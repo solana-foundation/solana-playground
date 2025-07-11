@@ -17,7 +17,7 @@ ENV PATH="${HOME}/.cargo/bin:${PATH}"
 FROM rust AS build
 
 WORKDIR /build
-COPY Cargo.* .
+COPY Cargo.* ./
 COPY src src
 RUN cargo build --release
 
