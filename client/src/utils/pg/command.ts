@@ -172,20 +172,12 @@ export const PgCommand: Commands = new Proxy({} as any, {
       const cmdUiName = PgCommandManager.all[cmdCodeName].name;
       target[cmdCodeName] = {
         name: cmdUiName,
-        execute: (...args: string[]) => {
-          return PgCommandManager.execute([cmdUiName, ...args]);
+        execute: (...args) => PgCommandManager.execute([cmdUiName, ...args]),
+        onDidStart: (cb) => {
+          return PgCommon.onDidChange(getEventName(cmdCodeName, "start"), cb);
         },
-        onDidStart: (cb: (input: string | null) => void) => {
-          return PgCommon.onDidChange({
-            cb,
-            eventName: getEventName(cmdCodeName, "start"),
-          });
-        },
-        onDidFinish: (cb: (result: unknown) => void) => {
-          return PgCommon.onDidChange({
-            cb,
-            eventName: getEventName(cmdCodeName, "finish"),
-          });
+        onDidFinish: (cb) => {
+          return PgCommon.onDidChange(getEventName(cmdCodeName, "finish"), cb);
         },
       };
     }

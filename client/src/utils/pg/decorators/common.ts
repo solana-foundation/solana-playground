@@ -58,37 +58,29 @@ export const addOnDidChange = (
   sClass: any,
   state: { [key: string]: unknown }
 ) => {
-  // Batch main change event
-  (sClass as OnDidChangeDefault<unknown>).onDidChange = (
-    cb: (value: unknown) => void
-  ) => {
-    return PgCommon.batchChanges(
-      () => cb(sClass[INTERNAL_STATE_PROPERTY]),
-      [onDidChange]
-    );
-  };
-
   // Main change event
-  const onDidChange = (cb: (value: unknown) => void) => {
-    return PgCommon.onDidChange({
-      cb,
-      eventName: sClass._getChangeEventName(),
-      initialRun: sClass[IS_INITIALIZED_PROPERTY]
+  (sClass as OnDidChangeDefault<unknown>).onDidChange = (
+    cb: (value: unknown) => unknown
+  ) => {
+    return PgCommon.onDidChange(
+      sClass._getChangeEventName(),
+      // Debounce the main change event because each property change dispatches
+      // the main change event
+      PgCommon.debounce(cb),
+      sClass[IS_INITIALIZED_PROPERTY]
         ? { value: sClass[INTERNAL_STATE_PROPERTY] }
-        : undefined,
-    });
+        : undefined
+    );
   };
 
   // Property change events
   for (const prop in state) {
     sClass[getChangePropName(prop)] = (cb: (value: unknown) => unknown) => {
-      return PgCommon.onDidChange({
+      return PgCommon.onDidChange(
+        sClass._getChangeEventName(prop),
         cb,
-        eventName: sClass._getChangeEventName(prop),
-        initialRun: sClass[IS_INITIALIZED_PROPERTY]
-          ? { value: sClass[prop] }
-          : undefined,
-      });
+        sClass[IS_INITIALIZED_PROPERTY] ? { value: sClass[prop] } : undefined
+      );
     };
   }
 
