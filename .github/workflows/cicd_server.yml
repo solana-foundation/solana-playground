@@ -76,12 +76,12 @@ jobs:
           gcloud config set account ${{ secrets.SERVICE_ACCOUNT }}
           gcloud config set project ${{ secrets.PROJECT_ID }}
 
-#      - name: Replace app.yaml environment variables
-#        uses: 73h/gae-app-yaml-replace-env-variables@v0.1
-#        env:
-#          PG_DB_URI: ${{ secrets.PROD_DB_URI }}
-#        with:
-#          app_yaml_path: app.yaml
+      - name: Replace app.yaml environment variables
+        uses: 73h/gae-app-yaml-replace-env-variables@v0.1
+        env:
+          PG_DB_URI: ${{ secrets.PG_DB_URI }}
+        with:
+          app_yaml_path: app.yaml
 
       - name: Deploy to App Engine with specific version (no promote)
         uses: google-github-actions/deploy-appengine@v2

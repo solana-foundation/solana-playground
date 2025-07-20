@@ -8,9 +8,12 @@ automatic_scaling:
 
 # Environment variables
 env_variables:
-  PG_DB_URI: "mongodb://<YOUR_PROD_MONGO_HOST>:27017"
+  PG_DB_URI: "${PG_DB_URI}"
 
 resources:
   cpu: 4
   memory_gb: 8
   disk_size_gb: 20
+
+beta_settings:
+  cloud_sql_instances: "analytics-324114:us-central1:solpg"
