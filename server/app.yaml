@@ -11,6 +11,6 @@ env_variables:
   PG_DB_URI: "mongodb://<YOUR_PROD_MONGO_HOST>:27017"
 
 resources:
-  cpu: 1
-  memory_gb: 1
-  disk_size_gb: 10
+  cpu: 4
+  memory_gb: 8
+  disk_size_gb: 20
