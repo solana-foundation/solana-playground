@@ -76,20 +76,30 @@ jobs:
           gcloud config set account ${{ secrets.SERVICE_ACCOUNT }}
           gcloud config set project ${{ secrets.PROJECT_ID }}
 
+      - name: Authenticate Docker to Artifact Registry
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev
+
+      - name: Build Docker image
+        run: |
+          docker build -t us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/solpgbuilds/solpg-server:${{ env.VERSION_TAG }} server/
+
+      - name: Push Docker image
+        run: |
+          docker push us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/solpgbuilds/solpg-server:${{ env.VERSION_TAG }}
+
       - name: Replace app.yaml environment variables
         uses: 73h/gae-app-yaml-replace-env-variables@v0.1
         env:
+          VERSION_TAG: ${{ env.VERSION_TAG }}
           PG_DB_URI: ${{ secrets.PG_DB_URI }}
+          PROJECT_ID: ${{ secrets.PROJECT_ID }}
         with:
           app_yaml_path: server/app.yaml
 
       - name: Deploy to App Engine with specific version (no promote)
-        uses: google-github-actions/deploy-appengine@v2
-        env:
-          CLOUDSDK_APP_CLOUD_BUILD_TIMEOUT: 7200  # 120 minutes
-        with:
-          project_id: ${{ secrets.PROJECT_ID }}
-          deliverables: app.yaml
-          version: ${{ env.VERSION_TAG }}
-          promote: false
-          working_directory: server
+        run: |
+          gcloud app deploy app.yaml \
+            --project ${{ secrets.PROJECT_ID }} \
+            --version=${{ env.VERSION_TAG }} \
+            --no-promote
+        working-directory: server

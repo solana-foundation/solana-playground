@@ -6,7 +6,10 @@ automatic_scaling:
   min_num_instances: 1
   max_num_instances: 1
 
-# Environment variables
+deployment:
+  container:
+    image: us-central1-docker.pkg.dev/$PROJECT_ID/solpgbuilds/solpg-server:$VERSION_TAG
+
 env_variables:
   PG_DB_URI: $PG_DB_URI
 
