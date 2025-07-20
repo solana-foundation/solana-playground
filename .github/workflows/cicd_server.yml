@@ -81,7 +81,7 @@ jobs:
         env:
           PG_DB_URI: ${{ secrets.PG_DB_URI }}
         with:
-          app_yaml_path: app.yaml
+          app_yaml_path: server/app.yaml
 
       - name: Deploy to App Engine with specific version (no promote)
         uses: google-github-actions/deploy-appengine@v2
