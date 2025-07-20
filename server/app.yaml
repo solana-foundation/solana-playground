@@ -8,7 +8,7 @@ automatic_scaling:
 
 # Environment variables
 env_variables:
-  PG_DB_URI: "${PG_DB_URI}"
+  PG_DB_URI: $PG_DB_URI
 
 resources:
   cpu: 4
