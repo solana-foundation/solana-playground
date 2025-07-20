@@ -4,8 +4,8 @@ on:
   push:
     branches:
       - v0.29
-
-  workflow_dispatch:
+    tags:
+      - 'v0.29.*'
 
 jobs:
   format_server:
@@ -45,6 +45,7 @@ jobs:
     needs:
       - format_server
       - clippy_server
+    if: startsWith(github.ref, 'refs/tags/')
 
     steps:
       - name: Checkout code
@@ -55,10 +56,10 @@ jobs:
 
       - name: Set up Git to get tag and normalize for App Engine
         run: |
-          git fetch --tags
-          TAG=$(git describe --tags --abbrev=0)
-          # Replace periods with dashes for App Engine compatibility
-          NORMALIZED_TAG=${TAG//./-}
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "Raw tag: $TAG"
+          NORMALIZED_TAG="${TAG//./-}"
+          echo "Normalized tag: $NORMALIZED_TAG"
           echo "VERSION_TAG=$NORMALIZED_TAG" >> $GITHUB_ENV
 
       - name: Set up Cloud SDK authentication
