@@ -19,6 +19,7 @@ FROM rust AS build
 WORKDIR /build
 COPY Cargo.* ./
 COPY src src
+COPY migrations migrations
 RUN cargo build --release
 
 ################################# START SERVER #################################
