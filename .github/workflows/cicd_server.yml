@@ -99,6 +99,7 @@ jobs:
       - name: Deploy to App Engine with specific version (no promote)
         run: |
           gcloud app deploy app.yaml \
+            --image-url us-central1-docker.pkg.dev/${{ secrets.PROJECT_ID }}/solpgbuilds/solpg-server:${{ env.VERSION_TAG }} \
             --project ${{ secrets.PROJECT_ID }} \
             --version=${{ env.VERSION_TAG }} \
             --no-promote
