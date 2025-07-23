@@ -103,5 +103,4 @@ jobs:
             --project ${{ secrets.PROJECT_ID }} \
             --version=${{ env.VERSION_TAG }} \
             --no-promote
-            --verbosity=debug
         working-directory: server
