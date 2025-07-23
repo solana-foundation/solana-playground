@@ -9,9 +9,6 @@ automatic_scaling:
 env_variables:
   PG_DB_URI: $PG_DB_URI
 
-health_check:
-  enable_health_check: false
-
 resources:
   cpu: 4
   memory_gb: 8

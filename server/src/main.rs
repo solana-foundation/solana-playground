@@ -29,6 +29,8 @@ async fn main() -> Result<()> {
     info!("DB initialized");
 
     let app = Router::new()
+        .route("/readiness_check", get(|| async { "OK" }))
+        .route("/liveness_check", get(|| async { "OK" }))
         .route("/build", post(build))
         .route("/deploy/:uuid", get(deploy))
         .route("/share/:id", get(share_get))
