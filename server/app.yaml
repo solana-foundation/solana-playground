@@ -16,3 +16,19 @@ resources:
 
 beta_settings:
   cloud_sql_instances: "analytics-324114:us-central1:solpg"
+
+liveness_check:
+  path: "/liveness_check"
+  initial_delay_sec: 30
+  timeout_sec: 4
+  check_interval_sec: 30
+  failure_threshold: 2
+  success_threshold: 2
+
+readiness_check:
+  path: "/readiness_check"
+  timeout_sec: 4
+  check_interval_sec: 5
+  failure_threshold: 2
+  success_threshold: 2
+  app_start_timeout_sec: 300
