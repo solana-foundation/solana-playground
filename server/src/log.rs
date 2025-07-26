@@ -1,4 +1,4 @@
-use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{fmt, EnvFilter};
 
 /// Initialize logging in the application.
 ///
@@ -6,13 +6,13 @@ use tracing_subscriber::EnvFilter;
 ///
 /// [`env-logger`]: https://github.com/rust-cli/env_logger
 pub fn init_logging(verbose: bool) {
-    let fmt = tracing_subscriber::fmt()
-        .with_target(false)
-        .with_env_filter(EnvFilter::from_default_env());
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
+
+    let fmt_layer = fmt().with_target(false).with_env_filter(filter);
 
     if verbose {
-        fmt.pretty().init();
+        fmt_layer.pretty().init();
     } else {
-        fmt.compact().init();
+        fmt_layer.compact().init();
     }
 }
