@@ -25,9 +25,16 @@ impl Config {
     /// `.env` file is supported.
     pub fn from_env() -> Config {
         dotenv().ok();
+
+        // Prefer the $PORT variable set by App Engine
+        let port = dotenv::var("PORT")
+            .ok()
+            .and_then(|p| p.parse().ok())
+            .unwrap_or_else(|| get_env("PORT", 8080u16)); // fallback
+
         Config {
             client_url: get_env("CLIENT_URL", "https://beta.solpg.io"),
-            port: get_env("PORT", 8080u16),
+            port,
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024 * 1024),
             verbose: get_env("VERBOSE", false),
             db_uri: get_env(
