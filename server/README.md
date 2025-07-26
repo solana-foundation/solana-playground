@@ -40,8 +40,34 @@ anchor-syn = { version = "0.29.0" }
 
 Then the branch should be named `v0.29`.
 
+## Tagging and Deployment Strategy
 
-## Tagging Strategy
+There are **two separate GitHub Actions workflows**:
+
+1. **ci.yml** – Runs on every push to the branch (for formatting and linting).
+2. **deploy.yaml** – Runs **only if the commit has a tag**.
+
+### How Deployment Works
+
+- Deployment only occurs when a **Git tag is pushed**.
+- The **tag name becomes the deployed version name** in Google App Engine.
+- The tag is normalized (dots replaced with dashes) to form the deployed version URL.
+
+For example, pushing the tag:
+
+```
+v0.29.1
+```
+
+on branch `v0.29` will result in a deployed App Engine service accessible at:
+
+```
+https://v0-29-1-dot-playground-server-dot-analytics-324114.de.r.appspot.com/liveness_check
+```
+
+**This means in order to trigger a deployment you commit and push your changes to the branch, then create and push a tag pointing to that commit. A commit without a tag will not get deployed.**
+
+### Tagging Pattern
 
 Within each version branch use **Git tags** to define deployable sub-versions. Tags should follow the pattern:
 
@@ -51,8 +77,8 @@ Within each version branch use **Git tags** to define deployable sub-versions. T
 
 For example:
 
-- First deployment from branch `v0.29` → tag: `0.29.1`
-- Subsequent update → tag: `0.29.2`
+- First deployment from branch `v0.29` → tag: `v0.29.1`
+- Subsequent update → tag: `v0.29.2`
 
 
 ## GitHub Actions Deployment Workflow
@@ -63,7 +89,6 @@ For example:
 2. Update the GitHub Actions deployment YAML to include this branch as a trigger. 
 
 from:
-
 ```yaml
 on:
   push:
