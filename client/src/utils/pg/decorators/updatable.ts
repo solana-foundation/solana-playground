@@ -1,11 +1,10 @@
-import { PgCommon } from "../common";
 import {
   addInit,
   addOnDidChange,
   INTERNAL_STATE_PROPERTY,
-  IS_INITIALIZED_PROPERTY,
   ON_DID_CHANGE,
 } from "./common";
+import { PgCommon } from "../common";
 import type {
   Initialize,
   OnDidChangeDefault,
@@ -56,7 +55,7 @@ export function updatable<T>(params: {
 }) {
   return (sClass: any) => {
     // Add `onDidChange` methods
-    addOnDidChange(sClass, params.defaultState);
+    addOnDidChange(sClass, params.defaultState, params.recursive);
 
     // Add `init` method
     addInit(sClass, async () => {
@@ -101,158 +100,94 @@ export function updatable<T>(params: {
       // Set the initial state
       sClass.update(state);
 
-      return sClass.onDidChange((state: T) => {
-        // Check whether the state has been initialized. Normally, if this
-        // callback runs, it means the state has already been initialized,
-        // but if the app crashes without being able to recover (white screen),
-        // this callback somtimes runs with invalid state (e.g. partial).
-        //
-        // TODO: Make sure this callback never runs if the state hasn't been
-        // initialized, and remove this check.
-        if (sClass[IS_INITIALIZED_PROPERTY]) params.storage?.write(state);
-      });
+      return sClass.onDidChange((state: T) => params.storage?.write(state));
     });
 
     // Add `update` method
     if (params.recursive) {
-      (sClass as Update<T>).update = (updateParams: Partial<T>) => {
-        for (const prop in updateParams) {
-          update(prop, updateParams[prop]);
+      (sClass as Update<T>).update = (params) => {
+        for (const [prop, value] of PgCommon.entries(params)) {
+          update(sClass, prop, value);
 
-          if (typeof sClass[prop] === "object" && sClass[prop] !== null) {
-            sClass[prop] = defineSettersRecursively({
-              sClass,
-              getter: sClass[prop],
-              internal: sClass[INTERNAL_STATE_PROPERTY][prop],
-              propNames: [prop],
-            });
+          if (typeof value === "object" && value !== null) {
+            recursivelyDefineSetters(sClass, [prop]);
           }
         }
       };
     } else {
-      (sClass as Update<T>).update = (updateParams: Partial<T>) => {
-        for (const prop in updateParams) {
-          update(prop, updateParams[prop]);
-        }
+      (sClass as Update<T>).update = (params) => {
+        for (const entry of PgCommon.entries(params)) update(sClass, ...entry);
       };
     }
-
-    // Common update method
-    const update = (prop: keyof T, value?: T[keyof T]) => {
-      if (value === undefined) return;
-
-      // Define getter and setter once
-      if (!Object.hasOwn(sClass, prop)) {
-        Object.defineProperty(sClass, prop, {
-          get: () => sClass[INTERNAL_STATE_PROPERTY][prop],
-          set: (value: T[keyof T]) => {
-            sClass[INTERNAL_STATE_PROPERTY][prop] = value;
-
-            // Change event
-            PgCommon.createAndDispatchCustomEvent(
-              sClass._getChangeEventName(prop),
-              value
-            );
-
-            // Dispatch the main update event
-            PgCommon.createAndDispatchCustomEvent(
-              sClass._getChangeEventName(),
-              sClass[INTERNAL_STATE_PROPERTY]
-            );
-          },
-        });
-      }
-
-      // Trigger the setter
-      sClass[prop] = value;
-    };
   };
 }
 
-/** Define proxy setters for properties recursively. */
-const defineSettersRecursively = ({
-  sClass,
-  getter,
-  internal,
-  propNames,
-}: {
-  sClass: any;
-  getter: any;
-  internal: any;
-  propNames: string[];
-}) => {
-  getter = new Proxy(internal, {
-    set(target: any, prop: string, value: any) {
-      target[prop] = value;
+/** Update property values. */
+const update = <T>(sClass: any, prop: keyof T, value: Partial<T>[keyof T]) => {
+  if (value === undefined) return;
 
-      // Setting a new value should dispatch a change event for all of
-      // the parent objects.
-      // Example:
-      // const obj = { nested: { number: 1 } };
-      // obj.a.b = 2; -> obj.OnDidChangeNestedNumber, obj.OnDidChangeNested, obj.onDidChange
-
-      // 1. [nested, number].reduce
-      // 2. [nested, nested.number].reverse
-      // 3. [nested.number, nested].forEach
-      propNames
-        .concat([prop])
-        .reduce((acc, cur, i) => {
-          acc.push(propNames.slice(0, i).concat([cur]).join("."));
-          return acc;
-        }, [] as string[])
-        .reverse()
-        .forEach((prop) => {
-          PgCommon.createAndDispatchCustomEvent(
-            sClass._getChangeEventName(prop),
-            PgCommon.getProperty(sClass[INTERNAL_STATE_PROPERTY], prop)
-          );
-        });
-
-      // Dispatch the main update event
-      PgCommon.createAndDispatchCustomEvent(
-        sClass._getChangeEventName(),
-        sClass[INTERNAL_STATE_PROPERTY]
-      );
-
-      return true;
-    },
-  });
-
-  for (const prop in getter) {
-    const currentPropNames = [...propNames, prop];
-
-    // Change event handlers
-    const onDidChangeEventName =
-      ON_DID_CHANGE +
-      currentPropNames.reduce(
-        (acc, cur) => acc + cur[0].toUpperCase() + cur.slice(1),
-        ""
-      );
-
-    sClass[onDidChangeEventName] ??= (cb: (value: unknown) => unknown) => {
-      return PgCommon.onDidChange(
-        sClass._getChangeEventName(currentPropNames),
-        cb,
-        sClass[IS_INITIALIZED_PROPERTY] ? { value: getter[prop] } : undefined
-      );
-    };
-
-    // Recursively update
-    if (typeof getter[prop] === "object" && getter[prop] !== null) {
-      getter[prop] = defineSettersRecursively({
-        sClass,
-        getter: getter[prop],
-        internal: internal[prop],
-        propNames: currentPropNames,
-      });
-    } else {
-      // Trigger the setter
-      // eslint-disable-next-line no-self-assign
-      getter[prop] = getter[prop];
-    }
+  // Define getter and setter once
+  if (!Object.hasOwn(sClass, prop)) {
+    Object.defineProperty(sClass, prop, {
+      get: () => sClass[INTERNAL_STATE_PROPERTY][prop],
+      set: (value: T[keyof T]) => {
+        sClass[INTERNAL_STATE_PROPERTY][prop] = value;
+        sClass._dispatchChangeEvent(prop);
+      },
+    });
   }
 
-  return getter;
+  // Trigger the setter
+  sClass[prop] = value;
+};
+
+/** Define proxy setters for properties recursively. */
+const recursivelyDefineSetters = (sClass: any, propNames: string[]) => {
+  const parent = PgCommon.getValue(sClass, propNames.slice(0, -1)) ?? sClass;
+  const lastProp = propNames.at(-1)!;
+  parent[lastProp] = new Proxy(
+    PgCommon.getValue(sClass[INTERNAL_STATE_PROPERTY], propNames),
+    {
+      set(target: any, prop: string, value: any) {
+        target[prop] = value;
+
+        // Setting a new value should dispatch a change event for all of the
+        // parent objects. For example:
+        //
+        // ```
+        // const obj = { nested: { number: 1 } };
+        // obj.nested.number = 2;
+        // ```
+        //
+        // Should trigger `onDidChangeNestedNumber`, `onDidChangeNested`, `onDidChange`.
+
+        // 1. [nested, number].reduce
+        // 2. [nested, nested.number].reverse
+        // 3. [nested.number, nested].forEach
+        propNames
+          .concat([prop])
+          .reduce((acc, cur, i) => {
+            acc.push(propNames.slice(0, i).concat([cur]).join("."));
+            return acc;
+          }, [] as string[])
+          .reverse()
+          .forEach(sClass._dispatchChangeEvent);
+
+        return true;
+      },
+    }
+  );
+
+  const current = parent[lastProp];
+  for (const [prop, value] of PgCommon.entries(current)) {
+    if (typeof value === "object" && value !== null) {
+      // Recursively update
+      recursivelyDefineSetters(sClass, [...propNames, prop]);
+    } else {
+      // Trigger the setter via self-assign
+      current[prop] = value;
+    }
+  }
 };
 
 /**

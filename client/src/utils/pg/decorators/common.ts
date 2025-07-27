@@ -1,19 +1,27 @@
 import { PgCommon } from "../common";
 import type { OnDidChangeDefault } from "./types";
-import type { Arrayable, Disposable, SyncOrAsync } from "../types";
+import type { Disposable, SyncOrAsync } from "../types";
 
 /** Private state property */
 export const INTERNAL_STATE_PROPERTY = "_state";
 
 /** The property name for keeping track of whether the class has been initialized */
-export const IS_INITIALIZED_PROPERTY = "_isinitialized";
+const IS_INITIALIZED_PROPERTY = "_isinitialized";
 
 /** Change event method name prefix */
 export const ON_DID_CHANGE = "onDidChange";
 
-/** Get the change event property name. */
-export const getChangePropName = (prop: string) => {
-  return ON_DID_CHANGE + PgCommon.capitalize(prop);
+/**
+ * Get the change event property name.
+ *
+ * @param prop property path (e.g. `field`, `inner.field`)
+ * @returns the property name for the change event
+ */
+export const getChangePropName = (prop: string | string[]) => {
+  if (Array.isArray(prop)) prop = prop.join(".");
+  return prop
+    .split(".")
+    .reduce((acc, cur) => acc + PgCommon.capitalize(cur), ON_DID_CHANGE);
 };
 
 /**
@@ -53,17 +61,17 @@ export const addInit = (sClass: any, init: () => SyncOrAsync<Disposable>) => {
  *
  * @param sClass static class
  * @param state default state
+ * @param recursive whether to recursively add `onDidChange` methods
  */
 export const addOnDidChange = (
   sClass: any,
-  state: { [key: string]: unknown }
+  state: { [key: string]: unknown },
+  recursive?: boolean
 ) => {
   // Main change event
-  (sClass as OnDidChangeDefault<unknown>).onDidChange = (
-    cb: (value: unknown) => unknown
-  ) => {
+  (sClass as OnDidChangeDefault<unknown>).onDidChange = (cb) => {
     return PgCommon.onDidChange(
-      sClass._getChangeEventName(),
+      getChangeEventName(),
       // Debounce the main change event because each property change dispatches
       // the main change event
       PgCommon.debounce(cb),
@@ -77,16 +85,44 @@ export const addOnDidChange = (
   for (const prop in state) {
     sClass[getChangePropName(prop)] = (cb: (value: unknown) => unknown) => {
       return PgCommon.onDidChange(
-        sClass._getChangeEventName(prop),
+        getChangeEventName(prop),
         cb,
         sClass[IS_INITIALIZED_PROPERTY] ? { value: sClass[prop] } : undefined
       );
     };
   }
 
+  // Recursive property change events
+  if (recursive) {
+    const addOnDidChangeProps = (props: string[] = []) => {
+      const value = props.length ? PgCommon.getValue(state, props) : state;
+      for (const prop in value) {
+        const currentProps = [...props, prop];
+        sClass[getChangePropName(currentProps)] = (
+          cb: (value: unknown) => unknown
+        ) => {
+          return PgCommon.onDidChange(
+            getChangeEventName(currentProps),
+            cb,
+            sClass[IS_INITIALIZED_PROPERTY]
+              ? { value: PgCommon.getValue(sClass, currentProps) }
+              : undefined
+          );
+        };
+
+        const value = PgCommon.getValue(state, currentProps);
+        if (typeof value === "object" && value !== null) {
+          addOnDidChangeProps(currentProps);
+        }
+      }
+    };
+
+    addOnDidChangeProps();
+  }
+
   // Get custom event name
-  sClass._getChangeEventName = (name?: Arrayable<string>) => {
-    if (Array.isArray(name)) name = name.join(".");
+  const getChangeEventName = (prop?: string | string[]) => {
+    if (Array.isArray(prop)) prop = prop.join(".");
 
     // `sClass.name` is minified to something like `e` in production builds
     // which cause collision with other classes and this only happens with the
@@ -103,6 +139,26 @@ export const addOnDidChange = (
     // to include only the class/function names(decorator classes can be transpiled
     // to either classes or functions depending on the browser version) that start
     // with "_Pg".
-    return "ondidchange" + sClass.name + (name ?? "");
+    return "ondidchange" + sClass.name + (prop ?? "");
+  };
+
+  // Dispatch change event(s)
+  sClass._dispatchChangeEvent = (prop?: string) => {
+    // Only dispatch if the state has been initialized
+    if (!sClass[IS_INITIALIZED_PROPERTY]) return;
+
+    // Dispatch the prop update event if `prop` exists
+    if (prop) {
+      PgCommon.createAndDispatchCustomEvent(
+        getChangeEventName(prop),
+        PgCommon.getValue(sClass[INTERNAL_STATE_PROPERTY], prop)
+      );
+    }
+
+    // Always dispatch the main update event
+    PgCommon.createAndDispatchCustomEvent(
+      getChangeEventName(),
+      sClass[INTERNAL_STATE_PROPERTY]
+    );
   };
 };
