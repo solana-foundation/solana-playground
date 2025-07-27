@@ -23,6 +23,42 @@ This will:
 
 # Deployment
 
+## Quick Steps to Deploy
+
+There are two common scenarios when deploying:
+
+### 1. Deploying a New Patch Version (e.g., v0.29.1 → v0.29.2)
+
+1. Commit and push your changes to the existing branch (e.g., `v0.29`).
+2. Create a new tag for the patch version:
+   ```bash
+   git tag v0.29.2
+   git push origin v0.29.2
+   ```
+   [See tagging and deployment details below.](#tagging-and-deployment-strategy)
+3. GitHub Actions will deploy the new version, accessible at: 
+   `https://v0-29-2-dot-playground-server-dot-analytics-324114.de.r.appspot.com/liveness_check`
+
+---
+
+### 2. Deploying a New Minor/Major Version (e.g., v0.29.x → v0.32.x)
+
+1. Create a new branch for the version, e.g., `v0.32`. [See branching details below.](#branching-strategy)
+2. Update the GitHub Actions workflow configuration to include this branch as a trigger. [See Github Actions details below](#github-actions-deployment-workflow).
+3. Commit and push your changes to this branch.
+4. Tag your commit with the new version:
+   ```bash
+   git tag v0.32.1
+   git push origin v0.32.1
+   ```
+   [See tagging and deployment details below.](#tagging-and-deployment-strategy)
+5.  GitHub Actions will deploy the new version, accessible at:  
+   `https://v0-32-1-dot-playground-server-dot-analytics-324114.de.r.appspot.com/liveness_check`
+
+---
+
+More detailed explanations of deployment, branching, and tagging strategies can be found in the sections that follow.
+
 ## Overview
 
 This project uses **Google App Engine** for deployments. Each deployed version is managed intentionally using:
