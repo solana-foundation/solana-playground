@@ -1,11 +1,16 @@
 // Settings are getting loaded at the start of the application, so any non-type
 // import should be avoided.
 
-import { Endpoint } from "../../constants";
-import { declareUpdatable, migratable, updatable } from "./decorators";
-import type { CallableJSX, Disposable, Getable, UnionToTuple } from "./types";
+import { declareUpdatable, updatable } from "./decorators";
+import type {
+  Arrayable,
+  Disposable,
+  Getable,
+  RequiredKey,
+  UnionToTuple,
+} from "./types";
 
-type Settings = ConvertAll<UnionToTuple<InternalSettings[number]>> & {
+export type Settings = ConvertAll<UnionToTuple<InternalSetting>> & {
   // TODO: Store this in `PgProgramInfo` and remove
   build: {
     flags: {
@@ -25,18 +30,21 @@ type ConvertAll<A, R = unknown> = A extends readonly [infer Head, ...infer Tail]
     : never
   : R;
 
-type Convert<I extends string, V> = I extends ""
-  ? unknown
-  : I extends `${infer Head}.${infer Rest}`
+type Convert<I extends string, V> = I extends `${infer Head}.${infer Rest}`
   ? { [K in Head]: Convert<Rest, V> }
   : { [K in I]: V extends undefined ? boolean : V };
 
 /** Setting creation parameter */
-export type SettingParam<I extends string, V, C> = {
+export type SettingParam<
+  I extends string = string,
+  V = unknown,
+  C = never,
+  D = boolean
+> = {
   /** Setting identifier (used in `PgSettings`) */
-  id?: I;
-  /** Name of the setting */
-  name: string;
+  id: I;
+  /** Name of the setting (default: derive from `id`) */
+  name?: string;
   /** Information about the setting that will be shown as a help tooltip */
   description?: string;
   /**
@@ -45,6 +53,8 @@ export type SettingParam<I extends string, V, C> = {
    * If this is not set, the setting is assumed to be a checkbox.
    */
   values?: Getable<readonly Values<V>[]>;
+  /** Default value for the setting */
+  default?: D;
   /** Custom value properties */
   custom?: {
     /** Parse the custom value. */
@@ -61,8 +71,10 @@ export type SettingParam<I extends string, V, C> = {
      * This is set automatically if `Custom.tsx` file inside the setting's
      * directory exists.
      */
-    Component?: CallableJSX;
+    Component?: () => JSX.Element;
   };
+  /** Migrate old setting `id`s, useful for renaming settings */
+  migrate?: { from: Arrayable<string> };
 } & Partial<SettingsCompat<V>>;
 
 /** Compatibility with non-standard settings (theme and font) */
@@ -83,13 +95,17 @@ type Values<V> =
   | { name: string; values: Values<V[]> };
 
 /** UI Setting */
-export type Setting<I extends string = string, V = any, C = any> = SettingParam<
-  I,
-  V,
-  C
-> &
-  SettingsCompat<V>;
+export type Setting<I extends string = string, V = any, C = any> = RequiredKey<
+  Omit<SettingParam<I, V, C>, "default">,
+  "name"
+> & { default: V | C } & SettingsCompat<V>;
 
+// UPDATE: The following comments are technically correct, but we've managed to
+// fully abstract setting creation process without sacrificing performance i.e.
+// only the default values of settings are getting loaded at the start of the
+// application, and default values of settings can be set during their creation
+// process.
+//
 // Default values for the settings currently need to be initialized here rather
 // than during settings creation in `/settings` mainly because of two reasons:
 //
@@ -99,36 +115,16 @@ export type Setting<I extends string = string, V = any, C = any> = SettingParam<
 //    before everything else (even before the initial lazy loading process).
 //    There is no reason to apply these constraints to `/settings`.
 //
-// TODO: Unless we find another way, the initialization problem i.e. having to
-// make changes to this file can be fixed by adding a `defaultValue` field to
-// settings and adding a script that creates the `defaultState` constant based
-// on the new field.
+// TODO: Remove `build.flags`
 const defaultState: Settings = {
-  connection: {
-    endpoint: Endpoint.DEVNET,
-    commitment: "confirmed",
-    preflightChecks: true,
-    priorityFee: "median",
-  },
+  ...GLOBAL_SETTINGS.default,
   build: {
+    ...GLOBAL_SETTINGS.default.build,
     flags: {
       seedsFeature: false,
       noDocs: true,
       safetyChecks: false,
     },
-    improveErrors: true,
-  },
-  testUi: {
-    showTxDetailsInTerminal: false,
-  },
-  notification: {
-    showTx: true,
-  },
-  other: {
-    blockExplorer: "Solana Explorer",
-  },
-  wallet: {
-    automaticAirdrop: true,
   },
 };
 
@@ -151,8 +147,13 @@ const storage = {
 
 const recursive = true;
 
-// TODO: Remove in 2024
 const migrate = () => {
+  migrateLegacy();
+  return GLOBAL_SETTINGS.migrations;
+};
+
+// TODO: Remove when domain changes
+const migrateLegacy = () => {
   const migrateFromLocalStorage = <R>(oldKey: string) => {
     const valueStr = localStorage.getItem(oldKey);
     if (!valueStr) return;
@@ -187,8 +188,7 @@ const migrate = () => {
   localStorage.setItem(storage.KEY, JSON.stringify(newValue));
 };
 
-@migratable(migrate)
-@updatable({ defaultState, storage, recursive })
+@updatable({ defaultState, storage, recursive, migrate })
 class _PgSettings {
   /** All settings */
   static all: Setting[];

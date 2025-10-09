@@ -1,5 +1,3 @@
-import type { ChangeEvent } from "react";
-
 import type {
   AllPartial,
   Disposable,
@@ -8,6 +6,7 @@ import type {
   Arrayable,
   ValueOf,
   OrString,
+  Accessor,
 } from "./types";
 
 export class PgCommon {
@@ -188,10 +187,14 @@ export class PgCommon {
    * the given value.
    *
    * @param maybeFunction value to check
+   * @param args function arguments (unused for non-functions)
    * @returns either the given value or the called value if it's a function
    */
-  static callIfNeeded<T>(maybeFunction: T): T extends () => infer R ? R : T {
-    if (typeof maybeFunction === "function") return maybeFunction();
+  static callIfNeeded<T, P extends unknown[]>(
+    maybeFunction: T,
+    ...args: P
+  ): T extends () => infer R ? R : T {
+    if (typeof maybeFunction === "function") return maybeFunction(...args);
     return maybeFunction as T extends () => infer R ? R : T;
   }
 
@@ -414,11 +417,39 @@ export class PgCommon {
    * Access the property value from `.` seperated input.
    *
    * @param obj object to get the property value of
-   * @param prop `.` seperated property path
+   * @param accessor property accessor
    */
-  static getValue(obj: Record<string, any>, prop: string | string[]) {
-    if (Array.isArray(prop)) prop = prop.join(".");
-    return prop.split(".").reduce((acc, cur) => acc[cur], obj);
+  static getValue(obj: Record<string, any>, accessor: Accessor) {
+    return PgCommon.normalizeAccessor(accessor).reduce(
+      (acc, cur) => acc[cur],
+      obj
+    );
+  }
+
+  /**
+   * Set object property values from `.` separated input.
+   *
+   * @param obj object
+   * @param accessor property accessor
+   * @param value new value to set
+   */
+  static setValue(obj: Record<string, any>, accessor: Accessor, value: any) {
+    accessor = PgCommon.normalizeAccessor(accessor);
+    if (!accessor.length) throw new Error("Accessor cannot be empty empty");
+
+    const parent = PgCommon.getValue(obj, accessor.slice(0, -1));
+    const lastProp = accessor.at(-1)!;
+    parent[lastProp] = value;
+  }
+
+  /**
+   * Normalize the accessor i.e. convert the `string` inputs to an array.
+   *
+   * @param accessor property accessor
+   * @returns the normalized accessor (array)
+   */
+  static normalizeAccessor(accessor: Accessor) {
+    return typeof accessor === "string" ? accessor.split(".") : accessor;
   }
 
   /**
@@ -825,7 +856,14 @@ export class PgCommon {
    * @returns the string with its first letter uppercased
    */
   static capitalize(str: string) {
-    return str[0].toUpperCase() + str.slice(1);
+    switch (str.length) {
+      case 0:
+        return str;
+      case 1:
+        return str.toUpperCase();
+      default:
+        return str[0].toUpperCase() + str.slice(1);
+    }
   }
 
   /**
@@ -1013,7 +1051,7 @@ export class PgCommon {
    * - `dir`: whether to accept directories
    */
   static async import<T>(
-    onChange: (ev: ChangeEvent<HTMLInputElement>) => Promise<T>,
+    onChange: (ev: Event & { target: HTMLInputElement }) => Promise<T>,
     opts?: { accept?: string; dir?: boolean }
   ): Promise<T> {
     return new Promise((res, rej) => {

@@ -5,20 +5,14 @@ import {
   useState,
   useCallback,
   useRef,
+  ReactNode,
 } from "react";
 import styled, { css } from "styled-components";
 
 import ErrorBoundary from "../../../../components/ErrorBoundary";
 import Resizable from "../../../../components/Resizable";
 import { Wormhole } from "../../../../components/Loading";
-import {
-  NullableJSX,
-  PgTheme,
-  PgView,
-  SetState,
-  SidebarPage,
-} from "../../../../utils/pg";
-import { useResize } from "./useResize";
+import { PgTheme, PgView, SetState, SidebarPage } from "../../../../utils/pg";
 import { useAsyncEffect, useSetStatic } from "../../../../hooks";
 
 interface DefaultRightProps {
@@ -32,17 +26,26 @@ interface RightProps<W = number> extends DefaultRightProps {
 }
 
 const Right: FC<RightProps> = ({ page, width, setWidth, oldWidth }) => {
-  const { handleResizeStop, windowHeight } = useResize(setWidth);
+  const handleResizeStop = useCallback(
+    (e, direction, ref, d) => {
+      setWidth((w) => {
+        const newWidth = w + d.width;
+        if (newWidth < 180) return 0;
+
+        return newWidth;
+      });
+    },
+    [setWidth]
+  );
 
   return (
     <Resizable
       size={{ width, height: "100%" }}
-      minHeight="100%"
       maxWidth={window.innerWidth * 0.75}
       onResizeStop={handleResizeStop}
       enable="right"
     >
-      <Wrapper width={width} oldWidth={oldWidth} windowHeight={windowHeight}>
+      <Wrapper width={width} oldWidth={oldWidth}>
         <Title page={page} />
         <Content page={page} />
       </Wrapper>
@@ -55,7 +58,7 @@ const Title: FC<DefaultRightProps> = ({ page }) => (
 );
 
 const Content: FC<DefaultRightProps> = ({ page }) => {
-  const [el, setEl] = useState<NullableJSX>(null);
+  const [el, setEl] = useState<ReactNode>(null);
   const [props, setProps] = useState(() => ({}));
   const [loadingCount, setLoadingCount] = useState<number>(0);
 
@@ -89,22 +92,23 @@ const Content: FC<DefaultRightProps> = ({ page }) => {
 
   if (loadingCount) return <Loading page={page} />;
 
-  return <ErrorBoundary>{el}</ErrorBoundary>;
+  return (
+    <ErrorBoundary>
+      <ContentWrapper>{el}</ContentWrapper>
+    </ErrorBoundary>
+  );
 };
 
 const Wrapper = styled.div<{
-  windowHeight: number;
   width: number;
   oldWidth: number;
 }>`
-  ${({ theme, width, oldWidth, windowHeight }) => css`
+  ${({ theme, width, oldWidth }) => css`
     display: flex;
     flex-direction: column;
-    overflow-y: auto;
-    height: calc(${windowHeight}px - ${theme.views.bottom.default.height});
+    height: 100%;
     min-width: ${width ? width : oldWidth}px;
 
-    ${PgTheme.getScrollbarCSS()};
     ${PgTheme.convertToCSS(theme.views.sidebar.right.default)};
   `}
 `;
@@ -119,8 +123,15 @@ const TitleWrapper = styled.div`
   `}
 `;
 
+const ContentWrapper = styled.div`
+  height: 100%;
+  overflow-y: auto;
+
+  ${PgTheme.getScrollbarCSS()};
+`;
+
 const Loading: FC<DefaultRightProps> = ({ page }) => {
-  if (page.LoadingElement) return <page.LoadingElement />;
+  if (page.LoadingComponent) return <page.LoadingComponent />;
 
   return (
     <LoadingWrapper>

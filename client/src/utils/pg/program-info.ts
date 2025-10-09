@@ -3,13 +3,14 @@ import type { Idl } from "@coral-xyz/anchor";
 
 import { PgBytes } from "./bytes";
 import { PgCommand } from "./command";
+import { PgCommon } from "./common";
 import { PgConnection } from "./connection";
 import {
   createDerivable,
   declareDerivable,
   declareUpdatable,
   derivable,
-  migratable,
+  initable,
   updatable,
 } from "./decorators";
 import { PgExplorer } from "./explorer";
@@ -55,7 +56,9 @@ const storage = {
 
   /** Read from storage and deserialize the data. */
   async read(): Promise<ProgramInfo> {
-    if (!PgExplorer.currentWorkspaceName) return defaultState;
+    if (!PgExplorer.isInitialized || !PgExplorer.currentWorkspaceName) {
+      return defaultState;
+    }
 
     let serializedState: SerializedProgramInfo;
     try {
@@ -65,6 +68,7 @@ const storage = {
     }
 
     return {
+      ...defaultState,
       ...serializedState,
       kp: serializedState.kp
         ? PgWeb3.Keypair.fromSecretKey(Uint8Array.from(serializedState.kp))
@@ -72,15 +76,14 @@ const storage = {
       customPk: serializedState.customPk
         ? new PgWeb3.PublicKey(serializedState.customPk)
         : null,
-      importedProgram: defaultState.importedProgram,
     };
   },
 
   /** Serialize the data and write to storage. */
   async write(state: ProgramInfo) {
-    if (!PgExplorer.currentWorkspaceName) return;
+    if (!PgExplorer.isInitialized || !PgExplorer.currentWorkspaceName) return;
 
-    // Don't use spread operator(...) because of the extra derived state
+    // Don't use spread operator(...) because of the extra state
     const serializedState: SerializedProgramInfo = {
       uuid: state.uuid,
       idl: state.idl,
@@ -90,6 +93,14 @@ const storage = {
 
     await PgExplorer.fs.writeFile(this.PATH, JSON.stringify(serializedState));
   },
+};
+
+const onDidInit = () => {
+  // Refresh state on project change
+  return PgCommon.batchChanges(PgProgramInfo.refresh, [
+    PgExplorer.onDidInit,
+    PgExplorer.onDidSwitchWorkspace,
+  ]);
 };
 
 const derive = () => ({
@@ -125,9 +136,9 @@ const migrate = () => {
   localStorage.removeItem("programInfo");
 };
 
-@migratable(migrate)
+@initable({ onDidInit })
 @derivable(derive)
-@updatable({ defaultState, storage })
+@updatable({ defaultState, storage, migrate })
 class _PgProgramInfo {
   /** Get the current program's pubkey as base58 string. */
   static getPkStr() {

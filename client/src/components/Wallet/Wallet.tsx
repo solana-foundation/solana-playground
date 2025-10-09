@@ -21,12 +21,7 @@ import {
   PgView,
   PgWallet,
 } from "../../utils/pg";
-import {
-  useAutoAirdrop,
-  useDarken,
-  useStandardAccountChange,
-  useSyncBalance,
-} from "./hooks";
+import { useDarken, useStandardAccountChange } from "./hooks";
 import {
   useKeybind,
   useOnClickOutside,
@@ -40,8 +35,6 @@ const Wallet = () => {
   const { wallet } = useWallet();
 
   useStandardAccountChange();
-  useSyncBalance();
-  useAutoAirdrop();
 
   if (!PgWallet.show || !wallet) return null;
 
@@ -82,14 +75,14 @@ const WALLET_BOUND_ID = "wallet-bound";
 const WalletBound = styled.div`
   ${({ theme }) => css`
     position: absolute;
-    margin: ${theme.components.tabs.tab.default.height} 0.75rem
+    margin: ${theme.views.sidebar.right.title.height} 0.75rem
       ${theme.views.bottom.default.height}
       ${theme.views.sidebar.left.default.width};
     width: calc(100% - (0.75rem + ${theme.views.sidebar.left.default.width}));
     height: calc(
       100% -
         (
-          ${theme.components.tabs.tab.default.height} +
+          ${theme.views.sidebar.right.title.height} +
             ${theme.views.bottom.default.height}
         )
     );

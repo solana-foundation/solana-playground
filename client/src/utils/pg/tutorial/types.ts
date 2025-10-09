@@ -1,5 +1,3 @@
-import type { ComponentType } from "react";
-
 import { TUTORIAL_CATEGORIES, TUTORIAL_LEVELS } from "./details";
 import type { Nullable, RequiredKey } from "../types";
 
@@ -10,11 +8,8 @@ type Author = {
   link?: string;
 };
 
-/** Program info state */
-export type TutorialState = Nullable<TutorialMetadata & { data: TutorialData }>;
-
-/** Serialized program info that's used in storage */
-export type SerializedTutorialState = Nullable<TutorialMetadata>;
+/** Tutorial state (same as the serialized state) */
+export type TutorialState = Nullable<TutorialMetadata>;
 
 /** Tutorial data with optional fields. */
 export interface TutorialDataParam {
@@ -67,7 +62,7 @@ export interface TutorialDataParam {
    * Defaults to `./<TutorialName>`.
    */
   importComponent?: () => Promise<{
-    default: ComponentType<Omit<TutorialData, "importComponent">>;
+    default: (props: Omit<TutorialData, "importComponent">) => JSX.Element;
   }>;
 }
 
@@ -91,3 +86,6 @@ export type TutorialDetailKey = keyof Pick<
   TutorialData,
   "level" | "framework" | "languages" | "categories"
 >;
+
+/** A map of string to unknown data as used for tutorial storage data */
+export type TutorialStorageData = Record<string, unknown>;
