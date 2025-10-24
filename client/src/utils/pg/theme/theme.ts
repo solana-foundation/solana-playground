@@ -742,8 +742,7 @@ export class PgTheme {
       ._main()
       ._home()
       ._tutorial()
-      ._tutorials()
-      ._programs();
+      ._tutorials();
   }
 
   /** Set default components */
@@ -1771,21 +1770,4 @@ export class PgTheme {
     return this;
   }
 
-  /** Set default programs view */
-  private static _programs() {
-    const main = this._getView("main");
-    main.primary!.programs ??= {};
-
-    const programs = main.primary!.programs;
-    programs.default ??= {};
-    programs.default.bg ??= this._themeReady.views.main.default.bg;
-    programs.top ??= {};
-    programs.main ??= {};
-    programs.main.default ??= {};
-    programs.main.content ??= {};
-    programs.main.content.default ??= {};
-    programs.main.content.card ??= {};
-
-    return this;
-  }
 }

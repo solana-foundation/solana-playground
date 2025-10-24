@@ -135,12 +135,6 @@ const PLAYGROUND: ThemeParam = {
             },
           },
         },
-        programs: {
-          top: {
-            bg: `linear-gradient(180deg, ${BG_DEFAULT}, ${BG_LIGHT})`,
-            boxShadow: BOX_SHADOW_LIGHT,
-          },
-        },
         tutorial: {
           aboutPage: {
             bg: "transparent",
