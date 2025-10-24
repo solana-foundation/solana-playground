@@ -82,6 +82,9 @@ export interface ThemeParam {
     /** Button component */
     button?: OverridableComponent<ButtonKind>;
 
+    /** Card component */
+    card?: DefaultComponent;
+
     /** Editor component */
     editor?: {
       /** Editor defaults */
@@ -182,6 +185,7 @@ export interface ThemeParam {
       highlightColor?: Color;
     };
 
+    /** SVG component */
     svg?: DefaultComponent;
 
     /** Tabs component */
@@ -219,6 +223,9 @@ export interface ThemeParam {
 
     /** Notification toast component */
     toast?: ExtendibleComponent<"progress" | "closeButton">;
+
+    /** Topbar component (e.g. top section of primary main view) */
+    topbar?: DefaultComponent;
 
     /** Tooltip component */
     tooltip?: DefaultStyles & { bgSecondary?: Bg };
@@ -297,35 +304,6 @@ export interface ThemeParam {
 
         /** Tutorial view */
         tutorial?: ExtendibleComponent<"aboutPage" | "tutorialPage">;
-
-        /** Tutorials page view */
-        tutorials?: ExtendibleComponent<{
-          /** Tutorials top section */
-          top?: DefaultComponent;
-          /** Tutorials main section */
-          main?: ExtendibleComponent<{
-            /** Side section (left filters) */
-            side?: DefaultComponent;
-            /** Content section (right tutorials) */
-            content?: ExtendibleComponent<{
-              /** Tutorial card component */
-              card?: ExtendibleComponent<"gradient">;
-              /** Featured tutorial component */
-              featured?: DefaultComponent;
-            }>;
-          }>;
-        }>;
-
-        /** Programs page view */
-        programs?: ExtendibleComponent<{
-          /** Programs top section */
-          top?: DefaultComponent;
-          /** Programs main section */
-          main?: ExtendibleComponent<{
-            /** Program main content component */
-            content?: ExtendibleComponent<"card">;
-          }>;
-        }>;
       }>;
 
       /** Main secondary view */
@@ -348,7 +326,7 @@ export interface ThemeParam {
 
       /** Right side of the side panel */
       right?: ExtendibleComponent<
-        "title",
+        "title" | "content",
         { otherBg?: Bg; initialWidth?: StandardProperties["width"] }
       >;
     }>;
@@ -450,7 +428,13 @@ export interface ImportableThemeParam {
 export type ImportableTheme = Required<ImportableThemeParam>;
 
 /** Components that use `DefaultComponent` type */
-type DefaultComponents = "input" | "skeleton" | "svg" | "tooltip";
+type DefaultComponents =
+  | "card"
+  | "input"
+  | "skeleton"
+  | "svg"
+  | "tooltip"
+  | "topbar";
 
 /** Components that use `ExtendibleComponent` type */
 type ExtendibleComponents =

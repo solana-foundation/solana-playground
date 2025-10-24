@@ -4,7 +4,7 @@ import styled, { css } from "styled-components";
 import Button from "../../../../components/Button";
 import Img from "../../../../components/Img";
 import TutorialDetails from "../../../../components/Tutorial/TutorialDetails";
-import { PgTheme, PgTutorial, TutorialData } from "../../../../utils/pg";
+import { PgTutorial, TutorialData } from "../../../../utils/pg";
 
 interface FeaturedTutorialProps {
   tutorial: TutorialData;
@@ -51,19 +51,13 @@ const Wrapper = styled.div`
     border: 1px solid ${theme.colors.default.border};
     border-radius: ${theme.default.borderRadius};
     box-shadow: ${theme.default.boxShadow};
-
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.tutorials.main.content.featured
-    )};
   `}
 `;
 
 const LeftWrapper = styled.div`
   ${({ theme }) => css`
-    border-top-left-radius: ${theme.views.main.primary.tutorials.main.content
-      .featured.borderRadius};
-    border-bottom-left-radius: ${theme.views.main.primary.tutorials.main.content
-      .featured.borderRadius};
+    border-top-left-radius: ${theme.default.borderRadius};
+    border-bottom-left-radius: ${theme.default.borderRadius};
     overflow: hidden;
   `}
 `;
@@ -76,7 +70,7 @@ const Thumbnail = styled(Img)`
 
 const RightWrapper = styled.div`
   flex: 1;
-  padding: 1rem;
+  padding: 1.5rem 2rem;
   display: flex;
   flex-direction: column;
   justify-content: space-between;

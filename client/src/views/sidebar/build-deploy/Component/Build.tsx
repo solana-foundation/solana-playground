@@ -13,19 +13,14 @@ const Build = () => {
   );
   const build = useCallback(() => PgCommand.build.execute(), []);
 
-  const { explorer } = useExplorer();
+  const explorer = useExplorer();
   if (!explorer.isTemporary && !explorer.currentWorkspaceName) {
     return <Text>No project to build.</Text>;
   }
 
   return (
     <Wrapper>
-      <Button
-        kind="secondary"
-        onClick={build}
-        btnLoading={buildLoading}
-        fullWidth
-      >
+      <Button kind="secondary" onClick={build} loading={buildLoading} fullWidth>
         {buildLoading ? "Building..." : "Build"}
       </Button>
     </Wrapper>

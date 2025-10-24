@@ -6,6 +6,7 @@ import FilterGroups from "../../../../components/FilterGroups";
 import Link from "../../../../components/Link";
 import SearchBar from "../../../../components/SearchBar";
 import Text from "../../../../components/Text";
+import Topbar from "../../../../components/Topbar";
 import { FILTERS } from "./filters";
 import { Sad } from "../../../../components/Icons";
 import { useFilteredSearch } from "../../../../hooks";
@@ -92,27 +93,15 @@ const Wrapper = styled.div`
     flex-direction: column;
     font-family: ${theme.font.other.family};
     font-size: ${theme.font.other.size.medium};
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.tutorials.default)};
   `}
 `;
 
-const TopSection = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    justify-content: space-between;
-    padding: 1rem 2.5rem;
-    background: ${PgTheme.getDifferentBackground(
-      theme.views.main.primary.tutorials.default.bg
-    )};
-    border-bottom: 1px solid ${theme.colors.default.border};
+const TopSection = styled(Topbar)`
+  padding: 1rem 2.5rem;
 
-    & > div {
-      width: max(12rem, 50%);
-    }
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.tutorials.top)};
-  `}
+  & > div {
+    width: max(12rem, 50%);
+  }
 `;
 
 const Title = styled.h1``;
@@ -127,10 +116,11 @@ const MainSection = styled.div`
   ${({ theme }) => css`
     display: flex;
     height: 100%;
-    background: ${PgTheme.getDifferentBackground(theme.views.main.default.bg)};
+    background: ${PgTheme.getDifferentBackground(
+      theme.views.main.primary.default.bg
+    )};
     border-radius: ${theme.default.borderRadius};
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.tutorials.main.default)};
+    overflow: hidden;
   `}
 `;
 
@@ -140,12 +130,6 @@ const SideWrapper = styled.div`
     flex-shrink: 0;
     padding: 0.5rem;
     border-right: 1px solid ${theme.colors.default.border};
-    border-top-left-radius: ${theme.views.main.primary.tutorials.main.default
-      .borderRadius};
-    border-bottom-left-radius: ${theme.views.main.primary.tutorials.main.default
-      .borderRadius};
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.tutorials.main.side)};
   `}
 `;
 
@@ -155,23 +139,12 @@ const FiltersWrapper = styled.div`
 `;
 
 const ContentWrapper = styled.div`
-  ${({ theme }) => css`
-    padding: 1.5rem;
-    display: flex;
-    flex-direction: column;
-    flex-grow: 1;
-    gap: 2rem;
-    overflow: auto;
-    background: ${theme.views.main.primary.tutorials.main.default.bg};
-    border-top-right-radius: ${theme.views.main.primary.tutorials.main.default
-      .borderRadius};
-    border-bottom-right-radius: ${theme.views.main.primary.tutorials.main
-      .default.borderRadius};
-
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.tutorials.main.content.default
-    )};
-  `}
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  gap: 2rem;
+  overflow: auto;
 `;
 
 const RegularTutorialsWrapper = styled.div`

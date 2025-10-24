@@ -39,7 +39,7 @@ const SendExpanded = () => {
   const [amount, setAmount] = useState("");
   const [disabled, setDisabled] = useState(true);
 
-  const { balance } = useBalance();
+  const balance = useBalance();
 
   // Send button disable
   useEffect(() => {
@@ -112,8 +112,8 @@ const SendExpanded = () => {
       />
       <ExpandedButton
         onClick={send}
-        btnLoading={{ text: "Sending..." }}
         disabled={disabled}
+        loading={{ text: "Sending..." }}
         kind="primary-transparent"
         fullWidth
       >

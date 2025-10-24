@@ -1,20 +1,46 @@
-import { FC } from "react";
-import styled, { css } from "styled-components";
+import { FC, useState } from "react";
+import styled, { css, keyframes } from "styled-components";
 
+import Card from "../../../../components/Card";
 import Img from "../../../../components/Img";
 import Tag from "../../../../components/Tag";
-import { PgTheme, PgTutorial, TutorialData } from "../../../../utils/pg";
+import { useAsyncEffect } from "../../../../hooks";
+import {
+  PgTheme,
+  PgTutorial,
+  TutorialData,
+  TutorialMetadata,
+} from "../../../../utils/pg";
 
-const TutorialCard: FC<TutorialData> = ({
+type TutorialCardProps = TutorialData;
+
+const TutorialCard: FC<TutorialCardProps> = ({
   name,
   description,
   thumbnail,
   level,
   framework,
-}) => (
-  <GradientWrapper onClick={() => PgTutorial.open(name)}>
-    <InsideWrapper>
-      <ImgWrapper>
+  pageCount,
+}) => {
+  const [metadata, setMetadata] = useState<TutorialMetadata>();
+  useAsyncEffect(async () => {
+    const tutorial = PgTutorial.all.find((t) => t.name === name);
+    if (!tutorial) throw new Error(`Tutorial not found: ${name}`);
+    const metadata = await PgTutorial.getMetadata(name);
+    setMetadata(metadata);
+  }, [name]);
+
+  return (
+    <Wrapper onClick={() => PgTutorial.open(name)}>
+      <ImgWrapper
+        progress={
+          metadata
+            ? metadata.completed
+              ? 100
+              : ((metadata.pageNumber - 1) / pageCount) * 100
+            : 0
+        }
+      >
         <TutorialImg src={thumbnail} />
       </ImgWrapper>
 
@@ -31,83 +57,42 @@ const TutorialCard: FC<TutorialData> = ({
           {framework && <Tag kind="framework" value={framework} />}
         </InfoBottomSection>
       </InfoWrapper>
-    </InsideWrapper>
-  </GradientWrapper>
-);
+    </Wrapper>
+  );
+};
 
-const GradientWrapper = styled.div`
-  ${({ theme }) => css`
-    --img-height: 13.5rem;
+const Wrapper = styled(Card)`
+  --img-height: 13.1rem;
 
+  width: calc(var(--img-height) * 4 / 3);
+  height: 23rem;
+  padding: 0;
+`;
+
+const ImgWrapper = styled.div<{ progress: number }>`
+  ${({ theme, progress }) => css`
+    width: 100%;
+    height: var(--img-height);
     position: relative;
-    width: calc(var(--img-height) * 4 / 3);
-    height: 23rem;
-    padding: 0.25rem;
-    transform-style: preserve-3d;
-    transition: transform ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
 
     &::after {
+      --progress-height: 0.25rem;
+
       content: "";
       position: absolute;
-      transform: translateZ(-1px);
-      height: 100%;
-      width: 100%;
-      inset: 0;
-      margin: auto;
-      border-radius: ${theme.default.borderRadius};
-      background: linear-gradient(
-        45deg,
-        ${theme.colors.default.primary},
-        ${theme.colors.default.secondary}
-      );
-      opacity: 0;
-      transition: opacity ${theme.default.transition.duration.medium}
-        ${theme.default.transition.type};
+      left: 0;
+      bottom: calc(-1 * var(--progress-height));
+      height: var(--progress-height);
+      background: ${progress === 100
+        ? `linear-gradient(90deg, ${theme.colors.state.success.color} 0%, ${
+            theme.colors.state.success.color + theme.default.transparency.high
+          } 100%)`
+        : `linear-gradient(90deg, ${theme.colors.default.primary} 0%, ${theme.colors.default.secondary} 100%)`};
+      animation: ${keyframes`from { width: 0; } to { width: ${progress}%; }`}
+        ${theme.default.transition.duration.long}
+        ${theme.default.transition.type} forwards;
     }
-
-    &:hover {
-      cursor: pointer;
-      transform: translateY(-0.5rem);
-
-      & > div {
-        background: ${theme.colors.state.hover.bg};
-      }
-
-      &::after {
-        opacity: 1;
-      }
-    }
-
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.tutorials.main.content.card.gradient
-    )};
   `}
-`;
-
-const InsideWrapper = styled.div`
-  ${({ theme }) => css`
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: ${theme.views.main.primary.tutorials.main.default.bg};
-    color: ${theme.colors.default.textPrimary};
-    border: 1px solid
-      ${theme.colors.default.border + theme.default.transparency.medium};
-    border-radius: ${theme.default.borderRadius};
-    box-shadow: ${theme.default.boxShadow};
-    transition: all ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.tutorials.main.content.card.default
-    )};
-  `}
-`;
-
-const ImgWrapper = styled.div`
-  width: 100%;
-  height: var(--img-height);
 `;
 
 const TutorialImg = styled(Img)`

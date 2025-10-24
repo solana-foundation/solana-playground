@@ -3,11 +3,11 @@ import styled, { css } from "styled-components";
 
 import SearchBar from "../../../../components/SearchBar";
 import Text from "../../../../components/Text";
+import Topbar from "../../../../components/Topbar";
 import ProgramCard, { ProgramCardProps } from "./ProgramCard";
 import { FILTERS } from "./filters";
 import { Sad } from "../../../../components/Icons";
 import { useFilteredSearch } from "../../../../hooks";
-import { PgTheme } from "../../../../utils/pg";
 
 interface ProgramsProps {
   programs: ProgramCardProps[];
@@ -36,7 +36,7 @@ const Programs: FC<ProgramsProps> = ({ programs }) => {
       </TopSection>
 
       <MainSection>
-        <MainContent noMatch={!regularItems.length}>
+        <ContentWrapper noMatch={!regularItems.length}>
           {!regularItems.length && (
             <NoMatchText icon={<Sad />}>No match found</NoMatchText>
           )}
@@ -44,7 +44,7 @@ const Programs: FC<ProgramsProps> = ({ programs }) => {
           {regularItems.map((program) => (
             <ProgramCard key={program.name} {...program} />
           ))}
-        </MainContent>
+        </ContentWrapper>
       </MainSection>
     </Wrapper>
   );
@@ -56,56 +56,32 @@ const Wrapper = styled.div`
 
     font-family: ${theme.font.other.family};
     font-size: ${theme.font.other.size.medium};
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.programs.default)};
   `}
 `;
 
-const TopSection = styled.div`
-  ${({ theme }) => css`
-    position: sticky;
-    top: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    width: 100%;
-    height: var(--top-height);
-    padding: 1rem 2.5rem;
-    background: ${PgTheme.getDifferentBackground(
-      theme.views.main.primary.programs.default.bg
-    )};
-    border-bottom: 1px solid ${theme.colors.default.border};
+const TopSection = styled(Topbar)`
+  height: var(--top-height);
+  padding: 1rem 2.5rem;
 
-    & > div {
-      width: max(12rem, 50%);
-    }
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.programs.top)};
-  `}
+  & > div {
+    width: max(12rem, 50%);
+  }
 `;
 
 const Title = styled.h1``;
 
 const MainSection = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    min-height: calc(100% - var(--top-height));
-    padding: 2rem 2.5rem;
-
-    ${PgTheme.convertToCSS(theme.views.main.primary.programs.main.default)};
-  `}
+  display: flex;
+  min-height: calc(100% - var(--top-height));
+  padding: 2rem 2.5rem;
 `;
 
-const MainContent = styled.div<{ noMatch: boolean }>`
-  ${({ theme, noMatch }) => css`
+const ContentWrapper = styled.div<{ noMatch: boolean }>`
+  ${({ noMatch }) => css`
     display: flex;
     flex-wrap: wrap;
     flex-grow: 1;
     gap: 1.5rem;
-
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.programs.main.content.default
-    )};
 
     ${noMatch
       ? "justify-content: center; align-items: center"

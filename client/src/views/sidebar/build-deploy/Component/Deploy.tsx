@@ -21,16 +21,19 @@ const Deploy = () => {
     PgGlobal.deployState
   );
 
-  const { deployed, error, programInfo } = useProgramInfo();
-  const { wallet } = useWallet();
+  const programInfo = useProgramInfo();
+  const error = !programInfo.onChain;
+  const deployed = programInfo.onChain?.deployed;
   const upgradable = programInfo.onChain?.upgradable;
-  const hasAuthority = wallet
-    ? programInfo.onChain?.authority?.equals(wallet.publicKey)
-    : false;
   const hasProgramKp = !!programInfo.kp;
   const hasUuid = !!programInfo.uuid;
   const importedProgram = programInfo.importedProgram;
   const isImportedProgram = !!importedProgram?.buffer.length;
+
+  const wallet = useWallet();
+  const hasAuthority = wallet
+    ? programInfo.onChain?.authority?.equals(wallet.publicKey)
+    : false;
 
   const deployButtonText = useMemo(() => {
     return deployState === "cancelled"
@@ -67,8 +70,8 @@ const Deploy = () => {
             PgGlobal.update({ deployState: "loading" });
         }
       },
-      btnLoading: deployState === "cancelled",
       disabled: buildLoading,
+      loading: deployState === "cancelled",
       leftIcon:
         deployState === "loading" ? (
           <Pause />
