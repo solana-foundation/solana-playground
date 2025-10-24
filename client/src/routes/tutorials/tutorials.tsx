@@ -69,9 +69,9 @@ const handleTutorial = (name: string, page: string) => {
       PgView.onDidChangeSidebarPage((page) => {
         // Skip handling other routed pages in order to avoid navigation issues.
         // Without this check, this callback runs again after clicking to a
-        // different sidebar page with route (e.g. Programs), which then
-        // results in `PgTutorial.open` getting run and the user getting
-        // navigated to the last tutorial's path erroneously.
+        // different sidebar page with route, which then results in
+        // `PgTutorial.open` getting run and the user getting navigated to
+        // the last tutorial's path erroneously.
         //
         // TODO: Find a way to dispose this *just before* the next navigation
         // and remove this check
