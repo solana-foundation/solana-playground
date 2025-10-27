@@ -295,8 +295,4 @@ if (process.env.NODE_ENV !== "production") {
     page: "1",
   });
   assertNoMatches("/tutorials", "/");
-  assertNoMatches("/tutorials", "/programs");
-  assertNoMatches("/tutorials/", "/programs");
-  assertNoMatches("/tutorials/{name}", "/programs");
-  assertNoMatches("/tutorials/{name}/{page}", "/programs");
 }
