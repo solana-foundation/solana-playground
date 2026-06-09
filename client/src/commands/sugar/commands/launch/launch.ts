@@ -5,7 +5,7 @@ import { processValidate } from "../validate";
 import { processVerify } from "../verify";
 import { loadConfigData } from "../../utils";
 import { Emoji } from "../../../../constants";
-import { PgTerminal } from "../../../../utils/pg";
+import { PgTerminal } from "../../../../utils";
 
 export const processLaunch = async (
   rpcUrl: string | undefined,
@@ -14,7 +14,7 @@ export const processLaunch = async (
 ) => {
   const term = await PgTerminal.get();
 
-  term.println(`Starting Sugar launch... ${Emoji.LAUNCH}`);
+  term.println(`Starting Sugar launch... ${Emoji.ROCKET}`);
 
   // Config
   try {
@@ -23,7 +23,7 @@ export const processLaunch = async (
     term.println("");
 
     if (
-      await term.waitForUserInput(
+      await term.waitForInput(
         "Could not load config file. Would you like to create a new config file?",
         { confirm: true, default: "yes" }
       )

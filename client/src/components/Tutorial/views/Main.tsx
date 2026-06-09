@@ -7,7 +7,15 @@ import Markdown from "../../Markdown";
 import Resizable from "../../Resizable";
 import { SpinnerWithBg } from "../../Loading";
 import { PointedArrow } from "../../Icons";
-import { PgRouter, PgTheme, PgTutorial } from "../../../utils/pg";
+import { Emoji } from "../../../constants";
+import { useAsyncEffect } from "../../../hooks";
+import {
+  PgCommon,
+  PgRouter,
+  PgTheme,
+  PgTutorial,
+  PgView,
+} from "../../../utils";
 import type { TutorialMainComponentProps } from "../types";
 
 export const Main: FC<TutorialMainComponentProps> = ({
@@ -19,9 +27,19 @@ export const Main: FC<TutorialMainComponentProps> = ({
   start,
 }) => {
   // If the page is set from the URL but the tutorial has not been started,
-  // start the tutorial automatically
-  useEffect(() => {
-    if (!isStarted) start();
+  // start the tutorial automatically.
+  //
+  // TODO: Move this to the route handler. Currently, the user sees the sidebar
+  // page for a short period of time before this effect runs.
+  useAsyncEffect(async () => {
+    if (isStarted) return;
+
+    PgView.setSidebarLoading(true);
+    try {
+      await PgCommon.transition(start);
+    } finally {
+      PgView.setSidebarLoading(false);
+    }
   }, [isStarted, start]);
 
   // Scroll to the top on page change
@@ -115,7 +133,7 @@ export const Main: FC<TutorialMainComponentProps> = ({
                     onClick={finishTutorial}
                     kind="no-border"
                     color="success"
-                    rightIcon={<span>✔</span>}
+                    rightIcon={<span>{Emoji.CHECKMARK}</span>}
                   >
                     Finish
                   </NavigationButton>
@@ -148,13 +166,13 @@ const TutorialPage = styled.div`
     overflow: auto;
     max-width: 60rem;
     padding-top: ${theme.components.tabs.tab.default.height};
-    background: ${theme.views.main.primary.tutorial.default.bg};
+    background: ${theme.components.tutorial.default.bg};
   `}
 `;
 
 const TutorialContent = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.tutorial.tutorialPage)};
+    ${PgTheme.convertToCSS(theme.components.tutorial.tutorialPage)};
   `}
 `;
 

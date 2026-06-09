@@ -1,17 +1,13 @@
-import { useCallback } from "react";
 import styled from "styled-components";
 
 import Button from "../../../../components/Button";
 import Text from "../../../../components/Text";
+import { Wrench } from "../../../../components/Icons";
 import { useExplorer, useRenderOnChange } from "../../../../hooks";
-import { PgCommand, PgGlobal } from "../../../../utils/pg";
+import { PgCommand, PgGlobal } from "../../../../utils";
 
 const Build = () => {
-  const buildLoading = useRenderOnChange(
-    PgGlobal.onDidChangeBuildLoading,
-    PgGlobal.buildLoading
-  );
-  const build = useCallback(() => PgCommand.build.execute(), []);
+  const buildLoading = useRenderOnChange(PgGlobal.onDidChangeBuildLoading);
 
   const explorer = useExplorer();
   if (!explorer.isTemporary && !explorer.currentWorkspaceName) {
@@ -20,7 +16,13 @@ const Build = () => {
 
   return (
     <Wrapper>
-      <Button kind="secondary" onClick={build} loading={buildLoading} fullWidth>
+      <Button
+        kind="secondary"
+        onClick={() => PgCommand.build.execute()}
+        loading={buildLoading}
+        fullWidth
+        leftIcon={<Wrench />}
+      >
         {buildLoading ? "Building..." : "Build"}
       </Button>
     </Wrapper>

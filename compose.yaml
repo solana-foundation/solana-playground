@@ -1,0 +1,102 @@
+name: "solana-playground"
+
+x-client: &client
+  platform: linux/amd64
+  depends_on:
+    wasm:
+      condition: service_completed_successfully
+    server:
+      condition: service_started
+  build:
+    context: .
+    dockerfile: ./client/Dockerfile
+    args:
+      USER: solpg
+      HAS_SERVER: true
+    additional_contexts:
+      solana-playground-wasm: service:wasm
+      solana-playground-server: service:server
+  ports:
+    - ${PG_CLIENT_PORT:-3000}:3000
+
+x-server: &server
+  platform: linux/amd64
+  build:
+    context: ./server
+    args:
+      USER: solpg
+  ports:
+    - ${PG_PORT:-8080}:8080
+  env_file: .env
+  profiles:
+    - dev
+    - prod
+
+services:
+  client:
+    <<: *client
+    tty: true
+    stdin_open: true
+    profiles:
+      - dev
+
+  client-prod:
+    <<: *client
+    command: ["sh", "-c", "yarn build && npx serve -s build"]
+    profiles:
+      - prod
+
+  # Client without server
+  client-standalone:
+    platform: linux/amd64
+    depends_on:
+      wasm:
+        condition: service_completed_successfully
+    build:
+      context: .
+      dockerfile: ./client/Dockerfile
+      args:
+        USER: solpg
+        HAS_SERVER: ${PG_SERVER:-false}
+      additional_contexts:
+        solana-playground-wasm: service:wasm
+    ports:
+      - ${PG_CLIENT_PORT:-3000}:3000
+    tty: true
+    stdin_open: true
+    profiles:
+      - client-standalone
+
+  server:
+    <<: *server
+    depends_on:
+      - db
+    environment:
+      - PG_DB_URI=${PG_DB_URI:-mongodb://db:27017}
+
+  # Server without DB
+  server-standalone:
+    <<: *server
+
+  wasm:
+    platform: linux/amd64
+    build:
+      context: ./wasm
+    profiles:
+      - dev
+      - prod
+      - client-standalone
+
+  db:
+    image: mongo:7
+    volumes:
+      - mongodb:/data/db
+    # Override the default command because it logs a lot and setting `logging`
+    # `driver` to `none` doesn't work
+    command: mongod --quiet --logpath /dev/null
+    profiles:
+      - dev
+      - prod
+
+volumes:
+  mongodb:

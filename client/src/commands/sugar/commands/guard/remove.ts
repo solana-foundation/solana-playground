@@ -1,6 +1,6 @@
 import { getMetaplex, loadCache } from "../../utils";
 import { Emoji } from "../../../../constants";
-import { PgTerminal, PgWeb3 } from "../../../../utils/pg";
+import { PgTerminal, PgWeb3 } from "../../../../utils";
 
 export const processGuardRemove = async (
   rpcUrl: string | undefined,
@@ -9,7 +9,7 @@ export const processGuardRemove = async (
 ) => {
   const term = await PgTerminal.get();
 
-  term.println(`[1/1] ${Emoji.UNWRAP} Unwrapping`);
+  term.println(`[1/1] ${Emoji.NUT_AND_BOLT} Unwrapping`);
 
   // The candy machine id specified takes precedence over the one from the cache
   const candyMachinePkStr =

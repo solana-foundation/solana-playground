@@ -23,12 +23,24 @@ import {
   Plus,
   Trash,
 } from "../../../../components/Icons";
-import { PgCommon, PgExplorer, PgTutorial, PgView } from "../../../../utils/pg";
+import { PgCommon, PgExplorer, PgTutorial, PgView } from "../../../../utils";
 import { useExplorer } from "../../../../hooks";
 
 const Workspaces = () => {
   if (PgExplorer.isTemporary) return <TemporaryWarning />;
 
+  return (
+    <Wrapper>
+      <TopWrapper>
+        <MainText>Projects</MainText>
+        <WorkspaceButtons />
+      </TopWrapper>
+      <WorkspaceSelect />
+    </Wrapper>
+  );
+};
+
+const WorkspaceButtons = () => {
   const handleCreate = () => PgView.setModal(CreateWorkspace);
   const handleRename = () => PgView.setModal(RenameWorkspace);
   const handleDelete = () => PgView.setModal(DeleteWorkspace);
@@ -37,46 +49,40 @@ const Workspaces = () => {
   const handleFsExport = () => PgView.setModal(ExportWorkspace);
 
   return (
-    <Wrapper>
-      <TopWrapper>
-        <MainText>Projects</MainText>
-        <ButtonsWrapper>
-          <Button onClick={handleCreate} kind="icon" title="Create">
-            <Plus />
-          </Button>
+    <ButtonsWrapper>
+      <Button onClick={handleCreate} kind="icon" title="Create">
+        <Plus />
+      </Button>
 
-          <Button onClick={handleRename} kind="icon" title="Rename">
-            <Edit />
-          </Button>
+      <Button onClick={handleRename} kind="icon" title="Rename">
+        <Edit />
+      </Button>
 
-          <Button
-            onClick={handleDelete}
-            kind="icon"
-            hoverColor="error"
-            title="Delete"
-          >
-            <Trash />
-          </Button>
+      <Button
+        onClick={handleDelete}
+        kind="icon"
+        hoverColor="error"
+        title="Delete"
+      >
+        <Trash />
+      </Button>
 
-          <Button onClick={handleGithub} kind="icon" title="Import from Github">
-            <Github />
-          </Button>
+      <Button onClick={handleGithub} kind="icon" title="Import from Github">
+        <Github />
+      </Button>
 
-          <Button
-            onClick={handleFsImport}
-            kind="icon"
-            title="Import from local file system"
-          >
-            <ImportFile />
-          </Button>
+      <Button
+        onClick={handleFsImport}
+        kind="icon"
+        title="Import from local file system"
+      >
+        <ImportFile />
+      </Button>
 
-          <Button onClick={handleFsExport} kind="icon" title="Export">
-            <ExportFile />
-          </Button>
-        </ButtonsWrapper>
-      </TopWrapper>
-      <WorkspaceSelect />
-    </Wrapper>
+      <Button onClick={handleFsExport} kind="icon" title="Export">
+        <ExportFile />
+      </Button>
+    </ButtonsWrapper>
   );
 };
 

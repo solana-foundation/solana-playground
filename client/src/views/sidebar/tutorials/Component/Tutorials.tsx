@@ -1,60 +1,43 @@
-import { FC, useState } from "react";
+import { FC, useMemo } from "react";
 import styled, { css, keyframes } from "styled-components";
 
 import FilterGroups from "../../../../components/FilterGroups";
 import Text from "../../../../components/Text";
-import TutorialsSkeleton from "./TutorialsSkeleton";
-import { FILTERS } from "../../../main/primary/Tutorials/filters";
-import {
-  PgCommon,
-  PgTutorial,
-  TutorialData,
-  TutorialMetadata,
-} from "../../../../utils/pg";
-import { useAsyncEffect, useRenderOnChange } from "../../../../hooks";
+import { PgTutorial, TutorialFullData } from "../../../../utils";
+import type { Filter } from "../../../../hooks";
 
-const Tutorials = () => {
-  useRenderOnChange(PgTutorial.onDidChangeCurrent);
-  return PgTutorial.current ? <Progress /> : <Filters />;
+interface TutorialsProps {
+  tutorials: TutorialFullData[];
+  filters?: Filter[];
+}
+
+const Tutorials: FC<TutorialsProps> = ({ filters, ...props }) => {
+  // FIXME: `props.tutorials` should always be defined
+  if (!props.tutorials) return null;
+
+  return filters ? (
+    <FilterGroups items={props.tutorials} filters={filters} />
+  ) : (
+    <Progress {...props} />
+  );
 };
 
-const Filters = () => <FilterGroups filters={FILTERS} items={PgTutorial.all} />;
+type ProgressProsp = Omit<TutorialsProps, "filters">;
 
-type TutorialFullData = TutorialData & TutorialMetadata;
-
-const Progress = () => {
-  const [tutorialsData, setTutorialsData] = useState<{
-    completed: TutorialFullData[];
-    ongoing: TutorialFullData[];
-  }>();
-
-  // Get tutorial data
-  useAsyncEffect(async () => {
-    // Sleep here because:
-    // - Explorer might not have been initialized
-    // - The current tutorial's `completed` state might not have been saved yet
-    // after finishing the tutorial
-    // - Better transition
-    //
-    // TODO: Remove this after making sure explorer is always initialized
-    // before this runs.
-    await PgCommon.sleep(300);
-
-    const data: typeof tutorialsData = { completed: [], ongoing: [] };
-    for (const tutorialName of PgTutorial.getUserTutorialNames()) {
-      const tutorialData = PgTutorial.all.find((t) => t.name === tutorialName);
-      if (!tutorialData) continue;
-
-      const tutorialMetadata = await PgTutorial.getMetadata(tutorialName);
-      const tutorialFullData = { ...tutorialData, ...tutorialMetadata };
-      if (tutorialMetadata.completed) data.completed.push(tutorialFullData);
-      else data.ongoing.push(tutorialFullData);
-    }
-
-    setTutorialsData(data);
-  }, []);
-
-  if (!tutorialsData) return <TutorialsSkeleton />;
+const Progress: FC<ProgressProsp> = ({ tutorials }) => {
+  const tutorialsData = useMemo(() => {
+    return tutorials.reduce(
+      (acc, cur) => {
+        if (cur.progress === "Ongoing") acc.ongoing.push(cur);
+        if (cur.progress === "Completed") acc.completed.push(cur);
+        return acc;
+      },
+      { completed: [], ongoing: [] } as {
+        completed: TutorialFullData[];
+        ongoing: TutorialFullData[];
+      }
+    );
+  }, [tutorials]);
 
   return (
     <ProgressWrapper>
@@ -96,7 +79,11 @@ const TutorialGroup: FC<TutorialGroupProps> = ({ name, tutorials }) => {
           key={t.name}
           onClick={() => PgTutorial.open(t.name)}
           progress={
-            t.completed ? 100 : ((t.pageNumber - 1) / t.pageCount) * 100
+            t.metadata
+              ? t.metadata.completed
+                ? 100
+                : ((t.metadata.pageNumber - 1) / t.pageCount) * 100
+              : 0
           }
         >
           <TutorialName>{t.name}</TutorialName>

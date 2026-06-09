@@ -11,7 +11,7 @@ import {
 } from "./parser";
 import { SugarUploadScreen } from "../upload";
 import { Emoji } from "../../../../constants";
-import { PgCommon, PgView, PgTerminal } from "../../../../utils/pg";
+import { PgCommon, PgView, PgTerminal } from "../../../../utils";
 
 export const processValidate = async (
   strict: boolean,
@@ -56,7 +56,7 @@ export const processValidate = async (
       );
 
       if (
-        !(await term.waitForUserInput(
+        !(await term.waitForInput(
           "Do you want to continue without automatically setting the candy machine collection?",
           { confirm: true, default: "yes" }
         ))

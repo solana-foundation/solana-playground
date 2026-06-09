@@ -13,7 +13,7 @@ import {
   PgView,
   RequiredKey,
   Setting as SettingType,
-} from "../../../../utils/pg";
+} from "../../../../utils";
 import { CustomSetting } from "./CustomSetting";
 
 const Settings = () => (
@@ -22,7 +22,7 @@ const Settings = () => (
       .reduce((acc, cur) => {
         const groupName = cur.id.split(".")[0];
         const lastGroup = acc.at(-1);
-        if (lastGroup?.name === groupName) lastGroup.settings.push(cur);
+        if (lastGroup?.name === groupName) lastGroup!.settings.push(cur);
         else acc.push({ name: groupName, settings: [cur] });
 
         return acc;
@@ -109,11 +109,7 @@ const Setting: FC<SettingType> = (setting) => (
     </Left>
 
     <Right>
-      {setting.onChange ? (
-        <SettingSetterWithOnChange {...setting} onChange={setting.onChange} />
-      ) : (
-        <SettingSetter {...setting} />
-      )}
+      <SettingSetter {...setting} />
     </Right>
   </SettingWrapper>
 );
@@ -151,15 +147,8 @@ const Right = styled.div`
 
 type SettingSetterProps = SettingType;
 
-// Create a separate component to get around conditional hook usage error.
-const SettingSetterWithOnChange: FC<
-  RequiredKey<SettingSetterProps, "onChange">
-> = ({ onChange, ...props }) => {
-  useRenderOnChange(onChange);
-  return <SettingSetter {...props} />;
-};
-
 const SettingSetter: FC<SettingSetterProps> = ({ values, ...props }) => {
+  useRenderOnChange(props.onChange);
   if (values) return <SettingSetterSelect values={values} {...props} />;
   return <SettingSetterCheckBox {...props} />;
 };
@@ -232,13 +221,11 @@ type SettingSetterCheckBoxProps = Omit<SettingSetterProps, "values">;
 const SettingSetterCheckBox: FC<SettingSetterCheckBoxProps> = ({
   getValue,
   setValue,
-}) => {
-  return (
-    <Checkbox
-      onChange={(ev) => setValue(ev.target.checked)}
-      defaultChecked={getValue()}
-    />
-  );
-};
+}) => (
+  <Checkbox
+    onChange={(ev) => setValue(ev.target.checked)}
+    checked={getValue()}
+  />
+);
 
 export default Settings;

@@ -1,4 +1,4 @@
-import { PgCommon, PgSettings, Setting, SettingParam } from "../utils/pg";
+import { PgCommon, PgSettings, Setting, SettingParam } from "../utils";
 
 /**
  * Create a UI setting.
@@ -22,10 +22,10 @@ export const createSetting = <
     .map((word, i) => (i ? word.toLowerCase() : word))
     .join(" ");
 
-  if (!(setting.getValue && setting.setValue)) {
-    setting.getValue = () => PgCommon.getValue(PgSettings, id);
+  if (!(setting.getValue && setting.setValue && setting.onChange)) {
+    setting.getValue = () => PgCommon.getValue(PgSettings, id) as V;
     setting.setValue = (v) => PgCommon.setValue(PgSettings, id, v);
-    setting.onChange ??= PgSettings[
+    setting.onChange = PgSettings[
       id.reduce(
         (acc, cur) => acc + PgCommon.capitalize(cur),
         "onDidChange"

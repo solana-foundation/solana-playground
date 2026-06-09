@@ -7,7 +7,7 @@ import CodeBlock from "../CodeBlock";
 import Img from "../Img";
 import Link, { LinkProps } from "../Link";
 import { HyperLink } from "../Icons";
-import { PgCommon, PgRouter, PgTheme } from "../../utils/pg";
+import { PgCommon, PgRouter, PgTheme } from "../../utils";
 
 interface MarkdownProps {
   /** Markdown string */
@@ -21,8 +21,10 @@ interface MarkdownProps {
 }
 
 const Markdown: FC<MarkdownProps> = ({ rootSrc, linkable, ...props }) => {
-  // Scroll to section
+  // Scroll to section if it's linkable
   useEffect(() => {
+    if (!linkable) return;
+
     /** Recursively try to find a parent vertically scrollable element. */
     const findParentScrollableElement = (
       element: HTMLElement | null
@@ -51,7 +53,7 @@ const Markdown: FC<MarkdownProps> = ({ rootSrc, linkable, ...props }) => {
       });
     });
     return dispose;
-  }, []);
+  }, [linkable]);
 
   return (
     <StyledMarkdown

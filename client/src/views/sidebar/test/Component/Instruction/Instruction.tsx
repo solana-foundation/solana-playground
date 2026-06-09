@@ -14,11 +14,11 @@ import {
   PgSettings,
   PgTerminal,
   PgTx,
-} from "../../../../../utils/pg";
+} from "../../../../../utils";
 import {
   IdlInstruction,
   PgProgramInteraction,
-} from "../../.././../../utils/pg/program-interaction";
+} from "../../.././../../utils/program-interaction";
 import { useWallet } from "../../../../../hooks";
 import { useIdl } from "../IdlProvider";
 
@@ -88,7 +88,7 @@ const Instruction: FC<InstructionProps> = ({ index, idlInstruction }) => {
 
   const handleTest = async () => {
     const showLogTxHash = await PgTerminal.process(async () => {
-      PgTerminal.println(PgTerminal.info(`Testing '${instruction.name}'...`));
+      PgTerminal.println(PgTerminal.info(`Testing \`${instruction.name}\`...`));
 
       try {
         const txHash = await PgCommon.transition(
@@ -97,23 +97,29 @@ const Instruction: FC<InstructionProps> = ({ index, idlInstruction }) => {
         if (PgSettings.testUi.showTxDetailsInTerminal) return txHash;
 
         const txResult = await PgTx.confirm(txHash);
-        const msg = txResult?.err
-          ? `${Emoji.CROSS} ${PgTerminal.error(
-              `Test '${instruction.name}' failed`
-            )}.`
-          : `${Emoji.CHECKMARK} ${PgTerminal.success(
-              `Test '${instruction.name}' passed`
-            )}.`;
-        PgTerminal.println(msg + "\n", { noColor: true });
-      } catch (e: any) {
-        console.log(e);
-        const convertedError = PgTerminal.convertErrorMessage(e.message);
+        if (txResult?.err) {
+          throw new Error(`${Emoji.CROSSMARK} Test failed: ${txResult.err}`);
+        }
+
         PgTerminal.println(
-          `${Emoji.CROSS} ${PgTerminal.error(
-            `Test '${instruction.name}' failed`
-          )}: ${convertedError}\n`,
-          { noColor: true }
+          `${Emoji.CHECKMARK_BUTTON} ${PgTerminal.success(`Test passed`)}.`
         );
+      } catch (e: any) {
+        if (e.message) {
+          const ERRORS = [
+            ["unable to infer src variant", "Enum variant not found"],
+            [
+              "program.methods[txVals.name] is not a function",
+              "Test component is outdated",
+            ],
+          ];
+
+          for (const [before, after] of ERRORS) {
+            if (e.message === before) throw new Error(after);
+          }
+        }
+
+        throw e;
       }
     });
 

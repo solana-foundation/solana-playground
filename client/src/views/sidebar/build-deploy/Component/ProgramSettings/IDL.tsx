@@ -2,14 +2,12 @@ import { ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 
 import Button from "../../../../../components/Button";
-import ExportButton from "../../../../../components/ExportButton";
-import ImportButton from "../../../../../components/ImportButton";
 import {
   PgCommand,
   PgCommon,
   PgProgramInfo,
   PgWallet,
-} from "../../../../../utils/pg";
+} from "../../../../../utils";
 import { useRenderOnChange } from "../../../../../hooks";
 
 const IDL = () => (
@@ -27,33 +25,29 @@ const Import = () => {
 
     try {
       const file = files[0];
-      const arrayBuffer = await file.arrayBuffer();
-      const decodedString = PgCommon.decodeBytes(arrayBuffer);
-
-      PgProgramInfo.update({
-        idl: JSON.parse(decodedString),
-      });
+      const text = await file.text();
+      const idl = JSON.parse(text);
+      PgProgramInfo.update({ idl });
     } catch (e: any) {
       console.log(e.message);
     }
   };
 
   return (
-    <ImportButton accept=".json" onImport={handleImport} showImportText>
+    <Button.Import accept=".json" onImport={handleImport} showImportText>
       Import
-    </ImportButton>
+    </Button.Import>
   );
 };
 
 const Export = () => {
-  useRenderOnChange(PgProgramInfo.onDidChangeIdl);
-
-  if (!PgProgramInfo.idl) return null;
+  const idl = useRenderOnChange(PgProgramInfo.onDidChangeIdl);
+  if (!idl) return null;
 
   return (
-    <ExportButton href={PgProgramInfo.idl} fileName="idl.json">
+    <Button.Export href={idl} fileName="idl.json">
       Export
-    </ExportButton>
+    </Button.Export>
   );
 };
 

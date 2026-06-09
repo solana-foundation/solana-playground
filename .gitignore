@@ -12,7 +12,7 @@
 */build
 
 # Misc
-*/.env
+.env
 */deploy.sh
 
 */npm-debug.log*
@@ -20,7 +20,7 @@
 */yarn-error.log*
 
 # Server
-server/.sqlx
+server/mongodb
 server/programs/*
 !server/programs/Cargo.*
 !server/programs/default

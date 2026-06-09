@@ -10,13 +10,14 @@ import {
 import styled, { css } from "styled-components";
 
 import ErrorBoundary from "../../../../components/ErrorBoundary";
+import FadeIn from "../../../../components/FadeIn";
 import Resizable from "../../../../components/Resizable";
 import { Wormhole } from "../../../../components/Loading";
-import { PgTheme, PgView, SetState, SidebarPage } from "../../../../utils/pg";
-import { useAsyncEffect, useSetStatic } from "../../../../hooks";
+import { PgCommon, PgTheme, PgView } from "../../../../utils";
+import { useAsyncEffect, useRenderOnChange } from "../../../../hooks";
 
 interface DefaultRightProps {
-  page: SidebarPage;
+  page: typeof PgView.currentSidebarPage;
 }
 
 interface RightProps<W = number> extends DefaultRightProps {
@@ -54,48 +55,55 @@ const Right: FC<RightProps> = ({ page, width, setWidth, oldWidth }) => {
 };
 
 const Title: FC<DefaultRightProps> = ({ page }) => (
-  <TitleWrapper>{page.name.toUpperCase()}</TitleWrapper>
+  <TitleWrapper>{page ? page.name.toUpperCase() : ""}</TitleWrapper>
 );
 
 const Content: FC<DefaultRightProps> = ({ page }) => {
+  const props = useRenderOnChange(PgView.onDidChangeSidebarProps);
+  const loadingCount = useRenderOnChange(PgView.onDidChangeSidebarLoadingCount);
+
   const [el, setEl] = useState<ReactNode>(null);
-  const [props, setProps] = useState(() => ({}));
-  const [loadingCount, setLoadingCount] = useState<number>(0);
-
-  // There could be multiple processes that change the loading state and the
-  // overall loading state should only be disabled when all processes complete.
-  const setLoading = useCallback((set: SetState<boolean>) => {
-    setLoadingCount((prev) => {
-      const val = typeof set === "function" ? set(!!prev) : set;
-      return val ? prev + 1 : prev - 1;
-    });
-  }, []);
-
-  useSetStatic(PgView.events.SIDEBAR_PAGE_PROPS_SET, setProps);
-  useSetStatic(PgView.events.SIDEBAR_LOADING_SET, setLoading);
 
   const ids = useRef<boolean[]>([]);
-
   useAsyncEffect(async () => {
-    setLoading(true);
+    if (!page) return;
+
     const currentId = ids.current.length;
+    ids.current[currentId] ??= true;
+
+    const setContent = async () => {
+      const [{ default: Page }, resolvedProps] = await Promise.all([
+        page.importComponent(),
+        PgCommon.callIfNeeded(props),
+      ]);
+      if (!ids.current[currentId + 1]) setEl(<Page {...resolvedProps} />);
+    };
 
     try {
-      const { default: PageComponent } = await page.importComponent();
-      if (!ids.current[currentId + 1]) setEl(<PageComponent {...props} />);
-    } catch (e: any) {
-      console.log("SIDEBAR ERROR", e.message);
+      PgView.setSidebarLoading(true);
+      await setContent();
+    } catch (e) {
+      setEl({ error: e, refresh: setContent });
     } finally {
-      setLoading(false);
+      PgView.setSidebarLoading(false);
     }
-  }, [page, props, setLoading]);
+  }, [page, props]);
 
-  if (loadingCount) return <Loading page={page} />;
+  if (
+    loadingCount ||
+    !el ||
+    !page ||
+    (page.route &&
+      (el as { props?: Record<string, any> }).props &&
+      page.name !== (el as { props: { pageName?: string } }).props.pageName)
+  ) {
+    return <Loading page={page} />;
+  }
 
   return (
-    <ErrorBoundary>
-      <ContentWrapper>{el}</ContentWrapper>
-    </ErrorBoundary>
+    <ContentWrapper duration="long">
+      <ErrorBoundary>{el}</ErrorBoundary>
+    </ContentWrapper>
   );
 };
 
@@ -106,7 +114,7 @@ const Wrapper = styled.div<{
   ${({ theme, width, oldWidth }) => css`
     display: flex;
     flex-direction: column;
-    height: 100%;
+    height: calc(100vh - ${PgTheme.theme.views.bottom.default.height});
     min-width: ${width ? width : oldWidth}px;
 
     ${PgTheme.convertToCSS(theme.views.sidebar.right.default)};
@@ -123,7 +131,7 @@ const TitleWrapper = styled.div`
   `}
 `;
 
-const ContentWrapper = styled.div`
+const ContentWrapper = styled(FadeIn)`
   ${({ theme }) => css`
     height: 100%;
     overflow-y: auto;
@@ -134,7 +142,7 @@ const ContentWrapper = styled.div`
 `;
 
 const Loading: FC<DefaultRightProps> = ({ page }) => {
-  if (page.LoadingComponent) return <page.LoadingComponent />;
+  if (page?.LoadingComponent) return <page.LoadingComponent />;
 
   return (
     <LoadingWrapper>

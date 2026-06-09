@@ -8,7 +8,7 @@ import {
   PgGlobal,
   PgLanguage,
   PgView,
-} from "../../../../utils/pg";
+} from "../../../../utils";
 import { useRenderOnChange } from "../../../../hooks";
 
 export type ItemData = {
@@ -22,13 +22,11 @@ export type ItemData = {
 };
 
 export const useExplorerContextMenu = () => {
+  const buildLoading = useRenderOnChange(PgGlobal.onDidChangeBuildLoading);
+  const deployState = useRenderOnChange(PgGlobal.onDidChangeDeployState);
+
   const [itemData, setItemData] = useState<ItemData>({});
   const [ctxSelectedPath, setCtxSelectedPath] = useState("");
-
-  const deployState = useRenderOnChange(
-    PgGlobal.onDidChangeDeployState,
-    PgGlobal.deployState
-  );
 
   const handleMenu = useCallback((ev: MouseEvent<HTMLDivElement>) => {
     // Add selected style to the item
@@ -164,6 +162,7 @@ export const useExplorerContextMenu = () => {
     runClientFolder,
     runTestFolder,
     itemData,
+    buildLoading,
     deployState,
   };
 };

@@ -3,19 +3,19 @@ import styled from "styled-components";
 
 import FromSeed from "./FromSeed";
 import Label from "../InputLabel";
-import CopyButton from "../../../../../components/CopyButton";
+import Button from "../../../../../components/Button";
 import SearchBar, {
   SearchBarItem,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
-import { PgCommon, PgWallet, PgWeb3 } from "../../../../../utils/pg";
+import { PgCommon, PgWallet, PgWeb3 } from "../../../../../utils";
 import {
   GeneratableInstruction,
   Idl,
   IdlType,
   InstructionValueGenerator,
   PgProgramInteraction,
-} from "../../../../../utils/pg/program-interaction";
+} from "../../../../../utils/program-interaction";
 import { useInstruction } from "./InstructionProvider";
 import { useIdl } from "../IdlProvider";
 
@@ -56,7 +56,7 @@ const InstructionInput: FC<InstructionInputProps> = ({
   const { instruction, setInstruction } = useInstruction();
   const { idl } = useIdl();
 
-  const { displayType, parse } = useMemo(
+  const { name: typeName, parse } = useMemo(
     () => PgProgramInteraction.getIdlType(type, idl),
     [type, idl]
   );
@@ -160,7 +160,7 @@ const InstructionInput: FC<InstructionInputProps> = ({
     <Wrapper>
       {!noLabel && (
         <Row>
-          <Label name={name} type={displayType} {...accountProps} />
+          <Label name={name} type={typeName} {...accountProps} />
         </Row>
       )}
 
@@ -186,7 +186,7 @@ const InstructionInput: FC<InstructionInputProps> = ({
             {...searchBarProps}
           />
           <CopyButtonWrapper>
-            <CopyButton copyText={value} />
+            <Button.Copy copyText={value} />
           </CopyButtonWrapper>
         </InputWithCopyButtonWrapper>
       </Row>
@@ -234,10 +234,7 @@ const getSearchBarProps = (
 
   // Items
   searchBarProps.items = [
-    {
-      label: "Random",
-      value: customizable.generateRandom,
-    },
+    { label: "Random", value: customizable.generateRandom },
   ];
 
   // Generate values via `generateValueOrDefault` method and push to items.
@@ -274,10 +271,10 @@ const getSearchBarProps = (
     }
   };
 
-  if (customizable.displayType === "bool") {
+  if (customizable.name === "bool") {
     searchBarProps.items.push("false", "true");
     searchBarProps.noCustomOption = true;
-  } else if (customizable.displayType === "publicKey") {
+  } else if (customizable.name === "publicKey") {
     // Handle "Random" for "publicKey" differently in order to be able to
     // sign the transaction later with the generated key
     searchBarProps.items[0] = {
@@ -294,10 +291,11 @@ const getSearchBarProps = (
     if (PgWallet.current) {
       pushGeneratorItem({ type: "Current wallet" });
 
-      if (PgWallet.accounts.length > 1) {
+      const wallets = PgWallet.getConnectedWallets();
+      if (wallets.length > 1) {
         pushGeneratorItem({
           type: "All wallets",
-          names: PgWallet.accounts.map((acc) => acc.name),
+          names: wallets.map((w) => w.name),
         });
       }
     }
@@ -308,6 +306,34 @@ const getSearchBarProps = (
       DropdownComponent: (props) => <FromSeed {...props} name={name} />,
       closeButton: true,
     });
+
+    if (PgWallet.current && !accountProps.isSigner) {
+      searchBarProps.items.push(
+        {
+          label: "Token accounts",
+          items: async () => {
+            const accounts = await PgProgramInteraction.getTokenAccounts();
+
+            return accounts.map(({ address, mint, amount }) => ({
+              label: address,
+              value: address,
+              matches: [mint, amount].filter(Boolean),
+            }));
+          },
+        },
+        {
+          label: "Mint accounts",
+          items: async () => {
+            const accounts = await PgProgramInteraction.getMintAccounts();
+
+            return accounts.map((address) => ({
+              label: address,
+              value: address,
+            }));
+          },
+        }
+      );
+    }
 
     // Programs
     if (!(accountProps.isMut || accountProps.isSigner)) {
@@ -333,7 +359,7 @@ const getSearchBarProps = (
   } else {
     // Handle enum
     const definedType = idl.types?.find(
-      (t) => t.name === customizable.displayType
+      (t) => t.name === customizable.name
     )?.type;
     if (definedType?.kind === "enum") {
       const enumItems = definedType.variants.map((variant) => {
@@ -352,7 +378,6 @@ const getSearchBarProps = (
 
           const lowerCaseValue = value.toLowerCase();
           if (lowerCaseName.includes(lowerCaseValue)) return true;
-
           return new RegExp(lowerCaseName).test(lowerCaseValue);
         };
 

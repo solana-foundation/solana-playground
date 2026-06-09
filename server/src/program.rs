@@ -1,17 +1,22 @@
-use std::{fs, path::Path, process::Command, sync::OnceLock};
+use std::{fs, io, path::Path, process::Command, sync::LazyLock};
 
 use anchor_syn::idl::{parse::file::parse as parse_idl, types::Idl};
 use anyhow::anyhow;
 use regex::Regex;
 
+use crate::log::{info, warn};
+
 /// Directory name of where the programs are stored
 const PROGRAMS_DIR: &str = "programs";
 
-/// Maximum amount of files to pass to the [`build`] function.
+/// Maximum amount of files to pass to the [`build`] function
 const MAX_FILE_AMOUNT: usize = 64;
 
-/// Maximum length of the file paths to pass to the [`build`] function.
-const MAX_PATH_LENGTH: usize = 128;
+/// Maximum length of the file paths to pass to the [`build`] function
+const MAX_PATH_LEN: usize = 128;
+
+/// Max program build output stderr length
+const MAX_STDERR_LEN: usize = 1024 * 1024 * 1024;
 
 /// A vector of [Path, Content]
 pub type Files = Vec<[String; 2]>;
@@ -26,6 +31,7 @@ pub type Files = Vec<[String; 2]>;
 ///
 /// NOTE: This function doesn't return an error in the case of a compiler error.
 pub fn build(
+    concurrency_id: usize,
     program_name: &str,
     files: &Files,
     seeds_feature: bool,
@@ -34,59 +40,100 @@ pub fn build(
 ) -> anyhow::Result<(String, Option<Idl>)> {
     // Check file count
     if files.len() > MAX_FILE_AMOUNT {
-        return Err(anyhow!("Exceeded maximum file amount({MAX_FILE_AMOUNT})"));
+        return Err(anyhow!(
+            "Exceeded maximum file amount: {} > {MAX_FILE_AMOUNT}",
+            files.len()
+        ));
     }
 
     // Check file paths
-    static ALLOWED_REGEX: OnceLock<Regex> = OnceLock::new();
-    let allowed_regex = ALLOWED_REGEX.get_or_init(|| Regex::new(r"^/src/[\w/-]+\.rs$").unwrap());
-    let is_valid = files.iter().all(|[path, _]| {
-        allowed_regex.is_match(path)
-            && path.len() <= MAX_PATH_LENGTH
+    static ALLOWED_REGEX: LazyLock<Regex> =
+        LazyLock::new(|| Regex::new(r"^/src/[\w/-]+\.rs$").unwrap());
+    for [path, _] in files {
+        let is_valid = path.len() <= MAX_PATH_LEN
             && !path.contains("..")
             && !path.contains("//")
-    });
-    if !is_valid {
-        return Err(anyhow!("Invalid path"));
+            && ALLOWED_REGEX.is_match(path);
+        if !is_valid {
+            return Err(anyhow!("Invalid path: {path}"));
+        }
     }
 
-    // Write files
+    // Copy `Cargo.*` files into a separate directory (only once)
+    let concurrency_path = Path::new(PROGRAMS_DIR).join(concurrency_id.to_string());
+    let concurrency_ready_path = concurrency_path.join("ready");
+    if !fs::exists(&concurrency_ready_path)? {
+        info!("Initializing concurrency id {concurrency_id}");
+        fs::create_dir_all(&concurrency_path)?;
+        fs::copy(
+            Path::new(PROGRAMS_DIR).join("Cargo.toml"),
+            concurrency_path.join("Cargo.toml"),
+        )?;
+        fs::copy(
+            Path::new(PROGRAMS_DIR).join("Cargo.lock"),
+            concurrency_path.join("Cargo.lock"),
+        )?;
+        fs::write(concurrency_ready_path, [])?;
+        info!("Initialized concurrency id {concurrency_id}");
+    }
+
+    // Remove existing files
+    //
+    // TODO: Compare with existing files and only remove the unused ones instead of removing all
     let program_path = Path::new(PROGRAMS_DIR).join(program_name);
+    if let Err(e) = fs::remove_dir_all(program_path.join("src")) {
+        if e.kind() != io::ErrorKind::NotFound {
+            return Err(anyhow!("Failed to remove existing files: {e}"));
+        }
+    };
+
+    // Write files
     for [path, content] in files {
-        // TODO: Send relative path from client and remove this line
         let relative_path = path.trim_start_matches('/');
         let item_path = program_path.join(relative_path);
 
         // Create directories when necessary
-        let parent_path = item_path.parent().expect("Should have parent");
+        let parent_path = item_path.parent().expect("Must have parent");
         fs::create_dir_all(parent_path)?;
 
         // Write file
         fs::write(item_path, content)?;
     }
 
-    // Update manifest path
-    static MANIFEST: OnceLock<String> = OnceLock::new();
-    let manifest_path = Path::new(PROGRAMS_DIR).join("Cargo.toml");
-    let manifest = MANIFEST
-        .get_or_init(|| fs::read_to_string(&manifest_path).expect("Could not read manifest"))
-        .replacen("default", program_name, 1);
-    fs::write(&manifest_path, manifest)?;
+    // Update manifest
+    static MANIFEST: LazyLock<String> = LazyLock::new(|| {
+        fs::read_to_string(Path::new(PROGRAMS_DIR).join("Cargo.toml"))
+            .expect("Could not read manifest")
+    });
+    let manifest_path = concurrency_path.join("Cargo.toml");
+    fs::write(
+        &manifest_path,
+        MANIFEST.replacen("default", &format!("../{program_name}"), 1),
+    )?;
 
-    // Build the program
+    // Build the program with a clean env, inheriting only toolchain locator vars from the parent.
     let output = Command::new("cargo-build-sbf")
-        .args([
-            "--manifest-path",
-            manifest_path
-                .to_str()
-                .expect("Manifest path should always be UTF-8"),
-            "--sbf-out-dir",
-            program_path
-                .to_str()
-                .ok_or_else(|| anyhow!("{program_path:?} is not valid UTF-8"))?,
-            "--offline",
-        ])
+        .env_clear()
+        .envs(["PATH", "HOME"].into_iter().filter_map(|key| {
+            std::env::var(key)
+                .inspect_err(|e| warn!("Failed to get env variable: `{key}`: {e}"))
+                .ok()
+                .map(|value| (key, value))
+        }))
+        .arg("--manifest-path")
+        .arg(manifest_path)
+        .arg("--sbf-out-dir")
+        .arg(&program_path)
+        .arg("--offline")
         .output()?;
+
+    // Check output length
+    if output.stderr.len() > MAX_STDERR_LEN {
+        return Err(anyhow!(
+            "Exceeded maximum build output length: {} > {MAX_STDERR_LEN}",
+            output.stderr.len()
+        ));
+    }
 
     // Check compile errors
     let stderr = String::from_utf8(output.stderr)?;
@@ -108,7 +155,7 @@ pub fn build(
             )
         })
         .transpose()
-        .map_or_else(|e| (format!("Error: {e}"), None), |idl| (stderr, idl));
+        .map_or_else(|e| (format!("IDL error: {e}"), None), |idl| (stderr, idl));
     Ok(ret)
 }
 

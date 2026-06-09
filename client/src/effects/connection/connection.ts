@@ -4,24 +4,16 @@ import {
   PgView,
   PgWallet,
   SyncOrAsync,
-} from "../../utils/pg";
+} from "../../utils";
 
 export const connection = () => {
   return PgCommon.batchChanges(async () => {
-    if (cache.local && cache.nonLocal) return;
+    if (Object.values(cache).every((v) => v)) return;
     if (!PgWallet.current) return;
     if (PgConnection.cluster === "playnet") return;
+    if (PgConnection.isConnected && !PgConnection.isClusterDown) return;
 
-    const RETRY_AMOUNT = 2;
-    for (let i = 0; i < RETRY_AMOUNT; i++) {
-      const isClusterDown = await PgConnection.getIsClusterDown();
-      if (isClusterDown === false) return;
-
-      // Don't sleep on the last iteration
-      if (i !== RETRY_AMOUNT - 1) await PgCommon.sleep(5000);
-    }
-
-    // Connection failed
+    // Connection failed or the cluster is down
     if (PgConnection.cluster === "localnet") {
       executeOnce("local", async () => {
         const { Local } = await import("./Local");

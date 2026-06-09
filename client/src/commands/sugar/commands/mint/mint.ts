@@ -2,12 +2,7 @@ import { toBigNumber } from "@metaplex-foundation/js";
 
 import { getMetaplex, loadCache } from "../../utils";
 import { Emoji } from "../../../../constants";
-import {
-  PgBlockExplorer,
-  PgTerminal,
-  PgView,
-  PgWeb3,
-} from "../../../../utils/pg";
+import { PgBlockExplorer, PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 
 export const processMint = async (
   rpcUrl: string | undefined,
@@ -61,7 +56,7 @@ export const processMint = async (
   const groupLen = candyState.candyGuard?.groups.length;
   let groupIndex = 0;
   if (groupLen && groupLen > 1) {
-    groupIndex = await term.waitForUserInput(
+    groupIndex = await term.waitForInput(
       "Candy guard has multiple groups. Which group do you belong to?",
       {
         choice: {

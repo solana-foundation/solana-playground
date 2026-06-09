@@ -1,57 +1,60 @@
-use std::sync::OnceLock;
+use std::{sync::OnceLock, time::Duration};
 
 use anyhow::{anyhow, Result};
+use mongodb::{
+    bson::{doc, oid::ObjectId, Bson},
+    options::ClientOptions,
+    Client, Collection,
+};
 use serde_json::Value;
-use sqlx::{postgres::PgPoolOptions, PgPool};
-use uuid::Uuid;
 
-/// Global database connection pool
-static DB: OnceLock<PgPool> = OnceLock::new();
+/// Global database client
+static DB: OnceLock<Client> = OnceLock::new();
 
-/// Initialize the global database connection pool.
+/// Initialize the global database singleton.
 ///
 /// NOTE: Other functions in this module will not be usable before this function is executed.
-pub async fn init(uri: &str, _name: String) -> Result<()> {
-    let pool = PgPoolOptions::new().max_connections(5).connect(uri).await?;
+pub async fn init(uri: &str, name: String) -> Result<()> {
+    let mut options = ClientOptions::parse(uri).await?;
+    options.default_database = Some(name);
+    options.server_selection_timeout = Some(Duration::from_secs(2));
 
-    // Run migrations
-    sqlx::migrate!("./migrations").run(&pool).await?;
-
-    DB.set(pool).map_err(|_| anyhow!("Failed to init `DB`"))
+    let client = Client::with_options(options)?;
+    DB.set(client).map_err(|_| anyhow!("Failed to init `DB`"))
 }
 
-/// Find the value by id in the given `collection` (table).
+/// Find the value by id in the given `collection`.
 pub async fn find_by_id(id: &str, collection: &str) -> Result<Option<Value>> {
-    let pool = get_pool()?;
-    let id = Uuid::parse_str(id)?;
-
-    let query = format!("SELECT data FROM {collection} WHERE id = $1");
-    let row: Option<(Value,)> = sqlx::query_as(&query).bind(id).fetch_optional(pool).await?;
-
-    Ok(row.map(|(data,)| data))
-}
-
-/// Insert the value inside the given `collection` (table).
-pub async fn insert(value: Value, collection: &str) -> Result<String> {
-    let pool = get_pool()?;
-    let id = Uuid::new_v4();
-
-    let query = format!("INSERT INTO {collection} (id, data) VALUES ($1, $2) RETURNING id");
-    let row: (Uuid,) = sqlx::query_as(&query)
-        .bind(id)
-        .bind(&value)
-        .fetch_one(pool)
+    let id = ObjectId::parse_str(id)?;
+    let value = get_collection(collection)
+        .find_one(doc! { "_id": id }, None)
         .await?;
-
-    Ok(row.0.to_string())
+    Ok(value)
 }
 
-/// Get the database connection pool.
+/// Insert the value inside the given `collection`.
+pub async fn insert(value: Value, collection: &str) -> Result<String> {
+    match get_collection(collection)
+        .insert_one(value, None)
+        .await?
+        .inserted_id
+    {
+        Bson::ObjectId(id) => Ok(id.to_string()),
+        _ => Err(anyhow!("Unexpected `insert_one` result")),
+    }
+}
+
+/// Get collection from the given collection `name`.
 ///
-/// # Errors
+/// # Panics
 ///
-/// This function returns an error if [`DB`] isn't initialized.
-fn get_pool() -> Result<&'static PgPool> {
+/// This function panics in the following scenerios:
+/// - [`DB`] isn't initialized
+/// - Default database isn't set
+fn get_collection(name: &str) -> Collection<Value> {
     DB.get()
-        .ok_or_else(|| anyhow!("`db::init` must be called before `get_pool`"))
+        .expect("`db::init` must be called before `get_collection`")
+        .default_database()
+        .expect("Default database must be set")
+        .collection(name)
 }

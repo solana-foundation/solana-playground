@@ -1,11 +1,11 @@
-import { BPF_LOADER_UPGRADEABLE_PROGRAM_ID } from "../../utils/bpf-upgradeable-browser";
 import {
-  PgBytes,
+  PgCodec,
   PgConnection,
   PgSettings,
   PgTx,
   PgView,
-} from "../../utils/pg";
+  PgWeb3,
+} from "../../utils";
 import { ExplorerLink } from "./ExplorerLink";
 
 // Show a notification toast with explorer links after a transaction is sent.
@@ -20,15 +20,18 @@ export const tx = () => {
     // Don't show buffer initialize and write transactions (too many)
     const hasBufferInitOrWriteIx = tx.instructions.some(
       (ix) =>
-        ix.programId.equals(BPF_LOADER_UPGRADEABLE_PROGRAM_ID) &&
-        (ix.data[0] === 0 || ix.data[0] === 1)
+        ix.programId.equals(PgWeb3.BpfLoaderUpgradeableProgram.programId) &&
+        (PgWeb3.BpfLoaderUpgradeableProgram.isInitializeBufferInstruction(
+          ix.data
+        ) ||
+          PgWeb3.BpfLoaderUpgradeableProgram.isWriteInstruction(ix.data))
     );
     if (hasBufferInitOrWriteIx) return;
 
     // Sanity check for signature
     if (!tx.signature) return;
-    const txHash = PgBytes.toBase58(tx.signature);
 
+    const txHash = PgCodec.encodeBinary(tx.signature, "base58");
     PgView.setToast(ExplorerLink, {
       componentProps: { txHash },
       options: { toastId: txHash },

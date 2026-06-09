@@ -7,6 +7,7 @@ import {
   ReactNode,
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import styled, { css, useTheme } from "styled-components";
@@ -25,11 +26,11 @@ import {
   Triangle,
   Wrench,
 } from "../../../../components/Icons";
-import { PgCommon, PgExplorer, PgView } from "../../../../utils/pg";
+import { PgCommon, PgExplorer, PgView } from "../../../../utils";
 import { useCreateItem } from "./useCreateItem";
 import { useExplorerContextMenu } from "./useExplorerContextMenu";
 import { useHandleItemState } from "./useHandleItemState";
-import { useKeybind } from "../../../../hooks";
+import { useKeybind, useOnClickOutside } from "../../../../hooks";
 
 const Folders = () => {
   useHandleItemState();
@@ -45,6 +46,10 @@ const Folders = () => {
     ],
     []
   );
+
+  // Reset ctx selected on outside clicks
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  useOnClickOutside(wrapperRef, PgExplorer.removeCtxSelectedEl);
 
   // No need to memoize here
   const relativeRootPath = PgExplorer.getProjectRootPath();
@@ -62,7 +67,11 @@ const Folders = () => {
 
       <ExplorerDndContext>
         <ExplorerContextMenu {...ctxMenu}>
-          <RootWrapper id={PgView.ids.ROOT_DIR} data-path={relativeRootPath}>
+          <RootWrapper
+            ref={wrapperRef}
+            id={PgView.ids.ROOT_DIR}
+            data-path={relativeRootPath}
+          >
             {/* Program */}
             <SectionTopWrapper>
               <SectionHeader>Program</SectionHeader>
@@ -70,6 +79,7 @@ const Folders = () => {
                 <>
                   <SectionButton
                     onClick={ctxMenu.runBuild}
+                    disabled={ctxMenu.buildLoading}
                     icon={<Wrench />}
                     addTextMargin
                   >
@@ -77,9 +87,9 @@ const Folders = () => {
                   </SectionButton>
                   <SectionButton
                     onClick={ctxMenu.runDeploy}
+                    disabled={ctxMenu.deployState !== "ready"}
                     icon={<Rocket />}
                     addTextMargin
-                    disabled={ctxMenu.deployState !== "ready"}
                   >
                     Deploy
                   </SectionButton>
@@ -285,7 +295,6 @@ const RecursiveFolder: FC<RecursiveFolderProps> = ({ path }) => {
     () => PgExplorer.getItemNameFromPath(path),
     [path]
   );
-
   const depth = useMemo(
     () => PgExplorer.getRelativePath(path).split("/").length - 2,
     [path]
