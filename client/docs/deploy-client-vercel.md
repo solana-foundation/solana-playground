@@ -41,7 +41,7 @@ Each target has a matching `vercel-link-{production,preview}` that's run automat
 
 Split is deliberate:
 
-- **Build/deploy is configurable** (`REACT_APP_SERVER_URL` at build time, also user-overridable via the `server.endpoint` setting) — so self-hosted forks can route builds to their own backend.
-- **Share (`/share/*`, `/new`) is hardcoded to `https://api.solpg.io`** — so shared snippets stay discoverable from one canonical store regardless of where the client is hosted.
+- **All routes except share routes are configurable** (`REACT_APP_SERVER_URL` at build time, also user-overridable via the `server.endpoint` setting) — so self-hosted forks can route client requests to their own backend.
+- **Share routes (`/share/*`, `/new`) are locked to `https://api.solpg.io`** — so shared snippets stay discoverable from one canonical store regardless of where the client is hosted.
 
 For this Vercel deploy, `REACT_APP_SERVER_URL` is read directly from the Vercel project's environment variables (pulled via `vercel pull` before the build).
