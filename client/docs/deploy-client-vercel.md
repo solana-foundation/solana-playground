@@ -1,11 +1,8 @@
 # Deploy the client to Vercel
 
-Two paths:
+Vercel's native Git integration auto-deploys: `master` → production; any other branch → preview. Makefile targets exist as a local escape hatch.
 
-- **Automatic** — Vercel's native Git integration. `master` → production; any other branch → preview.
-- **Manual** — `_deploy_client_vercel.yml` Action or Makefile targets. Escape hatch.
-
-Automatic flow: `installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `yarn build`. Wasm must precede `yarn install` because `client/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
+`installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `yarn build`. Wasm must precede `yarn install` because `client/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
 
 ## Verified Vercel project settings
 
@@ -25,9 +22,8 @@ Automatic flow: `installCommand` = `bash scripts/vercel-install.sh` (rustup + `w
 3. Production Branch: `master`. Ignored Build Step: Automatic.
 4. Node.js Version: `22.x`.
 5. Environment Variables: `REACT_APP_SOLANA_FOUNDATION_SERVER_URL` (full URL, `https://`, no trailing slash) for Production and Preview.
-6. GitHub repo Variables/Secrets: same `REACT_APP_SOLANA_FOUNDATION_SERVER_URL` (used by the manual workflow).
-7. Account Settings → Tokens: team-scoped token as GitHub secret `VERCEL_TOKEN` and `export VERCEL_TOKEN=...` locally.
-8. Link the local checkout (from repo root):
+6. Account Settings → Tokens: team-scoped token, `export VERCEL_TOKEN=...` locally for the Makefile targets.
+7. Link the local checkout (from repo root):
 
    ```sh
    VERCEL_PROJECT_ID=prj_xxx make vercel-bootstrap
@@ -38,7 +34,6 @@ Add the Vercel deployment origin to the GAE server's `client_urls` or CORS will 
 ## Deploy
 
 - **Automatic:** push the branch.
-- **GitHub manual:** Actions → "Deploy Client (Vercel)" → Run workflow, optional `ref`.
 - **Local preview:** `VERCEL_TOKEN=<token> make deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
 - **Local production:** `VERCEL_TOKEN=<token> make deploy-client-to-vercel-production`.
 
