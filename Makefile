@@ -1,9 +1,5 @@
-# Local Vercel deploy targets.
-# One-time setup at repo root: create the Vercel project in the dashboard, then `make vercel-bootstrap` to link this checkout to it.
-# See docs/deploy-client-vercel.md for the full setup.
-#
-# Layout: Vercel project's Root Directory is `client`, so vercel CLI must run from repo root (cwd + RootDirectory = client/).
-# yarn needs cwd = client/, so it's wrapped in `(cd client && ...)` to scope the cd back to repo root for the following vercel calls.
+# Local Vercel deploy targets. See client/docs/deploy-client-vercel.md.
+# `vercel build` reads client/vercel.json (installCommand, buildCommand) so install/build chain isn't duplicated here.
 
 .PHONY: vercel-bootstrap vercel-link-production vercel-link-preview deploy-client-to-vercel-production deploy-client-to-vercel-preview
 
@@ -32,15 +28,13 @@ vercel-link-preview:
 # Build + deploy straight to the production alias. Live immediately.
 deploy-client-to-vercel-production: vercel-link-production
 	set -a && . ./.vercel/.env.production.local && set +a && \
-		: $${REACT_APP_SERVER_URL:?REACT_APP_SERVER_URL missing from Vercel production env} && \
-		(cd client && yarn setup && yarn build) && \
+		: $${REACT_APP_SOLANA_FOUNDATION_SERVER_URL:?REACT_APP_SOLANA_FOUNDATION_SERVER_URL missing from Vercel production env} && \
 		npx vercel@latest build --prod --token="$${VERCEL_TOKEN}" && \
 		npx vercel@latest deploy --prebuilt --prod --token="$${VERCEL_TOKEN}"
 
 # Build + deploy as a unique preview URL. Promote with `vercel promote <url> --prod`.
 deploy-client-to-vercel-preview: vercel-link-preview
 	set -a && . ./.vercel/.env.preview.local && set +a && \
-		: $${REACT_APP_SERVER_URL:?REACT_APP_SERVER_URL missing from Vercel preview env} && \
-		(cd client && yarn setup && yarn build) && \
+		: $${REACT_APP_SOLANA_FOUNDATION_SERVER_URL:?REACT_APP_SOLANA_FOUNDATION_SERVER_URL missing from Vercel preview env} && \
 		npx vercel@latest build --token="$${VERCEL_TOKEN}" && \
 		npx vercel@latest deploy --prebuilt --token="$${VERCEL_TOKEN}"
