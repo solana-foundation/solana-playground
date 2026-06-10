@@ -29,16 +29,6 @@ if ! command -v cargo >/dev/null 2>&1; then
 fi
 rustup default 1.75.0
 
-# Pre-install wasm-pack once so parallel package builds don't race on `cargo install`.
-if ! command -v wasm-pack >/dev/null 2>&1; then
-  cargo install wasm-pack@0.10.3 --locked --no-default-features
-fi
-
-# Fan out the 6 wasm crate builds. WASM_BUILD_JOBS tunes parallelism — keep
-# conservative by default to avoid oversubscribing memory on smaller build machines.
-PACKAGES=(anchor-cli rust-analyzer seahorse-compile solana-cli spl-token-cli sugar-cli)
-JOBS="${WASM_BUILD_JOBS:-3}"
-echo ">>> Building ${#PACKAGES[@]} wasm crates with -P${JOBS}"
-printf '%s\n' "${PACKAGES[@]}" | xargs -n1 -P"$JOBS" -I{} bash ../wasm/build.sh {}
+bash ../wasm/build.sh
 
 yarn install --frozen-lockfile
