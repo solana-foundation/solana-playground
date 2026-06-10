@@ -43,7 +43,3 @@ Add the Vercel deployment origin to the GAE server's `client_urls` or CORS will 
 
 - All non-share routes → `REACT_APP_SOLANA_FOUNDATION_SERVER_URL` (also user-overridable via the `server.endpoint` setting), so forks can point at their own backend.
 - Share routes (`/share/*`, `/new`) → hardcoded `https://api.solpg.io` so shared snippets stay discoverable across hosts.
-
-## Planned: offload wasm build to GitHub Actions
-
-GHA will build the 6 wasm crates per `wasm/**` change, tar the outputs, and publish as a release asset keyed by content hash. `vercel-install.sh` will `curl` the matching tarball and extract into `wasm/*/pkg/`, falling back to source build if missing. `package.json` and local workflows stay unchanged; public repo means no extra tokens on either side.
