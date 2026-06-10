@@ -7,7 +7,7 @@ name: Deploy Client (Vercel)
 #
 # Trigger from the Actions tab → "Deploy Client (Vercel)" → "Run workflow".
 # Secrets (VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID) are read directly from repo settings.
-# REACT_APP_SERVER_URL is pulled from the Vercel project's Preview env via `vercel pull`.
+# REACT_APP_SOLANA_FOUNDATION_SERVER_URL is read from GitHub repo/environment variables or secrets.
 on:
   workflow_dispatch:
     inputs:
@@ -27,6 +27,7 @@ jobs:
       VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
       VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      REACT_APP_SOLANA_FOUNDATION_SERVER_URL: ${{ vars.REACT_APP_SOLANA_FOUNDATION_SERVER_URL || secrets.REACT_APP_SOLANA_FOUNDATION_SERVER_URL }}
 
     steps:
       - uses: actions/checkout@v6
@@ -49,17 +50,13 @@ jobs:
         run: npm install --global vercel@latest
 
       # Preview target throughout (vercel rejects mismatched build/deploy targets with --prebuilt).
-      # Pull runs before yarn build so REACT_APP_SERVER_URL gets sourced into the build shell.
       - name: Pull Vercel project settings
         run: vercel pull --yes --environment=preview --token="${VERCEL_TOKEN}"
 
       - name: Build client bundle
         working-directory: client
         run: |
-          set -a
-          . ../.vercel/.env.preview.local
-          set +a
-          : "${REACT_APP_SERVER_URL:?REACT_APP_SERVER_URL missing from Vercel preview env}"
+          : "${REACT_APP_SOLANA_FOUNDATION_SERVER_URL:?REACT_APP_SOLANA_FOUNDATION_SERVER_URL missing from GitHub variables or secrets}"
           yarn setup
           yarn build
 
