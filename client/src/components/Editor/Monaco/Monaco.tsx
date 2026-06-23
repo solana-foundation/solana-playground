@@ -12,12 +12,14 @@ import {
   PgLanguage,
   PgPackage,
   PgProgramInfo,
+  PgSettings,
   PgTerminal,
   PgTheme,
 } from "../../../utils";
 import {
   useAsyncEffect,
   useKeybind,
+  useRenderOnChange,
   useSendAndReceiveCustomEvent,
 } from "../../../hooks";
 
@@ -213,6 +215,32 @@ const Monaco = () => {
 
     return dispose;
   }, [editor]);
+
+  // Set keybinding
+  const keybinding = useRenderOnChange(PgSettings.onDidChangeEditorKeybinding);
+  useAsyncEffect(async () => {
+    if (!editor) return;
+
+    switch (keybinding) {
+      case "default":
+        return;
+      case "vim": {
+        const { initVimMode } = await import("monaco-vim");
+
+        // NOTE: It is required to store the result as a variable to avoid the
+        // `Cannot read properties of undefined (reading 'dispatch')` error on
+        // disposal.
+        //
+        // TODO: Show status bar
+        const vimMode = initVimMode(editor);
+
+        // Also required to create a callback; cannot `return vimMode.dispose`
+        return () => vimMode.dispose();
+      }
+      default:
+        throw new Error(`Unhandled keybinding: ${keybinding}`);
+    }
+  }, [editor, keybinding]);
 
   // Create editor
   useEffect(() => {

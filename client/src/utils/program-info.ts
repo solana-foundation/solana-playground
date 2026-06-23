@@ -31,6 +31,8 @@ type ProgramInfo = Nullable<{
     buffer: Buffer;
     fileName: string;
   };
+  /** Whether the last build failed */
+  lastBuildFailed: boolean;
 }>;
 
 /** Serialized program info that's used in storage */
@@ -39,6 +41,7 @@ type SerializedProgramInfo = Nullable<{
   kp: Array<number>;
   customPk: string;
   idl: Idl;
+  lastBuildFailed: boolean;
 }>;
 
 const defaultState: ProgramInfo = {
@@ -47,6 +50,7 @@ const defaultState: ProgramInfo = {
   customPk: null,
   idl: null,
   importedProgram: null,
+  lastBuildFailed: null,
 };
 
 const storage = {
@@ -88,6 +92,7 @@ const storage = {
       idl: state.idl,
       kp: state.kp ? Array.from(state.kp.secretKey) : null,
       customPk: state.customPk?.toBase58() ?? null,
+      lastBuildFailed: state.lastBuildFailed,
     };
 
     await PgExplorer.fs.writeFile(this.PATH, JSON.stringify(serializedState));
@@ -148,10 +153,10 @@ class _PgProgramInfo {
   }
 
   /**
-   * Fetch the program from chain.
+   * Fetch the on-chain program.
    *
    * @param programId optional program id
-   * @returns program's authority and whether the program is upgradable
+   * @returns program's on-chain data
    */
   static async fetch(programId: PgWeb3.PublicKey | null = PgProgramInfo.pk) {
     if (!programId) throw new Error("Program id doesn't exist");
@@ -161,19 +166,35 @@ class _PgProgramInfo {
 
     const programAccountInfo = await conn.getAccountInfo(programId);
     const deployed = !!programAccountInfo;
-    if (!programAccountInfo) return { deployed, upgradable: true };
+    if (!deployed) return { deployed, upgradable: true };
+
+    // TODO: Also handle Loader v4?
+    if (
+      !programAccountInfo.owner.equals(
+        PgWeb3.BpfLoaderUpgradeableProgram.programId
+      )
+    ) {
+      return { deployed, upgradable: false };
+    }
 
     const programDataPkBuffer = programAccountInfo.data.slice(4);
     const programDataPk = new PgWeb3.PublicKey(programDataPkBuffer);
     const programDataAccountInfo = await conn.getAccountInfo(programDataPk);
+    if (!programDataAccountInfo) return { deployed, upgradable: true };
 
     // Check if program authority exists
-    const authorityExists = programDataAccountInfo?.data.at(12);
-    if (!authorityExists) return { deployed, upgradable: false };
+    const authorityExists = programDataAccountInfo.data.at(12);
+    const upgradable = !!authorityExists;
+    if (!upgradable) return { deployed, upgradable };
 
-    const upgradeAuthorityPkBuffer = programDataAccountInfo?.data.slice(13, 45);
-    const upgradeAuthorityPk = new PgWeb3.PublicKey(upgradeAuthorityPkBuffer!);
-    return { deployed, authority: upgradeAuthorityPk, upgradable: true };
+    const authorityBuffer = programDataAccountInfo.data.slice(13, 45);
+    const authority = new PgWeb3.PublicKey(authorityBuffer);
+    return {
+      deployed,
+      upgradable,
+      authority,
+      programDataLen: programDataAccountInfo.data.length,
+    };
   }
 
   /**

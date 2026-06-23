@@ -151,8 +151,8 @@ export class BpfLoaderUpgradeable {
       }, 1000);
 
       const onChainProgramData = bufferAccount.data.slice(
-        PgWeb3.BpfLoaderUpgradeableProgram.BUFFER_ACCOUNT_METADATA_SIZE,
-        PgWeb3.BpfLoaderUpgradeableProgram.BUFFER_ACCOUNT_METADATA_SIZE +
+        PgWeb3.BpfLoaderUpgradeableProgram.BUFFER_METADATA_SIZE,
+        PgWeb3.BpfLoaderUpgradeableProgram.BUFFER_METADATA_SIZE +
           programData.length
       );
       if (onChainProgramData.equals(programData)) break;
@@ -211,6 +211,23 @@ export class BpfLoaderUpgradeable {
     ];
 
     return await PgTx.send(ixs, { wallet, keypairSigners: [program] });
+  }
+
+  /** Extend the program data account. */
+  static async extendProgram(
+    programPk: PgWeb3.PublicKey,
+    additionalBytes: number,
+    opts?: WalletOption
+  ) {
+    const { wallet } = this._getOptions(opts);
+
+    const ix = PgWeb3.BpfLoaderUpgradeableProgram.extendProgram({
+      programPk,
+      additionalBytes,
+      payerPk: wallet.publicKey,
+    });
+
+    return await PgTx.send(ix, { wallet });
   }
 
   /** Upgrade a program. */

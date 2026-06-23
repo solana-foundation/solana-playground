@@ -10,6 +10,7 @@ import {
   PgView,
   PgWallet,
   PgWeb3,
+  SyncOrAsync,
 } from "../../utils";
 import { checkWallet } from "../checks";
 import { createCmd } from "../create";
@@ -18,44 +19,38 @@ import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
 export const deploy = createCmd({
   name: "deploy",
   description: "Deploy your program",
-  preCheck: [checkWallet, checkProgram],
+  preChecks: [checkWallet, checkProgram],
   handle: async () => {
-    PgGlobal.update({ deployState: "loading" });
+    switch (PgGlobal.deployState) {
+      case "ready":
+        PgGlobal.update({ deployState: "loading" });
+        break;
+      case "loading":
+        PgGlobal.update({ deployState: "paused" });
+        return;
+      case "paused":
+        PgGlobal.update({ deployState: "loading" });
+        return;
+      case "cancelled":
+        throw new Error("Deployment has been cancelled.");
+    }
 
+    PgView.setMainSecondaryProgress(0.1);
     PgTerminal.println(
       `${PgTerminal.info(
         "Deploying..."
       )} This could take a while depending on the program size and network conditions.`
     );
-    PgView.setMainSecondaryProgress(0.1);
 
     try {
       const startTime = performance.now();
-      const { txHash, closeBuffer } = await processDeploy();
-      let msg;
-      if (txHash) {
-        const timePassed = (performance.now() - startTime) / 1000;
-        msg = `${PgTerminal.success(
+      await processDeploy();
+      const timePassed = (performance.now() - startTime) / 1000;
+      PgTerminal.println(
+        `${PgTerminal.success(
           "Deployment successful."
-        )} Completed in ${PgCommon.secondsToTime(timePassed)}.`;
-      } else if (closeBuffer) {
-        const term = await PgTerminal.get();
-        const shouldCloseBufferAccount = await term.waitForInput(
-          PgTerminal.warning("Cancelled deployment.") +
-            " Would you like to close the buffer account and reclaim SOL?",
-          { confirm: true, default: "yes" }
-        );
-        if (shouldCloseBufferAccount) {
-          await closeBuffer();
-          msg = PgTerminal.success("Reclaim successful.");
-        } else {
-          msg = `${PgTerminal.error(
-            "Reclaim rejected."
-          )} Run \`solana program close --buffers\` to close unused buffer accounts and reclaim SOL.`;
-        }
-      }
-
-      PgTerminal.println(msg);
+        )} Completed in ${PgCommon.secondsToTime(timePassed)}.`
+      );
     } finally {
       PgView.setMainSecondaryProgress(0);
       PgGlobal.update({ deployState: "ready" });
@@ -68,6 +63,24 @@ async function checkProgram() {
   if (!PgProgramInfo.uuid && !PgProgramInfo.importedProgram?.buffer.length) {
     PgTerminal.println("Warning: Program is not built.");
     await PgCommand.build.execute();
+  }
+
+  // The server keeps the previous program binary after a failed compilation, so
+  // /deploy would silently return the stale binary. Ask the user about whether
+  // to proceed with the deployment using the server-cached binary.
+  if (
+    PgProgramInfo.lastBuildFailed &&
+    !PgProgramInfo.importedProgram?.buffer.length
+  ) {
+    PgTerminal.println(
+      "Warning: Your last build failed. Deploying now will upload the last successful build, not the current sources."
+    );
+    const term = await PgTerminal.get();
+    const proceed = await term.waitForInput(
+      "Deploy the previously built binary anyway?",
+      { confirm: true, default: "no" }
+    );
+    if (!proceed) throw new Error("Deployment cancelled: last build failed.");
   }
 
   if (!PgProgramInfo.pk) {
@@ -190,6 +203,35 @@ const processDeploy = async () => {
     );
   }
 
+  // Extend the program data account if needed.
+  //
+  // NOTE: This ideally would happen just before the upgrade, but doing so
+  // results in `Program was deployed in this block already` error.
+  if (programExists) {
+    const getOnChainProgramDataLen = () => {
+      const programDataLen = PgProgramInfo.onChain?.programDataLen;
+      if (typeof programDataLen !== "number") {
+        throw new Error("Failed to get program data length");
+      }
+
+      return programDataLen;
+    };
+
+    const requiredLen =
+      PgWeb3.BpfLoaderUpgradeableProgram.getProgramDataAccountSize(programLen);
+    const delta = requiredLen - getOnChainProgramDataLen();
+    if (delta > 0) {
+      await sendAndConfirmTxWithRetries(
+        () => {
+          return BpfLoaderUpgradeable.extendProgram(PgProgramInfo.pk!, delta, {
+            wallet: pgWallet,
+          });
+        },
+        () => getOnChainProgramDataLen() >= requiredLen
+      );
+    }
+  }
+
   // Create buffer
   const bufferKp = PgWeb3.Keypair.generate();
   await sendAndConfirmTxWithRetries(
@@ -206,21 +248,6 @@ const processDeploy = async () => {
       return !!bufferAcc;
     }
   );
-
-  console.log("Buffer pk:", bufferKp.publicKey.toBase58());
-  const closeBuffer = async () => {
-    return await sendAndConfirmTxWithRetries(
-      async () => {
-        return await BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
-          wallet: pgWallet,
-        });
-      },
-      async () => {
-        const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
-        return !bufferAcc;
-      }
-    );
-  };
 
   // Load buffer
   const loadBufferResult = await loadBufferWithControl(
@@ -242,7 +269,37 @@ const processDeploy = async () => {
       },
     }
   );
-  if (loadBufferResult.cancelled) return { closeBuffer };
+  if (loadBufferResult.cancelled) {
+    const term = await PgTerminal.get();
+    const shouldCloseBufferAccount = await term.waitForInput(
+      `${PgTerminal.warning(
+        "Cancelled deployment."
+      )} Would you like to close the buffer account and reclaim SOL?`,
+      { confirm: true, default: "yes" }
+    );
+    let msg;
+    if (shouldCloseBufferAccount) {
+      await sendAndConfirmTxWithRetries(
+        async () => {
+          return await BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
+            wallet: pgWallet,
+          });
+        },
+        async () => {
+          const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+          return !bufferAcc;
+        }
+      );
+      msg = PgTerminal.success("Reclaim successful.");
+    } else {
+      msg = `${PgTerminal.error(
+        "Reclaim rejected."
+      )} Run \`solana program close --buffers\` to close unused buffer accounts and reclaim SOL.`;
+    }
+
+    term.println(msg);
+    throw new Error("Deployment cancelled");
+  }
 
   // If deploying from a standard wallet, transfer the buffer authority
   // to the standard wallet before deployment, otherwise it doesn't
@@ -266,17 +323,10 @@ const processDeploy = async () => {
     );
   }
 
-  // Deploy/upgrade
-  try {
-    const txHash = await sendAndConfirmTxWithRetries(
+  // Deploy
+  if (!programExists) {
+    return await sendAndConfirmTxWithRetries(
       async () => {
-        if (programExists) {
-          return await BpfLoaderUpgradeable.upgradeProgram(
-            PgProgramInfo.pk!,
-            bufferKp.publicKey
-          );
-        }
-
         return await BpfLoaderUpgradeable.deployProgram(
           PgProgramInfo.kp!,
           bufferKp.publicKey,
@@ -288,11 +338,21 @@ const processDeploy = async () => {
         return !bufferAcc;
       }
     );
-    return { txHash };
-  } catch (e) {
-    await closeBuffer();
-    throw e;
   }
+
+  // Upgrade
+  return await sendAndConfirmTxWithRetries(
+    async () => {
+      return await BpfLoaderUpgradeable.upgradeProgram(
+        PgProgramInfo.pk!,
+        bufferKp.publicKey
+      );
+    },
+    async () => {
+      const bufferAcc = await connection.getAccountInfo(bufferKp.publicKey);
+      return !bufferAcc;
+    }
+  );
 };
 
 /** Load buffer with the ability to pause, resume and cancel on demand. */
@@ -325,10 +385,10 @@ const loadBufferWithControl = (
         dispose();
 
         if (shouldContinue) {
-          PgGlobal.deployState = "loading";
+          PgGlobal.update({ deployState: "loading" });
           loadBufferWithControl(...args).then(res);
         } else {
-          PgGlobal.deployState = "cancelled";
+          PgGlobal.update({ deployState: "cancelled" });
           res({ cancelled: true });
         }
       }
@@ -367,23 +427,25 @@ const loadBufferWithControl = (
  * @returns the transaction signature
  */
 const sendAndConfirmTxWithRetries = async (
-  sendTx: () => Promise<string>,
-  checkConfirmation: () => Promise<boolean>
+  sendTx: () => Promise<string | undefined>,
+  checkConfirmation: () => SyncOrAsync<boolean>
 ) => {
   const MAX_RETRIES = 5;
   const SLEEP_MULTIPLIER = 1.8;
 
   let sleepAmount = 1000;
-  let errMsg;
+  let err;
   for (let i = 0; i < MAX_RETRIES; i++) {
     try {
       const txHash = await sendTx();
+      if (!txHash) return;
       const result = await PgTx.confirm(txHash);
       if (!result?.err) return txHash;
       if (await checkConfirmation()) return txHash;
     } catch (e: any) {
-      errMsg = e.message;
-      console.log(errMsg);
+      console.log(e);
+      err = e;
+      if (i === MAX_RETRIES - 1) break;
       await PgCommon.sleep(sleepAmount);
       sleepAmount *= SLEEP_MULTIPLIER;
     }
@@ -394,6 +456,6 @@ const sendAndConfirmTxWithRetries = async (
       MAX_RETRIES.toString()
     )}).
 This might be an RPC related issue. Consider changing the endpoint from the settings.
-Reason: ${errMsg}`
+${err.message ? `Reason: ${err.message}` : ""}`
   );
 };
