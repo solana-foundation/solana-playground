@@ -1,6 +1,7 @@
 import { createAnthropicProvider } from "./anthropic";
 import { createOpenAiProvider } from "./openai";
 import { DEFAULT_BACKEND_URL, PROVIDERS } from "./types";
+import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { Effort, Provider, ProviderId } from "./types";
 
 export * from "./types";
@@ -21,30 +22,35 @@ export interface ProviderConnection {
  * @param connection which backend, and what it needs to be reached
  * @returns a provider that owns its own history
  */
-export const createProvider = ({
-  id,
-  apiKey,
-  endpoint,
-  settings,
-}: ProviderConnection): Provider => {
+export const createProvider = (
+  { id, apiKey, endpoint, settings }: ProviderConnection,
+  /** Prior turns, when reopening a stored thread. Empty for a new one. */
+  seed: readonly ReplayMessage[] = []
+): Provider => {
   switch (id) {
     // The model is the server's to pick, so none is sent and none is shown
     case "default":
-      return createOpenAiProvider({
-        id,
-        url: DEFAULT_BACKEND_URL,
-        baseUrl: "",
-        model: "",
-        apiKey: "",
-        label: "default backend",
-      });
+      return createOpenAiProvider(
+        {
+          id,
+          url: DEFAULT_BACKEND_URL,
+          baseUrl: "",
+          model: "",
+          apiKey: "",
+          label: "default backend",
+        },
+        seed
+      );
     case "anthropic":
-      return createAnthropicProvider(apiKey, settings);
+      return createAnthropicProvider(apiKey, settings, seed);
     case "openai":
     case "openrouter":
     case "gemini": {
       const defaults = PROVIDERS.find((p) => p.id === id)!.endpoint!;
-      return createOpenAiProvider({ id, apiKey, ...(endpoint ?? defaults) });
+      return createOpenAiProvider(
+        { id, apiKey, ...(endpoint ?? defaults) },
+        seed
+      );
     }
   }
 };

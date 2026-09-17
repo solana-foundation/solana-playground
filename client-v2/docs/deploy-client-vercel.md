@@ -68,6 +68,42 @@ There is no cost gate in front of this route. Anything that can reach the
 deployment can spend that key, so put a challenge and a per-session limit
 in front of it before pointing it at a paid account.
 
+## Conversation and project sync
+
+Off unless configured, and off again the moment `SYNC_ENABLED` is not exactly
+`true`. The client asks `/api/sync` first and stays purely local when the
+answer is no, so a deployment without a database behaves exactly as it did
+before this existed.
+
+| Variable | Meaning |
+|---|---|
+| `DATABASE_URL` | Postgres connection string. **Must be a pooled endpoint.** A serverless function opens a connection per invocation and will exhaust `max_connections` against a direct one. TLS is required and the certificate verified unless the URL sets `sslmode` — so a provider needing a looser mode has to say so in the URL, where it is visible in review |
+| `SYNC_ENABLED` | Kill switch. Only the exact string `true` enables sync; unset or anything else keeps the app local-only |
+| `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
+| `AUTH_BASE_URL` | The deployment's own origin, e.g. `https://example.vercel.app`. Better Auth builds the OAuth callback from it, so a wrong value breaks sign-in with no error at the browser |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL` |
+
+**Migrations are applied by hand, never by a function.** Before turning
+`SYNC_ENABLED` on for an environment:
+
+```sh
+DATABASE_URL=<that environment's url> yarn db-migrate
+```
+
+A preview deployment pointed at a database that has not been migrated will
+answer `db: "unreachable"` from `/api/sync` and stay local, which is the
+intended failure rather than a broken app.
+
+### Known gaps
+
+- **No signed-in end-to-end coverage.** The e2e suite runs signed out, so the
+  sync paths it exercises are the ones that decline to do anything. Two-browser
+  behaviour has only been checked by hand.
+- **`/api/agent` is still ungated** — see the section above. Sync does not
+  change that.
+- The deployed-preview reachability of `DATABASE_URL` has not been verified;
+  everything so far has run against a local container.
+
 ## Endpoint routing
 
 - All non-share routes → the hardcoded Solana Foundation server URL in `client-v2/src/settings/server/server.ts` (also user-overridable via the `server.endpoint` setting), so forks can point at their own backend.

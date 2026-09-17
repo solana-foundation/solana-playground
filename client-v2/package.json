@@ -33,12 +33,14 @@
     "@solana/wallet-adapter-react": "0.15.39",
     "@solana/web3.js": "*",
     "assert": "^2.0.0",
+    "better-auth": "^1.7.5",
     "crypto-browserify": "^3.12.0",
     "jszip": "^3.10.1",
     "mocha": "^10.0.0",
     "monaco-editor": "=0.37.1",
     "monaco-vim": "^0.4.4",
     "pako": "^2.1.0",
+    "pg": "^8.13.1",
     "prettier": "^2.7.1",
     "process": "^0.11.10",
     "re-resizable": "^6.9.6",
@@ -109,7 +111,13 @@
     "test": "yarn test-types && yarn test-unit && yarn build",
     "test-types": "tsc --noEmit",
     "test-unit": "craco test --watchAll=false",
-    "test-e2e": "playwright test"
+    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"src/features/**/server/**/*.test.mjs\"",
+    "db-migrate": "dbmate --no-dump-schema up",
+    "db-rollback": "dbmate --no-dump-schema down",
+    "db-status": "dbmate status",
+    "db-new": "dbmate new",
+    "test-e2e": "playwright test",
+    "db-dump": "./scripts/db-dump.sh"
   },
   "eslintConfig": {
     "extends": [

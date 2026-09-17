@@ -6,6 +6,7 @@ import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
 import { PROVIDERS } from "./types";
 import { serverUrl } from "../grounding";
+import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { McpServerEntry } from "../grounding";
 import type { Effort, Provider, ToolInput } from "./types";
 
@@ -60,7 +61,17 @@ const declareMcp = (servers: readonly McpServerEntry[]) => {
  */
 export const createAnthropicProvider = (
   apiKey: string,
-  settings?: { model: string; effort: Effort }
+  settings?: { model: string; effort: Effort },
+  /**
+   * Prior turns to start from, when a stored thread is reopened.
+   *
+   * Text only: the panel keeps a render model, not a wire transcript, so tool
+   * calls and their results were never stored and are not reconstructed. The
+   * model gets the conversation from here and the current project from
+   * `describeProject`, which is re-sent every turn -- see
+   * `features/persistence/model/replay.ts`.
+   */
+  seed: readonly ReplayMessage[] = []
 ): Provider => {
   const defaults = PROVIDERS.find((p) => p.id === "anthropic")!.modelSettings!
     .defaults;
@@ -83,7 +94,10 @@ export const createAnthropicProvider = (
     })
   );
 
-  let history: Anthropic.Beta.BetaMessageParam[] = [];
+  let history: Anthropic.Beta.BetaMessageParam[] = seed.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
 
   return {
     id: "anthropic",

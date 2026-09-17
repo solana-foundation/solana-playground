@@ -1,6 +1,7 @@
 import { createTools } from "./tools";
 import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
+import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { Provider, ProviderId, ToolDefinition, ToolInput } from "./types";
 
 /** A turn that has not finished after this many round trips is looping */
@@ -47,9 +48,24 @@ interface ToolCall {
  * collect tool calls, run them (each tool gates itself on user approval),
  * feed results back, repeat until the model stops calling tools.
  */
-export const createOpenAiProvider = (config: OpenAiConfig): Provider => {
+export const createOpenAiProvider = (
+  config: OpenAiConfig,
+  /**
+   * Prior turns to start from, when a stored thread is reopened.
+   *
+   * Text only: the panel keeps a render model, not a wire transcript, so tool
+   * calls and their results were never stored and are not reconstructed. The
+   * model gets the conversation from here and the current project from
+   * `describeProject`, which is re-sent every turn -- see
+   * `features/persistence/model/replay.ts`.
+   */
+  seed: readonly ReplayMessage[] = []
+): Provider => {
   const tools = createTools();
-  const history: ChatMessage[] = [];
+  const history: ChatMessage[] = seed.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
 
   return {
     id: config.id,

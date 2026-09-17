@@ -9,7 +9,7 @@ import {
   useRenderOnChange,
   useWallet,
 } from "../../../hooks";
-import { GithubAuth as PgGithubAuth } from "../../../features/github-oauth";
+import { PgSession } from "../../../features/auth";
 import { PgCommand, PgConnection } from "../../../utils";
 import { SETTINGS_TRIGGER_ATTR } from "../settings/GearSidebar";
 import type { SettingsFocus } from "../settings/GearSidebar";
@@ -33,10 +33,10 @@ const StatusChips: FC<StatusChipsProps> = ({
   const isClusterDown = useRenderOnChange(
     PgConnection.onDidChangeIsClusterDown
   );
-  useRenderOnChange(PgGithubAuth.onDidChange);
+  useRenderOnChange(PgSession.onDidChange);
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
-  const github = PgGithubAuth.user;
+  const github = PgSession.get();
 
   const [profileOpen, setProfileOpen] = useState(false);
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
@@ -74,7 +74,7 @@ const StatusChips: FC<StatusChipsProps> = ({
     setAuthError(null);
     setSigningIn(true);
     try {
-      await PgGithubAuth.signIn();
+      await PgSession.signIn();
     } catch (e) {
       setAuthError((e as Error).message);
     } finally {
@@ -121,10 +121,12 @@ const StatusChips: FC<StatusChipsProps> = ({
             onClick={() => setProfileOpen((open) => !open)}
             title="GitHub profile"
             aria-expanded={profileOpen}
-            aria-label={`GitHub profile: ${github.login}`}
+            aria-label={`GitHub profile: ${
+              github.login ?? github.name ?? "account"
+            }`}
           >
-            <Avatar src={github.avatarUrl} alt="" aria-hidden />
-            <span>{github.login}</span>
+            <Avatar src={github.image ?? undefined} alt="" aria-hidden />
+            <span>{github.login ?? github.name ?? "Account"}</span>
           </GithubChip>
           {profileOpen && (
             <Popover aria-label="GitHub profile">
@@ -135,7 +137,7 @@ const StatusChips: FC<StatusChipsProps> = ({
                     <ConfirmSignOutButton
                       type="button"
                       onClick={() => {
-                        PgGithubAuth.signOut();
+                        void PgSession.signOut();
                         closeProfile();
                       }}
                     >
@@ -152,22 +154,26 @@ const StatusChips: FC<StatusChipsProps> = ({
               ) : (
                 <>
                   <ProfileHeader>
-                    <ProfileAvatar src={github.avatarUrl} alt="" />
+                    <ProfileAvatar src={github.image ?? undefined} alt="" />
                     <ProfileNames>
                       <DisplayName>{github.name ?? github.login}</DisplayName>
-                      <Login>@{github.login}</Login>
+                      {github.login && <Login>@{github.login}</Login>}
                     </ProfileNames>
                   </ProfileHeader>
-                  <MenuLink
-                    ref={firstMenuRowRef}
-                    href={`https://github.com/${github.login}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={closeProfile}
-                  >
-                    Open GitHub profile
-                  </MenuLink>
-                  <Separator />
+                  {github.login && (
+                    <>
+                      <MenuLink
+                        ref={firstMenuRowRef}
+                        href={`https://github.com/${github.login}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={closeProfile}
+                      >
+                        Open GitHub profile
+                      </MenuLink>
+                      <Separator />
+                    </>
+                  )}
                   <MenuButtonRow
                     type="button"
                     onClick={() => setConfirmingSignOut(true)}
@@ -186,7 +192,7 @@ const StatusChips: FC<StatusChipsProps> = ({
         <Chip role="status">
           <GithubMark />
           <span>Signing in...</span>
-          <CancelSignIn type="button" onClick={PgGithubAuth.cancelSignIn}>
+          <CancelSignIn type="button" onClick={PgSession.cancelSignIn}>
             Cancel
           </CancelSignIn>
         </Chip>
@@ -511,27 +517,6 @@ const AuthError = styled.span`
   `}
 `;
 
-const CancelSignIn = styled.button`
-  ${({ theme }) => css`
-    border: none;
-    background: transparent;
-    padding: 0;
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.small};
-    text-decoration: underline;
-    cursor: pointer;
-
-    &:hover {
-      color: ${theme.colors.default.textPrimary};
-    }
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
-  `}
-`;
-
 /**
  * Where the chips give way.
  *
@@ -590,6 +575,23 @@ const IconButton = styled.button`
 
     @media (prefers-reduced-motion: reduce) {
       transition: none;
+    }
+  `}
+`;
+
+const CancelSignIn = styled.button`
+  ${({ theme }) => css`
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: ${theme.colors.default.textSecondary};
+    font: inherit;
+    font-size: ${theme.font.code.size.small};
+    text-decoration: underline;
+    cursor: pointer;
+
+    &:hover {
+      color: ${theme.colors.default.textPrimary};
     }
   `}
 `;

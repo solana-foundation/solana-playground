@@ -1,4 +1,4 @@
-import { GithubAuth as PgGithubAuth } from "../../features/github-oauth";
+import { PgSession } from "../../features/auth";
 import {
   Cluster,
   PgCommand,
@@ -15,7 +15,7 @@ export const automaticAirdrop = () => {
       if (!PgSettings.wallet.automaticAirdrop) return;
 
       // Signed-out users can't airdrop; avoid throwing from the gate
-      if (!PgGithubAuth.user) return;
+      if (!PgSession.get()) return;
 
       // If there was an error, disable the effect
       const cluster = PgConnection.cluster;

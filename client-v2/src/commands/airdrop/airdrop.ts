@@ -1,4 +1,4 @@
-import { checkGithubSignIn } from "../../features/github-oauth";
+import { checkSignedIn } from "../../features/auth";
 import {
   PgCommon,
   PgConnection,
@@ -25,7 +25,7 @@ export const airdrop = createCmd({
       },
     },
   ]),
-  preChecks: [checkWallet, checkGithubSignIn],
+  preChecks: [checkWallet, checkSignedIn],
   handle: async (input) => {
     const defaultAmount = PgConnection.getAirdropAmount();
     if (typeof defaultAmount !== "number") {

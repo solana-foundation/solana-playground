@@ -9,6 +9,7 @@ import { stepNumber } from "../lessons/progress";
 import { useOnClickOutside, useRenderOnChange } from "../../../hooks";
 import { PgExplorer, PgTutorial, PgView } from "../../../utils";
 import { DeleteWorkspace } from "../../sidebar/explorer/Component/Modals";
+import { SyncBanner } from "../../../features/persistence/Component/SyncBanner";
 
 interface ProjectSwitcherProps {
   onOpenGallery: () => void;
@@ -28,6 +29,9 @@ interface ProjectSwitcherProps {
  */
 const ProjectSwitcher: FC<ProjectSwitcherProps> = ({ onOpenGallery }) => {
   useRenderOnChange(PgExplorer.onDidSwitchWorkspace);
+  // A project synced from another device arrives without a switch -- it is
+  // deliberately not opened -- so the list has to be told separately
+  useRenderOnChange(PgExplorer.onDidCreateWorkspace);
   const [, setLesson] = useState(PgLesson.state);
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
   const [open, setOpen] = useState(false);
@@ -79,6 +83,12 @@ const ProjectSwitcher: FC<ProjectSwitcherProps> = ({ onOpenGallery }) => {
 
   return (
     <Wrapper ref={wrapperRef}>
+      {/* Anchored under the switcher rather than placed in the header row:
+          the banner appears only on a conflict, and reserving height for it
+          would shift the whole header every time one happened */}
+      <BannerSlot>
+        <SyncBanner />
+      </BannerSlot>
       <Trigger
         onClick={() => setOpen((o) => !o)}
         aria-haspopup="true"
@@ -180,6 +190,15 @@ const describeProgress = (name: string) => {
 
 const Wrapper = styled.div`
   position: relative;
+`;
+
+const BannerSlot = styled.div`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  min-width: 100%;
+  white-space: nowrap;
 `;
 
 const Trigger = styled.button`

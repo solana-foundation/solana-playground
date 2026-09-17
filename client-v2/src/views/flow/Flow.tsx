@@ -33,6 +33,7 @@ import Toast from "../../components/Toast";
 import Wallet from "../../components/Wallet";
 import { useKeybind } from "../../hooks";
 import { PgExplorer, PgView } from "../../utils";
+import type { Disposable } from "../../utils/types";
 
 /**
  * The Flow layout: header, left project/file tabs, the stage router in the
@@ -50,6 +51,10 @@ const Flow = () => {
   const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH);
   const [assistantOpen, setAssistantOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  // Lives here, not in `LeftPanel`: the open and collapsed panels are separate
+  // branches of the tree below, so toggling unmounts one and mounts the other
+  // and anything `LeftPanel` held goes with it.
+  const [pendingCreate, setPendingCreate] = useState(false);
   const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
 
   useKeybind("Ctrl+B", () => setLeftOpen((o) => !o));
@@ -83,6 +88,8 @@ const Flow = () => {
   // Whether the empty-workspace gallery has already been opened once for
   // this mount of `Flow`.
   const openedGalleryOnInit = useRef(false);
+  /** Watches for the account's projects to land under an auto-opened gallery */
+  const imported = useRef<Disposable | null>(null);
 
   useEffect(() => {
     // `PgExplorer` initializes asynchronously (`routes/common.tsx`), so
@@ -101,11 +108,26 @@ const Flow = () => {
         openedGalleryOnInit.current = true;
         sub.dispose();
         openGallery();
+        // "You have no projects" is a guess until the account has answered.
+        // A browser signed in to an account with work on it is empty only for
+        // as long as the sync takes, and the gallery was landing on top of
+        // projects that arrived a moment later. Waiting for the sync instead
+        // would delay the gallery for everyone who genuinely is new, so it
+        // opens on time and stands down if it turns out to be wrong.
+        imported.current = PgExplorer.onDidCreateWorkspace(() => {
+          if (PgExplorer.allWorkspaceNames?.length) {
+            imported.current?.dispose();
+            PgView.closeModal();
+          }
+        });
       }
     };
     const sub = PgExplorer.onDidInit(openIfEmpty);
     if (PgExplorer.allWorkspaceNames) openIfEmpty();
-    return sub.dispose;
+    return () => {
+      sub.dispose();
+      imported.current?.dispose();
+    };
   }, []);
 
   const readingStep = lesson.path
@@ -144,10 +166,17 @@ const Flow = () => {
             <LeftPanel
               collapsed={false}
               onToggle={() => setLeftOpen((o) => !o)}
+              pendingCreate={pendingCreate}
+              onPendingCreateChange={setPendingCreate}
             />
           </Resizable>
         ) : (
-          <LeftPanel collapsed onToggle={() => setLeftOpen((o) => !o)} />
+          <LeftPanel
+            collapsed
+            onToggle={() => setLeftOpen((o) => !o)}
+            pendingCreate={pendingCreate}
+            onPendingCreateChange={setPendingCreate}
+          />
         )}
         <Center>
           <ObjectiveBand state={lesson} onRead={() => setReading(true)} />

@@ -1,5 +1,6 @@
 import { PgCommon } from "../common";
 import { PgExplorer, TupleFiles } from "../explorer";
+import { PgWorkspace } from "../explorer/workspace";
 import { PgRouter } from "../router";
 import {
   createDerivable,
@@ -354,3 +355,9 @@ export const PgTutorial = declareDecorator(_PgTutorial, {
   derivable: derive,
   updatable: { defaultState },
 });
+
+// A tutorial workspace's id is derived from its name, so the same tutorial is
+// one thread on every device rather than forking per machine. `PgWorkspace`
+// cannot import this module to ask -- `_PgTutorial` already imports the
+// explorer, and the build fails on the cycle -- so the answer is injected.
+PgWorkspace.setIsTutorialName((name) => _PgTutorial.isWorkspaceTutorial(name));

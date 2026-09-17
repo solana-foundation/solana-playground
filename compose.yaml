@@ -108,9 +108,13 @@ services:
     environment:
       - PG_DB_URI=${PG_DB_URI:-mongodb://db:27017}
 
-  # Server without DB
+  # Server without DB. Publishes the same host port as `server`, so it is an
+  # alternative to it rather than a companion -- it must not inherit the
+  # shared profiles, or every profile builds and starts the server twice.
   server-standalone:
     <<: *server
+    profiles:
+      - server-standalone
 
   wasm:
     platform: linux/amd64
@@ -136,5 +140,25 @@ services:
       - v2
       - v2-prod
 
+  # Conversation and project sync, read only by `client-v2/api/*.mjs`. Separate
+  # from `db` on purpose: that one belongs to the Rust build server and is
+  # upstream's, and this work does not touch it.
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: solpg
+      POSTGRES_PASSWORD: solpg
+      POSTGRES_DB: solpg
+    ports:
+      - ${PG_POSTGRES_PORT:-5432}:5432
+    volumes:
+      - postgres:/var/lib/postgresql/data
+    profiles:
+      - dev
+      - prod
+      - v2
+      - v2-prod
+
 volumes:
   mongodb:
+  postgres:

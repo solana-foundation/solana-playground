@@ -1,9 +1,9 @@
 name: client-v2
 
-# Types, formatting, the unit suite and the CI=true production bundle for
-# the fork's frontend. Upstream's ci.yml guards `client/` on master; this
-# one guards `client-v2/` on master-2.0 and never touches the Rust
-# workspaces.
+# Types, formatting, the unit and API suites, and the CI=true production
+# bundle for the fork's frontend. Upstream's ci.yml guards `client/` on
+# master; this one guards `client-v2/` on master-2.0 and never touches the
+# Rust workspaces.
 on:
   push:
     branches: ["master-2.0"]
@@ -23,6 +23,31 @@ jobs:
     timeout-minutes: 15
     env:
       CI: "true"
+      # The API suite's integration cases skip themselves without this, so
+      # without it they would pass by not running.
+      #
+      # `sslmode=disable` is an explicit opt-out, not a workaround: this
+      # service container serves no TLS at all. Both dbmate and the app
+      # otherwise require an encrypted, verified connection, which is what a
+      # real database gets.
+      DATABASE_URL: postgres://solpg:solpg@localhost:5432/solpg?sslmode=disable
+
+    # Ours, not the Rust server's MongoDB -- that one is untouched and is not
+    # needed here.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: solpg
+          POSTGRES_PASSWORD: solpg
+          POSTGRES_DB: solpg
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     defaults:
       run:
@@ -61,6 +86,20 @@ jobs:
       - name: Generate
         run: yarn generate-fast
 
+      # Pinned rather than `latest`: a migration tool that changes under CI
+      # without anyone asking is a bad trade for the few seconds saved.
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/download/v2.35.1/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      # Applied explicitly, never from a function. This also proves the
+      # migrations actually run from scratch, which a database that is only
+      # ever migrated forward locally does not.
+      - name: Apply migrations
+        run: yarn db-migrate
+
       - name: Check types
         run: yarn test-types
 
@@ -69,6 +108,11 @@ jobs:
 
       - name: Unit tests
         run: yarn test-unit
+
+      # `node --test`, not CRA's Jest: the `api/` and `**/server/` modules are
+      # plain ESM outside the TypeScript build and need real Node.
+      - name: API tests
+        run: yarn test-api
 
       - name: Production build
         run: yarn build-fast

@@ -71,7 +71,9 @@ runs the deployment configures its bypass secret on the server.
 - **Traceability.** A record of what the assistant did and on what basis.
 - **Open by default.** The client and any service integrated into it stay public.
 - **No backend changes.** The build server, crate list, deploy mechanics and
-  sharing infrastructure are out of scope.
+  sharing infrastructure are out of scope. Conversation and project sync is
+  the exception, and it is additive: new `api/*` routes and a Postgres of our
+  own. The build server and its database are still untouched.
 
 ## How it works, technically
 
@@ -155,6 +157,11 @@ Done:
   reachable at `/?classic` as a fallback.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
+- Conversations and project code are persisted. Threads are keyed by project
+  or tutorial, kept in IndexedDB on the device, and synced to Postgres when
+  signed in. A restored thread is history the model can read back, not a
+  resumed session: the provider is re-seeded from the text of the
+  conversation, and the tool calls behind it are not replayed.
 
 Ecosystem grounding shipped: skills the model loads on demand
 (`list_skills` / `load_skill` / `read_skill_reference`), and MCP tools — both
@@ -181,6 +188,11 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Real:** the skills — fetched from the Foundation's own repository at
   `raw.githubusercontent.com`, not copies bundled and left to rot. Only the
   playground-environment skill is bundled, so something always loads offline.
+- **Real, behind a capability probe:** conversation and project sync. The
+  client asks `/api/sync` whether the deployment has a database and stays
+  purely local when it does not, so signing out or deploying without one
+  changes nothing about how the playground works.
+- **Still prototype-grade:** the default backend has no cost gate.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the
   transaction signature yet, because the deploy command it hooks into

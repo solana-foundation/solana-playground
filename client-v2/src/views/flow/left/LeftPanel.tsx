@@ -15,6 +15,18 @@ type Tab = "steps" | "files";
 interface LeftPanelProps {
   collapsed: boolean;
   onToggle: () => void;
+  /**
+   * Whether the rail's "+" is waiting for the tree to appear.
+   *
+   * Owned by `Flow` rather than held here, because this component does not
+   * survive the toggle: the open and collapsed panels sit in different
+   * branches of `Flow`'s tree -- one inside `Resizable`, one not -- so React
+   * unmounts one and mounts the other. A flag kept here went with it, and the
+   * rail's "+" expanded the panel and then did nothing at all.
+   */
+  pendingCreate?: boolean;
+  /** Raise or clear `pendingCreate`. */
+  onPendingCreateChange?: (pending: boolean) => void;
 }
 
 /**
@@ -22,7 +34,12 @@ interface LeftPanelProps {
  * the header switcher's job -- the rail used to answer that too, and two
  * controls for one question is what this change removed.
  */
-const LeftPanel: FC<LeftPanelProps> = ({ collapsed, onToggle }) => {
+const LeftPanel: FC<LeftPanelProps> = ({
+  collapsed,
+  onToggle,
+  pendingCreate = false,
+  onPendingCreateChange,
+}) => {
   const [lesson, setLesson] = useState(INITIAL_LESSON_STATE);
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
 
@@ -31,18 +48,17 @@ const LeftPanel: FC<LeftPanelProps> = ({ collapsed, onToggle }) => {
   // "New file" icon button (`NewItemButton` -> `useCreateItem`) -- no
   // upstream edit, no programmatic `.click()` of a hidden button.
   const { createItem } = useCreateItem();
-  const [pendingCreate, setPendingCreate] = useState(false);
 
   // `createItem` portals its input into the explorer tree, so it cannot run
   // in the rail button's own handler -- the tree is still unmounted at that
-  // point. Expanding sets this flag instead and the create happens here, on
+  // point. Expanding raises the flag instead and the create happens here, on
   // the commit that mounts the tree.
   useEffect(() => {
     if (collapsed || !pendingCreate) return;
 
-    setPendingCreate(false);
+    onPendingCreateChange?.(false);
     createItem();
-  }, [collapsed, pendingCreate, createItem]);
+  }, [collapsed, pendingCreate, createItem, onPendingCreateChange]);
 
   // Sits in the tab row when open and at the top of the rail when collapsed,
   // so it lines up with the tab labels instead of floating above them.
@@ -76,7 +92,7 @@ const LeftPanel: FC<LeftPanelProps> = ({ collapsed, onToggle }) => {
         <RailAction
           type="button"
           onClick={() => {
-            setPendingCreate(true);
+            onPendingCreateChange?.(true);
             onToggle();
           }}
           aria-label="New file"

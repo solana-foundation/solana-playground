@@ -320,6 +320,32 @@ const sendJson = (res, status, body) => {
 };
 
 /**
+ * Map an `/api` sub-path to the module that serves it.
+ *
+ * Only the first segment selects the module, so `api/auth.mjs` serves every
+ * `/api/auth/...` path the way a platform catch-all does. Every segment is
+ * still constrained rather than sanitised, because the value reaches
+ * `import()`.
+ *
+ * @param {string} url the path below `/api`, query string included
+ * @returns {{name: string} | null} the module to import, or `null` for 404
+ */
+const resolveApiRoute = (url) => {
+  const segments = url.split("?")[0].split("/").filter(Boolean);
+  if (!segments.length) return null;
+  if (
+    !segments.every(
+      (s) => /^[A-Za-z0-9._-]+$/.test(s) && s !== ".." && s !== "."
+    )
+  ) {
+    return null;
+  }
+
+  const [name] = segments;
+  return /^[a-z0-9-]+$/.test(name) ? { name } : null;
+};
+
+/**
  * Dispatch `/api/<name>` to `api/<name>.mjs`, matching how the deployed
  * function is invoked.
  *
@@ -332,20 +358,27 @@ const sendJson = (res, status, body) => {
  * @param {import("http").ServerResponse} res
  */
 const serveApiRoute = async (req, res) => {
-  // Mounted on `/api`, so `req.url` is the remainder
-  const name = req.url.split("?")[0].replace(/^\/+/, "");
-  // Constrained rather than sanitised: the path decides which module is
-  // imported, so anything unexpected must not reach `import()`
-  if (!/^[a-z0-9-]+$/.test(name)) {
-    return sendJson(res, 404, { error: `No API route at /api/${name}` });
+  // Mounted on `/api`, so `req.url` is the remainder.
+  //
+  // NOTE: the `import()` below caches, and nothing here invalidates it. Editing
+  // an `api/*.mjs` route, or a `.mjs` one of them imports (the per-feature
+  // `config.mjs` files), does NOT hot-reload the way `src` does -- the server
+  // keeps serving the module it first loaded, and a newly added export shows up
+  // as "does not provide an export named X". Restart the dev server after such
+  // an edit.
+  const route = resolveApiRoute(req.url);
+  if (!route) {
+    return sendJson(res, 404, { error: `No API route at /api${req.url}` });
   }
 
   try {
-    const route = await import(`./api/${name}.mjs`);
-    await route.default(req, res);
+    const mod = await import(`./api/${route.name}.mjs`);
+    await mod.default(req, res);
   } catch (e) {
     if (e.code === "ERR_MODULE_NOT_FOUND") {
-      return sendJson(res, 404, { error: `No API route at /api/${name}` });
+      return sendJson(res, 404, {
+        error: `No API route at /api/${route.name}`,
+      });
     }
     sendJson(res, 500, { error: e.message });
   }
@@ -383,3 +416,7 @@ const defineFromPublicDir = (dirName, cb) => {
 
   return JSON.stringify(cb(fs.readdirSync(publicPath), publicPath));
 };
+
+// Exported for tests only. The craco config itself is the default export
+// above; this is the one pure function in the file worth covering directly.
+module.exports.resolveApiRoute = resolveApiRoute;

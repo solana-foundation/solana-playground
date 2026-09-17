@@ -118,6 +118,22 @@ export class PgFs {
   }
 
   /**
+   * Persist the directory structure immediately.
+   *
+   * The backing store debounces its superblock write by 500ms, so file
+   * contents land right away while the tree they live in does not. A reload
+   * inside that window comes back to a filesystem where the directory was
+   * never created -- the project's files exist but nothing can find them, and
+   * the explorer reports the workspace as missing.
+   *
+   * Content writes do not need this. Structural changes -- creating,
+   * renaming or deleting a workspace -- do.
+   */
+  static async flush() {
+    await this._fs.flush();
+  }
+
+  /**
    * Read a directory.
    *
    * @param path directory path
@@ -141,14 +157,25 @@ export class PgFs {
 
     if (opts?.recursive) {
       const recursivelyRmdir = async (dir: string[], currentPath: string) => {
+        // Normalised here rather than trusted from the caller. Every recursive
+        // call below passes a trailing slash and the first one did not, so the
+        // top level built `/projectsrc` out of `/project` + `src`, every
+        // removal under it failed with ENOENT, and the directory was left
+        // exactly as it was -- silently, since callers treat "nothing to
+        // delete" as success.
+        const base = currentPath.endsWith("/")
+          ? currentPath
+          : currentPath + "/";
+        const self = base.length > 1 ? base.slice(0, -1) : base;
+
         if (!dir.length) {
           // Delete if it's an empty directory
-          await this._fs.rmdir(currentPath);
+          await this._fs.rmdir(self);
           return;
         }
 
         for (const childName of dir) {
-          const childPath = currentPath + childName;
+          const childPath = base + childName;
           const metadata = await this.getMetadata(childPath);
           if (metadata.isDirectory()) {
             const childDir = await this.readDir(childPath);
@@ -161,8 +188,8 @@ export class PgFs {
         }
 
         // Read the directory again and delete if it's empty
-        const _dir = await this.readDir(currentPath);
-        if (!_dir.length) await this._fs.rmdir(currentPath);
+        const _dir = await this.readDir(self);
+        if (!_dir.length) await this._fs.rmdir(self);
       };
 
       const dir = await this.readDir(path);

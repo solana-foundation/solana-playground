@@ -14,6 +14,8 @@ import { PgBuildOutput } from "../bridge/build-output";
 import { describeLesson } from "../bridge/lesson-context";
 import { realBridge } from "../bridge/playground-bridge";
 import { createProvider } from "../model";
+import { PgChatSync } from "../../../../features/persistence/model/chat-sync";
+import { toReplayMessages } from "../../../../features/persistence/model/replay";
 import { PgCommand, PgExplorer, PgProgramInfo } from "../../../../utils";
 import { useRenderOnChange } from "../../../../hooks";
 import {
@@ -58,6 +60,7 @@ const Chat = () => {
   } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
   const turn = useRef<AbortController | null>(null);
   // Bridges `onDidRequestPrompt`, which must subscribe unconditionally, to
   // `send`, which only exists once a backend is connected below
@@ -109,7 +112,29 @@ const Chat = () => {
   useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
 
   const connection = PgAssistant.connection;
-  if (!connection || PgAssistant.isPickingBackend) return <Connect />;
+  if (!connection || PgAssistant.isPickingBackend) {
+    // The conversation is restored long before a backend is picked -- on
+    // another browser, picking one is the first thing the user does, and
+    // returning only the picker made a thread that was already in memory look
+    // like it had not been synced at all. Shown read-only: every action a
+    // `ChatItem` offers starts a turn, and there is nothing to run it.
+    return (
+      <Wrapper>
+        {items.length > 0 && (
+          <Messages role="log" aria-label="Conversation">
+            {items.map((item) => (
+              <ChatItem key={item.id} item={item} />
+            ))}
+            <div ref={bottomRef} />
+          </Messages>
+        )}
+
+        <ConnectSlot>
+          <Connect />
+        </ConnectSlot>
+      </Wrapper>
+    );
+  }
 
   // One provider per connection; it owns the conversation history. The store
   // keeps the same object while the settings are unchanged, so identity is
@@ -117,7 +142,9 @@ const Chat = () => {
   if (provider.current?.connection !== connection) {
     provider.current = {
       connection,
-      instance: createProvider(connection),
+      // Seeded from what is rendered, so reopening a stored thread gives the
+      // model the conversation rather than amnesia behind a full transcript
+      instance: createProvider(connection, toReplayMessages(PgAssistant.items)),
     };
   }
 
@@ -142,6 +169,13 @@ const Chat = () => {
     } finally {
       if (turn.current === controller) turn.current = null;
       PgAssistant.setStatus("idle");
+
+      // End of turn is the natural commit point: the exchange is complete and
+      // the user is reading rather than typing. Deliberately not awaited --
+      // a slow or failed upload must not hold up the panel, and the local
+      // copy is already written either way.
+      const threadId = PgAssistant.threadId;
+      if (threadId) void PgChatSync.push(threadId);
     }
   };
   sendRef.current = send;
@@ -388,6 +422,20 @@ const Wrapper = styled.div`
   flex-direction: column;
   flex-grow: 1;
   min-height: 0;
+`;
+
+/**
+ * Keeps the picker at its natural height under a restored conversation.
+ *
+ * Without it the two share the column and the picker is squeezed to whatever
+ * the transcript leaves -- the transcript is the part that should scroll.
+ */
+const ConnectSlot = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  min-height: 0;
+  overflow-y: auto;
 `;
 
 const Messages = styled.div`
