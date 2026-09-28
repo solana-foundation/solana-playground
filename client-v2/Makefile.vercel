@@ -31,7 +31,7 @@ export NEON_API_KEY
 VERCEL_TOKEN_ARG = $${VERCEL_TOKEN:+--token=$$VERCEL_TOKEN}
 
 .PHONY: vercel-bootstrap vercel-link-preview deploy-client-to-vercel-preview \
-	neon-preview-base preview-db-branch migrate-preview-db migrate-parent-db
+	deploy-client-to-vercel-prod-fast neon-preview-base preview-db-branch migrate-preview-db migrate-production-db
 
 # Resolve orgId from Vercel API + write .vercel/project.json. Requires jq.
 # The one target that still requires VERCEL_TOKEN: this calls the REST API
@@ -74,36 +74,82 @@ deploy-client-to-vercel-preview: vercel-link-preview ## Build + deploy a unique 
 		npx vercel@latest deploy --prebuilt --archive=tgz \
 		-e DATABASE_URL="$$db" $(VERCEL_TOKEN_ARG)
 
-# The project-level DATABASE_URL is unscoped (no gitBranch) and targets preview
-# and production alike, so this migrates production. Previews no longer use it --
-# see migrate-preview-db -- but the parent still needs its own schema, and that
-# is what this applies. Cutting `preview-base` BEFORE running this is what keeps
+# Rebuilds the bundle and functions from the working tree but skips
+# installCommand, which is vercel-install.sh -- the Rust toolchain plus
+# wasm/build.sh, about an hour of the full build. That is only safe when a
+# full build has already left the real wasm packages and node_modules on disk,
+# so both are checked first: a stub package here would ship `solana`/`anchor`
+# commands that throw to production.
+#
+# The no-op install goes through a derived copy of vercel.json passed as
+# --local-config, so the committed one is never edited. `env pull`, not `pull`:
+# it refreshes the production variables the build inlines (REACT_APP_*) without
+# touching the cached settings, and rootDirectory is re-pinned anyway in case a
+# plain `pull` ran since. Server-side variables need none of this -- the
+# deployment picks those up from the project when it is created.
+FAST_BUILD_CONFIG := .vercel/vercel.noinstall.json
+WASM_BUILT_PACKAGES := anchor-cli rust-analyzer seahorse-compile solana-cli spl-token-cli sugar-cli
+
+deploy-client-to-vercel-prod-fast: ## Rebuild without the wasm/install step and deploy to PRODUCTION (needs a prior full build)
+	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
+	@test -d $(CLIENT_DIR)/node_modules || { echo "no $(CLIENT_DIR)/node_modules — run a full build first" >&2; exit 1; }
+	@for pkg in $(WASM_BUILT_PACKAGES); do \
+		manifest=wasm/$$pkg/pkg/package.json; \
+		test -f "$$manifest" || { echo "wasm/$$pkg/pkg is missing — run a full build first" >&2; exit 1; }; \
+		if grep -q '0.0.0-stub' "$$manifest"; then echo "wasm/$$pkg/pkg is a stub — production needs ./wasm/build.sh" >&2; exit 1; fi; \
+	done
+	@jq '.installCommand = "true"' $(CLIENT_DIR)/vercel.json > $(FAST_BUILD_CONFIG)
+	@jq --arg dir '$(CLIENT_DIR)' '.settings.rootDirectory = $$dir' \
+		.vercel/project.json > .vercel/project.json.next
+	@mv .vercel/project.json.next .vercel/project.json
+	export VERCEL_ORG_ID=$$(jq -r .orgId .vercel/project.json) && \
+		export VERCEL_PROJECT_ID=$$(jq -r .projectId .vercel/project.json) && \
+		npx vercel@latest env pull .vercel/.env.production.local --environment=production --yes $(VERCEL_TOKEN_ARG) && \
+		npx vercel@latest build --prod --local-config $(FAST_BUILD_CONFIG) $(VERCEL_TOKEN_ARG) && \
+		npx vercel@latest deploy --prebuilt --prod --archive=tgz $(VERCEL_TOKEN_ARG)
+
+# Reads the Production environment's DATABASE_URL_UNPOOLED -- the database
+# production actually uses -- and never the preview pull. The preview pull is
+# resolved for the checked-out git branch, so on a branch with branch-scoped
+# Preview variables it names that branch's Neon database: run from `master-2.0`
+# it once reported "nothing to apply" off `preview/master-2.0` while `main` had
+# no schema at all. Cutting `preview-base` BEFORE running this is what keeps
 # preview branches empty.
-migrate-parent-db: vercel-link-preview ## Apply pending migrations to the shared parent database (SERVES PRODUCTION)
+migrate-production-db: ## Apply pending migrations to the production database (SERVES PRODUCTION)
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
+	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
+	@# `env pull`, not `pull`: it writes only the named file and leaves the cached
+	@# project settings (and the pinned Root Directory) alone.
+	export VERCEL_ORG_ID=$$(jq -r .orgId .vercel/project.json) && \
+		export VERCEL_PROJECT_ID=$$(jq -r .projectId .vercel/project.json) && \
+		npx vercel@latest env pull .vercel/.env.production.local --environment=production --yes $(VERCEL_TOKEN_ARG)
 	@# DATABASE_URL is the PgBouncer endpoint and carries `channel_binding`, which
 	@# dbmate's driver cannot parse. The unpooled URL is direct and still carries
 	@# the `sslmode` that both dbmate and src/features/persistence/model/db.mjs
 	@# require. An inline DATABASE_URL wins over client-v2/.env, so the local
 	@# database is never the one that gets migrated here.
-	@url=$$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.preview.local 2>/dev/null | cut -d= -f2- | tr -d '"'); \
-		[ -n "$$url" ] || { echo "no DATABASE_URL_UNPOOLED in .vercel/.env.preview.local" >&2; exit 1; }; \
+	@#
+	@# The host is printed before anything else, pending or not: "nothing to
+	@# apply" is only reassuring if it says which database had nothing pending.
+	@url=$$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.production.local 2>/dev/null | cut -d= -f2- | tr -d '"'); \
+		[ -n "$$url" ] || { echo "no DATABASE_URL_UNPOOLED in the Production environment" >&2; exit 1; }; \
 		host=$$(printf '%s\n' "$$url" | sed -E 's#^[^@]*@([^/?]*).*#\1#'); \
+		printf 'production database: %s\n' "$$host"; \
 		cd $(CLIENT_DIR) || exit 1; \
 		status=$$(DATABASE_URL="$$url" dbmate status) || exit 1; \
 		printf '%s\n' "$$status"; \
 		case "$$status" in *"Pending: 0"*) echo "nothing to apply"; exit 0;; esac; \
 		printf 'Apply the migrations marked [ ] above to %s\n' "$$host"; \
-		printf 'That database also serves PRODUCTION. Type yes to continue: '; \
+		printf 'That is the PRODUCTION database. Type yes to continue:'; \
 		read -r reply || { echo "aborted: no answer on stdin" >&2; exit 1; }; \
 		[ "$$reply" = yes ] || { echo "aborted" >&2; exit 1; }; \
 		DATABASE_URL="$$url" dbmate --no-dump-schema up
 
 # `preview-base` is the empty parent every preview branch is cut from. Run this
-# once, while the shared database still has no schema -- after migrate-parent-db
-# it would no longer be empty, and previews would inherit tables that dbmate
-# then tries to create again.
-neon-preview-base: ## Create the empty parent branch previews are cut from (run once, before migrate-parent-db)
+# once, while the production database still has no schema -- after
+# migrate-production-db it would no longer be empty, and previews would inherit
+# tables that dbmate then tries to create again.
+neon-preview-base: ## Create the empty parent branch previews are cut from (run once, before migrate-production-db)
 	@: $${NEON_API_KEY:?NEON_API_KEY is unset}
 	npx --yes neonctl@latest branches create --name preview-base \
 		--project-id $(NEON_PROJECT_ID) --no-secrets
@@ -112,9 +158,9 @@ preview-db-branch: ## Create (or reuse) this git branch's Neon branch
 	@url=$$($(NEON_BRANCH_URL)) || exit 1; \
 		printf '%s\n' "$$url" | sed -E 's#^[^@]*@([^/?]*).*#preview database: \1#'
 
-# No confirmation here, unlike migrate-parent-db: this branch belongs to one git
-# branch and nothing else reads it, so a wrong migration costs a `neon branches
-# delete` and not an incident.
+# No confirmation here, unlike migrate-production-db: this branch belongs to one
+# git branch and nothing else reads it, so a wrong migration costs a `neon
+# branches delete` and not an incident.
 migrate-preview-db: ## Apply pending migrations to this git branch's own Neon branch
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
 	@url=$$($(NEON_BRANCH_URL)) || exit 1; \
