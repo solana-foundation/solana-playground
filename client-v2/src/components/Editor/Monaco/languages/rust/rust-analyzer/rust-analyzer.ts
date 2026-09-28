@@ -37,6 +37,15 @@ let state: AsyncMethods<WorldState>;
  * @returns a disposable to dispose all events
  */
 export const initRustAnalyzer = async (): Promise<Disposable> => {
+  // The thread pool shares memory with its workers, which the browser only
+  // allows on a cross-origin isolated page (COOP + COEP, see `vercel.json`).
+  // Without it the worker fails every attempt, never reports ready, and the
+  // retry below spawns another 9MB worker every interval, forever.
+  if (!self.crossOriginIsolated) {
+    console.warn("Rust Analyzer disabled: the page is not crossOriginIsolated");
+    return { dispose: () => {} };
+  }
+
   // Creating thread pool with `wasm-bindgen-rayon` sometimes hangs forever for
   // unknown reasons. Retry until success in order to mitigate this problem.
   // The try interval should take into account the initial download time of the
