@@ -6,7 +6,9 @@ import {
   reconcile,
   releaseLocalProjects,
 } from "../../features/persistence/model/project-restore";
+import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgAssistant } from "../../views/sidebar/assistant/store";
+import { openThread } from "../chat-thread/open-thread";
 // Deep import rather than the `utils` barrel, which reaches `settings.ts` and
 // a webpack-defined global jest cannot resolve. Same workaround as
 // `snapshot.ts`, and what makes this effect testable.
@@ -78,12 +80,24 @@ export const session = (): Disposable => {
       // explorer or handing the chat threads over, leaves every project on
       // this device unable to save for the rest of the session, silently.
       await explorerReady();
+      // Before the dump: it would upload a thread minted while signed out as
+      // a conversation of its own, and the account's would never be found
+      await PgChatSync.adoptAccountThreads();
       await PgChatSync.pushAll();
       result = await reconcile();
     } finally {
       // Whatever happened, pushes stop waiting here. A reconcile that failed
       // is a reason to let this device save its work, not to hold it forever.
       PgProjectSync.releasePushes();
+    }
+
+    // The panel is still showing the thread it opened before sign-in, which
+    // the adoption above may have repointed the workspace away from
+    const workspaceId = PgExplorer.currentWorkspaceId;
+    const open = PgAssistant.threadId;
+    const wanted = workspaceId && (await PgThreadIndex.get(workspaceId));
+    if (workspaceId && wanted && open && open !== wanted) {
+      await openThread(workspaceId, wanted);
     }
 
     const current = PgExplorer.currentWorkspaceName;

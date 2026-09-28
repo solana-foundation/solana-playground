@@ -7,6 +7,7 @@ import { PgAssistant } from "../../views/sidebar/assistant/store";
 // other effects; here it is what makes this file testable at all.
 import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
+import { openThread } from "./open-thread";
 
 /**
  * Keep the open conversation pointed at the current workspace, and get it to
@@ -42,18 +43,6 @@ export const chatThread = (): Disposable => {
    */
   let openedFor: string | null = null;
 
-  const openThread = async (id: string) => {
-    await PgAssistant.loadThread(id);
-
-    const merged = await PgChatSync.pull(id);
-    // `pull` rewrote storage underneath, so the open thread has to be re-read
-    // past `loadThread`'s unchanged-id guard -- but only if the user has not
-    // switched away while the request was in flight.
-    if (merged && PgAssistant.threadId === id) {
-      await PgAssistant.loadThread(id, true);
-    }
-  };
-
   const open = async () => {
     const workspaceId = PgExplorer.currentWorkspaceId;
     // No workspace means nowhere to persist to. Closing rather than leaving
@@ -79,11 +68,11 @@ export const chatThread = (): Disposable => {
       const read = await PgThreadIndex.ensure(workspaceId);
       // The switch may have happened while the index was being read
       if (PgExplorer.currentWorkspaceId !== workspaceId) return;
-      await openThread(read);
+      await openThread(workspaceId, read);
       return;
     }
 
-    await openThread(id);
+    await openThread(workspaceId, id);
   };
 
   // Read the index now, so the switch that follows can open its thread in

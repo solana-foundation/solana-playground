@@ -1,4 +1,5 @@
 import { chatThread } from "./chat-thread";
+import { openThread } from "./open-thread";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { PgExplorer } from "../../utils/explorer/explorer";
@@ -32,6 +33,7 @@ describe("the chat-thread effect", () => {
     effect = null;
     push = jest.spyOn(PgChatSync, "push").mockResolvedValue(true);
     jest.spyOn(PgChatSync, "pull").mockResolvedValue(null);
+    jest.spyOn(PgChatSync, "adoptAccountThread").mockResolvedValue(null);
     jest.spyOn(PgAssistant, "loadThread").mockResolvedValue(undefined);
     jest.spyOn(PgAssistant, "threadId", "get").mockReturnValue("p1");
     jest
@@ -102,5 +104,28 @@ describe("the chat-thread effect", () => {
     setVisibility("hidden");
 
     expect(push).not.toHaveBeenCalled();
+  });
+
+  it("moves to the account's thread when the server has never seen this one", async () => {
+    // Sign-out clears the thread index, so the next open mints a fresh id and
+    // its pull 404s -- while the account holds the conversation under another
+    jest
+      .spyOn(PgChatSync, "adoptAccountThread")
+      .mockResolvedValue("account-thread");
+    const load = PgAssistant.loadThread as unknown as jest.SpyInstance;
+
+    await openThread("p1", "p1");
+
+    expect(PgChatSync.adoptAccountThread).toHaveBeenCalledWith("p1");
+    expect(load).toHaveBeenLastCalledWith("account-thread");
+    expect(PgChatSync.pull).toHaveBeenLastCalledWith("account-thread");
+  });
+
+  it("does not look elsewhere when the pull found the thread", async () => {
+    jest.spyOn(PgChatSync, "pull").mockResolvedValue([]);
+
+    await openThread("p1", "p1");
+
+    expect(PgChatSync.adoptAccountThread).not.toHaveBeenCalled();
   });
 });

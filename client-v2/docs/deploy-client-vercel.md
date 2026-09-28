@@ -1,6 +1,66 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration auto-deploys: `master` → production; any other branch → preview. Those builds use the dashboard's Root Directory, which is still `client`, so **pushes currently deploy the upstream client, not `client-v2`**. Makefile targets exist as a local escape hatch and pin `client-v2` themselves — see [Which client gets deployed](#which-client-gets-deployed).
+Vercel's native Git integration auto-deploys: `master-2.0` → production (the fork's integration branch, switched from `master` on 2026-09-25); any other branch → preview. Those builds use the dashboard's Root Directory, which must be `client-v2` — while it is `client`, **pushes deploy the upstream client, not `client-v2`**. Makefile targets pin `client-v2` themselves and work either way — see [Which client gets deployed](#which-client-gets-deployed).
+
+## Release checklist: `client-v2` to production
+
+Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
+order is the point: each step assumes the ones above it, and steps 1–7 come
+**before** the first production build of `client-v2`. `master-2.0` already
+holds the persistence code, so any push to it — or a redeploy — ships that code
+as soon as the Root Directory points at `client-v2`.
+
+1. **One-time setup is done** — [below](#one-time-setup). In particular
+   `preview-base` must already exist *before* step 6, or every later preview
+   inherits production's tables.
+2. **Production env vars**, scoped to Production —
+   [Assistant default backend](#assistant-default-backend) and
+   [Conversation and project sync](#conversation-and-project-sync):
+   - `DATABASE_URL` — the pooled URL of the parent Neon database, the same one
+     `migrate-production-db` migrates.
+   - `SYNC_ENABLED=true`.
+   - `AUTH_SECRET` — generated for production, never reused from a preview.
+   - `AUTH_BASE_URL` — the production origin. **Required here, not optional:**
+     without it `resolveBaseURL()` (`src/features/auth/model/auth.mjs`) falls
+     back to `VERCEL_URL`, the per-deployment hostname, so the session cookie
+     and the write-origin checks in `api/projects.mjs` and
+     `api/conversations.mjs` are issued for a host nobody visits.
+   - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
+   - `AGENT_*` — only once `/api/agent` has something in front of it.
+3. **GitHub OAuth app for production.** Its callback URL is
+   `<AUTH_BASE_URL>/api/auth/callback/github`. A GitHub OAuth app takes a
+   single callback, so production gets its own app rather than sharing a
+   preview's.
+4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
+   production origin.
+5. **Dry run on a preview**, from `master-2.0`:
+
+   ```sh
+   make -f client-v2/Makefile.vercel migrate-preview-db
+   make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview
+   ```
+
+   This uses the Neon branch `preview/master-2.0`. On the preview URL:
+   `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
+   project edited in one browser shows up in a second.
+6. **Migrate production:**
+
+   ```sh
+   make -f client-v2/Makefile.vercel migrate-production-db
+   ```
+
+   A deployment that ships ahead of its migration runs against a schema
+   missing what it expects — and `/api/sync` still reports `db: "ok"`, because
+   it checks reachability, not schema.
+7. **Dashboard settings.** Production Branch `master-2.0`; Root Directory →
+   `client-v2`; the Ignored Build Step still lets `master-2.0` through.
+8. **Deploy.** Redeploy the latest `master-2.0` commit from the dashboard, or
+   push to `master-2.0`.
+9. **Smoke test production** the same way as step 5.
+
+Rolling back the deployment (`vercel promote <previous-url> --prod`) does not
+roll back the schema. Migrations are additive so far, so the previous build
+runs against the newer schema; revisit this once one is not.
 
 `installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `yarn build`. Wasm must precede `yarn install` because `client-v2/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
 
@@ -11,7 +71,7 @@ Vercel's native Git integration auto-deploys: `master` → production; any other
 | Plan / Build Machine | Enterprise + **Enhanced** |
 | Framework Preset | Other |
 | Root Directory | `client` — intended `client-v2`, not yet changed |
-| Production Branch | `master` |
+| Production Branch | `master-2.0` — switched from `master` on 2026-09-25 |
 | Ignored Build Step | Automatic |
 
 ## How long a function may run
@@ -62,7 +122,7 @@ Setting the dashboard Root Directory to `client-v2` makes both paths agree; the 
 
 1. Create the project. Framework: Other. Root Directory: `client-v2`.
 2. Build Machine: Enhanced on Enterprise; default on Pro.
-3. Production Branch: `master`. Ignored Build Step: Automatic.
+3. Production Branch: `master-2.0`. Ignored Build Step: Automatic.
 4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
 5. Link the local checkout (from repo root):
 
@@ -78,7 +138,7 @@ Setting the dashboard Root Directory to `client-v2` makes both paths agree; the 
    make -f client-v2/Makefile.vercel neon-preview-base
    ```
 
-   Order matters: `preview-base` is useful only because it is empty. Cut it after `migrate-parent-db` and every preview inherits tables that dbmate then tries to create again.
+   Order matters: `preview-base` is useful only because it is empty. Cut it after `migrate-production-db` and every preview inherits tables that dbmate then tries to create again.
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
 
@@ -87,7 +147,11 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 - **Automatic:** push the branch — but this builds `client`, not `client-v2`, until the dashboard Root Directory is changed.
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
 
-`vercel-link-preview` runs automatically as a prerequisite. Local production deploys are intentionally not supported — production goes out only via the `master` Git integration.
+- **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
+
+`vercel-link-preview` runs automatically as a prerequisite of the preview target.
+
+To pick up only changed **server-side** variables (anything `api/*.mjs` reads), no rebuild is needed: re-run `npx vercel@latest deploy --prebuilt --prod --archive=tgz` on the existing `.vercel/output`. Variables are attached to functions when a deployment is created. `REACT_APP_*` are inlined into the bundle and do need a rebuild.
 
 The deploy resolves this git branch's Neon branch first, before building, and passes it as `-e DATABASE_URL=<pooled url>` so the deployment overrides the project-level variable. Resolving first is deliberate: a Neon failure should not cost a full wasm build.
 
@@ -179,20 +243,25 @@ The shared database behind the project-level `DATABASE_URL` still needs its own
 schema, and that one serves production:
 
 ```sh
-make -f client-v2/Makefile.vercel migrate-parent-db
+make -f client-v2/Makefile.vercel migrate-production-db
 ```
 
-It prints the pending migrations and the target host, then requires a typed
-`yes`. It skips the prompt entirely when nothing is pending, so the warning
+It pulls the **Production** environment's `DATABASE_URL_UNPOOLED` into
+`.vercel/.env.production.local` and migrates that — never the preview pull,
+which is resolved for the checked-out git branch and so can name a preview
+branch's database instead (it did: run from `master-2.0` it checked
+`preview/master-2.0` and reported nothing pending while `main` had no schema).
+It prints the target host first, then the pending migrations, then requires a
+typed `yes`. It skips the prompt entirely when nothing is pending, so the warning
 never becomes something to click through.
 
 **Nothing applies migrations automatically, in any environment.** CI runs
 `yarn db-migrate` only against its own throwaway service container
 (`client-v2.yml:101`), which proves the history replays from scratch but touches
-nothing real. The Git integration deploys `master` to production with no hook
-before or after it. Production is therefore migrated by a person running
-`migrate-parent-db` from a laptop, and the ordering is theirs to get right:
-migrate first, then merge. A deployment that ships ahead of its migration runs
+nothing real. The Git integration deploys `master-2.0` to production with no
+hook before or after it. Production is therefore migrated by a person running
+`migrate-production-db` from a laptop, and the ordering is theirs to get right:
+migrate first, then merge to `master-2.0`. A deployment that ships ahead of its migration runs
 against a schema missing the columns it expects.
 
 A preview deployment pointed at a database that has not been migrated will

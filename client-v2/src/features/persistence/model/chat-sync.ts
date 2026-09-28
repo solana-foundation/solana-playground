@@ -136,6 +136,82 @@ export class PgChatSync {
   }
 
   /**
+   * Point a workspace at the account's conversation, when the thread this
+   * device has for it is one the server has never seen.
+   *
+   * Sign-out clears the thread index, and a browser that has never seen the
+   * account never had one -- so the next open mints a fresh thread id, and a
+   * pull by that id finds nothing. The account's thread is still there, keyed
+   * by a thread id only the server now knows. This asks by project instead
+   * and adopts the newest thread.
+   *
+   * Anything already in the local thread is carried across rather than left
+   * behind: it was typed on this workspace and belongs with its conversation.
+   * Local wins by id, the same rule as `pull`.
+   *
+   * @returns the thread the workspace now points at, when that changed
+   */
+  static async adoptAccountThread(workspaceId: string): Promise<string | null> {
+    if (!(await PgChatSync._ready())) return null;
+
+    const local = await PgThreadIndex.get(workspaceId);
+
+    let threads: unknown;
+    try {
+      const response = await fetch(
+        `/api/conversations?projectId=${encodeURIComponent(workspaceId)}`,
+        { credentials: "include", cache: "no-store" }
+      );
+      if (!response.ok) {
+        report(`threads of ${workspaceId}: HTTP ${response.status}`, null);
+        return null;
+      }
+      threads = (await response.json())?.threads;
+    } catch (e) {
+      report(`threads of ${workspaceId}`, e);
+      return null;
+    }
+
+    // Newest first, as the server orders them
+    const ids = Array.isArray(threads)
+      ? threads.map((t) => t?.id).filter((id) => typeof id === "string")
+      : [];
+    const remote: string | undefined = ids[0];
+    if (!remote || (local && ids.includes(local))) return null;
+
+    if (local) {
+      const items = await PgChatStorage.read(local);
+      // Neither file is touched unless both could be read: moving what could
+      // not be read would lose it, and writing over what could not be read
+      // would lose that instead
+      if (items === null) return null;
+      if (items.length) {
+        const existing = await PgChatStorage.read(remote);
+        if (existing === null) return null;
+        await PgChatStorage.write(remote, merge(existing, items));
+      }
+    }
+
+    await PgThreadIndex.set(workspaceId, remote);
+    if (local) await PgChatStorage.remove(local);
+    return remote;
+  }
+
+  /**
+   * `adoptAccountThread` for every workspace this device has a thread for.
+   *
+   * Runs at sign-in ahead of the dump. Afterwards would be too late: the dump
+   * uploads a freshly minted thread as a conversation of its own, and from
+   * then on the server knows it, so nothing would ever look for the older one.
+   */
+  static async adoptAccountThreads(): Promise<void> {
+    if (!(await PgChatSync._ready())) return;
+
+    const workspaceIds = Object.keys(await PgThreadIndex.all());
+    await Promise.all(workspaceIds.map(PgChatSync.adoptAccountThread));
+  }
+
+  /**
    * Push every local thread -- the sign-in dump, and the last thing that runs
    * before sign-out clears local storage.
    *

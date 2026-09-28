@@ -40,6 +40,11 @@ describe("the session effect", () => {
     calls = [];
     PgSession.reset();
 
+    jest
+      .spyOn(PgChatSync, "adoptAccountThreads")
+      .mockImplementation(async () => {
+        calls.push("adoptChats");
+      });
     jest.spyOn(PgChatSync, "pushAll").mockImplementation(async () => {
       calls.push("pushChats");
       return { pushed: [], complete: true };
@@ -76,6 +81,9 @@ describe("the session effect", () => {
     await settle();
 
     expect(calls.filter((c) => c !== "hold" && c !== "release")).toEqual([
+      // Adopt first: the dump would otherwise upload a thread minted while
+      // signed out as a second conversation, and the account's would be lost
+      "adoptChats",
       "pushChats",
       "reconcile",
     ]);

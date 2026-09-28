@@ -398,3 +398,109 @@ describe("pulling a thread that cannot be read locally", () => {
     expect(mockFiles.get(`/.config/chats/${threadId}.json`)).toBe(corrupt);
   });
 });
+
+describe("finding the account's thread for a workspace", () => {
+  /**
+   * Sign-out clears the thread index, so the next open mints a fresh thread
+   * id -- and a pull by that id 404s while the account's conversation sits on
+   * the server under the old one.
+   */
+  let minted: string;
+  const accountThread = uuid();
+
+  /** The project's threads, newest first; POSTs and pulls are accepted */
+  const serverHolds = (ids: string[]) =>
+    respondingWith((url) =>
+      Promise.resolve({
+        ok: true,
+        json: async () =>
+          url.includes("projectId=")
+            ? { threads: ids.map((id) => ({ id })) }
+            : { items: [] },
+      })
+    );
+
+  beforeEach(async () => {
+    await PgChatStorage.clear();
+    await PgThreadIndex.clear();
+    PgSession.reset();
+    PgSyncClient.reset();
+    minted = await PgThreadIndex.ensure("w1");
+  });
+
+  it("asks by project and repoints the workspace at the newest thread", async () => {
+    serverHolds([accountThread, uuid()]);
+    await signedIn();
+
+    expect(await PgChatSync.adoptAccountThread("w1")).toBe(accountThread);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/conversations?projectId=w1",
+      expect.anything()
+    );
+    expect(await PgThreadIndex.get("w1")).toBe(accountThread);
+  });
+
+  it("carries what was typed locally into the account's thread", async () => {
+    serverHolds([accountThread]);
+    await signedIn();
+    await PgChatStorage.write(minted, [item(3)]);
+    await PgChatStorage.write(accountThread, [item(1)]);
+
+    await PgChatSync.adoptAccountThread("w1");
+
+    expect(await PgChatStorage.read(accountThread)).toEqual([item(1), item(3)]);
+    expect(await PgChatStorage.threadIds()).toEqual([accountThread]);
+  });
+
+  it("leaves a thread the server already knows alone", async () => {
+    serverHolds([uuid(), minted]);
+    await signedIn();
+
+    expect(await PgChatSync.adoptAccountThread("w1")).toBeNull();
+    expect(await PgThreadIndex.get("w1")).toBe(minted);
+  });
+
+  it("keeps the minted thread when the account has none for the project", async () => {
+    serverHolds([]);
+    await signedIn();
+
+    expect(await PgChatSync.adoptAccountThread("w1")).toBeNull();
+    expect(await PgThreadIndex.get("w1")).toBe(minted);
+  });
+
+  it("keeps the local thread when the server cannot be reached", async () => {
+    respondingWith(() => Promise.reject(new Error("offline")));
+    await signedIn();
+    await PgChatStorage.write(minted, [item(1)]);
+
+    expect(await PgChatSync.adoptAccountThread("w1")).toBeNull();
+    expect(await PgThreadIndex.get("w1")).toBe(minted);
+    expect(await PgChatStorage.read(minted)).toHaveLength(1);
+  });
+
+  it("does nothing when signed out", async () => {
+    await PgChatSync.adoptAccountThreads();
+
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("adopts for every workspace in the index", async () => {
+    await PgThreadIndex.ensure("w2");
+    const other = uuid();
+    respondingWith((url) =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          threads: [{ id: url.endsWith("w1") ? accountThread : other }],
+        }),
+      })
+    );
+    await signedIn();
+
+    await PgChatSync.adoptAccountThreads();
+
+    expect(await PgThreadIndex.get("w1")).toBe(accountThread);
+    expect(await PgThreadIndex.get("w2")).toBe(other);
+  });
+});

@@ -107,12 +107,19 @@ export class PgThreadIndex {
   /**
    * Point a workspace at a different thread.
    *
-   * Nothing calls this yet -- it is what a thread picker will use, and it is
-   * here so the picker is a component rather than a migration.
+   * Used by sign-in to point a workspace at the account's thread, and what a
+   * thread picker will use.
+   *
+   * Spreads the cache as it is at write time, not the map read before the
+   * `await`: sign-in repoints several workspaces at once, and spreading a
+   * snapshot let each write undo the one before it.
    */
   static async set(workspaceId: string, threadId: string) {
-    const index = await PgThreadIndex.all();
-    await PgThreadIndex._write({ ...index, [workspaceId]: threadId });
+    await PgThreadIndex.all();
+    await PgThreadIndex._write({
+      ...PgThreadIndex._cache,
+      [workspaceId]: threadId,
+    });
   }
 
   /**
