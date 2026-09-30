@@ -267,10 +267,14 @@ export class PgTerm {
     // formatted input.
     //
     // Also stops multiline inputs rendering unnecessarily.
-    this._xterm.onResize(({ rows, cols }) => {
-      this._tty.clearInput();
+    this._xterm.onResize(({ cols, rows }) => {
+      // If it's not prompting, clearing and setting the input may print the
+      // previous line without the prompt prefix, resulting in an undesired
+      // duplication that cannot be cleared (without clearing everything)
+      const isPrompting = this._shell.isPrompting();
+      if (isPrompting) this._tty.clearInput();
       this._tty.setTermSize(cols, rows);
-      this._tty.setInput(this._tty.input, true);
+      if (isPrompting) this._tty.setInput(this._tty.input, true);
     });
 
     // Add a custom key handler in order to fix a bug with spaces
@@ -402,26 +406,24 @@ export class PgTerm {
    * @param msg message to print to the terminal before prompting user
    * @param opts -
    * - allowEmpty: whether to allow the input to be empty
-   * - choice.items: set of values to choose from. Returns the selected index if
-   * `allowMultiple` is not specified.
-   * - choice.allowMultiple: whether to allow multiple choices. Returns the indices.
-   * - confirm: yes/no question. Returns the result as boolean.
    * - default: default value to set
+   * - choice.items: set of values to choose from. Returns the selected value if
+   * `multiple` is not specified.
+   * - choice.multiple: whether to allow multiple choices. Returns the values.
+   * - confirm: yes/no question. Returns the result as a boolean.
    * - validator: callback function to validate the user input
    * @returns user input
    */
   async waitForInput<
     O extends {
       allowEmpty?: boolean;
-      confirm?: boolean;
       default?: string;
+      confirm?: boolean;
       choice?: {
         items: string[];
-        allowMultiple?: boolean;
+        multiple?: boolean;
       };
-      validator?: (
-        userInput: string
-      ) => boolean | void | Promise<boolean | void>;
+      validator?: (input: string) => SyncOrAsync<boolean | void>;
     }
   >(
     msg: string,
@@ -430,9 +432,9 @@ export class PgTerm {
     O["confirm"] extends boolean
       ? boolean
       : O["choice"] extends object
-      ? O["choice"]["allowMultiple"] extends boolean
-        ? number[]
-        : number
+      ? O["choice"]["multiple"] extends boolean
+        ? O["choice"]["items"]
+        : O["choice"]["items"][number]
       : string
   > {
     // Avoid `this.focus()` here because it calls `scrollToCursor`, which may
@@ -445,6 +447,7 @@ export class PgTerm {
     const disposables = [];
     if (opts?.choice) {
       // Show multi choice items
+      convertedMsg += " (options: ',' separated numbers e.g. 0,1)";
       const items = opts.choice.items;
       convertedMsg += items.reduce(
         (acc, cur, i) => acc + `\n[${i}] - ${cur}`,
@@ -494,7 +497,7 @@ export class PgTerm {
         opts.validator = (input) => {
           const parsed: number[] = JSON.parse(`[${input}]`);
           return (
-            (opts.choice?.allowMultiple ? true : parsed.length === 1) &&
+            (opts.choice?.multiple ? true : parsed.length === 1) &&
             parsed.every(
               (v) =>
                 PgCommon.isInt(v.toString()) && v >= 0 && v <= choiceMaxLength
@@ -528,7 +531,7 @@ export class PgTerm {
     }
 
     // Return value
-    let returnValue;
+    let returnValue: any;
 
     // Confirm
     if (opts?.confirm) {
@@ -536,10 +539,16 @@ export class PgTerm {
     }
     // Multichoice
     else if (opts?.choice) {
-      if (opts.choice.allowMultiple) {
-        returnValue = JSON.parse(`[${userInput}]`);
+      const { items, multiple } = opts.choice;
+      // TODO: Return the actual values instead of indices
+      if (multiple) {
+        returnValue = userInput
+          .split(",")
+          .map((s) => s.trim())
+          .map(parseInt)
+          .map((i) => items[i]);
       } else {
-        returnValue = parseInt(userInput);
+        returnValue = items[parseInt(userInput)];
       }
     }
     // Default as string
@@ -585,12 +594,15 @@ export class PgTerm {
     try {
       return await cb();
     } catch (e: any) {
-      // The previous line is not available until the next event loop
-      await PgCommon.sleep(0);
-
-      const msg = `Process error: ${e?.message ? e.message : e}`;
-      const previousLine = this._tty.getLine(1)?.translateToString().trim();
-      if (previousLine !== msg) this.println(msg);
+      // Only log error if this is the outermost process i.e. a process that is
+      // *not* spawned by another terminal process.
+      //
+      // NOTE: This check is not fully correct because, at the time of writing
+      // this comment, one terminal can have multiple outermost processes at
+      // the same time.
+      if (this._shell.processCount === 1) {
+        this.println(`Process error: ${e?.message ? e.message : e}`);
+      }
 
       throw e;
     } finally {
