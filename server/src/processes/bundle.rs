@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     env,
     fs::{self, DirEntry},
     io,
@@ -53,7 +53,11 @@ struct Manifest {
     #[serde(default)]
     optional_dependencies: Dependencies,
     #[serde(default)]
+    main: Option<String>,
+    #[serde(default)]
     types: Option<String>,
+    #[serde(default)]
+    typings: Option<String>,
 }
 
 impl Manifest {
@@ -77,44 +81,25 @@ fn handle_package_manager_command(args: &Args) -> Result<Manifest> {
         [name, args @ ..] => match name.as_str() {
             "yarn" => {
                 match args {
-                    // TODO: Only allow known options (e.g. `--dev`)
                     [command, args @ ..] => match command.as_str() {
-                        "install" => run_yarn_install(args)?,
-                        "add" => {
-                            let status = Command::new("yarn")
-                                .current_dir(PACKAGES_DIR)
-                                .arg("--ignore-scripts")
-                                .arg("--prefer-offline")
-                                .arg(command)
-                                .args(args)
-                                .status()?;
-                            if !status.success() {
-                                return Err(anyhow!("Failed to add"));
-                            }
-                        }
-                        "remove" => {
-                            let status = Command::new("yarn")
-                                .current_dir(PACKAGES_DIR)
-                                .arg("--ignore-scripts")
-                                .arg("--prefer-offline")
-                                .arg(command)
-                                .args(args)
-                                .status()?;
-                            if !status.success() {
-                                return Err(anyhow!("Failed to remove"));
-                            }
-                        }
-                        // TODO: `upgrade`
+                        "add" | "install" | "remove" | "upgrade" => run_yarn(
+                            command,
+                            args,
+                            match command.as_str() {
+                                "add" => &["--dev", "-D", "--peer", "-P", "--optional", "-O"],
+                                _ => &[],
+                            },
+                        )?,
                         _ => return Err(anyhow!("Unsupported command: `{command}`")),
                     },
                     // Empty `yarn` defaults to install
-                    _ => run_yarn_install(&[])?,
+                    _ => run_yarn("install", &[], &[])?,
                 }
             }
             _ => return Err(anyhow!("Unsupported package manager: `{name}`")),
         },
         // TODO: `npm` as a safer default?
-        _ => run_yarn_install(&[])?,
+        _ => run_yarn("install", &[], &[])?,
     }
 
     let packages_path = Path::new(PACKAGES_DIR);
@@ -132,17 +117,31 @@ fn handle_package_manager_command(args: &Args) -> Result<Manifest> {
         .map_err(Into::into)
 }
 
-/// Run the default `yarn` installation command.
-fn run_yarn_install(args: &[String]) -> Result<()> {
+/// Run the `yarn` command using safe(r) defaults.
+///
+/// # Safety
+///
+/// Only options specified in `allowed_options` are allowed to be passed in.
+///
+/// **Arguments are not sanitized!**
+fn run_yarn(command: &str, args: &[String], allowed_options: &[&'static str]) -> Result<()> {
+    if let Some(opt) = args
+        .iter()
+        .filter(|arg| arg.starts_with('-'))
+        .find(|arg| !allowed_options.iter().any(|opt| opt == arg))
+    {
+        return Err(anyhow!("Invalid option: `{opt}`"));
+    }
+
     let status = Command::new("yarn")
         .current_dir(PACKAGES_DIR)
         .arg("--ignore-scripts")
         .arg("--prefer-offline")
-        .arg("install")
+        .arg(command)
         .args(args)
         .status()?;
     if !status.success() {
-        return Err(anyhow!("Failed to install"));
+        return Err(anyhow!("Failed to {command}"));
     }
 
     Ok(())
@@ -154,8 +153,28 @@ fn generate_bundle(manifest: &Manifest) -> Result<()> {
     let packages_path = Path::new(PACKAGES_DIR);
     let src_path = packages_path.join(SRC_DIR);
     let mut entries = vec![];
-    // TODO: Other deps (`optionalDependencies`...)
-    for pkg in manifest.dependencies.keys() {
+    for pkg in manifest.get_all_dependencies().keys() {
+        // Skip the `@types` organization
+        if pkg.starts_with("@types") {
+            continue;
+        }
+
+        // Skip other type only packages
+        let manifest_path = packages_path
+            .join(NODE_MODULES)
+            .join(pkg)
+            .join(MANIFEST_FILE);
+        let manifest =
+            fs::read(manifest_path).map(|b| serde_json::from_slice::<Manifest>(&b))??;
+        let is_type_only = manifest
+            .main
+            .map(|main| main.is_empty())
+            .unwrap_or_default()
+            && manifest.types.is_some();
+        if is_type_only {
+            continue;
+        }
+
         let module = to_module_name(pkg);
         let pkg_path = src_path.join(pkg);
         let entry_path = pkg_path.join("index.js");
@@ -249,11 +268,10 @@ where
 /// Currently, the server tries to collect the minimum amount of type files instead of serving all
 /// type declaration files inside `node_modules`. This is a design decision to make the types as
 /// light as possible, as the the target client is a web browser.
-//
-// TODO: Cache
 fn generate_types(manifest: &Manifest) -> Result<()> {
+    let mut cache = HashSet::new();
     for dep in manifest.get_all_dependencies().keys() {
-        if let Err(e) = generate_package_types(dep) {
+        if let Err(e) = generate_package_types(dep, &mut cache) {
             eprintln!("Failed to generate types for `{dep}`: {e}")
         }
     }
@@ -273,7 +291,16 @@ fn generate_types(manifest: &Manifest) -> Result<()> {
 /// Port of [`generate-packages.mjs`] (without the Monaco editor parts).
 ///
 /// [`generate-packages.mjs`]: https://github.com/solana-playground/solana-playground/blob/7d9f365a5009fd65aaa388e85bc541e5f4f51ae9/client/scripts/generate-packages.mjs
-fn generate_package_types(name: &str) -> Result<()> {
+fn generate_package_types(name: &str, cache: &mut HashSet<String>) -> Result<()> {
+    if cache.contains(name) {
+        return Ok(());
+    }
+
+    // Always cache independent of failure because the process will almost certainly return an error
+    // in all subsequent calls if the first one was an error. This also fixes potential infinite
+    // recursion when type generation fails for both circular dependencies.
+    cache.insert(name.to_owned());
+
     let build_path = get_build_path();
     // Flatten the `@types` into the out directory so that clients have a easier time importing
     let out_path = build_path.join(name.replace("@types/", ""));
@@ -309,7 +336,8 @@ fn generate_package_types(name: &str) -> Result<()> {
         let type_root = manifest
             .types
             .as_ref()
-            .ok_or_else(|| anyhow!("Unexpected `types` field"))
+            .or(manifest.typings.as_ref())
+            .ok_or_else(|| anyhow!("Failed to find type root"))
             .map(Path::new)
             .map(|type_root| pkg_path.join(type_root))?;
         let files = get_all_declaration_files(&type_root)
@@ -327,9 +355,9 @@ fn generate_package_types(name: &str) -> Result<()> {
             // TODO: Make this more robust (if necesssary)
             .filter(|dep| files.iter().any(|(_, content)| content.contains(dep)))
             .fold(vec![], |mut acc, dep| {
-                match generate_package_types(&dep) {
+                match generate_package_types(&dep, cache) {
                     Ok(_) => acc.push(dep),
-                    Err(e1) => match generate_package_types(&format!("@types/{dep}")) {
+                    Err(e1) => match generate_package_types(&format!("@types/{dep}"), cache) {
                         Ok(_) => acc.push(dep),
                         Err(e2) => eprintln!("Failed to generate types for `{dep}`: {e1}\n{e2}"),
                     },

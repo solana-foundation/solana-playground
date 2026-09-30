@@ -389,30 +389,18 @@ const Monaco = () => {
     if (!editor) return;
 
     let timeoutId: NodeJS.Timeout;
-
     const { dispose } = editor.onDidChangeModelContent(() => {
       timeoutId && clearTimeout(timeoutId);
       timeoutId = setTimeout(async () => {
-        if (!PgExplorer.currentFilePath) return;
+        const currentFilePath = PgExplorer.currentFilePath;
+        if (!currentFilePath) return;
 
-        const args: [string, string] = [
-          PgExplorer.currentFilePath,
-          editor.getValue(),
-        ];
-
-        // Save to state
-        PgExplorer.saveFileToState(...args);
-
-        // Saving to state is enough if it's a temporary project
-        if (PgExplorer.isTemporary) return;
-
-        // Save to `indexedDB`
         try {
-          await PgExplorer.fs.writeFile(...args);
+          await PgExplorer.saveItem(currentFilePath, editor.getValue(), {
+            refreshIfAlreadyOpen: false,
+          });
         } catch (e: any) {
-          console.log(
-            `Error saving file ${PgExplorer.currentFilePath}. ${e.message}`
-          );
+          console.log(`Auto-save failed: ${e.message}`);
         }
       }, 500);
     });
@@ -693,6 +681,12 @@ const Monaco = () => {
     const disposables = monaco.languages.getLanguages().map((language) => {
       return monaco.languages.onLanguage(language.id, async () => {
         try {
+          // Do not dispose here because `monaco-editor` caches the `onLanguage`
+          // listener, resulting in `init` running only once independent of
+          // mounts and unmounts.
+          //
+          // TODO: Consider finding another way to re-run after a remount and
+          // dispose each time on unmount.
           const { init } = await import(`./languages/${language.id}/init`);
           await init();
         } catch (e: any) {

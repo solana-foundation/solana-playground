@@ -158,7 +158,7 @@ export class PgCommon {
   }
 
   /**
-   * Execute the given callback in order.
+   * Execute the given callback sequentially i.e. in order.
    *
    * This is particularly useful when the desired behavior of an `onChange`
    * event is to execute its callback in order.
@@ -166,7 +166,7 @@ export class PgCommon {
    * @param cb callback to run
    * @returns the wrapped callback function
    */
-  static executeInOrder<T>(cb: (...args: [T]) => SyncOrAsync) {
+  static executeSequential(cb: (...args: unknown[]) => SyncOrAsync) {
     type Callback = typeof cb;
 
     const queue: Parameters<Callback>[] = [];
@@ -205,6 +205,42 @@ export class PgCommon {
   ): T extends (...args: any[]) => infer R ? R : T {
     if (typeof maybeFn === "function") return maybeFn(...args);
     return maybeFn as any;
+  }
+
+  /**
+   * Try calling the callback and return `undefined` on error.
+   *
+   * This is useful for avoiding nesting via `try-catch`. For example, this:
+   *
+   * ```ts
+   * let value;
+   * try {
+   *   value = getValue();
+   * } catch {
+   *   return;
+   * }
+   * ```
+   *
+   * can be written as:
+   *
+   * ```ts
+   * const value = PgCommon.tryCall(getValue);
+   * if (!value) return;
+   * ```
+   *
+   * This is better because it avoids nesting and leaving `value` mutable.
+   *
+   * @param cb callback to call
+   * @returns the return value of the callback or `undefined` on error
+   */
+  static tryCall<R>(
+    cb: (...args: unknown[]) => Exclude<R, undefined>
+  ): R | undefined {
+    try {
+      return cb();
+    } catch {
+      return;
+    }
   }
 
   /**
