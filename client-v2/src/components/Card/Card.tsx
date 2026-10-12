@@ -42,8 +42,7 @@ const Wrapper = styled.div`
     padding: 1rem;
     background: ${theme.colors.default.bgPrimary};
     color: ${theme.colors.default.textPrimary};
-    border: 1px solid
-      ${theme.colors.default.border + theme.default.transparency.medium};
+    border: 1px solid ${PgTheme.alpha(theme.colors.default.border, "medium")};
     border-radius: ${theme.default.borderRadius};
     transition: all ${theme.default.transition.duration.medium}
       ${theme.default.transition.type};

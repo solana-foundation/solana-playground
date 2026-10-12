@@ -32,7 +32,7 @@ const PORT = new URL(
 const SERVER_START_MS = 10_000;
 // Where components.json's aliases and the registry's file targets write, and
 // the `tailwind.css` file shadcn adds an item's `cssVars` to.
-const INSTALLED = ["src/shared", "src/styles", "src/index.css"];
+const INSTALLED = ["src/shared", "src/app/styles", "src/index.css"];
 // The shadcn flags that preview instead of writing. Only these pass through,
 // and only bare: a value given to one (`--diff src/x.tsx`) would be read here
 // as a component name.

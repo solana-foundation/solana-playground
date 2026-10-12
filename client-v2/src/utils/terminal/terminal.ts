@@ -1,4 +1,4 @@
-import { ITerminalOptions, Terminal as XTerm } from "xterm";
+import { ITerminalOptions, ITheme, Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 
@@ -286,6 +286,15 @@ export class PgTerm {
 
     this._isOpen = false;
     this._defaultText = opts?.defaultText;
+  }
+
+  /**
+   * Re-colour and re-font the running terminal. A new `PgTerm` per theme
+   * change would drop the scrollback, so the theme is applied in place.
+   */
+  setAppearance({ theme, fontFamily }: { theme: ITheme; fontFamily: string }) {
+    this._xterm.setOption("theme", theme);
+    this._xterm.setOption("fontFamily", fontFamily);
   }
 
   /** Open terminal. */

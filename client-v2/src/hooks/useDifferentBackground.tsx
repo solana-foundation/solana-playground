@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTheme } from "styled-components";
 
 import { PgTheme } from "../utils";
+import { isTransparent } from "../shared/lib/css-color";
 
 /**
  * Use a different background than the parent node's background.
@@ -33,7 +34,7 @@ export const useDifferentBackground = <T extends HTMLElement = HTMLDivElement>(
           break;
         }
 
-        if (style.backgroundColor !== "rgba(0, 0, 0, 0)") {
+        if (!isTransparent(style.backgroundColor)) {
           inheritedBg = style.backgroundColor;
           break;
         }

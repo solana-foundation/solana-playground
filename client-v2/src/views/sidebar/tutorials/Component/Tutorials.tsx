@@ -3,7 +3,7 @@ import styled, { css, keyframes } from "styled-components";
 
 import FilterGroups from "../../../../components/FilterGroups";
 import Text from "../../../../components/Text";
-import { PgTutorial, TutorialFullData } from "../../../../utils";
+import { PgTutorial, TutorialFullData, PgTheme } from "../../../../utils";
 import type { Filter } from "../../../../hooks";
 
 interface TutorialsProps {
@@ -129,9 +129,12 @@ const TutorialWrapper = styled.div<{ progress: number }>`
       left: 0;
       height: 0.125rem;
       background: ${progress === 100
-        ? `linear-gradient(90deg, ${theme.colors.state.success.color} 0%, ${
-            theme.colors.state.success.color + theme.default.transparency.high
-          } 100%)`
+        ? `linear-gradient(90deg, ${
+            theme.colors.state.success.color
+          } 0%, ${PgTheme.alpha(
+            theme.colors.state.success.color,
+            "high"
+          )} 100%)`
         : `linear-gradient(90deg, ${theme.colors.default.primary} 0%, ${theme.colors.default.secondary} 100%)`};
       animation: ${keyframes`from { width: 0; } to { width: ${progress}%; }`}
         ${theme.default.transition.duration.long}

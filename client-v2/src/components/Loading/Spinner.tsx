@@ -34,7 +34,7 @@ const Wrapper = styled.div`
       inset: 0;
       width: 100%;
       height: 100%;
-      background: #00000000;
+      background: transparent;
       z-index: -1;
       transition: all ${theme.default.transition.duration.medium}
         ${theme.default.transition.type};

@@ -3,7 +3,8 @@ import styled, { css, useTheme } from "styled-components";
 
 import Button from "../Button";
 import { highlight } from "./highlight";
-import { PgTheme } from "../../utils";
+import { PgTheme, resolveTextMateTheme } from "../../utils";
+import { resolveColor } from "../../shared/lib/css-color";
 import { useAsyncEffect, useDifferentBackground } from "../../hooks";
 
 export interface CodeBlockProps {
@@ -83,7 +84,10 @@ const Code = ({ children, lang }: CodeBlockProps) => {
       const highlightedHtml = await highlight(
         children,
         lang,
-        PgTheme.convertToTextMateTheme(theme)
+        resolveTextMateTheme(
+          PgTheme.convertToTextMateTheme(theme),
+          resolveColor
+        )
       );
       setHtml(highlightedHtml);
     } else {

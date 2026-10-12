@@ -162,55 +162,57 @@ const StyledButton = styled.button<ButtonProps & { $loading?: boolean }>`
       case "primary": {
         button.padding = "0.5rem 1.25rem";
         button.bg = theme.colors.default.primary;
-        button.hover!.bg = theme.colors.default.primary + "E0";
+        button.hover!.bg = PgTheme.alpha(theme.colors.default.primary, "high");
         break;
       }
       case "secondary": {
         button.bg = theme.colors.default.secondary;
-        button.hover!.bg = theme.colors.default.secondary + "E0";
+        button.hover!.bg = PgTheme.alpha(
+          theme.colors.default.secondary,
+          "high"
+        );
         button.padding = "0.5rem 1.25rem";
         break;
       }
       case "primary-transparent": {
         button.padding = "0.5rem 1.25rem";
-        button.bg =
-          theme.colors.default.primary +
-          (theme.isDark
-            ? theme.default.transparency.medium
-            : theme.default.transparency.high);
-        button.hover!.bg =
-          theme.colors.default.primary +
-          (theme.isDark
-            ? theme.default.transparency.high
-            : theme.default.transparency.medium);
+        button.bg = PgTheme.alpha(
+          theme.colors.default.primary,
+          theme.isDark ? "medium" : "high"
+        );
+        button.hover!.bg = PgTheme.alpha(
+          theme.colors.default.primary,
+          theme.isDark ? "high" : "medium"
+        );
         break;
       }
       case "secondary-transparent": {
         button.padding = "0.5rem 1.25rem";
-        button.bg =
-          theme.colors.default.secondary + theme.default.transparency.medium;
-        button.hover!.bg =
-          theme.colors.default.secondary + theme.default.transparency.high;
+        button.bg = PgTheme.alpha(theme.colors.default.secondary, "medium");
+        button.hover!.bg = PgTheme.alpha(
+          theme.colors.default.secondary,
+          "high"
+        );
         break;
       }
       case "error": {
         button.padding = "0.5rem 1.25rem";
-        button.bg =
-          theme.colors.state.error.color +
-          (theme.isDark ? theme.default.transparency.high : "");
-        button.hover!.bg =
-          theme.colors.state.error.color +
-          (theme.isDark ? "" : theme.default.transparency.high);
+        const error = theme.colors.state.error.color;
+        button.bg = theme.isDark ? PgTheme.alpha(error, "high") : error;
+        button.hover!.bg = theme.isDark ? error : PgTheme.alpha(error, "high");
         break;
       }
       case "primary-outline": {
         button.borderColor = theme.colors.default.primary;
-        button.hover!.bg = theme.colors.default.primary + "E0";
+        button.hover!.bg = PgTheme.alpha(theme.colors.default.primary, "high");
         break;
       }
       case "secondary-outline": {
         button.borderColor = theme.colors.default.secondary;
-        button.hover!.bg = theme.colors.default.secondary + "E0";
+        button.hover!.bg = PgTheme.alpha(
+          theme.colors.default.secondary,
+          "high"
+        );
         break;
       }
       case "outline": {
@@ -285,7 +287,7 @@ const StyledButton = styled.button<ButtonProps & { $loading?: boolean }>`
         case "error":
         case "info":
         case "warning":
-          button.color = themeColor + theme.default.transparency.high;
+          button.color = PgTheme.alpha(themeColor, "high");
           button.hover!.color = themeColor;
       }
     }

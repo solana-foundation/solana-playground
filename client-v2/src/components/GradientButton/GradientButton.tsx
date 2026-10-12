@@ -16,9 +16,9 @@ const GradientButton = styled(Button)`
     /* border-box: the gradient's positioning area defaults to the padding
        box, so the base Button's 1px border ring was painted by the
        repeated tile's far end -- a mint stripe on the left edge */
-    background: linear-gradient(135deg, #9945ff 10%, #14f195 90%) border-box;
+    background: var(--gradient-product) border-box;
     border-color: transparent;
-    color: #050505;
+    color: var(--brand-ink);
     font-weight: 700;
 
     &:hover:not(:disabled) {

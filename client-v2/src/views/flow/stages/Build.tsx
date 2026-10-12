@@ -13,7 +13,13 @@ import GradientButton from "../../../components/GradientButton";
 import { PgAssistant } from "../../sidebar/assistant/store";
 import { PgFlow } from "../state/stage";
 import type { FlowState } from "../state/stage";
-import { PgCommand, PgExplorer, PgFramework, PgSettings } from "../../../utils";
+import {
+  PgCommand,
+  PgExplorer,
+  PgFramework,
+  PgSettings,
+  PgTheme,
+} from "../../../utils";
 
 /** `flow.buildMs` as a ` - 3.2s` suffix, or nothing while it is unknown */
 const msSuffix = (ms: number | null) =>
@@ -572,7 +578,7 @@ const Card = styled.section<{ $tone?: "error" }>`
     padding: 1.125rem 1.25rem;
     border: 1px solid
       ${$tone === "error"
-        ? theme.colors.state.error.color + theme.default.transparency.medium
+        ? PgTheme.alpha(theme.colors.state.error.color, "medium")
         : theme.colors.default.border};
     border-radius: ${theme.default.borderRadius};
     background: ${theme.components.tooltip.bg};

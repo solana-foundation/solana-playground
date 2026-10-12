@@ -6,6 +6,7 @@ import GradientButton from "../../../../components/GradientButton";
 import Markdown from "../../../../components/Markdown";
 import { diffLines, summarizeDiff } from "../diff";
 import { PgAssistant, type ChatItem as Item } from "../store";
+import { alpha } from "../../../../utils/theme/alpha";
 
 const ChatItem: FC<
   React.PropsWithChildren<{
@@ -428,9 +429,9 @@ const DiffRow = styled.div<{ $kind: string }>`
     display: flex;
     line-height: 1.6;
     background: ${$kind === "added"
-      ? theme.colors.state.success.color + theme.default.transparency.low
+      ? alpha(theme.colors.state.success.color, "low")
       : $kind === "removed"
-      ? theme.colors.state.error.color + theme.default.transparency.low
+      ? alpha(theme.colors.state.error.color, "low")
       : "transparent"};
   `}
 `;

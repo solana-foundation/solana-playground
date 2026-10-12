@@ -4,7 +4,7 @@ import styled, { css } from "styled-components";
 import Img from "../../../components/Img";
 import Input from "../../../components/Input";
 import GradientButton from "../../../components/GradientButton";
-import { PgExplorer, PgFramework, PgView } from "../../../utils";
+import { PgExplorer, PgFramework, PgView, PgTheme } from "../../../utils";
 
 /**
  * The gallery's one decisive action: pick a framework, name the project,
@@ -106,8 +106,7 @@ const Row = styled.div`
     align-items: center;
     gap: 1rem;
     padding: 1rem;
-    border: 1px solid
-      ${theme.colors.default.primary + theme.default.transparency.medium};
+    border: 1px solid ${PgTheme.alpha(theme.colors.default.primary, "medium")};
     border-radius: ${theme.default.borderRadius};
     background: ${theme.colors.default.bgSecondary};
   `}
@@ -173,7 +172,7 @@ const FrameworkOption = styled.button<{ $active: boolean }>`
       ${$active ? theme.colors.default.primary : theme.colors.default.border};
     border-radius: ${theme.default.borderRadius};
     background: ${$active
-      ? theme.colors.default.primary + theme.default.transparency.high
+      ? PgTheme.alpha(theme.colors.default.primary, "high")
       : "transparent"};
     color: ${theme.colors.default.textPrimary};
     font: inherit;

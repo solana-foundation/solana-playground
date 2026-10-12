@@ -13,6 +13,17 @@
 @source "./";
 
 /*
+ * The design system's tokens (`yarn ds-add playground-tokens`, never edited
+ * here). `:root` is light; `.dark` on <html> is the product default, set by
+ * `applyThemeMode`. The variant makes shadcn's `dark:` follow that class, not
+ * the OS setting.
+ */
+@import "./app/styles/playground-tokens.css";
+@import "./app/styles/playground-theme.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
  * This file's own reset sits in `base`, below `utilities`. Unlayered CSS
  * beats every layer, so left outside it the `*` rule would silently cancel
  * `p-*` and `m-*` on every element, and the `a` rule the text colour and

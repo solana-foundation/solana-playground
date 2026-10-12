@@ -1,32 +1,33 @@
-import type { ThemeParam } from "../../utils";
+import type { ThemeParam } from "../utils";
 
-// Tokens from docs/design/brand-research.md — values found in solana.com's own
-// served CSS, not invented. See the research doc before changing any of these.
-
-// Surfaces: a violet-black family, matching solana.com's #1d1a23 tint.
-const BG_BASE = "#000000", // chrome: rail, topbar, status bar, terminal
-  BG_SURFACE = "#0F0D13", // editor, panels
-  BG_RAISED = "#1A1721", // cards, inputs, menus
-  BG_HOVER = "#262230",
-  // Brand
-  PURPLE = "#9945FF",
-  GREEN = "#14F195",
-  CYAN = "#80ECFF",
-  PINK = "#EB54BC",
-  // The canonical gradient, verbatim from solana.com's CSS
-  GRADIENT = `linear-gradient(135deg, ${PURPLE} 10%, ${GREEN} 90%)`,
-  // Text: slightly lavender whites, not pure gray
-  TEXT_PRIMARY = "#ECEBF1",
-  TEXT_SECONDARY = "#9C98A9",
-  // Lavender-white borders at low alpha — solana.com's own trick
-  BORDER = "#ECE4FD1F",
-  BORDER_STRONG = "#ECE4FD33",
-  // States tuned to sit in the palette
-  RED = "#FF4D6A",
-  YELLOW = "#FFD666",
-  DISABLED_BG = "#111016",
-  // Syntax
-  COMMENT = "#6E6880";
+// Every colour is a token from `app/styles/playground-tokens.css`. `:root`
+// holds light and `.dark` the product, so this one object serves both
+// themes; `applyThemeMode` switches them. The layout floats the panels on a
+// ground, with 8px gutters between them.
+const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, terminal
+  BG_SURFACE = "var(--surface-panel)", // editor, panels
+  BG_RAISED = "var(--surface-raised)", // cards, inputs, menus
+  BG_HOVER = "var(--surface-hover)",
+  PRIMARY = "var(--primary)",
+  PRIMARY_HOVER = "var(--accent-fill-hover)",
+  ON_PRIMARY = "var(--primary-foreground)",
+  SECONDARY = "var(--track-brand)",
+  GRADIENT = "var(--gradient-product)",
+  TEXT_PRIMARY = "var(--text-primary)",
+  TEXT_SECONDARY = "var(--text-secondary)",
+  BORDER = "var(--border)",
+  BORDER_STRONG = "var(--border-strong)",
+  ERROR = "var(--error)",
+  WARNING = "var(--warning)",
+  INFO = "var(--info)",
+  SUCCESS = "var(--success)",
+  DISABLED_BG = "var(--muted)",
+  SYNTAX_KEYWORD = "var(--syntax-keyword)",
+  SYNTAX_TYPE = "var(--syntax-type)",
+  SYNTAX_FUNCTION = "var(--syntax-function)",
+  SYNTAX_STRING = "var(--syntax-string)",
+  SYNTAX_NUMBER = "var(--syntax-number)",
+  SYNTAX_COMMENT = "var(--syntax-comment)";
 
 /**
  * Corner radius of every floating panel, in both layouts -- the classic
@@ -39,24 +40,24 @@ const PANEL_RADIUS = "12px";
 const DISPLAY_FONT = `"Space Grotesk", -apple-system, BlinkMacSystemFont,
   "Segoe UI", Helvetica, Arial, sans-serif`;
 
-const SOLANA_V2: ThemeParam = {
+const PALETTE: ThemeParam = {
   colors: {
     default: {
       bgPrimary: BG_BASE,
       bgSecondary: BG_SURFACE,
-      primary: PURPLE,
-      secondary: GREEN,
+      primary: PRIMARY,
+      secondary: SECONDARY,
       textPrimary: TEXT_PRIMARY,
       textSecondary: TEXT_SECONDARY,
       border: BORDER,
     },
     state: {
       disabled: { bg: DISABLED_BG, color: TEXT_SECONDARY },
-      error: { color: RED },
-      hover: { bg: BG_HOVER, color: "#B4B0C0" },
-      info: { color: CYAN },
-      success: { color: GREEN },
-      warning: { color: YELLOW },
+      error: { color: ERROR },
+      hover: { bg: BG_HOVER, color: TEXT_PRIMARY },
+      info: { color: INFO },
+      success: { color: SUCCESS },
+      warning: { color: WARNING },
     },
   },
 
@@ -76,7 +77,7 @@ const SOLANA_V2: ThemeParam = {
   default: {
     backdrop: { backdropFilter: "blur(12px)" },
     borderRadius: PANEL_RADIUS,
-    boxShadow: "rgba(0, 0, 0, 0.5) 0px 8px 32px",
+    boxShadow: "var(--shadow-panel-value)",
   },
 
   components: {
@@ -87,8 +88,8 @@ const SOLANA_V2: ThemeParam = {
       },
       overrides: {
         primary: {
-          color: TEXT_PRIMARY,
-          hover: { bg: "#A95FFF" },
+          color: ON_PRIMARY,
+          hover: { bg: PRIMARY_HOVER },
         },
         outline: {
           border: `1px solid ${BORDER_STRONG}`,
@@ -106,7 +107,7 @@ const SOLANA_V2: ThemeParam = {
       },
       gutter: {
         bg: "transparent",
-        color: COMMENT,
+        color: SYNTAX_COMMENT,
         activeColor: TEXT_SECONDARY,
       },
       wrapper: { bg: BG_SURFACE },
@@ -129,9 +130,9 @@ const SOLANA_V2: ThemeParam = {
     },
     modal: {
       default: {
-        bg: "rgba(26, 23, 33, 0.9)",
+        bg: "color-mix(in srgb, var(--surface-raised) 90%, transparent)",
         border: `1px solid ${BORDER}`,
-        boxShadow: "rgba(0, 0, 0, 0.6) 0px 16px 48px",
+        boxShadow: "var(--shadow-modal-value)",
       },
     },
     progressbar: {
@@ -158,7 +159,7 @@ const SOLANA_V2: ThemeParam = {
         current: {
           bg: BG_SURFACE,
           color: TEXT_PRIMARY,
-          borderTopColor: PURPLE,
+          borderTopColor: PRIMARY,
         },
       },
     },
@@ -328,34 +329,34 @@ const SOLANA_V2: ThemeParam = {
   },
 
   highlight: {
-    typeName: { color: CYAN, fontStyle: "italic" },
+    typeName: { color: SYNTAX_TYPE, fontStyle: "italic" },
     variableName: { color: TEXT_PRIMARY },
     constant: { color: TEXT_PRIMARY },
-    namespace: { color: CYAN },
-    macroName: { color: GREEN },
-    functionCall: { color: GREEN },
-    functionDef: { color: GREEN },
+    namespace: { color: SYNTAX_TYPE },
+    macroName: { color: SYNTAX_FUNCTION },
+    functionCall: { color: SYNTAX_FUNCTION },
+    functionDef: { color: SYNTAX_FUNCTION },
     functionArg: { color: TEXT_PRIMARY },
-    definitionKeyword: { color: PINK },
-    moduleKeyword: { color: PINK },
-    modifier: { color: PINK },
-    controlKeyword: { color: PINK },
-    operatorKeyword: { color: PINK },
-    keyword: { color: PINK },
-    self: { color: PINK },
-    bool: { color: PURPLE },
-    integer: { color: PURPLE },
-    literal: { color: PURPLE },
-    string: { color: YELLOW },
-    character: { color: YELLOW },
-    operator: { color: PINK },
-    derefOperator: { color: PINK },
-    specialVariable: { color: PURPLE },
-    lineComment: { color: COMMENT },
-    blockComment: { color: COMMENT },
-    meta: { color: PURPLE },
-    regexp: { color: YELLOW },
+    definitionKeyword: { color: SYNTAX_KEYWORD },
+    moduleKeyword: { color: SYNTAX_KEYWORD },
+    modifier: { color: SYNTAX_KEYWORD },
+    controlKeyword: { color: SYNTAX_KEYWORD },
+    operatorKeyword: { color: SYNTAX_KEYWORD },
+    keyword: { color: SYNTAX_KEYWORD },
+    self: { color: SYNTAX_KEYWORD },
+    bool: { color: SYNTAX_NUMBER },
+    integer: { color: SYNTAX_NUMBER },
+    literal: { color: SYNTAX_NUMBER },
+    string: { color: SYNTAX_STRING },
+    character: { color: SYNTAX_STRING },
+    operator: { color: SYNTAX_KEYWORD },
+    derefOperator: { color: SYNTAX_KEYWORD },
+    specialVariable: { color: SYNTAX_NUMBER },
+    lineComment: { color: SYNTAX_COMMENT },
+    blockComment: { color: SYNTAX_COMMENT },
+    meta: { color: SYNTAX_NUMBER },
+    regexp: { color: SYNTAX_STRING },
   },
 };
 
-export default SOLANA_V2;
+export default PALETTE;

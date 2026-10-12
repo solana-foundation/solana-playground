@@ -15,7 +15,7 @@ vi.mock("../../utils", () => ({
     toKebabFromTitle: (s: string) => s.toLowerCase(),
   },
   PgRouter: { location: {}, onDidChangeHash: () => ({ dispose: () => {} }) },
-  PgTheme: { convertToCSS: () => "" },
+  PgTheme: { convertToCSS: () => "", alpha: (color: string) => color },
 }));
 vi.mock("../Link", () => ({ __esModule: true, default: () => null }));
 vi.mock("../Img", () => ({ __esModule: true, default: () => null }));
@@ -52,14 +52,23 @@ describe("Markdown", () => {
   const theme = {
     default: {
       borderRadius: "4px",
-      transparency: { high: "ee" },
       transition: { duration: { short: "0s" }, type: "linear" },
     },
     colors: {
-      default: { border: "#000000", primary: "#fff", textSecondary: "#ccc" },
-      state: { hover: { bg: "#111" } },
+      default: {
+        border: "var(--border)",
+        primary: "var(--primary)",
+        textSecondary: "var(--text-secondary)",
+      },
+      state: { hover: { bg: "var(--surface-hover)" } },
     },
-    components: { markdown: { color: "#fff", bg: "#000", subtleBg: "#111" } },
+    components: {
+      markdown: {
+        color: "var(--text-primary)",
+        bg: "var(--surface-base)",
+        subtleBg: "var(--surface-raised)",
+      },
+    },
     font: { code: { family: "monospace", size: { small: "1", medium: "2" } } },
   } as unknown as DefaultTheme;
 

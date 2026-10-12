@@ -494,8 +494,7 @@ const DropdownWrapper = styled.div<{ isCustomComponent: boolean }>`
     padding: 0.5rem 0;
     background: ${theme.components.input.bg};
     border-radius: ${theme.default.borderRadius};
-    outline: 1px solid
-      ${theme.colors.default.primary + theme.default.transparency.medium};
+    outline: 1px solid ${PgTheme.alpha(theme.colors.default.primary, "medium")};
     user-select: none;
 
     ${!isCustomComponent &&

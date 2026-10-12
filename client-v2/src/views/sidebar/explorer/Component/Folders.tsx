@@ -26,7 +26,7 @@ import {
   Triangle,
   Wrench,
 } from "../../../../components/Icons";
-import { PgCommon, PgExplorer, PgView } from "../../../../utils";
+import { PgCommon, PgExplorer, PgView, PgTheme } from "../../../../utils";
 import { useCreateItem } from "./useCreateItem";
 import { useExplorerContextMenu } from "./useExplorerContextMenu";
 import { useHandleItemState } from "./useHandleItemState";
@@ -331,7 +331,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
   const theme = useTheme();
   const overStyle: CSSProperties = useMemo(
     () => ({
-      background: theme.colors.default.primary + theme.default.transparency.low,
+      background: PgTheme.alpha(theme.colors.default.primary, "low"),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [theme.name]
@@ -429,25 +429,17 @@ const RootWrapper = styled.div`
     font-size: ${theme.font.code.size.small};
 
     &.${PgView.classNames.SELECTED} {
-      background: ${
-        theme.colors.default.primary + theme.default.transparency.low
-      };
+      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
     }
 
     &.${PgView.classNames.CTX_SELECTED} {
-      background: ${
-        theme.colors.default.primary + theme.default.transparency.low
-      };
-      border-color: ${
-        theme.colors.default.primary + theme.default.transparency.medium
-      };
+      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
+      border-color: ${PgTheme.alpha(theme.colors.default.primary, "medium")};
       border-radius: ${theme.default.borderRadius};
     }
 
     &:hover {
-      background: ${
-        theme.colors.default.primary + theme.default.transparency.low
-      };
+      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
     }
 
     /*

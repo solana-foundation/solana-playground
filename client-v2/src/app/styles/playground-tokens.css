@@ -1,0 +1,242 @@
+/* Playground design tokens, v0.
+ *
+ * Two layers. The first is shadcn/ui's own semantic set (background,
+ * foreground, primary, muted, accent, border, ring, radius…), so every
+ * shadcn component reads Playground without being edited. The second is
+ * Playground's own: the brand colours, the surfaces, status, syntax, the two
+ * tracks, layout sizes, elevation and motion.
+ *
+ * The values come from the product's former Solana theme and the deck's
+ * tokens. Colours are hex on purpose: Studio's Design tab offers a
+ * colour picker for a hex token and a text field for anything else.
+ *
+ * :root is paper: the product's Light theme, the landing and the deck's
+ * white slides. .dark is the product's Dark theme, its default, which it
+ * sets on <html>. */
+
+:root {
+  /* ── shadcn semantic tokens, paper ─────────────────────────────────── */
+  --background: #ffffff;
+  --foreground: #151515;
+  --card: #f7f6f3;
+  --card-foreground: #151515;
+  --popover: #ffffff;
+  --popover-foreground: #151515;
+  --primary: #8a3ff5;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f3;
+  --secondary-foreground: #151515;
+  --muted: #f2f2f3;
+  --muted-foreground: #6b6b72;
+  --accent: #ececee;
+  --accent-foreground: #151515;
+  --destructive: #dc2626;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --ring: #9945ff;
+  --radius: 0.5rem;
+
+  --chart-1: #9945ff;
+  --chart-2: #00a36c;
+  --chart-3: #2dcea9;
+  --chart-4: #7a56da;
+  --chart-5: #9496f9;
+
+  --sidebar: #fafafa;
+  --sidebar-foreground: #151515;
+  --sidebar-primary: #8a3ff5;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f2f2f3;
+  --sidebar-accent-foreground: #151515;
+  --sidebar-border: #e4e4e7;
+  --sidebar-ring: #9945ff;
+
+  /* ── Playground surfaces and text ──────────────────────────────────── */
+  --surface-base: #ffffff;
+  --surface-panel: #fafafa;
+  --surface: #f7f6f3;
+  --surface-raised: #f2f2f3;
+  --surface-hover: #ececee;
+  --surface-well: #f7f6f3;
+  --frosted: rgb(255 255 255 / 0.82);
+  --text-primary: #151515;
+  --text-secondary: #5c5c63;
+  --text-tertiary: #8b8b93;
+  --border-strong: #d4d4d8;
+
+  /* ── status ─────────────────────────────────────────────────────────── */
+  --success: #00a36c;
+  --success-foreground: #ffffff;
+  --warning: #b45309;
+  --warning-foreground: #ffffff;
+  --warning-ink: #92400e;
+  --info: #0284c7;
+  --info-foreground: #ffffff;
+  --error: #dc2626;
+  --error-foreground: #ffffff;
+
+  /* ── the two tracks ─────────────────────────────────────────────────── */
+  --track-brand: #00a36c;
+  --track-product: #9945ff;
+}
+
+.dark {
+  /* ── shadcn semantic tokens, the product ────────────────────────────── */
+  --background: #101011;
+  --foreground: #f2f2f3;
+  --card: #161617;
+  --card-foreground: #f2f2f3;
+  --popover: #161617;
+  --popover-foreground: #f2f2f3;
+  --primary: #8a3ff5;
+  --primary-foreground: #ffffff;
+  --secondary: #242426;
+  --secondary-foreground: #f2f2f3;
+  --muted: #242426;
+  --muted-foreground: #a0a0a6;
+  --accent: #2a2a2c;
+  --accent-foreground: #f2f2f3;
+  --destructive: #ef4444;
+  --border: #26262a;
+  --input: #33333a;
+  --ring: #9945ff;
+
+  --chart-1: #9945ff;
+  --chart-2: #14f195;
+  --chart-3: #2dcea9;
+  --chart-4: #7a56da;
+  --chart-5: #9496f9;
+
+  --sidebar: #101011;
+  --sidebar-foreground: #f2f2f3;
+  --sidebar-primary: #9945ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #242426;
+  --sidebar-accent-foreground: #f2f2f3;
+  --sidebar-border: #26262a;
+  --sidebar-ring: #9945ff;
+
+  /* ── Playground surfaces and text: an equal-channel grey ramp ──────── */
+  /* base is the ground (bg1). panel is bg2: cards, menus, dialogs, the
+     composer, the stepper's track. well is the terminal's, one step below */
+  --surface-base: #101011;
+  --surface-panel: #161617;
+  --surface: #1c1c1e;
+  --surface-raised: #242426;
+  --surface-hover: #2a2a2c;
+  --surface-well: #0b0b0c;
+  /* the bars that float over the stage: the stepper rail, the console
+     strip, the objective band. Used with backdrop blur, see .frosted */
+  --frosted: rgb(16 16 17 / 0.82);
+  --text-primary: #f2f2f3;
+  --text-secondary: #a0a0a6;
+  --text-tertiary: #6b6b72;
+  --border-strong: #33333a;
+
+  /* ── status: Solana's green for success, and nothing else uses them ── */
+  --success: #14f195;
+  --success-foreground: #08080a;
+  --warning: #f59e0b;
+  --warning-foreground: #08080a;
+  --warning-ink: #f2c36b;
+  --info: #38bdf8;
+  --info-foreground: #08080a;
+  --error: #ef4444;
+  --error-foreground: #ffffff;
+
+  --track-brand: #14f195;
+  --track-product: #ae7bff;
+}
+
+/* Tokens that read the same on both grounds */
+:root {
+  /* ── brand ──────────────────────────────────────────────────────────── */
+  --brand-green: #14f195;
+  --brand-purple: #9945ff;
+  --brand-teal: #2dcea9;
+  --brand-violet: #7a56da;
+  --brand-periwinkle: #9496f9;
+  --brand-ink: #151515;
+  --brand-paper: #ffffff;
+  --brand-deep-green: #00a36c;
+  --accent-fill-hover: #9b5bff;
+
+  /* The landing's button, green into purple, sampled off the brand render */
+  --gradient-brand: linear-gradient(
+    90deg,
+    #19c98c 0%,
+    #339794 13%,
+    #5673b0 25%,
+    #794fcd 37.8%,
+    #8845da 56%,
+    #8e4be0 100%
+  );
+  /* The product's own: Solana's two colours, for the stepper's thumb, the
+     brand ring and a lesson's meter (views/flow/components/gradient.ts) */
+  --gradient-product: linear-gradient(120deg, #9945ff, #14f195);
+  --gradient-product-flat: linear-gradient(90deg, #9945ff, #14f195);
+  /* The letter trail's ramp, nearest the letter first */
+  --trail-1: #14f195;
+  --trail-2: #2dcea9;
+  --trail-3: #9945ff;
+  --trail-4: #5a3fd9;
+
+  /* ── syntax: VS Code's six roles, pulled into the product's palette ── */
+  --syntax-keyword: #ec4899;
+  --syntax-type: #38bdf8;
+  --syntax-function: #14f195;
+  --syntax-string: #f59e0b;
+  --syntax-number: #8b5cf6;
+  --syntax-comment: #6b6b72;
+  --syntax-plain: #f2f2f3;
+
+  /* ── type ───────────────────────────────────────────────────────────── */
+  --font-headline: "Stack Sans Headline", "Manrope", -apple-system,
+    BlinkMacSystemFont, sans-serif;
+  --font-text: "Stack Sans Text", "Manrope", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* ── layout: the canvas's shared sizes (views/flow/tokens.ts) ───────── */
+  --layout-gap: 8px;
+  --layout-head: 2.75rem;
+  --layout-subhead: 2.375rem;
+  --layout-bar: 1.75rem;
+  --layout-rail: 3.5rem;
+  --layout-inset: 0.875rem;
+  --sidebar-width-value: 14.5rem;
+  --sidebar-rail-value: 3.25rem;
+
+  /* ── phone (views/flow/phone.ts): bars, heads, rows and touch targets ─ */
+  --phone-bar: 60px;
+  --phone-head: 52px;
+  --phone-row: 52px;
+  --target: 48px;
+
+  /* ── elevation ──────────────────────────────────────────────────────── */
+  --shadow-panel-value: 0 8px 28px rgb(0 0 0 / 0.45);
+  --shadow-modal-value: 0 24px 64px rgb(0 0 0 / 0.6);
+  --shadow-glow-value: 0 0 0 10px rgb(153 69 255 / 0.12);
+  --shadow-thumb-value: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-sheet-value: 0 -12px 40px rgb(0 0 0 / 0.45);
+  --shadow-composer-value: inset 0 1px 0 rgb(255 255 255 / 0.02),
+    0 10px 30px -18px rgb(0 0 0 / 0.8);
+  --backdrop: rgb(8 8 9 / 0.62);
+
+  /* ── motion ─────────────────────────────────────────────────────────── */
+  /* The product's one curve (EASE in client-v2), and its menus' */
+  --ease-standard-value: cubic-bezier(0.2, 0, 0, 1);
+  --ease-menu-value: cubic-bezier(0.22, 1, 0.36, 1);
+  --duration-menu: 120ms;
+  --duration-sidebar: 200ms;
+  --duration-thumb: 220ms;
+  --duration-sheet: 260ms;
+  /* The deck's and the landing's curves */
+  --ease-out-value: cubic-bezier(0.22, 0.61, 0.24, 1);
+  --ease-move-value: cubic-bezier(0.45, 0, 0.2, 1);
+  --ease-pop-value: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --duration-fast: 160ms;
+  --duration-base: 320ms;
+  --duration-slow: 620ms;
+  --duration-ground: 1400ms;
+}

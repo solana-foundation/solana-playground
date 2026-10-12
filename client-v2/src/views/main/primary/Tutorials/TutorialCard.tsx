@@ -65,9 +65,12 @@ const ImgWrapper = styled.div<{ progress: number }>`
       bottom: 0;
       height: 0.25rem;
       background: ${progress === 100
-        ? `linear-gradient(90deg, ${theme.colors.state.success.color} 0%, ${
-            theme.colors.state.success.color + theme.default.transparency.high
-          } 100%)`
+        ? `linear-gradient(90deg, ${
+            theme.colors.state.success.color
+          } 0%, ${PgTheme.alpha(
+            theme.colors.state.success.color,
+            "high"
+          )} 100%)`
         : `linear-gradient(90deg, ${theme.colors.default.primary} 0%, ${theme.colors.default.secondary} 100%)`};
       animation: ${keyframes`from { width: 0; } to { width: ${progress}%; }`}
         ${theme.default.transition.duration.long}

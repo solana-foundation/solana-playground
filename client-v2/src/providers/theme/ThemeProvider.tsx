@@ -44,8 +44,7 @@ const Wrapper = styled.div`
     font-size: ${theme.font.code.size.medium};
 
     & ::selection {
-      background: ${theme.colors.default.primary +
-      theme.default.transparency.medium};
+      background: ${PgTheme.alpha(theme.colors.default.primary, "medium")};
     }
   `}
 `;

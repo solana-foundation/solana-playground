@@ -1,7 +1,6 @@
 import { ComponentPropsWithoutRef, FC, ReactNode } from "react";
 import styled, { css } from "styled-components";
 
-import Img from "../../../../components/Img";
 import Tooltip from "../../../../components/Tooltip";
 import { PgTheme } from "../../../../utils";
 
@@ -18,7 +17,7 @@ const SidebarButton: FC<React.PropsWithChildren<SidebarButtonProps>> = ({
 }) => (
   <Tooltip element={tooltip} placement="right" arrow={{ size: 4 }}>
     <IconWrapper {...props}>
-      <Icon src={src} />
+      <Icon $src={src} aria-hidden />
     </IconWrapper>
   </Tooltip>
 );
@@ -26,19 +25,26 @@ const SidebarButton: FC<React.PropsWithChildren<SidebarButtonProps>> = ({
 const IconWrapper = styled.div<Pick<SidebarButtonProps, "active">>`
   ${({ theme, active }) => css`
     ${PgTheme.convertToCSS(theme.views.sidebar.left.button.default)};
+    color: ${active ? "var(--text-primary)" : "var(--text-secondary)"};
 
     ${active
-      ? `${PgTheme.convertToCSS(theme.views.sidebar.left.button.selected)};
-      & img { filter: invert(1); }`
-      : `&:hover img { filter: invert(1); }`}
+      ? PgTheme.convertToCSS(theme.views.sidebar.left.button.selected)
+      : "&:hover { color: var(--text-primary); }"}
   `}
 `;
 
-const Icon = styled(Img)`
+/**
+ * The icon's shape as a mask over the text colour, so it follows the theme
+ * from the tokens instead of being inverted by a filter. Serves the SVG
+ * icons and the two alpha-shaped raster ones (GitHub, Settings) alike.
+ */
+const Icon = styled.span<{ $src: string }>`
+  display: block;
   width: 2rem;
   height: 2rem;
-  padding: 0.25rem;
-  filter: invert(0.5);
+  background-color: currentColor;
+  -webkit-mask: url(${({ $src }) => $src}) center / 1.5rem no-repeat;
+  mask: url(${({ $src }) => $src}) center / 1.5rem no-repeat;
 `;
 
 export default SidebarButton;

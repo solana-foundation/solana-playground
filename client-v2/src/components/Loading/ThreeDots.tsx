@@ -1,5 +1,7 @@
 import styled, { css, keyframes } from "styled-components";
 
+import { alpha } from "../../utils/theme/alpha";
+
 interface ThreeDotsProps {
   width?: string;
   height?: string;
@@ -9,7 +11,7 @@ interface ThreeDotsProps {
 export const ThreeDots = styled.div<ThreeDotsProps>`
   ${({ theme, width = "0.5rem", height = "0.5rem", distance = "1rem" }) => css`
     --bg: ${theme.colors.default.primary};
-    --bg-fade: ${theme.colors.default.primary + theme.default.transparency.low};
+    --bg-fade: ${alpha(theme.colors.default.primary, "low")};
     --distance: ${distance};
 
     position: relative;

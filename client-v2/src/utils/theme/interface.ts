@@ -69,13 +69,6 @@ export interface ThemeParam {
       };
     };
 
-    /** Default transparency values as hex string(00-ff) */
-    transparency?: {
-      low: string;
-      medium: string;
-      high: string;
-    };
-
     /** Default transition settings */
     transition?: {
       /** Timing function */

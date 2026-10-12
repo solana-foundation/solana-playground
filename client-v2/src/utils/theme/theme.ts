@@ -10,7 +10,14 @@ import type {
   ThemeColor,
   Highlight,
 } from "./interface";
+import { alpha } from "./alpha";
+import { applyThemeMode } from "./mode";
+import { removedThemeNotice, resolveSavedTheme } from "./saved-theme";
+import { resolveColor } from "../../shared/lib/css-color";
+import { createLogger } from "../../shared/lib/logger";
 import type { ValueOf } from "../types";
+
+const log = createLogger("theme:saved");
 
 export class PgTheme {
   /** Current theme */
@@ -28,15 +35,17 @@ export class PgTheme {
   /** Theme key in localStorage */
   private static readonly _THEME_KEY = "theme";
 
-  /** One-time storage migration flag for the "Solana V2" default switch.
-   * Bumping the suffix re-runs the reset once in every existing profile. */
-  private static readonly _MIGRATION_KEY = "theme-migration-solana-v2-r2";
-
-  /** Superseded migration flags, removed on the next `set` */
-  private static readonly _STALE_MIGRATION_KEYS = ["theme-migration-solana-v2"];
+  /** Flags of the retired "Solana V2" default migration, cleared on load */
+  private static readonly _RETIRED_KEYS = [
+    "theme-migration-solana-v2",
+    "theme-migration-solana-v2-r2",
+  ];
 
   /** Font key in localStorage */
   private static readonly _FONT_KEY = "font";
+
+  /** A colour at a lower opacity, see `alpha` */
+  static readonly alpha = alpha;
 
   /** Theme event names */
   static readonly events = {
@@ -112,22 +121,17 @@ export class PgTheme {
     const defaultTheme = this.themes.find((t) => t.isDefault)!;
     const defaultFont = this.fonts.find((f) => f.isDefault)!;
 
-    // Fork migration: the default theme changed to "Solana V2". The previous
-    // default was auto-written to storage on first load (see the `setItem`
-    // below), so without this one-time reset no existing browser would ever
-    // see the new default. Explicitly choosing "Playground" afterwards sticks,
-    // because the migration flag stays set.
-    if (!localStorage.getItem(PgTheme._MIGRATION_KEY)) {
-      localStorage.setItem(PgTheme._MIGRATION_KEY, "1");
-      if (localStorage.getItem(PgTheme._THEME_KEY) === "Playground") {
-        localStorage.removeItem(PgTheme._THEME_KEY);
-      }
-      for (const key of PgTheme._STALE_MIGRATION_KEYS) {
-        localStorage.removeItem(key);
-      }
+    const saved = resolveSavedTheme(localStorage.getItem(this._THEME_KEY));
+    if ("removed" in saved) {
+      removedThemeNotice.hold(saved.removed);
+      log.info("saved theme was removed, falling back to Dark", {
+        context: { removed: saved.removed },
+      });
     }
+    for (const key of PgTheme._RETIRED_KEYS) localStorage.removeItem(key);
+
     const { themeName, fontFamily } = PgCommon.setDefault(params, {
-      themeName: localStorage.getItem(this._THEME_KEY) ?? defaultTheme.name,
+      themeName: saved.name,
       fontFamily: localStorage.getItem(this._FONT_KEY) ?? defaultFont.family,
     });
 
@@ -158,10 +162,7 @@ export class PgTheme {
     };
     this._font = font;
 
-    // Match native UI (scrollbars, form controls, system colors) to the theme
-    document.documentElement.style.colorScheme = this._theme.isDark
-      ? "dark"
-      : "light";
+    applyThemeMode(this._theme.isDark ? "dark" : "light");
 
     // Load font if necessary.
     //
@@ -260,6 +261,14 @@ export class PgTheme {
   }
 
   /**
+   * The theme a fallback replaced on this load, once. The start-up effect
+   * `themeNotice` shows it; every later call returns `null`.
+   */
+  static takeRemovedThemeNotice() {
+    return removedThemeNotice.take();
+  }
+
+  /**
    * Convert the component object styles into CSS styles.
    *
    * @param component Component to convert to CSS
@@ -353,7 +362,12 @@ export class PgTheme {
   static getDifferentBackground(bg: string) {
     const theme = this._themeReady;
     const { bgPrimary, bgSecondary } = theme.colors.default;
-    if (PgCommon.isColorsEqual(bg, bgPrimary)) return bgSecondary;
+    // Theme colours are CSS variables, which a canvas cannot paint, and a
+    // caller passes either one of them or a computed colour: both sides are
+    // compared as the colour they resolve to now
+    if (PgCommon.isColorsEqual(resolveColor(bg), resolveColor(bgPrimary))) {
+      return bgSecondary;
+    }
     return bgPrimary;
   }
 
@@ -735,32 +749,21 @@ export class PgTheme {
 
     // Backdrop
     def.backdrop ??= {};
-    def.backdrop.bg ??= this._theme.isDark ? "#00000080" : "#00000040";
+    def.backdrop.bg ??= "var(--backdrop)";
 
     // Border radius
     def.borderRadius ??= "4px";
 
     // Box shadow
-    def.boxShadow ??= "rgb(0 0 0 / 25%) -1px 3px 4px";
+    def.boxShadow ??= "var(--shadow-panel-value)";
 
     // Scrollbar
-    if (!def.scrollbar) {
-      if (this._theme.isDark) {
-        def.scrollbar = {
-          thumb: {
-            color: "#ffffff64",
-            hoverColor: "#ffffff32",
-          },
-        };
-      } else {
-        def.scrollbar = {
-          thumb: {
-            color: "#00000032",
-            hoverColor: "#00000064",
-          },
-        };
-      }
-    }
+    def.scrollbar ??= {
+      thumb: {
+        color: alpha("var(--text-primary)", "medium"),
+        hoverColor: alpha("var(--text-primary)", "low"),
+      },
+    };
 
     // Transition
     def.transition ??= {
@@ -772,27 +775,19 @@ export class PgTheme {
       },
     };
 
-    // Transparency
-    def.transparency ??= {
-      low: "16",
-      medium: "64",
-      high: "bb",
-    };
-
     return this;
   }
 
   /** Set default state colors */
   private static _stateColors() {
     const state = this._theme.colors.state;
-    const theme = this._themeReady;
 
-    state.disabled.bg ??= state.disabled.color + theme.default.transparency.low;
-    state.error.bg ??= state.error.color + theme.default.transparency.low;
-    state.hover.bg ??= state.hover.color + theme.default.transparency.low;
-    state.info.bg ??= state.info.color + theme.default.transparency.low;
-    state.success.bg ??= state.success.color + theme.default.transparency.low;
-    state.warning.bg ??= state.warning.color + theme.default.transparency.low;
+    state.disabled.bg ??= alpha(state.disabled.color, "low");
+    state.error.bg ??= alpha(state.error.color, "low");
+    state.hover.bg ??= alpha(state.hover.color, "low");
+    state.info.bg ??= alpha(state.info.color, "low");
+    state.success.bg ??= alpha(state.success.color, "low");
+    state.warning.bg ??= alpha(state.warning.color, "low");
 
     return this;
   }
@@ -983,8 +978,8 @@ export class PgTheme {
     const skeleton = this._getComponent("skeleton");
     const theme = this._themeReady;
 
-    skeleton.bg ??= "#44475A";
-    skeleton.highlightColor ??= "#343746";
+    skeleton.bg ??= "var(--surface-raised)";
+    skeleton.highlightColor ??= "var(--surface-hover)";
     skeleton.borderRadius ??= theme.default.borderRadius;
 
     return this;
@@ -1078,14 +1073,16 @@ export class PgTheme {
     input.fontSize ??= theme.font.code.size.medium;
 
     input.focus ??= {};
-    input.focus.outline ??= `1px solid ${
-      theme.colors.default.primary + theme.default.transparency.medium
-    }`;
+    input.focus.outline ??= `1px solid ${alpha(
+      theme.colors.default.primary,
+      "medium"
+    )}`;
 
     input.focusWithin ??= {};
-    input.focusWithin.outline ??= `1px solid ${
-      theme.colors.default.primary + theme.default.transparency.medium
-    }`;
+    input.focusWithin.outline ??= `1px solid ${alpha(
+      theme.colors.default.primary,
+      "medium"
+    )}`;
 
     return this;
   }
@@ -1110,9 +1107,10 @@ export class PgTheme {
     select.control.hover.borderColor ??= theme.colors.state.hover.color;
     select.control.hover.cursor ??= "pointer";
     select.control.focusWithin ??= {};
-    select.control.focusWithin.boxShadow ??= `0 0 0 1px ${
-      theme.colors.default.primary + theme.default.transparency.high
-    }`;
+    select.control.focusWithin.boxShadow ??= `0 0 0 1px ${alpha(
+      theme.colors.default.primary,
+      "high"
+    )}`;
 
     // Menu
     select.menu ??= {};
@@ -1210,17 +1208,18 @@ export class PgTheme {
     // Default
     uploadArea.default ??= {};
     uploadArea.default.padding ??= "2rem";
-    uploadArea.default.bg ??=
-      theme.colors.default.primary + theme.default.transparency.low;
+    uploadArea.default.bg ??= alpha(theme.colors.default.primary, "low");
     uploadArea.default.border ??= `2px dashed
-    ${theme.colors.default.primary + theme.default.transparency.medium}`;
+    ${alpha(theme.colors.default.primary, "medium")}`;
     uploadArea.default.borderRadius ??= theme.default.borderRadius;
     uploadArea.default.transition ??= `all ${theme.default.transition.duration.short}
       ${theme.default.transition.type}`;
     uploadArea.default.hover ??= {};
     uploadArea.default.hover.cursor ??= "pointer";
-    uploadArea.default.hover.borderColor ??=
-      theme.colors.default.primary + theme.default.transparency.high;
+    uploadArea.default.hover.borderColor ??= alpha(
+      theme.colors.default.primary,
+      "high"
+    );
 
     // Icon
     uploadArea.icon ??= {};
@@ -1427,7 +1426,7 @@ export class PgTheme {
     wallet.main.default.bg ??= `linear-gradient(
       0deg,
       ${wallet.default.bg} 75%,
-      ${theme.colors.default.primary + theme.default.transparency.low} 100%
+      ${alpha(theme.colors.default.primary, "low")} 100%
     )`;
     wallet.main.default.borderRadius ??= theme.default.borderRadius;
 
@@ -1571,8 +1570,10 @@ export class PgTheme {
     tabs.tab.default.hover.color ??= theme.colors.default.textPrimary;
     // Tab selected
     tabs.tab.selected ??= {};
-    tabs.tab.selected.borderColor ??=
-      theme.colors.default.secondary + theme.default.transparency.medium;
+    tabs.tab.selected.borderColor ??= alpha(
+      theme.colors.default.secondary,
+      "medium"
+    );
     // Tab current
     tabs.tab.current ??= {};
     tabs.tab.current.bg ??= theme.colors.default.bgPrimary;
@@ -1581,8 +1582,7 @@ export class PgTheme {
     // Tab drag
     tabs.tab.drag ??= {};
     tabs.tab.drag.position ??= "relative";
-    tabs.tab.drag.borderColor ??=
-      theme.colors.default.secondary + theme.default.transparency.high;
+    tabs.tab.drag.borderColor ??= alpha(theme.colors.default.secondary, "high");
     tabs.tab.drag.after ??= {};
     tabs.tab.drag.after.content ??= '""';
     tabs.tab.drag.after.position ??= "absolute";
@@ -1618,14 +1618,18 @@ export class PgTheme {
 
     // Editor selection
     editor.default.selection ??= {};
-    editor.default.selection.bg ??=
-      theme.colors.default.primary + theme.default.transparency.medium;
+    editor.default.selection.bg ??= alpha(
+      theme.colors.default.primary,
+      "medium"
+    );
     editor.default.selection.color ??= "inherit";
 
     // Editor search match
     editor.default.searchMatch ??= {};
-    editor.default.searchMatch.bg ??=
-      theme.colors.default.textSecondary + theme.default.transparency.medium;
+    editor.default.searchMatch.bg ??= alpha(
+      theme.colors.default.textSecondary,
+      "medium"
+    );
     editor.default.searchMatch.color ??= "inherit";
     editor.default.searchMatch.selectedBg ??= "inherit";
     editor.default.searchMatch.selectedColor ??= "inherit";
@@ -1640,7 +1644,7 @@ export class PgTheme {
 
     // Editor inlay hint
     editor.inlayHint ??= {};
-    editor.inlayHint.bg ??= "#262730aa";
+    editor.inlayHint.bg ??= alpha("var(--surface-raised)", "high");
     editor.inlayHint.color ??= theme.colors.default.textSecondary;
     editor.inlayHint.parameterBg ??= editor.inlayHint.bg;
     editor.inlayHint.parameterColor ??= editor.inlayHint.color;
@@ -1664,26 +1668,31 @@ export class PgTheme {
     // Editor peek view editor
     editor.peekView.editor ??= {};
     editor.peekView.editor.bg ??= theme.colors.default.bgSecondary;
-    editor.peekView.editor.matchHighlightBg ??=
-      theme.colors.state.warning.color + theme.default.transparency.medium;
+    editor.peekView.editor.matchHighlightBg ??= alpha(
+      theme.colors.state.warning.color,
+      "medium"
+    );
     editor.peekView.editor.gutterBg ??= editor.peekView.editor.bg;
     // Editor peek view result
     editor.peekView.result ??= {};
     editor.peekView.result.bg ??= theme.colors.default.bgPrimary;
     editor.peekView.result.lineColor ??= theme.colors.default.textSecondary;
     editor.peekView.result.fileColor ??= theme.colors.default.textSecondary;
-    editor.peekView.result.selectionBg ??=
-      theme.colors.default.primary + theme.default.transparency.low;
+    editor.peekView.result.selectionBg ??= alpha(
+      theme.colors.default.primary,
+      "low"
+    );
     editor.peekView.result.selectionColor ??= theme.colors.default.textPrimary;
-    editor.peekView.result.matchHighlightBg ??=
-      theme.colors.state.warning.color + theme.default.transparency.medium;
+    editor.peekView.result.matchHighlightBg ??= alpha(
+      theme.colors.state.warning.color,
+      "medium"
+    );
 
     // Editor tooltip/widget
     editor.tooltip ??= {};
     editor.tooltip.bg ??= theme.colors.default.bgSecondary;
     editor.tooltip.color ??= theme.colors.default.textPrimary;
-    editor.tooltip.selectedBg ??=
-      theme.colors.default.primary + theme.default.transparency.medium;
+    editor.tooltip.selectedBg ??= alpha(theme.colors.default.primary, "medium");
     editor.tooltip.selectedColor ??= theme.colors.default.textPrimary;
     editor.tooltip.borderColor ??= theme.colors.default.border;
 

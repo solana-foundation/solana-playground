@@ -128,6 +128,11 @@ jobs:
       - name: Lint
         run: yarn lint
 
+      # Every colour comes from the design system's tokens; a hex or a
+      # colour function anywhere else in `src/` fails the job.
+      - name: Colour literals
+        run: yarn check-colors
+
       # `openspec validate --all` over ../openspec: every active change has
       # its proposal, delta specs, design and tasks in the schema's shape.
       - name: Validate specs

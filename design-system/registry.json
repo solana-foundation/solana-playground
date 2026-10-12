@@ -15,12 +15,12 @@
         {
           "path": "src/styles/tokens.css",
           "type": "registry:file",
-          "target": "src/styles/playground-tokens.css"
+          "target": "src/app/styles/playground-tokens.css"
         },
         {
           "path": "src/styles/theme.css",
           "type": "registry:file",
-          "target": "src/styles/playground-theme.css"
+          "target": "src/app/styles/playground-theme.css"
         }
       ]
     },

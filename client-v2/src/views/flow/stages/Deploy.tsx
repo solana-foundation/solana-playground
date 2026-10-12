@@ -16,6 +16,7 @@ import {
   PgExplorer,
   PgGlobal,
   PgProgramInfo,
+  PgTheme,
 } from "../../../utils";
 import { PgDeployHistory } from "../state/deploy-history";
 import type { DeployRecord } from "../state/deploy-history";
@@ -276,8 +277,7 @@ const ErrorNotice = styled.p`
     padding: 0.5rem 0.75rem;
     border: 1px solid ${theme.colors.state.error.color};
     border-radius: ${theme.default.borderRadius};
-    background: ${theme.colors.state.error.color +
-    theme.default.transparency.high};
+    background: ${PgTheme.alpha(theme.colors.state.error.color, "high")};
     color: ${theme.colors.state.error.color};
     font-size: ${theme.font.other.size.small};
   `}

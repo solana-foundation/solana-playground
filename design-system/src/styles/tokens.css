@@ -6,12 +6,13 @@
  * Playground's own: the brand colours, the surfaces, status, syntax, the two
  * tracks, layout sizes, elevation and motion.
  *
- * The values come from the product's theme (client-v2 themes/solana-v3) and
- * the deck's tokens. Colours are hex on purpose: Studio's Design tab offers a
+ * The values come from the product's former Solana theme and the deck's
+ * tokens. Colours are hex on purpose: Studio's Design tab offers a
  * colour picker for a hex token and a text field for anything else.
  *
- * :root is paper, for the landing and the deck's white slides. .dark is the
- * product, and the product sets it on <html> by default. */
+ * :root is paper: the product's Light theme, the landing and the deck's
+ * white slides. .dark is the product's Dark theme, its default, which it
+ * sets on <html>. */
 
 :root {
   /* ── shadcn semantic tokens, paper ─────────────────────────────────── */

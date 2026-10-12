@@ -127,13 +127,41 @@ that owns the data.
 ## Tokens and themes
 
 `tokens.css` is the source of colour, type, radius, elevation and motion.
-`:root` is light (paper); `.dark` is the product. The `dark` class goes on
-`<html>` and follows the theme setting (today only `colorScheme` is set, in
-`PgTheme.set`). The styled-components theme object is rebuilt from the same
-values so legacy and new components read one palette; HOO-1802's literal
-colours move onto them. Monaco (`monaco.editor.defineTheme`) and xterm
-(`theme` in `Terminal.tsx`) need resolved values and read them through
-`getComputedStyle(document.documentElement)` when the theme changes.
+`:root` is light (paper); `.dark` is the product. It reaches the code only
+through `yarn ds-add playground-tokens`, which installs
+`src/app/styles/playground-tokens.css` and `playground-theme.css`; neither is
+edited by hand, and no token is added for the playground's sake (a legacy
+role without one maps to the nearest). `src/index.css` imports both and
+declares `@custom-variant dark (&:is(.dark *))`, so `dark:` follows the class,
+not the OS. `PgTheme.set` toggles `dark` on `<html>` next to `colorScheme`.
+
+- **The theme object holds references.** Every colour in the
+  styled-components theme is `var(--token)`, so one object serves both themes
+  and the class switches every value. Alpha is `PgTheme.alpha(color, level)`,
+  a `color-mix(in srgb, ...)` at 9, 39 or 73 per cent (the weights of the old
+  `16`, `64`, `bb` suffixes). _Rejected:_ values resolved at switch time (a
+  second copy of the palette in JS, and hex concatenation breaks on any token
+  not written `#rrggbb`); a hybrid of both (two kinds of value in one object).
+- **Monaco, xterm and shiki get plain values.** They cannot read a CSS
+  variable. `shared/lib/css-color` resolves one through `getComputedStyle` on
+  a probe element and turns the `rgb()` or `color(srgb ...)` it reports into
+  hex; a value that does not resolve becomes transparent, with one warning.
+  Monaco redefines its theme and xterm recolours in place on every change, so
+  terminal output survives.
+- **Two names.** `Dark` (the default) and `Light`. A saved `Playground`,
+  `Dracula` or `Solana` falls back to Dark and is told once; `Solana V2`,
+  written on every first load and so nobody's choice, and any unknown name
+  fall back silently. The fallback rewrites the existing `theme` key at once,
+  so there is no new storage key; the `theme-migration-solana-v2*` flags go.
+  The notice waits in memory for a start-up effect mounted after `Toast`,
+  because a toast sent before `Toast` mounts is lost.
+- **Literals are guarded.** `scripts/check-colors.mjs` runs in
+  `yarn run check` and in CI, and fails on any hex colour or colour function
+  (`rgb()`, `hsl()`, `color(srgb ...)` and the like) outside the installed
+  token files, `shared/lib/css-color` and the third-party logo colours in
+  `languages/`. Named colours (`white`, `red`) are not caught: the words are
+  too common in code to tell from a colour without parsing CSS. Sidebar icons colour through a CSS mask over the
+  text colour, which reaches the rail's raster icons too.
 
 ## Tailwind inside Create React App
 

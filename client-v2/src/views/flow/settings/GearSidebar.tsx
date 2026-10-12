@@ -25,6 +25,7 @@ import {
   PgProgramInfo,
   PgSettings,
   PgView,
+  PgTheme,
 } from "../../../utils";
 import {
   ImportFs,
@@ -361,7 +362,7 @@ const Chip = styled.button<{ $active: boolean }>`
     border: 1px solid
       ${$active ? theme.colors.default.primary : theme.colors.default.border};
     background: ${$active
-      ? theme.colors.default.primary + theme.default.transparency.medium
+      ? PgTheme.alpha(theme.colors.default.primary, "medium")
       : "transparent"};
     color: ${$active
       ? theme.colors.default.primary

@@ -11,9 +11,7 @@ export const GAP = "8px";
 export const BOTTOM_BAR_HEIGHT = "1.75rem";
 
 /**
- * The brand gradient, verbatim from
- * `components/GradientButton/GradientButton.tsx` -- that component
- * is the existing precedent for this literal (logomark, stepper active dot,
- * the one decisive CTA per view).
+ * The product's gradient token, the same one `GradientButton` paints with
+ * (logomark, stepper active dot, the one decisive CTA per view).
  */
-export const GRADIENT = "linear-gradient(135deg, #9945ff 10%, #14f195 90%)";
+export const GRADIENT = "var(--gradient-product)";

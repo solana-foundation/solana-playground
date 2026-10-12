@@ -11,6 +11,8 @@ import {
   PgTerminal,
   PgTheme,
 } from "../../utils";
+import { resolveColor } from "../../shared/lib/css-color";
+import { xtermTheme } from "./terminal-theme";
 
 interface TerminalProps {
   cmdManager: CommandManager;
@@ -44,23 +46,19 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
         cursorBlink: xterm.cursor.blink,
         cursorStyle: xterm.cursor.kind,
         tabStopWidth: 4,
-        theme: {
-          foreground: xterm.textPrimary,
-          brightBlack: xterm.textSecondary,
-          black: xterm.textSecondary,
-          brightMagenta: xterm.primary,
-          brightCyan: xterm.secondary,
-          brightGreen: xterm.success,
-          brightRed: xterm.error,
-          brightYellow: xterm.warning,
-          brightBlue: xterm.info,
-          selection: xterm.selectionBg,
-          cursor: xterm.cursor.color,
-          cursorAccent: xterm.cursor.accentColor,
-        },
+        theme: xtermTheme(xterm, resolveColor),
       },
     });
-  }, [theme, cmdManager]);
+    // The theme is applied in place below; rebuilding would drop the output
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cmdManager]);
+
+  useEffect(() => {
+    term.setAppearance({
+      theme: xtermTheme(theme.components.terminal.xterm, resolveColor),
+      fontFamily: theme.font.code.family,
+    });
+  }, [term, theme]);
 
   useExposeStatic(PgTerminal.events.STATIC, term);
 

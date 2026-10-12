@@ -263,7 +263,7 @@ const MainWrapper = styled.div`
       height: 100%;
       position: absolute;
       inset: 0;
-      background: #00000000;
+      background: transparent;
       pointer-events: none;
       transition: all ${theme.default.transition.duration.short}
         ${theme.default.transition.type};

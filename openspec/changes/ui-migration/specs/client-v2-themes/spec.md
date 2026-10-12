@@ -27,7 +27,10 @@ light, and SHALL start on dark when no theme is saved.
 
 When a saved theme is one the product no longer offers, the product SHALL
 apply dark, SHALL tell the user once that the saved theme is gone, and SHALL
-save dark so the message does not repeat.
+save dark so the message does not repeat. The former default, "Solana V2", is
+the exception: it was written to storage on every first load, so nobody chose
+it, and it moves to dark without the message. A name the product never
+offered (a hand edit) also moves to dark without the message.
 
 #### Scenario: A saved Dracula theme
 
