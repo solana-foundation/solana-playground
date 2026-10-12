@@ -93,10 +93,11 @@ once, and again whenever its lockfile changes), serves it on the port
 formats what lands with this package's prettier. Names are the registry's
 (`design-system/registry.json`); `components.json` maps `@playground` to that
 server and the aliases to `@/shared/ui`, `@/shared/lib` and
-`@/shared/lib/hooks`. Nothing comes from the design system's public site;
-the components' npm dependencies are added to `package.json` from npm. The
-stock shadcn parts a few of ours build on (`button`, `spinner`, `tooltip`)
-still come from `ui.shadcn.com`.
+`@/shared/lib/hooks`. Nothing comes from the design system's public site
+or from `ui.shadcn.com`: the stock shadcn parts are registry items too, and
+`scripts/registry.test.mjs` fails on a dependency named outside
+`@playground/`. The components' npm dependencies are added to
+`package.json` from npm.
 
 The hand-written `GradientButton` is not in `shared/ui`: it lives in
 `components/GradientButton`, beside the legacy `Button` it wraps, until the

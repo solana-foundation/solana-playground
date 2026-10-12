@@ -37,6 +37,176 @@
       ]
     },
     {
+      "name": "use-mobile",
+      "type": "registry:hook",
+      "title": "useIsMobile",
+      "description": "Stock shadcn hook: true below the mobile breakpoint. The sidebar turns into a sheet there.",
+      "files": [
+        {
+          "path": "src/hooks/use-mobile.ts",
+          "type": "registry:hook"
+        }
+      ]
+    },
+    {
+      "name": "button",
+      "type": "registry:ui",
+      "title": "Button",
+      "description": "Stock shadcn button, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/button.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "class-variance-authority",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "spinner",
+      "type": "registry:ui",
+      "title": "Spinner",
+      "description": "Stock shadcn spinner, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/spinner.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "tooltip",
+      "type": "registry:ui",
+      "title": "Tooltip",
+      "description": "Stock shadcn tooltip, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/tooltip.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "separator",
+      "type": "registry:ui",
+      "title": "Separator",
+      "description": "Stock shadcn separator, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/separator.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "input",
+      "type": "registry:ui",
+      "title": "Input",
+      "description": "Stock shadcn input, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/input.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn"
+      ]
+    },
+    {
+      "name": "skeleton",
+      "type": "registry:ui",
+      "title": "Skeleton",
+      "description": "Stock shadcn skeleton, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/skeleton.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn"
+      ]
+    },
+    {
+      "name": "sheet",
+      "type": "registry:ui",
+      "title": "Sheet",
+      "description": "Stock shadcn sheet, as the design system ships it.",
+      "registryDependencies": [
+        "@playground/button"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/sheet.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "resizable",
+      "type": "registry:ui",
+      "title": "Resizable",
+      "description": "Stock shadcn resizable panels, on react-resizable-panels v4.",
+      "files": [
+        {
+          "path": "src/components/ui/resizable.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "react-resizable-panels"
+      ]
+    },
+    {
+      "name": "sidebar",
+      "type": "registry:ui",
+      "title": "Sidebar",
+      "description": "Stock shadcn sidebar, as the design system ships it.",
+      "registryDependencies": [
+        "@playground/use-mobile",
+        "@playground/button",
+        "@playground/input",
+        "@playground/separator",
+        "@playground/sheet",
+        "@playground/skeleton",
+        "@playground/tooltip"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/sidebar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "class-variance-authority",
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
       "name": "logo",
       "type": "registry:ui",
       "title": "Logo",
@@ -99,8 +269,8 @@
       "title": "Async button",
       "description": "A Button that disables itself and shows a spinner until its onClick promise settles.",
       "registryDependencies": [
-        "button",
-        "spinner",
+        "@playground/button",
+        "@playground/spinner",
         "@playground/playground-tokens"
       ],
       "files": [
@@ -108,10 +278,6 @@
           "path": "src/components/ui/async-button.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "class-variance-authority",
-        "radix-ui"
       ]
     },
     {
@@ -120,8 +286,8 @@
       "title": "Copy button",
       "description": "Copies one value. Its tooltip turns from Copy to Copied, in green.",
       "registryDependencies": [
-        "button",
-        "tooltip",
+        "@playground/button",
+        "@playground/tooltip",
         "@playground/playground-tokens"
       ],
       "files": [
@@ -132,9 +298,7 @@
       ],
       "dependencies": [
         "lucide-react",
-        "cn",
-        "class-variance-authority",
-        "radix-ui"
+        "cn"
       ]
     },
     {
@@ -143,7 +307,7 @@
       "title": "Help tip",
       "description": "A small question mark with a large place to press, and the answer in a tooltip.",
       "registryDependencies": [
-        "tooltip",
+        "@playground/tooltip",
         "@playground/playground-tokens"
       ],
       "files": [
@@ -153,8 +317,7 @@
         }
       ],
       "dependencies": [
-        "cn",
-        "radix-ui"
+        "cn"
       ]
     },
     {
