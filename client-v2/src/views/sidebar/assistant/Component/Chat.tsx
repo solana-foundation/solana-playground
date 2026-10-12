@@ -68,6 +68,10 @@ const Chat = () => {
   // Bridges `onDidRequestPrompt`, which must subscribe unconditionally, to
   // `send`, which only exists once a backend is connected below
   const sendRef = useRef<(text: string) => void>(() => {});
+  // A prompt that arrived with no backend waits in the composer. Saying so is
+  // the picker's job: a notice item would outlive the connect and be stored
+  // with the thread
+  const [promptWaiting, setPromptWaiting] = useState(false);
 
   // "Fix with assistant" and similar callers outside the panel ask for a
   // prompt to be sent through `PgAssistant.requestPrompt`; this is the only
@@ -77,9 +81,7 @@ const Chat = () => {
       ({ text, send }) => {
         if (!PgAssistant.isConnected) {
           setInput(text);
-          PgAssistant.addNotice(
-            "Connect a backend to send this to the assistant."
-          );
+          setPromptWaiting(true);
           return;
         }
         // A prompt the user did not type gets one look before it costs a turn
@@ -115,7 +117,13 @@ const Chat = () => {
   useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
 
   const connection = PgAssistant.connection;
-  if (!connection || PgAssistant.isPickingBackend) {
+  const picking = !connection || PgAssistant.isPickingBackend;
+  // Connecting answers the hint; a later disconnect must not bring it back
+  useEffect(() => {
+    if (!picking) setPromptWaiting(false);
+  }, [picking]);
+
+  if (picking) {
     // The conversation is restored long before a backend is picked -- on
     // another browser, picking one is the first thing the user does, and
     // returning only the picker made a thread that was already in memory look
@@ -133,6 +141,12 @@ const Chat = () => {
         )}
 
         <ConnectSlot>
+          {promptWaiting && (
+            <WaitingHint role="status">
+              Connect a backend to send this to the assistant. Your prompt is
+              waiting in the composer.
+            </WaitingHint>
+          )}
           <Connect />
         </ConnectSlot>
       </Wrapper>
@@ -448,6 +462,15 @@ const ConnectSlot = styled.div`
   flex-shrink: 0;
   min-height: 0;
   overflow-y: auto;
+`;
+
+const WaitingHint = styled.div`
+  ${({ theme }) => css`
+    padding: 0.75rem 1rem 0;
+    color: ${theme.colors.default.textSecondary};
+    font-size: ${theme.font.code.size.xsmall};
+    font-style: italic;
+  `}
 `;
 
 const Messages = styled.div`

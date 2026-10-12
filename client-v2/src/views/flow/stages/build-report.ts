@@ -6,7 +6,12 @@ export interface BuildDiagnostic {
   code: string | null;
   /** The one-line summary rustc prints after `error[...]:` */
   title: string;
-  /** Path as rustc reports it, or `null` if the diagnostic has no location */
+  /**
+   * Workspace path (`src/lib.rs`), or `null` if the diagnostic has no
+   * location. rustc's own path is relative to the build server's working
+   * directory, which sits beside `src`, so leading `./` and `../` segments
+   * are dropped.
+   */
   file: string | null;
   line: number | null;
   col: number | null;
@@ -28,7 +33,7 @@ const HEADER = /^error(?:\[(E\d+)\])?: (.+)$/;
 // excerpt. (Indented `= note: ...` lines under an error are unaffected -
 // they do not match `^`.)
 const OTHER_HEADER = /^(?:warning|note|help)(?:\[[^\]]+\])?: .+$/;
-const LOCATION = /^\s*--> (.+?):(\d+):(\d+)\s*$/;
+const LOCATION = /^\s*--> (?:\.\.?\/)*(.+?):(\d+):(\d+)\s*$/;
 // rustc's own summary lines ("could not compile ...", "aborting due to ...
 // previous error(s)") are not diagnostics of their own.
 const SUMMARY = /^(could not compile|aborting due to)/;
