@@ -16,7 +16,7 @@ const PROGRAMS_URL = "/programs/programs.json";
  * The "What do you want to build?" gallery: the entry point for a new (or
  * empty) project. One decisive action up top (start from scratch), then two
  * real catalogs underneath -- the same tutorials and ecosystem programs the
- * classic sidebar already lists, opened through their existing mechanisms
+ * sidebar pages already list, opened through their existing mechanisms
  * (`PgTutorial.open`, `PgGithub.import`) so nothing about how a project gets
  * created is reinvented here.
  */

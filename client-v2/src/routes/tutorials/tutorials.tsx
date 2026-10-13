@@ -189,7 +189,7 @@ const handleTutorial = (name: string, page: string) => {
         if (PgExplorer.allWorkspaceNames?.length === 0) PgRouter.navigate();
       }),
 
-      // Set the main secondary view height to the previous saved value
+      // No listener since Flow replaced the classic layout; see below
       { dispose: () => PgView.setMainSecondaryHeight(mainSecondaryHeight) },
 
       // Set `isTutorialInView` to its default value
@@ -215,7 +215,8 @@ const handleTutorial = (name: string, page: string) => {
     PgView.sidebar.props = {};
   }
 
-  // Minimize secondary main view and reopen on navigation to other routes
+  // Asked the classic layout to minimize its secondary view; nothing listens
+  // since Flow replaced it (see `PgView.setMainSecondaryHeight`)
   PgView.setMainSecondaryHeight((h) => {
     if (page) {
       if (h > PgView.getMainSecondaryMinHeight()) mainSecondaryHeight = h;

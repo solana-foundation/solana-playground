@@ -12,7 +12,10 @@ export const useHandleItemState = () => {
       PgExplorer.collapseAllFolders();
     });
 
-    const openParentsAndSelectEl = (path: string) => {
+    const openParentsAndSelectEl = (
+      path: string,
+      { keepCtxSelected }: { keepCtxSelected: boolean }
+    ) => {
       // Open if current file's parents are not opened
       PgExplorer.openAllParents(path);
 
@@ -20,19 +23,23 @@ export const useHandleItemState = () => {
       const newEl = PgExplorer.getElFromPath(path);
       if (newEl) {
         PgExplorer.setSelectedEl(newEl);
-        PgExplorer.removeCtxSelectedEl();
+        if (!keepCtxSelected) PgExplorer.removeCtxSelectedEl();
       }
     };
 
     const switchFile = PgExplorer.onDidOpenFile(async (file) => {
       if (!file) return;
 
-      openParentsAndSelectEl(file.path);
+      openParentsAndSelectEl(file.path, { keepCtxSelected: false });
 
       // Sleep before opening parents because switching workspace collapses
-      // all folders after file switching
+      // all folders after file switching. The context selection is left
+      // alone: one made since belongs to a menu the user opened in those
+      // 300 ms, and the tree mounts again each time the project Sheet opens
+      // below 768 px, so clearing it here left that menu's Rename and Delete
+      // with nothing to act on.
       await PgCommon.sleep(300);
-      openParentsAndSelectEl(file.path);
+      openParentsAndSelectEl(file.path, { keepCtxSelected: true });
     });
 
     return () => {

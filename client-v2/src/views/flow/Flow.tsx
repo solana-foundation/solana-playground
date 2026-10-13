@@ -6,12 +6,6 @@ import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import Header from "./header/Header";
 import LeftPanel from "./left/LeftPanel";
-import {
-  clampLeftWidth,
-  DEFAULT_LEFT_WIDTH,
-  MIN_LEFT_WIDTH,
-} from "./left/width";
-import Resizable from "@/components/Resizable";
 import ObjectiveBand from "./lessons/ObjectiveBand";
 import Reader from "./lessons/Reader";
 // The barrel registers every lesson path as a side effect, so importing
@@ -33,37 +27,28 @@ import type { FlowState } from "./state/stage";
 import { GAP } from "./tokens";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Assistant from "@/views/sidebar/assistant/Component";
-import { PgAssistant } from "@/views/sidebar/assistant/store";
 import ModalBackdrop from "@/components/ModalBackdrop";
 import Toast from "@/components/Toast";
 import Wallet from "@/components/Wallet";
-import { useKeybind } from "@/hooks";
 import { PgExplorer, PgView } from "@/utils";
+import { LayoutShell } from "@/widgets/layout-shell";
 import type { Disposable } from "@/utils/types";
 
 /**
  * The Flow layout: header, left project/file tabs, the stage router in the
  * center with a collapsible console beneath it, and the assistant on the
- * right. Replaces the classic `Panels` layout unless `?classic` is present.
+ * right, all placed by `LayoutShell`.
  */
 const Flow = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
-  const [leftOpen, setLeftOpen] = useState(true);
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   const [reading, setReading] = useState(false);
-  // Session-only, like `leftOpen` and `assistantOpen` above.
-  // TODO: persist to `localStorage` so a width dragged to read a long path
-  // survives a reload.
-  const [leftWidth, setLeftWidth] = useState(DEFAULT_LEFT_WIDTH);
-  const [assistantOpen, setAssistantOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Lives here, not in `LeftPanel`: the open and collapsed panels are separate
-  // branches of the tree below, so toggling unmounts one and mounts the other
-  // and anything `LeftPanel` held goes with it.
+  // Lives here, not in `LeftPanel`: below `LAYOUT_BREAKPOINTS.left` the shell
+  // puts it in a Sheet that unmounts it on close, and crossing that width swaps
+  // the rail for the Sheet, so anything `LeftPanel` held goes with it.
   const [pendingCreate, setPendingCreate] = useState(false);
   const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
-
-  useKeybind("Ctrl+B", () => setLeftOpen((o) => !o));
 
   useEffect(() => {
     const subs = [
@@ -72,16 +57,9 @@ const Flow = () => {
       PgDeployHistory.init(),
       PgFlow.onDidChange(setState),
       PgLesson.onDidChange(setLesson),
-      // So a "Fix with assistant" click while collapsed reopens the panel
-      // and the user sees where the click went.
-      PgAssistant.onDidRequestPrompt(() => setAssistantOpen(true)),
     ];
     return () => subs.forEach((s) => s.dispose());
   }, []);
-
-  // Takes over the browser's reload shortcut, same as Ctrl+J does for the
-  // console drawer
-  useKeybind("Ctrl+R", () => setAssistantOpen((o) => !o));
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
   // Toggles rather than opens: the header controls are the only way in, so a
@@ -172,80 +150,62 @@ const Flow = () => {
       <BannerSlot>
         <SyncBanner />
       </BannerSlot>
-      <Columns $assistant={assistantOpen} $left={leftOpen}>
-        {leftOpen ? (
-          <Resizable
-            enable="right"
-            size={{ width: leftWidth, height: "100%" }}
-            minWidth={MIN_LEFT_WIDTH}
-            maxWidth={clampLeftWidth(Infinity, window.innerWidth)}
-            onResizeStop={(_ev, _dir, ref) => {
-              setLeftWidth(
-                clampLeftWidth(
-                  ref.getBoundingClientRect().width,
-                  window.innerWidth
-                )
-              );
-            }}
-          >
-            <LeftPanel
-              collapsed={false}
-              onToggle={() => setLeftOpen((o) => !o)}
-              pendingCreate={pendingCreate}
-              onPendingCreateChange={setPendingCreate}
-            />
-          </Resizable>
-        ) : (
+      <LayoutShell
+        left={({ collapsed, toggle }) => (
           <LeftPanel
-            collapsed
-            onToggle={() => setLeftOpen((o) => !o)}
+            collapsed={collapsed}
+            onToggle={toggle}
             pendingCreate={pendingCreate}
             onPendingCreateChange={setPendingCreate}
           />
         )}
-        <Center>
-          <ObjectiveBand
-            state={lesson}
-            flow={state}
-            onRead={read}
-            onOpenGallery={openGallery}
-          />
-          <Stage>
-            <StageRouter stage={state.stage} />
-            {reading && described && (
-              <Reader
-                key={described.step.id}
-                step={described.step}
-                position={described.number}
-                criterion={described.verifiedBy}
-                offersAttest={
-                  described.offersPrimary &&
-                  graderClass(described.step.verify) === "attestation"
-                }
-                onLoaded={() => PgLesson.opened(described.step.id)}
-                onClose={() => setReading(false)}
-                onAttest={() => {
-                  PgLesson.attest();
-                  setReading(false);
-                }}
-              />
-            )}
-          </Stage>
-          <ConsoleDrawer />
-        </Center>
-        <Right $open={assistantOpen}>
-          <Collapse
-            type="button"
-            aria-label={
-              assistantOpen ? "Collapse assistant" : "Expand assistant"
-            }
-            onClick={() => setAssistantOpen((o) => !o)}
-          >
-            <Chevron $flip={!assistantOpen} />
-          </Collapse>
-          {assistantOpen && <Assistant />}
-        </Right>
-      </Columns>
+        stage={
+          <Center>
+            <ObjectiveBand
+              state={lesson}
+              flow={state}
+              onRead={read}
+              onOpenGallery={openGallery}
+            />
+            <Stage>
+              <StageRouter stage={state.stage} />
+              {reading && described && (
+                <Reader
+                  key={described.step.id}
+                  step={described.step}
+                  position={described.number}
+                  criterion={described.verifiedBy}
+                  offersAttest={
+                    described.offersPrimary &&
+                    graderClass(described.step.verify) === "attestation"
+                  }
+                  onLoaded={() => PgLesson.opened(described.step.id)}
+                  onClose={() => setReading(false)}
+                  onAttest={() => {
+                    PgLesson.attest();
+                    setReading(false);
+                  }}
+                />
+              )}
+            </Stage>
+          </Center>
+        }
+        console={({ open, toggle }) => (
+          <ConsoleDrawer open={open} onToggle={toggle} />
+        )}
+        assistant={({ open, toggle }) => (
+          <Right $open={open}>
+            <Collapse
+              type="button"
+              aria-label={open ? "Collapse assistant" : "Expand assistant"}
+              onClick={toggle}
+            >
+              <Chevron $flip={!open} />
+            </Collapse>
+            {open && <Assistant />}
+          </Right>
+        )}
+      />
 
       <GearSidebar
         open={settingsOpen}
@@ -292,30 +252,21 @@ const BannerSlot = styled.div`
   }
 `;
 
-// Open, the left track is `auto` so the `Resizable` around `LeftPanel` sets
-// its own width; collapsed, the track is fixed and there is no `Resizable`
-const Columns = styled.div<{ $assistant: boolean; $left: boolean }>`
-  flex: 1;
-  display: grid;
-  grid-template-columns:
-    ${({ $left }) => ($left ? "auto" : "1.5rem")} 1fr
-    ${({ $assistant }) => ($assistant ? "21.75rem" : "1.5rem")};
-  gap: ${GAP};
-  padding: 0 ${GAP} ${GAP};
-  overflow: hidden;
-`;
-
-// The floating center panel: a single bordered/rounded surface holding both
-// the stage and the console drawer, so the drawer's status line reads as
-// the bottom edge of one panel rather than a separate box (see the board).
+// The floating center panel holding the stage. It is open at the bottom: the
+// console panel under it carries the sides and bottom border, so the two read
+// as one surface.
 const Center = styled.div`
   ${({ theme }) => css`
     display: flex;
     flex-direction: column;
+    flex: 1;
     min-width: 0;
+    min-height: 0;
     background: ${theme.colors.default.bgSecondary};
     border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
+    border-bottom: none;
+    border-radius: ${theme.default.borderRadius} ${theme.default.borderRadius} 0
+      0;
     overflow: hidden;
   `}
 `;
@@ -340,6 +291,7 @@ const Right = styled.aside<{ $open: boolean }>`
     position: relative;
     --flow-handle-inset: ${$open ? "1rem" : "0px"};
     width: 100%;
+    height: 100%;
     border: 1px solid ${theme.colors.default.border};
     border-radius: ${theme.default.borderRadius};
     background: ${theme.colors.default.bgSecondary};
@@ -376,12 +328,23 @@ const Collapse = styled.button`
   `}
 `;
 
+// Above everything the shell draws: the stock Sidebar (z-10), the header
+// (z-20) and the Sheets (z-50), which portal to `body` beside these. The
+// explorer's context menu opens here from inside the project Sheet, so it
+// must sit over that Sheet; a modal closes the Sheet as it opens
+// (`LayoutShell`), since the Sheet traps focus. A modal Sheet also turns off
+// pointer events on `body`, so each portal turns them back on for itself.
 const PortalAbove = styled.div`
-  z-index: 4;
+  z-index: 62;
+  pointer-events: auto;
 `;
 const StyledModalBackdrop = styled(ModalBackdrop)`
-  z-index: 3;
+  z-index: 61;
+  pointer-events: auto;
 `;
+// Toasts open at the bottom left, over the left panel and its Sheet, and
+// below the modal backdrop so a modal still covers them.
 const PortalBelow = styled.div`
-  z-index: 2;
+  z-index: 60;
+  pointer-events: auto;
 `;

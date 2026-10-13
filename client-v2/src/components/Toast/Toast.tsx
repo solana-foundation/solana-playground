@@ -11,13 +11,7 @@ export interface ToastChildProps {
   id: number;
 }
 
-interface ToastProps {
-  /** Offset the container past the classic layout's icon rail; the flow
-   * layout has no rail, so it keeps the standard edge margin */
-  sidebarOffset?: boolean;
-}
-
-const Toast = ({ sidebarOffset = false }: ToastProps) => {
+const Toast = () => {
   const setToast = useCallback(
     ({
       elementable,
@@ -46,15 +40,14 @@ const Toast = ({ sidebarOffset = false }: ToastProps) => {
     <StyledContainer
       position={toast.POSITION.BOTTOM_LEFT}
       closeOnClick={false}
-      $sidebarOffset={sidebarOffset}
     />
   );
 };
 
-const StyledContainer = styled(ToastContainer)<{ $sidebarOffset: boolean }>`
-  ${({ theme, $sidebarOffset }) => css`
+const StyledContainer = styled(ToastContainer)`
+  ${({ theme }) => css`
     &&&.Toastify__toast-container {
-      left: ${$sidebarOffset ? theme.views.sidebar.left.default.width : "1rem"};
+      left: 1rem;
       bottom: 1rem;
     }
 

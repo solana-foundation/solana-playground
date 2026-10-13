@@ -24,10 +24,10 @@ interface LeftPanelProps {
    * Whether the rail's "+" is waiting for the tree to appear.
    *
    * Owned by `Flow` rather than held here, because this component does not
-   * survive the toggle: the open and collapsed panels sit in different
-   * branches of `Flow`'s tree -- one inside `Resizable`, one not -- so React
-   * unmounts one and mounts the other. A flag kept here went with it, and the
-   * rail's "+" expanded the panel and then did nothing at all.
+   * always survive the toggle: below `LAYOUT_BREAKPOINTS.left` the shell
+   * renders it inside a Sheet that unmounts it on close, and crossing that
+   * width swaps the desktop rail for the Sheet. A flag kept here went with it,
+   * and the rail's "+" expanded the panel and then did nothing at all.
    */
   pendingCreate?: boolean;
   /** Raise or clear `pendingCreate`. */
@@ -173,8 +173,8 @@ export default LeftPanel;
 
 // A floating panel like Center and Right: full 1px border, rounded corners,
 // the raised surface background instead of the black page ground.
-// Width comes from `Columns` in `Flow.tsx` (14.5rem open, 1.5rem collapsed)
-// so the grid and the panel can never disagree about the column size.
+// Width comes from the layout shell's Sidebar (its `SIDEBAR_STYLE`), so the
+// panel fills whatever it is given.
 const Wrapper = styled.aside`
   ${({ theme }) => css`
     width: 100%;

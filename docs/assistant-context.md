@@ -145,16 +145,19 @@ Done:
   provider has not yet been exercised against a live key.
 - Three redesign iterations shipped: the Solana-brand theme (tokens sourced
   from solana.com, `Solana V2` as the fork's default), the floating-panel
-  layout (anatomy and navigation built on top of it), then **Flow** —
+  layout (anatomy and navigation built on top of it; the classic layout, since
+  removed), then **Flow** —
   re-anatomizing the UI around the Write → Build → Deploy → Interact loop
-  (`decisions.md` → D10, D17). Flow is now the default layout: a header
+  (`decisions.md` → D10, D17). Flow is the only layout: a header
   stepper (Write → Build → Deploy → Interact, state derived from real
-  build/deploy events) plus a two-tab left panel (Projects | Files), a
-  permanent assistant column, and the terminal moved into a console drawer
-  (Cmd+J). A New Workspace gallery starts a project from 34 upstream
+  build/deploy events) plus a two-tab left panel (Projects | Files), an
+  assistant column, and the terminal in a console drawer (Cmd+J). The
+  assistant is a resizable panel on screens 1024 px and wider and a side
+  Sheet below that; below 768 px the left panel is a Sheet too, and below
+  600 px the editor is read-only and says why. The header and the stages
+  have no phone layout. A New Workspace gallery starts a project from 34 upstream
   programs or 16 tutorials. A gear icon opens a settings overlay embedding
-  the existing settings registry. The previous floating-panel layout stays
-  reachable at `/?classic` as a fallback.
+  the existing settings registry.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
 - Conversations and project code are persisted. Threads are keyed by project
@@ -185,7 +188,7 @@ model connected at all. The `tools/list` and `tools/call` round trips are
 verified against the live server; what has not been exercised is a full turn
 where a *model* chooses to call one, since that needs a key.
 
-Not started: real wallet adapters; responsive/tablet layout.
+Not started: real wallet adapters, phone layouts for the header and stages.
 
 ## What is real and what is mocked
 

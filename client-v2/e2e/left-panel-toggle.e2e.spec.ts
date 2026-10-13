@@ -9,10 +9,10 @@ import { expect, test } from "./fixtures";
  */
 
 const OPEN_PX = 232; // 14.5rem
-const RAIL_PX = 24; // 1.5rem
+const RAIL_PX = 52; // 3.25rem
 
 const panel = (page: import("@playwright/test").Page) =>
-  page.locator("aside").first();
+  page.locator(`[data-slot="sidebar-container"]`);
 
 test("cmd+b toggles the left panel", async ({ seededPage: page }) => {
   await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);

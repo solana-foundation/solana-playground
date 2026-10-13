@@ -34,7 +34,7 @@ interface ProgramsTabProps {
 }
 
 /**
- * Lists the upstream ecosystem program registry (same data as the classic
+ * Lists the upstream ecosystem program registry (same data as the
  * `/programs` route). "Open" reuses the exact import path the rest of the
  * app already uses for a program card: `PgGithub.import`, which reads the
  * repo layout from the GitHub Trees API, converts it to the playground

@@ -120,7 +120,8 @@ export const handleRoute = (
     }
   });
 
-  // Minimize secondary main view and reopen on navigation to other routes
+  // Asked the classic layout to minimize its secondary view; nothing listens
+  // since Flow replaced it (see `PgView.setMainSecondaryHeight`)
   if (minimizeSecondaryMainView) {
     let oldHeight = 0;
     PgView.setMainSecondaryHeight((h) => {
@@ -128,7 +129,6 @@ export const handleRoute = (
       return 0;
     });
 
-    // Set the main secondary view height to the previous saved value
     disposables.push({
       dispose: () => PgView.setMainSecondaryHeight(oldHeight),
     });

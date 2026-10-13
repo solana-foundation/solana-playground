@@ -83,8 +83,14 @@ export default Header;
 
 // Transparent on the black page ground -- the floating panels below carry
 // their own edges, so the header needs none of its own.
+//
+// Raised above the stock Sidebar's container (z-10, absolute in the shell): the switcher's and
+// the status chips' menus drop down over the left panel, and beneath it they
+// are drawn but cannot be clicked.
 const Bar = styled.header`
   ${({ theme }) => css`
+    position: relative;
+    z-index: 20;
     height: 3.5rem;
     display: grid;
     grid-template-columns: 1fr auto 1fr;

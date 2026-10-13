@@ -65,3 +65,6 @@ client-v2/playwright-report/
 .superpowers/
 
 .idea/
+
+# Review reports the /sx:review-pr skill writes
+.github/reviews/

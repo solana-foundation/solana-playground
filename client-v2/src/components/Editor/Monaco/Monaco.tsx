@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import styled, { useTheme } from "styled-components";
 import * as monaco from "monaco-editor";
 
+import { applyReadOnly, executeProductEdits } from "./read-only";
 import { editorBuffersOf } from "./editor-buffers";
 import { initLanguages } from "./languages";
 import { SpinnerWithBg } from "../../Loading";
@@ -25,6 +26,22 @@ import {
   useSendAndReceiveCustomEvent,
 } from "../../../hooks";
 import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("editor:monaco");
+
+/**
+ * A format the editor refused. Said whatever started it: a format from
+ * Ctrl+S that does nothing otherwise leaves the user no sign of why.
+ */
+const reportRefusedFormat = (lang: string) => {
+  log.error(new Error("The editor refused a format"), {
+    report: true,
+    context: { lang },
+  });
+  PgTerminal.println(PgTerminal.error("Format failed."));
+};
 
 /**
  * Monaco paints its own canvas and cannot read CSS variables, so the theme's
@@ -208,6 +225,14 @@ const Monaco = () => {
   useEffect(() => {
     if (editor) return () => editor.dispose();
   }, [editor]);
+
+  // Phones read; from 600 px the editor edits (the client-v2-layout spec)
+  const viewport = useViewport();
+  useEffect(() => {
+    if (!editor) return;
+    const d = applyReadOnly(editor, { readOnly: viewport === "phone" });
+    return () => d.dispose();
+  }, [editor, viewport]);
 
   // Set font
   useEffect(() => {
@@ -522,7 +547,7 @@ const Monaco = () => {
           const endColumn = model.getLineContent(endLineNumber).length + 1;
 
           // Execute edits pushes the changes to the undo stack
-          editor.executeEdits(null, [
+          const applied = executeProductEdits(editor, [
             {
               text: formattedCode,
               range: {
@@ -533,6 +558,10 @@ const Monaco = () => {
               },
             },
           ]);
+          if (!applied) {
+            reportRefusedFormat(lang.name);
+            return;
+          }
 
           const resultPos = model.getPositionAt(cursorOffset);
           editor.setPosition(resultPos);
@@ -569,7 +598,7 @@ const Monaco = () => {
           const endColumn = model.getLineContent(endLineNumber).length + 1;
 
           // Execute edits pushes the changes to the undo stack
-          editor.executeEdits(null, [
+          const applied = executeProductEdits(editor, [
             {
               text: result.formatted,
               range: {
@@ -580,6 +609,10 @@ const Monaco = () => {
               },
             },
           ]);
+          if (!applied) {
+            reportRefusedFormat(lang.name);
+            return;
+          }
 
           const resultPos = model.getPositionAt(result.cursorOffset);
           editor.setPosition(resultPos);
@@ -633,7 +666,7 @@ const Monaco = () => {
           const endColumn = model.getLineContent(endLineNumber).length + 1;
 
           // Execute edits pushes the changes to the undo stack
-          editor.executeEdits(null, [
+          const applied = executeProductEdits(editor, [
             {
               text: formattedCode,
               range: {
@@ -644,6 +677,10 @@ const Monaco = () => {
               },
             },
           ]);
+          if (!applied) {
+            reportRefusedFormat(lang.name);
+            return;
+          }
 
           const resultPos = model.getPositionAt(cursorOffset);
           editor.setPosition(resultPos);
@@ -763,10 +800,16 @@ const Monaco = () => {
       const endPos = model.getPositionAt(quoteEndIndex);
       const range = monaco.Range.fromPositions(startPos, endPos);
 
+      // Reported: a program id left unwritten builds the old id, and the
+      // deploy that then fails has no other clue
       try {
-        editor.executeEdits(null, [{ range, text: programPkStr }]);
-      } catch (e: any) {
-        console.log("Program ID update error:", e.message);
+        if (!executeProductEdits(editor, [{ range, text: programPkStr }])) {
+          log.error(new Error("The editor refused the program id edit"), {
+            report: true,
+          });
+        }
+      } catch (error) {
+        log.error(error, { report: true, context: { edit: "program id" } });
       }
     };
 

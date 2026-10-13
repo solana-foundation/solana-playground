@@ -1,40 +1,34 @@
 import type { FC } from "react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
-import { useKeybind } from "../../../hooks";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
-import { PgCommand } from "../../../utils";
 import { PgFlow } from "../state/stage";
-import type { StageStatus } from "../state/stage";
 import { BOTTOM_BAR_HEIGHT } from "../tokens";
 import { describeConsoleStatus } from "./status";
 import type { ConsoleStatus } from "./status";
 
+interface ConsoleDrawerProps {
+  open: boolean;
+  onToggle: () => void;
+}
+
 /**
- * The console lives at the bottom of the center column and collapses by
- * height rather than unmounting, so the xterm buffer (scrollback, running
- * process) survives while the drawer is closed.
+ * The console at the bottom of the centre column. The layout shell folds its
+ * panel to the handle's height (`BOTTOM_BAR_PX`, which both read) rather
+ * than unmounting it, so the xterm buffer (scrollback, running process)
+ * survives while it is closed.
  */
-const ConsoleDrawer: FC<React.PropsWithChildren<unknown>> = () => {
-  const [open, setOpen] = useState(false);
+const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
   const [status, setStatus] = useState<ConsoleStatus>(() =>
     describeConsoleStatus(PgFlow.state)
   );
-  const prevDeploy = useRef<StageStatus | null>(null);
-  useKeybind("Ctrl+J", () => setOpen((o) => !o));
 
-  // Opens on deploy start and on the transition into failure; never
-  // re-opens on unrelated state changes.
   useEffect(() => {
-    const a = PgCommand.deploy.onDidStart(() => setOpen(true));
-    const b = PgFlow.onDidChange((flow) => {
-      const prev = prevDeploy.current;
-      prevDeploy.current = flow.deploy;
-      if (flow.deploy === "failed" && prev !== "failed") setOpen(true);
-      setStatus(describeConsoleStatus(flow));
-    });
+    const b = PgFlow.onDidChange((flow) =>
+      setStatus(describeConsoleStatus(flow))
+    );
     // `PgBuildOutput` fills in slightly after the `build-finish` event that
     // sets `flow.build`, and it carries the diagnostic code a failed
     // status line needs -- recompute once it lands so a failed build never
@@ -43,7 +37,6 @@ const ConsoleDrawer: FC<React.PropsWithChildren<unknown>> = () => {
       setStatus(describeConsoleStatus(PgFlow.state))
     );
     return () => {
-      a.dispose();
       b.dispose();
       c.dispose();
     };
@@ -56,7 +49,7 @@ const ConsoleDrawer: FC<React.PropsWithChildren<unknown>> = () => {
         aria-expanded={open}
         aria-controls="flow-console-drawer-body"
         aria-label="Console"
-        onClick={() => setOpen((o) => !o)}
+        onClick={onToggle}
       >
         {/* \u25be/\u25b8 keep the source ASCII-only: the small
             down-pointing / right-pointing triangles the board uses. */}
@@ -69,7 +62,7 @@ const ConsoleDrawer: FC<React.PropsWithChildren<unknown>> = () => {
         </TextGroup>
         <Hint>&#8984;J</Hint>
       </Handle>
-      <Body id="flow-console-drawer-body" $open={open}>
+      <Body id="flow-console-drawer-body">
         <Terminal />
       </Body>
     </Wrapper>
@@ -78,22 +71,25 @@ const ConsoleDrawer: FC<React.PropsWithChildren<unknown>> = () => {
 
 export default ConsoleDrawer;
 
-// Transparent: this drawer lives inside \`Center\`'s single floating panel
-// (\`views/flow/Flow.tsx\`), which already supplies the panel background --
-// the top border is only the internal divider between stage and console.
+// The stage's `Center` is open at the bottom, so this carries the border on
+// the sides and bottom and the two read as one surface.
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    border-top: 1px solid ${theme.colors.default.border};
-    background: transparent;
+    border: 1px solid ${theme.colors.default.border};
+    border-top: none;
+    border-radius: 0 0 ${theme.default.borderRadius}
+      ${theme.default.borderRadius};
+    background: ${theme.colors.default.bgSecondary};
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
+    height: 100%;
   `}
 `;
 
 const Handle = styled.button`
   ${({ theme }) => css`
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 0.5rem;
     height: ${BOTTOM_BAR_HEIGHT};
@@ -145,21 +141,17 @@ const Hint = styled.span`
   opacity: 0.6;
 `;
 
-const Body = styled.div<{ $open: boolean }>`
+const Body = styled.div`
   display: flex;
   flex-direction: column;
-  height: ${({ $open }) => ($open ? "16rem" : "0")};
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
-  transition: height 320ms cubic-bezier(0.2, 0, 0, 1);
 
   /* Terminal's own root has no explicit height; stretch it to fill the
      drawer body so xterm's ResizeObserver sees a real, non-zero size. */
   & > div {
     flex: 1;
     min-height: 0;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    transition: none;
   }
 `;
