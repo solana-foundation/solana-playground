@@ -40,7 +40,7 @@ export const ImportFs: FC<ImportFsProps> = (props) => {
         importFiles.push([userFile.path, content]);
       }
 
-      const pgFiles = await PgFramework.convertToPlaygroundLayout(importFiles);
+      const pgFiles = await PgFramework.toPlaygroundLayout(importFiles);
 
       // Multiple programs require selecting the program to import which closes
       // the current modal

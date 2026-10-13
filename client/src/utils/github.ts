@@ -85,7 +85,7 @@ export class PgGithub {
    */
   static async getFiles(url: string) {
     const { files } = await this._getRepository(url);
-    const convertedFiles = await PgFramework.convertToPlaygroundLayout(files);
+    const convertedFiles = await PgFramework.toPlaygroundLayout(files);
     return convertedFiles;
   }
 
@@ -141,7 +141,7 @@ export class PgGithub {
     const refParam = ref ? `?ref=${ref}` : "";
 
     // If it's a single file fetch request, Github returns an object instead of an array
-    const data: Arrayable<GithubRepositoryData> = await PgCommon.fetchJSON(
+    const data: Arrayable<GithubRepositoryData> = await PgCommon.fetchJson(
       `https://api.github.com/repos/${owner}/${repo}/contents/${path}${refParam}`
     );
 

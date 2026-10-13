@@ -121,7 +121,7 @@ const GoBackButtonWrapper = styled.div`
 
 const TutorialAboutPage = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tutorial.aboutPage)};
+    ${PgTheme.toCss(theme.components.tutorial.aboutPage)};
   `}
 `;
 

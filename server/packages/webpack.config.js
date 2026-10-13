@@ -1,15 +1,11 @@
 import path from "path";
-import { createRequire } from "module";
 import { execSync } from "child_process";
+import { createRequire } from "module";
 
 import PgImportChunkPlugin from "./plugins/pg-import-chunk.js";
 
-const require = createRequire(import.meta.url);
-const webpack = require((process.env.NODE_PATH = path.join(
-  execSync("yarn global dir", { encoding: "utf-8" }).trim(),
-  "node_modules",
-  "webpack"
-)));
+const require = createRequire(path.resolve("polyfills", "package.json"));
+const webpack = require("webpack");
 
 export default {
   mode: "production",
@@ -27,26 +23,34 @@ export default {
     outputModule: true,
   },
   plugins: [
-    // Resolve Node polyfills
-    new webpack.ProvidePlugin({ Buffer: ["buffer", "Buffer"] }),
-    new webpack.ProvidePlugin({ process: "process/browser" }),
-
-    // Playground chunk loader
     new PgImportChunkPlugin(),
+    new webpack.ProvidePlugin({
+      process: require.resolve("process/browser"),
+      Buffer: [require.resolve("buffer"), "Buffer"],
+    }),
   ],
   resolve: {
     fallback: {
-      // Fix `Module not found: Error: Can't resolve 'perf_hooks'` from typescript
-      perf_hooks: false,
-
-      // `mocha`
-      stream: require.resolve("stream-browserify"),
-
-      // `@metaplex-foundation/js` polyfills
+      assert: require.resolve("assert/"),
+      buffer: require.resolve("buffer/"),
       crypto: require.resolve("crypto-browserify"),
+      events: require.resolve("events/"),
+      path: require.resolve("path-browserify"),
+      process: require.resolve("process/browser"),
+      stream: require.resolve("stream-browserify"),
+      url: require.resolve("url/"),
+      util: require.resolve("util/"),
+      child_process: false,
+      cluster: false,
+      dgram: false,
       fs: false,
-      process: false,
-      path: false,
+      inspector: false,
+      net: false,
+      perf_hooks: false,
+      repl: false,
+      tls: false,
+      vm: false,
+      worker_threads: false,
       zlib: false,
     },
   },

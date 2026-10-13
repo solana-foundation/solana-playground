@@ -41,7 +41,7 @@ const Wrapper = styled.div`
     align-items: center;
     inset: 0;
 
-    ${PgTheme.convertToCSS(theme.components.modal.backdrop)};
+    ${PgTheme.toCss(theme.components.modal.backdrop)};
   `}
 `;
 

@@ -20,7 +20,7 @@ export class PgFs {
     data: string,
     opts?: { createParents?: boolean }
   ) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
 
     if (opts?.createParents) {
       // TODO: Create a path module
@@ -38,7 +38,7 @@ export class PgFs {
    * @returns the content of the file
    */
   static async readToString(path: string) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
     return (await this._fs.readFile(path, { encoding: "utf8" })) as string;
   }
 
@@ -48,7 +48,7 @@ export class PgFs {
    * @param path file path
    * @returns JSON parsed result
    */
-  static async readToJSON<T>(path: string): Promise<T> {
+  static async readToJson<T>(path: string): Promise<T> {
     const data = await this.readToString(path);
     return JSON.parse(data);
   }
@@ -63,9 +63,9 @@ export class PgFs {
    * @param defaultValue the default value to return if the file doesn't exist
    * @returns JSON parsed result or the given `defaultValue`
    */
-  static async readToJSONOrDefault<T>(path: string, defaultValue: T) {
+  static async readToJsonOrDefault<T>(path: string, defaultValue: T) {
     try {
-      return await this.readToJSON<T>(path);
+      return await this.readToJson<T>(path);
     } catch {
       return defaultValue;
     }
@@ -78,8 +78,8 @@ export class PgFs {
    * @param newPath new item path
    */
   static async rename(oldPath: string, newPath: string) {
-    oldPath = PgExplorer.convertToFullPath(oldPath);
-    newPath = PgExplorer.convertToFullPath(newPath);
+    oldPath = PgExplorer.toAbsolutePath(oldPath);
+    newPath = PgExplorer.toAbsolutePath(newPath);
     await this._fs.rename(oldPath, newPath);
   }
 
@@ -89,7 +89,7 @@ export class PgFs {
    * @param path file path
    */
   static async removeFile(path: string) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
     await this._fs.unlink(path);
   }
 
@@ -101,7 +101,7 @@ export class PgFs {
    * `createParents`: Whether to create the parent folders if they don't exist
    */
   static async createDir(path: string, opts?: { createParents?: boolean }) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
 
     if (opts?.createParents) {
       const folders = path.split("/");
@@ -125,7 +125,7 @@ export class PgFs {
    * @returns an array of the item names
    */
   static async readDir(path: string) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
     return await this._fs.readdir(path);
   }
 
@@ -137,7 +137,7 @@ export class PgFs {
    * `recursive`: Whether the recursively remove all of the child items
    */
   static async removeDir(path: string, opts?: { recursive?: boolean }) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
 
     if (opts?.recursive) {
       const recursivelyRmdir = async (dir: string[], currentPath: string) => {
@@ -179,7 +179,7 @@ export class PgFs {
    * @returns the metadata of the file
    */
   static async getMetadata(path: string) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
     return await this._fs.stat(path);
   }
 
@@ -190,7 +190,7 @@ export class PgFs {
    * @returns whether the given file exists
    */
   static async exists(path: string) {
-    path = PgExplorer.convertToFullPath(path);
+    path = PgExplorer.toAbsolutePath(path);
 
     try {
       await this.getMetadata(path);

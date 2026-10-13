@@ -7,7 +7,7 @@ import IDL from "./IDL";
 import ProgramBinary from "./ProgramBinary";
 import ProgramID from "./ProgramID";
 import { useAsyncEffect } from "../../../../../hooks";
-import { PgFramework } from "../../../../../utils";
+import { PgFramework, PgSettings } from "../../../../../utils";
 
 /** All program settings */
 const DEFAULT_PROGRAM_SETTINGS: ProgramSettingProps[] = [
@@ -26,7 +26,7 @@ const DEFAULT_PROGRAM_SETTINGS: ProgramSettingProps[] = [
 ];
 
 const ProgramSettings = () => {
-  const [settings, setSettings] = useState<ProgramSettingProps[] | null>(null);
+  const [settings, setSettings] = useState<ProgramSettingProps[]>();
 
   useAsyncEffect(async () => {
     const framework = await PgFramework.getFromFiles();
@@ -40,7 +40,12 @@ const ProgramSettings = () => {
             element: <IDL />,
           },
         ];
-        if (process.env.NODE_ENV !== "production") {
+        // TODO: Workspace-based settings (not global `PgSettings`)
+        // FIXME: This doesn't work with unstable currently
+        if (
+          process.env.NODE_ENV !== "production" &&
+          !PgSettings.experimental.unstable
+        ) {
           anchorSettings.unshift({
             title: "Build flags",
             description: "Anchor build flags",

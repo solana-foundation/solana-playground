@@ -21,7 +21,7 @@ const Left: FC<LeftProps> = ({ pageName, width, setPageName }) => (
         {PgView.allSidebarPages.map((page) => (
           <SidebarButton
             key={page.name}
-            tooltip={PgCommon.getKeybindTextOS(page.title)}
+            tooltip={PgCommon.getKeybindTextOs(page.title)}
             src={page.icon}
             onClick={() => setPageName(page.name)}
             active={page.name === pageName && width !== 0}
@@ -52,7 +52,7 @@ const Wrapper = styled.div`
     user-select: none;
     overflow: hidden;
 
-    ${PgTheme.convertToCSS(theme.views.sidebar.left.default)};
+    ${PgTheme.toCss(theme.views.sidebar.left.default)};
   `}
 `;
 

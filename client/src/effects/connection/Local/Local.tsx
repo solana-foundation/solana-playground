@@ -31,10 +31,10 @@ export const Local = () => {
 
         <MarkdownSteps codeFontOnly>
           {require("./steps.md")
-            .replace("<OS_NAME>", PgCommon.getOS() ?? "Other")
+            .replace("<OS_NAME>", PgCommon.getOs() ?? "Other")
             .replace(
               "<OS_INSTALLATION>",
-              PgCommon.getOS() === "Windows"
+              PgCommon.getOs() === "Windows"
                 ? require("./install-windows.md")
                 : require("./install-unix.md")
             )}

@@ -80,7 +80,7 @@ const StyledInput = styled.input<InputProps>`
       border-color: ${theme.colors.state.success.color};
     }
 
-    ${PgTheme.convertToCSS(theme.components.input)};
+    ${PgTheme.toCss(theme.components.input)};
   `}}
 `;
 

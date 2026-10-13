@@ -193,7 +193,7 @@ export class PgTty {
   /** Print a message and properly handle new-lines. */
   print(msg: string | object, opts?: PrintOptions) {
     // All data types should be converted to string
-    if (typeof msg === "object") msg = PgCommon.prettyJSON(msg);
+    if (typeof msg === "object") msg = PgCommon.toPrettyJson(msg);
     else msg = `${msg}`;
 
     if (opts?.newLine) msg += "\n";
@@ -475,7 +475,7 @@ export class PgTty {
         })
 
         // Secondary text color for (...)
-        .replace(/\(.+\)/gm, (match) =>
+        .replace(/\([^)]+\)/gm, (match) =>
           match === "(s)" ? match : PgTerminal.secondaryText(match)
         )
 

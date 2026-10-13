@@ -14,6 +14,13 @@ export type CommandParam<
   name: N;
   /** Description that will be seen in the `help` command */
   description: string;
+  /**
+   * Whether the command is a proxy to another command (e.g. WASM wrappers).
+   *
+   * This disables argument and option validation, as the validation should be
+   * done in the actual command.
+   */
+  proxy?: boolean;
   /* Only process the command if the condition passes */
   preChecks?: Arrayable<() => SyncOrAsync<void>>;
 } & (WithSubcommands<S> | WithHandle<A, O, R>);
@@ -41,6 +48,9 @@ type WithHandle<A, O, R> = {
 };
 
 type ParsedInput<A, O> = {
+  /** Parsed tokens */
+  tokens: string[];
+  // TODO: Remove and pass `tokens` to the WASM commands
   /** Raw input */
   raw: string;
   /** Parsed arguments */
@@ -168,7 +178,7 @@ type ExecutableCommand<
    * @param cb callback function to run when the command starts running
    * @returns a dispose function to clear the event
    */
-  onDidStart(cb: (input: string | null) => void): Disposable;
+  onDidStart(cb: (input: string[] | null) => unknown): Disposable;
   /**
    * @param cb callback function to run when the command finishes running
    * @returns a dispose function to clear the event
@@ -306,11 +316,9 @@ export class PgCommandManager {
         );
       }
 
-      const input = tokens.join(" ");
-
       // Dispatch start event
       const eventNames = PgCommandManager._getEventNames(topCmd.name);
-      PgCommon.createAndDispatchCustomEvent(eventNames.start, input);
+      PgCommon.createAndDispatchCustomEvent(eventNames.start, tokens);
 
       let cmd: Command<string, Arg[], Option[], any[], any> = topCmd;
       const args = [];
@@ -323,10 +331,17 @@ export class PgCommandManager {
         const subcmd = cmd.subcommands?.find((cmd) => cmd.name === token);
         if (subcmd) cmd = subcmd;
 
-        // Handle checks
+        // Handle pre-checks
         if (cmd.preChecks) {
           const preChecks = PgCommon.toArray(cmd.preChecks);
-          for (const preCheck of preChecks) await preCheck();
+          try {
+            for (const preCheck of preChecks) await preCheck();
+          } catch (e) {
+            PgCommon.createAndDispatchCustomEvent(eventNames.finish, {
+              err: e,
+            });
+            throw e;
+          }
         }
 
         // Early continue if it's not the end of the command
@@ -349,8 +364,8 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
           break;
         }
 
-        const hasArgsOrOpts = cmd.args?.length || cmd.options!.length > 1;
-        if (hasArgsOrOpts) {
+        // Skip argument and option validation if proxy
+        if (!topCmd.proxy) {
           // Handle `help` option
           if (nextToken === "--help" || nextToken === "-h") {
             const usagePrefix = `Usage: ${[
@@ -413,8 +428,8 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
               }
 
               const isOpt = argOrOpt.startsWith("-");
-              if (isOpt && cmd.options) {
-                const opt = cmd.options.find(
+              if (isOpt) {
+                const opt = cmd.options?.find(
                   (o) =>
                     "--" + o.name === argOrOpt || "-" + o.short === argOrOpt
                 );
@@ -422,7 +437,7 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
 
                 opts.push(argOrOpt);
                 if (opt.takeValue) takeValue = true;
-              } else if (cmd.args) {
+              } else {
                 args.push(argOrOpt);
               }
             }
@@ -539,7 +554,8 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
         let result;
         try {
           const ret = await cmd.handle({
-            raw: input,
+            tokens,
+            raw: tokens.join(" "),
             args: parsedArgs,
             options: parsedOpts,
           });
@@ -599,7 +615,7 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
 
     return (...args) => {
       try {
-        return item.parse!(...args);
+        return parse(...args);
       } catch (e: any) {
         throw new Error(
           `Failed to parse ${kind}: \`${item.name}\`${

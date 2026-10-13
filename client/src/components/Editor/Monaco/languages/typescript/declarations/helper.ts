@@ -2,10 +2,48 @@ import * as monaco from "monaco-editor";
 
 import {
   Disposable,
-  JsRuntimePackageName,
+  MergeUnion,
+  OrString,
   PgCommon,
   PgJsPackage,
+  PgSettings,
 } from "../../../../../../utils";
+
+/** Global packages */
+type GlobalPackages = typeof PACKAGES["global"];
+
+/** Global package name */
+type GlobalPackageName = keyof GlobalPackages;
+
+/** ESM import style */
+type PackageImportStyle = GlobalPackages[GlobalPackageName];
+
+/**
+ * Declare global namespace.
+ *
+ * @param packageName package name to be referenced in declaration files
+ * @param importStyle import style of the package
+ * @returns a dispose method to dispose all events
+ */
+export const declareNamespace = (
+  packageName: OrString<GlobalPackageName>,
+  importStyle: PackageImportStyle
+) => {
+  const style = importStyle as Partial<MergeUnion<PackageImportStyle>>;
+  const name = style.as ?? style.named ?? style.default;
+  const importStyleText = style.as
+    ? `* as ${style.as}`
+    : style.named
+    ? `{ ${style.named} }`
+    : style.default;
+
+  return monaco.languages.typescript.typescriptDefaults.addExtraLib(
+    `import ${importStyleText} from "${packageName}";
+export = ${name};
+export as namespace ${name};`,
+    `${name}-ns.d.ts`
+  );
+};
 
 /**
  * Some declaration files need to be declared for them to be referenced by other
@@ -15,24 +53,22 @@ import {
  * @param module contents of the module
  * @returns module declaration for the given package
  */
-export const declareModule = (
-  packageName: JsRuntimePackageName,
-  module: string = ""
-) => {
+export const declareModule = (packageName: string, module: string = "") => {
   return `declare module "${packageName}" { ${module} }`;
 };
 
 /**
- * Declare a full package(cached).
+ * Declare a full package (cached).
  *
  * @param packageName package name to be referenced in declaration files
  * @param opts declare options
- * - `transitive`: Whether the package is a transitive package
+ * - `empty`: whether the package should be declared as an empty module
+ * - `transitive`: whether the package is a transitive package
  * @returns a dispose method to dispose all events or `undefined` if the
  * package has already been declared
  */
 export const declarePackage = async (
-  packageName: JsRuntimePackageName,
+  packageName: string,
   opts?: { empty?: boolean; transitive?: boolean }
 ): Promise<Disposable | undefined> => {
   if (cache.has(packageName)) return;
@@ -45,7 +81,15 @@ export const declarePackage = async (
 
   cache.add(packageName);
 
-  const { files, dependencies } = await getTypes(packageName);
+  const types = await getTypes(packageName).catch((e) => {
+    console.log("Failed to get types:", packageName, e);
+  });
+  if (!types) {
+    cache.delete(packageName);
+    return;
+  }
+
+  const { files, dependencies } = types;
   if (files.length > 1) {
     // Type root is always the first index (sorted by the server)
     const typeRootFile = files[0];
@@ -93,11 +137,7 @@ export const declarePackage = async (
   // requests without adding much benefit.
   if (!opts?.transitive) {
     const transitiveDisposables = await Promise.all(
-      dependencies.map((dep) => {
-        return declarePackage(dep as JsRuntimePackageName, {
-          transitive: true,
-        });
-      })
+      dependencies.map((dep) => declarePackage(dep, { transitive: true }))
     );
     disposables.push(...transitiveDisposables.filter(PgCommon.isNonNullish));
   }
@@ -111,15 +151,15 @@ export const declarePackage = async (
 };
 
 /** Get type declarations. */
-// TODO: Remove this and inline `PgServer.types` once the feature stabilizes.
+// TODO: Remove this and inline once the feature stabilizes.
 const getTypes = async (
-  packageName: JsRuntimePackageName
+  packageName: string
 ): ReturnType<typeof PgJsPackage["getTypes"]> => {
-  if (process.env.NODE_ENV === "production") {
-    const files = await PgCommon.fetchJSON(
+  if (!PgSettings.experimental.unstable) {
+    const files = await PgCommon.fetchJson(
       `/packages/${packageName}/types.json`
     );
-    const dependencies = await PgCommon.fetchJSON(
+    const dependencies = await PgCommon.fetchJson(
       `/packages/${packageName}/deps.json`
     );
     return { files, dependencies };
@@ -129,4 +169,4 @@ const getTypes = async (
 };
 
 /** Declared package names cache */
-const cache = new Set<JsRuntimePackageName>();
+const cache = new Set<string>();

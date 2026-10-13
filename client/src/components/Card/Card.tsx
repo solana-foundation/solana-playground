@@ -48,7 +48,7 @@ const Wrapper = styled.div`
     transition: all ${theme.default.transition.duration.medium}
       ${theme.default.transition.type};
 
-    ${PgTheme.convertToCSS(theme.components.card)};
+    ${PgTheme.toCss(theme.components.card)};
   `}
 `;
 

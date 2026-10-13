@@ -20,7 +20,7 @@ const Tooltip: FC<TooltipProps> = ({ children, element, help, ...props }) => (
 
 const StyledPopover = styled(Popover)<Pick<TooltipProps, "bgSecondary">>`
   ${({ bgSecondary, theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tooltip)};
+    ${PgTheme.toCss(theme.components.tooltip)};
     background: ${bgSecondary
       ? theme.components.tooltip.bgSecondary
       : theme.components.tooltip.bg};

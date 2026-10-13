@@ -48,7 +48,7 @@ export class PgShare {
       // Remove workspace from path because share only needs /src
       const sharePath = PgCommon.joinPaths(
         PgExplorer.PATHS.ROOT_DIR_PATH,
-        PgExplorer.getRelativePath(path)
+        PgExplorer.toRelativePath(path)
       );
       shareFiles[sharePath] = itemInfo;
     }

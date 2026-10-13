@@ -58,7 +58,7 @@ const Wrapper = styled.div`
     border-radius: ${theme.default.borderRadius};
     box-shadow: ${theme.default.boxShadow};
     overflow: auto;
-    ${PgTheme.getScrollbarCSS({ width: "0.25rem" })};
+    ${PgTheme.getScrollbarCss({ width: "0.25rem" })};
   `}
 `;
 

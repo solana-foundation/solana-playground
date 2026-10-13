@@ -21,10 +21,10 @@ const SidebarButton: FC<SidebarButtonProps> = ({ src, tooltip, ...props }) => (
 
 const IconWrapper = styled.div<Pick<SidebarButtonProps, "active">>`
   ${({ theme, active }) => css`
-    ${PgTheme.convertToCSS(theme.views.sidebar.left.button.default)};
+    ${PgTheme.toCss(theme.views.sidebar.left.button.default)};
 
     ${active
-      ? `${PgTheme.convertToCSS(theme.views.sidebar.left.button.selected)};
+      ? `${PgTheme.toCss(theme.views.sidebar.left.button.selected)};
       & img { filter: invert(1); }`
       : `&:hover img { filter: invert(1); }`}
   `}

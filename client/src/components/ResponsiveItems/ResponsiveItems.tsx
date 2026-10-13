@@ -16,9 +16,9 @@ const ResponsiveItems: FC<ResponsiveItemsProps> = (props) => {
     const el = ref.current;
     if (!el) return;
 
-    const gap = PgCommon.convertToPx(props.gap);
+    const gap = PgCommon.toPx(props.gap);
     const widthPoints = Array.from<number>({ length: props.maxItems })
-      .fill(PgCommon.convertToPx(props.minItemWidth))
+      .fill(PgCommon.toPx(props.minItemWidth))
       .map((mw, i) => (i + 1) * mw + i * gap)
       .reverse();
 

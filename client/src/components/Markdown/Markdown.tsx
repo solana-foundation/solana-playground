@@ -152,7 +152,7 @@ const StyledMarkdown = styled(ReactMarkdown)<MarkdownProps>`
       line-height: 1.5;
       word-wrap: break-word;
 
-      ${PgTheme.convertToCSS(theme.components.markdown)};
+      ${PgTheme.toCss(theme.components.markdown)};
       ${codeFontOnly &&
       `
         font-family: ${theme.font.code.family} !important;

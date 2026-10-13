@@ -1,5 +1,6 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
+    env,
     fs::{self, DirEntry},
     io,
     path::{Path, PathBuf},
@@ -15,10 +16,27 @@ use solpg_server::{
 
 // TODO: Make the process output a single compressed archive with all the files in it
 fn main() -> Result<()> {
-    let manifest = install_packages()?;
+    let args = Args::from_env()?;
+    let manifest = handle_package_manager_command(&args)?;
     generate_bundle(&manifest)?;
     generate_types(&manifest)?;
     Ok(())
+}
+
+struct Args {
+    command: Vec<String>,
+}
+
+impl Args {
+    fn from_env() -> Result<Self> {
+        let mut args = env::args();
+        if args.next().is_none() {
+            return Err(anyhow!("Missing program"));
+        };
+
+        let command = args.collect();
+        Ok(Self { command })
+    }
 }
 
 /// `package.json` manifest
@@ -35,7 +53,11 @@ struct Manifest {
     #[serde(default)]
     optional_dependencies: Dependencies,
     #[serde(default)]
+    main: Option<String>,
+    #[serde(default)]
     types: Option<String>,
+    #[serde(default)]
+    typings: Option<String>,
 }
 
 impl Manifest {
@@ -54,9 +76,31 @@ impl Manifest {
 type Dependencies = HashMap<String, String>;
 
 /// Install packages.
-fn install_packages() -> Result<Manifest> {
-    // TODO: Install
-    // TODO: Validate?
+fn handle_package_manager_command(args: &Args) -> Result<Manifest> {
+    match args.command.as_slice() {
+        [name, args @ ..] => match name.as_str() {
+            "yarn" => {
+                match args {
+                    [command, args @ ..] => match command.as_str() {
+                        "add" | "install" | "remove" | "upgrade" => run_yarn(
+                            command,
+                            args,
+                            match command.as_str() {
+                                "add" => &["--dev", "-D", "--peer", "-P", "--optional", "-O"],
+                                _ => &[],
+                            },
+                        )?,
+                        _ => return Err(anyhow!("Unsupported command: `{command}`")),
+                    },
+                    // Empty `yarn` defaults to install
+                    _ => run_yarn("install", &[], &[])?,
+                }
+            }
+            _ => return Err(anyhow!("Unsupported package manager: `{name}`")),
+        },
+        // TODO: `npm` as a safer default?
+        _ => run_yarn("install", &[], &[])?,
+    }
 
     let packages_path = Path::new(PACKAGES_DIR);
     let out_path = get_out_path();
@@ -73,14 +117,64 @@ fn install_packages() -> Result<Manifest> {
         .map_err(Into::into)
 }
 
+/// Run the `yarn` command using safe(r) defaults.
+///
+/// # Safety
+///
+/// Only options specified in `allowed_options` are allowed to be passed in.
+///
+/// **Arguments are not sanitized!**
+fn run_yarn(command: &str, args: &[String], allowed_options: &[&'static str]) -> Result<()> {
+    if let Some(opt) = args
+        .iter()
+        .filter(|arg| arg.starts_with('-'))
+        .find(|arg| !allowed_options.iter().any(|opt| opt == arg))
+    {
+        return Err(anyhow!("Invalid option: `{opt}`"));
+    }
+
+    let status = Command::new("yarn")
+        .current_dir(PACKAGES_DIR)
+        .arg("--ignore-scripts")
+        .arg("--prefer-offline")
+        .arg(command)
+        .args(args)
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("Failed to {command}"));
+    }
+
+    Ok(())
+}
+
 /// Generate an ESM bundle.
 fn generate_bundle(manifest: &Manifest) -> Result<()> {
     // Create a separate directory for each package
     let packages_path = Path::new(PACKAGES_DIR);
     let src_path = packages_path.join(SRC_DIR);
     let mut entries = vec![];
-    // TODO: Other deps (`optionalDependencies`...)
-    for pkg in manifest.dependencies.keys() {
+    for pkg in manifest.get_all_dependencies().keys() {
+        // Skip the `@types` organization
+        if pkg.starts_with("@types") {
+            continue;
+        }
+
+        // Skip other type only packages
+        let manifest_path = packages_path
+            .join(NODE_MODULES)
+            .join(pkg)
+            .join(MANIFEST_FILE);
+        let manifest =
+            fs::read(manifest_path).map(|b| serde_json::from_slice::<Manifest>(&b))??;
+        let is_type_only = manifest
+            .main
+            .map(|main| main.is_empty())
+            .unwrap_or_default()
+            && manifest.types.is_some();
+        if is_type_only {
+            continue;
+        }
+
         let module = to_module_name(pkg);
         let pkg_path = src_path.join(pkg);
         let entry_path = pkg_path.join("index.js");
@@ -129,8 +223,6 @@ fn generate_bundle(manifest: &Manifest) -> Result<()> {
 /// Module names must be valid JS variable names.
 ///
 /// NOTE: This must be kept in sync with the client.
-//
-// TODO: It might be better to include a mapping of package names to module names as a separate file
 fn to_module_name(pkg_name: &str) -> String {
     pkg_name.replace(['@', '/', '-', '_', '.'], "")
 }
@@ -172,9 +264,14 @@ where
 }
 
 /// Generate type declaration files.
+///
+/// Currently, the server tries to collect the minimum amount of type files instead of serving all
+/// type declaration files inside `node_modules`. This is a design decision to make the types as
+/// light as possible, as the the target client is a web browser.
 fn generate_types(manifest: &Manifest) -> Result<()> {
+    let mut cache = HashSet::new();
     for dep in manifest.get_all_dependencies().keys() {
-        if let Err(e) = generate_package_types(dep) {
+        if let Err(e) = generate_package_types(dep, &mut cache) {
             eprintln!("Failed to generate types for `{dep}`: {e}")
         }
     }
@@ -194,9 +291,19 @@ fn generate_types(manifest: &Manifest) -> Result<()> {
 /// Port of [`generate-packages.mjs`] (without the Monaco editor parts).
 ///
 /// [`generate-packages.mjs`]: https://github.com/solana-playground/solana-playground/blob/7d9f365a5009fd65aaa388e85bc541e5f4f51ae9/client/scripts/generate-packages.mjs
-fn generate_package_types(name: &str) -> Result<()> {
+fn generate_package_types(name: &str, cache: &mut HashSet<String>) -> Result<()> {
+    if cache.contains(name) {
+        return Ok(());
+    }
+
+    // Always cache independent of failure because the process will almost certainly return an error
+    // in all subsequent calls if the first one was an error. This also fixes potential infinite
+    // recursion when type generation fails for both circular dependencies.
+    cache.insert(name.to_owned());
+
     let build_path = get_build_path();
-    let out_path = build_path.join(name);
+    // Flatten the `@types` into the out directory so that clients have a easier time importing
+    let out_path = build_path.join(name.replace("@types/", ""));
     let types_path = out_path.join(TYPES_FILE);
     let deps_path = out_path.join(DEPENDENCIES_FILE);
 
@@ -229,11 +336,12 @@ fn generate_package_types(name: &str) -> Result<()> {
         let type_root = manifest
             .types
             .as_ref()
-            .ok_or_else(|| anyhow!("Unexpected `types` field: `{name}`"))
+            .or(manifest.typings.as_ref())
+            .ok_or_else(|| anyhow!("Failed to find type root"))
             .map(Path::new)
             .map(|type_root| pkg_path.join(type_root))?;
         let files = get_all_declaration_files(&type_root)
-            .map_err(|e| anyhow!("Failed to get type paths: `{name}`: {e}"))
+            .map_err(|e| anyhow!("Failed to get type paths: {e}"))
             .map(convert_type_files)??;
 
         // Save type declarations
@@ -243,13 +351,16 @@ fn generate_package_types(name: &str) -> Result<()> {
         // Get transitive dependencies that are being referenced in type declarations
         let deps = manifest
             .get_all_dependencies()
-            .keys()
+            .into_keys()
             // TODO: Make this more robust (if necesssary)
-            .filter(|dep| files.iter().any(|(_, content)| content.contains(*dep)))
+            .filter(|dep| files.iter().any(|(_, content)| content.contains(dep)))
             .fold(vec![], |mut acc, dep| {
-                match generate_package_types(dep) {
-                    Ok(_) => acc.push(dep.to_owned()),
-                    Err(e) => eprintln!("Failed to generate types for `{dep}`: {e}"),
+                match generate_package_types(&dep, cache) {
+                    Ok(_) => acc.push(dep),
+                    Err(e1) => match generate_package_types(&format!("@types/{dep}"), cache) {
+                        Ok(_) => acc.push(dep),
+                        Err(e2) => eprintln!("Failed to generate types for `{dep}`: {e1}\n{e2}"),
+                    },
                 }
 
                 acc
@@ -261,7 +372,7 @@ fn generate_package_types(name: &str) -> Result<()> {
         return Ok(());
     }
 
-    Err(anyhow!("Could not find type declarations ({name})"))
+    Err(anyhow!("Could not find type declarations"))
 }
 
 /// Get all type declaration files recursively.
@@ -330,7 +441,7 @@ fn convert_type_files(files: Vec<(PathBuf, String)>) -> anyhow::Result<Files> {
 /// Build directory (`webpack`)
 const BUILD_DIR: &str = "dist";
 
-/// `weppack` config file
+/// Base `webpack` config file
 const WEBPACK_CONFIG_FILE: &str = "webpack.config.js";
 
 /// The default directory of where the JS packages are stored

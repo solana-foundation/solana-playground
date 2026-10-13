@@ -120,7 +120,7 @@ export class PgFramework {
    * @param files framework files
    * @returns the playground layout converted files
    */
-  static async convertToPlaygroundLayout(files: TupleFiles) {
+  static async toPlaygroundLayout(files: TupleFiles) {
     const framework = await this.getFromFiles(files);
     if (!framework) throw new Error("Could not identify framework");
 
@@ -154,7 +154,7 @@ export class PgFramework {
       for (const subItemPath of subItemPaths) {
         const metadata = await PgExplorer.fs.getMetadata(subItemPath);
         if (metadata.isFile()) {
-          const relativePath = PgExplorer.getRelativePath(subItemPath);
+          const relativePath = PgExplorer.toRelativePath(subItemPath);
           const content = await PgExplorer.fs.readToString(subItemPath);
           files.push([relativePath, content]);
         } else {

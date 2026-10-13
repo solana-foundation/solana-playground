@@ -24,13 +24,13 @@ const Send = () => (
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.main.send.default)};
+    ${PgTheme.toCss(theme.components.wallet.main.send.default)};
   `}
 `;
 
 const Title = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.main.send.title)};
+    ${PgTheme.toCss(theme.components.wallet.main.send.title)};
   `}
 `;
 
@@ -135,21 +135,19 @@ const SendExpanded = () => {
 
 const ExpandedWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.main.send.expanded.default)};
+    ${PgTheme.toCss(theme.components.wallet.main.send.expanded.default)};
   `}
 `;
 
 const ExpandedInput = styled(Input)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.main.send.expanded.input)};
+    ${PgTheme.toCss(theme.components.wallet.main.send.expanded.input)};
   `}
 `;
 
 const ExpandedButton = styled(Button)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.send.expanded.sendButton
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.send.expanded.sendButton)};
   `}
 `;
 

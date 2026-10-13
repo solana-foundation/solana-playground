@@ -129,12 +129,11 @@ const Wrapper = styled.div<
       opacity: 1;
     }
 
-    ${PgTheme.convertToCSS(theme.components.tabs.tab.default)};
-    ${isSelected && PgTheme.convertToCSS(theme.components.tabs.tab.selected)};
-    ${isCurrent && PgTheme.convertToCSS(theme.components.tabs.tab.current)};
-    ${isDragging && PgTheme.convertToCSS(theme.components.tabs.tab.drag)};
-    ${isDragOverlay &&
-    PgTheme.convertToCSS(theme.components.tabs.tab.dragOverlay)};
+    ${PgTheme.toCss(theme.components.tabs.tab.default)};
+    ${isSelected && PgTheme.toCss(theme.components.tabs.tab.selected)};
+    ${isCurrent && PgTheme.toCss(theme.components.tabs.tab.current)};
+    ${isDragging && PgTheme.toCss(theme.components.tabs.tab.drag)};
+    ${isDragOverlay && PgTheme.toCss(theme.components.tabs.tab.dragOverlay)};
   `}
 `;
 

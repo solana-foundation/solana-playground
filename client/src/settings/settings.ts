@@ -1,4 +1,4 @@
-import { IS_NODE } from "./node-compatiblity"; // Needs to happen first
+import { IS_NODE } from "./node-compatibility"; // Needs to happen first
 import * as S from "./generated";
 
 /** All configurable settings */

@@ -1,3 +1,4 @@
+mod config;
 mod middlewares;
 mod routes;
 #[cfg(feature = "unstable")]
@@ -14,15 +15,14 @@ use axum::{
 use solpg_server::{
     db,
     log::{self, info},
-    Config,
 };
 use tokio::net::TcpListener;
 
-use self::{middlewares::*, routes::*};
+use self::{config::Config, middlewares::*, routes::*};
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let config = Config::from_env();
+    let config = Config::from_env()?;
     log::init(config.verbose);
     info!("Config loaded: {config:#?}");
 
@@ -42,14 +42,22 @@ async fn main() -> Result<()> {
         .route("/new", post(share_new));
 
     let unstable_routes = if cfg!(feature = "unstable") {
+        let build_concurrency = config.unstable_build.limits.route.concurrency;
+        let bundle_concurrency = config.unstable_bundle.limits.route.concurrency;
         Router::new()
             .route(
                 "/build",
                 post(unstable::build)
-                    .with_state(unstable::BuildState::new(config.build_concurrency)),
+                    .with_state(unstable::BuildState::new(config.unstable_build))
+                    .layer(concurrency_limit(build_concurrency)),
             )
             .route("/deploy/{uuid}", get(unstable::deploy))
-            .route("/bundle", post(unstable::bundle))
+            .route(
+                "/bundle",
+                post(unstable::bundle)
+                    .with_state(unstable::BundleState::new(config.unstable_bundle))
+                    .layer(concurrency_limit(bundle_concurrency)),
+            )
     } else {
         Router::new()
     };

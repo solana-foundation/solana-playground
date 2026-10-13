@@ -12,7 +12,7 @@ const Topbar = styled.div`
     align-items: center;
     border-bottom: 1px solid ${theme.colors.default.border};
 
-    ${PgTheme.convertToCSS(theme.components.topbar)};
+    ${PgTheme.toCss(theme.components.topbar)};
   `}
 `;
 

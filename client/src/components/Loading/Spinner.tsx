@@ -47,7 +47,7 @@ const Wrapper = styled.div`
     &.${PgView.classNames.LOADING} {
       &::after {
         z-index: 1;
-        ${PgTheme.convertToCSS(theme.default.backdrop)};
+        ${PgTheme.toCss(theme.default.backdrop)};
       }
 
       & > .spinner {

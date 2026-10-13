@@ -26,7 +26,7 @@ interface RightProps<W = number> extends DefaultRightProps {
   oldWidth: W;
 }
 
-const AUTOMATIC_MINIMIZE_WIDTH = PgCommon.convertToPx("12rem");
+const AUTOMATIC_MINIMIZE_WIDTH = PgCommon.toPx("12rem");
 
 const Right: FC<RightProps> = ({ page, width, setWidth, oldWidth }) => {
   const handleResizeStop = useCallback(
@@ -118,7 +118,7 @@ const Wrapper = styled.div<{
     height: calc(100vh - ${PgTheme.theme.views.bottom.height});
     min-width: ${width ? width : oldWidth}px;
 
-    ${PgTheme.convertToCSS(theme.views.sidebar.right.default)};
+    ${PgTheme.toCss(theme.views.sidebar.right.default)};
   `}
 `;
 
@@ -128,7 +128,7 @@ const TitleWrapper = styled.div`
     justify-content: center;
     align-items: center;
 
-    ${PgTheme.convertToCSS(theme.views.sidebar.right.title)};
+    ${PgTheme.toCss(theme.views.sidebar.right.title)};
   `}
 `;
 
@@ -137,8 +137,8 @@ const ContentWrapper = styled(FadeIn)`
     height: 100%;
     overflow-y: auto;
 
-    ${PgTheme.getScrollbarCSS()};
-    ${PgTheme.convertToCSS(theme.views.sidebar.right.content)};
+    ${PgTheme.getScrollbarCss()};
+    ${PgTheme.toCss(theme.views.sidebar.right.content)};
   `}
 `;
 

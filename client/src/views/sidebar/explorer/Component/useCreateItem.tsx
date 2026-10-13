@@ -37,7 +37,7 @@ export const useCreateItem = () => {
       const folderName =
         folders.find((name) => name === PgExplorer.PATHS.SRC_DIRNAME) ??
         folders[0];
-      const folderPath = PgExplorer.getCanonicalPath(folderName);
+      const folderPath = PgExplorer.toCanonicalPath(folderName);
 
       const rootFolderEl = PgExplorer.getRootFolderEl()!;
       const divs = rootFolderEl.getElementsByTagName("div");

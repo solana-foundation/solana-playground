@@ -28,7 +28,7 @@ const Svg = forwardRef<SVGSVGElement, SvgProps>(
 
 const StyledSvg = styled.svg<SvgProps>`
   ${({ color, rotate, theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.svg)};
+    ${PgTheme.toCss(theme.components.svg)};
 
     ${color && `color: ${PgTheme.getColor(color)}`};
     ${rotate && `rotate: ${rotate}`};

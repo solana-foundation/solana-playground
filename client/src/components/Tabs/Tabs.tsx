@@ -59,7 +59,7 @@ export const Tabs = () => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tabs.default)};
+    ${PgTheme.toCss(theme.components.tabs.default)};
   `}
 `;
 
@@ -69,7 +69,7 @@ const TabsWrapper = styled.div`
   overflow-x: auto;
   overflow-y: hidden;
 
-  ${PgTheme.getScrollbarCSS({ height: "0.25rem !important" })};
+  ${PgTheme.getScrollbarCss({ height: "0.25rem !important" })};
 `;
 
 const Wallet = () => {

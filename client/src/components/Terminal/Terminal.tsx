@@ -96,7 +96,7 @@ const Terminal: FC<TerminalProps> = ({ cmdManager }) => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.terminal.default)};
+    ${PgTheme.toCss(theme.components.terminal.default)};
 
     & .xterm {
       padding: 0.25rem 1rem;

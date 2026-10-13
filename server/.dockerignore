@@ -1,9 +1,10 @@
+**/node_modules
+**/target
+
 packages/*
 !packages/plugins
-!packages/package.json
+!packages/polyfills
 !packages/webpack.config.js
-!packages/yarn.lock
 programs/*
 !programs/default
 !programs/Cargo.*
-target

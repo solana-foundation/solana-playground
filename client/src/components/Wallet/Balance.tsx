@@ -12,7 +12,7 @@ const Balance = () => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.main.balance)};
+    ${PgTheme.toCss(theme.components.wallet.main.balance)};
   `}
 `;
 

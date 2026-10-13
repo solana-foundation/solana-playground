@@ -175,7 +175,7 @@ const Secondary = () => {
                 kind="icon"
                 title={
                   action.keybind
-                    ? `${action.name} (${PgCommon.getKeybindTextOS(
+                    ? `${action.name} (${PgCommon.getKeybindTextOs(
                         action.keybind
                       )})`
                     : action.name
@@ -196,14 +196,14 @@ const Secondary = () => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.secondary.default)};
+    ${PgTheme.toCss(theme.views.main.secondary.default)};
 
     & > div:first-child {
       height: ${PgView.getMainSecondaryMinHeight()}px;
     }
 
     & > div:last-child {
-      ${PgTheme.getScrollbarCSS({ allChildren: true })};
+      ${PgTheme.getScrollbarCss({ allChildren: true })};
       height: calc(100% - ${PgView.getMainSecondaryMinHeight()}px);
       overflow: hidden;
     }
@@ -219,15 +219,14 @@ const Topbar = styled.div`
 
 const TabsWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.secondary.tabs.default)};
+    ${PgTheme.toCss(theme.views.main.secondary.tabs.default)};
   `}
 `;
 
 const Tab = styled.div<{ isCurrent: boolean }>`
   ${({ theme, isCurrent }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.secondary.tabs.tab.default)};
-    ${isCurrent &&
-    PgTheme.convertToCSS(theme.views.main.secondary.tabs.tab.current)};
+    ${PgTheme.toCss(theme.views.main.secondary.tabs.tab.default)};
+    ${isCurrent && PgTheme.toCss(theme.views.main.secondary.tabs.tab.current)};
   `}
 `;
 

@@ -62,13 +62,13 @@ const Home = () => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.default)};
+    ${PgTheme.toCss(theme.views.main.primary.home.default)};
   `}
 `;
 
 const ProjectTitle = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.title)};
+    ${PgTheme.toCss(theme.views.main.primary.home.title)};
   `}
 `;
 
@@ -80,13 +80,13 @@ const ContentWrapper = styled.div`
 
 const ResourcesWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.default)};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.default)};
   `}
 `;
 
 const ResourcesTitle = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.title)};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.title)};
   `}
 `;
 
@@ -119,21 +119,19 @@ const Resource: FC<ResourceProps> = ({
 
 const ResourceCard = styled(Card)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.home.resources.card.default
-    )};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.card.default)};
   `}
 `;
 
 const ResourceTitle = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.card.title)};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.card.title)};
   `}
 `;
 
 const ResourceImg = styled(Img)<{ $circleImage?: boolean }>`
   ${({ theme, $circleImage }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.card.image)};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.card.image)};
 
     ${$circleImage && "border-radius: 50%"};
   `};
@@ -141,9 +139,7 @@ const ResourceImg = styled(Img)<{ $circleImage?: boolean }>`
 
 const ResourceDescription = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.home.resources.card.description
-    )};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.card.description)};
   `}
 `;
 
@@ -154,21 +150,19 @@ const ResourceButtonWrapper = styled.div`
 
 const ResourceButton = styled(Button)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.home.resources.card.button
-    )};
+    ${PgTheme.toCss(theme.views.main.primary.home.resources.card.button)};
   `}
 `;
 
 const TutorialsWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.tutorials.default)};
+    ${PgTheme.toCss(theme.views.main.primary.home.tutorials.default)};
   `}
 `;
 
 const TutorialsTitle = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.tutorials.title)};
+    ${PgTheme.toCss(theme.views.main.primary.home.tutorials.title)};
   `}
 `;
 
@@ -202,7 +196,7 @@ const getSrc = (url: string) => {
 
 const TutorialCard = styled(Card)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.tutorials.card)};
+    ${PgTheme.toCss(theme.views.main.primary.home.tutorials.card)};
   `}
 `;
 

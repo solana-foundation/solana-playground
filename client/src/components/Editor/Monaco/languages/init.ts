@@ -52,7 +52,7 @@ export const initLanguages = async (theme: RequiredKey<IRawTheme, "name">) => {
       createOnigString,
     }),
     loadGrammar: async (scopeName: string) => {
-      const grammar = await PgCommon.fetchJSON(
+      const grammar = await PgCommon.fetchJson(
         `/languages/${scopeName}/grammar.tmLanguage.json`
       );
       // `registry.loadGrammarWithConfiguration` expects `scopeName` as the
@@ -101,7 +101,7 @@ export const initLanguages = async (theme: RequiredKey<IRawTheme, "name">) => {
     });
 
     // Set configuration
-    const configuration = await PgCommon.fetchJSON(
+    const configuration = await PgCommon.fetchJson(
       `/languages/${languageId}/configuration.json`
     );
     monaco.languages.setLanguageConfiguration(

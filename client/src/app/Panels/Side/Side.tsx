@@ -7,8 +7,8 @@ import { SpinnerWithBg } from "../../../components/Loading";
 import { PgCommon, PgRouter, PgTheme, PgView } from "../../../utils";
 import { useKeybind, useRenderOnChange } from "../../../hooks";
 
-const DEFAULT_WIDTH = PgCommon.convertToPx("20rem");
-const AUTOMATIC_MINIMIZE_WINDOW_WIDTH = PgCommon.convertToPx("60rem");
+const DEFAULT_WIDTH = PgCommon.toPx("20rem");
+const AUTOMATIC_MINIMIZE_WINDOW_WIDTH = PgCommon.toPx("60rem");
 
 const Side = () => {
   const page = useRenderOnChange(PgView.onDidChangeCurrentSidebarPage);
@@ -84,7 +84,7 @@ const Side = () => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.sidebar.default)};
+    ${PgTheme.toCss(theme.views.sidebar.default)};
   `}
 `;
 

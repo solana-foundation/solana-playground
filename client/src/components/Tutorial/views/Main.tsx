@@ -172,7 +172,7 @@ const TutorialPage = styled.div`
 
 const TutorialContent = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tutorial.tutorialPage)};
+    ${PgTheme.toCss(theme.components.tutorial.tutorialPage)};
   `}
 `;
 

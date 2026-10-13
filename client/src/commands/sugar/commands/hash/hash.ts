@@ -7,7 +7,7 @@ export const processHash = async (compare: string | undefined) => {
 
   if (compare) {
     const cache = await loadCache();
-    const hashB58 = hash(PgCommon.prettyJSON(cache));
+    const hashB58 = hash(PgCommon.toPrettyJson(cache));
     term.println(`Cache hash: ${hashB58}`);
 
     if (compare !== hashB58) {
@@ -34,7 +34,7 @@ export const hashAndUpdate = async () => {
   }
 
   const cache = await loadCache();
-  const hashResult = hash(PgCommon.prettyJSON(cache));
+  const hashResult = hash(PgCommon.toPrettyJson(cache));
   hiddenSettings.hash = Array.from(Buffer.from(hashResult));
 
   await saveConfigData(configData);

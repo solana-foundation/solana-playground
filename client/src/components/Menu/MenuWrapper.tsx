@@ -33,6 +33,6 @@ const getStyles = ({
   );
 
   return css`
-    ${PgTheme.convertToCSS(menu)};
+    ${PgTheme.toCss(menu)};
   `;
 };

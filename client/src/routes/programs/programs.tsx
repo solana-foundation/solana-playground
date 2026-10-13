@@ -12,7 +12,7 @@ export const programs = PgRouter.create({
     const programs = {
       name: "Programs",
       props: async () => ({
-        programs: await PgCommon.fetchJSON("/programs/programs.json"),
+        programs: await PgCommon.fetchJson("/programs/programs.json"),
         filters: [
           { param: "framework", filters: PgFramework.all.map((f) => f.name) },
           { param: "categories", filters: TUTORIAL_CATEGORIES },

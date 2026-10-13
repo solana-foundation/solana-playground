@@ -103,7 +103,7 @@ const Account: FC<AccountProps> = ({ accountName, index }) => {
                 <FetchError kind="error">{fetchError}</FetchError>
               ) : (
                 <CodeResult index={index}>
-                  {PgCommon.prettyJSON(fetchedData!)}
+                  {PgCommon.toPrettyJson(fetchedData!)}
                 </CodeResult>
               )}
             </SpinnerWithBg>

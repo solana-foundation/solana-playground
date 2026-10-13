@@ -119,7 +119,7 @@ const Description = styled(Markdown)`
   ${({ theme }) => css`
     height: 3rem;
     color: ${theme.colors.default.textSecondary};
-    ${PgTheme.getClampLinesCSS(2)};
+    ${PgTheme.getClampLinesCss(2)};
   `}
 `;
 

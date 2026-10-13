@@ -158,7 +158,7 @@ export class PgCommon {
   }
 
   /**
-   * Execute the given callback in order.
+   * Execute the given callback sequentially i.e. in order.
    *
    * This is particularly useful when the desired behavior of an `onChange`
    * event is to execute its callback in order.
@@ -166,7 +166,7 @@ export class PgCommon {
    * @param cb callback to run
    * @returns the wrapped callback function
    */
-  static executeInOrder<T>(cb: (...args: [T]) => SyncOrAsync) {
+  static executeSequential(cb: (...args: unknown[]) => SyncOrAsync) {
     type Callback = typeof cb;
 
     const queue: Parameters<Callback>[] = [];
@@ -208,6 +208,42 @@ export class PgCommon {
   }
 
   /**
+   * Try calling the callback and return `undefined` on error.
+   *
+   * This is useful for avoiding nesting via `try-catch`. For example, this:
+   *
+   * ```ts
+   * let value;
+   * try {
+   *   value = getValue();
+   * } catch {
+   *   return;
+   * }
+   * ```
+   *
+   * can be written as:
+   *
+   * ```ts
+   * const value = PgCommon.tryCall(getValue);
+   * if (!value) return;
+   * ```
+   *
+   * This is better because it avoids nesting and leaving `value` mutable.
+   *
+   * @param cb callback to call
+   * @returns the return value of the callback or `undefined` on error
+   */
+  static tryCall<R>(
+    cb: (...args: unknown[]) => Exclude<R, undefined>
+  ): R | undefined {
+    try {
+      return cb();
+    } catch {
+      return;
+    }
+  }
+
+  /**
    * Fetch the response from the given URL and return the text response.
    *
    * @param url URL
@@ -224,7 +260,7 @@ export class PgCommon {
    * @param url URL
    * @returns the JSON response
    */
-  static async fetchJSON(url: string) {
+  static async fetchJson(url: string) {
     const response = await fetch(url);
     return await response.json();
   }
@@ -617,7 +653,7 @@ export class PgCommon {
    *
    * @returns the operating system of the user
    */
-  static getOS() {
+  static getOs() {
     const userAgent = navigator.userAgent.toLowerCase();
     if (userAgent.includes("win")) return "Windows";
     if (userAgent.includes("mac")) return "MacOS";
@@ -630,10 +666,8 @@ export class PgCommon {
    * @param keybind keybind text
    * @returns the correct text based on OS
    */
-  static getKeybindTextOS(keybind: string) {
-    if (this.getOS() === "MacOS") {
-      keybind = keybind.replace("Ctrl", "Cmd");
-    }
+  static getKeybindTextOs(keybind: string) {
+    if (this.getOs() === "MacOS") keybind = keybind.replace("Ctrl", "Cmd");
     return keybind;
   }
 
@@ -654,7 +688,7 @@ export class PgCommon {
    * @param unit CSS unit
    * @returns the pixel value
    */
-  static convertToPx(unit: string) {
+  static toPx(unit: string) {
     const el = document.createElement("div");
     el.style.width = unit;
     el.style.zIndex = "-1";
@@ -1190,12 +1224,12 @@ export class PgCommon {
   }
 
   /**
-   * Convert objects into pretty JSON strings
+   * Convert objects into pretty JSON strings.
    *
-   * @param obj json object
+   * @param obj JSON object
    * @returns prettified string output
    */
-  static prettyJSON(obj: object) {
+  static toPrettyJson(obj: object) {
     return JSON.stringify(obj, null, 2);
   }
 

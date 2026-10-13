@@ -55,7 +55,7 @@ const CreateItemInput: FC<CreateItemInputProps> = ({ El, hide }) => {
 
           try {
             // Create item
-            const itemPath = PgExplorer.getCanonicalPath(
+            const itemPath = PgExplorer.toCanonicalPath(
               PgCommon.joinPaths(parentPath, itemName)
             );
             await PgExplorer.createItem(itemPath);
@@ -99,7 +99,7 @@ const CreateItemInput: FC<CreateItemInputProps> = ({ El, hide }) => {
 
     // Make `path` relative for consistency between temporary and normal projects
     if (PgExplorer.isTemporary) path = path.slice(1);
-    else path = PgExplorer.getRelativePath(path);
+    else path = PgExplorer.toRelativePath(path);
 
     return path.split("/").length - (itemType.file || isEmptyFolder ? 0 : 1);
   }, [El]);

@@ -39,7 +39,7 @@ export const Skeleton = styled.div<SkeletonProps>`
         animation: ${skeletonAnimation} 1.25s ease-in-out infinite;
       }
 
-      ${PgTheme.convertToCSS(skeleton)};
+      ${PgTheme.toCss(skeleton)};
     `;
   }}
 `;

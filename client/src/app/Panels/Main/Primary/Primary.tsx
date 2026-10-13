@@ -43,8 +43,8 @@ const Primary = () => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.getScrollbarCSS({ allChildren: true })};
-    ${PgTheme.convertToCSS(theme.views.main.primary.default)};
+    ${PgTheme.getScrollbarCss({ allChildren: true })};
+    ${PgTheme.toCss(theme.views.main.primary.default)};
   `}
 `;
 

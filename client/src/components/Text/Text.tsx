@@ -48,7 +48,7 @@ const Wrapper = styled.div<TextProps>`
     );
 
     return css`
-      ${PgTheme.convertToCSS(text)};
+      ${PgTheme.toCss(text)};
 
       ${!!icon &&
       `& div > svg {

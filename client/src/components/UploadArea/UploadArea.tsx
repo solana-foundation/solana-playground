@@ -43,14 +43,14 @@ const Wrapper = styled.div<{ isDragActive: boolean }>`
     opacity: ${isDragActive ? 0.55 : 1};
 
     & > svg {
-      ${PgTheme.convertToCSS(theme.components.uploadArea.icon)};
+      ${PgTheme.toCss(theme.components.uploadArea.icon)};
     }
 
     &:hover > div {
       color: ${theme.colors.default.textPrimary};
     }
 
-    ${PgTheme.convertToCSS(theme.components.uploadArea.default)};
+    ${PgTheme.toCss(theme.components.uploadArea.default)};
   `}
 `;
 
@@ -110,11 +110,11 @@ const ImportResultText = styled.div<{
       margin-right: 0.5rem;
     }
 
-    ${PgTheme.convertToCSS(theme.components.uploadArea.text.default)}
+    ${PgTheme.toCss(theme.components.uploadArea.text.default)}
     ${result === "error" &&
-    PgTheme.convertToCSS(theme.components.uploadArea.text.error)};
+    PgTheme.toCss(theme.components.uploadArea.text.error)};
     ${result === "success" &&
-    PgTheme.convertToCSS(theme.components.uploadArea.text.success)};
+    PgTheme.toCss(theme.components.uploadArea.text.success)};
   `}
 `;
 

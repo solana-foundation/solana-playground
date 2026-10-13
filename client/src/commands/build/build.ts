@@ -162,10 +162,12 @@ const getBuildFiles = () => {
     // Remove the workspace from path because build only needs /src
     const buildPath = PgCommon.joinPaths(
       PgExplorer.PATHS.ROOT_DIR_PATH,
-      PgExplorer.getRelativePath(path)
+      PgExplorer.toRelativePath(path)
     );
     buildFiles.push([buildPath, content]);
   }
+
+  // TODO: Add `cargo` files
 
   return buildFiles;
 };
@@ -259,7 +261,7 @@ const improveOutput = (output: string) => {
     .replace(/(\/home\/\w+)\//gm, (match, home) => match.replace(home, "~"))
 
     // Remove compiling output
-    .replace(/\s*Compiling\ssolpg.*/, "")
+    .replace(/\s+Compiling\s.*/, "")
 
     // Replace `solpg` name with the current workspace name
     .replaceAll("solpg", PgExplorer.currentWorkspaceName ?? "solpg")

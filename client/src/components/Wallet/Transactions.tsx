@@ -94,29 +94,25 @@ const Transactions = () => {
 
 const TxsWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.main.transactions.default)};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.default)};
   `}
 `;
 
 const TxsTitleWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.title.default
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.title.default)};
   `}
 `;
 
 const TxsTitleText = styled.span`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.title.text
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.title.text)};
   `}
 `;
 
 const TxsRefreshButton = styled(Button)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
+    ${PgTheme.toCss(
       theme.components.wallet.main.transactions.title.refreshButton
     )};
   `}
@@ -124,17 +120,13 @@ const TxsRefreshButton = styled(Button)`
 
 const TxsTable = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.table.default
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.table.default)};
   `}
 `;
 
 const TxsTableHeader = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.table.header
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.table.header)};
   `}
 `;
 
@@ -219,7 +211,7 @@ const TxWrapper = styled.div`
       height: 1rem;
     }
 
-    ${PgTheme.convertToCSS(
+    ${PgTheme.toCss(
       theme.components.wallet.main.transactions.table.row.default
     )};
   `}
@@ -237,7 +229,7 @@ const Signature = styled.div`
       margin-right: 0.25rem;
     }
 
-    ${PgTheme.convertToCSS(
+    ${PgTheme.toCss(
       theme.components.wallet.main.transactions.table.row.signature
     )};
   `}
@@ -245,9 +237,7 @@ const Signature = styled.div`
 
 const Slot = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.table.row.slot
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.table.row.slot)};
   `}
 `;
 
@@ -257,9 +247,7 @@ const Time = styled.div`
       margin-left: 0.25rem;
     }
 
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.table.row.time
-    )};
+    ${PgTheme.toCss(theme.components.wallet.main.transactions.table.row.time)};
   `}
 `;
 

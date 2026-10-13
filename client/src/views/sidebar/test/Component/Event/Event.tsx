@@ -35,7 +35,7 @@ const Event: FC<EventProps> = ({ index, eventName }) => {
   return (
     <Interaction name={`${eventName} (${receivedEvents.length})`} index={index}>
       <CodeResult index={index}>
-        {receivedEvents.map((ev) => PgCommon.prettyJSON(ev)).join("\n")}
+        {receivedEvents.map((ev) => PgCommon.toPrettyJson(ev)).join("\n")}
       </CodeResult>
     </Interaction>
   );

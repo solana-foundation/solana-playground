@@ -116,13 +116,13 @@ const SingleModal: FC<SingleModalProps> = ({
 
 const Wrapper = styled(FadeIn)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.modal.default)};
+    ${PgTheme.toCss(theme.components.modal.default)};
   `}
 `;
 
 const TopWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.modal.top)};
+    ${PgTheme.toCss(theme.components.modal.top)};
   `}
 `;
 
@@ -158,12 +158,12 @@ const CloseButtonWrapper = styled.div<{ hasTitle: boolean }>`
 const ScrollableWrapper = styled.div`
   overflow-y: auto;
   overflow-x: hidden;
-  ${PgTheme.getScrollbarCSS()};
+  ${PgTheme.getScrollbarCss()};
 `;
 
 const ContentWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.modal.content)};
+    ${PgTheme.toCss(theme.components.modal.content)};
   `}
 `;
 
@@ -177,7 +177,7 @@ const ButtonsWrapper = styled.div`
       margin-left: 1rem;
     }
 
-    ${PgTheme.convertToCSS(theme.components.modal.bottom)};
+    ${PgTheme.toCss(theme.components.modal.bottom)};
   `}
 `;
 

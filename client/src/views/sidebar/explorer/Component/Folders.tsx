@@ -198,7 +198,7 @@ const ExplorerDndContext: FC = ({ children }) => {
     if (isFromPathFolder && toPath.startsWith(fromPath)) return;
 
     const itemName = PgExplorer.getItemNameFromPath(fromPath);
-    const newPath = PgExplorer.getCanonicalPath(
+    const newPath = PgExplorer.toCanonicalPath(
       PgCommon.joinPaths(toPath, itemName)
     );
     if (PgCommon.isPathsEqual(fromPath, newPath)) return;
@@ -296,7 +296,7 @@ const RecursiveFolder: FC<RecursiveFolderProps> = ({ path }) => {
     [path]
   );
   const depth = useMemo(
-    () => PgExplorer.getRelativePath(path).split("/").length - 2,
+    () => PgExplorer.toRelativePath(path).split("/").length - 2,
     [path]
   );
 

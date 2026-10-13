@@ -238,13 +238,13 @@ export class PgTheme {
    * @param component Component to convert to CSS
    * @returns the converted CSS
    */
-  static convertToCSS(component: DefaultComponent): string {
+  static toCss(component: DefaultComponent): string {
     return Object.keys(component).reduce((acc, key) => {
       const value = component[key];
 
       // Check for `&`
       if (key.startsWith("&")) {
-        return `${acc}${key}{${this.convertToCSS(value)}}`;
+        return `${acc}${key}{${this.toCss(value)}}`;
       }
 
       // Handle non-standard properties
@@ -258,11 +258,11 @@ export class PgTheme {
         case "active":
         case "focus":
         case "focusWithin":
-          return `${acc}&:${prop}{${this.convertToCSS(value)}}`;
+          return `${acc}&:${prop}{${this.toCss(value)}}`;
 
         case "before":
         case "after":
-          return `${acc}&::${prop}{${this.convertToCSS(value)}}`;
+          return `${acc}&::${prop}{${this.toCss(value)}}`;
       }
 
       // Only allow string and number values
@@ -337,7 +337,7 @@ export class PgTheme {
    * `allChildren`: Whether to add the scrollbar changes to all children components
    * @returns the scrollbar CSS
    */
-  static getScrollbarCSS(
+  static getScrollbarCss(
     opts?: {
       allChildren?: boolean;
     } & Pick<StandardProperties, "width" | "height" | "borderRadius">
@@ -392,7 +392,7 @@ export class PgTheme {
    * @param max maximum number of lines
    * @returns the CSS string
    */
-  static getClampLinesCSS(max: number) {
+  static getClampLinesCss(max: number) {
     return `
       display: -webkit-box;
       -webkit-line-clamp: ${max};
@@ -407,7 +407,7 @@ export class PgTheme {
    * @param theme ready theme
    * @returns the converted TextMate theme
    */
-  static convertToTextMateTheme(theme: Theme) {
+  static toTextMateTheme(theme: Theme) {
     const editorStyles = theme.components.editor;
     const hl = theme.highlight;
 

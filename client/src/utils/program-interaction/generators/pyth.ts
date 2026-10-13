@@ -18,7 +18,7 @@ const PYTH_ACCOUNTS: {
 export const getOrInitPythAccounts = async () => {
   if (!PgConnection.cluster) return {};
 
-  PYTH_ACCOUNTS[PgConnection.cluster] ??= await PgCommon.fetchJSON(
+  PYTH_ACCOUNTS[PgConnection.cluster] ??= await PgCommon.fetchJson(
     `/pyth/${PgConnection.cluster}.json`
   );
   return getPythAccounts();

@@ -1,5 +1,6 @@
 import {
   Cluster,
+  Disposable,
   PgCommand,
   PgCommon,
   PgConnection,
@@ -9,13 +10,27 @@ import {
 } from "../../utils";
 
 export const automaticAirdrop = () => {
-  return PgCommon.batchChanges(
-    PgCommon.executeInOrder(async () => {
+  const disposables: Disposable[] = [];
+
+  let isConnecting = false;
+  disposables.push(PgCommand.connect.onDidStart(() => (isConnecting = true)));
+  disposables.push(PgCommand.connect.onDidFinish(() => (isConnecting = false)));
+
+  let isDeploying = false;
+  disposables.push(PgCommand.deploy.onDidStart(() => (isDeploying = true)));
+  disposables.push(PgCommand.deploy.onDidFinish(() => (isDeploying = false)));
+
+  const airdrop = PgCommon.batchChanges(
+    // TODO: Should every batch request be executed sequentially?
+    PgCommon.executeSequential(async () => {
       if (!PgSettings.wallet.automaticAirdrop) return;
 
-      // If there was an error, disable the effect
+      // Skip if there was an error
       const cluster = PgConnection.cluster;
       if (!cluster || errorCache.has(cluster)) return;
+
+      // Skip during processes that might conflict
+      if (isConnecting || isDeploying) return;
 
       // Get airdrop amount based on network (in SOL)
       const airdropAmount = PgConnection.getAirdropAmount();
@@ -43,6 +58,9 @@ export const automaticAirdrop = () => {
     }),
     [PgWallet.onDidChangeBalance, PgSettings.onDidChangeWalletAutomaticAirdrop]
   );
+  disposables.push(airdrop);
+
+  return { dispose: () => disposables.forEach(({ dispose }) => dispose()) };
 };
 
 const errorCache = new Set<Cluster>();

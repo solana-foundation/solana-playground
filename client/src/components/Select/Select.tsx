@@ -81,12 +81,12 @@ const Select = <
 
 const StyledReactSelect = styled(ReactSelect)`
   ${({ theme }) => css`
-    ${PgTheme.getScrollbarCSS({
+    ${PgTheme.getScrollbarCss({
       allChildren: true,
       width: "0.25rem",
       height: "0.25rem",
     })};
-    ${PgTheme.convertToCSS(theme.components.select.default)};
+    ${PgTheme.toCss(theme.components.select.default)};
   `}
 `;
 

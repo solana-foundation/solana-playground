@@ -1,5 +1,4 @@
 import {
-  JsRuntimePackageName,
   MergeUnion,
   PgCommon,
   PgLanguage,
@@ -118,7 +117,7 @@ export const getJSDependencies = async (files: TupleFiles) => {
     typescript: "^5.2.2",
   };
 
-  return PgCommon.prettyJSON({ dependencies, devDependencies }).slice(2, -2);
+  return PgCommon.toPrettyJson({ dependencies, devDependencies }).slice(2, -2);
 };
 
 /**
@@ -130,7 +129,7 @@ export const getJSDependencies = async (files: TupleFiles) => {
 const getVersions = async (
   kind: "crates" | "packages"
 ): Promise<Record<string, string>> => {
-  return await PgCommon.fetchJSON(`/${kind}/versions.json`);
+  return await PgCommon.fetchJson(`/${kind}/versions.json`);
 };
 
 /**
@@ -193,7 +192,7 @@ const getGlobalPackages = (content: string) => {
 
 /** Map packages to a different package on exports or completely ignore them */
 const PACKAGES_MAP: {
-  [K in JsRuntimePackageName]?: JsRuntimePackageName | null;
+  [key: string]: string | null;
 } = {
   buffer: null, // No need to import
 };

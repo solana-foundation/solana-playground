@@ -39,7 +39,7 @@ const Wrapper = styled.div`
       font-size: ${theme.font.code.size.medium};
       overflow: auto;
 
-      ${PgTheme.getScrollbarCSS()};
+      ${PgTheme.getScrollbarCss()};
     }
 
     & > :first-child {
@@ -83,7 +83,7 @@ const Code = ({ children, lang }: CodeBlockProps) => {
       const highlightedHtml = await highlight(
         children,
         lang,
-        PgTheme.convertToTextMateTheme(theme)
+        PgTheme.toTextMateTheme(theme)
       );
       setHtml(highlightedHtml);
     } else {

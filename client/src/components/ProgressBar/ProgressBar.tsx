@@ -32,13 +32,13 @@ const ProgressBar: FC<ProgressBarProps> = ({ value }) => {
 
 const Wrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.progressbar.default)};
+    ${PgTheme.toCss(theme.components.progressbar.default)};
   `}
 `;
 
 const Indicator = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.progressbar.indicator)};
+    ${PgTheme.toCss(theme.components.progressbar.indicator)};
   `}
 `;
 

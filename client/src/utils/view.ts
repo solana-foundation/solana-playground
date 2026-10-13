@@ -158,7 +158,7 @@ class _PgView {
 
   /** Get the minimum height of the main secondary view. */
   static getMainSecondaryMinHeight() {
-    return PgCommon.convertToPx("2.25rem");
+    return PgCommon.toPx("2.25rem");
   }
 
   /** Get the maximum height of the main secondary view. */

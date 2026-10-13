@@ -353,7 +353,7 @@ const StyledButton = styled.button<ButtonProps & { $loading?: boolean }>`
         `}
       }
 
-      ${PgTheme.convertToCSS(button)};
+      ${PgTheme.toCss(button)};
 
       ${fullWidth && `width: 100%;`}
 

@@ -38,15 +38,15 @@ const StyledContainer = styled(ToastContainer)`
     }
 
     .Toastify__toast {
-      ${PgTheme.convertToCSS(theme.components.toast.default)};
+      ${PgTheme.toCss(theme.components.toast.default)};
     }
 
     .Toastify__progress-bar {
-      ${PgTheme.convertToCSS(theme.components.toast.progress)};
+      ${PgTheme.toCss(theme.components.toast.progress)};
     }
 
     .Toastify__close-button--light {
-      ${PgTheme.convertToCSS(theme.components.toast.closeButton)};
+      ${PgTheme.toCss(theme.components.toast.closeButton)};
     }
   `}
 `;

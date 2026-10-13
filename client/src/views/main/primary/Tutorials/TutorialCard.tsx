@@ -101,14 +101,14 @@ const NameRow = styled.div`
 
 const Name = styled.span`
   font-weight: bold;
-  ${PgTheme.getClampLinesCSS(1)};
+  ${PgTheme.getClampLinesCss(1)};
 `;
 
 const Description = styled.div`
   ${({ theme }) => css`
     margin-top: 0.75rem;
     color: ${theme.colors.default.textSecondary};
-    ${PgTheme.getClampLinesCSS(2)};
+    ${PgTheme.getClampLinesCss(2)};
   `}
 `;
 

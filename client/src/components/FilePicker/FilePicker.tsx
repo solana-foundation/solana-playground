@@ -57,7 +57,7 @@ const RecursiveFolder: FC<RecursiveFolderProps> = ({ path, setFilePaths }) => {
   );
 
   const depth = useMemo(
-    () => PgExplorer.getRelativePath(path).split("/").length - 1,
+    () => PgExplorer.toRelativePath(path).split("/").length - 1,
     [path]
   );
 

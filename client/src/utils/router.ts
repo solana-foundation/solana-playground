@@ -249,8 +249,8 @@ if (process.env.NODE_ENV !== "production") {
       throw new Error(
         [
           `Route: ${route} and ${path} mismatch:`,
-          `expected (${PgCommon.prettyJSON(expectedParams)})`,
-          `actual: ${PgCommon.prettyJSON(actualParams)}`,
+          `expected (${PgCommon.toPrettyJson(expectedParams)})`,
+          `actual: ${PgCommon.toPrettyJson(actualParams)}`,
         ].join("\n")
       );
     }

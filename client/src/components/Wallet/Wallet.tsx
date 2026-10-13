@@ -92,7 +92,7 @@ const WalletBound = styled.div`
 
 const WalletWrapper = styled(FadeIn)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.default)};
+    ${PgTheme.toCss(theme.components.wallet.default)};
   `}
 `;
 
@@ -113,7 +113,7 @@ const WalletTop = () => {
 
 const WalletTopWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.top.default)};
+    ${PgTheme.toCss(theme.components.wallet.top.default)};
   `}
 `;
 
@@ -173,19 +173,19 @@ const WalletName = () => {
 
 const WalletTitleWrapper = styled.div`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.top.title.default)};
+    ${PgTheme.toCss(theme.components.wallet.top.title.default)};
   `}
 `;
 
 const WalletTitleIcon = styled(Img)`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.top.title.icon)};
+    ${PgTheme.toCss(theme.components.wallet.top.title.icon)};
   `}
 `;
 
 const WalletTitleText = styled.span`
   ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.wallet.top.title.text)};
+    ${PgTheme.toCss(theme.components.wallet.top.title.text)};
   `}
 `;
 
@@ -268,10 +268,10 @@ const MainWrapper = styled.div`
     }
 
     &.${PgView.classNames.DARKEN}::after {
-      ${PgTheme.convertToCSS(theme.components.wallet.main.backdrop)};
+      ${PgTheme.toCss(theme.components.wallet.main.backdrop)};
     }
 
-    ${PgTheme.convertToCSS(theme.components.wallet.main.default)};
+    ${PgTheme.toCss(theme.components.wallet.main.default)};
   `}
 `;
 

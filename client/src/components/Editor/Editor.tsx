@@ -63,6 +63,6 @@ const Wrapper = styled.div`
       theme.views.main.default.bg};
     }
 
-    ${PgTheme.convertToCSS(theme.components.editor.wrapper)};
+    ${PgTheme.toCss(theme.components.editor.wrapper)};
   `}
 `;
