@@ -1,39 +1,9 @@
-// The only module that imports the Sentry SDK: everything else reports through the logger
-import * as Sentry from "@sentry/react";
-
-import type { Level } from "../severity";
-import type { LogEntry, LogProvider } from "../types";
-
-const SEVERITY: Record<Level, Sentry.SeverityLevel> = {
-  panic: "fatal",
-  error: "error",
-  warn: "warning",
-  info: "info",
-  debug: "debug",
-};
-
-const capture = (entry: LogEntry) =>
-  Sentry.withScope((scope) => {
-    scope.setLevel(SEVERITY[entry.level]);
-    // Sentry titles an exception by its own message, so the tag is what tells slices apart
-    scope.setTag("ns", entry.ns);
-    if (entry.context) scope.setExtras(entry.context);
-
-    if (entry.error) {
-      Sentry.captureException(
-        entry.error,
-        entry.unhandled
-          ? { mechanism: { handled: false, type: "auto.logger.global" } }
-          : undefined
-      );
-    } else {
-      Sentry.captureMessage(`[${entry.ns}] ${entry.message ?? ""}`);
-    }
-  });
+import { reporter } from "../../reporter";
+import type { LogProvider } from "../types";
 
 /**
- * Initialises Sentry and sends the entries marked `report` (see `isReported`).
- * Without a DSN it initialises nothing and sends nothing.
+ * Initialises the reporter and sends it the entries marked `report` (see
+ * `isReported`). Without a DSN it initialises nothing and sends nothing.
  */
 export const sentryProvider = ({
   dsn,
@@ -46,18 +16,11 @@ export const sentryProvider = ({
 }): LogProvider => {
   if (!dsn) return { log: () => {} };
 
-  Sentry.init({
-    dsn,
-    release,
-    environment,
-    // The logger installs its own global handlers, so every error takes one path
-    integrations: (defaults) =>
-      defaults.filter((integration) => integration.name !== "GlobalHandlers"),
-  });
+  reporter.init({ dsn, release, environment });
 
   return {
     log: (entry) => {
-      if (entry.report) capture(entry);
+      if (entry.report) reporter.capture(entry);
     },
   };
 };

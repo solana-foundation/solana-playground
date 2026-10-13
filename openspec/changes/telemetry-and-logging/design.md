@@ -61,9 +61,13 @@ and the level set and error handling of its
    reaches `document`, `model/` and `utils/` code has no element, and
    `detail` is untyped.
 
-6. **Sentry is a logger provider.** `providers/sentry.ts` is the only file
-   that imports `@sentry/react`; it initialises Sentry and is a no-op without
-   a DSN. _Rejected:_ a separate `shared/lib/sentry` beside the logger.
+6. **Sentry is a logger provider.** `providers/sentry.ts` is the logger's
+   only route to Sentry: no other logger provider reaches it. It initialises
+   Sentry and is a no-op without a DSN. _Revised:_ the provider first made
+   the SDK calls itself, and a separate Sentry module beside the logger was
+   rejected; the calls now live in a shared Sentry module the provider
+   delegates to, so every use of Sentry in the browser shares one SDK client.
+   _Rejected:_ a second logger provider that reaches Sentry on its own.
 
 7. **Namespace: a default, an option, a bound logger.**
 

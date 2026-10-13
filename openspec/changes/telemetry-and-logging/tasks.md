@@ -38,17 +38,21 @@ the same time; section 3 follows both.
       `LoggerErrorBoundary` at the app root, initialised by the
       `widgets/observability` widget; bundle-size change recorded in the PR
       (ticket to file; after 2.1)
-- [ ] 2.3 Source maps: upload with `sentry-cli` in `client-v2.yml`, remove
-      `.map` files before deploy. A person creates the Sentry project and sets
-      `REACT_APP_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG` and
-      `SENTRY_PROJECT` in Vercel and CI (ticket to file; after 2.2)
+- [x] 2.3 Source maps: production builds, and previews with
+      `SOURCEMAPS_PREVIEW_ENABLED=true`, emit hidden maps
+      (`scripts/sourcemap-gate.mjs`); the last step of `build:bundle`,
+      `scripts/upload-sourcemaps.mjs`, uploads them with `sentry-cli` from the
+      Vercel build and deletes every `.map` before deploy. The Sentry org and
+      project are named in the script; a person sets `REACT_APP_SENTRY_DSN`
+      and `SENTRY_AUTH_TOKEN` in Vercel. CI emits no maps and needs neither
+      (HOO-2041; after 2.2)
 - [x] 2.4 `features/persistence/model/diagnostics.ts` reports through
       `createLogger("persistence:diagnostics")` with `report: true`; the
       in-memory failure list and `__pgSyncDiagnostics` stay (ticket to file;
       after 2.1)
-- [ ] 2.5 ESLint inside the layers: `no-console` except the console provider,
-      `no-restricted-imports` for `@sentry/*` except the Sentry provider
-      (HOO-1897; after 2.2)
+- [ ] 2.5 ESLint inside the layers: `no-console` except the console provider;
+      `no-restricted-imports` for `@sentry/*` in the logger's providers
+      except the Sentry provider (HOO-1897; after 2.2)
 
 ## 3. Rules
 

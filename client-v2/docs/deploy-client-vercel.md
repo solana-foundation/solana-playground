@@ -62,7 +62,7 @@ Rolling back the deployment (`vercel promote <previous-url> --prod`) does not
 roll back the schema. Migrations are additive so far, so the previous build
 runs against the newer schema; revisit this once one is not.
 
-`installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `yarn build`. Wasm must precede `yarn install` because `client-v2/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
+`installCommand` = `bash scripts/vercel-install.sh` (rustup + `wasm/build.sh` + `yarn install`); `buildCommand` = `yarn build:bundle`, not `yarn build`, which would compile the wasm packages a second time and miss the install step's cache. Wasm must precede `yarn install` because `client-v2/package.json` has `file://../wasm/*/pkg` deps that don't exist until `wasm-pack` runs.
 
 ## Verified Vercel project settings
 

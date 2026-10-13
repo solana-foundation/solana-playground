@@ -1,5 +1,5 @@
 // Which builds carry and initialise Sentry. craco.config.js swaps the Sentry
-// provider for a do-nothing stub in every other build, so the SDK is not
+// reporter for a stub that sends nothing in every other build, so the SDK is not
 // bundled there at all.
 
 /**

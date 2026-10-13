@@ -75,16 +75,18 @@ SHALL print only entries at or above its threshold: `debug` in development,
 
 ### Requirement: Sentry receives reported entries through one provider
 
-Only `shared/lib/logger/providers/sentry.ts` SHALL import `@sentry/*`. The
-Sentry provider SHALL send every `panic` entry, and every `error` or `warn`
+The logger SHALL reach Sentry only through
+`shared/lib/logger/providers/sentry.ts`; no other logger provider SHALL
+import `@sentry/*`. The Sentry provider SHALL send every `panic` entry, and
+every `error` or `warn`
 entry logged with `report: true`, and no `info` or `debug` entry. It SHALL set
 the tag `ns` to the entry's namespace, and SHALL do nothing when
 `REACT_APP_SENTRY_DSN` is unset.
 
-#### Scenario: A Sentry import outside the provider
+#### Scenario: A Sentry import in another logger provider
 
-- **WHEN** a file under `src/{features,shared,entities,widgets}/` other than
-  the Sentry provider imports `@sentry/react`
+- **WHEN** a file under `shared/lib/logger/providers/` other than the Sentry
+  provider imports `@sentry/react`
 - **THEN** `yarn lint` fails
 
 #### Scenario: An error not marked for reporting

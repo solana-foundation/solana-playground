@@ -88,7 +88,8 @@ services:
   client-v2-prod:
     <<: *client-v2
     image: solana-playground-client-v2-prod
-    command: ["sh", "-c", "yarn build && npx serve -s build"]
+    # The image carries prebuilt wasm/*/pkg and no Rust toolchain, which `yarn build` needs
+    command: ["sh", "-c", "yarn build:bundle && npx serve -s build"]
     profiles:
       - v2-prod
 

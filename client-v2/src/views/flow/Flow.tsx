@@ -25,6 +25,7 @@ import { PgDeployHistory } from "./state/deploy-history";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import type { FlowState } from "./state/stage";
 import { GAP } from "./tokens";
+import { FeedbackWidget } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Assistant from "@/views/sidebar/assistant/Component";
 import ModalBackdrop from "@/components/ModalBackdrop";
@@ -214,6 +215,7 @@ const Flow = () => {
       />
 
       <Wallet />
+      <FeedbackWidget />
       <PortalAbove id={PgView.ids.PORTAL_ABOVE} />
       <StyledModalBackdrop />
       <PortalBelow id={PgView.ids.PORTAL_BELOW}>

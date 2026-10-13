@@ -15,6 +15,9 @@
 .env
 .env*.local
 .env.production
+# The Sentry wizard writes an auth token into these
+.env.sentry-build-plugin
+.sentryclirc
 */deploy.sh
 
 */npm-debug.log*

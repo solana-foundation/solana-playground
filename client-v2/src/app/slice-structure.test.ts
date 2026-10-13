@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
-import { join } from "path";
+import { join, relative } from "path";
 import ts from "typescript";
 // `@types/mocha` also declares a global `it`, without `each`
 import { expect, it } from "vitest";
@@ -60,6 +60,31 @@ const undocumentedEvents = (file: string): string[] => {
       .map((member) => member.name?.getText(source) ?? "<unnamed>");
   });
 };
+
+/** The one browser module allowed to import the Sentry SDK; craco swaps it out of builds without Sentry */
+const SENTRY_IMPORTER = join("shared", "lib", "reporter", "sentry.ts");
+
+/** Every file under `dir`, as a path relative to `SRC` */
+const filesUnder = (dir: string): string[] =>
+  readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+    entry.isDirectory()
+      ? filesUnder(join(dir, entry.name))
+      : [relative(SRC, join(dir, entry.name))]
+  );
+
+/** Non-test source files under `src` that import `@sentry/react` */
+const sentryImporters = () =>
+  filesUnder(SRC)
+    .filter((file) => /\.(tsx?|mjs)$/.test(file) && !/\.test\./.test(file))
+    .filter((file) =>
+      /from\s+["']@sentry\/react["']|import\(\s*["']@sentry\/react["']/.test(
+        readFileSync(join(SRC, file), "utf8")
+      )
+    );
+
+it("should import @sentry/react only from the reporter", () => {
+  expect(sentryImporters()).toEqual([SENTRY_IMPORTER]);
+});
 
 it("should find the slices it checks", () => {
   expect(slices()).toContain(join("features", "auth"));
