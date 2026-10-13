@@ -11,7 +11,7 @@ The product with Studio over it: https://solana-playground-ds.vercel.app/#app
 | ---------------------------- | --------------------------------------------------------------------------------------------------------- |
 | `src/styles/tokens.css`      | The tokens. `:root` is paper, `.dark` is the product                                                      |
 | `src/styles/theme.css`       | The tokens as Tailwind utilities, and the product utilities: `frosted`, `gradient-stroke`, `brand-action` |
-| `src/components/ui/`         | 60 stock shadcn components, untouched, and 26 of ours                                                     |
+| `src/components/ui/`         | 60 stock shadcn components, untouched, and 27 of ours                                                     |
 | `src/hooks/use-indicator.ts` | The measured thumb that Stepper and Segmented slide                                                       |
 | `src/ds/`                    | The page itself: foundations, one block per component, the migration map                                  |
 | `registry.json`              | Our components, for `npx shadcn add`                                                                      |

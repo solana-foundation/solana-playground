@@ -334,6 +334,14 @@ const otherDeviceDeleted = (id: string) => {
 
 const HELLO = { id: "tut:hello-anchor", name: "Hello Anchor" };
 
+/** A divergent conflict on `paths`, carrying a file conflict for each */
+const divergentOn = (projectId: string, paths: string[]) => ({
+  projectId,
+  kind: "divergent",
+  paths,
+  files: paths.map((path) => expect.objectContaining({ path })),
+});
+
 describe("a tutorial started on one browser, opened on another", () => {
   beforeEach(setUp);
   afterEach(() => vi.restoreAllMocks());
@@ -385,11 +393,7 @@ describe("a tutorial started on one browser, opened on another", () => {
     const result = await reconcile();
 
     expect(result.conflicts).toEqual([
-      {
-        projectId: "tut:hello-anchor",
-        kind: "divergent",
-        paths: ["src/lib.rs"],
-      },
+      divergentOn("tut:hello-anchor", ["src/lib.rs"]),
     ]);
     expect(replace).not.toHaveBeenCalled();
   });
@@ -423,9 +427,7 @@ describe("work that never reached the server", () => {
     const result = await reconcile();
 
     expect(replace).not.toHaveBeenCalled();
-    expect(result.conflicts).toEqual([
-      { projectId: HELLO.id, kind: "divergent", paths: ["src/lib.rs"] },
-    ]);
+    expect(result.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
   });
 
   it("stops being retried, instead of 409ing for the life of the page", async () => {
@@ -608,11 +610,20 @@ describe("both devices changed it", () => {
 
     expect(await PgProjectSync.pushCurrent()).toBe("conflict");
 
-    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual({
-      projectId: HELLO.id,
-      kind: "divergent",
-      paths: ["src/lib.rs"],
-    });
+    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual(
+      divergentOn(HELLO.id, ["src/lib.rs"])
+    );
+    // Only the line both changed is in question
+    expect(PgProjectSync.conflictFor(HELLO.id)?.files).toEqual([
+      expect.objectContaining({
+        kind: "lines",
+        chunks: [
+          { kind: "settled", lines: ["a"] },
+          { kind: "conflict", base: ["b"], ours: ["mine"], theirs: ["theirs"] },
+          { kind: "settled", lines: ["c", "d", "e", ""] },
+        ],
+      }),
+    ]);
     // Nothing is written until the user answers
     expect(replace).not.toHaveBeenCalled();
 
@@ -675,13 +686,73 @@ describe("both devices changed it", () => {
     // cover `tests/t.rs`
     expect(await PgProjectSync.resolve(HELLO.id, "keep-local")).toBe(false);
 
-    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual({
-      projectId: HELLO.id,
-      kind: "divergent",
-      paths: ["src/lib.rs", "tests/t.rs"],
-    });
+    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual(
+      divergentOn(HELLO.id, ["src/lib.rs", "tests/t.rs"])
+    );
     expect(replace).not.toHaveBeenCalled();
     expect(server.get(HELLO.id)!.snapshot).toEqual({ files: theirs });
+  });
+
+  it("uploads what the user resolved line by line, and the other device takes it without asking", async () => {
+    const theirs = "a\ntheirs\nc\nd\ne\n";
+    await startFrom({ "src/lib.rs": base }, { "src/lib.rs": theirs });
+    // What the other device last agreed with the account: its own write
+    const theirsAt = server.get(HELLO.id)!.updatedAt;
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nmine\nc\nd\ne\n" });
+    captureWrites();
+    expect(await PgProjectSync.pushCurrent()).toBe("conflict");
+
+    // Hunk by hunk, as the view does it: every settled line, and both sides
+    // of each conflict, this device's first
+    const [file] = PgProjectSync.conflictFor(HELLO.id)!.files!;
+    if (file.kind !== "lines") throw new Error("expected a line conflict");
+    const content = file.chunks
+      .flatMap((chunk) =>
+        chunk.kind === "settled" ? chunk.lines : chunk.ours.concat(chunk.theirs)
+      )
+      .join("\n");
+    expect(content).toBe("a\nmine\ntheirs\nc\nd\ne\n");
+
+    expect(
+      await PgProjectSync.resolve(HELLO.id, {
+        kind: "resolved",
+        files: {
+          "src/lib.rs": {
+            content,
+            localHash: file.localHash,
+            serverHash: file.serverHash,
+          },
+        },
+      })
+    ).toBe(true);
+    expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": content },
+    });
+
+    // The other device, still holding its own copy and its own agreement
+    asFreshDevice([HELLO], theirs);
+    await PgSyncMark.write(HELLO.id, {
+      files: { "src/lib.rs": await sha256(theirs) },
+      name: HELLO.name,
+      updatedAt: theirsAt,
+      dirty: false,
+    });
+    const replace = captureWrites();
+    const uploads = () =>
+      (global.fetch as Mock).mock.calls.filter(
+        ([, init]) => init?.method === "PUT"
+      ).length;
+    const before = uploads();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(result.replaced).toEqual([HELLO.name]);
+    expect(replace).toHaveBeenCalledWith(HELLO.name, { "src/lib.rs": content });
+    expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+    expect(uploads()).toBe(before);
+    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
   });
 
   // Separate files, so the merge needs no base content: these call the merge
@@ -1365,9 +1436,7 @@ describe("a device upgraded from whole-snapshot marks", () => {
 
     const second = await reconcile();
 
-    expect(second.conflicts).toEqual([
-      { projectId: HELLO.id, kind: "divergent", paths: ["src/lib.rs"] },
-    ]);
+    expect(second.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
     expect(puts()).toEqual([]);
     expect(await PgProjectSync.resolve(HELLO.id, "keep-local")).toBe(true);
     expect(serverFiles()).toEqual({
@@ -1393,9 +1462,7 @@ describe("a device upgraded from whole-snapshot marks", () => {
 
     const result = await reconcile();
 
-    expect(result.conflicts).toEqual([
-      { projectId: HELLO.id, kind: "divergent", paths: ["src/lib.rs"] },
-    ]);
+    expect(result.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
     expect(replace).not.toHaveBeenCalled();
     expect(puts()).toEqual([]);
 

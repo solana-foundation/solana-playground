@@ -166,7 +166,12 @@ describe("reconcile", () => {
 
     expect(replace).not.toHaveBeenCalled();
     expect(result.conflicts).toEqual([
-      { projectId: "p1", kind: "divergent", paths: ["src/lib.rs"] },
+      {
+        projectId: "p1",
+        kind: "divergent",
+        paths: ["src/lib.rs"],
+        files: [expect.objectContaining({ path: "src/lib.rs" })],
+      },
     ]);
     expect(PgProjectSync.conflictFor("p1")).not.toBeNull();
   });

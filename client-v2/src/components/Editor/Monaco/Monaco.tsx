@@ -6,6 +6,7 @@ import { applyReadOnly, executeProductEdits } from "./read-only";
 import { editorBuffersOf } from "./editor-buffers";
 import { initLanguages } from "./languages";
 import { SpinnerWithBg } from "../../Loading";
+import { isMergeModel } from "../../../features/persistence/ui/merge-editor/scheme";
 import {
   PgCommand,
   PgCommon,
@@ -332,6 +333,8 @@ const Monaco = () => {
           .getModels()
           .filter((model) => {
             return (
+              // The resolve view's panes are its own, and it disposes them
+              !isMergeModel(model.uri) &&
               // Only check client and tests dir otherwise `target/types` model
               // will also get disposed
               (model.uri.path.includes(PgExplorer.PATHS.CLIENT_DIRNAME) ||

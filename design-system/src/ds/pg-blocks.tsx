@@ -86,6 +86,33 @@ import { Kbd } from "@/components/ui/kbd"
 import { Logo, LogoMark, LogoText } from "@/components/ui/logo"
 import { MenuFold, MenuFoldChevron, MenuFoldContent, MenuFoldTrigger, MenuItemDescription, MenuItemText, MenuNote } from "@/components/ui/menu-extras"
 import {
+  Merge,
+  type MergeBand,
+  MergeCount,
+  MergeFold,
+  MergeFooter,
+  MergeFooterActions,
+  MergeFooterShortcuts,
+  MergeHunkAction,
+  MergeHunkActions,
+  MergeHunkBar,
+  MergeHunkBarSide,
+  MergeHunkGutter,
+  mergeHunkOrder,
+  mergeHunkVariants,
+  type MergeHunkState,
+  MergeNav,
+  MergePane,
+  MergePaneBody,
+  MergePaneHeader,
+  MergePanes,
+  MergePaneTabs,
+  MergeRibbon,
+  MergeShowAll,
+  MergeTitle,
+  MergeToolbar,
+} from "@/components/ui/merge"
+import {
   Modal,
   ModalBody,
   ModalContent,
@@ -124,6 +151,7 @@ import { StepRail, StepRailIndicator, StepRailItem, StepRailMeta, StepRailTitle 
 import { Stepper, StepperItem, StepperList } from "@/components/ui/stepper"
 import { levelVariant, Tag } from "@/components/ui/tag"
 import { Terminal, TerminalCaret, TerminalLine } from "@/components/ui/terminal"
+import { cn } from "@/lib/utils"
 
 import { Block, More } from "./parts"
 
@@ -132,15 +160,35 @@ import { Block, More } from "./parts"
 const KEYWORDS = new Set(["use", "pub", "fn", "mod", "let", "mut", "struct", "impl", "return", "self", "super"])
 const TYPES = new Set(["Context", "Result", "Program", "Signer", "Account", "u64", "String", "Initialize", "Ok"])
 
-function highlight(line: string) {
-  if (line.trim().startsWith("//")) return <span className="text-syntax-comment">{line}</span>
+const SYNTAX = {
+  comment: "text-syntax-comment",
+  keyword: "text-syntax-keyword",
+  type: "text-syntax-type",
+  number: "text-syntax-number",
+  function: "text-syntax-function",
+  string: "text-syntax-string",
+}
+
+/* The syntax colours are tuned for the product's dark ground; on paper the
+   status inks stand in, so a specimen drawn in both reads in both */
+const SYNTAX_BOTH = {
+  comment: "text-muted-foreground dark:text-syntax-comment",
+  keyword: "text-primary dark:text-syntax-keyword",
+  type: "text-info dark:text-syntax-type",
+  number: "text-primary dark:text-syntax-number",
+  function: "text-success dark:text-syntax-function",
+  string: "text-warning dark:text-syntax-string",
+}
+
+function highlight(line: string, palette: typeof SYNTAX = SYNTAX) {
+  if (line.trim().startsWith("//")) return <span className={palette.comment}>{line}</span>
   const parts = line.split(/(\s+|[(){}<>;:,.!#[\]&'"]+)/)
   return parts.map((part, i) => {
-    if (KEYWORDS.has(part)) return <span key={i} className="text-syntax-keyword">{part}</span>
-    if (TYPES.has(part)) return <span key={i} className="text-syntax-type">{part}</span>
-    if (/^\d+$/.test(part)) return <span key={i} className="text-syntax-number">{part}</span>
-    if (/^[a-z_]+$/.test(part) && parts[i + 1]?.startsWith("(")) return <span key={i} className="text-syntax-function">{part}</span>
-    if (/^"/.test(parts[i - 1] ?? "") && part && !/^"/.test(part)) return <span key={i} className="text-syntax-string">{part}</span>
+    if (KEYWORDS.has(part)) return <span key={i} className={palette.keyword}>{part}</span>
+    if (TYPES.has(part)) return <span key={i} className={palette.type}>{part}</span>
+    if (/^\d+$/.test(part)) return <span key={i} className={palette.number}>{part}</span>
+    if (/^[a-z_]+$/.test(part) && parts[i + 1]?.startsWith("(")) return <span key={i} className={palette.function}>{part}</span>
+    if (/"$/.test(parts[i - 1] ?? "") && part && !/^"/.test(part)) return <span key={i} className={palette.string}>{part}</span>
     return <span key={i}>{part}</span>
   })
 }
@@ -158,6 +206,239 @@ pub mod hello_anchor {
 }`
 
 const PROGRAM_ID = "7Hq5vRw1yJmZ9bX3cDfE8sLkT2nA4uPqWe6oGhK1Xk2P"
+
+/* ── the merge specimen ───────────────────────────────────────────────────
+   Static lines where the app mounts its editors. A row is a line in each
+   pane, a spacer (null) where one side has fewer lines, or a fold. The
+   ribbons' offsets are worked out from the rows, as the app works them out
+   from its editors. */
+
+type MergeCell = { text: string; state?: MergeHunkState; actions?: React.ReactNode } | null
+type MergeRow = { fold: number } | { bar: true } | { left: MergeCell; result: MergeCell; right: MergeCell }
+
+const LINE = 20
+const FOLD = 24
+const BAR = 44
+const PAD = 4
+
+const same = (text: string): MergeRow => ({ left: { text }, result: { text }, right: { text } })
+
+function rowTop(rows: MergeRow[], index: number) {
+  return PAD + rows.slice(0, index).reduce((y, row) => y + ("fold" in row ? FOLD : "bar" in row ? BAR : LINE), 0)
+}
+
+/* A band from `lines` rows at `index` on one side to `toLines` on the other */
+function band(rows: MergeRow[], index: number, lines: number, toLines: number, state: MergeHunkState): MergeBand {
+  const top = rowTop(rows, index)
+  return { fromTop: top, fromBottom: top + lines * LINE, toTop: top, toBottom: top + toLines * LINE, state }
+}
+
+/* A side's pair, mirrored about the result: × » on the left, « × on the right */
+const hunkPair = (from: "left" | "right") =>
+  mergeHunkOrder[from].map((action) => (
+    <MergeHunkAction key={`${from}-${action}`} action={action} from={from} hunk="conflict 1 of 1" />
+  ))
+
+const TAKE_LEFT = (
+  <MergeHunkActions hunk="conflict 1 of 1" state="conflict">
+    {hunkPair("left")}
+  </MergeHunkActions>
+)
+
+const TAKE_RIGHT = (
+  <MergeHunkActions hunk="conflict 1 of 1" state="conflict">
+    {hunkPair("right")}
+  </MergeHunkActions>
+)
+
+/* At phone width the result carries both sides' controls, in a row under the hunk */
+const HUNK_BAR = (
+  <MergeHunkBar hunk="conflict 1 of 1" state="conflict">
+    <MergeHunkBarSide side="left">{hunkPair("left")}</MergeHunkBarSide>
+    <MergeHunkBarSide side="right">{hunkPair("right")}</MergeHunkBarSide>
+  </MergeHunkBar>
+)
+
+function conflictRows(phone = false): MergeRow[] {
+  return [
+    same("use anchor_lang::prelude::*;"),
+    same(""),
+    {
+      left: { text: 'declare_id!("Fg6P…sLnS");' },
+      result: { text: 'declare_id!("7Hq5…Xk2P");', state: "changed" },
+      right: { text: 'declare_id!("7Hq5…Xk2P");', state: "changed" },
+    },
+    same(""),
+    { fold: 24 },
+    same("#[program]"),
+    same("pub mod hello_anchor {"),
+    same("    use super::*;"),
+    same("    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {"),
+    {
+      left: { text: '        msg!("Hi");', state: "conflict", actions: TAKE_LEFT },
+      result: { text: '        msg!("Greetings");', state: "conflict" },
+      right: { text: '        msg!("Hello");', state: "conflict", actions: TAKE_RIGHT },
+    },
+    { left: null, result: null, right: { text: '        msg!("Welcome back");', state: "conflict" } },
+    ...(phone ? [{ bar: true } as const] : []),
+    same("        Ok(())"),
+    same("    }"),
+    same("}"),
+  ]
+}
+
+const CONFLICT_ROWS = conflictRows()
+const CONFLICT_LEFT = [band(CONFLICT_ROWS, 9, 1, 1, "conflict")]
+const CONFLICT_RIGHT = [band(CONFLICT_ROWS, 2, 1, 1, "changed"), band(CONFLICT_ROWS, 9, 1, 2, "conflict")]
+
+/* The same hunk, decided: this device's line taken, the other's dismissed */
+const DECIDED_ROWS: MergeRow[] = [
+  same("    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {"),
+  {
+    left: { text: '        msg!("Hi");', state: "resolved" },
+    result: { text: '        msg!("Hi");', state: "resolved" },
+    right: { text: '        msg!("Hello");', state: "dismissed" },
+  },
+  { left: null, result: null, right: { text: '        msg!("Welcome back");', state: "dismissed" } },
+  same("        Ok(())"),
+  same("    }"),
+]
+const DECIDED_LEFT = [band(DECIDED_ROWS, 1, 1, 1, "resolved")]
+const DECIDED_RIGHT = [band(DECIDED_ROWS, 1, 1, 2, "dismissed")]
+
+/* A file the other device deleted and this one edited: the whole file is
+   one hunk, and the other side is an empty pane that says so */
+const DELETED_ROWS: MergeRow[] = [
+  "use anchor_lang::prelude::*;",
+  "",
+  "pub fn legacy_greeting() -> &'static str {",
+  '    "Hi"',
+  "}",
+].map((text, i): MergeRow => ({
+  left: { text, state: "conflict", actions: i === 0 ? TAKE_LEFT : undefined },
+  result: { text, state: "conflict" },
+  right: null,
+}))
+const DELETED_LEFT = [band(DELETED_ROWS, 0, 5, 5, "conflict")]
+const DELETED_RIGHT = [band(DELETED_ROWS, 0, 5, 0, "conflict")]
+
+function MergeLines({ rows, side, start = 1 }: { rows: MergeRow[]; side: "left" | "result" | "right"; start?: number }) {
+  /* each row's line number in this pane: a fold skips its lines, a spacer has none */
+  const lines = (row: MergeRow) => ("fold" in row ? row.fold : "bar" in row ? 0 : row[side] ? 1 : 0)
+  const numbers = rows.map((_, i) => start + rows.slice(0, i).reduce((n, row) => n + lines(row), 0))
+  return (
+    <div className="min-w-0 flex-1 py-1 font-mono text-[0.8125rem] leading-5">
+      {rows.map((row, i) => {
+        if ("fold" in row) return <MergeFold key={i} count={row.fold} />
+        if ("bar" in row) return side === "result" ? <div key={i}>{HUNK_BAR}</div> : null
+        const cell = row[side]
+        /* a spacer only aligns panes side by side; one pane at a time needs none */
+        if (!cell) return <div key={i} className="h-5 @max-3xl/merge:hidden" />
+        const number = numbers[i]
+        return (
+          <div key={i} className={cn("relative flex h-5 items-center", cell.state && mergeHunkVariants({ state: cell.state }))}>
+            <span className="flex w-10 shrink-0 items-center justify-end pr-3 text-xs text-subtle tabular-nums select-none">{number}</span>
+            <code className="min-w-0 flex-1 overflow-hidden whitespace-pre text-foreground">{highlight(cell.text, SYNTAX_BOTH)}</code>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+/* Each side's controls for one hunk */
+const TAKE = { left: TAKE_LEFT, right: TAKE_RIGHT }
+
+/* A row's controls on one side; a fold or a bar row has none */
+const rowActions = (row: MergeRow, side: "left" | "right") => ("fold" in row || "bar" in row ? undefined : row[side]?.actions)
+
+/* A side's hunk controls in its gutter, each at its row's height. A side
+   that deleted the file has no lines, but its one hunk -- the whole file --
+   is still taken or dismissed from the top of its gutter, as in the app */
+function MergeGutter({ rows, side, deleted = false }: { rows: MergeRow[]; side: "left" | "right"; deleted?: boolean }) {
+  return (
+    <MergeHunkGutter>
+      {rows.map((row, i) => {
+        const actions = deleted ? i === 0 && TAKE[side] : rowActions(row, side)
+        if (!actions) return null
+        return (
+          <div key={i} className="absolute inset-x-0 flex items-center justify-center" style={{ top: rowTop(rows, i), height: LINE }}>
+            {actions}
+          </div>
+        )
+      })}
+    </MergeHunkGutter>
+  )
+}
+
+function MergeSpecimen({
+  rows,
+  left,
+  right,
+  start,
+  count,
+  phone = false,
+  path = "src/lib.rs",
+  deletedRight = false,
+}: {
+  rows: MergeRow[]
+  left: MergeBand[]
+  right: MergeBand[]
+  start?: number
+  count: number
+  phone?: boolean
+  path?: string
+  deletedRight?: boolean
+}) {
+  return (
+    <Merge>
+      <MergeToolbar>
+        <MergeNav to="previous-file" disabled />
+        <MergeNav to="next-file" />
+        <MergeTitle path={path} index={1} total={2} />
+        <MergeCount count={count} />
+        <MergeNav to="previous-conflict" disabled={count === 0} />
+        <MergeNav to="next-conflict" disabled={count === 0} />
+        <MergeShowAll />
+      </MergeToolbar>
+      <MergePaneTabs />
+      <MergePanes>
+        <MergePane side="left">
+          <MergePaneHeader />
+          <MergePaneBody>
+            <MergeLines rows={rows} side="left" start={start} />
+            <MergeGutter rows={rows} side="left" />
+          </MergePaneBody>
+        </MergePane>
+        <MergeRibbon bands={left} />
+        <MergePane side="result">
+          <MergePaneHeader />
+          <MergePaneBody>
+            <MergeLines rows={phone ? conflictRows(true) : rows} side="result" start={start} />
+          </MergePaneBody>
+        </MergePane>
+        <MergeRibbon bands={right} />
+        <MergePane side="right" deleted={deletedRight}>
+          <MergePaneHeader />
+          <MergePaneBody>
+            <MergeGutter rows={rows} side="right" deleted={deletedRight} />
+            {!deletedRight && <MergeLines rows={rows} side="right" start={start} />}
+          </MergePaneBody>
+        </MergePane>
+      </MergePanes>
+      <MergeFooter>
+        <MergeFooterShortcuts>
+          <Button size="sm" variant="outline">Keep this version</Button>
+          <Button size="sm" variant="outline">Take the other version</Button>
+        </MergeFooterShortcuts>
+        <MergeFooterActions>
+          <Button size="sm" variant="ghost">Cancel</Button>
+          <Button size="sm" disabled={count > 0}>Apply</Button>
+        </MergeFooterActions>
+      </MergeFooter>
+    </Merge>
+  )
+}
 
 /* ── the components ────────────────────────────────────────────────────── */
 
@@ -402,6 +683,52 @@ function PlaygroundComponents() {
             <Button size="sm" variant="ghost">Discard</Button>
           </DiffFooter>
         </Diff>
+      </Block>
+
+      <Block
+        id="merge"
+        title="Merge"
+        source="playground"
+        registry="merge"
+        note="Two devices changed the same lines, and the merge will not choose for you. This device on the left, the other device on the right, the result between, each hunk joined across by a ribbon: red is yours to decide, blue merged on its own, green taken, grey left out. » and « take a side's lines, × leaves them out. It draws; the editors in the panes are the app's. In a narrow box it shows one pane at a time."
+        className="block"
+        more={
+          <>
+            <More label="Decided: this device's line taken, the other device's dismissed" className="block">
+              <div className="h-64 max-w-5xl overflow-hidden rounded-2xl border border-border-strong bg-surface-panel">
+                <MergeSpecimen rows={DECIDED_ROWS} left={DECIDED_LEFT} right={DECIDED_RIGHT} start={32} count={0} />
+              </div>
+            </More>
+            <More label="Deleted on the other device, edited here: the whole file is one hunk" className="block">
+              <div className="h-64 max-w-5xl overflow-hidden rounded-2xl border border-border-strong bg-surface-panel">
+                <MergeSpecimen rows={DELETED_ROWS} left={DELETED_LEFT} right={DELETED_RIGHT} count={1} path="src/legacy.rs" deletedRight />
+              </div>
+            </More>
+            <More label="On a phone, 390 px: one pane at a time, the result carrying both sides' controls" className="block">
+              <div className="h-[34rem] w-[390px] max-w-full overflow-hidden rounded-2xl border border-border-strong bg-surface-panel">
+                <MergeSpecimen rows={CONFLICT_ROWS} left={CONFLICT_LEFT} right={CONFLICT_RIGHT} count={1} phone />
+              </div>
+            </More>
+            <More label="In the wide modal">
+              <Modal>
+                <ModalTrigger asChild>
+                  <Button variant="outline">Resolve…</Button>
+                </ModalTrigger>
+                <ModalContent size="wide" className="md:h-[min(40rem,calc(100dvh-4rem))]">
+                  <ModalHeader>
+                    <ModalTitle>Resolve conflicts</ModalTitle>
+                    <ModalDescription className="sr-only">Both devices changed the same lines of src/lib.rs.</ModalDescription>
+                  </ModalHeader>
+                  <MergeSpecimen rows={CONFLICT_ROWS} left={CONFLICT_LEFT} right={CONFLICT_RIGHT} count={1} />
+                </ModalContent>
+              </Modal>
+            </More>
+          </>
+        }
+      >
+        <div className="h-[30rem] max-w-5xl overflow-hidden rounded-2xl border border-border-strong bg-surface-panel">
+          <MergeSpecimen rows={CONFLICT_ROWS} left={CONFLICT_LEFT} right={CONFLICT_RIGHT} count={1} />
+        </div>
       </Block>
 
       <Block id="callout" title="Callout" source="playground" registry="callout" note="A note in a page or a form: a tint and a hairline, calm enough to read past. Alert speaks for the whole page. A callout speaks for the place it sits." className="block">

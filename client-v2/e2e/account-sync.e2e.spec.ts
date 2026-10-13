@@ -3,7 +3,15 @@ import { join } from "path";
 import { expect, test } from "@playwright/test";
 import { isUuid } from "../src/shared/lib/ids";
 import type { Page, Route } from "@playwright/test";
-import { applyWrite, hasDefaultBackend } from "./fixtures";
+import {
+  applyWrite,
+  hasDefaultBackend,
+  json,
+  LONG,
+  makeLocalProject,
+  settled,
+  workspaceIdOf,
+} from "./fixtures";
 
 /**
  * What a signed-in browser does with an account it has never seen.
@@ -18,8 +26,6 @@ import { applyWrite, hasDefaultBackend } from "./fixtures";
  * The server's side of the same contract is covered against a real database in
  * `src/features/persistence/model/projects.test.mjs`.
  */
-
-const LONG = { timeout: 60_000 };
 
 const TUTORIAL = {
   id: "tut:hello-anchor",
@@ -148,114 +154,6 @@ test("the conversation is on screen before a backend is picked", async ({
     await expect(connect).toHaveText("Start");
   }
 });
-
-const json = (r: Route, body: unknown) =>
-  r.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(body),
-  });
-
-/**
- * Wait until the browser has stopped uploading.
- *
- * A first sign-in is not one write. `program-info.json` is written after the
- * workspace opens, asynchronously and by something other than the editor, so
- * it lands after the first push and schedules its own -- and until that one
- * has been accepted the sync mark describes a snapshot without it. Reloading
- * inside that window is a race, and the losing side looks exactly like a real
- * divergence.
- */
-const settled = async (page: Page, writes: unknown[]) => {
-  let last = -1;
-  while (last !== writes.length) {
-    last = writes.length;
-    await page.waitForTimeout(4000);
-  }
-};
-
-/**
- * The id the explorer gave a workspace, read off its config in IndexedDB.
- *
- * From the store rather than from a handle on the page, which has none for
- * it: the assistant's is the conversation's id, which has not been the
- * workspace's since a project could hold several conversations. Every value
- * is tried, because the volume keeps file contents by inode and the config
- * is simply the one that parses as a workspace list naming this project.
- */
-const workspaceIdOf = (page: Page, name: string) =>
-  page.evaluate(async (name) => {
-    const dbs: Array<{ name?: string }> = await (
-      indexedDB as unknown as {
-        databases: () => Promise<Array<{ name?: string }>>;
-      }
-    ).databases();
-
-    for (const { name: dbName } of dbs) {
-      if (!dbName) continue;
-      const db: IDBDatabase = await new Promise((resolve, reject) => {
-        const request = indexedDB.open(dbName);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-
-      for (const store of Array.from(db.objectStoreNames)) {
-        const values: unknown[] = await new Promise((resolve) => {
-          const request = db
-            .transaction(store, "readonly")
-            .objectStore(store)
-            .getAll();
-          request.onsuccess = () => resolve(request.result);
-          request.onerror = () => resolve([]);
-        });
-
-        for (const value of values) {
-          try {
-            const text =
-              typeof value === "string"
-                ? value
-                : new TextDecoder().decode(value as ArrayBuffer);
-            const parsed = JSON.parse(text);
-            const found = (
-              parsed?.workspaces as Array<{ id: string; name: string }>
-            )?.find?.((w) => w.name === name);
-            if (found) {
-              db.close();
-              return found.id;
-            }
-          } catch {
-            // Not text, or not JSON: some other file, or the superblock
-          }
-        }
-      }
-      db.close();
-    }
-    return null;
-  }, name);
-
-/**
- * A project of this browser's own, to hand over and then reload against.
- *
- * @returns the workspace's id, which is what the account has to list it under
- * for the reload to be about this project. A different id is a project the
- * browser has never seen: it is imported beside this one as "<name>
- * imported", and everything the stub records is about the wrong project.
- */
-const makeLocalProject = async (page: Page, name: string) => {
-  await page.goto("/");
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill(name);
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
-
-  let id: string | null = null;
-  await expect
-    .poll(async () => (id = await workspaceIdOf(page, name)), LONG)
-    .toBeTruthy();
-  expect(isUuid(id!)).toBe(true);
-  return id!;
-};
 
 /** The same project is open again: not an imported copy beside it */
 const reopened = async (page: Page, id: string, name: string) => {

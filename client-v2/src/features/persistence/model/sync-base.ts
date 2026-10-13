@@ -50,6 +50,11 @@ export class PgSyncBase {
     PgSyncBase._shadow = { projectId, files: { ...files } };
   }
 
+  /** Whether a shadow of `projectId` is held, from an open or an upload */
+  static isTracking(projectId: string) {
+    return PgSyncBase._shadow?.projectId === projectId;
+  }
+
   static async read(projectId: string): Promise<BaseContents> {
     const userId = currentUserId();
     if (!userId) return {};

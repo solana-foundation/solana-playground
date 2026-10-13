@@ -705,6 +705,27 @@
       ]
     },
     {
+      "name": "merge",
+      "type": "registry:ui",
+      "title": "Merge",
+      "description": "Two devices' changes to the same lines, after IDEA's merge dialog: this device, the result and the other device, joined by ribbons, with take and dismiss on each hunk and one pane at a time at phone width. It draws; the editors in the panes are the app's.",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/segmented"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/merge.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "lucide-react",
+        "cn"
+      ]
+    },
+    {
       "name": "playground",
       "type": "registry:item",
       "title": "Everything",
@@ -736,7 +757,8 @@
         "@playground/menu-extras",
         "@playground/editor-tabs",
         "@playground/drop-zone",
-        "@playground/achievement"
+        "@playground/achievement",
+        "@playground/merge"
       ],
       "files": []
     }

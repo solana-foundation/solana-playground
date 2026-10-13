@@ -13,6 +13,14 @@
 @source "./";
 
 /*
+ * The design system's components in `shared/ui` (`yarn ds-add`): the
+ * enter/exit animations, and shadcn's `data-open`/`data-closed` variants
+ * that Radix's `data-state` needs.
+ */
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
  * The design system's tokens (`yarn ds-add playground-tokens`, never edited
  * here). `:root` is light; `.dark` on <html> is the product default, set by
  * `applyThemeMode`. The variant makes shadcn's `dark:` follow that class, not
@@ -22,6 +30,51 @@
 @import "./app/styles/playground-theme.css";
 
 @custom-variant dark (&:is(.dark *));
+
+/*
+ * The resolve view's hunk lines, and the lines a side changed on its own
+ * (`changed`), in Monaco, which keeps only plain class
+ * names on a decoration (`hunkLineClass` in features/persistence). Each is
+ * `mergeHunkVariants`' look for that state, so the editors and the ribbons
+ * change colour together; `hunk-class.test.ts` checks they still match.
+ */
+.pg-merge-hunk-conflict {
+  @apply bg-error/12 shadow-[inset_2px_0_0_var(--color-error)];
+}
+.pg-merge-hunk-changed {
+  @apply bg-info/10 shadow-[inset_2px_0_0_var(--color-info)];
+}
+.pg-merge-hunk-resolved {
+  @apply bg-success/10 shadow-[inset_2px_0_0_var(--color-success)];
+}
+.pg-merge-hunk-dismissed {
+  @apply bg-muted-foreground/8 shadow-[inset_2px_0_0_var(--color-muted-foreground)];
+}
+
+/*
+ * Without preflight, a design-system element would keep the browser's
+ * button face and border. This resets those elements only, as the design
+ * system's `inject.css` does for pages not built on it; `:where` keeps it
+ * at no specificity, so every utility still wins.
+ */
+@layer base {
+  :where([data-slot], [data-slot] *, [data-slot] ::before, [data-slot]
+      ::after) {
+    border: 0 solid;
+  }
+  :where([data-slot]) {
+    font-family: var(--font-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  :where([data-slot] button, [data-slot]
+      input, button[data-slot], input[data-slot]) {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    background-color: transparent;
+    border-radius: 0;
+  }
+}
 
 /*
  * This file's own reset sits in `base`, below `utilities`. Unlayered CSS

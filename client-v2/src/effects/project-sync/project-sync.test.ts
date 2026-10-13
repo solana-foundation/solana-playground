@@ -216,6 +216,39 @@ describe("the project-sync effect", () => {
 
     expect(track).toHaveBeenCalledWith("p1", { "src/lib.rs": "opened with" });
   });
+
+  it("remembers the files of the project already open when it starts", async () => {
+    vi.spyOn(snapshot, "snapshotOf").mockResolvedValue({
+      files: { "src/lib.rs": "opened with" },
+    } as never);
+    // A fresh page: nothing held yet
+    PgSyncBase.reset();
+    const track = vi.spyOn(PgSyncBase, "track");
+
+    // Mounted after the page load's switch has fired: `<Effects />` is
+    // delayed, so no switch event reaches it for the project on screen
+    effect = projectSync();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(track).toHaveBeenCalledWith("p1", { "src/lib.rs": "opened with" });
+  });
+
+  it("keeps a shadow an upload took before its own read landed", async () => {
+    vi.spyOn(snapshot, "snapshotOf").mockResolvedValue({
+      files: { "src/lib.rs": "edited since" },
+    } as never);
+    PgSyncBase.track("p1", { "src/lib.rs": "agreed" });
+    const track = vi.spyOn(PgSyncBase, "track");
+
+    effect = projectSync();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(track).not.toHaveBeenCalled();
+  });
 });
 
 describe("a tab that is not in front", () => {

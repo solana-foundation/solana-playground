@@ -105,9 +105,15 @@ export const projectSync = (): Disposable => {
    * This is where a merge's base content comes from: the next push compares
    * against the last agreement, and keeps the opened content of any file that
    * changed since. Taken on switch because that is the moment the in-memory
-   * copy is fresh -- the switch fires on every page load too.
+   * copy is fresh -- the switch fires on every page load too, though before
+   * this effect mounts, so the mount takes one as well.
+   *
+   * @param opts -
+   * - `keepHeld`: leave a shadow already held for the project. The mount's
+   *   read can land after an accepted upload took the agreement, and after an
+   *   edit, and replacing the one with the other loses that file's base.
    */
-  const shadow = async () => {
+  const shadow = async (opts: { keepHeld?: boolean } = {}) => {
     const id = PgExplorer.currentWorkspaceId;
     const name = PgExplorer.currentWorkspaceName;
     if (!id || !name) return;
@@ -116,7 +122,11 @@ export const projectSync = (): Disposable => {
       // behind another tab's write
       const { files } = await snapshotOf(name);
       // A switch that landed during the read has its own shadow coming
-      if (PgExplorer.currentWorkspaceId === id) PgSyncBase.track(id, files);
+      if (PgExplorer.currentWorkspaceId !== id) return;
+      // One taken meanwhile, by an accepted upload, is the agreement; this
+      // read may already hold an edit made since
+      if (opts.keepHeld && PgSyncBase.isTracking(id)) return;
+      PgSyncBase.track(id, files);
     } catch (e) {
       report("shadow workspace", e);
     }
@@ -288,6 +298,11 @@ export const projectSync = (): Disposable => {
     if (!isVisible()) return flush();
     refresh("focus");
   };
+
+  // The project already on screen. `<Effects />` mounts after a delay, by
+  // which time the page load's switch has fired, and with no shadow the first
+  // push after a load kept no base: a 409 there asked about every file whole.
+  void shadow({ keepHeld: true });
 
   document.addEventListener("visibilitychange", onVisibilityChange);
   // `pagehide` rather than `beforeunload`: browsers cancel in-flight

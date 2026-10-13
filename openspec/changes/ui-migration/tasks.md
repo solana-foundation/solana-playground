@@ -1,8 +1,11 @@
 # Tasks
 
 Each task is its own stream: its own worktree, ticket and small PRs. Tick a
-task in the PR that lands it. Until 3.2 lands, new code may use Tailwind
-utilities and tokens but no design-system components.
+task in the PR that lands it. Until React 19 (3.2's PR #45) and the
+in-repository registry (2.2's PRs #44 and #50) are on `master-2.0`, new code
+may use Tailwind utilities and tokens but no design-system components. Both
+are, since 2026-10-07. Ticking 3.2 is its own stream's call, and does not
+hold the components back.
 
 ## 1. Rules
 
