@@ -294,7 +294,7 @@ check's job (HOO-1859); the rest hold by review.
   close the change (delete `tasks.md`, then `/opsx:archive`). Never
   archive unasked.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` job of
-  `client-v2.yml`) on every PR to `master-2.0`, and a red spec fails the
+  `client-v2.yml`) on every PR to `master`, and a red spec fails the
   PR's checks. It needs no server and no Postgres: every spec stubs the account
   endpoints with `page.route`, and the dev server serves `api/*.mjs` itself.
   Two tests connect to the keyless default backend and skip themselves where
@@ -304,10 +304,9 @@ check's job (HOO-1859); the rest hold by review.
   already has writes nothing") are `test.fixme` on the runner, where the
   load's timing differs and the sync races they guard show. The four are
   listed by title in `e2e/known-skips.txt`; the job fails on any skip that
-  is not in the list and warns on an entry that no longer skips. D61 (on
-  `context-archive`) records them. CI retries a failed spec once,
-  because the runner is three times slower than a laptop and fails specs on
-  timing alone; a pass on the retry is reported as **flaky**, named in the
+  is not in the list and warns on an entry that no longer skips. CI retries a
+  failed spec once, because the runner is three times slower than a laptop and
+  fails specs on timing alone; a pass on the retry is reported as **flaky**, named in the
   run's annotations, and is work to do, not a pass. Locally `retries` is 0,
   so a flake fails where it gets fixed. Quarantine is an explicit
   `test.skip` or `test.fixme` with the reason in the call, never a retry.

@@ -1,13 +1,13 @@
 name: client-v2
 
 # The fork's frontend checks. Upstream's ci.yml guards `client/` on master;
-# this one guards `client-v2/` on master-2.0 and never touches the Rust
+# this one guards `client-v2/` on master and never touches the Rust
 # workspaces.
 on:
   push:
-    branches: ["master-2.0"]
+    branches: ["master"]
   pull_request:
-    branches: ["master-2.0"]
+    branches: ["master"]
 
   workflow_dispatch:
 
@@ -181,7 +181,7 @@ jobs:
   # no secret: every spec stubs the account endpoints with `page.route`, and
   # the dev server serves `api/*.mjs` itself. The skips the job expects are
   # listed in `e2e/known-skips.txt`; `playwright.config.ts` says what `CI`
-  # changes. D61 (decisions.md on `context-archive`) has the reasoning.
+  # changes.
   e2e:
     name: e2e
     runs-on: ubuntu-latest

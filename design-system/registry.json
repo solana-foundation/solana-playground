@@ -1,7 +1,7 @@
 {
   "$schema": "https://ui.shadcn.com/schema/registry.json",
   "name": "playground",
-  "homepage": "https://github.com/hoodieshq/solana-playground/tree/master-2.0/design-system",
+  "homepage": "https://github.com/solana-foundation/solana-playground/tree/master/design-system",
   "items": [
     {
       "name": "playground-tokens",

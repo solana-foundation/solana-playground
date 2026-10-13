@@ -273,7 +273,7 @@ the conversation's own UUID PK keeps cheap later.
 - Signed-in E2E sync tests are **out of scope initially** — a known, stated
   gap. Real GitHub OAuth in CI flakes, and a test-only auth bypass is a new
   attack surface.
-- Branch off `master-2.0`, PR against `master-2.0`, Conventional Commits with a
+- Branch off `master`, PR against `master`, Conventional Commits with a
   `(client-v2)` scope.
 
 ## Risks

@@ -55,8 +55,7 @@ export interface Patch {
  *
  * This is the seam: one interface, a real implementation and a mock one. The
  * real implementation is the default because most of it is genuinely real —
- * only the model call is simulated when there is no key. See
- * `docs/superpowers/specs/2026-08-19-assistant-panel-design.md`.
+ * only the model call is simulated when there is no key.
  *
  * Reading is free. Everything that writes, builds or deploys is called only
  * after the user has approved it in the UI — the bridge does not gate, the

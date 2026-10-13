@@ -3,9 +3,7 @@
  *
  * Nothing else is stored. The per-step marks and the learner's position
  * are folds over this series (see `ledger.ts`), so the record can never
- * disagree with itself the way v1's three fields could. See the spec,
- * `docs/superpowers/specs/2026-08-28-lesson-state-machine-design.md`
- * (D25/D26) on `context-archive`.
+ * disagree with itself the way v1's three fields could.
  */
 
 /**

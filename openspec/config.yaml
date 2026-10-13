@@ -18,7 +18,7 @@ context: |
   exempt from the layer rules until code moves out of them.
   Everything written here is English. Reference Linear tickets as HOO-nnnn
   and pull requests as #nn. Do not cite decision-log numbers (D51 and the
-  like) or the documentation branch: neither resolves on master-2.0.
+  like) or the documentation branch: neither resolves on master.
   Several people and agents work in parallel; a task is sized for one small
   PR, and a change names which tasks may run at the same time.
   Every feature and widget is measured: it sends product events through

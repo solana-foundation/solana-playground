@@ -29,10 +29,10 @@ npm run dev
 ## Building and publishing
 
 ```bash
-bash scripts/site.sh
+VERCEL_SCOPE=<team-slug> bash scripts/site.sh
 ```
 
-That builds the page, snapshots it, builds `ds-inject.css` and the registry, then puts them on one site with the product and Studio and deploys it to Vercel (hoodies). Use `NO_DEPLOY=1` to assemble only.
+That builds the page, snapshots it, builds `ds-inject.css` and the registry, then puts them on one site with the product and Studio and deploys it to the Vercel team named by `VERCEL_SCOPE`. Use `NO_DEPLOY=1` to assemble only; it needs no `VERCEL_SCOPE`.
 
 The page ships with a snapshot of itself in `index.html`. Studio reads the specimens by fetching the page without running it, so they have to be in the HTML.
 

@@ -10,7 +10,6 @@
 # tools come from ~/Studio; the only Playground file among them is the
 # config this repo generates.
 set -euo pipefail
-export PATH="/Users/treptsov/playground/.node/bin:$HOME/Library/pnpm/bin:$PATH"
 DS="$(cd "$(dirname "$0")/.." && pwd)"
 PRODUCT="${PRODUCT:-$HOME/.solana-playground-proposal/site}"
 STUDIO="${STUDIO:-$HOME/Studio/tools}"
@@ -57,5 +56,6 @@ JSON
 
 echo "assembled: $STAGE"
 [ -z "${NO_DEPLOY:-}" ] || exit 0
+: "${VERCEL_SCOPE:?set VERCEL_SCOPE to the Vercel team slug to deploy under}"
 cd "$STAGE"
-npx --yes vercel@latest deploy --prod --yes --scope hoodies
+npx --yes vercel@latest deploy --prod --yes --scope "$VERCEL_SCOPE"

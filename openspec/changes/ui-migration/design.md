@@ -12,7 +12,7 @@ React 19, Tailwind 4 and shadcn/ui, with a shadcn registry whose
 
 Constraints that shape the approach:
 
-- Parallel work. Several streams land small PRs on `master-2.0` at once; no
+- Parallel work. Several streams land small PRs on `master` at once; no
   step may block the others for long.
 - Dates. Design freeze Nov 11; Breakpoint Nov 15-17; the design system's own
   v0 is also due Nov 11.
@@ -31,7 +31,7 @@ Constraints that shape the approach:
   written rule both people and agents can apply.
 - The design system has one source in the repository; `client-v2` installs
   from it and never edits the installed files by hand.
-- The rules live on `master-2.0`, where every contributor's agent reads
+- The rules live on `master`, where every contributor's agent reads
   them.
 - The new layout is the first screen built this way.
 

@@ -66,8 +66,7 @@ Expect: `x86_64`.
 
 ### P-3. Branches
 
-- [ ] All cases run from a `master-2.0` checkout. Its `client/`, `server/`, and `wasm/` match upstream; `client-v2/`
-      exists only on `master-2.0` and branches made from it.
+- [ ] All cases run from a `master` checkout. Its `client/`, `server/`, and `wasm/` match upstream.
 
 ### P-4. One compose file, selected by profile
 
@@ -222,7 +221,7 @@ Expect: an error page or message, not a blank screen.
 
 ### C-4. client-v2 starts
 
-Precondition: `master-2.0`; nothing listens on port 8080.
+Precondition: `master`; nothing listens on port 8080.
 
 client-v2 defaults its server endpoint to the remote Foundation server, not to `localhost`. To test the "no server"
 case, point it at the local port:
@@ -309,7 +308,7 @@ Expect: the first response carries `Access-Control-Allow-Origin`; the second doe
 
 ### D-6. client-v2 stack
 
-Precondition: `master-2.0`.
+Precondition: `master`.
 
 ```sh
 docker compose --profile v2 up --build
@@ -394,7 +393,7 @@ curl -s http://localhost:3000/crates/std.rs | head -c 200
 
 Expect: Rust source for each, not `<!doctype html>`.
 
-Known gap: on `master` and `master-2.0` nothing generates these three, so each request returns `index.html` or a
+Known gap: on `master` nothing generates these three, so each request returns `index.html` or a
 `404`, depending on the server. The
 generator, `client-v2/scripts/generate-default-crates.mjs`, is on `feat/vercel-wasm-cache` until that change merges.
 
@@ -480,10 +479,10 @@ Expect: the content renders; the `curl` prints `200 application/json` (the file 
 
 Precondition: a preview deployment of a branch with `generate-default-crates.mjs`; the Vercel CLI version pinned as
 `VERCEL_CLI` in `client-v2/Makefile.vercel`; a Protection Bypass for Automation secret from the project settings in
-`VERCEL_BYPASS` (never in this file).
+`VERCEL_BYPASS` (never in this file); the Vercel team slug in `VERCEL_SCOPE`.
 
 ```sh
-npx vercel@<version> inspect <deployment URL> --logs --scope hoodies \
+npx vercel@<version> inspect <deployment URL> --logs --scope "$VERCEL_SCOPE" \
   | grep -E 'default crates:|Default crates are current|Crates are current|generate-crates|not found'
 curl -s -H "x-vercel-protection-bypass: $VERCEL_BYPASS" <deployment URL>/crates/std.rs | head -c 200
 curl -s -H "x-vercel-protection-bypass: $VERCEL_BYPASS" <deployment URL>/crates/anchor_lang.toml | head -c 200

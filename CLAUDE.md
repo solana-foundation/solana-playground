@@ -6,17 +6,13 @@ This file records only what the code and git history do not make obvious.
 
 ## This is a fork
 
-`hoodieshq/solana-playground`, forked from `solana-playground/solana-playground`.
-There is one remote (`origin`) and it is the fork.
+`solana-foundation/solana-playground`, forked from
+`solana-playground/solana-playground`.
 
-| Branch       | Role                                                                        |
-| ------------ | --------------------------------------------------------------------------- |
-| `master`     | Tracks upstream. Guards `client/`, `server/`, `wasm/` via `ci.yml`.         |
-| `master-2.0` | **The fork's integration branch.** Guards `client-v2/` via `client-v2.yml`. |
-
-**Open PRs against `master-2.0`, not `master`.** Feature branches come off
-`master-2.0`; the two have diverged (master holds 20 commits master-2.0 lacks,
-master-2.0 holds 14 master lacks) and are not merged back.
+`master` is the integration branch. `ci.yml` guards `client/`, `server/` and
+`wasm/`; `client-v2.yml` guards `client-v2/`. Feature branches come off
+`master` and PRs go against `master`. Upstream changes arrive as squashed
+sync commits.
 
 ## Two clients
 
@@ -25,7 +21,7 @@ master-2.0 holds 14 master lacks) and are not merged back.
 - `client-v2/` — **where the fork's work happens**: the AI assistant panel, the
   Solana-brand theme, the Flow layout. Default to this one.
 
-`server/`, `wasm/`, `vscode/` are upstream's and out of scope per the project's
+`server/` and `wasm/` are upstream's and out of scope per the project's
 own principles ("No backend changes").
 
 ## Commit messages
@@ -33,7 +29,8 @@ own principles ("No backend changes").
 The fork uses Conventional Commits (`feat:`, `fix:`, `chore:`, with an optional
 `(client-v2)` / `(tutorials)` scope). This **contradicts `CONTRIBUTING.md`**,
 which describes upstream's `server: Add feature` / no-prefix-for-client style.
-Follow the fork's convention on `master-2.0`; follow CONTRIBUTING on `master`.
+Follow the fork's convention; follow CONTRIBUTING only in a PR meant for
+upstream.
 
 ## Setup and commands
 

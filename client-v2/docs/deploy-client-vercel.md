@@ -1,12 +1,12 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration auto-deploys: `master-2.0` → production (the fork's integration branch, switched from `master` on 2026-09-25); any other branch → preview. Those builds use the dashboard's Root Directory, which must be `client-v2` — while it is `client`, **pushes deploy the upstream client, not `client-v2`**. Makefile targets pin `client-v2` themselves and work either way — see [Which client gets deployed](#which-client-gets-deployed).
+Vercel's native Git integration auto-deploys: `master` → production (the integration branch); any other branch → preview. Those builds use the dashboard's Root Directory, which must be `client-v2` — while it is `client`, **pushes deploy the upstream client, not `client-v2`**. Makefile targets pin `client-v2` themselves and work either way — see [Which client gets deployed](#which-client-gets-deployed).
 
 ## Release checklist: `client-v2` to production
 
 Nothing below has been run end to end yet — see [Known gaps](#known-gaps). The
 order is the point: each step assumes the ones above it, and steps 1–7 come
-**before** the first production build of `client-v2`. `master-2.0` already
+**before** the first production build of `client-v2`. `master` already
 holds the persistence code, so any push to it — or a redeploy — ships that code
 as soon as the Root Directory points at `client-v2`.
 
@@ -33,14 +33,14 @@ as soon as the Root Directory points at `client-v2`.
    preview's.
 4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
    production origin.
-5. **Dry run on a preview**, from `master-2.0`:
+5. **Dry run on a preview**, from `master`:
 
    ```sh
    make -f client-v2/Makefile.vercel migrate-preview-db
    make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview
    ```
 
-   This uses the Neon branch `preview/master-2.0`. On the preview URL:
+   This uses the Neon branch `preview/master`. On the preview URL:
    `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
    project edited in one browser shows up in a second.
 6. **Migrate production:**
@@ -52,10 +52,10 @@ as soon as the Root Directory points at `client-v2`.
    A deployment that ships ahead of its migration runs against a schema
    missing what it expects — and `/api/sync` still reports `db: "ok"`, because
    it checks reachability, not schema.
-7. **Dashboard settings.** Production Branch `master-2.0`; Root Directory →
-   `client-v2`; the Ignored Build Step still lets `master-2.0` through.
-8. **Deploy.** Redeploy the latest `master-2.0` commit from the dashboard, or
-   push to `master-2.0`.
+7. **Dashboard settings.** Production Branch `master`; Root Directory →
+   `client-v2`; the Ignored Build Step still lets `master` through.
+8. **Deploy.** Redeploy the latest `master` commit from the dashboard, or
+   push to `master`.
 9. **Smoke test production** the same way as step 5.
 
 Rolling back the deployment (`vercel promote <previous-url> --prod`) does not
@@ -71,7 +71,7 @@ runs against the newer schema; revisit this once one is not.
 | Plan / Build Machine | Enterprise + **Enhanced** |
 | Framework Preset | Other |
 | Root Directory | `client` — intended `client-v2`, not yet changed |
-| Production Branch | `master-2.0` — switched from `master` on 2026-09-25 |
+| Production Branch | `master-2.0`; switch to `master` once `master-2.0` is merged into `master` |
 | Ignored Build Step | Automatic |
 
 ## How long a function may run
@@ -122,7 +122,7 @@ Setting the dashboard Root Directory to `client-v2` makes both paths agree; the 
 
 1. Create the project. Framework: Other. Root Directory: `client-v2`.
 2. Build Machine: Enhanced on Enterprise; default on Pro.
-3. Production Branch: `master-2.0`. Ignored Build Step: Automatic.
+3. Production Branch: `master`. Ignored Build Step: Automatic.
 4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
 5. Link the local checkout (from repo root):
 
@@ -294,10 +294,10 @@ never becomes something to click through.
 **Nothing applies migrations automatically, in any environment.** CI runs
 `yarn db-migrate` only against its own throwaway service container
 (`client-v2.yml:101`), which proves the history replays from scratch but touches
-nothing real. The Git integration deploys `master-2.0` to production with no
+nothing real. The Git integration deploys `master` to production with no
 hook before or after it. Production is therefore migrated by a person running
 `migrate-production-db` from a laptop, and the ordering is theirs to get right:
-migrate first, then merge to `master-2.0`. A deployment that ships ahead of its migration runs
+migrate first, then merge to `master`. A deployment that ships ahead of its migration runs
 against a schema missing the columns it expects.
 
 A preview deployment pointed at a database that has not been migrated will

@@ -12,7 +12,7 @@ HTTP 200, so `Vec::`, `format!`, and most of `anchor_lang` resolved to nothing.
 Two gaps cause it:
 
 - **The default crates (`core`, `alloc`, `std`) have no recipe.** Nothing in
-  the history of `master` or `master-2.0` produces them; `generate-crates`
+  the history of `master` produces them; `generate-crates`
   only keeps existing copies. Upstream serves hand-made copies from Amazon S3
   (design.md, "Upstream reference").
 - **The supported crates are never found on Vercel.** `generate-crates` reads
