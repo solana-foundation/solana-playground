@@ -115,4 +115,4 @@ not this one. See the [root README](../README.md#run-with-docker).
 
 ## Deployment
 
-For Vercel deployment instructions, see [Deploy client to Vercel](docs/deploy-client-vercel.md).
+For Vercel deployment instructions, see [Deploy client to Vercel](docs/deploy-client-vercel.md). Preview databases and their cleanup are in [Neon preview databases](docs/neon.md). Every doc in `docs/` is listed in [its index](docs/README.md).

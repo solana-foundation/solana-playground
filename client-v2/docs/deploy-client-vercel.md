@@ -131,14 +131,7 @@ Setting the dashboard Root Directory to `client-v2` makes both paths agree; the 
    ```
 
    The root `Makefile` includes `client-v2/Makefile.vercel`, so a bare `make <target>` from the repo root runs the same targets, and `make help` lists them.
-6. Neon console → the org named `Vercel: Hoodies` → Settings → API keys → Create new → Project-scoped, for project `spring-cake-75618686`. Put it in `client-v2/.env` as `NEON_API_KEY=...`, alongside `DATABASE_URL` — `Makefile.vercel` lifts it out of there, because make does not read `.env` the way dbmate does. A Vercel-managed Neon account has no CLI login — `neon login` cannot work — so this key is the only way the Makefile reaches the Neon API, and only org Admins can mint one. The token is shown once.
-7. Cut the empty parent that every preview database branches from, **before** anything migrates the shared database:
-
-   ```sh
-   make -f client-v2/Makefile.vercel neon-preview-base
-   ```
-
-   Order matters: `preview-base` is useful only because it is empty. Cut it after `migrate-production-db` and every preview inherits tables that dbmate then tries to create again.
+6. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable), then cut `preview-base` **before** anything migrates the shared database. Both steps are in [Neon preview databases](neon.md#configuration).
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
 
@@ -262,18 +255,8 @@ own Neon branch, so its schema is its own problem:
 make -f client-v2/Makefile.vercel migrate-preview-db
 ```
 
-That creates `preview/<git-branch>` from `preview-base` on first use and applies
-the whole migration history to it. Because the branch belongs to one git branch
-and nothing else reads it, there is no confirmation prompt and a bad migration
-costs a `neon branches delete`, not an incident. Two people testing two
-migrations can no longer corrupt each other, which was the case before preview
-and production shared a single database.
-
-Previews branch from `preview-base` rather than from the default branch for two
-reasons. A plain copy-on-write branch would carry production's rows into every
-preview. A `--schema-only` branch would carry the tables but leave
-`schema_migrations` empty, so dbmate would try to create tables that already
-exist. An empty parent avoids both.
+What that target does to the preview's Neon branch, and why it asks for no
+confirmation, is in [Neon preview databases](neon.md#a-branch-per-git-branch).
 
 The shared database behind the project-level `DATABASE_URL` still needs its own
 schema, and that one serves production:
@@ -318,11 +301,8 @@ database that cannot be reached, not one whose schema is merely out of date.
   98 cancelled by the Ignored Build Step (`exit 0` for anything that is not
   production, so preview builds are switched off at the project level) and 2
   errored on `master`. The Makefile has never produced one.
-- **The Neon calls are untested against real Neon.** `neon-preview-base`,
-  `preview-db-branch` and `migrate-preview-db` were exercised with a stubbed
-  `neonctl` against a local Postgres, which proves the arguments and the shell
-  but not that the Neon API accepts them. `neon-preview-base` is the smallest
-  real call and fails fastest.
+- **The Neon targets are untested against real Neon.** See
+  [Neon preview databases](neon.md#known-gaps).
 
 ## Endpoint routing
 

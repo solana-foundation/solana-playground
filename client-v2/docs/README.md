@@ -1,0 +1,6 @@
+# client-v2 docs
+
+| Doc | What it covers |
+| --- | --- |
+| [Deploy the client to Vercel](deploy-client-vercel.md) | Release checklist, Vercel project settings, deploy targets, build cache, env vars, migrations |
+| [Neon preview databases](neon.md) | Neon keys and project ID, `preview-base`, a database branch per git branch, and their cleanup on merge |

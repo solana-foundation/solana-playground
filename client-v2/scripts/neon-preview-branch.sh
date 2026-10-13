@@ -23,7 +23,7 @@ set -e
 # a project-scoped key from the Neon console is the only way in. Makefile.vercel
 # reads it out of client-v2/.env, the same file dbmate takes DATABASE_URL from.
 : "${NEON_API_KEY:?NEON_API_KEY is unset -- add it to client-v2/.env}"
-: "${NEON_PROJECT_ID:?NEON_PROJECT_ID is unset -- set by Makefile.vercel}"
+: "${NEON_PROJECT_ID:?NEON_PROJECT_ID is unset -- add it to client-v2/.env}"
 
 DATABASE=${NEON_DATABASE:-neondb}
 BASE_BRANCH=${NEON_BASE_BRANCH:-preview-base}

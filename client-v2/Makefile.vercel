@@ -11,16 +11,17 @@ CLIENT_DIR := client-v2
 # Targets verified against this CLI version; bump only after re-running them.
 VERCEL_CLI := vercel@62.7.0
 
-# The Neon project behind the Vercel Marketplace store `neon-solana-playground`.
-NEON_PROJECT_ID := spring-cake-75618686
-NEON_BRANCH_URL := NEON_PROJECT_ID=$(NEON_PROJECT_ID) $(CLIENT_DIR)/scripts/neon-preview-branch.sh
+NEON_BRANCH_URL := $(CLIENT_DIR)/scripts/neon-preview-branch.sh
 
 # Secrets live in $(CLIENT_DIR)/.env, which dbmate reads by itself. Make does not,
-# so the key is lifted out here and exported to every recipe. `?=` leaves an
-# already-exported value alone; one key is read rather than the file sourced, so
-# a stray DATABASE_URL in there cannot redirect a migration.
-NEON_API_KEY ?= $(shell sed -n 's/^NEON_API_KEY=//p' $(CLIENT_DIR)/.env 2>/dev/null | head -1 | tr -d '"'"'"'"')
-export NEON_API_KEY
+# so the Neon values are lifted out here and exported to every recipe. `?=` leaves
+# an already-exported value alone; named keys are read rather than the file
+# sourced, so a stray DATABASE_URL in there cannot redirect a migration.
+# See $(CLIENT_DIR)/docs/neon.md.
+dotenv = $(shell sed -n 's/^$(1)=//p' $(CLIENT_DIR)/.env 2>/dev/null | head -1 | tr -d '"'"'"'"')
+NEON_API_KEY ?= $(call dotenv,NEON_API_KEY)
+NEON_PROJECT_ID ?= $(call dotenv,NEON_PROJECT_ID)
+export NEON_API_KEY NEON_PROJECT_ID
 
 # `--token` is passed only when VERCEL_TOKEN is set; otherwise the CLI uses the
 # login from `vercel login`, which a developer already has. A token is for CI.
@@ -192,9 +193,9 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 # migrate-production-db it would no longer be empty, and previews would inherit
 # tables that dbmate then tries to create again.
 neon-preview-base: ## Create the empty parent branch previews are cut from (run once, before migrate-production-db)
-	@: $${NEON_API_KEY:?NEON_API_KEY is unset}
+	@: $${NEON_API_KEY:?NEON_API_KEY is unset} $${NEON_PROJECT_ID:?NEON_PROJECT_ID is unset}
 	npx --yes neonctl@latest branches create --name preview-base \
-		--project-id $(NEON_PROJECT_ID) --no-secrets
+		--project-id "$$NEON_PROJECT_ID" --no-secrets
 
 preview-db-branch: ## Create (or reuse) this git branch's Neon branch
 	@url=$$($(NEON_BRANCH_URL)) || exit 1; \
