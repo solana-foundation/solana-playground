@@ -13,7 +13,7 @@ import { diffFiles, hashFiles, sameUserFiles, snapshotOf } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
 import { LOCKED_REQUEST_MS, timeoutSignal, withSyncLock } from "./sync-lock";
-import { legacyContentHash, PgSyncMark } from "./sync-mark";
+import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
@@ -25,7 +25,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { FileConflict, MergePlan, ResolvedFiles } from "./merge";
 import type { FileHashes, Snapshot } from "./snapshot";
-import type { LegacySyncMark, SyncMark } from "./sync-mark";
+import type { SyncMark } from "./sync-mark";
 import type { Disposable } from "../../../utils/types";
 
 type PushResult = "ok" | "conflict" | "skipped";
@@ -822,15 +822,9 @@ export class PgProjectSync {
       // finds the copy dirty and merges it there. Merging here instead would
       // be a second route to the same result with its own ordering to get
       // right.
-      //
-      // A mark from before per-file hashes is asked too, as a whole: reconcile
-      // adopts over one whose user files still match it, because it says
-      // nothing about the generated files and the account's copy is the only
-      // one known to be the agreement. Declining leaves it untouched, and the
-      // next pass decides again from it.
       const before = (await snapshotOf(local)).files;
-      const mark = await PgSyncMark.inspect(projectId);
-      if (!(await isCleanAgainst(mark, local, before))) return null;
+      const mark = await PgSyncMark.read(projectId);
+      if (!mark || !(await isCleanAgainst(mark, local, before))) return null;
 
       // Only once the copy is known to be expendable: a push already reading
       // this copy is carrying work, and stopping it would leave that work to
@@ -849,11 +843,8 @@ export class PgProjectSync {
       //
       // A stand-in name this device already had for the project counts as
       // the agreed one: it is what sync left here, not a rename.
-      const agreedName =
-        mark && !("legacy" in mark) && mark.localName === local
-          ? mark.name
-          : local;
-      if (mergeName(mark?.name, agreedName, full!.name) === "server") {
+      const agreedName = mark.localName === local ? mark.name : local;
+      if (mergeName(mark.name, agreedName, full!.name) === "server") {
         local = await renameToServer(projectId, local, full!.name);
       }
       // Still the server's hashes, carried keypair or not. That is what makes
@@ -1784,26 +1775,16 @@ export class PgProjectSync {
  * last agreed with the server, under the name it is called now.
  *
  * Shared by reconcile and adoption, because adoption re-asks the question
- * reconcile decided on and the two must not disagree about the answer. A mark
- * from before per-file hashes answers it as a whole, through the one hash it
- * holds, and an empty hash -- marks older still -- matches no copy.
+ * reconcile decided on and the two must not disagree about the answer.
  */
 export const isCleanAgainst = async (
-  mark: SyncMark | LegacySyncMark | null,
+  mark: SyncMark | null,
   localName: string,
   files: Record<string, string>
 ): Promise<boolean> => {
   // The name this device's copy goes by under the agreement: the server's,
   // or the stand-in sync gave it here
-  const agreedLocal =
-    mark && !("legacy" in mark) ? mark.localName ?? mark.name : mark?.name;
-  if (!mark || agreedLocal !== localName) return false;
-  if ("legacy" in mark) {
-    return (
-      !!mark.contentHash &&
-      mark.contentHash === (await legacyContentHash(files))
-    );
-  }
+  if (!mark || (mark.localName ?? mark.name) !== localName) return false;
   return sameUserFiles(mark.files, await hashFiles({ files }));
 };
 

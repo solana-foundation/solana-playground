@@ -116,20 +116,14 @@ changes. Asked to build something in the client, look there first.
   them, and asks the user only about lines both changed. Per account because
   a tutorial's id is derived from its name and so is identical across
   accounts.
-- **A mark from before per-file hashes is read, never trusted per file.**
-  It holds one `contentHash` of the user files and no `files`. `read` returns
-  `null` for it; `inspect` returns it as `{legacy: true, ...}`. Reconcile
-  compares that hash (`legacyContentHash`, the old sorted-pairs form) with the
-  local copy (`isCleanAgainst`): equal, it **adopts the account's copy**
-  (`PgProjectSync.adopt`, which re-checks against the legacy mark inside the
-  project's queue), whether or not the server moved; not equal, it merges
-  against an empty base, where the account's generated files win. Never
-  rebuild the mark from the local copy: the legacy hash never covered the
-  three generated files, so that recorded this device's keypair as the
-  agreement and the next build uploaded it over the account's. An adopt that
-  declines writes nothing, leaving the legacy mark for the next pass. Any mark
-  file, legacy included, keeps a project out of `pushNeverSynced`
-  (`PgSyncMark.exists`).
+- **There is one in-browser migration: from the pre-sync layout to the
+  current one.** `PgWorkspace.migrate` (workspace ids) and
+  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). No
+  intermediate format between #29 and now reached real users, so none gets
+  compatibility code: a sync mark `read` cannot parse is `null` ("never
+  agreed", merged against an empty base), yet still keeps its project out of
+  `pushNeverSynced` (`PgSyncMark.exists`). A future format change that ships
+  to users adds its own step; it does not chain through dropped ones.
 - **The sync mark holds a hash per file, and that is the merge base.**
   `mark.files` is `path -> sha256` of what the server last accepted from this
   device. `isClean` compares it on _user_ files only (the three generated

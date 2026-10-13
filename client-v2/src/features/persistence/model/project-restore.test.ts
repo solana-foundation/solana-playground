@@ -416,18 +416,17 @@ describe("reconcile", () => {
     expect(forget).toHaveBeenCalledWith("p1");
   });
 
-  it("does not hand over as new a project it holds a pre-upgrade mark for", async () => {
-    // The mark predates per-file hashes, so it is not read as an agreement --
-    // but it is still the record that this device synced the project, and a
-    // project the server no longer lists was deleted elsewhere, not never
-    // uploaded. A create-only upload of it meets the tombstone.
+  it("does not hand over as new a project it holds an unreadable mark for", async () => {
+    // The mark is not read as an agreement -- but it is still the record that
+    // this device synced the project, and a project the server no longer lists
+    // was deleted elsewhere, not never uploaded. A create-only upload of it
+    // meets the tombstone.
     withLocal({ alpha: "p1" });
     withFiles("alpha", { "src/lib.rs": "work that never uploaded" });
     storedFiles().set(
       "/.config/sync/u1/p1.json",
       JSON.stringify({
-        hash: "x",
-        contentHash: "y",
+        files: { "src/lib.rs": 1 },
         name: "alpha",
         updatedAt: "t1",
         dirty: false,

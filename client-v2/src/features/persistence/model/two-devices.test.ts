@@ -9,7 +9,6 @@ import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
 import { reconcile, releaseLocalProjects } from "./project-restore";
 import { PgSession } from "../../auth";
-import { isUuid } from "../../../shared/lib/ids";
 import { projectSync } from "../../../effects/project-sync/project-sync";
 import { PgCommon } from "../../../utils/common";
 import { PgExplorer } from "../../../utils/explorer/explorer";
@@ -1284,316 +1283,6 @@ describe("a tutorial deleted and started again", () => {
   });
 });
 
-describe("a device upgraded from whole-snapshot marks", () => {
-  beforeEach(setUp);
-  afterEach(() => vi.restoreAllMocks());
-
-  /**
-   * A mark as the previous version wrote it: one hash of the user's files,
-   * sorted by path and serialised as pairs, and nothing per file. Computed
-   * here from that description rather than by the code under test, so the
-   * format is pinned.
-   */
-  const legacyMark = async (
-    files: Record<string, string>,
-    updatedAt: string
-  ) => {
-    const pairs = Object.keys(files)
-      .filter((path) => !SYNCED_WORKSPACE_FILES.includes(path))
-      .sort()
-      .map((path) => [path, files[path]]);
-    storedFiles().set(
-      `/.config/sync/u1/${encodeURIComponent(HELLO.id)}.json`,
-      JSON.stringify({
-        hash: "whole snapshot",
-        contentHash: await sha256(JSON.stringify(pairs)),
-        name: HELLO.name,
-        updatedAt,
-        dirty: false,
-      })
-    );
-  };
-
-  const serverHolds = (files: Record<string, string>) => {
-    const updatedAt = tick();
-    server.set(HELLO.id, {
-      id: HELLO.id,
-      name: HELLO.name,
-      kind: "tutorial",
-      snapshot: { files },
-      updatedAt,
-    });
-    return updatedAt;
-  };
-
-  const puts = () =>
-    (global.fetch as Mock).mock.calls.filter(
-      ([, init]) => init?.method === "PUT"
-    );
-
-  const PROGRAM_INFO = ".workspace/program-info.json";
-  const ACCOUNT_INFO = '{"kp":"the account\'s"}';
-  const DEVICE_INFO = '{"kp":"this device\'s"}';
-  const programInfoPath = `/${HELLO.name}/${PROGRAM_INFO}`;
-  const localProgramInfo = () => storedFiles().get(programInfoPath);
-  const keypairOf = (content: string | undefined) =>
-    content === undefined ? undefined : JSON.parse(content).kp;
-  const serverFiles = () =>
-    (server.get(HELLO.id)!.snapshot as { files: Record<string, string> }).files;
-
-  /**
-   * Replaces that land where the real explorer's do: every file in the
-   * store, which is what a snapshot reads, and the user files in the
-   * explorer's memory.
-   */
-  const writesLand = () => {
-    vi.spyOn(PgExplorer, "switchWorkspace").mockResolvedValue(undefined);
-    return vi
-      .spyOn(PgExplorer, "replaceWorkspaceFiles")
-      .mockImplementation(
-        async (name: string, files: Record<string, string>) => {
-          // All of it in the store, which is what a snapshot reads; only the
-          // user files in memory, as the explorer keeps them
-          writeStored(name, files);
-          vi.spyOn(PgExplorer, "getAllFiles").mockReturnValue(
-            Object.entries(files)
-              .filter(([path]) => !SYNCED_WORKSPACE_FILES.includes(path))
-              .map(([path, content]) => [`/${name}/${path}`, content])
-          );
-        }
-      );
-  };
-
-  it("takes the account's keypair when this copy is what it last agreed", async () => {
-    // A legacy hash never covered the generated files, so a mark rebuilt from
-    // this device's copy recorded this device's keypair as the agreement --
-    // and the next build uploaded it over the account's
-    const account = { "src/lib.rs": "same", [PROGRAM_INFO]: ACCOUNT_INFO };
-    const agreedAt = serverHolds(account);
-    await legacyMark(account, agreedAt);
-    asDevice([HELLO], "same");
-    storedFiles().set(programInfoPath, DEVICE_INFO);
-    writesLand();
-    await signedIn();
-
-    const result = await reconcile();
-
-    expect(result.conflicts).toEqual([]);
-    expect(localProgramInfo()).toBe(ACCOUNT_INFO);
-    expect((await PgSyncMark.read(HELLO.id))?.files[PROGRAM_INFO]).toBe(
-      await sha256(ACCOUNT_INFO)
-    );
-    expect(puts()).toEqual([]);
-    expect(keypairOf(serverFiles()[PROGRAM_INFO])).toBe("the account's");
-  });
-
-  it("does not hand the account this device's keypair on the next build", async () => {
-    const account = { "src/lib.rs": "same", [PROGRAM_INFO]: ACCOUNT_INFO };
-    const agreedAt = serverHolds(account);
-    await legacyMark(account, agreedAt);
-    asDevice([HELLO], "same");
-    storedFiles().set(programInfoPath, DEVICE_INFO);
-    writesLand();
-    await signedIn();
-    await reconcile();
-
-    // A build rewrites the file in place, keeping whatever keypair it holds
-    storedFiles().set(
-      programInfoPath,
-      JSON.stringify({ ...JSON.parse(localProgramInfo()!), idl: "built" })
-    );
-    await PgProjectSync.pushCurrent();
-
-    expect(keypairOf(serverFiles()[PROGRAM_INFO])).toBe("the account's");
-  });
-
-  it("leaves the old mark alone when the copy stops being clean before it is taken", async () => {
-    // Typing that lands while the account's copy is being fetched is on this
-    // device alone. The adoption declines, and the mark must not be rebuilt
-    // from this device's generated files in its place -- the next pass merges
-    // it against nothing, where the account's keypair wins
-    const account = { "src/lib.rs": "same", [PROGRAM_INFO]: ACCOUNT_INFO };
-    const agreedAt = serverHolds(account);
-    await legacyMark(account, agreedAt);
-    asDevice([HELLO], "same");
-    storedFiles().set(programInfoPath, DEVICE_INFO);
-    const replace = writesLand();
-    const realFetch = PgProjectSync.fetch;
-    vi.spyOn(PgProjectSync, "fetch").mockImplementationOnce(
-      async (projectId: string) => {
-        localFilesAre(HELLO.name, { "src/lib.rs": "typed meanwhile" });
-        return await realFetch.call(PgProjectSync, projectId);
-      }
-    );
-    await signedIn();
-
-    const first = await reconcile();
-
-    expect(first.conflicts).toEqual([]);
-    expect(replace).not.toHaveBeenCalled();
-    expect(puts()).toEqual([]);
-    expect(await PgSyncMark.inspect(HELLO.id)).toMatchObject({ legacy: true });
-
-    const second = await reconcile();
-
-    expect(second.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
-    expect(puts()).toEqual([]);
-    expect(await PgProjectSync.resolve(HELLO.id, "keep-local")).toBe(true);
-    expect(serverFiles()).toEqual({
-      "src/lib.rs": "typed meanwhile",
-      [PROGRAM_INFO]: ACCOUNT_INFO,
-    });
-  });
-
-  it("merges against nothing when this copy is not what it last agreed, and keeps the account's keypair", async () => {
-    const agreedAt = serverHolds({
-      "src/lib.rs": "old",
-      [PROGRAM_INFO]: ACCOUNT_INFO,
-    });
-    await legacyMark({ "src/lib.rs": "old" }, agreedAt);
-    otherDeviceWroteFiles(HELLO.id, {
-      "src/lib.rs": "theirs",
-      [PROGRAM_INFO]: ACCOUNT_INFO,
-    });
-    asDevice([HELLO], "mine");
-    storedFiles().set(programInfoPath, DEVICE_INFO);
-    const replace = writesLand();
-    await signedIn();
-
-    const result = await reconcile();
-
-    expect(result.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
-    expect(replace).not.toHaveBeenCalled();
-    expect(puts()).toEqual([]);
-
-    expect(await PgProjectSync.resolve(HELLO.id, "keep-local")).toBe(true);
-    expect(serverFiles()).toEqual({
-      "src/lib.rs": "mine",
-      [PROGRAM_INFO]: ACCOUNT_INFO,
-    });
-    expect(localProgramInfo()).toBe(ACCOUNT_INFO);
-  });
-
-  it("takes the account's copy without asking when this one is what it last agreed", async () => {
-    // Merged against an empty base, every line the other device changed read
-    // as both sides adding different content, and a device that had done
-    // nothing was asked -- where "Keep this version" reverted the other one
-    const agreedAt = serverHolds({ "src/lib.rs": "a\nb\nc\n" });
-    await legacyMark({ "src/lib.rs": "a\nb\nc\n" }, agreedAt);
-    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "a\ntheirs\nc\n" });
-    asDevice([HELLO], "a\nb\nc\n");
-    const replace = captureWrites();
-    await signedIn();
-
-    const result = await reconcile();
-
-    expect(result.conflicts).toEqual([]);
-    expect(result.replaced).toEqual([HELLO.name]);
-    expect(replace).toHaveBeenCalledWith(HELLO.name, {
-      "src/lib.rs": "a\ntheirs\nc\n",
-    });
-    expect(puts()).toEqual([]);
-    // Rewritten in the current shape, from the copy it adopted
-    expect((await PgSyncMark.read(HELLO.id))?.updatedAt).toBe(
-      server.get(HELLO.id)!.updatedAt
-    );
-  });
-
-  it("settles identical copies silently, and writes a mark it can use", async () => {
-    // Taken from the account even so: an old mark cannot say whether the
-    // generated files agree, and the account's copy is the one that is known
-    // to be the agreement
-    const account = { "src/lib.rs": "same", [PROGRAM_INFO]: ACCOUNT_INFO };
-    const agreedAt = serverHolds(account);
-    await legacyMark(account, agreedAt);
-    asDevice([HELLO], "same");
-    storedFiles().set(programInfoPath, ACCOUNT_INFO);
-    const replace = writesLand();
-    await signedIn();
-
-    const result = await reconcile();
-
-    expect(result.conflicts).toEqual([]);
-    expect(replace).toHaveBeenCalledWith(HELLO.name, account);
-    expect(puts()).toEqual([]);
-    expect(await PgSyncMark.read(HELLO.id)).toEqual({
-      files: {
-        "src/lib.rs": await sha256("same"),
-        [PROGRAM_INFO]: await sha256(ACCOUNT_INFO),
-      },
-      name: HELLO.name,
-      updatedAt: agreedAt,
-      dirty: false,
-    });
-  });
-
-  it("asks about a delete elsewhere over unsent work, and keeps the question answerable", async () => {
-    // Read as no mark at all, the project was also "never synced", so a
-    // create-only upload went out, met the tombstone, and replaced this
-    // question with a version question neither of whose answers can work
-    const agreedAt = serverHolds({ "src/lib.rs": "old" });
-    await legacyMark({ "src/lib.rs": "old" }, agreedAt);
-    otherDeviceDeleted(HELLO.id);
-    asDevice([HELLO], "unsent work");
-    const deleteWorkspace = vi
-      .spyOn(PgExplorer, "deleteWorkspace")
-      .mockResolvedValue(undefined as never);
-    vi.spyOn(PgExplorer, "switchWorkspace").mockResolvedValue(undefined);
-    await signedIn();
-
-    const result = await reconcile();
-
-    expect(result.conflicts).toEqual([
-      { projectId: HELLO.id, kind: "deleted-elsewhere" },
-    ]);
-    expect(PgProjectSync.conflictFor(HELLO.id)).toEqual({
-      projectId: HELLO.id,
-      kind: "deleted-elsewhere",
-    });
-    expect(puts()).toEqual([]);
-    expect(deleteWorkspace).not.toHaveBeenCalled();
-
-    const importWorkspace = vi.spyOn(PgExplorer, "importWorkspace");
-    expect(await PgProjectSync.resolve(HELLO.id, "keep-as-new")).toBe(true);
-    expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
-
-    // Under a fresh id: the old one is tombstoned, and every push under it
-    // would be refused. Imported before the original goes.
-    const [name, { id }] = importWorkspace.mock.calls[0] as [
-      string,
-      { id: string }
-    ];
-    expect(name).toBe(`${HELLO.name} (kept)`);
-    expect(isUuid(id)).toBe(true);
-    expect(id).not.toBe(HELLO.id);
-    expect(deleteWorkspace).toHaveBeenCalledWith(HELLO.name);
-    expect(importWorkspace.mock.invocationCallOrder[0]).toBeLessThan(
-      deleteWorkspace.mock.invocationCallOrder[0]
-    );
-  });
-
-  it("finishes a delete elsewhere when this copy is what it last agreed", async () => {
-    const agreedAt = serverHolds({ "src/lib.rs": "old" });
-    await legacyMark({ "src/lib.rs": "old" }, agreedAt);
-    otherDeviceDeleted(HELLO.id);
-    const workspaces = [HELLO];
-    asDevice(workspaces, "old");
-    // Gone from the explorer as the real delete leaves it, so nothing later in
-    // the pass reads it as a project the account has never seen
-    const deleteWorkspace = vi
-      .spyOn(PgExplorer, "deleteWorkspace")
-      .mockImplementation(async () => void workspaces.pop());
-    await signedIn();
-
-    const result = await reconcile();
-
-    expect(result.conflicts).toEqual([]);
-    expect(result.removed).toEqual([HELLO.name]);
-    expect(deleteWorkspace).toHaveBeenCalledWith(HELLO.name);
-    expect(puts()).toEqual([]);
-  });
-});
-
 describe("a program keypair only this device holds", () => {
   beforeEach(() => {
     setUp();
@@ -1657,22 +1346,22 @@ describe("a program keypair only this device holds", () => {
       );
   };
 
-  /** A mark from before per-file hashes, over the user files of `files` */
-  const legacyMark = async (
-    files: Record<string, string>,
-    updatedAt: string
-  ) => {
-    const pairs = Object.keys(files)
-      .filter((path) => !SYNCED_WORKSPACE_FILES.includes(path))
-      .sort()
-      .map((path) => [path, files[path]]);
+  /**
+   * The agreement this device last reached, over every file of `files`, at a
+   * row version the server has since moved past
+   */
+  const agreedBefore = async (files: Record<string, string>) => {
+    const hashes: Record<string, string> = {};
+    for (const [path, content] of Object.entries(files)) {
+      hashes[path] = await sha256(content);
+    }
+    // Straight to the store: no one is signed in yet to write it as
     storedFiles().set(
       `/.config/sync/u1/${encodeURIComponent(HELLO.id)}.json`,
       JSON.stringify({
-        hash: "whole snapshot",
-        contentHash: await sha256(JSON.stringify(pairs)),
+        files: hashes,
         name: HELLO.name,
-        updatedAt,
+        updatedAt: "before",
         dirty: false,
       })
     );
@@ -1691,13 +1380,13 @@ describe("a program keypair only this device holds", () => {
   };
 
   it("is kept when the account's copy is taken, and reaches the account and the other device", async () => {
-    // A device from before the upgrade built, which generated the keypair
-    // here. Nothing uploaded generated files in that era, so the account's
-    // copy has none, and taking it dropped the only keypair there was: the
-    // next build minted a new program address.
+    // This device built, which generated the keypair here and changed no
+    // user file, so the copy is still clean. The account's copy has none, and
+    // taking it dropped the only keypair there was: the next build minted a
+    // new program address.
     const account = { "src/lib.rs": "same", [PROGRAM_INFO]: info(null, "idl") };
+    await agreedBefore({ "src/lib.rs": "same", [PROGRAM_INFO]: info(null) });
     const agreedAt = serverHolds(account);
-    await legacyMark(account, agreedAt);
     asDevice([HELLO], "same");
     storedFiles().set(programInfoPath, info(DEVICE_KP));
     writesLand();
@@ -1799,8 +1488,8 @@ describe("a program keypair only this device holds", () => {
       "src/lib.rs": "same",
       [PROGRAM_INFO]: info(ACCOUNT_KP, "idl"),
     };
-    const agreedAt = serverHolds(account);
-    await legacyMark(account, agreedAt);
+    await agreedBefore({ "src/lib.rs": "same", [PROGRAM_INFO]: info(null) });
+    serverHolds(account);
     asDevice([HELLO], "same");
     storedFiles().set(programInfoPath, info(DEVICE_KP));
     writesLand();

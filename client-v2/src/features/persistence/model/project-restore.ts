@@ -14,7 +14,6 @@ import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import type { Conflict, ServerProject } from "./project-sync";
-import type { SyncMark } from "./sync-mark";
 
 /** What one reconcile pass did */
 export interface SyncResult {
@@ -66,7 +65,7 @@ const empty = (): SyncResult => ({
  */
 const isClean = async (projectId: string, localName: string) =>
   await isCleanAgainst(
-    await PgSyncMark.inspect(projectId),
+    await PgSyncMark.read(projectId),
     localName,
     (
       await snapshotOf(localName)
@@ -245,42 +244,7 @@ const passUnlocked = async (): Promise<SyncResult> => {
 
       result.latest ??= local;
 
-      const found = await PgSyncMark.inspect(project.id);
-      let mark: SyncMark | null;
-      if (found && "legacy" in found) {
-        // A mark from before per-file hashes says whether the user's files
-        // are exactly what the server accepted at its timestamp, and nothing
-        // about any one file -- nor anything at all about the generated ones,
-        // which its hash never covered.
-        //
-        // Where the user files still match it, the account's copy is taken,
-        // whether or not the server has moved: nothing is lost, because the
-        // user's files were just found equal to the agreement, and it is the
-        // only copy of the generated files known to be agreed. Rebuilding the
-        // mark from this device's copy instead recorded this device's keypair
-        // as the agreement, so the next build uploaded it and silently moved
-        // the account's program to a new address.
-        //
-        // The adoption re-checks cleanliness inside the project's queue, and
-        // writes nothing when it declines, so the old mark stays for the next
-        // pass. What that pass does depends on why it declined. If the copy
-        // stopped being clean meanwhile, it merges against an empty base,
-        // where the account's generated files win, less any keypair only this
-        // device holds, which is carried into them. If the fetch failed or the
-        // snapshot was unusable, the copy is still clean and it adopts again.
-        if (await isClean(project.id, local)) {
-          const adopted = await PgProjectSync.adopt(project.id);
-          if (adopted) result.replaced.push(adopted);
-          continue;
-        }
-        // Where they do not, nothing can be derived, and the old mark is left
-        // for the merge to replace: against an empty base, which asks about
-        // whatever the two copies disagree on. Never the old mark's hash used
-        // as if it were per file.
-        mark = null;
-      } else {
-        mark = found;
-      }
+      const mark = await PgSyncMark.read(project.id);
 
       // The cheap path, and the overwhelmingly common one: this device has
       // nothing pending and the row is exactly where it was left. Neither side
