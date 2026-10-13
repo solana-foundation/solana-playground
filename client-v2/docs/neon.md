@@ -8,7 +8,7 @@ see [Deploy the client to Vercel](deploy-client-vercel.md).
 
 | Name | Where to get it |
 | --- | --- |
-| `NEON_API_KEY` | Neon console → the org named `Vercel: Hoodies` → Settings → API keys → Create new → Project-scoped, for the project below. Only org Admins can mint one, and it is shown once |
+| `NEON_API_KEY` | Neon console → the org that owns the project below → Settings → API keys → Create new → Project-scoped, for the project below. Only org Admins can mint one, and it is shown once |
 | `NEON_PROJECT_ID` | Neon console → the project behind the Vercel Marketplace store `neon-solana-playground` → Settings → General → Project ID |
 
 Both go in two places:
@@ -19,8 +19,8 @@ Both go in two places:
   repository secret, the project ID as a repository variable, since it grants nothing on its own:
 
   ```sh
-  gh secret set NEON_API_KEY --repo hoodieshq/solana-playground
-  gh variable set NEON_PROJECT_ID --repo hoodieshq/solana-playground
+  gh secret set NEON_API_KEY --repo solana-foundation/solana-playground
+  gh variable set NEON_PROJECT_ID --repo solana-foundation/solana-playground
   ```
 
 The app never reads either, so neither is set in the Vercel dashboard.
@@ -63,7 +63,7 @@ single database.
 
 The Neon project caps its branch count, so every `preview/*` branch left behind blocks a future preview.
 [`neon-cleanup.yml`](../../.github/workflows/neon-cleanup.yml) deletes `preview/<head branch>` when a PR from this
-repository merges into `master-2.0`. A PR that never deployed a preview has no branch, and the job passes.
+repository merges into `master`. A PR that never deployed a preview has no branch, and the job passes.
 
 Known limitations, both cleaned up by hand:
 
