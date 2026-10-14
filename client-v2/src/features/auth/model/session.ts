@@ -45,6 +45,18 @@ export interface SessionUser {
 export type SignInOrigin = "assistant";
 
 /**
+ * Where the last sign-in stands. Held here, not by the control that started
+ * it: the status chips sit in the navigation's Sheet on a phone, which
+ * unmounts them on close, and a sign-in outlives that.
+ */
+export type SignInState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "failed"; message: string };
+
+const IDLE: SignInState = { status: "idle" };
+
+/**
  * The signed-in user, from our backend rather than from GitHub.
  *
  * `GithubAuth` answers "which GitHub account is this", which is what the
@@ -116,17 +128,38 @@ export class PgSession {
    * rather than per-window, so the reply only has to say "finished" and this
    * side re-reads the session. Rejects when that read finds nobody signed in.
    */
-  static async signIn({ from }: { from?: SignInOrigin } = {}) {
+  static signIn({ from }: { from?: SignInOrigin } = {}): Promise<void> {
+    // One popup and one nonce at a time: a second click while the first flow
+    // waits joins it instead of racing it for the session cookie, and keeps
+    // the first one's origin
+    PgSession._pending ??= PgSession._signIn(from).finally(() => {
+      PgSession._pending = undefined;
+    });
+    return PgSession._pending;
+  }
+
+  /** Where the last sign-in stands; `onDidChange` fires when it moves */
+  static signInState(): SignInState {
+    return PgSession._signInState;
+  }
+
+  private static async _signIn(from: SignInOrigin | undefined) {
     authTelemetry.track("auth_sign_in_started", {});
     PgSession._signingInFrom = from ?? null;
+    PgSession._setSignIn({ status: "pending" });
     try {
       await PgSession._signInThroughPopup();
     } catch (error) {
       authTelemetry.track("auth_sign_in_failed", { reason: reasonOf(error) });
+      PgSession._setSignIn({
+        status: "failed",
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     } finally {
       PgSession._signingInFrom = null;
     }
+    PgSession._setSignIn(IDLE);
     authTelemetry.track("auth_signed_in", {});
   }
 
@@ -290,12 +323,17 @@ export class PgSession {
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
     PgSession._signingInFrom = null;
+    PgSession._pending = undefined;
+    PgSession._signInState = IDLE;
   }
 
   private static _user: SessionUser | null = null;
   private static _signingInFrom: SignInOrigin | null = null;
   private static _onSignOut: (() => Promise<void>) | null = null;
   private static readonly _listeners = new Set<() => void>();
+
+  private static _pending: Promise<void> | undefined;
+  private static _signInState: SignInState = IDLE;
 
   private static _channel: PopupChannel | undefined;
   private static _openChannelImpl: typeof openPopupChannel = openPopupChannel;
@@ -306,6 +344,11 @@ export class PgSession {
   ): PopupChannel | undefined {
     PgSession._channel = PgSession._openChannelImpl(...args);
     return PgSession._channel;
+  }
+
+  private static _setSignIn(state: SignInState) {
+    PgSession._signInState = state;
+    for (const cb of PgSession._listeners) cb();
   }
 
   private static _set(user: SessionUser | null) {
@@ -603,6 +646,92 @@ if (import.meta.vitest) {
 
         await expect(PgSession.signIn()).rejects.toThrow(/sign-in/i);
         expect(open).not.toHaveBeenCalled();
+      });
+
+      /** A popup that answers only when the test says, and how many were opened */
+      const heldPopup = () => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ url: "https://x/" }),
+        }) as unknown as typeof fetch;
+        let answer!: (receipt: {
+          delivered: false;
+          reason: "cancelled";
+        }) => void;
+        const open = vi.fn(() => ({
+          receive: () =>
+            new Promise<{ delivered: false; reason: "cancelled" }>(
+              (resolve) => (answer = resolve)
+            ),
+          cancel: () => {},
+        }));
+        PgSession.setOpenChannel(open as never);
+        return {
+          open,
+          cancel: () => answer({ delivered: false, reason: "cancelled" }),
+        };
+      };
+
+      it("holds a pending sign-in and its failure, so they outlive whatever rendered them", async () => {
+        const popup = heldPopup();
+        const changed = vi.fn();
+        PgSession.onDidChange(changed);
+        expect(PgSession.signInState()).toEqual({ status: "idle" });
+
+        const pending = PgSession.signIn();
+        expect(PgSession.signInState()).toEqual({ status: "pending" });
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        await expect(pending).rejects.toThrow(/cancelled/i);
+
+        expect(PgSession.signInState()).toEqual({
+          status: "failed",
+          message: "Sign-in cancelled.",
+        });
+        expect(changed).toHaveBeenCalledTimes(2);
+      });
+
+      it("does not start a second sign-in while one is pending", async () => {
+        const popup = heldPopup();
+
+        const first = PgSession.signIn();
+        const second = PgSession.signIn();
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        await expect(first).rejects.toThrow(/cancelled/i);
+        await expect(second).rejects.toThrow(/cancelled/i);
+
+        expect(popup.open).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      it("clears a failed sign-in when the next one starts, and settles idle on success", async () => {
+        const popup = heldPopup();
+        const failed = PgSession.signIn();
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        await expect(failed).rejects.toThrow();
+
+        // The sign-in reads the session once the popup is done, and fails
+        // without a user there
+        global.fetch = vi.fn((input: unknown) =>
+          Promise.resolve({
+            ok: true,
+            json: async () =>
+              input === "/api/auth/get-session"
+                ? { user: { id: "u1" } }
+                : { url: "https://x/" },
+          })
+        ) as unknown as typeof fetch;
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({ delivered: true as const, data: {} }),
+          cancel: () => {},
+        }));
+        const next = PgSession.signIn();
+        expect(PgSession.signInState()).toEqual({ status: "pending" });
+        await next;
+
+        expect(PgSession.signInState()).toEqual({ status: "idle" });
       });
 
       it("signs out and clears the user", async () => {

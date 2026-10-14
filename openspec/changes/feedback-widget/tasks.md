@@ -56,14 +56,16 @@ Tasks 1.1 and 2.1 may run at the same time.
   draft is tested in 3.1's hook tests, and closing mid-send in 3.1's and
   3.3's. Depends on 1.1.
   May run beside 3.1. Ticket to file.
-- [x] 3.3 Add the connected `FeedbackWidget` with the provider context.
+- [x] 3.3 Add the connected `FeedbackHost` and `FeedbackTrigger` with the
+  provider context.
   Verify with an integration test that renders it over the real
   `shared/lib/reporter` and the capturing transport, sends one rated
   feedback through the UI and asserts the envelope, the success toast and
   `feedback_opened` then `feedback_sent`; and with
   `src/app/slice-structure.test.ts` passing. Depends on 3.1 and 3.2.
   Ticket to file.
-- [x] 3.4 Render `<FeedbackWidget />` in `views/flow/Flow.tsx` and add
+- [x] 3.4 Render `<FeedbackHost>` around the frame and `<FeedbackTrigger />` in
+  the navigation footer, both in `views/flow/Flow.tsx`, and add
   Playwright tests titled `client-v2-feedback: <scenario>` for every
   scenario not marked `(manual)`. Verify with `yarn test-e2e` and
   `spec:coverage` reporting no uncovered `client-v2-feedback` scenario.

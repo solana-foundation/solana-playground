@@ -1,4 +1,4 @@
-/** Shared layout/color constants for the Flow canvas (panels, header). */
+/** Shared layout/color constants for the Flow canvas (panels, stage bar). */
 
 /** Gutter between the black page ground and each floating panel. */
 export const GAP = "8px";

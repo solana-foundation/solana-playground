@@ -11,8 +11,9 @@ widget gives the team a channel that costs the user one form.
 
 ## What Changes
 
-- A `features/feedback` slice: a floating trigger at the bottom left of the
-  page, above the project panel's "+ New file", a menu with "Share
+- A `features/feedback` slice: a trigger in the navigation's footer, under
+  the status chips (the prototype keeps "Report a bug" in that footer's
+  account menu), a menu with "Share
   feedback", "Suggest an idea" and "Report a bug", and a form with a
   five-star rating, a message and an optional X handle.
 - The form sends its values to Sentry as user feedback, tagged as the spec's
@@ -73,9 +74,9 @@ logger provider imports it.
 - `client-v2/src/shared/lib/telemetry/prefixes.ts`: the `feedback` prefix.
 - `client-v2/src/shared/ui/`: `modal`, `dropdown-menu`, `textarea`, `label`,
   `async-button` and `brand-button` installed with `yarn ds-add`.
-- `client-v2/src/views/flow/Flow.tsx`: renders the widget.
-- Users: a round button sits at the bottom left of every screen, above the
-  project panel's "+ New file".
+- `client-v2/src/views/flow/Flow.tsx`: renders the widget in the navigation's footer.
+- Users: a round button sits in the navigation's footer, under the status
+  chips.
   What they type and the handle they give reach Sentry, which the team can
   read. In a build without Sentry they
   see the button with the two GitHub links.
@@ -86,8 +87,7 @@ logger provider imports it.
     label in a new-issue link applies only for people with triage rights, so
     the links open the issue list.
   - Screenshots or attachments with the feedback.
-  - A feedback entry point other than the floating trigger, such as a footer
-    or menu link.
+  - A second feedback entry point, such as a menu link beside the trigger.
   - Feedback from `client-v2/api/*.mjs` or any server route.
   - Moving the legacy toast (`PgView.setToast`) to the design system's
     `sonner`.

@@ -36,8 +36,8 @@ interface ObjectiveBandProps {
  * One ask, above the editor, always visible.
  *
  * The primary action is the criterion: the control is labelled by what
- * proves the step and dispatches the same command the header stepper
- * does. The assistant sits beside it as a secondary -- the unaided
+ * proves the step and dispatches the same command the stage bar's
+ * stepper does. The assistant sits beside it as a secondary -- the unaided
  * first attempt, bought by layout rather than by a disabled button.
  * The page comes first among the actions, and until it has been opened
  * it is the band's signpost (D34).
@@ -48,8 +48,8 @@ const ObjectiveBand: FC<React.PropsWithChildren<ObjectiveBandProps>> = ({
   onRead,
   onOpenGallery,
 }) => {
-  // What the proving action needs, from the same sources the header's
-  // chips read. Subscribed here, before the early return below, so the
+  // What the proving action needs, from the same sources the navigation
+  // footer's chips read. Subscribed here, before the early return below, so the
   // hooks run on every render.
   const wallet = useWallet();
   const balance = useBalance();

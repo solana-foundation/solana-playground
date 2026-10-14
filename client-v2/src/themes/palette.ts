@@ -30,7 +30,7 @@ const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, term
   SYNTAX_COMMENT = "var(--syntax-comment)";
 
 /**
- * Corner radius of every floating panel: Flow's left/center/right columns
+ * Corner radius of every floating panel: the frame's columns
  * and the cards inside them, which read it back through
  * `theme.default.borderRadius`.
  */

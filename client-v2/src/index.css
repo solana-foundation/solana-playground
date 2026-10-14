@@ -74,6 +74,11 @@
     background-color: transparent;
     border-radius: 0;
   }
+  /* The Sidebar's menus are lists; their bullets showed beside the rail's
+     footer icons, where no `overflow` clips them as it does in the content */
+  :where(ul[data-slot], ol[data-slot]) {
+    list-style: none;
+  }
 }
 
 /*

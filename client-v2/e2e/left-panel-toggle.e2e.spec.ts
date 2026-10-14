@@ -1,7 +1,7 @@
-import { expect, test } from "./fixtures";
+import { expect, leaveEditor, test } from "./fixtures";
 
 /**
- * Collapsing the Flow left panel to a rail and back.
+ * Collapsing the files column to a rail and back.
  *
  * The rail's "+" is the one worth a browser: it expands the panel and then
  * waits for the explorer tree to mount before creating, and that hand-off has
@@ -12,15 +12,16 @@ const OPEN_PX = 232; // 14.5rem
 const RAIL_PX = 52; // 3.25rem
 
 const panel = (page: import("@playwright/test").Page) =>
-  page.locator(`[data-slot="sidebar-container"]`);
+  page.locator("#files[data-panel]");
 
-test("cmd+b toggles the left panel", async ({ seededPage: page }) => {
+test("cmd+e toggles the files column", async ({ seededPage: page }) => {
   await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);
+  await leaveEditor(page);
 
-  await page.keyboard.press("Meta+b");
+  await page.keyboard.press("Meta+e");
   await expect(panel(page)).toHaveJSProperty("offsetWidth", RAIL_PX);
 
-  await page.keyboard.press("Meta+b");
+  await page.keyboard.press("Meta+e");
   await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);
 });
 
@@ -34,11 +35,11 @@ test("the chevron toggles the panel and the hint survives collapse", async ({
   await expect(panel(page)).toHaveJSProperty("offsetWidth", RAIL_PX);
   // Collapsed, this hint is the only affordance saying how to get the panel
   // back, so losing it is a real regression rather than a cosmetic one.
-  await expect(expand).toContainText("⌘B");
+  await expect(expand).toContainText("⌘E");
 
   await expand.click();
   await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);
-  await expect(collapse).toContainText("⌘B");
+  await expect(collapse).toContainText("⌘E");
 });
 
 test("the rail's + expands the panel and opens the new-file input", async ({
@@ -55,7 +56,9 @@ test("the rail's + expands the panel and opens the new-file input", async ({
   await expect(editor).toBeVisible();
   await expect(editor).toBeFocused();
 
-  await page.keyboard.press("Meta+b");
+  // Folded by its button, not ⌘E: Monaco keeps ⌘E (find with selection)
+  // while it has focus, and the editor holds it here by design
+  await page.getByRole("button", { name: "Collapse project panel" }).click();
   await expect(panel(page)).toHaveJSProperty("offsetWidth", RAIL_PX);
 
   // Only the rail's "+" exists while collapsed; the footer button is unmounted.

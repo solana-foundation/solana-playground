@@ -88,7 +88,7 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
       setModalOpen(!!detail?.elementable)
   );
 
-  // The header's toggles are excluded: this hook fires on `mousedown`, so
+  // The status chips' toggles are excluded: this hook fires on `mousedown`, so
   // without that a toggle's own `click` would re-open what the `mousedown`
   // just closed -- one render each way, which reads as the panel wiggling.
   useOnClickOutside(
@@ -112,7 +112,7 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
 
   // Focus the panel itself on open so keyboard users land somewhere sane
   // without having to guess which control comes first -- unless the caller
-  // asked for a specific control, as the header's cluster chip does. On close,
+  // asked for a specific control, as the cluster chip does. On close,
   // restore focus to the element that was active before the panel opened.
   useEffect(() => {
     if (open) {
@@ -286,7 +286,7 @@ export default GearSidebar;
 const Panel = styled.div<{ $open: boolean }>`
   ${({ theme, $open }) => css`
     position: fixed;
-    top: 3.5rem;
+    top: 0;
     right: 0;
     bottom: 0;
     width: 22rem;

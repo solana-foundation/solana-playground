@@ -1,7 +1,7 @@
 import styled from "styled-components";
 
 /**
- * The collapse-handle arrow shared by the left and right Flow panels.
+ * The collapse-handle arrow shared by the files column and the assistant.
  * Points right by default; `$flip` rotates it to point left.
  */
 const Chevron = styled.svg.attrs({
