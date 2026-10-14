@@ -41,13 +41,19 @@ existing code moves.
 - `design-system/` moves from PR #32 into the repository as its own package
   with a registry that has no outside links; `client-v2` installs from it.
 - The new layout shell is built once, on React 19, with today's panels
-  inside; then panels move one by one.
+  inside. Then the app moves to the designer's prototype in big steps (the
+  four-column frame, Home, the workspace, projects, the assistant and
+  lessons, the details), while the small elements are swapped app-wide on a
+  parallel track.
 - The classic layout (`?classic`) is removed with the shell; Flow is the only
   layout.
 - The layout shell adds the telemetry events `layout_panel_toggled`,
   `layout_viewport` (field `viewport`), `layout_readonly_edit_blocked` and
   `layout_restore_failed` (prefix `layout`), described in the
-  `client-v2-layout` spec.
+  `client-v2-layout` spec. The four-column frame names the panels in
+  `layout_panel_toggled` `nav`, `files`, `assistant` and `console` (`left`
+  is gone), and its navigation (`widgets/app-nav`) adds `nav_item_opened`
+  (prefix `nav`).
 
 ## Capabilities
 

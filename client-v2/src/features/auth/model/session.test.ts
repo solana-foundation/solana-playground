@@ -231,6 +231,82 @@ describe("PgSession", () => {
     expect(open).not.toHaveBeenCalled();
   });
 
+  /** A popup that answers only when the test says, and how many were opened */
+  const heldPopup = () => {
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: "https://x/" }),
+    }) as unknown as typeof fetch;
+    let answer!: (receipt: { delivered: false; reason: "cancelled" }) => void;
+    const open = vi.fn(() => ({
+      receive: () =>
+        new Promise<{ delivered: false; reason: "cancelled" }>(
+          (resolve) => (answer = resolve)
+        ),
+      cancel: () => {},
+    }));
+    PgSession.setOpenChannel(open as never);
+    return {
+      open,
+      cancel: () => answer({ delivered: false, reason: "cancelled" }),
+    };
+  };
+
+  it("holds a pending sign-in and its failure, so they outlive whatever rendered them", async () => {
+    const popup = heldPopup();
+    const changed = vi.fn();
+    PgSession.onDidChange(changed);
+    expect(PgSession.signInState()).toEqual({ status: "idle" });
+
+    const pending = PgSession.signIn();
+    expect(PgSession.signInState()).toEqual({ status: "pending" });
+    await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+    popup.cancel();
+    await expect(pending).rejects.toThrow(/cancelled/i);
+
+    expect(PgSession.signInState()).toEqual({
+      status: "failed",
+      message: "Sign-in cancelled.",
+    });
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not start a second sign-in while one is pending", async () => {
+    const popup = heldPopup();
+
+    const first = PgSession.signIn();
+    const second = PgSession.signIn();
+    await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+    popup.cancel();
+    await expect(first).rejects.toThrow(/cancelled/i);
+    await expect(second).rejects.toThrow(/cancelled/i);
+
+    expect(popup.open).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("clears a failed sign-in when the next one starts, and settles idle on success", async () => {
+    const popup = heldPopup();
+    const failed = PgSession.signIn();
+    await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+    popup.cancel();
+    await expect(failed).rejects.toThrow();
+
+    global.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: "https://x/" }),
+    }) as unknown as typeof fetch;
+    PgSession.setOpenChannel(() => ({
+      receive: async () => ({ delivered: true as const, data: {} }),
+      cancel: () => {},
+    }));
+    const next = PgSession.signIn();
+    expect(PgSession.signInState()).toEqual({ status: "pending" });
+    await next;
+
+    expect(PgSession.signInState()).toEqual({ status: "idle" });
+  });
+
   it("signs out and clears the user", async () => {
     global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
     await PgSession.refresh();

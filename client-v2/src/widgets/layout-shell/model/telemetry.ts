@@ -6,12 +6,17 @@ import type { LayoutPanel, RestoreFailure } from "./layout-state";
 /**
  * What opened or closed a panel: a click, a key, a drag of its edge, or the
  * product itself (`auto`): a deploy or "Fix with assistant" opening one, or a
- * modal closing the project Sheet, which would keep focus from the modal
+ * modal closing the navigation's Sheet, which would keep focus from the modal
  */
 export type ToggleSource = "button" | "key" | "drag" | "auto";
 
 type LayoutEvents = {
-  /** A panel opened or closed; `via` says whether a button, a key, a drag or the product did it. */
+  /**
+   * A panel opened or closed; `via` says whether a button, a key, a drag or the
+   * product did it. `panel` is `nav`, `files`, `assistant` or `console`; the
+   * files column was `left` before the navigation took its own name, so a
+   * dashboard grouping on `panel` reads `left` for earlier events.
+   */
   layout_panel_toggled: {
     panel: LayoutPanel;
     open: boolean;

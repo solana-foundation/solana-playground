@@ -33,6 +33,30 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
   await expect(page.locator("#root-dir")).toBeVisible();
 };
 
+/**
+ * The last line `help` prints in the terminal (`test`'s description), so it
+ * is in view however narrow the console is. An entry above it scrolls out of
+ * the terminal's rows once the stage column is narrow enough to wrap the
+ * longer descriptions, and xterm keeps only the rows in view in the page.
+ */
+export const HELP_TAIL = "Run test(s)";
+
+/**
+ * Waits for the editor to take focus, then moves focus out of it.
+ *
+ * The editor focuses itself when it opens a file, at a moment that varies
+ * with the machine, and on macOS Monaco keeps ⌘E (find with selection)
+ * while it has focus. A key the shell binds globally, such as ⌘E for the
+ * files column, reaches the shell there only from outside the editor, so a
+ * test pressing it first settles where focus is.
+ */
+export const leaveEditor = async (page: Page) => {
+  const editor = page.locator(".monaco-editor textarea.inputarea");
+  await expect(editor).toBeFocused();
+  await editor.blur();
+  await expect(editor).not.toBeFocused();
+};
+
 export const test = base.extend<{ seededPage: Page }>({
   seededPage: async ({ page }, use) => {
     await seedWorkspace(page);

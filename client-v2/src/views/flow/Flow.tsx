@@ -4,7 +4,11 @@ import styled, { css } from "styled-components";
 import Chevron from "./Chevron";
 import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
-import Header from "./header/Header";
+import Logomark from "./header/Logomark";
+import ProjectSwitcher from "./header/ProjectSwitcher";
+import RailFooter from "./header/RailFooter";
+import StageBar from "./header/StageBar";
+import StatusChips from "./header/StatusChips";
 import LeftPanel from "./left/LeftPanel";
 import ObjectiveBand from "./lessons/ObjectiveBand";
 import Reader from "./lessons/Reader";
@@ -25,22 +29,38 @@ import { PgDeployHistory } from "./state/deploy-history";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import type { FlowState } from "./state/stage";
 import { GAP } from "./tokens";
-import { FeedbackWidget } from "@/features/feedback";
+import { FeedbackHost, FeedbackTrigger } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Assistant from "@/views/sidebar/assistant/Component";
 import ModalBackdrop from "@/components/ModalBackdrop";
 import Toast from "@/components/Toast";
 import Wallet from "@/components/Wallet";
 import { PgExplorer, PgView } from "@/utils";
+import { AppNav } from "@/widgets/app-nav";
 import { LayoutShell } from "@/widgets/layout-shell";
 import type { Disposable } from "@/utils/types";
 
 /**
- * The Flow layout: header, left project/file tabs, the stage router in the
- * center with a collapsible console beneath it, and the assistant on the
- * right, all placed by `LayoutShell`.
+ * The Flow layout, with no header: `LayoutShell` places four columns, the
+ * navigation (`AppNav`, holding the logo, the project switcher, and the status
+ * chips and the feedback trigger in its footer, which on the rail gives way to
+ * `RailFooter`'s cluster dot and account button), the assistant, the files
+ * column, and the stage router over its collapsible console, with the
+ * `StageBar` stepper across the last two. The sync banner sits above all four,
+ * full width.
+ *
+ * The feedback form and its state sit in `FeedbackHost`, above the frame, not
+ * in the footer with the trigger: below `LAYOUT_BREAKPOINTS.left` the footer
+ * is in a Sheet that unmounts on close, and crossing that width swaps it for
+ * the rail, so a draft or a send held in the footer would go with it.
  */
-const Flow = () => {
+const Flow = () => (
+  <FeedbackHost>
+    <FlowFrame />
+  </FeedbackHost>
+);
+
+const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   const [reading, setReading] = useState(false);
@@ -63,12 +83,19 @@ const Flow = () => {
   }, []);
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
-  // Toggles rather than opens: the header controls are the only way in, so a
-  // second click on one has to be the way out.
-  const toggleSettings = (focus: SettingsFocus = "panel") => {
-    setSettingsFocus(focus);
-    setSettingsOpen((open) => !open);
-  };
+  // Toggles rather than opens: the navigation footer's chips, and the rail's
+  // cluster dot, are the only way in, so a second click on one has to be the
+  // way out. Opening closes the
+  // navigation's Sheet below `LAYOUT_BREAKPOINTS.left` (`closeSheet`): the
+  // chips sit in it, and its modal overlay would cover the panel and trap
+  // focus away from it.
+  const toggleSettings =
+    (closeSheet: () => void) =>
+    (focus: SettingsFocus = "panel") => {
+      if (!settingsOpen) closeSheet();
+      setSettingsFocus(focus);
+      setSettingsOpen((open) => !open);
+    };
 
   // Whether the empty-workspace gallery has already been opened once for
   // this mount of `Flow`.
@@ -141,18 +168,39 @@ const Flow = () => {
 
   return (
     <Wrapper>
-      <Header
-        onOpenGallery={openGallery}
-        onToggleSettings={toggleSettings}
-        settingsOpen={settingsOpen}
-      />
       {/* In flow, not floating: it is a blocking question, and the file it
           names has to stay visible beneath it */}
       <BannerSlot>
         <SyncBanner />
       </BannerSlot>
       <LayoutShell
-        left={({ collapsed, toggle }) => (
+        nav={({ collapsed, toggle, closeSheet }) => (
+          <AppNav
+            collapsed={collapsed}
+            onToggle={toggle}
+            logo={<Logomark aria-hidden="true" />}
+            switcher={<ProjectSwitcher onOpenGallery={openGallery} />}
+            footer={
+              <>
+                <StatusChips
+                  placement="above"
+                  onToggleSettings={toggleSettings(closeSheet)}
+                  settingsOpen={settingsOpen}
+                />
+                <FeedbackTrigger />
+              </>
+            }
+            railFooter={
+              <RailFooter
+                settingsOpen={settingsOpen}
+                onToggleSettings={toggleSettings(closeSheet)}
+                onExpand={toggle}
+              />
+            }
+          />
+        )}
+        stageBar={<StageBar />}
+        files={({ collapsed, toggle }) => (
           <LeftPanel
             collapsed={collapsed}
             onToggle={toggle}
@@ -201,7 +249,9 @@ const Flow = () => {
               aria-label={open ? "Collapse assistant" : "Expand assistant"}
               onClick={toggle}
             >
-              <Chevron $flip={!open} />
+              {/* The assistant folds toward the left edge: open, the chevron
+                  points left (fold); folded, right (open) */}
+              <Chevron $flip={open} />
             </Collapse>
             {open && <Assistant />}
           </Right>
@@ -215,7 +265,6 @@ const Flow = () => {
       />
 
       <Wallet />
-      <FeedbackWidget />
       <PortalAbove id={PgView.ids.PORTAL_ABOVE} />
       <StyledModalBackdrop />
       <PortalBelow id={PgView.ids.PORTAL_BELOW}>
@@ -330,9 +379,9 @@ const Collapse = styled.button`
   `}
 `;
 
-// Above everything the shell draws: the stock Sidebar (z-10), the header
-// (z-20) and the Sheets (z-50), which portal to `body` beside these. The
-// explorer's context menu opens here from inside the project Sheet, so it
+// Above everything the shell draws: the stock Sidebar (z-10) and the Sheets
+// (z-50), which portal to `body` beside these. The
+// explorer's context menu opens here from inside the navigation's Sheet, so it
 // must sit over that Sheet; a modal closes the Sheet as it opens
 // (`LayoutShell`), since the Sheet traps focus. A modal Sheet also turns off
 // pointer events on `body`, so each portal turns them back on for itself.
@@ -344,7 +393,7 @@ const StyledModalBackdrop = styled(ModalBackdrop)`
   z-index: 61;
   pointer-events: auto;
 `;
-// Toasts open at the bottom left, over the left panel and its Sheet, and
+// Toasts open at the bottom left, over the navigation and its Sheet, and
 // below the modal backdrop so a modal still covers them.
 const PortalBelow = styled.div`
   z-index: 60;

@@ -4,7 +4,7 @@
 import { PgSession } from "./model/session";
 
 export { PgSession } from "./model/session";
-export type { SessionUser } from "./model/session";
+export type { SessionUser, SignInState } from "./model/session";
 
 /**
  * Command pre-check: the airdrop demo requires an identity.
