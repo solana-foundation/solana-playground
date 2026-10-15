@@ -1,7 +1,13 @@
 import { FC, ReactNode, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Foldable from "../../../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
+import { useSyncedOpen } from "./useSyncedOpen";
 import BuildFlags from "./BuildFlags";
 import IDL from "./IDL";
 import ProgramBinary from "./ProgramBinary";
@@ -97,16 +103,26 @@ const ProgramSetting: FC<React.PropsWithChildren<ProgramSettingProps>> = ({
   description,
   element,
   isOpen,
-}) => (
-  <ProgramSettingWrapper>
-    <Foldable isOpen={isOpen} element={title}>
-      <ProgramSettingsInside>
-        <ProgramSettingDescription>{description}</ProgramSettingDescription>
-        <ProgramSettingContent>{element}</ProgramSettingContent>
-      </ProgramSettingsInside>
-    </Foldable>
-  </ProgramSettingWrapper>
-);
+}) => {
+  const [open, setOpen] = useSyncedOpen(isOpen);
+
+  return (
+    <ProgramSettingWrapper>
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleHeading>
+          <CollapsibleChevron />
+          {title}
+        </CollapsibleHeading>
+        <CollapsibleContent className="mt-2">
+          <ProgramSettingsInside>
+            <ProgramSettingDescription>{description}</ProgramSettingDescription>
+            <ProgramSettingContent>{element}</ProgramSettingContent>
+          </ProgramSettingsInside>
+        </CollapsibleContent>
+      </Collapsible>
+    </ProgramSettingWrapper>
+  );
+};
 
 const ProgramSettingWrapper = styled.div`
   margin-top: 1rem;

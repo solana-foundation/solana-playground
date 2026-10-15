@@ -1,11 +1,11 @@
 import { useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import Input from "../../Input";
 import { Button } from "@/shared/ui/button";
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../../Text";
-import { Info } from "../../Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet, PgWeb3 } from "../../../utils";
 
 export const Add = () => {
@@ -42,11 +42,12 @@ export const Add = () => {
           />
         </InputWrapper>
 
-        <WarningTextWrapper>
-          <Text icon={<Info color="info" />}>
+        <Callout variant="info" className="mt-4">
+          <InfoIcon />
+          <CalloutDescription>
             Saving the keypair will allow you to recover the wallet.
-          </Text>
-        </WarningTextWrapper>
+          </CalloutDescription>
+        </Callout>
         <Button
           type="button"
           variant="outline"
@@ -83,18 +84,6 @@ const Desc = styled.span`
     color: ${theme.colors.default.textSecondary};
     margin-top: 0.5rem;
   `}
-`;
-
-const WarningTextWrapper = styled.div`
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-
-  & svg {
-    height: 2rem;
-    width: 2rem;
-    margin-right: 1rem;
-  }
 `;
 
 const InputWrapper = styled.div`

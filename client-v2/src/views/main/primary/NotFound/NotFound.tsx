@@ -3,8 +3,8 @@ import styled from "styled-components";
 
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import Text from "../../../../components/Text";
-import { Error } from "../../../../components/Icons";
+import { CircleXIcon } from "lucide-react";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgRouter } from "../../../../utils";
 
 interface NotFoundProps {
@@ -20,9 +20,12 @@ const NotFound: FC<React.PropsWithChildren<NotFoundProps>> = ({
   navigate,
 }) => (
   <Wrapper>
-    <Text kind="error" icon={<Error />}>
-      {text ?? `URL path not found: ${PgRouter.location.pathname}`}
-    </Text>
+    <Callout variant="error" className="w-fit">
+      <CircleXIcon />
+      <CalloutDescription>
+        {text ?? `URL path not found: ${PgRouter.location.pathname}`}
+      </CalloutDescription>
+    </Callout>
     <AsyncButton
       variant="ghost"
       onClick={() => PgRouter.navigate(navigate?.path)}

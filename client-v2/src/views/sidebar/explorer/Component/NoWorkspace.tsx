@@ -1,6 +1,6 @@
 import styled from "styled-components";
 
-import Text from "../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { CreateWorkspace } from "./Modals";
 import { Plus } from "../../../../components/Icons";
 import { PgView } from "../../../../utils";
@@ -12,7 +12,11 @@ const NoWorkspace = () => {
 
   return (
     <Wrapper>
-      <Text>Start by creating a new project.</Text>
+      <Callout>
+        <CalloutDescription>
+          Start by creating a new project.
+        </CalloutDescription>
+      </Callout>
       <AsyncButton
         variant="outline"
         onClick={createWorkspace}

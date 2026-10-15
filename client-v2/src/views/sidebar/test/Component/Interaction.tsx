@@ -1,7 +1,12 @@
 import { FC } from "react";
 import styled, { css } from "styled-components";
 
-import Foldable from "../../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 
 interface InteractionProps {
   name: string;
@@ -14,7 +19,13 @@ const Interaction: FC<React.PropsWithChildren<InteractionProps>> = ({
   children,
 }) => (
   <Wrapper index={index}>
-    <Foldable element={name}>{children}</Foldable>
+    <Collapsible>
+      <CollapsibleHeading>
+        <CollapsibleChevron />
+        {name}
+      </CollapsibleHeading>
+      <CollapsibleContent className="mt-2">{children}</CollapsibleContent>
+    </Collapsible>
   </Wrapper>
 );
 

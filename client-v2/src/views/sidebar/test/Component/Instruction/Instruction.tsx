@@ -4,7 +4,12 @@ import styled from "styled-components";
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
 import Interaction from "../Interaction";
-import Foldable from "../../../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 import { Emoji } from "../../../../../constants";
 import {
   PgCommand,
@@ -146,52 +151,64 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
       <Interaction name={instruction.name} index={index}>
         <ArgsAndAccountsWrapper>
           {instruction.values.args.length > 0 && (
-            <Foldable element="Args" isOpen>
-              <InstructionInputsWrapper>
-                {instruction.values.args.map((arg) => (
-                  <InstructionInput
-                    key={arg.name + refreshCount}
-                    prefix="args"
-                    updateInstruction={({
-                      updateGenerator,
-                      updateRefs,
-                      checkErrors,
-                    }) => {
-                      updateGenerator(arg);
-                      updateRefs(arg, "Arguments");
-                      setDisabled(checkErrors());
-                      refresh();
-                    }}
-                    {...arg}
-                  />
-                ))}
-              </InstructionInputsWrapper>
-            </Foldable>
+            <Collapsible defaultOpen>
+              <CollapsibleHeading>
+                <CollapsibleChevron />
+                Args
+              </CollapsibleHeading>
+              <CollapsibleContent className="mt-2">
+                <InstructionInputsWrapper>
+                  {instruction.values.args.map((arg) => (
+                    <InstructionInput
+                      key={arg.name + refreshCount}
+                      prefix="args"
+                      updateInstruction={({
+                        updateGenerator,
+                        updateRefs,
+                        checkErrors,
+                      }) => {
+                        updateGenerator(arg);
+                        updateRefs(arg, "Arguments");
+                        setDisabled(checkErrors());
+                        refresh();
+                      }}
+                      {...arg}
+                    />
+                  ))}
+                </InstructionInputsWrapper>
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {instruction.values.accounts.length > 0 && (
-            <Foldable element="Accounts" isOpen>
-              <InstructionInputsWrapper>
-                {instruction.values.accounts.map((acc) => (
-                  <InstructionInput
-                    key={acc.name + refreshCount}
-                    prefix="accounts"
-                    type="publicKey"
-                    updateInstruction={({
-                      updateGenerator,
-                      updateRefs,
-                      checkErrors,
-                    }) => {
-                      updateGenerator(acc);
-                      updateRefs(acc, "Accounts");
-                      setDisabled(checkErrors());
-                      refresh();
-                    }}
-                    {...acc}
-                  />
-                ))}
-              </InstructionInputsWrapper>
-            </Foldable>
+            <Collapsible defaultOpen>
+              <CollapsibleHeading>
+                <CollapsibleChevron />
+                Accounts
+              </CollapsibleHeading>
+              <CollapsibleContent className="mt-2">
+                <InstructionInputsWrapper>
+                  {instruction.values.accounts.map((acc) => (
+                    <InstructionInput
+                      key={acc.name + refreshCount}
+                      prefix="accounts"
+                      type="publicKey"
+                      updateInstruction={({
+                        updateGenerator,
+                        updateRefs,
+                        checkErrors,
+                      }) => {
+                        updateGenerator(acc);
+                        updateRefs(acc, "Accounts");
+                        setDisabled(checkErrors());
+                        refresh();
+                      }}
+                      {...acc}
+                    />
+                  ))}
+                </InstructionInputsWrapper>
+              </CollapsibleContent>
+            </Collapsible>
           )}
         </ArgsAndAccountsWrapper>
 

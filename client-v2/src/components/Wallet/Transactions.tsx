@@ -3,8 +3,9 @@ import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
 import Link from "../Link";
-import Text from "../Text";
-import { Clock, Refresh, Sad, Error as ErrorIcon } from "../Icons";
+import { FrownIcon } from "lucide-react";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Clock, Refresh, Error as ErrorIcon } from "../Icons";
 import { SpinnerWithBg } from "../Loading";
 import { PgCommon, PgTheme, PgWallet, PgWeb3 } from "../../utils";
 import { useBlockExplorer, useConnection } from "../../hooks";
@@ -84,11 +85,19 @@ const Transactions = () => {
             <NoTransaction>
               {!loading &&
                 (error ? (
-                  <Text kind="error" icon={<Sad />}>
-                    Connection error: {error}
-                  </Text>
+                  <Callout variant="error">
+                    <FrownIcon />
+                    <CalloutDescription>
+                      Connection error: {error}
+                    </CalloutDescription>
+                  </Callout>
                 ) : (
-                  <Text icon={<Sad />}>No transaction found.</Text>
+                  <Callout>
+                    <FrownIcon />
+                    <CalloutDescription>
+                      No transaction found.
+                    </CalloutDescription>
+                  </Callout>
                 ))}
             </NoTransaction>
           )}

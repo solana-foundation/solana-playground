@@ -1,7 +1,8 @@
 import styled from "styled-components";
 
-import Checkbox from "../../../../../components/Checkbox";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { HelpTip } from "@/shared/ui/help-tip";
+import { Label } from "@/shared/ui/label";
 import { PgCommon, PgSettings } from "../../../../../utils";
 
 type BuildFlag = keyof typeof PgSettings["build"]["flags"];
@@ -16,13 +17,15 @@ const BuildFlags = () => (
   <Wrapper>
     {PgCommon.entries(BUILD_FLAGS).map(([flag, details]) => (
       <Row key={flag}>
-        <Checkbox
-          label={PgCommon.toTitleFromCamel(flag)}
-          onChange={(ev) => {
-            PgSettings.build.flags[flag] = ev.target.checked;
-          }}
-          defaultChecked={PgSettings.build.flags[flag]}
-        />
+        <Label className="flex items-center gap-2">
+          <Checkbox
+            defaultChecked={PgSettings.build.flags[flag]}
+            onCheckedChange={(checked) => {
+              PgSettings.build.flags[flag] = checked === true;
+            }}
+          />
+          {PgCommon.toTitleFromCamel(flag)}
+        </Label>
         <HelpTip>{details}</HelpTip>
       </Row>
     ))}

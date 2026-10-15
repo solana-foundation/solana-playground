@@ -1,6 +1,7 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Badge } from "@/shared/ui/badge";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
@@ -154,7 +155,9 @@ const ServerConsole = ({
     <Card>
       <Head>
         <Name>{server.name || server.id}</Name>
-        <Badge>{server.executor}</Badge>
+        <Badge variant="outline" className="shrink-0 font-mono">
+          {server.executor}
+        </Badge>
       </Head>
 
       {server.executor === "server" ? (
@@ -204,13 +207,14 @@ const ServerConsole = ({
                     {description}
                   </Description>
                   {descriptionIsLong && (
-                    <Disclosure
+                    <button
                       type="button"
                       aria-expanded={descriptionOpen}
                       onClick={() => setDescriptionOpen((open) => !open)}
+                      className="mt-1 cursor-pointer p-0 text-xs text-muted-foreground underline hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                     >
                       {descriptionOpen ? "Show less" : "Show more"}
-                    </Disclosure>
+                    </button>
                   )}
 
                   <Label htmlFor={`mcp-args-${server.id}`}>ARGUMENTS</Label>
@@ -268,17 +272,6 @@ const Name = styled.div`
   `}
 `;
 
-const Badge = styled.span`
-  ${({ theme }) => css`
-    flex-shrink: 0;
-    padding: 0.0625rem 0.375rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
-
 const Note = styled.div`
   ${({ theme }) => css`
     padding: 0.375rem 0 0;
@@ -314,29 +307,6 @@ const Description = styled.div<{ $clamped: boolean }>`
       -webkit-line-clamp: 3;
       overflow: hidden;
     `}
-  `}
-`;
-
-const Disclosure = styled.button`
-  ${({ theme }) => css`
-    margin-top: 0.25rem;
-    padding: 0;
-    background: transparent;
-    border: none;
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    text-decoration: underline;
-    cursor: pointer;
-
-    &:hover {
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    &:focus-visible {
-      outline: 1px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
   `}
 `;
 

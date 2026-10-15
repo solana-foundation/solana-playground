@@ -23,7 +23,9 @@ const rewriteConfig = (page: Page, next: unknown) =>
   page.evaluate(
     async ({ next, marker }) => {
       const dbs = await (indexedDB as any).databases();
-      const name = dbs.map((d: any) => d.name).find((n: string) => n?.includes("solana"));
+      const name = dbs
+        .map((d: any) => d.name)
+        .find((n: string) => n?.includes("solana"));
       if (!name) throw new Error("no filesystem database");
 
       const db: IDBDatabase = await new Promise((res, rej) => {
@@ -31,7 +33,9 @@ const rewriteConfig = (page: Page, next: unknown) =>
         r.onsuccess = () => res(r.result);
         r.onerror = () => rej(r.error);
       });
-      const store = Array.from(db.objectStoreNames).find((s) => s.includes("files"));
+      const store = Array.from(db.objectStoreNames).find((s) =>
+        s.includes("files")
+      );
       if (!store) throw new Error("no file store");
 
       const read = <T>(fn: (s: IDBObjectStore) => IDBRequest): Promise<T> =>
@@ -58,7 +62,10 @@ const rewriteConfig = (page: Page, next: unknown) =>
 
       await new Promise<void>((res, rej) => {
         const tx = db.transaction(store, "readwrite");
-        tx.objectStore(store).put(new TextEncoder().encode(JSON.stringify(next)), target!);
+        tx.objectStore(store).put(
+          new TextEncoder().encode(JSON.stringify(next)),
+          target!
+        );
         tx.oncomplete = () => res();
         tx.onerror = () => rej(tx.error);
       });
@@ -69,12 +76,16 @@ const rewriteConfig = (page: Page, next: unknown) =>
 const readConfig = (page: Page) =>
   page.evaluate(async () => {
     const dbs = await (indexedDB as any).databases();
-    const name = dbs.map((d: any) => d.name).find((n: string) => n?.includes("solana"));
+    const name = dbs
+      .map((d: any) => d.name)
+      .find((n: string) => n?.includes("solana"));
     const db: IDBDatabase = await new Promise((res) => {
       const r = indexedDB.open(name!);
       r.onsuccess = () => res(r.result);
     });
-    const store = Array.from(db.objectStoreNames).find((s) => s.includes("files"))!;
+    const store = Array.from(db.objectStoreNames).find((s) =>
+      s.includes("files")
+    )!;
     const values: any[] = await new Promise((res) => {
       const rq = db.transaction(store, "readonly").objectStore(store).getAll();
       rq.onsuccess = () => res(rq.result);
@@ -101,7 +112,10 @@ const switcher = (page: Page) => page.locator('[aria-haspopup="true"]').first();
  */
 const addWorkspace = async (page: Page, name: string) => {
   await switcher(page).click();
-  await page.getByLabel("Projects and lessons").getByText("Browse gallery").click();
+  await page
+    .getByLabel("Projects and lessons")
+    .getByText("Browse gallery")
+    .click();
 
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible();

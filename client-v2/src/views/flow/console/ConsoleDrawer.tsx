@@ -2,6 +2,7 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Kbd } from "@/shared/ui/kbd";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgFlow } from "../state/stage";
@@ -60,7 +61,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
             <Status $tone={status.tone}>{` ${status.text}`}</Status>
           )}
         </TextGroup>
-        <Hint>&#8984;J</Hint>
+        <Kbd className="ml-auto">&#8984;J</Kbd>
       </Handle>
       <Body id="flow-console-drawer-body">
         <Terminal />
@@ -134,11 +135,6 @@ const Status = styled.span<{ $tone: ConsoleStatus["tone"] }>`
       ? theme.colors.state.error.color
       : theme.colors.default.textSecondary};
   `}
-`;
-
-const Hint = styled.span`
-  margin-left: auto;
-  opacity: 0.6;
 `;
 
 const Body = styled.div`

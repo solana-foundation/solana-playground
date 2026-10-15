@@ -2,8 +2,9 @@ import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
-/* The product's one vocabulary for state: a dot, in words as well where it
-   matters. Running pulses; everything else sits still. */
+/* The product's one vocabulary for state: a dot. It renders no words, so
+   callers add them where it matters. Running pulses; everything else sits
+   still. */
 const statusDotVariants = cva("inline-block shrink-0 rounded-full", {
   variants: {
     variant: {

@@ -1,6 +1,7 @@
 import { CircleUserRound } from "lucide-react";
 
-import { cn } from "cn";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
+import { StatusDot } from "@/shared/ui/status-dot";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -49,13 +50,7 @@ const BaseRailFooter = ({
           className="justify-center"
           onClick={onOpenCluster}
         >
-          <span
-            aria-hidden
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              cluster.down ? "bg-destructive" : "bg-success"
-            )}
-          />
+          <StatusDot variant={cluster.down ? "error" : "success"} size="lg" />
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>
@@ -65,11 +60,12 @@ const BaseRailFooter = ({
           className="justify-center"
           onClick={onExpand}
         >
-          {avatar ? (
-            <img src={avatar} alt="" className="size-4 rounded-full" />
-          ) : (
-            <CircleUserRound aria-hidden />
-          )}
+          <Avatar className="size-4">
+            <AvatarImage src={avatar ?? undefined} alt="" />
+            <AvatarFallback className="bg-transparent">
+              <CircleUserRound aria-hidden />
+            </AvatarFallback>
+          </Avatar>
         </SidebarMenuButton>
       </SidebarMenuItem>
     </SidebarMenu>

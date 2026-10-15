@@ -1,11 +1,11 @@
 import { FC, useEffect, useRef, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled from "styled-components";
 
 import Input from "../../../../components/Input";
 import Markdown from "../../../../components/Markdown";
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../../../../components/Text";
-import { Info } from "../../../../components/Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Setting } from "../../../../utils";
 
 interface CustomSettingProps {
@@ -63,9 +63,12 @@ export const CustomSetting: FC<React.PropsWithChildren<CustomSettingProps>> = ({
         />
 
         {custom.tip && (
-          <Tip icon={<Info color="info" />}>
-            <Markdown codeFontOnly>{custom.tip}</Markdown>
-          </Tip>
+          <Callout variant="info" className="mt-4">
+            <InfoIcon />
+            <CalloutDescription>
+              <Markdown codeFontOnly>{custom.tip}</Markdown>
+            </CalloutDescription>
+          </Callout>
         )}
       </Content>
     </ModalFrame>
@@ -79,8 +82,4 @@ const Content = styled.div`
 const InputLabel = styled.div`
   margin-bottom: 0.5rem;
   font-weight: bold;
-`;
-
-const Tip = styled(Text)`
-  margin-top: 1rem;
 `;

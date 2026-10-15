@@ -17,7 +17,6 @@ vi.mock("../../../../utils", () => ({
     onDidChangeDeployState: "deployState",
   },
 }));
-vi.mock("../../../../components/Text", () => ({ default: () => null }));
 vi.mock("../../../../components/Icons", () => ({
   Pause: () => null,
   Rocket: () => null,

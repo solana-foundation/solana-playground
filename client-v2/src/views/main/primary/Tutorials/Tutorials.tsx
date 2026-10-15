@@ -3,11 +3,11 @@ import styled, { css } from "styled-components";
 
 import List from "../../../../components/ResponsiveItems";
 import SearchBar from "../../../../components/SearchBar";
-import Text from "../../../../components/Text";
 import Topbar from "../../../../components/Topbar";
 import FeaturedTutorial from "./FeaturedTutorial";
 import TutorialCard from "./TutorialCard";
-import { Sad } from "../../../../components/Icons";
+import { FrownIcon } from "lucide-react";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Filter, useFilteredSearch } from "../../../../hooks";
 import { TutorialFullData, TUTORIAL_LEVELS } from "../../../../utils";
 
@@ -66,7 +66,10 @@ const Tutorials: FC<React.PropsWithChildren<TutorialsProps>> = ({
             ))}
           </List>
         ) : (
-          <NoMatchText icon={<Sad />}>No match found</NoMatchText>
+          <Callout className="flex h-20 w-84 items-center justify-center gap-2.5 text-sm *:[svg]:translate-y-0">
+            <FrownIcon />
+            <CalloutDescription>No match found</CalloutDescription>
+          </Callout>
         )}
 
         {featuredItems.length > 0 && (
@@ -105,14 +108,6 @@ const MainSection = styled.div<{ noMatch: boolean }>`
     padding: 2rem 2.5rem;
 
     ${noMatch && "justify-content: center; align-items: center;"}
-  `}
-`;
-
-const NoMatchText = styled(Text)`
-  ${({ theme }) => css`
-    width: 21rem;
-    height: 5rem;
-    font-size: ${theme.font.other.size.small};
   `}
 `;
 

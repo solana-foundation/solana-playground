@@ -1,8 +1,10 @@
 import styled from "styled-components";
+import { InfoIcon } from "lucide-react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import {
   Select,
   SelectContent,
@@ -12,7 +14,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import Text from "../../../../components/Text";
 import {
   CreateWorkspace,
   RenameWorkspace,
@@ -28,7 +29,6 @@ import {
   Github,
   ImportFile,
   ImportWorkspace,
-  Info,
   Plus,
   Trash,
 } from "../../../../components/Icons";
@@ -210,9 +210,12 @@ const TemporaryWarning = () => {
 
   return (
     <TemporaryWarningWrapper>
-      <Text icon={<Info color="info" />}>
-        This is a temporary project, import it to persist changes.
-      </Text>
+      <Callout variant="info">
+        <InfoIcon />
+        <CalloutDescription>
+          This is a temporary project, import it to persist changes.
+        </CalloutDescription>
+      </Callout>
       <AsyncButton
         variant="outline"
         onClick={handleImport}

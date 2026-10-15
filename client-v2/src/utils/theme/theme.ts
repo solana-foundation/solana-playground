@@ -821,11 +821,9 @@ export class PgTheme {
 
     return this._skeleton()
       ._card()
-      ._text()
       ._svg()
       ._input()
       ._tooltip()
-      ._progressBar()
       ._uploadArea()
       ._topbar()
       ._markdown()
@@ -986,25 +984,6 @@ export class PgTheme {
     return this;
   }
 
-  /** Set default text component */
-  private static _text() {
-    const text = this._getComponent("text");
-    const theme = this._themeReady;
-
-    // Default
-    text.default ??= {};
-    text.default.display ??= "flex";
-    text.default.justifyContent ??= "center";
-    text.default.alignItems ??= "center";
-    text.default.bg ??= theme.colors.default.bgPrimary;
-    text.default.padding ??= "1rem";
-    text.default.borderRadius ??= theme.default.borderRadius;
-    text.default.fontSize ??= theme.font.code.size.small;
-    text.default.lineHeight ??= 1.5;
-
-    return this;
-  }
-
   /** Set default svg component */
   private static _svg() {
     const svg = this._getComponent("svg");
@@ -1061,30 +1040,6 @@ export class PgTheme {
     tooltip.fontFamily ??= theme.font.code.family;
     tooltip.fontSize ??= theme.font.code.size.small;
     tooltip.textAlign ??= "center";
-
-    return this;
-  }
-
-  /** Set default progress bar component */
-  private static _progressBar() {
-    const progressbar = this._getComponent("progressbar");
-    const theme = this._themeReady;
-
-    // Default
-    progressbar.default ??= {};
-    progressbar.default.width ??= "100%";
-    progressbar.default.height ??= "0.75rem";
-    progressbar.default.overflow ??= "hidden";
-    progressbar.default.border ??= `1px solid ${theme.colors.default.border}`;
-    progressbar.default.borderRadius ??= theme.default.borderRadius;
-
-    // Indicator
-    progressbar.indicator ??= {};
-    progressbar.indicator.height ??= "100%";
-    progressbar.indicator.maxWidth ??= "100%";
-    progressbar.indicator.bg ??= theme.colors.default.primary;
-    progressbar.indicator.borderRadius ??= theme.default.borderRadius;
-    progressbar.indicator.transition ??= `width ${theme.default.transition.duration.long} ${theme.default.transition.type}`;
 
     return this;
   }

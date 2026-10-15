@@ -6,7 +6,7 @@ import Account from "./Account";
 import Event from "./Event";
 import Instruction from "./Instruction";
 import IdlProvider from "./IdlProvider";
-import Text from "../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgCommand, PgProgramInfo } from "../../../../utils";
 import { PgProgramInteraction } from "../../../../utils/program-interaction";
 import {
@@ -32,7 +32,9 @@ const Test = () => {
   if (!explorer.isTemporary && !explorer.currentWorkspaceName) {
     return (
       <InitialWrapper>
-        <Text>No project to test.</Text>
+        <Callout>
+          <CalloutDescription>No project to test.</CalloutDescription>
+        </Callout>
       </InitialWrapper>
     );
   }
@@ -44,11 +46,13 @@ const Test = () => {
   if (!idl) {
     return (
       <InitialWrapper>
-        <Text>
-          {programInfo.importedProgram || programInfo.uuid
-            ? "Anchor IDL not found."
-            : "Program is not built."}
-        </Text>
+        <Callout>
+          <CalloutDescription>
+            {programInfo.importedProgram || programInfo.uuid
+              ? "Anchor IDL not found."
+              : "Program is not built."}
+          </CalloutDescription>
+        </Callout>
       </InitialWrapper>
     );
   }
@@ -56,7 +60,11 @@ const Test = () => {
   if (!programInfo.pk) {
     return (
       <InitialWrapper>
-        <Text>The program has no public key.</Text>
+        <Callout>
+          <CalloutDescription>
+            The program has no public key.
+          </CalloutDescription>
+        </Callout>
       </InitialWrapper>
     );
   }
@@ -64,10 +72,12 @@ const Test = () => {
   if (!idl.instructions) {
     return (
       <InitialWrapper>
-        <Text kind="error">
-          You've imported a corrupted IDL. Please double check you've imported
-          an Anchor IDL.
-        </Text>
+        <Callout variant="error">
+          <CalloutDescription>
+            You've imported a corrupted IDL. Please double check you've imported
+            an Anchor IDL.
+          </CalloutDescription>
+        </Callout>
       </InitialWrapper>
     );
   }
@@ -75,10 +85,12 @@ const Test = () => {
   if (error) {
     return (
       <InitialWrapper>
-        <Text kind="error">
-          Connection error. Please try changing the RPC endpoint from the
-          settings.
-        </Text>
+        <Callout variant="error">
+          <CalloutDescription>
+            Connection error. Please try changing the RPC endpoint from the
+            settings.
+          </CalloutDescription>
+        </Callout>
       </InitialWrapper>
     );
   }
@@ -86,7 +98,9 @@ const Test = () => {
   if (!deployed) {
     return (
       <InitialWrapper>
-        <Text>Program is not deployed.</Text>
+        <Callout>
+          <CalloutDescription>Program is not deployed.</CalloutDescription>
+        </Callout>
       </InitialWrapper>
     );
   }

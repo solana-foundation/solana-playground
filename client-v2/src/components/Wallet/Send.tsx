@@ -4,7 +4,12 @@ import styled, { css } from "styled-components";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Input from "../Input";
-import Foldable from "../Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 import {
   PgCommon,
   PgTerminal,
@@ -17,9 +22,15 @@ import { useBalance, useKeybind } from "../../hooks";
 
 const Send = () => (
   <Wrapper>
-    <Foldable element={<Title>Send</Title>}>
-      <SendExpanded />
-    </Foldable>
+    <Collapsible>
+      <CollapsibleHeading>
+        <CollapsibleChevron />
+        <Title>Send</Title>
+      </CollapsibleHeading>
+      <CollapsibleContent className="mt-2">
+        <SendExpanded />
+      </CollapsibleContent>
+    </Collapsible>
   </Wrapper>
 );
 
@@ -29,7 +40,7 @@ const Wrapper = styled.div`
   `}
 `;
 
-const Title = styled.div`
+const Title = styled.span`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(theme.components.wallet.main.send.title)};
   `}

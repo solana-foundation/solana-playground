@@ -1,6 +1,9 @@
 import { FC, useMemo } from "react";
 import styled, { css } from "styled-components";
 
+import { Badge } from "@/shared/ui/badge";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { cn } from "cn";
 import Markdown from "../../../../components/Markdown";
 import { diffLines, summarizeDiff } from "../diff";
 import { PgAssistant, type ChatItem as Item } from "../store";
@@ -118,14 +121,29 @@ const ChatItem: FC<
       );
 
     case "error":
-      return <ErrorBox role="alert">{item.text}</ErrorBox>;
+      return (
+        <Callout variant="error" role="alert">
+          <CalloutDescription className="break-words">
+            {item.text}
+          </CalloutDescription>
+        </Callout>
+      );
 
     case "notice":
-      return <Notice role="status">{item.text}</Notice>;
+      return (
+        <Callout role="status">
+          <CalloutDescription>{item.text}</CalloutDescription>
+        </Callout>
+      );
 
     case "approval":
       return <Approval item={item} />;
   }
+};
+
+// Allowed reads as success; the rest take the badge's own colours.
+const STATUS_TEXT: Record<string, string> = {
+  allowed: "text-success",
 };
 
 const Approval: FC<
@@ -154,7 +172,12 @@ const Approval: FC<
         ) : (
           <CardTitle>wants to run {request.name}</CardTitle>
         )}
-        <StatusLabel $status={status}>{label ?? "PROPOSED"}</StatusLabel>
+        <Badge
+          variant={status === "pending" ? "default" : "outline"}
+          className={cn("font-mono tracking-wider", STATUS_TEXT[status])}
+        >
+          {label ?? "PROPOSED"}
+        </Badge>
       </CardHead>
 
       {request.type === "patch" ? (
@@ -313,26 +336,6 @@ const MakeChange = styled.button<{ $quiet?: boolean }>`
   `}
 `;
 
-const Notice = styled.div`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    font-style: italic;
-  `}
-`;
-
-const ErrorBox = styled.div`
-  ${({ theme }) => css`
-    padding: 0.625rem 0.6875rem;
-    border: 1px solid ${theme.colors.state.error.color};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.code.size.small};
-    line-height: 1.55;
-    word-break: break-word;
-  `}
-`;
-
 const Card = styled.div<{ $pending: boolean }>`
   ${({ theme, $pending }) => css`
     border: 1px solid
@@ -397,19 +400,6 @@ const Removed = styled.span`
   ${({ theme }) => css`
     color: ${theme.colors.state.error.color};
     font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
-
-const StatusLabel = styled.span<{ $status: string }>`
-  ${({ theme, $status }) => css`
-    flex-shrink: 0;
-    font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.08em;
-    color: ${$status === "allowed"
-      ? theme.colors.state.success.color
-      : $status === "pending"
-      ? theme.colors.default.primary
-      : theme.colors.default.textSecondary};
   `}
 `;
 

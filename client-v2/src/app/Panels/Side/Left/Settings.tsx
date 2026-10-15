@@ -10,8 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import Checkbox from "../../../../components/Checkbox";
-import Foldable from "../../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
+import { Switch } from "@/shared/ui/switch";
 import { HelpTip } from "@/shared/ui/help-tip";
 import { useRenderOnChange } from "../../../../hooks";
 import {
@@ -80,14 +85,17 @@ const SettingGroup: FC<React.PropsWithChildren<SettingGroupProps>> = ({
   settings,
 }) => (
   <SettingGroupWrapper>
-    <Foldable
-      isOpen
-      element={PgCommon.toTitleFromCamel(name).replace("Ui", "UI")}
-    >
-      {settings.map((setting) => (
-        <Setting key={setting.id} {...setting} />
-      ))}
-    </Foldable>
+    <Collapsible defaultOpen>
+      <CollapsibleHeading>
+        <CollapsibleChevron />
+        {PgCommon.toTitleFromCamel(name).replace("Ui", "UI")}
+      </CollapsibleHeading>
+      <CollapsibleContent className="mt-2">
+        {settings.map((setting) => (
+          <Setting key={setting.id} {...setting} />
+        ))}
+      </CollapsibleContent>
+    </Collapsible>
   </SettingGroupWrapper>
 );
 
@@ -288,10 +296,11 @@ type SettingSetterCheckBoxProps = Omit<SettingSetterProps, "values">;
 
 const SettingSetterCheckBox: FC<
   React.PropsWithChildren<SettingSetterCheckBoxProps>
-> = ({ getValue, setValue }) => (
-  <Checkbox
-    onChange={(ev) => setValue(ev.target.checked)}
+> = ({ name, getValue, setValue }) => (
+  <Switch
+    aria-label={name}
     checked={getValue()}
+    onCheckedChange={(checked) => setValue(checked)}
   />
 );
 

@@ -2,7 +2,7 @@ import { FC } from "react";
 import styled, { css } from "styled-components";
 
 import Link from "../Link";
-import Tag from "../Tag";
+import { DetailTag } from "@/entities/tutorial";
 import { Arrayable, TutorialDetailKey } from "../../utils";
 import { useDifferentBackground } from "../../hooks";
 
@@ -86,7 +86,7 @@ const ClickableTutorialDetail: FC<
   React.PropsWithChildren<ClickableTutorialDetailProps>
 > = ({ data, ...props }) => (
   <Link href={`/tutorials?${props.kind}=${data}`}>
-    <Tag {...props} value={data} />
+    <DetailTag kind={props.kind} value={String(data)} />
   </Link>
 );
 

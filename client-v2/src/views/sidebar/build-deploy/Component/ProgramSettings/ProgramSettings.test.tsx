@@ -38,7 +38,6 @@ vi.mock("../../../../../utils", () => ({
 }));
 vi.mock("../../../../../hooks", () => ({ useRenderOnChange: () => null }));
 vi.mock("../../../../../components/Input", () => ({ default: () => null }));
-vi.mock("../../../../../components/Text", () => ({ default: () => null }));
 vi.mock("../../../../../components/Icons", () => ({ Warning: () => null }));
 vi.mock("@/widgets/overlays", () => ({ ModalFrame: () => null }));
 vi.mock("@/shared/ui/copy-button", () => ({ CopyButton: () => null }));

@@ -10,7 +10,6 @@ const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, term
   BG_HOVER = "var(--surface-hover)",
   PRIMARY = "var(--primary)",
   SECONDARY = "var(--track-brand)",
-  GRADIENT = "var(--gradient-product)",
   TEXT_PRIMARY = "var(--text-primary)",
   TEXT_SECONDARY = "var(--text-secondary)",
   BORDER = "var(--border)",
@@ -100,9 +99,6 @@ const PALETTE: ThemeParam = {
       bg: BG_RAISED,
       borderColor: BORDER,
       padding: "0.4375rem 0.75rem",
-    },
-    progressbar: {
-      indicator: { bg: GRADIENT },
     },
     skeleton: {
       bg: BG_RAISED,

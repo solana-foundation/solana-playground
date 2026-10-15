@@ -9,11 +9,9 @@ vi.mock("../../../../utils", async () => {
   return { PgCommon, PgView: { setModal: () => {} }, PgSettings: {} };
 });
 
-// Only the select is under test: the modal, checkbox, fold and tooltip pull in
-// the theme, which needs the same build-time global
+// Only the select is under test: the modal and tooltip pull in the theme,
+// which needs the same build-time global
 vi.mock("./CustomSetting", () => ({ CustomSetting: () => null }));
-vi.mock("../../../../components/Checkbox", () => ({ default: () => null }));
-vi.mock("../../../../components/Foldable", () => ({ default: () => null }));
 vi.mock("../../../../components/Tooltip", () => ({ default: () => null }));
 vi.mock("../../../../hooks", () => ({ useRenderOnChange: () => {} }));
 

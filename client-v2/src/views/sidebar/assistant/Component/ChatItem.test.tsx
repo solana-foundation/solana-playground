@@ -62,3 +62,35 @@ describe("approval card", () => {
     expect(resolve).toHaveBeenCalledWith("card-1", false);
   });
 });
+
+const renderItem = (item: Item) =>
+  render(
+    <ThemeProvider theme={anyTheme}>
+      <ChatItem item={item} />
+    </ThemeProvider>
+  );
+
+describe("notices", () => {
+  it("announces an error item as an alert", () => {
+    renderItem({
+      kind: "error",
+      id: "1",
+      createdAt: "2026-10-14T00:00:00.000Z",
+      text: "Key rejected",
+    });
+
+    expect(screen.getByRole("alert").textContent).toBe("Key rejected");
+  });
+
+  it("announces a notice item as a status", () => {
+    renderItem({
+      kind: "notice",
+      id: "2",
+      createdAt: "2026-10-14T00:00:00.000Z",
+      text: "Stopped",
+    });
+
+    expect(screen.getByRole("status").textContent).toBe("Stopped");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});

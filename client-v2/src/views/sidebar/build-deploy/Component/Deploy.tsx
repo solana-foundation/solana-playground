@@ -1,7 +1,7 @@
 import { useMemo, type ReactElement } from "react";
 import styled from "styled-components";
 
-import Text from "../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Pause, Rocket, Triangle } from "../../../../components/Icons";
 import { PgCommand, PgGlobal } from "../../../../utils";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -74,10 +74,12 @@ const Deploy = () => {
 
     return (
       <Wrapper>
-        <Text>
-          Initial deployment needs a keypair. You can import it from
-          <Bold> Program ID</Bold> settings.
-        </Text>
+        <Callout>
+          <CalloutDescription>
+            Initial deployment needs a keypair. You can import it from
+            <Bold> Program ID</Bold> settings.
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
     );
   }
@@ -85,10 +87,12 @@ const Deploy = () => {
   if (error) {
     return (
       <Wrapper>
-        <Text kind="error">
-          Connection error. Please try changing the RPC endpoint from the
-          settings.
-        </Text>
+        <Callout variant="error">
+          <CalloutDescription>
+            Connection error. Please try changing the RPC endpoint from the
+            settings.
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
     );
   }
@@ -96,7 +100,11 @@ const Deploy = () => {
   if (!wallet) {
     return (
       <Wrapper>
-        <Text>Your wallet must be connected for program deployments.</Text>
+        <Callout>
+          <CalloutDescription>
+            Your wallet must be connected for program deployments.
+          </CalloutDescription>
+        </Callout>
         <AsyncButton
           onClick={() => PgCommand.connect.execute()}
           onError={reportButtonFailure}
@@ -110,10 +118,12 @@ const Deploy = () => {
   if (!hasUuid && !isImportedProgram) {
     return (
       <Wrapper>
-        <Text>
-          Build the program first or import a program from
-          <Bold> Program binary</Bold>.
-        </Text>
+        <Callout>
+          <CalloutDescription>
+            Build the program first or import a program from
+            <Bold> Program binary</Bold>.
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
     );
   }
@@ -121,7 +131,11 @@ const Deploy = () => {
   if (upgradable === false) {
     return (
       <Wrapper>
-        <Text kind="warning">The program is not upgradable.</Text>
+        <Callout variant="warning">
+          <CalloutDescription>
+            The program is not upgradable.
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
     );
   }
@@ -129,9 +143,11 @@ const Deploy = () => {
   if (hasAuthority === false) {
     return (
       <Wrapper>
-        <Text kind="warning">
-          You don't have the authority to upgrade this program.
-        </Text>
+        <Callout variant="warning">
+          <CalloutDescription>
+            You don't have the authority to upgrade this program.
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
     );
   }
@@ -153,7 +169,9 @@ const Deploy = () => {
 
     return (
       <Wrapper>
-        <Text>{text}</Text>
+        <Callout>
+          <CalloutDescription>{text}</CalloutDescription>
+        </Callout>
         {deployButton}
       </Wrapper>
     );

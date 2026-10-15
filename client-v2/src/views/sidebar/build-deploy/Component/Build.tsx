@@ -1,6 +1,6 @@
 import styled from "styled-components";
 
-import Text from "../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Wrench } from "../../../../components/Icons";
 import { useExplorer, useRenderOnChange } from "../../../../hooks";
 import { PgCommand, PgGlobal } from "../../../../utils";
@@ -12,7 +12,11 @@ const Build = () => {
 
   const explorer = useExplorer();
   if (!explorer.isTemporary && !explorer.currentWorkspaceName) {
-    return <Text>No project to build.</Text>;
+    return (
+      <Callout>
+        <CalloutDescription>No project to build.</CalloutDescription>
+      </Callout>
+    );
   }
 
   return (

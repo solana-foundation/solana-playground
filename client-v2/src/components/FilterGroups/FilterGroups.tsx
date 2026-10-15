@@ -2,8 +2,9 @@ import { ComponentProps, FC } from "react";
 import { useSearchParams } from "react-router-dom";
 import styled, { css } from "styled-components";
 
-import Checkbox from "../Checkbox";
-import Tag from "../Tag";
+import { Checkbox } from "@/shared/ui/checkbox";
+import { Label } from "@/shared/ui/label";
+import { DetailTag } from "@/entities/tutorial";
 import type { Filter } from "../../hooks";
 
 interface FilterGroupsProps<P extends string> {
@@ -60,30 +61,27 @@ const FilterGroup: FC<React.PropsWithChildren<FilterGroupProps>> = ({
     <FilterGroupWrapper>
       <FilterGroupTitle>{param}</FilterGroupTitle>
       {nonZeroFilters.map((filter) => (
-        <Checkbox
-          key={filter.name}
-          label={
-            <FilterLabel
-              kind={param}
-              value={filter.name}
-              count={filter.count}
-            />
-          }
-          checked={searchValues.includes(filter.name)}
-          onChange={(ev) => {
-            if (ev.target.checked) {
-              searchParams.append(param, filter.name);
-            } else {
-              const otherValues = searchValues.filter((f) => f !== filter.name);
-              searchParams.delete(param);
-              for (const otherValue of otherValues) {
-                searchParams.append(param, otherValue);
+        <Label key={filter.name}>
+          <Checkbox
+            checked={searchValues.includes(filter.name)}
+            onCheckedChange={(checked) => {
+              if (checked === true) {
+                searchParams.append(param, filter.name);
+              } else {
+                const otherValues = searchValues.filter(
+                  (f) => f !== filter.name
+                );
+                searchParams.delete(param);
+                for (const otherValue of otherValues) {
+                  searchParams.append(param, otherValue);
+                }
               }
-            }
 
-            setSearchParams(searchParams, { replace: true });
-          }}
-        />
+              setSearchParams(searchParams, { replace: true });
+            }}
+          />
+          <FilterLabel kind={param} value={filter.name} count={filter.count} />
+        </Label>
       ))}
     </FilterGroupWrapper>
   );
@@ -107,7 +105,7 @@ const FilterGroupTitle = styled.div`
   `}
 `;
 
-type FilterLabelProps = ComponentProps<typeof Tag> & {
+type FilterLabelProps = ComponentProps<typeof DetailTag> & {
   count: number | undefined;
 };
 
@@ -116,7 +114,11 @@ const FilterLabel: FC<React.PropsWithChildren<FilterLabelProps>> = ({
   ...props
 }) => (
   <FilterLabelWrapper>
-    <StyledTag {...props} />
+    <DetailTag
+      {...props}
+      // Reset the default box styles except `level`
+      className={props.kind === "level" ? undefined : "bg-transparent px-1"}
+    />
     {count ? <FilterCount>({count})</FilterCount> : null}
   </FilterLabelWrapper>
 );
@@ -125,19 +127,6 @@ const FilterLabelWrapper = styled.div`
   display: flex;
   align-items: center;
   gap: 0.125rem;
-`;
-
-const StyledTag = styled(Tag)`
-  ${({ kind }) => {
-    // Reset the default box styles except `level`
-    if (kind !== "level") {
-      return css`
-        padding: 0 0.25rem;
-        background: none !important;
-        box-shadow: none;
-      `;
-    }
-  }}
 `;
 
 const FilterCount = styled.span`

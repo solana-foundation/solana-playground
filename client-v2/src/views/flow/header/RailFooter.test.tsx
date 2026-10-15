@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 
 import { PgSession } from "@/features/auth";
@@ -72,7 +72,37 @@ it("expands the navigation from the account's button", () => {
   expect(onExpand).toHaveBeenCalledTimes(1);
 });
 
-it("shows the signed-in user's avatar on the account's button", () => {
+// The avatar draws its image only once the browser has loaded it, which jsdom
+// never does, so a stand-in image loads at once
+class LoadedImage extends EventTarget {
+  complete = true;
+  naturalWidth = 1;
+  set src(_url: string) {
+    this.dispatchEvent(new Event("load"));
+  }
+}
+
+it("marks a cluster that is up with the success variant", () => {
+  draw();
+  expect(
+    document
+      .querySelector("[data-slot=status-dot]")
+      ?.getAttribute("data-variant")
+  ).toBe("success");
+});
+
+it("marks a cluster that is down with the error variant", () => {
+  status.down = true;
+  draw();
+  expect(
+    document
+      .querySelector("[data-slot=status-dot]")
+      ?.getAttribute("data-variant")
+  ).toBe("error");
+});
+
+it("shows the signed-in user's avatar on the account's button", async () => {
+  vi.stubGlobal("Image", LoadedImage);
   vi.spyOn(PgSession, "get").mockReturnValue({
     id: "u1",
     login: "octo",
@@ -81,8 +111,10 @@ it("shows the signed-in user's avatar on the account's button", () => {
   });
   draw();
   const account = screen.getByRole("button", { name: "Account" });
-  expect(account.querySelector("img")?.getAttribute("src")).toBe(
-    "https://example.test/octo.png"
+  await waitFor(() =>
+    expect(account.querySelector("img")?.getAttribute("src")).toBe(
+      "https://example.test/octo.png"
+    )
   );
 });
 

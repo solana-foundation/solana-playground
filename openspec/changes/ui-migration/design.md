@@ -621,6 +621,58 @@ stepper) cite `BrandButton`.
 Kept: every id, `aria-label` and test id on a button. The design system's
 `data-slot` names (`button`, `brand-button`, `copy-button`) come with it.
 
+## Leaf elements (5.3)
+
+The small elements a screen is built from come from the design system,
+app-wide, before the screen tickets that restyle around them. Leaves first,
+as the design system's migration map orders them
+(`design-system/src/ds/migration.tsx`): each swap deletes one
+styled-component.
+
+| Today | Becomes | Where |
+|---|---|---|
+| `components/Text` (a callout) | `Callout`, with a lucide icon per kind | 26 call sites: modals, the wallet, the explorer, Interact, the not-found page, the gallery lists |
+| `components/Tag` (level, framework, languages) | `Tag`, `levelVariant` for the level colours; the framework image and `LangIcon` stay inside it | tutorial and program cards, tutorial details |
+| `components/Checkbox` | `Checkbox` and `Label`; a boolean setting is a toggle, so it takes `Switch` | the assistant's skills, the build flags; the settings panel |
+| `components/Foldable` | `Collapsible`, a chevron that turns 90° | settings groups, the wallet's Send, Interact's Args, Accounts and Result |
+| `components/ProgressBar` | nothing: no call site uses it | removed |
+| hand-built chips, counts, empty states, key hints, status dots, the avatar, the logo mark | `Badge`, `Tag`, `Empty`, `Kbd`, `StatusDot`, `Avatar`, `Logo` | `views/flow` and the assistant panel |
+
+**Installed as used.** `yarn ds-add` installs only what a call site in this
+task uses. The stock parts (badge, checkbox, switch, collapsible, kbd, empty and
+avatar) have sources in `design-system/src/components/ui` and no
+registry item, so this task registers them, as 5.5 did. `Progress` and
+`ScrollArea` wait for their first use.
+
+**Behaviour the swap adds.**
+
+- A callout of kind error or warning is `role="alert"`; the others are
+  `role="note"`. The legacy `Text` had no role.
+- A `Collapsible` trigger is a `<button>` with `aria-expanded`. The legacy
+  `Foldable` was a clickable `<div>`, out of the tab order.
+- A checkbox is a Radix checkbox with its `Label`; a click on the label
+  toggles it, as the legacy `<label><input>` did.
+
+**The theme loses** `components.text` and `components.progressbar`, which only
+the removed components read: their types in `utils/theme/interface.ts`
+(with `OverridableComponent`, which nothing else used), their defaults in
+`utils/theme/theme.ts` and the progress bar's accent in `themes/palette.ts`
+are gone.
+
+**Unreachable code is swapped, not deleted.** The legacy sidebar pages'
+components (`views/sidebar/build-deploy`, `tutorials` and `programs`),
+`components/FilterGroups`, the explorer's `Share` modal and
+`components/FilePicker` are reached by nothing, since nothing calls a sidebar
+page's `importComponent`. They take the mechanical swap so the legacy
+components can go; deleting them belongs to the screens that replace them
+(HOO-2064, HOO-2066, HOO-1760).
+
+**Files under the other element tasks were swapped last.** Call sites in
+files that 5.2, 5.4, 5.5 and 5.6 change were swapped after those landed, by a
+rebase, so this task merges after them. The legacy `Text`, `Tag`, `Checkbox`
+and `Foldable` components are deleted, and no import of them remains. Ids,
+`aria-label`s and the texts the e2e reads stay.
+
 ## Risks / Trade-offs
 
 - **The upgrade is late for the freeze.** The design system's v0 is due Nov

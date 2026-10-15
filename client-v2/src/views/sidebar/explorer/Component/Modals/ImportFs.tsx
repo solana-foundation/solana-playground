@@ -1,11 +1,11 @@
 import { FC, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled from "styled-components";
 
 import Input from "../../../../../components/Input";
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import UploadArea from "../../../../../components/UploadArea";
-import { Info } from "../../../../../components/Icons";
 import {
   PgExplorer,
   PgFramework,
@@ -94,9 +94,12 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
           />
         </UploadAreaWrapper>
 
-        <StyledText icon={<Info color="info" />}>
-          You can drag & drop a Cargo workspace directory.
-        </StyledText>
+        <Callout variant="info" className="mt-4">
+          <InfoIcon />
+          <CalloutDescription>
+            You can drag & drop a Cargo workspace directory.
+          </CalloutDescription>
+        </Callout>
       </Content>
     </ModalFrame>
   );
@@ -118,9 +121,5 @@ const MainText = styled.div`
 `;
 
 const UploadAreaWrapper = styled.div`
-  margin-top: 1rem;
-`;
-
-const StyledText = styled(Text)`
   margin-top: 1rem;
 `;

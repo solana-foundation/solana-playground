@@ -1,10 +1,10 @@
 import styled, { css } from "styled-components";
+import { TriangleAlertIcon } from "lucide-react";
 
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../../Text";
-import { Warning } from "../../Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet } from "../../../utils";
 
 export const Remove = () => (
@@ -20,11 +20,12 @@ export const Remove = () => (
     <MainContent>
       <MainText>Are you sure you want to remove the current wallet?</MainText>
       <Desc>This action is irreversable!</Desc>
-      <WarningTextWrapper>
-        <Text icon={<Warning color="warning" />}>
+      <Callout className="mt-4">
+        <TriangleAlertIcon />
+        <CalloutDescription>
           You can recover the wallet later if you save the keypair.
-        </Text>
-      </WarningTextWrapper>
+        </CalloutDescription>
+      </Callout>
       <AsyncButton
         type="button"
         variant="outline"
@@ -61,16 +62,4 @@ const Desc = styled.span`
     color: ${theme.colors.default.textSecondary};
     margin-top: 0.5rem;
   `}
-`;
-
-const WarningTextWrapper = styled.div`
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-
-  & svg {
-    height: 2rem;
-    width: 2rem;
-    margin-right: 1rem;
-  }
 `;

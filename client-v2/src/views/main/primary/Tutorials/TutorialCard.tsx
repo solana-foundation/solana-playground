@@ -3,7 +3,7 @@ import styled, { css, keyframes } from "styled-components";
 
 import Card from "../../../../components/Card";
 import Img from "../../../../components/Img";
-import Tag from "../../../../components/Tag";
+import { DetailTag } from "@/entities/tutorial";
 import { PgTheme, PgTutorial, TutorialFullData } from "../../../../utils";
 
 type TutorialCardProps = TutorialFullData;
@@ -34,13 +34,15 @@ const TutorialCard: FC<React.PropsWithChildren<TutorialCardProps>> = ({
       <InfoTopWrapper>
         <NameRow>
           <Name>{name}</Name>
-          <Tag kind="level" value={level} />
+          <DetailTag kind="level" value={level} />
         </NameRow>
         <Description>{description}</Description>
       </InfoTopWrapper>
 
       <InfoBottomWrapper>
-        {framework && <Framework kind="framework" value={framework} />}
+        {framework && (
+          <DetailTag kind="framework" value={framework} className="mt-3" />
+        )}
       </InfoBottomWrapper>
     </InfoWrapper>
   </Wrapper>
@@ -116,9 +118,5 @@ const Description = styled.div`
 `;
 
 const InfoBottomWrapper = styled.div``;
-
-const Framework = styled(Tag)`
-  margin-top: 0.75rem;
-`;
 
 export default TutorialCard;

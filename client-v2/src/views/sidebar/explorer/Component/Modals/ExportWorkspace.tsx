@@ -1,11 +1,12 @@
 import { FC } from "react";
+import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import Markdown from "../../../../../components/Markdown";
 import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
 import type { ModalPageProps } from "@/widgets/overlays";
-import Text from "../../../../../components/Text";
-import { ExportFile, Info } from "../../../../../components/Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { ExportFile } from "../../../../../components/Icons";
 import { PgFramework, PgView } from "../../../../../utils";
 import { createLogger } from "@/shared/lib/logger";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -56,10 +57,13 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
           conversion before exporting.
         </Description>
 
-        <InfoText icon={<Info color="info" />}>
-          Conversion may involve modifying JS/TS code to make the code work in
-          local Node environment.
-        </InfoText>
+        <Callout variant="info" className="mt-4">
+          <InfoIcon />
+          <CalloutDescription>
+            Conversion may involve modifying JS/TS code to make the code work in
+            local Node environment.
+          </CalloutDescription>
+        </Callout>
 
         <ButtonsWrapper>
           <AsyncButton
@@ -99,10 +103,6 @@ const Description = styled.p`
     font-size: ${theme.font.code.size.small};
     margin-top: 1rem;
   `}
-`;
-
-const InfoText = styled(Text)`
-  margin-top: 1rem;
 `;
 
 const ButtonsWrapper = styled.div`

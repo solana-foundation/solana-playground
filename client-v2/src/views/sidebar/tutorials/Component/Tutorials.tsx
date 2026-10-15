@@ -2,7 +2,7 @@ import { FC, useMemo } from "react";
 import styled, { css, keyframes } from "styled-components";
 
 import FilterGroups from "../../../../components/FilterGroups";
-import Text from "../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgTutorial, TutorialFullData, PgTheme } from "../../../../utils";
 import type { Filter } from "../../../../hooks";
 
@@ -47,7 +47,11 @@ const Progress: FC<React.PropsWithChildren<ProgressProsp>> = ({
   return (
     <ProgressWrapper>
       {!tutorialsData.ongoing.length && !tutorialsData.completed.length && (
-        <Text>Choose and start a new tutorial to track your progress.</Text>
+        <Callout>
+          <CalloutDescription>
+            Choose and start a new tutorial to track your progress.
+          </CalloutDescription>
+        </Callout>
       )}
       <TutorialGroup name="Ongoing" tutorials={tutorialsData.ongoing} />
       <TutorialGroup name="Completed" tutorials={tutorialsData.completed} />

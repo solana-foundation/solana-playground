@@ -1,7 +1,6 @@
 import { StandardProperties } from "csstype";
 import { ITerminalOptions as XtermOptions } from "xterm";
 
-import { TextKind } from "../../components/Text";
 import { AllRequired, ChildRequired, NestedRequired } from "../types";
 
 /** Playground theme */
@@ -163,9 +162,6 @@ export interface ThemeParam {
     /** Markdown component */
     markdown?: DefaultComponent & { subtleBg?: Bg };
 
-    /** Progress bar component */
-    progressbar?: ExtendibleComponent<"indicator">;
-
     /** Skeleton component */
     skeleton?: DefaultComponent & {
       highlightColor?: Color;
@@ -203,9 +199,6 @@ export interface ThemeParam {
         };
       };
     }>;
-
-    /** Text component */
-    text?: OverridableComponent<TextKind>;
 
     /** Topbar component (e.g. top section of primary main view) */
     topbar?: DefaultComponent;
@@ -428,15 +421,11 @@ type DefaultComponents =
 type ExtendibleComponents =
   | "editor"
   | "markdown"
-  | "progressbar"
   | "tabs"
   | "terminal"
   | "tutorial"
   | "uploadArea"
   | "wallet";
-
-/** Components that use `OverridableComponent` type */
-type OverridableComponents = "text";
 
 /** Theme to be used while setting the defaults internally */
 export type ThemeInternal = Omit<ImportableTheme, "import"> &
@@ -464,13 +453,6 @@ export type Theme<
 } & {
   // Extendible components
   components: AllRequired<Pick<C, ExtendibleComponents>>;
-} & {
-  // Overridable components
-  components: ChildRequired<
-    Pick<C, OverridableComponents>,
-    OverridableComponents,
-    "default"
-  >;
 } & {
   // All views
   views: AllRequired<V>;
@@ -528,16 +510,6 @@ type ExtendibleComponent<
 } & (T extends string
   ? { [K in U extends any ? keyof U : never]?: DefaultComponent }
   : U);
-
-/** A component with multiple kinds */
-type OverridableComponent<T extends string> = {
-  /** Default StandardProperties values of the component */
-  default?: DefaultComponent;
-  /** Override the defaults with specificity */
-  overrides?: {
-    [K in T]?: DefaultComponent;
-  };
-};
 
 /** StandardProperties background */
 type Bg = string;

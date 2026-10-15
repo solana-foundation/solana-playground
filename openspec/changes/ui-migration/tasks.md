@@ -90,8 +90,11 @@ regression against 5.1 has misread this rule.
       moved unchanged (HOO-2055; after 5.1; design.md, "The four-column
       frame (5.2)"; plan:
       [plans/5.2-four-column-frame.md](plans/5.2-four-column-frame.md))
-- [ ] 5.3 Elements: leaves (Tag, Callout, Badge, Checkbox, Switch, Progress,
-      Collapsible and the like) swapped app-wide (HOO-2058; parallel)
+- [x] 5.3 Elements: leaves (Tag, Callout, Badge, Checkbox, Switch,
+      Collapsible, Kbd, Empty, StatusDot, Avatar, Logo) swapped app-wide; the
+      legacy `Tag`, `Text`, `Checkbox`, `Foldable` and `ProgressBar` removed
+      (HOO-2058; parallel; design.md, "Leaf elements (5.3)"; plan:
+      [plans/5.3-leaf-elements.md](plans/5.3-leaf-elements.md))
 - [x] 5.4 Elements: buttons (BrandButton, AsyncButton, CopyButton, HelpTip)
       (HOO-2059; parallel; design.md, "Buttons (5.4)"; plan:
       [plans/5.4-buttons.md](plans/5.4-buttons.md))

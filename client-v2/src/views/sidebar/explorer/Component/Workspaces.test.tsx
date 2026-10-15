@@ -32,7 +32,6 @@ vi.mock("../../../../hooks", () => ({ useExplorer: () => explorer }));
 // The select and the workspace buttons are under test: the modals, text and
 // icons pull in the theme, which needs the same build-time global
 vi.mock("./Modals", () => ({}));
-vi.mock("../../../../components/Text", () => ({ default: () => null }));
 vi.mock("../../../../components/Icons", () => ({}));
 
 import { PgExplorer, PgTutorial } from "../../../../utils";

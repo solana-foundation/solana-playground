@@ -1,4 +1,5 @@
 import { FC, useState } from "react";
+import { CircleCheckIcon, CircleXIcon } from "lucide-react";
 import styled from "styled-components";
 
 import FilePicker from "../../../../../components/FilePicker";
@@ -6,8 +7,7 @@ import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
 import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
 import type { ModalPageProps } from "@/widgets/overlays";
-import Text from "../../../../../components/Text";
-import { Checkmark, Sad } from "../../../../../components/Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgCommon, PgExplorer, PgRouter, PgShare } from "../../../../../utils";
 import { createLogger } from "@/shared/lib/logger";
 import { CopyButton } from "@/shared/ui/copy-button";
@@ -73,9 +73,10 @@ const ErrorPage: FC<React.PropsWithChildren<ErrorPageProps>> = ({
   message,
 }) => (
   <ModalFrame name="share" title buttonProps={{ text: "Continue" }}>
-    <Text kind="error" icon={<Sad />}>
-      Share error: {message}
-    </Text>
+    <Callout variant="error">
+      <CircleXIcon />
+      <CalloutDescription>Share error: {message}</CalloutDescription>
+    </Callout>
   </ModalFrame>
 );
 
@@ -91,9 +92,12 @@ const SuccessPage: FC<React.PropsWithChildren<SuccessPageProps>> = ({
   return (
     <ModalFrame name="share" title buttonProps={{ text: "Continue" }}>
       <SuccessWrapper>
-        <Text kind="success" icon={<Checkmark color="success" />}>
-          Successfully shared the project.
-        </Text>
+        <Callout variant="success">
+          <CircleCheckIcon />
+          <CalloutDescription>
+            Successfully shared the project.
+          </CalloutDescription>
+        </Callout>
 
         <SuccessInputWrapper>
           <Input value={shareLink} readOnly />

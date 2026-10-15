@@ -1,9 +1,9 @@
 import { FC, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../components/Text";
-import { Info } from "../components/Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 interface SelectProgramProps {
   /** Program names to select from */
@@ -25,10 +25,13 @@ export const SelectProgram: FC<React.PropsWithChildren<SelectProgramProps>> = ({
       }}
     >
       <Content>
-        <Text icon={<Info color="info" />}>
-          Multiple programs have been found but playground currently supports
-          one program per project.
-        </Text>
+        <Callout variant="info">
+          <InfoIcon />
+          <CalloutDescription>
+            Multiple programs have been found but playground currently supports
+            one program per project.
+          </CalloutDescription>
+        </Callout>
 
         <ProgramsWrapper>
           {programNames.map((name) => (

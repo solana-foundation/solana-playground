@@ -1,7 +1,8 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
-import Checkbox from "../../../../components/Checkbox";
+import { Checkbox } from "@/shared/ui/checkbox";
+import { Label } from "@/shared/ui/label";
 import ServerConsole from "./ServerConsole";
 import { useRenderOnChange } from "../../../../hooks";
 import { PgAssistant } from "../store";
@@ -70,13 +71,15 @@ const Grounding = () => {
 
         {SKILLS.map((skill) => (
           <Row key={skill.id}>
-            <Checkbox
-              label={skill.name}
-              checked={enabledSkills.includes(skill.id)}
-              onChange={(ev) =>
-                PgAssistant.setSkillEnabled(skill.id, ev.target.checked)
-              }
-            />
+            <Label>
+              <Checkbox
+                checked={enabledSkills.includes(skill.id)}
+                onCheckedChange={(checked) =>
+                  PgAssistant.setSkillEnabled(skill.id, checked === true)
+                }
+              />
+              {skill.name}
+            </Label>
             <RowNote>
               {skill.source.type === "bundled"
                 ? "bundled — always available"

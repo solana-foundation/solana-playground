@@ -1,11 +1,16 @@
 import { useEffect } from "react";
+import { FrownIcon, InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
-import Foldable from "../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import Markdown from "../../../components/Markdown";
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../../../components/Text";
-import { Info, Sad } from "../../../components/Icons";
 import { PgCommon, PgConnection, PgView } from "../../../utils";
 
 export const Local = () => {
@@ -19,9 +24,10 @@ export const Local = () => {
 
   return (
     <ModalFrame name="localnet-unreachable" title="Connect to localnet">
-      <Text kind="error" icon={<Sad />}>
-        Unable to connect to localnet
-      </Text>
+      <Callout variant="error">
+        <FrownIcon />
+        <CalloutDescription>Unable to connect to localnet</CalloutDescription>
+      </Callout>
 
       <Content>
         <ContentTitle>How to connect</ContentTitle>
@@ -72,21 +78,30 @@ const Issues = () => {
   if (browser === "Firefox") return null;
 
   return (
-    <Foldable element="Having issues?">
-      <Text icon={<Info color="info" />}>
-        <p>
-          If you have a running test validator, it means your browser is
-          blocking localhost access and you'll need to enable it in order to
-          connect.
-        </p>
-        {browser === "Brave" && (
-          <p>
-            For <strong>Brave Browser</strong>: Click the Brave icon at the
-            right side of the browser URL bar and drop the shields for this
-            website.
-          </p>
-        )}
-      </Text>
-    </Foldable>
+    <Collapsible>
+      <CollapsibleHeading>
+        <CollapsibleChevron />
+        Having issues?
+      </CollapsibleHeading>
+      <CollapsibleContent className="mt-2">
+        <Callout variant="info">
+          <InfoIcon />
+          <CalloutDescription className="[&_p+p]:mt-4">
+            <p>
+              If you have a running test validator, it means your browser is
+              blocking localhost access and you'll need to enable it in order to
+              connect.
+            </p>
+            {browser === "Brave" && (
+              <p>
+                For <strong>Brave Browser</strong>: Click the Brave icon at the
+                right side of the browser URL bar and drop the shields for this
+                website.
+              </p>
+            )}
+          </CalloutDescription>
+        </Callout>
+      </CollapsibleContent>
+    </Collapsible>
   );
 };

@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
 import IdlActions from "./IdlActions";
+import { Badge } from "@/shared/ui/badge";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import Link from "../../../components/Link";
 import {
   useBlockExplorer,
@@ -14,7 +16,6 @@ import {
   PgExplorer,
   PgGlobal,
   PgProgramInfo,
-  PgTheme,
 } from "../../../utils";
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
@@ -99,7 +100,11 @@ const Deploy = () => {
       </HeaderRow>
       <Muted>{description}</Muted>
       {flow.deploy === "failed" && (
-        <ErrorNotice role="alert">Deploy failed - see the console.</ErrorNotice>
+        <Callout variant="error" role="alert">
+          <CalloutDescription>
+            Deploy failed - see the console.
+          </CalloutDescription>
+        </Callout>
       )}
 
       <Actions>
@@ -148,7 +153,9 @@ const Deploy = () => {
           </Row>
           <Row>
             <Key>Cluster</Key>
-            <Chip>{latest.cluster}</Chip>
+            <Badge variant="outline" className="font-mono lowercase">
+              {latest.cluster}
+            </Badge>
           </Row>
           {latest.signature && (
             <Row>
@@ -211,7 +218,9 @@ const Deploy = () => {
           <List>
             {history.map((r) => (
               <HistoryRow key={r.id}>
-                <Chip>{r.cluster}</Chip>
+                <Badge variant="outline" className="font-mono lowercase">
+                  {r.cluster}
+                </Badge>
                 <Mono title={r.programId}>
                   {r.programId.slice(0, 8)}&hellip;{r.programId.slice(-4)}
                 </Mono>
@@ -281,18 +290,6 @@ const Eyebrow = styled.div`
   `}
 `;
 
-const ErrorNotice = styled.p`
-  ${({ theme }) => css`
-    margin: 0;
-    padding: 0.5rem 0.75rem;
-    border: 1px solid ${theme.colors.state.error.color};
-    border-radius: ${theme.default.borderRadius};
-    background: ${PgTheme.alpha(theme.colors.state.error.color, "high")};
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.other.size.small};
-  `}
-`;
-
 const ReadyGlyph = styled.svg<{ $ready: boolean }>`
   ${({ theme, $ready }) => css`
     flex-shrink: 0;
@@ -316,21 +313,6 @@ const Headline = styled.h2`
     font-size: ${theme.font.other.size.xlarge};
     font-weight: 600;
     letter-spacing: -0.01em;
-  `}
-`;
-
-const Chip = styled.span`
-  ${({ theme }) => css`
-    display: inline-flex;
-    align-items: center;
-    padding: 0.125rem 0.5rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: 999px;
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.xsmall};
-    font-weight: 400;
-    color: ${theme.colors.default.textSecondary};
-    text-transform: lowercase;
   `}
 `;
 

@@ -1,10 +1,11 @@
 import { ChangeEvent, useEffect, useState } from "react";
+import { TriangleAlertIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import ImportButton from "../../../../../components/ImportButton";
 import Input from "../../../../../components/Input";
 import { ModalFrame } from "@/widgets/overlays";
-import Text from "../../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Warning } from "../../../../../components/Icons";
 import { PgProgramInfo, PgCommon, PgView, PgWeb3 } from "../../../../../utils";
 import { useRenderOnChange } from "../../../../../hooks";
@@ -66,11 +67,12 @@ const NewKeypairModal = () => {
           Are you sure you want to create a new program keypair?
         </MainText>
         <Desc>This will create a brand new keypair for your program.</Desc>
-        <WarningTextWrapper>
-          <Text kind="warning" icon={<Warning color="warning" />}>
+        <Callout variant="warning" className="mt-4">
+          <TriangleAlertIcon />
+          <CalloutDescription>
             The old keypair will be lost if you don't save it.
-          </Text>
-        </WarningTextWrapper>
+          </CalloutDescription>
+        </Callout>
         <Button asChild variant="outline" className="w-fit">
           <a
             href={PgCommon.getDataUrl(Array.from(PgProgramInfo.kp!.secretKey))}
@@ -229,18 +231,6 @@ const Desc = styled.span`
     color: ${theme.colors.default.textSecondary};
     margin-top: 0.5rem;
   `}
-`;
-
-const WarningTextWrapper = styled.div`
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-
-  & svg {
-    height: 2rem;
-    width: 2rem;
-    margin-right: 1rem;
-  }
 `;
 
 const InputPkWrapper = styled.div`

@@ -1,17 +1,13 @@
 import { FC, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
 import { ModalFrame, SubmitCancelled } from "@/widgets/overlays";
-import Text from "../../../../../components/Text";
-import {
-  Eye,
-  Github,
-  ImportWorkspace,
-  Info,
-} from "../../../../../components/Icons";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
 import {
   Framework,
   PgCommon,
@@ -76,17 +72,20 @@ export const ImportGithub = () => {
           </ExamplesWrapper>
         </ExamplesSectionWrapper>
 
-        <Text icon={<Info color="info" />}>
-          <p>
-            Program repositories can be viewed in playground by combining the
-            playground URL with their GitHub URL. For example, from{" "}
-            <Link href={GITHUB_PROGRAM_URL}>this repository</Link>:
-          </p>
+        <Callout variant="info">
+          <InfoIcon />
+          <CalloutDescription className="[&_p+p]:mt-4">
+            <p>
+              Program repositories can be viewed in playground by combining the
+              playground URL with their GitHub URL. For example, from{" "}
+              <Link href={GITHUB_PROGRAM_URL}>this repository</Link>:
+            </p>
 
-          <p style={{ wordBreak: "break-all" }}>
-            <Link href={VIEW_URL}>{VIEW_URL}</Link>
-          </p>
-        </Text>
+            <p style={{ wordBreak: "break-all" }}>
+              <Link href={VIEW_URL}>{VIEW_URL}</Link>
+            </p>
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
     </ModalFrame>
   );

@@ -2,6 +2,7 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Kbd } from "@/shared/ui/kbd";
 import Eyebrow from "./Eyebrow";
 import StepRail from "../lessons/StepRail";
 import {
@@ -82,7 +83,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
       {/* Advertises the layout shell's fold key. On macOS it does not fire
           while the editor has focus (Monaco binds ⌘E there); elsewhere it
           works everywhere. */}
-      <Hint>&#8984;E</Hint>
+      <Kbd className={collapsed ? "text-[0.5625rem]" : undefined}>&#8984;E</Kbd>
       {!collapsed && <Chevron $flip />}
     </Collapse>
   );
@@ -222,17 +223,6 @@ const Collapse = styled.button<{ $collapsed: boolean }>`
       outline: 2px solid ${theme.colors.default.primary};
       outline-offset: 2px;
     }
-  `}
-`;
-
-// The console handle's `⌘J` hint (`console/ConsoleDrawer.tsx`), same
-// treatment so both shortcuts read as one family.
-const Hint = styled.span`
-  ${({ theme }) => css`
-    font-family: ${theme.font.code.family};
-    font-size: inherit;
-    line-height: 1;
-    opacity: 0.6;
   `}
 `;
 

@@ -5,15 +5,10 @@ import Card from "../../../../components/Card";
 import Img from "../../../../components/Img";
 import Link from "../../../../components/Link";
 import Markdown from "../../../../components/Markdown";
-import Tag from "../../../../components/Tag";
+import { DetailTag } from "@/entities/tutorial";
 import { Github } from "../../../../components/Icons";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
-import {
-  Arrayable,
-  PgTheme,
-  TutorialData,
-  TutorialDetailKey,
-} from "../../../../utils";
+import { PgTheme, TutorialData, TutorialDetailKey } from "../../../../utils";
 
 export type ProgramCardProps = {
   /** Program name */
@@ -133,14 +128,14 @@ const Tags = styled.div`
 
 interface ClickableTagProps {
   kind: TutorialDetailKey;
-  value: Arrayable<string> | undefined;
+  value: string;
 }
 
 const ClickableTag: FC<React.PropsWithChildren<ClickableTagProps>> = (
   props
 ) => (
   <Link href={`/programs?${props.kind}=${props.value}`}>
-    <Tag {...props} />
+    <DetailTag kind={props.kind} value={props.value} />
   </Link>
 );
 

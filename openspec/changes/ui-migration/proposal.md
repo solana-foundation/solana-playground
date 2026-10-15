@@ -73,6 +73,9 @@ existing code moves.
 - `client-v2-buttons`: what a button does when pressed: the one call to
   action of a screen, waiting on the work it starts, copying a value, and
   reporting a click that fails.
+- `client-v2-elements`: how the small elements a screen is built from behave
+  for the user: a section that folds, a checkbox and its label, a note that
+  says what kind it is.
 
 ### Modified Capabilities
 

@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Empty, EmptyDescription } from "@/shared/ui/empty";
 import ChatItem from "./ChatItem";
 import Connect from "./Connect";
 import { Button } from "@/shared/ui/button";
@@ -146,10 +148,12 @@ const Chat = () => {
 
         <ConnectSlot>
           {promptWaiting && (
-            <WaitingHint role="status">
-              Connect a backend, or sign in for the default one, to send this to
-              the assistant. Your prompt is waiting in the composer.
-            </WaitingHint>
+            <Callout variant="info" role="status" className="mx-4 mt-3 w-auto">
+              <CalloutDescription>
+                Connect a backend, or sign in for the default one, to send this
+                to the assistant. Your prompt is waiting in the composer.
+              </CalloutDescription>
+            </Callout>
           )}
           <Connect />
         </ConnectSlot>
@@ -344,8 +348,10 @@ const Chat = () => {
 
       <Messages role="log" aria-label="Conversation">
         {items.length === 0 ? (
-          <Empty>
-            <EmptyLabel>TRY ASKING</EmptyLabel>
+          <Empty className="items-stretch justify-start gap-2 p-0 text-left">
+            <EmptyDescription className="pb-1 tracking-widest">
+              TRY ASKING
+            </EmptyDescription>
             {SUGGESTIONS.map((suggestion) => (
               <Suggestion
                 key={suggestion}
@@ -492,15 +498,6 @@ const ConnectSlot = styled.div`
   overflow-y: auto;
 `;
 
-const WaitingHint = styled.div`
-  ${({ theme }) => css`
-    padding: 0.75rem 1rem 0;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    font-style: italic;
-  `}
-`;
-
 const Messages = styled.div`
   display: flex;
   flex-direction: column;
@@ -509,21 +506,6 @@ const Messages = styled.div`
   overflow-y: auto;
   padding: 1rem 0.75rem;
   min-height: 0;
-`;
-
-const Empty = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const EmptyLabel = styled.div`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.1em;
-    padding-bottom: 0.25rem;
-  `}
 `;
 
 const Suggestion = styled.button`

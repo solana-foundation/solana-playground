@@ -1,6 +1,7 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Empty as EmptyNotice, EmptyDescription } from "@/shared/ui/empty";
 import Img from "../../../components/Img";
 import { PgTheme, PgTutorial, PgView } from "../../../utils";
 import { AsyncButton } from "@/shared/ui/async-button";
@@ -33,7 +34,13 @@ const TutorialsTab: FC<React.PropsWithChildren<TutorialsTabProps>> = ({
     : PgTutorial.all;
 
   if (!items.length) {
-    return <Empty>No tutorials match &ldquo;{query}&rdquo;.</Empty>;
+    return (
+      <EmptyNotice className="my-6 p-0">
+        <EmptyDescription>
+          No tutorials match &ldquo;{query}&rdquo;.
+        </EmptyDescription>
+      </EmptyNotice>
+    );
   }
 
   return (

@@ -1,5 +1,6 @@
 import type { FC } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CircleUserRound } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import {
@@ -10,6 +11,8 @@ import {
   useWallet,
 } from "../../../hooks";
 import { PgSession } from "../../../features/auth";
+import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
+import { StatusDot } from "@/shared/ui/status-dot";
 import { createLogger } from "../../../shared/lib/logger";
 import { PgCommand } from "../../../utils";
 import { SETTINGS_TRIGGER_ATTR } from "../settings/GearSidebar";
@@ -99,7 +102,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
         {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
         onClick={() => onToggleSettings("network")}
       >
-        <ClusterDot $down={cluster.down} />
+        <StatusDot variant={cluster.down ? "error" : "success"} />
         {cluster.name}
       </ChipButton>
       <ChipButton
@@ -132,7 +135,12 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
               github.login ?? github.name ?? "account"
             }`}
           >
-            <Avatar src={github.image ?? undefined} alt="" aria-hidden />
+            <Avatar className="size-4" aria-hidden>
+              <AvatarImage src={github.image ?? undefined} alt="" />
+              <AvatarFallback className="bg-transparent">
+                <CircleUserRound aria-hidden />
+              </AvatarFallback>
+            </Avatar>
             <span>{github.login ?? github.name ?? "Account"}</span>
           </GithubChip>
           {profileOpen && (
@@ -161,7 +169,12 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
               ) : (
                 <>
                   <ProfileHeader>
-                    <ProfileAvatar src={github.image ?? undefined} alt="" />
+                    <Avatar>
+                      <AvatarImage src={github.image ?? undefined} alt="" />
+                      <AvatarFallback className="bg-transparent">
+                        <CircleUserRound aria-hidden />
+                      </AvatarFallback>
+                    </Avatar>
                     <ProfileNames>
                       <DisplayName>{github.name ?? github.login}</DisplayName>
                       {github.login && <Login>@{github.login}</Login>}
@@ -333,12 +346,6 @@ const ChipButton = styled.button`
 
 const GithubChip = styled(ChipButton)``;
 
-const Avatar = styled.img`
-  width: 1rem;
-  height: 1rem;
-  border-radius: 50%;
-`;
-
 // Below, anchors the popover under the chip; `position: relative` is the only
 // layout role this plays, so it doesn't disturb the flex row it sits in.
 // Above, the chip can land anywhere in the wrapped row, and a menu as wide as
@@ -373,13 +380,6 @@ const ProfileHeader = styled.div`
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem;
-`;
-
-const ProfileAvatar = styled.img`
-  width: 2rem;
-  height: 2rem;
-  border-radius: 50%;
-  flex-shrink: 0;
 `;
 
 const ProfileNames = styled.div`
@@ -561,17 +561,6 @@ const CompactHidden = styled.span`
 
 const Balance = styled(CompactHidden)`
   color: ${({ theme }) => theme.colors.state.success.color};
-`;
-
-const ClusterDot = styled.span<{ $down: boolean }>`
-  ${({ theme, $down }) => css`
-    width: 0.4rem;
-    height: 0.4rem;
-    border-radius: 50%;
-    background: ${$down
-      ? theme.colors.state.error.color
-      : theme.colors.state.success.color};
-  `}
 `;
 
 const IconButton = styled.button`
