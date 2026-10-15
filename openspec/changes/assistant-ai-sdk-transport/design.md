@@ -65,9 +65,16 @@ The default backend's base URL is resolved against `location`: the SDK parses
 it with `new URL`, which rejects a relative URL.
 
 `AiTurnError` carries `status`, the HTTP status when the provider answered
-with one, and `kind`: `provider`, `refusal`, or `paused`. Its messages are
+with one, `body`, that response's body with the key redacted, and `kind`:
+`provider`, `refusal`, or `paused`. `body` lets a caller read fields its own
+backend puts in a refusal without the module knowing them. Its messages are
 neutral, with no advice to the user; a caller adds its own wording by
-`kind`, as the assistant does for a refusal.
+`kind`, as the assistant does for a refusal. When a failed response's body
+does not match the provider's error object, so the SDK's message is only the
+status text, the message is `<status> <statusText> — <body>` with the body
+redacted and cut to 300 characters, as in the old loops: a backend that
+answers `{ error: "<sentence>" }`, as `/api/agent` does, still shows its
+sentence.
 
 A paused step does not count against `maxSteps`: the resume continues that
 step, and resumes have their own limit.
@@ -105,7 +112,11 @@ Constants the module owns: `DEFAULT_MAX_STEPS`, which replaces the two
   ends with "Rephrase it, or switch backends."; a turn that reaches the step
   limit says the model was still calling tools after `DEFAULT_MAX_STEPS`
   rounds; a turn with no text and no tool call adds "returned an empty
-  response" on every backend.
+  response" on every backend. A 401 from the default backend whose `body`
+  has `reason: SIGNED_OUT_REASON` (`default-backend-sign-in`) is shown as
+  that body's `error` sentence and calls `PgSession.refresh()`, so the
+  store's session listener returns the panel to the picker; the check lives
+  in `model/provider.ts`, not in the module.
 - `grounding/mcp-client.ts` keeps `listGatewayServers` and calls `connectMcp`,
   one connection per server entry as it reaches the wire (id, URL with
   `queryParams`, headers with `authToken`). It adds to `McpUnreachableError`

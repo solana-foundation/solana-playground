@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { DEFAULT_BACKEND_URL } from "../../../views/sidebar/assistant/model/types";
+import { DEFAULT_BACKEND_URL } from "@/shared/lib/ai";
 import { assistantTelemetry } from "./telemetry";
 import type { AssistantEvents } from "./telemetry";
 

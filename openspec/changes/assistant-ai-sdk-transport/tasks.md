@@ -45,11 +45,11 @@ before it as stated.
       `createProvider` in `model/index.ts` returns it (depends on 2.2). Port
       the cases of `model/openai.test.ts` and `model/anthropic.test.ts` that
       still apply (Gemini `extra_content` echo, index-less tool deltas,
-      thinking paragraphs, refusal category, request params) to
-      `model/provider.test.ts` against a fake model or `fetch`; verify
-      `yarn test-unit`, `yarn test-api`, and the e2e specs
-      `assistant-reconnect`, `chat-threads`, `fix-with-assistant` and
-      `thread-restore` pass. A `server`-executor server gets no tools from
+      thinking paragraphs, refusal category, request params, the default
+      backend's signed-out refusal) to `model/provider.test.ts` against a
+      fake model or `fetch`; verify `yarn test-unit`, `yarn test-api`, and
+      the e2e specs `assistant-reconnect`, `assistant-sign-in`,
+      `chat-threads`, `fix-with-assistant` and `thread-restore` pass. A `server`-executor server gets no tools from
       this task until 3.2 lands
 - [x] 3.2 `grounding/mcp-client.ts` keeps `listGatewayServers` and calls
       `connectMcp`; `model/mcp-tools.ts` maps its tools. Remove the `server`
@@ -82,7 +82,7 @@ before it as stated.
       "Risks / Trade-offs" (depends on 4.1); verify the figures replace the
       #70 estimate there, and a search of the built chunks finds the SDK only
       in the chunks `loadAi()` requests
-- [ ] 5.2 Walk through the default backend, an Anthropic key, and an OpenAI
+- [ ] 5.2 Walk through the default backend signed in, an Anthropic key, and an OpenAI
       or Gemini key; on each, a tool turn with an approval, an MCP call to an
       `explorer__*` tool, Stop mid-turn, and a reload that restores the
       thread; record the results, and whether any turn paused, in

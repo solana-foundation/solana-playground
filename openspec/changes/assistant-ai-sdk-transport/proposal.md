@@ -105,7 +105,8 @@ None. No capability spec describes the assistant panel, so the removal of the
   gzip. `design.md`, "Risks / Trade-offs", has the per-file figures.
 - Users: the first turn and the first MCP call of a session download the SDK
   chunks; every page load downloads less JavaScript than before. Chat, tools,
-  approvals, Stop, stored threads, and the default backend behave as before.
+  approvals, Stop, stored threads, and the default backend behave as before,
+  including the default backend's sign-in gate (`default-backend-sign-in`).
   A server configured with the `server` executor is called from the browser instead of by Anthropic, and its tools
   are absent when its host refuses the browser.
 - Depends on: branch `feat/assistant-sources-on-by-default`, for the

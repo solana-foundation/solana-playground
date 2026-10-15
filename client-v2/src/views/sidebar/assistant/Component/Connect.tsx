@@ -19,11 +19,11 @@ import Link from "../../../../components/Link";
 import { isSignInFailure, PgSession } from "../../../../features/auth";
 import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
 import { PgAssistant } from "../store";
+import type { ModelProvider } from "@/shared/lib/ai";
 import {
   isDefaultBackend,
   PROVIDERS,
   type Effort,
-  type ProviderId,
   type ProviderInfo,
 } from "../model/types";
 
@@ -69,7 +69,7 @@ export interface ConnectPreset {
    * A key-based backend, or the default only for a signed-out user: the
    * form is where they sign in for it
    */
-  provider: ProviderId;
+  provider: ModelProvider;
   /** A model of the backend's own list, or its endpoint's model id */
   model?: string;
 }
@@ -146,7 +146,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   /** Opened on the backend already connected: its own key and choices */
   const onCurrent = current?.id === startId ? current : null;
 
-  const [providerId, setProviderId] = useState<ProviderId>(startId);
+  const [providerId, setProviderId] = useState<ModelProvider>(startId);
   const [expanded, setExpanded] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
   /**

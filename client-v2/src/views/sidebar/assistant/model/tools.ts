@@ -2,7 +2,7 @@ import { createMcpTools } from "./mcp-tools";
 import { createSkillTools } from "./skill-tools";
 import { PgAssistant } from "../store";
 import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
-import type { ToolDefinition, ToolInput } from "./types";
+import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {

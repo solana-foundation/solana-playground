@@ -167,5 +167,5 @@ quotes it, for a key of at least `MIN_REDACTED_KEY_LENGTH` characters.
 #### Scenario: A provider error that quotes the key (manual)
 
 - **WHEN** the provider answers 401 with a body that contains the key
-- **THEN** the rejected error's message contains `REDACTED_KEY` and not the
-  key
+- **THEN** the rejected error's message and its `body` contain
+  `REDACTED_KEY` and not the key

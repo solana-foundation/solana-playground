@@ -14,15 +14,6 @@ import {
 } from "../grounding";
 import { PROVIDERS } from "../model/types";
 
-/**
- * Backends that can execute a `server`-executor MCP server on our behalf.
- *
- * Not a statement about which backends can use MCP — every backend can use
- * `browser` servers. This is only about who performs the call for the ones a
- * page cannot reach.
- */
-const SERVER_EXECUTORS: readonly string[] = ["anthropic"];
-
 const Grounding = () => {
   useRenderOnChange(PgAssistant.onDidChange);
 
@@ -30,8 +21,6 @@ const Grounding = () => {
   const servers = PgAssistant.mcpServers;
   const providerId = PgAssistant.connection?.id;
   const providerName = PROVIDERS.find((p) => p.id === providerId)?.name;
-  const hasServerExecutor =
-    !!providerId && SERVER_EXECUTORS.includes(providerId);
 
   // The editor edits local additions only; the gateway owns the rest
   const local = PgAssistant.localMcpServers;
@@ -93,10 +82,8 @@ const Grounding = () => {
         <Heading>MCP SERVERS</Heading>
         <Lead>
           Tools from remote servers, available to whichever backend is
-          connected. What differs per server is who makes the call:{" "}
-          <code>browser</code> means we call it here, which works everywhere and
-          needs no key; <code>server</code> means a page cannot reach it, so
-          something server-side has to.
+          connected. This page calls each one itself, directly or through the
+          gateway at <code>/api/mcp</code> for a host that refuses the browser.
         </Lead>
 
         {servers
@@ -106,7 +93,6 @@ const Grounding = () => {
               key={server.id}
               server={server}
               providerName={providerName}
-              hasServerExecutor={hasServerExecutor}
             />
           ))}
 
@@ -142,16 +128,13 @@ const Grounding = () => {
         </Actions>
 
         <Note>
-          <code>executor</code> is <code>browser</code> or <code>server</code>,
-          and defaults to <code>browser</code>. <code>authToken</code> is a
-          bearer token on either. <code>queryParams</code> rides in the URL —
-          the only way to pass a credential a server wants outside the
-          Authorization header, such as a bot-protection bypass, and the only
-          way past a CORS policy that does not allow that header name.{" "}
-          <code>headers</code> is sent on <code>browser</code> only; the
-          connector has no header map. A header the server&apos;s
-          Access-Control-Allow-Headers omits will fail the preflight rather than
-          be ignored.
+          <code>authToken</code> is sent as a bearer token.{" "}
+          <code>queryParams</code> rides in the URL: the only way to pass a
+          credential a server wants outside the Authorization header, such as a
+          bot-protection bypass, and the only way past a CORS policy that does
+          not allow that header name. <code>headers</code> is sent on every
+          request. A header the server&apos;s Access-Control-Allow-Headers omits
+          will fail the preflight rather than be ignored.
         </Note>
       </Section>
     </Wrapper>
