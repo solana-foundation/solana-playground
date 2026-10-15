@@ -13,6 +13,12 @@ export const LAYOUT_BREAKPOINTS = {
   phone: 600,
 } as const;
 
+/**
+ * The collapsed left panel's width, the rail. The layout shell sizes the
+ * rail with it and the toast host keeps clear of it, so both read one value.
+ */
+export const RAIL_WIDTH = "3.25rem";
+
 export type Viewport = "wide" | "compact" | "phone";
 
 const PHONE = `(max-width: ${LAYOUT_BREAKPOINTS.phone - 1}px)`;

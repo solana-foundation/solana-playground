@@ -11,8 +11,6 @@ import FadeIn from "../FadeIn";
 import ErrorBoundary from "../ErrorBoundary";
 import Img from "../Img";
 import Input from "../Input";
-import Menu, { MenuItemProps } from "../Menu";
-import Tooltip from "../Tooltip";
 import { Close, ShortArrow } from "../Icons";
 import {
   Wallet as WalletType,
@@ -22,6 +20,14 @@ import {
   PgView,
   PgWallet,
 } from "../../utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
+import { MenuItemText } from "@/shared/ui/menu-extras";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { useDarken } from "./hooks";
 import {
   useKeybind,
@@ -117,7 +123,7 @@ const WalletTopWrapper = styled.div`
   `}
 `;
 
-const WalletName = () => {
+export const WalletName = () => {
   const wallet = useWallet();
   const { darken, lighten } = useDarken();
 
@@ -132,42 +138,52 @@ const WalletName = () => {
     return `${name} - (${PgCommon.shorten(wallet.publicKey.toBase58())})`;
   }, []);
 
-  // Show all of the Playground Wallet accounts
-  const pgAccounts: MenuItemProps[] = PgWallet.accounts.map((acc, i) => ({
-    name: getAccountDisplayName(PgWallet.create(acc)),
-    onClick: () => PgWallet.switch(i),
-    hoverColor: "textPrimary",
-  }));
-
-  // Show all of the connected Wallet Standard accounts
-  const standardAccounts: MenuItemProps[] =
-    PgWallet.getConnectedStandardWallets().map((wallet) => ({
-      name: getAccountDisplayName(wallet),
-      onClick: () => {
-        PgWallet.update({ state: "sol", standardName: wallet.name });
-      },
-      icon: <Img src={wallet.icon} alt={wallet.name} />,
-      hoverColor: "secondary",
-    }));
-
   if (!wallet) return null;
 
   return (
-    <Menu.Dropdown
-      items={pgAccounts.concat(standardAccounts)}
-      onShow={darken}
-      onHide={lighten}
-    >
-      <Tooltip element="Accounts">
-        <WalletTitleWrapper>
-          {!wallet.isPg && (
-            <WalletTitleIcon src={wallet.icon} alt={wallet.name} />
-          )}
-          <WalletTitleText>{getAccountDisplayName(wallet)}</WalletTitleText>
-          <ShortArrow rotate="90deg" />
-        </WalletTitleWrapper>
+    <DropdownMenu onOpenChange={(open) => (open ? darken() : lighten())}>
+      {/* One element carries both triggers: each `asChild` passes its props
+          and ref on to `WalletTitleWrapper` */}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DropdownMenuTrigger asChild>
+            <WalletTitleWrapper>
+              {!wallet.isPg && (
+                <WalletTitleIcon src={wallet.icon} alt={wallet.name} />
+              )}
+              <WalletTitleText>{getAccountDisplayName(wallet)}</WalletTitleText>
+              <ShortArrow rotate="90deg" />
+            </WalletTitleWrapper>
+          </DropdownMenuTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Accounts</TooltipContent>
       </Tooltip>
-    </Menu.Dropdown>
+      <DropdownMenuContent>
+        {/* All of the Playground Wallet accounts */}
+        {PgWallet.accounts.map((acc, i) => (
+          <DropdownMenuItem key={"pg-" + i} onSelect={() => PgWallet.switch(i)}>
+            <MenuItemText>
+              {getAccountDisplayName(PgWallet.create(acc))}
+            </MenuItemText>
+          </DropdownMenuItem>
+        ))}
+        {/* All of the connected Wallet Standard accounts */}
+        {PgWallet.getConnectedStandardWallets().map((standardWallet) => (
+          <DropdownMenuItem
+            key={"standard-" + standardWallet.name}
+            onSelect={() => {
+              PgWallet.update({
+                state: "sol",
+                standardName: standardWallet.name,
+              });
+            }}
+          >
+            <Img src={standardWallet.icon} alt={standardWallet.name} />
+            <MenuItemText>{getAccountDisplayName(standardWallet)}</MenuItemText>
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };
 
@@ -227,6 +243,7 @@ const WalletRename: FC<React.PropsWithChildren<WalletRenameProps>> = ({
     <div>
       <Input
         ref={inputRef}
+        id={PgView.ids.WALLET_RENAME_INPUT}
         value={name}
         onChange={(ev) => setName(ev.target.value)}
         validator={PgWallet.validateAccountName}

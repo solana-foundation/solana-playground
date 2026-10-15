@@ -343,6 +343,9 @@ describe("PgLesson.init -- real PgTutorialStorage default semantics", () => {
     await vi.waitFor(() => expect(PgView.setToast).toHaveBeenCalled());
     await flush();
     expect(PgView.setToast).toHaveBeenCalledTimes(1);
+    expect(
+      (PgView.setToast as ReturnType<typeof vi.fn>).mock.calls[0][1]
+    ).toEqual({ options: { name: "lesson-save-failed" } });
     sub.dispose();
     warn.mockRestore();
   });

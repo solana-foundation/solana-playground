@@ -1,6 +1,6 @@
 import { FC, useCallback, useState } from "react";
 
-import Modal from "../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import UploadArea from "../../../../components/UploadArea";
 import { PgCommon } from "../../../../utils";
 
@@ -29,7 +29,8 @@ export const SugarUploadScreen: FC<
   }, []);
 
   return (
-    <Modal
+    <ModalFrame
+      name="sugar-upload"
       buttonProps={{
         text: "Continue",
         disabled: !files || files.length % 2 === 1,
@@ -38,6 +39,6 @@ export const SugarUploadScreen: FC<
       title={title}
     >
       <UploadArea onDrop={onDrop} error={error} filesLength={files?.length} />
-    </Modal>
+    </ModalFrame>
   );
 };

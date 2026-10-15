@@ -27,7 +27,7 @@ describe("themeNotice", () => {
 
     expect(setToast).toHaveBeenCalledTimes(1);
     expect(setToast.mock.calls[0][1]).toEqual({
-      options: { autoClose: false },
+      options: { name: "theme-removed", duration: "persistent" },
     });
   });
 

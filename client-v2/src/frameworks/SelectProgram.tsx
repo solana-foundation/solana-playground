@@ -1,7 +1,7 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Modal from "../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../components/Text";
 import { Info } from "../components/Icons";
 
@@ -16,7 +16,8 @@ export const SelectProgram: FC<React.PropsWithChildren<SelectProgramProps>> = ({
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <Modal
+    <ModalFrame
+      name="select-program"
       title="Select the program to import"
       buttonProps={{
         text: "Select",
@@ -41,7 +42,7 @@ export const SelectProgram: FC<React.PropsWithChildren<SelectProgramProps>> = ({
           ))}
         </ProgramsWrapper>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

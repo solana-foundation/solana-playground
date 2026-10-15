@@ -822,7 +822,6 @@ export class PgTheme {
     return this._skeleton()
       ._button()
       ._card()
-      ._menu()
       ._text()
       ._svg()
       ._input()
@@ -830,9 +829,7 @@ export class PgTheme {
       ._tooltip()
       ._progressBar()
       ._uploadArea()
-      ._toast()
       ._topbar()
-      ._modal()
       ._markdown()
       ._terminal()
       ._wallet()
@@ -1006,23 +1003,6 @@ export class PgTheme {
   /** Set default card component */
   private static _card() {
     this._getComponent("card");
-    return this;
-  }
-
-  /** Set default menu component */
-  private static _menu() {
-    const menu = this._getComponent("menu");
-    const theme = this._themeReady;
-
-    // Default
-    menu.default ??= {};
-    menu.default.position ??= "absolute";
-    menu.default.zIndex ??= 2;
-    menu.default.bg ??= theme.colors.default.bgPrimary;
-    menu.default.borderRadius ??= theme.default.borderRadius;
-    menu.default.padding ??= "0.25rem 0";
-    menu.default.boxShadow ??= theme.default.boxShadow;
-
     return this;
   }
 
@@ -1244,80 +1224,12 @@ export class PgTheme {
     return this;
   }
 
-  /** Set default toast component */
-  private static _toast() {
-    const toast = this._getComponent("toast");
-    const theme = this._themeReady;
-
-    // Default
-    toast.default ??= {};
-    toast.default.bg ??= theme.colors.default.bgPrimary;
-    toast.default.color ??= theme.colors.default.textPrimary;
-    toast.default.borderRadius ??= theme.default.borderRadius;
-    toast.default.fontFamily ??= theme.font.code.family;
-    toast.default.fontSize ??= theme.font.code.size.medium;
-    toast.default.cursor ??= "default";
-
-    // Progress bar
-    toast.progress ??= {};
-    toast.progress.bg ??= theme.colors.default.primary;
-
-    // Close button
-    toast.closeButton ??= {};
-    toast.closeButton.color ??= theme.colors.default.textSecondary;
-
-    return this;
-  }
-
   /** Set default topbar component */
   private static _topbar() {
     const topbar = this._getComponent("topbar");
     const theme = this._themeReady;
 
     topbar.bg ??= PgTheme.getDifferentBackground(theme.views.main.default.bg);
-
-    return this;
-  }
-
-  /** Set default modal component */
-  private static _modal() {
-    const modal = this._getComponent("modal");
-    const theme = this._themeReady;
-
-    // Default
-    modal.default ??= {};
-    modal.default.display ??= "flex";
-    modal.default.flexDirection ??= "column";
-    modal.default.bg ??= theme.colors.default.bgPrimary;
-    modal.default.border ??= `1px solid ${theme.colors.default.border}`;
-    modal.default.borderRadius ??= theme.default.borderRadius;
-    modal.default.maxWidth ??= "max(40%, 40rem)";
-    modal.default.maxHeight ??= "max(80%, 40rem)";
-
-    // Backdrop
-    modal.backdrop ??= theme.default.backdrop;
-
-    // Top
-    modal.top ??= {};
-    modal.top.position ??= "relative";
-    modal.top.display ??= "flex";
-    modal.top.justifyContent ??= "center";
-    modal.top.alignItems ??= "center";
-    modal.top.padding ??= "0 1.5rem";
-    modal.top.fontWeight ??= "bold";
-
-    // Content
-    modal.content ??= {};
-    modal.content.padding ??= "1rem 1.5rem";
-    modal.content.minWidth ??= "23rem";
-    modal.content.minHeight ??= "3rem";
-
-    // Bottom
-    modal.bottom ??= {};
-    modal.bottom.display ??= "flex";
-    modal.bottom.justifyContent ??= "flex-end";
-    modal.bottom.padding ??= "0.25rem 1.5rem 0.75rem";
-    modal.bottom.marginBottom ??= "0.25rem";
 
     return this;
   }

@@ -5,7 +5,7 @@ import Button from "../../../../../components/Button";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame, SubmitCancelled } from "@/widgets/overlays";
 import Text from "../../../../../components/Text";
 import {
   Eye,
@@ -17,6 +17,7 @@ import {
   Framework,
   PgCommon,
   PgFramework,
+  ImportCancelledError,
   PgGithub,
   PgRouter,
   PgView,
@@ -28,14 +29,22 @@ export const ImportGithub = () => {
   const [error, setError] = useState("");
 
   return (
-    <Modal
+    <ModalFrame
+      name="import-github"
       title
       buttonProps={{
         text: "Import",
-        onSubmit: () => PgCommon.transition(PgGithub.import(url)),
+        onSubmit: async () => {
+          try {
+            await PgCommon.transition(PgGithub.import(url));
+          } catch (e) {
+            // Closing the program choice is the user changing their mind,
+            // not a failure: the import dialog stays, quietly
+            if (e instanceof ImportCancelledError) throw new SubmitCancelled();
+            throw e;
+          }
+        },
         disabled: !!error,
-        loading: { text: "Importing..." },
-        rightIcon: <ImportWorkspace />,
       }}
     >
       <Wrapper>
@@ -77,7 +86,7 @@ export const ImportGithub = () => {
           </p>
         </Text>
       </Wrapper>
-    </Modal>
+    </ModalFrame>
   );
 };
 

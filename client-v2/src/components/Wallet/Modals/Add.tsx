@@ -3,7 +3,7 @@ import styled, { css } from "styled-components";
 
 import Button from "../../Button";
 import Input from "../../Input";
-import Modal from "../../Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../Text";
 import { Info } from "../../Icons";
 import { PgWallet, PgWeb3 } from "../../../utils";
@@ -18,7 +18,8 @@ export const Add = () => {
   const [error, setError] = useState("");
 
   return (
-    <Modal
+    <ModalFrame
+      name="wallet-add"
       title
       buttonProps={{
         text: "Create",
@@ -50,7 +51,7 @@ export const Add = () => {
           Save keypair
         </Button>
       </MainContent>
-    </Modal>
+    </ModalFrame>
   );
 };
 

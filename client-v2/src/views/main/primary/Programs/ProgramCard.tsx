@@ -6,8 +6,8 @@ import Img from "../../../../components/Img";
 import Link from "../../../../components/Link";
 import Markdown from "../../../../components/Markdown";
 import Tag from "../../../../components/Tag";
-import Tooltip from "../../../../components/Tooltip";
 import { Github } from "../../../../components/Icons";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import {
   Arrayable,
   PgTheme,
@@ -53,10 +53,13 @@ const ProgramCard: FC<React.PropsWithChildren<ProgramCardProps>> = ({
       </HeaderLeft>
 
       <HeaderRight>
-        <Tooltip element="View in GitHub">
-          <Link href={repo}>
-            <Github />
-          </Link>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Link href={repo}>
+              <Github />
+            </Link>
+          </TooltipTrigger>
+          <TooltipContent>View in GitHub</TooltipContent>
         </Tooltip>
       </HeaderRight>
     </Header>

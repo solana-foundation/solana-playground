@@ -12,21 +12,27 @@ import { BaseFeedbackForm } from "./BaseFeedbackForm";
 import { BaseFeedbackWidget } from "./BaseFeedbackWidget";
 
 const thank = () =>
-  PgView.setToast(() => (
-    <span>
-      <strong>Feedback sent!</strong> Thank you for helping us improve the
-      Playground.
-    </span>
-  ));
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>Feedback sent!</strong> Thank you for helping us improve the
+        Playground.
+      </span>
+    ),
+    { options: { name: "feedback-sent" } }
+  );
 
 // Only for a form the user closed: an open form shows the failure inside itself, where they are reading
 const warn = () =>
-  PgView.setToast(() => (
-    <span>
-      <strong>Could not send feedback.</strong> Open Feedback to try again; what
-      you wrote is kept.
-    </span>
-  ));
+  PgView.setToast(
+    () => (
+      <span>
+        <strong>Could not send feedback.</strong> Open Feedback to try again;
+        what you wrote is kept.
+      </span>
+    ),
+    { options: { name: "feedback-failed" } }
+  );
 
 /** What `FeedbackTrigger` reads from the `FeedbackHost` above it */
 interface TriggerContext {

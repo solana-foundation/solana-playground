@@ -1,9 +1,15 @@
-import { FC } from "react";
+import { FC, useRef } from "react";
 import styled from "styled-components";
 
 import Button from "../Button";
 import Img from "../Img";
-import Menu, { MenuItemProps } from "../Menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
+import { MenuItemText } from "@/shared/ui/menu-extras";
 import {
   Airdrop,
   Copy,
@@ -14,9 +20,27 @@ import {
   ThreeDots,
   Trash,
 } from "../Icons";
+import { createLogger } from "@/shared/lib/logger";
 import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
 import { useAirdrop, useDarken } from "./hooks";
 import { useCopy } from "../../hooks";
+
+const log = createLogger("wallet:settings");
+
+// Radix ignores the promise an `onSelect` returns, so a rejection (a dialog
+// chunk that failed to load) would be unhandled and the click would seem to do
+// nothing. Log it for the team and tell the user.
+const openModal = async (action: string, load: () => Promise<unknown>) => {
+  try {
+    await load();
+  } catch (err) {
+    log.error(err, { report: true, context: { action } });
+    PgView.setToast(
+      () => <span>Could not open that. Reload and try again.</span>,
+      { options: { name: "menu-action-failed" } }
+    );
+  }
+};
 
 interface SettingsProps {
   showRename: Fn;
@@ -30,81 +54,116 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
 
   const wallet = PgWallet.current!;
   const isPg = wallet.isPg;
-  const [copied, copyAddress] = useCopy(wallet.publicKey.toBase58());
+  const [, copyAddress] = useCopy(wallet.publicKey.toBase58());
 
-  const defaultSettings: MenuItemProps[] = [
-    {
-      name: copied ? "Copied address" : "Copy address",
-      onClick: copyAddress,
-      color: copied ? "success" : undefined,
-      icon: <Copy />,
-    },
-    {
-      name: "Airdrop",
-      onClick: airdrop,
-      hoverColor: "success",
-      showCondition: airdropCondition,
-      icon: <Airdrop />,
-    },
-    {
-      name: "Add",
-      onClick: async () => {
-        const { Add } = await import("./Modals/Add");
-        await PgView.setModal(Add);
-      },
-      icon: <Plus />,
-    },
-    {
-      name: "Rename",
-      onClick: showRename,
-      icon: <Edit />,
-      showCondition: isPg,
-    },
-    {
-      name: "Remove",
-      onClick: async () => {
-        const { Remove } = await import("./Modals/Remove");
-        await PgView.setModal(Remove);
-      },
-      hoverColor: "error",
-      icon: <Trash />,
-      showCondition: isPg,
-    },
-    {
-      name: "Import",
-      onClick: PgWallet.import,
-      icon: <ImportFile />,
-    },
-    {
-      name: "Export",
-      onClick: PgWallet.export,
-      icon: <ExportFile />,
-      showCondition: isPg,
-    },
-  ];
-
-  const standardWalletSettings: MenuItemProps[] = PgWallet.standardWallets.map(
-    (wallet) => ({
-      name: wallet.connected
-        ? `Disconnect from ${wallet.name}`
-        : `Connect to ${wallet.name}`,
-      onClick: () => PgCommand.connect.execute(wallet.name.toLowerCase()),
-      hoverColor: wallet.connected ? "error" : "secondary",
-      icon: <Img src={wallet.icon} alt={wallet.name} />,
-    })
-  );
+  // Choosing Rename mounts the rename input. Radix would return focus to the
+  // trigger on close, so typing would go nowhere, and the input is focused
+  // here once the menu has let go. Every other item keeps Radix's return.
+  const choseRename = useRef(false);
+  const rename = () => {
+    choseRename.current = true;
+    showRename();
+  };
 
   return (
     <Wrapper>
-      <Menu.Dropdown
-        items={defaultSettings.concat(standardWalletSettings)}
-        onShow={darken}
-        onHide={lighten}
+      <DropdownMenu
+        onOpenChange={(open) => {
+          if (open) {
+            choseRename.current = false;
+            darken();
+          } else {
+            lighten();
+          }
+        }}
       >
-        <Button kind="icon" title="More">
-          <ThreeDots />
-        </Button>
-      </Menu.Dropdown>
+        <DropdownMenuTrigger asChild>
+          <Button kind="icon" title="More">
+            <ThreeDots />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          // Wide enough for "Disconnect from <wallet>" on one line
+          className="min-w-56"
+          onCloseAutoFocus={(ev) => {
+            if (!choseRename.current) return;
+            const input = document.getElementById(
+              PgView.ids.WALLET_RENAME_INPUT
+            );
+            if (!input) return;
+            ev.preventDefault();
+            input.focus();
+          }}
+        >
+          <DropdownMenuItem onSelect={copyAddress}>
+            <Copy />
+            <MenuItemText>Copy address</MenuItemText>
+          </DropdownMenuItem>
+          {airdropCondition && (
+            <DropdownMenuItem onSelect={airdrop}>
+              <Airdrop />
+              <MenuItemText>Airdrop</MenuItemText>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem
+            onSelect={() =>
+              openModal("add", async () => {
+                const { Add } = await import("./Modals/Add");
+                await PgView.setModal(Add);
+              })
+            }
+          >
+            <Plus />
+            <MenuItemText>Add</MenuItemText>
+          </DropdownMenuItem>
+          {isPg && (
+            <DropdownMenuItem onSelect={rename}>
+              <Edit />
+              <MenuItemText>Rename</MenuItemText>
+            </DropdownMenuItem>
+          )}
+          {isPg && (
+            <DropdownMenuItem
+              variant="destructive"
+              onSelect={() =>
+                openModal("remove", async () => {
+                  const { Remove } = await import("./Modals/Remove");
+                  await PgView.setModal(Remove);
+                })
+              }
+            >
+              <Trash />
+              <MenuItemText>Remove</MenuItemText>
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => PgWallet.import()}>
+            <ImportFile />
+            <MenuItemText>Import</MenuItemText>
+          </DropdownMenuItem>
+          {isPg && (
+            <DropdownMenuItem onSelect={() => PgWallet.export()}>
+              <ExportFile />
+              <MenuItemText>Export</MenuItemText>
+            </DropdownMenuItem>
+          )}
+          {PgWallet.standardWallets.map((standardWallet) => (
+            <DropdownMenuItem
+              key={standardWallet.name}
+              variant={standardWallet.connected ? "destructive" : "default"}
+              onSelect={() =>
+                PgCommand.connect.execute(standardWallet.name.toLowerCase())
+              }
+            >
+              <Img src={standardWallet.icon} alt={standardWallet.name} />
+              <MenuItemText>
+                {standardWallet.connected
+                  ? `Disconnect from ${standardWallet.name}`
+                  : `Connect to ${standardWallet.name}`}
+              </MenuItemText>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </Wrapper>
   );
 };

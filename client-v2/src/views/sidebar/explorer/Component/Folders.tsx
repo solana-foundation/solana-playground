@@ -29,8 +29,9 @@ import {
 import { PgCommon, PgExplorer, PgView, PgTheme } from "../../../../utils";
 import { useCreateItem } from "./useCreateItem";
 import { useExplorerContextMenu } from "./useExplorerContextMenu";
+import { useResetCtxSelected } from "./useResetCtxSelected";
 import { useHandleItemState } from "./useHandleItemState";
-import { useKeybind, useOnClickOutside } from "../../../../hooks";
+import { useKeybind } from "../../../../hooks";
 
 const Folders = () => {
   useHandleItemState();
@@ -47,9 +48,8 @@ const Folders = () => {
     []
   );
 
-  // Reset ctx selected on outside clicks
   const wrapperRef = useRef<HTMLDivElement>(null);
-  useOnClickOutside(wrapperRef, PgExplorer.removeCtxSelectedEl);
+  useResetCtxSelected(wrapperRef);
 
   // No need to memoize here
   const relativeRootPath = PgExplorer.getProjectRootPath();
@@ -73,7 +73,7 @@ const Folders = () => {
             data-path={relativeRootPath}
           >
             {/* Program */}
-            <SectionTopWrapper>
+            <SectionTopWrapper data-section>
               <SectionHeader>Program</SectionHeader>
               {folders.includes(PgExplorer.PATHS.SRC_DIRNAME) ? (
                 <>
@@ -108,7 +108,7 @@ const Folders = () => {
             />
 
             {/* Client and tests */}
-            <SectionTopWrapper>
+            <SectionTopWrapper data-section>
               <SectionHeader>Client</SectionHeader>
               {folders.includes(PgExplorer.PATHS.CLIENT_DIRNAME) ? (
                 <SectionButton
@@ -150,7 +150,7 @@ const Folders = () => {
 
             {/* Other */}
             {otherFolders.length > 0 && (
-              <SectionTopWrapper>
+              <SectionTopWrapper data-section>
                 <SectionHeader>Other</SectionHeader>
               </SectionTopWrapper>
             )}

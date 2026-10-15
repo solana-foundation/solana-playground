@@ -4,6 +4,7 @@ import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 import { usePanelRef } from "react-resizable-panels";
 import type { PanelImperativeHandle } from "react-resizable-panels";
 
+import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import type { Viewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
 import type { Disposable } from "@/utils/types";
@@ -58,7 +59,7 @@ export const PANEL_SIZES = {
  */
 const SIDEBAR_STYLE = {
   "--sidebar-width": "14.5rem",
-  "--sidebar-width-icon": "3.25rem",
+  "--sidebar-width-icon": RAIL_WIDTH,
 } as CSSProperties;
 
 /**

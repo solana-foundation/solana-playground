@@ -66,6 +66,8 @@ existing code moves.
 - `client-v2-browser-support`: the browsers the production bundle targets.
 - `client-v2-layout`: the arrangement of the panels, what of it survives a
   reload, how it changes with screen width, and where the editor is read-only.
+- `client-v2-overlays`: menus, dialogs, tooltips and toasts: how they open,
+  close and answer, where they sit on screen, and what they report.
 
 ### Modified Capabilities
 

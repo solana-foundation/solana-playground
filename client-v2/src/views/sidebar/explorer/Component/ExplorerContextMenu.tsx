@@ -1,6 +1,13 @@
-import { FC } from "react";
+import { FC, useRef } from "react";
 
-import Menu from "../../../../components/Menu";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/shared/ui/context-menu";
+import { MenuItemText } from "@/shared/ui/menu-extras";
 import {
   Edit,
   NewFile,
@@ -13,10 +20,23 @@ import {
   Triangle,
   Wrench,
 } from "../../../../components/Icons";
-import { PgExplorer } from "../../../../utils";
+import { PgExplorer, PgView } from "../../../../utils";
 import type { useExplorerContextMenu } from "./useExplorerContextMenu";
 
-type ExplorerContextMenuProps = ReturnType<typeof useExplorerContextMenu>;
+type ExplorerContextMenuProps = Pick<
+  ReturnType<typeof useExplorerContextMenu>,
+  | "itemData"
+  | "ctxNewItem"
+  | "renameItem"
+  | "deleteItem"
+  | "runBuild"
+  | "runDeploy"
+  | "runClient"
+  | "runClientFolder"
+  | "runTest"
+  | "runTestFolder"
+  | "handleMenu"
+>;
 
 export const ExplorerContextMenu: FC<
   React.PropsWithChildren<ExplorerContextMenuProps>
@@ -34,77 +54,106 @@ export const ExplorerContextMenu: FC<
   handleMenu,
   children,
 }) => {
+  // Choosing New File or New Folder opens the inline input. Radix's focus trap
+  // keeps the input from taking focus while the menu is open, and Radix would
+  // then return focus to the trigger on close, so the input is focused once
+  // the menu has let go. Every other item keeps Radix's return to the trigger
+  // (a dialog moves the focus itself).
+  const openedInput = useRef(false);
+  const newItem = () => {
+    openedInput.current = true;
+    ctxNewItem();
+  };
+
   return (
-    <Menu.Context
-      items={[
-        {
-          name: "New File",
-          onClick: ctxNewItem,
-          keybind: "ALT+N",
-          icon: <NewFile />,
-          showCondition: itemData.isFolder,
-        },
-        {
-          name: "New Folder",
-          onClick: ctxNewItem,
-          keybind: "ALT+N",
-          icon: <NewFolder />,
-          showCondition: itemData.isFolder,
-        },
-        {
-          name: "Rename",
-          onClick: renameItem,
-          keybind: "F2",
-          icon: <Edit />,
-        },
-        {
-          name: "Delete",
-          onClick: deleteItem,
-          keybind: "Del",
-          icon: <Trash />,
-          hoverColor: "error",
-        },
-        {
-          name: "Build",
-          onClick: runBuild,
-          icon: <Wrench />,
-          showCondition: itemData.isProgramFolder,
-        },
-        {
-          name: "Deploy",
-          onClick: runDeploy,
-          icon: <Rocket />,
-          showCondition: itemData.isProgramFolder,
-        },
-        {
-          name: "Run",
-          onClick: runClient,
-          icon: <Triangle rotate="90deg" />,
-          showCondition: itemData.isClient,
-        },
-        {
-          name: "Run All",
-          onClick: runClientFolder,
-          icon: <RunAll />,
-          showCondition: itemData.isClientFolder,
-        },
-        {
-          name: "Test",
-          onClick: runTest,
-          icon: <TestTube />,
-          showCondition: itemData.isTest,
-        },
-        {
-          name: "Test All",
-          onClick: runTestFolder,
-          icon: <TestPaper />,
-          showCondition: itemData.isTestFolder,
-        },
-      ]}
-      onContextMenu={handleMenu}
-      onHide={PgExplorer.removeCtxSelectedEl}
+    <ContextMenu
+      onOpenChange={(open) => {
+        if (open) openedInput.current = false;
+        else PgExplorer.removeCtxSelectedEl();
+      }}
     >
-      {children}
-    </Menu.Context>
+      <ContextMenuTrigger
+        asChild
+        onContextMenu={(ev) => {
+          // Radix skips its own handler once the default is prevented, and the
+          // browser's menu stays shut too: no menu at all on the root folder.
+          if (!handleMenu(ev)) ev.preventDefault();
+        }}
+      >
+        {children}
+      </ContextMenuTrigger>
+      <ContextMenuContent
+        onCloseAutoFocus={(ev) => {
+          if (!openedInput.current) return;
+          const input = document.querySelector<HTMLInputElement>(
+            `#${PgView.ids.ROOT_DIR} input`
+          );
+          if (!input) return;
+          ev.preventDefault();
+          input.focus();
+        }}
+      >
+        {itemData.isFolder && (
+          <>
+            <ContextMenuItem onSelect={newItem}>
+              <NewFile />
+              <MenuItemText>New File</MenuItemText>
+              <ContextMenuShortcut>ALT+N</ContextMenuShortcut>
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={newItem}>
+              <NewFolder />
+              <MenuItemText>New Folder</MenuItemText>
+              <ContextMenuShortcut>ALT+N</ContextMenuShortcut>
+            </ContextMenuItem>
+          </>
+        )}
+        <ContextMenuItem onSelect={renameItem}>
+          <Edit />
+          <MenuItemText>Rename</MenuItemText>
+          <ContextMenuShortcut>F2</ContextMenuShortcut>
+        </ContextMenuItem>
+        <ContextMenuItem variant="destructive" onSelect={deleteItem}>
+          <Trash />
+          <MenuItemText>Delete</MenuItemText>
+          <ContextMenuShortcut>Del</ContextMenuShortcut>
+        </ContextMenuItem>
+        {itemData.isProgramFolder && (
+          <>
+            <ContextMenuItem onSelect={runBuild}>
+              <Wrench />
+              <MenuItemText>Build</MenuItemText>
+            </ContextMenuItem>
+            <ContextMenuItem onSelect={runDeploy}>
+              <Rocket />
+              <MenuItemText>Deploy</MenuItemText>
+            </ContextMenuItem>
+          </>
+        )}
+        {itemData.isClient && (
+          <ContextMenuItem onSelect={runClient}>
+            <Triangle rotate="90deg" />
+            <MenuItemText>Run</MenuItemText>
+          </ContextMenuItem>
+        )}
+        {itemData.isClientFolder && (
+          <ContextMenuItem onSelect={runClientFolder}>
+            <RunAll />
+            <MenuItemText>Run All</MenuItemText>
+          </ContextMenuItem>
+        )}
+        {itemData.isTest && (
+          <ContextMenuItem onSelect={runTest}>
+            <TestTube />
+            <MenuItemText>Test</MenuItemText>
+          </ContextMenuItem>
+        )}
+        {itemData.isTestFolder && (
+          <ContextMenuItem onSelect={runTestFolder}>
+            <TestPaper />
+            <MenuItemText>Test All</MenuItemText>
+          </ContextMenuItem>
+        )}
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };

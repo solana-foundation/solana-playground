@@ -4,7 +4,7 @@ import styled, { css } from "styled-components";
 import Button from "../../../components/Button";
 import { Endpoint } from "../../../constants";
 import { PgConnection, PgSettings, PgView } from "../../../utils";
-import type { ToastChildProps } from "../../../components/Toast";
+import type { ToastChildProps } from "../../../utils/view";
 
 export const NonLocal: FC<React.PropsWithChildren<ToastChildProps>> = ({
   id,

@@ -3,24 +3,34 @@ import styled, { css } from "styled-components";
 
 import Button from "../../../../../components/Button";
 import Markdown from "../../../../../components/Markdown";
-import Modal, { CommonModalPageProps } from "../../../../../components/Modal";
+import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
+import type { ModalPageProps } from "@/widgets/overlays";
 import Text from "../../../../../components/Text";
 import { ExportFile, Info } from "../../../../../components/Icons";
 import { PgFramework, PgView } from "../../../../../utils";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("explorer:export-workspace");
 
 export const ExportWorkspace = () => (
-  <Modal multiple defaultPage={{ Component: Default }} />
+  <ModalPages name="export-workspace" defaultPage={modalPage(Default)} />
 );
 
-type DefaultProps = CommonModalPageProps;
+type DefaultProps = ModalPageProps;
 
 const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
   const convertAndExport = async () => {
     try {
       const { readme } = await PgFramework.exportWorkspace({ convert: true });
-      setPage({ Component: Readme, props: { readme } });
+      setPage(modalPage(Readme, { readme }));
     } catch (e) {
-      console.log("Convert and export error:", e);
+      // The export still happens, as is; the user hears that the layout
+      // stayed, and the team hears why the conversion failed
+      log.error(e, { report: true });
+      PgView.setToast(
+        () => <span>Could not convert the layout; exported it as is.</span>,
+        { options: { name: "export-convert-failed" } }
+      );
       await exportWithoutChanges();
     }
   };
@@ -31,7 +41,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
   };
 
   return (
-    <Modal title="Export project">
+    <ModalFrame name="export-workspace" title="Export project">
       <Content>
         <Question>Convert the project layout?</Question>
 
@@ -63,7 +73,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
           </Button>
         </ButtonsWrapper>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 
@@ -96,13 +106,13 @@ const ButtonsWrapper = styled.div`
   }
 `;
 
-type ReadmeProps = CommonModalPageProps & {
+type ReadmeProps = ModalPageProps & {
   /** Markdown text */
   readme: string;
 };
 
 const Readme: FC<React.PropsWithChildren<ReadmeProps>> = ({ readme }) => (
-  <Modal title buttonProps={{ text: "Continue" }}>
+  <ModalFrame name="export-workspace" title buttonProps={{ text: "Continue" }}>
     <Markdown>{readme}</Markdown>
-  </Modal>
+  </ModalFrame>
 );

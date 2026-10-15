@@ -1,31 +1,13 @@
 import type { Page } from "@playwright/test";
 
 import { expect, json, leaveEditor, seedWorkspace, test } from "./fixtures";
-
-/**
- * The telemetry event lines the page logs from now on.
- *
- * The dev server logs each event at `debug` from the `telemetry:event`
- * namespace, as `[telemetry:event] <name> {<params>}`.
- */
-const linesOn = (page: Page) => {
-  const lines: string[] = [];
-  page.on("console", (message) => {
-    const text = message.text();
-    if (text.startsWith("[telemetry:event]")) lines.push(text);
-  });
-  return lines;
-};
+import { lineOf, linesOn } from "./telemetry";
 
 /** Names of the telemetry events the page has logged so far */
 const eventsOn = (page: Page) => {
   const lines = linesOn(page);
   return { has: (name: string) => lines.some((l) => l.split(" ")[1] === name) };
 };
-
-/** The first event line with this name, params included */
-const lineOf = (lines: string[], name: string) =>
-  lines.find((line) => line.startsWith(`[telemetry:event] ${name} `));
 
 /**
  * The one event line with this name: waits for it, then a moment more, so a
@@ -575,30 +557,35 @@ test("a toast opens above the navigation", async ({ seededPage: page }) => {
       new CustomEvent("viewtoastset", {
         detail: {
           elementable: "div",
-          props: { componentProps: { children: "layout e2e toast" } },
+          props: {
+            componentProps: { children: "layout e2e toast" },
+            options: { name: "layout-e2e" },
+          },
         },
       })
     )
   );
   const toast = page.getByText("layout e2e toast");
   await expect(toast).toBeVisible();
-  // It slides in from the left; measure where it comes to rest
-  await expect
-    .poll(async () => (await toast.boundingBox())?.x ?? -1)
-    .toBeGreaterThanOrEqual(0);
-  const box = (await toast.boundingBox())!;
   const left = (await navColumn(page).boundingBox())!;
+  // It rises into place from below the window, so the first frames sit off
+  // screen where nothing is hit; wait for it to be the topmost thing at its
+  // own centre
+  await expect
+    .poll(() =>
+      toast.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        const hit = document.elementFromPoint(
+          rect.x + rect.width / 2,
+          rect.y + rect.height / 2
+        );
+        return hit !== null && el.contains(hit);
+      })
+    )
+    .toBe(true);
   // The toast really is over the navigation, not beside it
+  const box = (await toast.boundingBox())!;
   expect(box.x).toBeLessThan(left.x + left.width);
-  const onTop = await toast.evaluate((el) => {
-    const rect = el.getBoundingClientRect();
-    const hit = document.elementFromPoint(
-      rect.x + rect.width / 2,
-      rect.y + rect.height / 2
-    );
-    return hit !== null && el.contains(hit);
-  });
-  expect(onTop).toBe(true);
 });
 
 test.describe("the layout_viewport event", () => {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import styled from "styled-components";
 
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import { PgExplorer } from "../../../../../utils";
 
 export const ImportTemporary = () => {
@@ -14,7 +14,8 @@ export const ImportTemporary = () => {
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="import-temporary"
       title
       buttonProps={{
         text: "Import",
@@ -32,7 +33,7 @@ export const ImportTemporary = () => {
         setError={setError}
         placeholder="project name..."
       />
-    </Modal>
+    </ModalFrame>
   );
 };
 

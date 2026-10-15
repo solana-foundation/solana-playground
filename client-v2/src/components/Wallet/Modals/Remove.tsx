@@ -1,17 +1,18 @@
 import styled, { css } from "styled-components";
 
 import Button from "../../Button";
-import Modal from "../../Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../Text";
 import { Warning } from "../../Icons";
 import { PgWallet } from "../../../utils";
 
 export const Remove = () => (
-  <Modal
+  <ModalFrame
+    name="wallet-remove"
     title
     buttonProps={{
       text: "Remove",
-      kind: "error",
+      variant: "destructive",
       onSubmit: () => PgWallet.remove(),
     }}
   >
@@ -25,7 +26,7 @@ export const Remove = () => (
       </WarningTextWrapper>
       <Button onClick={() => PgWallet.export()}>Save keypair</Button>
     </MainContent>
-  </Modal>
+  </ModalFrame>
 );
 
 const MainContent = styled.div`

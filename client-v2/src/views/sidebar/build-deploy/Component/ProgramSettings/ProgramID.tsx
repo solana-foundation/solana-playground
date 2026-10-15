@@ -3,7 +3,7 @@ import styled, { css } from "styled-components";
 
 import Button from "../../../../../components/Button";
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../../../../components/Text";
 import { Warning } from "../../../../../components/Icons";
 import { PgProgramInfo, PgCommon, PgView, PgWeb3 } from "../../../../../utils";
@@ -41,7 +41,8 @@ const NewKeypairModal = () => {
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="program-id"
       title
       buttonProps={{
         text: "Generate",
@@ -66,7 +67,7 @@ const NewKeypairModal = () => {
           Save keypair
         </Button.Export>
       </MainContent>
-    </Modal>
+    </ModalFrame>
   );
 };
 

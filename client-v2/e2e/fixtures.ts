@@ -60,6 +60,16 @@ export const leaveEditor = async (page: Page) => {
 export const test = base.extend<{ seededPage: Page }>({
   seededPage: async ({ page }, use) => {
     await seedWorkspace(page);
+    // The tree shows before the editor: Monaco is a lazy chunk, and when it
+    // mounts it opens the current file and focuses itself
+    // (`PgExplorer.onDidOpenFile` in `Monaco.tsx`). On a loaded machine that
+    // lands after a test has already put the focus somewhere else -- a
+    // right-clicked file, the new-item input -- and takes it away. Hand the
+    // page over once the editor holds the focus, so it has nothing left to
+    // take.
+    await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused(
+      LONG
+    );
     await use(page);
   },
 });

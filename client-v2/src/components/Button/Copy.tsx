@@ -2,9 +2,9 @@ import { FC } from "react";
 import styled, { css } from "styled-components";
 
 import Button from "./Default";
-import Tooltip from "../Tooltip";
 import { Copy } from "../Icons";
 import { useCopy } from "../../hooks";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 interface CopyButtonProps {
   copyText: string;
@@ -16,16 +16,13 @@ const CopyButton: FC<React.PropsWithChildren<CopyButtonProps>> = ({
   const [copied, setCopied] = useCopy(copyText);
 
   return (
-    <Tooltip
-      element={
-        <TooltipElement copied={copied}>
-          {copied ? "Copied" : "Copy"}
-        </TooltipElement>
-      }
-    >
-      <StyledButton onClick={setCopied} kind="icon" copied={copied}>
-        <Copy />
-      </StyledButton>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <StyledButton onClick={setCopied} kind="icon" copied={copied}>
+          <Copy />
+        </StyledButton>
+      </TooltipTrigger>
+      <TooltipContent>{copied ? "Copied" : "Copy"}</TooltipContent>
     </Tooltip>
   );
 };
@@ -40,12 +37,6 @@ const StyledButton = styled(Button)<{ copied: boolean }>`
       ${copied && `color: ${theme.colors.state.success.color}`};
     }
   `};
-`;
-
-const TooltipElement = styled.span<{ copied: boolean }>`
-  ${({ copied, theme }) => css`
-    ${copied && `color: ${theme.colors.state.success.color}`};
-  `}
 `;
 
 export default CopyButton;

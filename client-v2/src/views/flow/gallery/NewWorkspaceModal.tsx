@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
-import styled, { createGlobalStyle, css } from "styled-components";
+import styled, { css } from "styled-components";
 
 import type { ProgramListing } from "./ProgramsTab";
 import ProgramsTab from "./ProgramsTab";
 import StartFromScratch from "./StartFromScratch";
 import TutorialsTab, { Empty } from "./TutorialsTab";
 import Button from "../../../components/Button";
-import Modal from "../../../components/Modal";
 import { createLogger } from "../../../shared/lib/logger";
+import { ModalFrame } from "@/widgets/overlays";
 import { PgCommon, PgTutorial } from "../../../utils";
 
 /** The gallery's two sources, one tab each */
@@ -73,8 +73,11 @@ const NewWorkspaceModal = ({
   const tutorialCount = PgTutorial.all.length;
 
   return (
-    <Modal title="What do you want to build?" closeButton>
-      <ModalWidthOverride />
+    <ModalFrame
+      name="new-workspace"
+      title="What do you want to build?"
+      size="wide"
+    >
       <Wrapper data-gallery-modal>
         <Lead>
           Start clean, open a real program, or learn through a tutorial.
@@ -139,27 +142,11 @@ const NewWorkspaceModal = ({
           )}
         </Panel>
       </Wrapper>
-    </Modal>
+    </ModalFrame>
   );
 };
 
 export default NewWorkspaceModal;
-
-/**
- * `components/Modal`'s outer chrome hardcodes `max-width: max(40%, 40rem)`
- * (`utils/theme/theme.ts`) with no prop to override it, and that file is
- * out of scope to edit here. This gallery needs a real multi-column grid,
- * so widen precisely the one element that is exactly three direct-child
- * hops above our own marker (Modal wrapper -> its scroll region -> its
- * content region -> `[data-gallery-modal]`) -- nothing else on the page can
- * match that shape, so every other modal in the app is unaffected.
- */
-const ModalWidthOverride = createGlobalStyle`
-  :has(> * > * > [data-gallery-modal]) {
-    width: min(64rem, 90vw) !important;
-    max-width: min(64rem, 90vw) !important;
-  }
-`;
 
 const Wrapper = styled.div`
   display: flex;

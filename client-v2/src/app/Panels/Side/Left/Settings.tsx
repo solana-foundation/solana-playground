@@ -4,7 +4,7 @@ import styled, { css } from "styled-components";
 import Checkbox from "../../../../components/Checkbox";
 import Foldable from "../../../../components/Foldable";
 import Select from "../../../../components/Select";
-import Tooltip from "../../../../components/Tooltip";
+import { HelpTip } from "@/shared/ui/help-tip";
 import { useRenderOnChange } from "../../../../hooks";
 import {
   PgCommon,
@@ -101,14 +101,7 @@ const Setting: FC<React.PropsWithChildren<SettingType>> = (setting) => (
   <SettingWrapper isCheckBox={!setting.values}>
     <Left>
       <SettingName>{setting.name}</SettingName>
-      {setting.description && (
-        <Tooltip
-          help
-          bgSecondary
-          element={setting.description}
-          maxWidth="20rem"
-        />
-      )}
+      {setting.description && <HelpTip>{setting.description}</HelpTip>}
     </Left>
 
     <Right>

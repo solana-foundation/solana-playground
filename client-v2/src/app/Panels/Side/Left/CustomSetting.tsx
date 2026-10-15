@@ -3,7 +3,7 @@ import styled from "styled-components";
 
 import Input from "../../../../components/Input";
 import Markdown from "../../../../components/Markdown";
-import Modal from "../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../../../components/Text";
 import { Info } from "../../../../components/Icons";
 import { Setting } from "../../../../utils";
@@ -37,15 +37,13 @@ export const CustomSetting: FC<React.PropsWithChildren<CustomSettingProps>> = ({
   }, []);
 
   return (
-    <Modal
+    <ModalFrame
+      name="custom-setting"
       title
-      closeButton
       buttonProps={{
         text: "Set",
         onSubmit: () => setting.setValue(custom.parse(value)),
         disabled: !!error,
-        fullWidth: true,
-        style: { height: "2.5rem", marginTop: "-0.25rem" },
       }}
     >
       <Content>
@@ -70,7 +68,7 @@ export const CustomSetting: FC<React.PropsWithChildren<CustomSettingProps>> = ({
           </Tip>
         )}
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

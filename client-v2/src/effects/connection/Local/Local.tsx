@@ -3,7 +3,7 @@ import styled, { css } from "styled-components";
 
 import Foldable from "../../../components/Foldable";
 import Markdown from "../../../components/Markdown";
-import Modal from "../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../../components/Text";
 import { Info, Sad } from "../../../components/Icons";
 import { PgCommon, PgConnection, PgView } from "../../../utils";
@@ -18,7 +18,7 @@ export const Local = () => {
   }, []);
 
   return (
-    <Modal title="Connect to localnet">
+    <ModalFrame name="localnet-unreachable" title="Connect to localnet">
       <Text kind="error" icon={<Sad />}>
         Unable to connect to localnet
       </Text>
@@ -42,7 +42,7 @@ export const Local = () => {
 
         <Issues />
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

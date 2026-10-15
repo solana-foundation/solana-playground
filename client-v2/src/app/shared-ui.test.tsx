@@ -1,8 +1,9 @@
 // The design-system components in shared/ui mount and respond in client-v2
 // as installed: React 19, our aliases and jsdom, with no edit by hand.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { AppProviders } from "./App";
 import { Button } from "@/shared/ui/button";
 import {
   ResizableHandle,
@@ -16,6 +17,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/shared/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 // jsdom has neither, every browser has both. `useIsMobile` reads
 // `window.innerWidth` and only subscribes through `matchMedia`, so the stub
@@ -119,5 +121,36 @@ describe("shared/ui", () => {
     expect(
       screen.getByRole("button", { name: "Build" }).getAttribute("data-slot")
     ).toBe("button");
+  });
+
+  it("shows a tooltip 500 ms after the pointer reaches its trigger", () => {
+    vi.useFakeTimers();
+    try {
+      render(
+        <AppProviders>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button>Refresh</button>
+            </TooltipTrigger>
+            <TooltipContent>Reload the panel</TooltipContent>
+          </Tooltip>
+        </AppProviders>
+      );
+
+      fireEvent.pointerMove(screen.getByRole("button", { name: "Refresh" }));
+      act(() => {
+        vi.advanceTimersByTime(499);
+      });
+      expect(screen.queryByRole("tooltip")).toBeNull();
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(screen.getByRole("tooltip").textContent).toContain(
+        "Reload the panel"
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

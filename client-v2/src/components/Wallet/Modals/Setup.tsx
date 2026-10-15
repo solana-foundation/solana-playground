@@ -2,10 +2,13 @@ import { useState } from "react";
 import styled, { css } from "styled-components";
 
 import Button from "../../Button";
-import Modal from "../../Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../Text";
 import { Warning } from "../../Icons";
 import { PgWallet, PgWeb3 } from "../../../utils";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("wallet:setup");
 
 export const Setup = () => {
   const [text, setText] = useState("");
@@ -32,13 +35,18 @@ export const Setup = () => {
       if (PgWallet.accounts.length) PgWallet.remove(0);
       const keypair = await PgWallet.import();
       if (keypair) setText("Imported address: " + keypair.publicKey.toBase58());
-    } catch (err: any) {
-      console.log(err.message);
+    } catch (err) {
+      log.error(err, { report: true });
+      setText(
+        "Could not import the keypair: " +
+          (err instanceof Error ? err.message : String(err))
+      );
     }
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="wallet-setup"
       title="Playground Wallet"
       buttonProps={{
         text: "Continue",
@@ -73,7 +81,7 @@ export const Setup = () => {
         </WalletButtonsWrapper>
         {text && <KeypairText>{text}</KeypairText>}
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

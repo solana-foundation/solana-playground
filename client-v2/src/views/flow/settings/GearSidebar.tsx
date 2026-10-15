@@ -74,13 +74,12 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
   const returnFocusTo = useRef<HTMLElement | null>(null);
 
   // Modals opened from this panel (Import from GitHub/files, and the
-  // upstream Settings' own "Custom" value modal) render into `ModalBackdrop`
-  // -- a sibling of this panel, not a descendant of it, and not one of the
-  // portal ids `useOnClickOutside` already excludes. Without this, the very
-  // first click inside such a modal (e.g. focusing its input) reads as an
-  // "outside" click and slides this panel shut behind the modal's
-  // translucent backdrop.
-  // Tracks the latest MODAL_SET event, not a modal stack.
+  // upstream Settings' own "Custom" value modal) render in `ModalHost`'s
+  // dialog, which portals to `body`. That is not a descendant of this panel,
+  // and not the portal `useOnClickOutside` already excludes. Without this,
+  // the very first click inside such a modal (e.g. focusing its input) reads
+  // as an "outside" click and slides this panel shut behind the dialog.
+  // This tracks the latest MODAL_SET event, not a modal stack.
   const [modalOpen, setModalOpen] = useState(false);
   useSetStatic(
     PgCommon.getSendAndReceiveEventNames(PgView.events.MODAL_SET).send,

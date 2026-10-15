@@ -1,5 +1,4 @@
 import { createElement, FC } from "react";
-import type { ToastOptions } from "react-toastify";
 
 import { PgCommon } from "./common";
 import {
@@ -16,6 +15,33 @@ import type {
   Elementable,
   Promisable,
 } from "./types";
+
+/** How long a toast stays, in milliseconds, when its options give no duration */
+export const DEFAULT_TOAST_DURATION = 5000;
+
+/** A toast's id: what to reuse to replace it, or to close it */
+export type ToastId = string | number;
+
+/** How a toast behaves; `name` is its telemetry name, kebab-case */
+export type ToastOptions = {
+  name: string;
+  /** Reuse to replace a toast; generated when absent */
+  id?: ToastId;
+  /** Milliseconds, or "persistent" to stay until closed; `DEFAULT_TOAST_DURATION` by default */
+  duration?: number | "persistent";
+};
+
+/** Props a toast's component receives on top of its own */
+export type ToastChildProps = { id: ToastId };
+
+/**
+ * What `PgView.setToast` sends and `ToastHost` receives. The event is a
+ * plain DOM event, so a sender outside `setToast` may still omit `options`.
+ */
+export type ToastRequest = {
+  elementable: Elementable<any>;
+  props?: { componentProps?: Record<string, unknown>; options?: ToastOptions };
+};
 
 /** Sidebar page param */
 export type SidebarPageParam<N extends string> = {
@@ -111,9 +137,8 @@ class _PgView {
     ROOT_DIR: "root-dir",
     TABS: "tabs",
     WALLET_MAIN: "wallet-main",
+    WALLET_RENAME_INPUT: "wallet-rename-input",
     HOME: "home",
-    PORTAL_ABOVE: "portal-above",
-    PORTAL_BELOW: "portal-below",
   };
 
   /**
@@ -234,10 +259,6 @@ class _PgView {
    * @param data data to be resolved from the modal
    */
   static closeModal(data?: any) {
-    // `data` will be a `ClickEvent` if the modal has been closed with the
-    // default Cancel button
-    if (data?.target) data = null;
-
     PgCommon.createAndDispatchCustomEvent(
       PgCommon.getSendAndReceiveEventNames(PgView.events.MODAL_SET).receive,
       { data }
@@ -252,9 +273,9 @@ class _PgView {
    * @param elementable component to show
    * @param props component props and toast options
    */
-  static setToast<P extends Record<string, unknown>>(
-    elementable: Elementable<P>,
-    props?: { componentProps?: P; options?: ToastOptions }
+  static setToast<P extends Record<string, unknown> = Record<string, never>>(
+    elementable: Elementable<P & ToastChildProps>,
+    props: { componentProps?: P; options: ToastOptions }
   ) {
     return PgCommon.createAndDispatchCustomEvent(PgView.events.TOAST_SET, {
       elementable,
@@ -267,7 +288,7 @@ class _PgView {
    *
    * @param id toast id
    */
-  static closeToast(id?: number) {
+  static closeToast(id?: ToastId) {
     return PgCommon.createAndDispatchCustomEvent(PgView.events.TOAST_CLOSE, id);
   }
 

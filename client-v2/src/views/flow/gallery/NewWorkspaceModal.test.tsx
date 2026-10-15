@@ -12,8 +12,8 @@ vi.mock("../../../utils", () => ({
   PgTutorial: { all: [] },
   PgView: { setModal: vi.fn() },
 }));
-vi.mock("../../../components/Modal", () => ({
-  default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+vi.mock("@/widgets/overlays", () => ({
+  ModalFrame: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 vi.mock("../../../components/Button", () => ({
   default: ({

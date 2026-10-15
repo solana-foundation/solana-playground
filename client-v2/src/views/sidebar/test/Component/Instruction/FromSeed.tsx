@@ -4,12 +4,12 @@ import styled from "styled-components";
 import InputLabel from "../InputLabel";
 import InstructionInput from "./InstructionInput";
 import Button from "../../../../../components/Button";
-import Tooltip from "../../../../../components/Tooltip";
 import SearchBar, {
   SearchBarDropdownProps,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
 import { Edit, Plus, Trash } from "../../../../../components/Icons";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import {
   IdlType,
   PgProgramInteraction,
@@ -99,33 +99,41 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
 
               <SeedLabelButtonsWrapper>
                 {seed.state === "selected" && (
-                  <Tooltip element="Edit seed">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        onClick={() => {
+                          setSeeds((seeds) =>
+                            seeds.map((seed, i) => {
+                              return i === index
+                                ? { ...seed, state: "selecting" }
+                                : seed;
+                            })
+                          );
+                        }}
+                        kind="icon"
+                      >
+                        <Edit />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Edit seed</TooltipContent>
+                  </Tooltip>
+                )}
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <Button
                       onClick={() => {
                         setSeeds((seeds) =>
-                          seeds.map((seed, i) => {
-                            return i === index
-                              ? { ...seed, state: "selecting" }
-                              : seed;
-                          })
+                          seeds.filter((_, i) => i !== index)
                         );
                       }}
                       kind="icon"
+                      hoverColor="error"
                     >
-                      <Edit />
+                      <Trash />
                     </Button>
-                  </Tooltip>
-                )}
-                <Tooltip element="Delete seed">
-                  <Button
-                    onClick={() => {
-                      setSeeds((seeds) => seeds.filter((_, i) => i !== index));
-                    }}
-                    kind="icon"
-                    hoverColor="error"
-                  >
-                    <Trash />
-                  </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Delete seed</TooltipContent>
                 </Tooltip>
               </SeedLabelButtonsWrapper>
             </SeedLabelWrapper>

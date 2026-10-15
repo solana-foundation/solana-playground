@@ -1,7 +1,7 @@
 import { FC, useEffect, useRef, useState } from "react";
 
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import { PgCommon, PgExplorer } from "../../../../../utils";
 
 interface RenameItemProps {
@@ -30,12 +30,12 @@ export const RenameItem: FC<React.PropsWithChildren<RenameItemProps>> = ({
   }, []);
 
   return (
-    <Modal
+    <ModalFrame
+      name="rename-item"
       title={`Rename '${itemName}'`}
       buttonProps={{
         text: "Rename",
         onSubmit: rename,
-        size: "small",
         disabled: !!error,
       }}
     >
@@ -48,6 +48,6 @@ export const RenameItem: FC<React.PropsWithChildren<RenameItemProps>> = ({
         error={error}
         setError={setError}
       />
-    </Modal>
+    </ModalFrame>
   );
 };

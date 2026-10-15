@@ -36,7 +36,7 @@ export const tx = () => {
     const txHash = PgCodec.encodeBinary(tx.signature, "base58");
     PgView.setToast(ExplorerLink, {
       componentProps: { txHash },
-      options: { toastId: txHash },
+      options: { name: "tx-explorer-link", id: txHash },
     });
   });
 };

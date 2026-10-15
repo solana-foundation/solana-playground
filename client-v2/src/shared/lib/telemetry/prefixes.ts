@@ -5,6 +5,7 @@ export const EVENT_PREFIXES = {
   feedback: "feedback",
   "layout-shell": "layout",
   observability: "obs",
+  overlays: "overlay",
   persistence: "sync",
 } as const;
 

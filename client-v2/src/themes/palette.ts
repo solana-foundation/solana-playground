@@ -122,19 +122,6 @@ const PALETTE: ThemeParam = {
       borderColor: BORDER,
       padding: "0.4375rem 0.75rem",
     },
-    menu: {
-      default: {
-        bg: BG_RAISED,
-        border: `1px solid ${BORDER}`,
-      },
-    },
-    modal: {
-      default: {
-        bg: "color-mix(in srgb, var(--surface-raised) 90%, transparent)",
-        border: `1px solid ${BORDER}`,
-        boxShadow: "var(--shadow-modal-value)",
-      },
-    },
     progressbar: {
       indicator: { bg: GRADIENT },
     },
@@ -165,16 +152,6 @@ const PALETTE: ThemeParam = {
     },
     terminal: {
       default: { bg: BG_BASE },
-    },
-    toast: {
-      default: {
-        bg: BG_RAISED,
-        border: `1px solid ${BORDER}`,
-        // react-toastify's 64px min-height inflates a single-line toast
-        minHeight: "3rem",
-        padding: "0.5rem 0.75rem",
-      },
-      progress: { bg: GRADIENT },
     },
     topbar: {
       bg: BG_BASE,

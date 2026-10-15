@@ -32,15 +32,18 @@ const pickTheme = async (page: Page, name: "Dark" | "Light") => {
   await page.getByRole("option", { name, exact: true }).click();
 };
 
-/** Open the console drawer and run `help`, so the terminal holds output */
+/**
+ * Open the console drawer and run `help`, so the terminal holds output.
+ *
+ * Takes a `seededPage`: the editor focuses itself when it opens the first
+ * file, and the fixture waits for that, so it cannot land after the click on
+ * the terminal and take the typing.
+ */
 const runHelp = async (page: Page) => {
   const drawer = page.getByRole("button", { name: "Console", exact: true });
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }
-  // The editor focuses itself when it opens the first file; landing after the
-  // click below, it takes the typing and the terminal never sees `help`
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
   await page.getByLabel("Terminal input").first().click();
   await page.keyboard.type("help");
   await page.keyboard.press("Enter");

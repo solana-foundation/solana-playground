@@ -11,9 +11,16 @@ import styled, { css } from "styled-components";
 
 import Button from "../Button";
 import LangIcon from "../LangIcon";
-import Menu from "../Menu";
 import { Close } from "../Icons";
 import { PgExplorer, PgTheme } from "../../utils";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuShortcut,
+  ContextMenuTrigger,
+} from "@/shared/ui/context-menu";
+import { MenuItemText } from "@/shared/ui/menu-extras";
 import type { SortableItemCommonProps } from "../Dnd/Sortable";
 
 interface TabProps extends ComponentPropsWithoutRef<"div"> {
@@ -62,51 +69,49 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
     }, []);
 
     return (
-      <Menu.Context
-        items={[
-          {
-            name: "Close",
-            onClick: closeFile,
-            keybind: "ALT+W",
-          },
-          {
-            name: "Close Others",
-            onClick: closeOthers,
-            showCondition: PgExplorer.tabs.length > 1,
-          },
-          {
-            name: "Close To The Right",
-            onClick: closeToTheRight,
-            showCondition: PgExplorer.tabs.length - 1 > index,
-          },
-          {
-            name: "Close All",
-            onClick: closeAll,
-          },
-        ]}
-        onShow={() => setIsSelected(true)}
-        onHide={() => setIsSelected(false)}
-      >
-        <Wrapper
-          onClick={changeTab}
-          title={path}
-          ref={ref}
-          isSelected={isSelected}
-          isCurrent={path === PgExplorer.currentFilePath}
-          {...(props as SortableItemCommonProps)}
-        >
-          <LangIcon path={path} />
-          <Name>{fileName}</Name>
-          <Button
-            ref={closeButtonRef}
-            kind="icon"
-            onClick={closeFile}
-            title="Close (Alt+W)"
+      <ContextMenu onOpenChange={setIsSelected}>
+        <ContextMenuTrigger asChild>
+          <Wrapper
+            onClick={changeTab}
+            title={path}
+            ref={ref}
+            isSelected={isSelected}
+            isCurrent={path === PgExplorer.currentFilePath}
+            {...(props as SortableItemCommonProps)}
           >
-            <Close />
-          </Button>
-        </Wrapper>
-      </Menu.Context>
+            <LangIcon path={path} />
+            <Name>{fileName}</Name>
+            <Button
+              ref={closeButtonRef}
+              kind="icon"
+              onClick={closeFile}
+              title="Close (Alt+W)"
+            >
+              <Close />
+            </Button>
+          </Wrapper>
+        </ContextMenuTrigger>
+        {/* Every label is a MenuItemText: one element to match, and the shortcut stays at the far edge */}
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={closeFile}>
+            <MenuItemText>Close</MenuItemText>
+            <ContextMenuShortcut>ALT+W</ContextMenuShortcut>
+          </ContextMenuItem>
+          {PgExplorer.tabs.length > 1 && (
+            <ContextMenuItem onSelect={closeOthers}>
+              <MenuItemText>Close Others</MenuItemText>
+            </ContextMenuItem>
+          )}
+          {PgExplorer.tabs.length - 1 > index && (
+            <ContextMenuItem onSelect={closeToTheRight}>
+              <MenuItemText>Close To The Right</MenuItemText>
+            </ContextMenuItem>
+          )}
+          <ContextMenuItem onSelect={closeAll}>
+            <MenuItemText>Close All</MenuItemText>
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     );
   }
 );

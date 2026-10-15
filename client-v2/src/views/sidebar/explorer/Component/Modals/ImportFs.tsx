@@ -2,10 +2,10 @@ import { FC, useState } from "react";
 import styled from "styled-components";
 
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../../../../components/Text";
 import UploadArea from "../../../../../components/UploadArea";
-import { ImportWorkspace, Info } from "../../../../../components/Icons";
+import { Info } from "../../../../../components/Icons";
 import {
   PgExplorer,
   PgFramework,
@@ -62,13 +62,13 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="import-fs"
       title="Import project"
       buttonProps={{
         text: "Import",
         onSubmit: () => PgExplorer.createWorkspace(name, { files }),
         disabled: !files || !!nameError || !!importError,
-        rightIcon: <ImportWorkspace />,
       }}
     >
       <Content>
@@ -98,7 +98,7 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
           You can drag & drop a Cargo workspace directory.
         </StyledText>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

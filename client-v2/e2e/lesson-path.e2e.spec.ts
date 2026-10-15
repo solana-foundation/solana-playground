@@ -14,10 +14,11 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 
   await page.goto("/");
 
-  // The gallery opens by itself when there are no workspaces. It has no
-  // `role="dialog"` -- `components/Modal` renders plain divs -- so anchor
-  // on its title text instead.
-  const gallery = page.getByText("What do you want to build?");
+  // The gallery opens by itself when there are no workspaces, as a dialog
+  // named by its title.
+  const gallery = page.getByRole("dialog", {
+    name: "What do you want to build?",
+  });
   await expect(gallery).toBeVisible();
 
   // Make a real project the active workspace first -- D16 only shows up
@@ -73,9 +74,10 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
 
   await page.goto("/");
 
-  // Same anchor as the test above -- `components/Modal` renders no
-  // `role="dialog"`, so the gallery has to be found by its title text.
-  const gallery = page.getByText("What do you want to build?");
+  // Same anchor as the test above: the gallery dialog, by its title.
+  const gallery = page.getByRole("dialog", {
+    name: "What do you want to build?",
+  });
   await expect(gallery).toBeVisible();
 
   await page.getByRole("tab", { name: /tutorials/i }).click();

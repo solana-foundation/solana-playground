@@ -96,8 +96,11 @@ regression against 5.1 has misread this rule.
       (HOO-2059; parallel)
 - [ ] 5.5 Elements: controls (Stepper, Segmented, Select, NativeSelect,
       RadioGroup, Field, InputGroup) (HOO-2060; parallel)
-- [ ] 5.6 Elements: menus and overlays (Dialog, Modal, DropdownMenu,
-      ContextMenu, Popover, Drawer, Sonner) (HOO-2061; parallel)
+- [x] 5.6 Elements: menus and overlays (Dialog, Modal, DropdownMenu,
+      ContextMenu, Popover, Drawer, Sonner) from the design system;
+      react-toastify and the legacy `Menu`, `Modal`, `ModalBackdrop`,
+      `Popover`, `Toast` and `Tooltip` removed (HOO-2061; parallel; plan:
+      [plans/5.6-overlays.md](plans/5.6-overlays.md))
 - [ ] 5.7 Phone: the prototype's three-page structure from 720 px, the
       editor editable on a phone, replacing 5.1's read-only editor (HOO-2062;
       after 5.2)

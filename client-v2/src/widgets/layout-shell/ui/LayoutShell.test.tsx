@@ -15,20 +15,22 @@ import {
 } from "@/shared/lib/telemetry";
 // The `@/utils` barrel reaches generated globals (`GLOBAL_SETTINGS`) that
 // exist only in a booted app, so the test builds it from the pieces the shell
-// uses: the real keybinds and editor events, a deploy command it can start
-// and modals it can open.
+// uses: the real keybinds, editor events and view (so a modal opens through
+// `PgView.setModal`, the event the shell listens to) and a deploy command it
+// can start.
 const deploy = vi.hoisted(() => ({
   starts: new Set<(input: string | null) => void>(),
-  modals: new Set<() => void>(),
 }));
 vi.mock("@/utils", async () => {
   const { PgKeybind } = await import("@/utils/keybind");
   const { PgEditor } = await import("@/utils/editor");
   const { PgCommon } = await import("@/utils/common");
+  const { PgView } = await import("@/utils/view");
   return {
     PgKeybind,
     PgEditor,
     PgCommon,
+    PgView,
     PgCommand: {
       deploy: {
         onDidStart: (cb: (input: string | null) => void) => {
@@ -37,16 +39,11 @@ vi.mock("@/utils", async () => {
         },
       },
     },
-    PgView: {
-      onDidOpenModal: (cb: () => void) => {
-        deploy.modals.add(cb);
-        return { dispose: () => deploy.modals.delete(cb) };
-      },
-    },
   };
 });
 
 import { PgEditor } from "@/utils/editor";
+import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
@@ -726,17 +723,24 @@ it("should not reopen the console for a change that leaves a deploy failed", () 
   ]);
 });
 
+/** Opens a modal the way a dialog's caller does; nothing answers it here */
+const openModal = () => {
+  act(() => {
+    void PgView.setModal(() => null);
+  });
+};
+
 it("should close the navigation Sheet when a modal opens", () => {
   resizeTo(500);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
-  act(() => deploy.modals.forEach((open) => open()));
+  openModal();
   expect(
     document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
   ).toBeNull();
   expect(toggled().at(-1)).toEqual({ panel: "nav", open: false, via: "auto" });
   // A modal with the Sheet already closed leaves no mark behind
-  act(() => deploy.modals.forEach((open) => open()));
+  openModal();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   expect(toggled().at(-1)).toEqual({
     panel: "nav",
@@ -774,7 +778,7 @@ it("should report nothing for a modal on a desktop when the Sheet was left open 
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   act(() => resizeTo(1440));
   const before = toggled().length;
-  act(() => deploy.modals.forEach((open) => open()));
+  openModal();
   expect(toggled()).toHaveLength(before);
   // And no `auto` mark is left for the next toggle
   press({ key: "b", metaKey: true });

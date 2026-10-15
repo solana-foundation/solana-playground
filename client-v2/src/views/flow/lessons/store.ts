@@ -470,7 +470,9 @@ export class PgLesson {
       if (!PgLesson._toldSaveFailed) {
         PgLesson._toldSaveFailed = true;
         const { default: SaveFailedToast } = await import("./SaveFailedToast");
-        PgView.setToast(SaveFailedToast);
+        PgView.setToast(SaveFailedToast, {
+          options: { name: "lesson-save-failed" },
+        });
       }
     }
   }
