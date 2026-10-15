@@ -768,6 +768,24 @@ COMPOSE_PROJECT_NAME=pg-slot$k PG_CLIENT_PORT=$((13000 + 10 * k)) PG_CLIENT_V2_P
 
 In each case of a group, read `http://localhost:3000` and `http://localhost:8080` as the slot's client and server ports.
 
+client-v2's browser suite takes the same slot through `PORT`:
+
+```sh
+k=5
+PORT=$((13000 + 10 * k)) yarn test-e2e
+```
+
+The run starts its own dev server on that port, or reuses one that this worktree already started there. A server on
+the port from another worktree, or anything else that is not this worktree's client-v2, fails the run before any test.
+
+A local run also waits in a machine-wide queue, so several worktrees do not swap the machine: at most `E2E_MAX_RUNS`
+runs (default 2) go at once, each with `E2E_WORKERS` Chromiums (default 2). The slots are the directories `slot-1`,
+`slot-2`, ... under `~/.cache/solana-playground-e2e` (`E2E_QUEUE_DIR` moves them). A waiting run prints who holds the
+slots. A run that was killed leaves its slot behind, and the next run reclaims it once the owner's pid is gone. If an
+unrelated process has since been given that pid, the slot stays held until that process exits: when a run waits on a
+holder that is not an e2e run, delete the slot by hand (`rm -r ~/.cache/solana-playground-e2e/slot-N`). CI does not
+queue.
+
 ### Limits
 
 - [ ] Every group runs from its own clone: B-1 to B-4, the C cases, and S-9 write to `node_modules`, `public/`,

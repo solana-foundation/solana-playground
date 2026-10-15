@@ -180,7 +180,7 @@ jobs:
   # `checks` stays short and a browser failure reads as one. No Postgres and
   # no secret: every spec stubs the account endpoints with `page.route`, and
   # the dev server serves `api/*.mjs` itself. The skips the job expects are
-  # listed in `e2e/known-skips.txt`; `playwright.config.ts` says what `CI`
+  # listed in `e2e/known-skips.txt`; `playwright.config.mts` says what `CI`
   # changes.
   e2e:
     name: e2e

@@ -319,6 +319,16 @@ check's job (HOO-1859); the rest hold by review.
   run's annotations, and is work to do, not a pass. Locally `retries` is 0,
   so a flake fails where it gets fixed. Quarantine is an explicit
   `test.skip` or `test.fixme` with the reason in the call, never a retry.
+  Locally, run `PORT=<port> yarn test-e2e` with a free slot port
+  (`docs/testing.md` section 8). The run reuses only this worktree's own dev
+  server on that port and stops before any test, with a message, when another
+  worktree's server or anything else holds it, and when the server does not
+  answer within 15 s. Locally run only the specs your change touches
+  (`PORT=<slot port> yarn test-e2e e2e/<spec>.e2e.spec.ts`); the full suite is
+  CI's. Stop your own dev server when the run is done. A local run uses 2
+  workers (`E2E_WORKERS`) and queues machine-wide before it starts its dev
+  server: at most `E2E_MAX_RUNS` runs (default 2) go at once, across every
+  worktree.
 - **A runtime upgrade still gets the manual walk-through** from the UI
   migration spec ("The React 19 gate"), in development and in the production
   build, because the suite runs against the dev server only.

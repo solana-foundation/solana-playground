@@ -45,6 +45,7 @@ class GoogleTagPlugin {
   }
 }
 
+const { DEV_SERVER_ROOT_HEADER } = require("./scripts/dev-server-owner.mjs");
 const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
@@ -511,6 +512,10 @@ module.exports = {
       ...devServerConfig.headers,
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
+      // Names this worktree's client-v2, so a local e2e run can tell its own
+      // server from another worktree's on the same port (`decideDevServer`).
+      // Percent-encoded: a header value must be ASCII, a path need not be.
+      [DEV_SERVER_ROOT_HEADER]: encodeURIComponent(__dirname),
     };
 
     // Serve `api/*.mjs` from the dev server itself, so local API work needs
