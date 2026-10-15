@@ -11,7 +11,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "../../../shared/lib/telemetry";
-import { FeedbackHost, FeedbackTrigger } from "./FeedbackWidget";
+import { FeedbackWidget } from "./FeedbackWidget";
 
 // The utils barrel reads generated globals that exist only in the built app
 const setToast = vi.fn();
@@ -73,19 +73,12 @@ afterEach(async () => {
   await Sentry.close();
 });
 
-/**
- * The host where `Flow` puts it, and the trigger where the navigation's
- * footer does; `footer: false` is the footer unmounted, as the navigation's
- * Sheet unmounts it on close
- */
-const page = ({ footer }: { footer: boolean }) => (
-  <ThemeProvider theme={theme}>
-    <FeedbackHost>{footer && <FeedbackTrigger />}</FeedbackHost>
-  </ThemeProvider>
-);
-
 it("should send one rated feedback from the trigger to Sentry, then thank the user", async () => {
-  render(page({ footer: true }));
+  render(
+    <ThemeProvider theme={theme}>
+      <FeedbackWidget />
+    </ThemeProvider>
+  );
 
   await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
   const share = await screen.findByRole("menuitem", { name: "Share feedback" });
@@ -133,7 +126,11 @@ it("should send one rated feedback from the trigger to Sentry, then thank the us
 });
 
 const openForm = async () => {
-  render(page({ footer: true }));
+  render(
+    <ThemeProvider theme={theme}>
+      <FeedbackWidget />
+    </ThemeProvider>
+  );
   await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Share feedback" })
@@ -203,43 +200,4 @@ it("should track a GitHub link opened from the form as from the form", async () 
     ["feedback_opened", {}],
     ["feedback_github_clicked", { link: "bug", from: "form" }],
   ]);
-});
-
-it("should keep the draft and the send when the trigger unmounts and comes back", async () => {
-  statusCode = 500;
-  let release = () => {};
-  held = new Promise<void>((resolve) => (release = resolve));
-  const { rerender } = render(page({ footer: true }));
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
-  await userEvent.click(
-    await screen.findByRole("menuitem", { name: "Share feedback" })
-  );
-  await userEvent.type(
-    await screen.findByRole("textbox", { name: "Feedback" }),
-    "Deploy is slow"
-  );
-  await userEvent.click(screen.getByRole("button", { name: "Submit" }));
-  await userEvent.keyboard("{Escape}");
-  await waitFor(() =>
-    expect(screen.queryByRole("heading", { name: "Give feedback" })).toBeNull()
-  );
-
-  rerender(page({ footer: false }));
-  expect(screen.queryByRole("button", { name: "Feedback" })).toBeNull();
-  rerender(page({ footer: true }));
-  expect(screen.getByRole("status", { name: "Sending feedback" })).toBeTruthy();
-
-  rerender(page({ footer: false }));
-  release();
-  await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
-  rerender(page({ footer: true }));
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
-  await userEvent.click(
-    await screen.findByRole("menuitem", { name: "Share feedback" })
-  );
-  expect(
-    (screen.getByRole("textbox", { name: "Feedback" }) as HTMLTextAreaElement)
-      .value
-  ).toBe("Deploy is slow");
-  expect(screen.getByRole("alert")).toBeTruthy();
 });

@@ -69,63 +69,13 @@ hold the components back.
 
 ## 5. Screens
 
-The screens move to the designer's prototype
-(https://solana-playground-ds.vercel.app/#app) in big visible steps, then
-the details: the frame, Home, the workspace, projects, the assistant and
-lessons, then the rest. The prototype is built from PR #32, which is a
-reference only: its screens are rebuilt on the design system, and #32 is not
-merged. Each step installs the design-system components it needs; the small
-elements are swapped app-wide on a parallel track (5.3-5.6) that depends on
-nothing. Every step after 5.2 restyles inside a column 5.2 already placed.
-Tablet keeps 5.1's layout, with one change from 5.2: between 768 and 1023 px
-the navigation starts as a rail on every load (unfolding it is for the visit
-and is not saved); the assistant stays the right Sheet, as in 5.1, until the
-designer delivers a tablet layout (HOO-2056). A task that treats the rail on load as a
-regression against 5.1 has misread this rule.
-
 - [x] 5.1 New layout shell with today's panels inside; the editor read-only
       below 600 px (decided 2026-10-09); the classic layout removed
       (HOO-1854; after 3.6 and 4.3; plan: `plans/5.1-layout-shell.md`)
-- [x] 5.2 Frame: the four-column frame, the header removed, today's pieces
-      moved unchanged (HOO-2055; after 5.1; design.md, "The four-column
-      frame (5.2)"; plan:
-      [plans/5.2-four-column-frame.md](plans/5.2-four-column-frame.md))
-- [ ] 5.3 Elements: leaves (Tag, Callout, Badge, Checkbox, Switch, Progress,
-      Collapsible and the like) swapped app-wide (HOO-2058; parallel)
-- [ ] 5.4 Elements: buttons (BrandButton, AsyncButton, CopyButton, HelpTip)
-      (HOO-2059; parallel)
-- [ ] 5.5 Elements: controls (Stepper, Segmented, Select, NativeSelect,
-      RadioGroup, Field, InputGroup) (HOO-2060; parallel)
-- [ ] 5.6 Elements: menus and overlays (Dialog, Modal, DropdownMenu,
-      ContextMenu, Popover, Drawer, Sonner) (HOO-2061; parallel)
-- [ ] 5.7 Phone: the prototype's three-page structure from 720 px, the
-      editor editable on a phone, replacing 5.1's read-only editor (HOO-2062;
-      after 5.2)
-- [ ] 5.8 Home replaces the gallery popup on start, desktop and phone
-      (HOO-2063; after 5.2)
-- [ ] 5.9 Tutorials and Programs pages, opened from the navigation
-      (HOO-2064; after 5.2)
-- [ ] 5.10 Workspace: the Write stage, editor tabs, console drawer and
-      terminal look (HOO-2065; after 5.2)
-- [ ] 5.11 Workspace: the Build and Deploy stages (HOO-2066; after 5.2)
-- [ ] 5.12 Workspace: the Interact stage (HOO-1676; after 5.2)
-- [ ] 5.13 Projects: New project (HOO-2068; after 5.2)
-- [ ] 5.14 Projects: the project list in the navigation, with pins, rename,
-      duplicate and zip (HOO-2069; after 5.2 and 5.6)
-- [ ] 5.15 Projects: the session footer and account menu (HOO-2070; after
-      5.2 and 5.6)
-- [ ] 5.16 Projects: the Get set up checklist (HOO-2075; after 5.15)
-- [ ] 5.17 Assistant: the composer and Connect a model (HOO-2067; after 5.2)
-- [ ] 5.18 Assistant: the thread, messages, diffs and approvals (HOO-1794;
-      after 5.17)
-- [ ] 5.19 Lessons: objective band, step rail, Steps and Files, the reader
-      (HOO-2076; after 5.2 and 5.10)
-- [ ] 5.20 Details: Settings as a full page (HOO-2071; after 5.5 and 5.6)
-- [ ] 5.21 Details: the tutorial page, its empty and error states
-      (HOO-2072; after 5.2)
-- [ ] 5.22 Details: the tablet layout (HOO-2073; after the designer's
-      HOO-2056)
-- [ ] 5.23 Details: the wallet (HOO-2074; after the designer's HOO-2057)
-- [ ] 5.24 Global reset on, styled-components out; Monaco and xterm excluded
-      from preflight or checked on their own (HOO-2077; after every other
-      task in this section)
+- [ ] 5.2 Panels move one by one, each by the change rule in
+      `client-v2/CLAUDE.md` (one ticket per panel, to file; after 5.1)
+- [ ] 5.3 Breakpoint screens, what the cut line says, by Nov 11 (ticket to
+      file; after 5.2)
+- [ ] 5.4 Global reset on, styled-components out; Monaco and xterm excluded
+      from preflight or checked on their own (ticket to file; after
+      Breakpoint)

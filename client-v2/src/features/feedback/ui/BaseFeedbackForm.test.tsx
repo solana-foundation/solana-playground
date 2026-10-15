@@ -16,7 +16,7 @@ interface HarnessProps {
   onOpenChange?: (open: boolean) => void;
 }
 
-/** Holds the draft and `open` as `FeedbackHost` does, with a button to return focus to */
+/** Holds the draft and `open` as `FeedbackWidget` does, with a button to return focus to */
 const Harness = ({
   send = "idle",
   initial = EMPTY_DRAFT,

@@ -278,10 +278,10 @@ const Build = () => {
   }
 
   const report: BuildReport = parseBuildReport(own.stderr);
-  // `countErrors` (the stepper badge's own count) and `parseBuildReport`
+  // `countErrors` (the header badge's own count) and `parseBuildReport`
   // share one parsing convention, but rustc output that convention can't
   // split into diagnostics still leaves the badge with a count and this
-  // surface with none -- fall back to the stepper's count rather than
+  // surface with none -- fall back to the header's count rather than
   // silently showing "0 errors" next to raw compiler output that says
   // otherwise.
   const n = report.diagnostics.length || flow.buildErrorCount;

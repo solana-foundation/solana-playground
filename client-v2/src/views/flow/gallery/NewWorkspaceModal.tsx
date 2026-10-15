@@ -4,21 +4,11 @@ import styled, { createGlobalStyle, css } from "styled-components";
 import type { ProgramListing } from "./ProgramsTab";
 import ProgramsTab from "./ProgramsTab";
 import StartFromScratch from "./StartFromScratch";
-import TutorialsTab, { Empty } from "./TutorialsTab";
-import Button from "../../../components/Button";
+import TutorialsTab from "./TutorialsTab";
 import Modal from "../../../components/Modal";
-import { createLogger } from "../../../shared/lib/logger";
 import { PgCommon, PgTutorial } from "../../../utils";
 
-/** The gallery's two sources, one tab each */
-export type GalleryTab = "programs" | "tutorials";
-
-type Registry =
-  | { status: "loading" }
-  | { status: "ready"; programs: ProgramListing[] }
-  | { status: "failed" };
-
-const log = createLogger("gallery:programs");
+type Tab = "programs" | "tutorials";
 
 const PROGRAMS_URL = "/programs/programs.json";
 
@@ -30,45 +20,29 @@ const PROGRAMS_URL = "/programs/programs.json";
  * (`PgTutorial.open`, `PgGithub.import`) so nothing about how a project gets
  * created is reinvented here.
  */
-const NewWorkspaceModal = ({
-  initialTab = "tutorials",
-}: {
-  initialTab?: GalleryTab;
-}) => {
+const NewWorkspaceModal = () => {
   // Tutorials lead: a verified path is what this fork is for, and a gallery
   // opening on the program list buries it behind a tab nobody clicks
-  const [tab, setTab] = useState<GalleryTab>(initialTab);
+  const [tab, setTab] = useState<Tab>("tutorials");
   const [query, setQuery] = useState("");
-  const [registry, setRegistry] = useState<Registry>({ status: "loading" });
-  // Bumped by Retry to run the fetch again
-  const [attempt, setAttempt] = useState(0);
+  const [programs, setPrograms] = useState<ProgramListing[] | null>(null);
 
   // Fetched once per time the modal opens (this component only exists while
   // the modal is mounted), mirroring how `routes/programs/programs.tsx`
   // loads the same file.
   useEffect(() => {
     let live = true;
-    setRegistry({ status: "loading" });
     PgCommon.fetchJSON(PROGRAMS_URL)
-      .then((programs: ProgramListing[]) => {
-        if (live) setRegistry({ status: "ready", programs });
+      .then((data: ProgramListing[]) => {
+        if (live) setPrograms(data);
       })
-      .catch((e: unknown) => {
-        // An empty list would read as "no programs exist"; say it failed
-        log.error(e, { report: true, context: { url: PROGRAMS_URL } });
-        if (live) setRegistry({ status: "failed" });
+      .catch(() => {
+        if (live) setPrograms([]);
       });
     return () => {
       live = false;
     };
-  }, [attempt]);
-
-  const programs = registry.status === "ready" ? registry.programs : null;
-  const programCount = {
-    loading: "...",
-    ready: programs?.length,
-    failed: "?",
-  }[registry.status];
+  }, []);
 
   const tutorialCount = PgTutorial.all.length;
 
@@ -107,7 +81,7 @@ const NewWorkspaceModal = ({
               onClick={() => setTab("programs")}
             >
               Programs
-              <Count>{programCount}</Count>
+              <Count>{programs ? programs.length : "..."}</Count>
             </TabButton>
           </Tabs>
 
@@ -125,17 +99,10 @@ const NewWorkspaceModal = ({
           role="tabpanel"
           aria-labelledby={`gallery-tab-${tab}`}
         >
-          {tab === "tutorials" && <TutorialsTab query={query} />}
-          {tab === "programs" && registry.status !== "failed" && (
+          {tab === "programs" ? (
             <ProgramsTab query={query} programs={programs} />
-          )}
-          {tab === "programs" && registry.status === "failed" && (
-            <Empty>
-              Could not load the programs.{" "}
-              <Button kind="secondary" onClick={() => setAttempt(attempt + 1)}>
-                Retry
-              </Button>
-            </Empty>
+          ) : (
+            <TutorialsTab query={query} />
           )}
         </Panel>
       </Wrapper>

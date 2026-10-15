@@ -36,8 +36,8 @@ interface LeftPanelProps {
 
 /**
  * Where you are inside the current project. Which project you are in is
- * the navigation switcher's job; the rail does not name the project too,
- * since two controls for one question would disagree.
+ * the header switcher's job -- the rail used to answer that too, and two
+ * controls for one question is what this change removed.
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
@@ -79,10 +79,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
           panel back, so the rail stacks it under the chevron rather than
           dropping it. */}
       {collapsed && <Chevron $flip={false} />}
-      {/* Advertises the layout shell's fold key. On macOS it does not fire
-          while the editor has focus (Monaco binds ⌘E there); elsewhere it
-          works everywhere. */}
-      <Hint>&#8984;E</Hint>
+      <Hint>&#8984;B</Hint>
       {!collapsed && <Chevron $flip />}
     </Collapse>
   );
@@ -182,7 +179,7 @@ const Wrapper = styled.aside`
   ${({ theme }) => css`
     width: 100%;
     // Explicit rather than inherited: as a grid item this stretched on its
-    // own, but the resize wrapper it sits inside is a plain block, so
+    // own, but the resize wrapper it now sits inside is a plain block, so
     // without this the panel ends at its content and stops short of the
     // editor beside it
     height: 100%;
@@ -208,9 +205,8 @@ const Collapse = styled.button<{ $collapsed: boolean }>`
     align-items: center;
     justify-content: center;
     gap: 0.25rem;
-    /* The rail is PANEL_SIZES.files.folded wide (BaseLayoutShell), too narrow for "⌘E"
-       beside the chevron, so it sits below it at a smaller size than the
-       expanded panel uses. */
+    /* The rail has 1.5rem of width to spend, so "⌘B" only fits below the
+       chevron and only at a smaller size than the expanded panel uses. */
     font-size: ${$collapsed ? "0.5625rem" : theme.font.code.size.small};
     border: none;
     background: transparent;
@@ -349,7 +345,7 @@ const SkipFooter = styled(Footer)`
 /**
  * Quiets the upstream explorer down to the bare tree the board shows
  * (`src`, `client`, `tests` -- no workspace picker, no icon toolbar, no
- * per-section action buttons or labels): the stage bar's stepper already
+ * per-section action buttons or labels): the Flow header's stepper already
  * owns Build/Deploy/Run/Test, and the footer `Footer` button above already
  * owns "new file".
  *

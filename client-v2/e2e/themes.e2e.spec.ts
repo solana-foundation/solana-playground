@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-import { HELP_TAIL, test } from "./fixtures";
+import { test } from "./fixtures";
 
 /** The computed style property of the first element matching `selector` */
 const computed = (
@@ -38,14 +38,11 @@ const runHelp = async (page: Page) => {
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }
-  // The editor focuses itself when it opens the first file; landing after the
-  // click below, it takes the typing and the terminal never sees `help`
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
   await page.getByLabel("Terminal input").first().click();
   await page.keyboard.type("help");
   await page.keyboard.press("Enter");
   const terminal = page.locator(".xterm-rows").first();
-  await expect(terminal).toContainText(HELP_TAIL);
+  await expect(terminal).toContainText("rustfmt");
   return terminal;
 };
 
@@ -62,12 +59,6 @@ test.describe("client-v2-themes", () => {
   test("client-v2-themes: First visit", async ({ seededPage: page }) => {
     await expect.poll(() => isDark(page)).toBe(true);
 
-    // The editor focuses itself when it opens the first file, at a moment
-    // that varies with the machine; landing after the select took focus, it
-    // takes the ArrowDown that opens the select
-    await expect(
-      page.locator(".monaco-editor textarea.inputarea")
-    ).toBeFocused();
     await openThemeSelect(page);
     await expect(page.getByRole("option")).toHaveText(["Dark", "Light"]);
   });
@@ -161,6 +152,6 @@ test.describe("client-v2-themes", () => {
       .not.toBe(terminalBefore);
     // The terminal re-coloured in place: what `help` printed is still there,
     // where a rebuilt terminal would show only its welcome text
-    await expect(terminal).toContainText(HELP_TAIL);
+    await expect(terminal).toContainText("rustfmt");
   });
 });

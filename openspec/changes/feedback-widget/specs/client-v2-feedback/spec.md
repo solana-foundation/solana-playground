@@ -8,17 +8,12 @@ the events `features/feedback` sends.
 
 ## ADDED Requirements
 
-### Requirement: A trigger in the navigation opens the feedback menu
+### Requirement: A floating trigger opens the feedback menu
 
-The page SHALL show a round button with the `aria-label` "Feedback" in the
-navigation's footer, under the status chips, with a 1px ring of the product
-gradient. Where the navigation is folded to its rail the trigger is not
-shown: the rail's footer holds only the cluster's dot and the account. The
-form, its draft and its send SHALL be held above the navigation, so they
-outlive the trigger: below 768 px the footer is in the navigation's Sheet,
-which unmounts it on close, and the rail swaps it for its own. Pressing the
-trigger SHALL open a menu above it, aligned to its start. An open modal, and a
-toast, SHALL cover the trigger.
+The page SHALL show a round button with the `aria-label` "Feedback", fixed at
+the bottom left just above the project panel's "+ New file" control, with a
+1px ring of the product gradient. Pressing it SHALL open a menu above it,
+aligned to its start. An open modal, and a toast, SHALL cover the trigger.
 
 #### Scenario: The menu opens
 
@@ -109,14 +104,6 @@ the user allows motion, until the send ends.
 - **WHEN** the user picks three stars, types a message, closes the form and
   opens it again
 - **THEN** the three stars and the message are as the user left them
-
-#### Scenario: A draft outlives the navigation's Sheet (manual)
-
-- **WHEN** on a 375 px window the user opens the navigation's Sheet, opens
-  the form from its trigger, types a message, closes the form and the Sheet,
-  and opens both again
-- **THEN** the message is as the user left it, and a send still in flight
-  shows on the trigger
 
 ### Requirement: One browser module imports the Sentry SDK
 

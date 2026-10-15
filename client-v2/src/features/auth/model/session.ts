@@ -42,18 +42,6 @@ export interface SessionUser {
 }
 
 /**
- * Where the last sign-in stands. Held here, not by the control that started
- * it: the status chips sit in the navigation's Sheet on a phone, which
- * unmounts them on close, and a sign-in outlives that.
- */
-export type SignInState =
-  | { status: "idle" }
-  | { status: "pending" }
-  | { status: "failed"; message: string };
-
-const IDLE: SignInState = { status: "idle" };
-
-/**
  * The signed-in user, from our backend rather than from GitHub.
  *
  * `GithubAuth` answers "which GitHub account is this", which is what the
@@ -117,34 +105,14 @@ export class PgSession {
    * rather than per-window, so the reply only has to say "finished" and this
    * side re-reads the session.
    */
-  static signIn(): Promise<void> {
-    // One popup and one nonce at a time: a second click while the first flow
-    // waits joins it instead of racing it for the session cookie
-    PgSession._pending ??= PgSession._signIn().finally(() => {
-      PgSession._pending = undefined;
-    });
-    return PgSession._pending;
-  }
-
-  /** Where the last sign-in stands; `onDidChange` fires when it moves */
-  static signInState(): SignInState {
-    return PgSession._signInState;
-  }
-
-  private static async _signIn() {
+  static async signIn() {
     authTelemetry.track("auth_sign_in_started", {});
-    PgSession._setSignIn({ status: "pending" });
     try {
       await PgSession._signInThroughPopup();
     } catch (error) {
       authTelemetry.track("auth_sign_in_failed", { reason: reasonOf(error) });
-      PgSession._setSignIn({
-        status: "failed",
-        message: error instanceof Error ? error.message : String(error),
-      });
       throw error;
     }
-    PgSession._setSignIn(IDLE);
     authTelemetry.track("auth_signed_in", {});
   }
 
@@ -292,16 +260,11 @@ export class PgSession {
     PgSession._listeners.clear();
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
-    PgSession._pending = undefined;
-    PgSession._signInState = IDLE;
   }
 
   private static _user: SessionUser | null = null;
   private static _onSignOut: (() => Promise<void>) | null = null;
   private static readonly _listeners = new Set<() => void>();
-
-  private static _pending: Promise<void> | undefined;
-  private static _signInState: SignInState = IDLE;
 
   private static _channel: PopupChannel | undefined;
   private static _openChannelImpl: typeof openPopupChannel = openPopupChannel;
@@ -312,11 +275,6 @@ export class PgSession {
   ): PopupChannel | undefined {
     PgSession._channel = PgSession._openChannelImpl(...args);
     return PgSession._channel;
-  }
-
-  private static _setSignIn(state: SignInState) {
-    PgSession._signInState = state;
-    for (const cb of PgSession._listeners) cb();
   }
 
   private static _set(user: SessionUser | null) {

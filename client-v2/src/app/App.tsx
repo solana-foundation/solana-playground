@@ -1,6 +1,5 @@
 import { lazy, Suspense } from "react";
 
-import { TooltipProvider } from "@/shared/ui/tooltip";
 import { ThemeProvider } from "../providers/theme";
 import { AppLoading } from "../components/Loading/App";
 
@@ -21,16 +20,11 @@ import { AppLoading } from "../components/Loading/App";
 // allows us to have as little chunks as possible.
 const AppLazy = lazy(() => import("./AppLazy"));
 
-// One `TooltipProvider` for the whole app, as the design system's `Tooltip`
-// expects: the navigation's rail items (`SidebarMenuButton`'s `tooltip`)
-// throw without one.
 const App = () => (
   <ThemeProvider>
-    <TooltipProvider>
-      <Suspense fallback={<AppLoading />}>
-        <AppLazy />
-      </Suspense>
-    </TooltipProvider>
+    <Suspense fallback={<AppLoading />}>
+      <AppLazy />
+    </Suspense>
   </ThemeProvider>
 );
 

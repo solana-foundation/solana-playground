@@ -237,11 +237,7 @@ const WalletRename: FC<React.PropsWithChildren<WalletRenameProps>> = ({
 };
 
 const WalletClose = () => (
-  <CloseButton
-    onClick={() => (PgWallet.show = false)}
-    kind="icon"
-    title="Close"
-  >
+  <CloseButton onClick={() => (PgWallet.show = false)} kind="icon">
     <Close />
   </CloseButton>
 );

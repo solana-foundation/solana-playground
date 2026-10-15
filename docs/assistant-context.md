@@ -148,26 +148,15 @@ Done:
   layout (anatomy and navigation built on top of it; the classic layout, since
   removed), then **Flow** —
   re-anatomizing the UI around the Write → Build → Deploy → Interact loop
-  (`decisions.md` → D10, D17). Flow is the only layout, a frame of four
-  columns with no header. From the left: the navigation (Home, New project,
-  Tutorials, Programs, the project switcher at its top, and the cluster,
-  wallet, GitHub and settings chips and the feedback trigger in its footer;
-  Cmd+B folds it to a rail of icons, whose footer keeps the cluster's status
-  dot, which opens the settings on the cluster, and an account button, which
-  unfolds it; the rail has no feedback trigger), the
-  assistant, then the work area. Across the top of the work area runs the
-  stage bar, with the stepper (Write → Build → Deploy →
-  Interact, state derived from real build/deploy events); under it sit the
-  Files column (Cmd+E folds it; on a Mac not while the editor has focus,
-  where the editor takes the key; the column's own button always works)
-  and the stage, with the terminal in a console
-  drawer under the stage (Cmd+J). The assistant is a resizable panel on
-  screens 1024 px and wider and a side Sheet below that; between 768 and
-  1023 px the navigation starts as a rail; below 768 px the navigation and
-  Files share one Sheet, and below 600 px the editor is read-only and says
-  why. The frame has no phone structure yet (HOO-2062). A New Workspace
-  gallery starts a project from 34 upstream programs or 16 tutorials. The
-  gear chip in the navigation's footer opens a settings overlay embedding
+  (`decisions.md` → D10, D17). Flow is the only layout: a header
+  stepper (Write → Build → Deploy → Interact, state derived from real
+  build/deploy events) plus a two-tab left panel (Projects | Files), an
+  assistant column, and the terminal in a console drawer (Cmd+J). The
+  assistant is a resizable panel on screens 1024 px and wider and a side
+  Sheet below that; below 768 px the left panel is a Sheet too, and below
+  600 px the editor is read-only and says why. The header and the stages
+  have no phone layout. A New Workspace gallery starts a project from 34 upstream
+  programs or 16 tutorials. A gear icon opens a settings overlay embedding
   the existing settings registry.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
@@ -199,8 +188,7 @@ model connected at all. The `tools/list` and `tools/call` round trips are
 verified against the live server; what has not been exercised is a full turn
 where a *model* chooses to call one, since that needs a key.
 
-Not started: real wallet adapters, a phone structure for the frame and the
-stages (HOO-2062).
+Not started: real wallet adapters, phone layouts for the header and stages.
 
 ## What is real and what is mocked
 

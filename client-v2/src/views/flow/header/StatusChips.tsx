@@ -10,43 +10,32 @@ import {
   useWallet,
 } from "../../../hooks";
 import { PgSession } from "../../../features/auth";
-import { createLogger } from "../../../shared/lib/logger";
-import { PgCommand } from "../../../utils";
+import { PgCommand, PgConnection } from "../../../utils";
 import { SETTINGS_TRIGGER_ATTR } from "../settings/GearSidebar";
 import type { SettingsFocus } from "../settings/GearSidebar";
-import { useClusterStatus } from "./use-cluster-status";
-
-/** Which side of its chip a menu opens on */
-type Placement = "below" | "above";
 
 interface StatusChipsProps {
   onToggleSettings: (focus?: SettingsFocus) => void;
   settingsOpen: boolean;
-  /**
-   * `"above"` at the foot of the navigation, where a menu opening downward
-   * would run off the bottom of the window
-   */
-  placement?: Placement;
 }
 
 const shortenPk = (s: string) => `${s.slice(0, 4)}...${s.slice(-4)}`;
-
-const log = createLogger("flow:status-chips");
 
 /** Cluster, wallet + balance and a settings entry point. */
 const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
   onToggleSettings,
   settingsOpen,
-  placement = "below",
 }) => {
   const connection = useConnection();
   const wallet = useWallet();
   const balance = useBalance();
-  const cluster = useClusterStatus();
+  const cluster = useRenderOnChange(PgConnection.onDidChangeCluster);
+  const isClusterDown = useRenderOnChange(
+    PgConnection.onDidChangeIsClusterDown
+  );
   useRenderOnChange(PgSession.onDidChange);
-  // Read from the session, not kept here: on a phone these chips sit in the
-  // navigation's Sheet, which unmounts them on close while the sign-in goes on
-  const signInState = PgSession.signInState();
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const github = PgSession.get();
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -81,26 +70,30 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
     }
   }, [profileOpen]);
 
-  const signIn = () => {
-    PgSession.signIn().catch((error: unknown) =>
-      // `PgSession.signInState` holds the failure and the chips show it from
-      // there; telemetry already has its reason
-      log.info("sign-in failed", { context: { error: String(error) } })
-    );
+  const signIn = async () => {
+    setAuthError(null);
+    setSigningIn(true);
+    try {
+      await PgSession.signIn();
+    } catch (e) {
+      setAuthError((e as Error).message);
+    } finally {
+      setSigningIn(false);
+    }
   };
 
   return (
-    <Wrapper $placement={placement}>
+    <Wrapper>
       <ChipButton
         type="button"
         title={connection?.rpcEndpoint}
-        aria-label={`Change cluster, currently ${cluster.name}`}
+        aria-label={`Change cluster, currently ${cluster ?? "unknown"}`}
         aria-expanded={settingsOpen}
         {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
         onClick={() => onToggleSettings("network")}
       >
-        <ClusterDot $down={cluster.down} />
-        {cluster.name}
+        <ClusterDot $down={isClusterDown === true} />
+        {cluster ?? "unknown"}
       </ChipButton>
       <ChipButton
         type="button"
@@ -121,7 +114,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
         )}
       </ChipButton>
       {github ? (
-        <ProfileWrapper ref={profileWrapperRef} $placement={placement}>
+        <ProfileWrapper ref={profileWrapperRef}>
           <GithubChip
             ref={profileChipRef}
             type="button"
@@ -136,7 +129,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
             <span>{github.login ?? github.name ?? "Account"}</span>
           </GithubChip>
           {profileOpen && (
-            <Popover aria-label="GitHub profile" $placement={placement}>
+            <Popover aria-label="GitHub profile">
               {confirmingSignOut ? (
                 <ConfirmBody>
                   <ConfirmText>Sign out of GitHub?</ConfirmText>
@@ -192,7 +185,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
             </Popover>
           )}
         </ProfileWrapper>
-      ) : signInState.status === "pending" ? (
+      ) : signingIn ? (
         // The popup cannot be asked whether it is still open once GitHub has
         // taken it over, so this is the only way out of the wait short of the
         // ten-minute timeout -- see `popup-channel.ts`.
@@ -214,9 +207,9 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
           <CompactHidden>Sign in</CompactHidden>
         </GithubChip>
       )}
-      {signInState.status === "failed" && (
-        <AuthError role="alert" title={signInState.message}>
-          {signInState.message}
+      {authError && (
+        <AuthError role="alert" title={authError}>
+          {authError}
         </AuthError>
       )}
       <IconButton
@@ -264,20 +257,10 @@ const GithubMark: FC<React.PropsWithChildren<unknown>> = () => (
   </svg>
 );
 
-// Above, at the foot of the navigation, the row is the navigation's width
-// (`SIDEBAR_STYLE` in `BaseLayoutShell`), narrower than the chips side by
-// side, so it wraps, and it is what the profile menu is anchored to (see
-// `ProfileWrapper`).
-const Wrapper = styled.div<{ $placement: Placement }>`
+const Wrapper = styled.div`
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  ${({ $placement }) =>
-    $placement === "above" &&
-    css`
-      position: relative;
-      flex-wrap: wrap;
-    `}
 `;
 
 // Non-interactive: the "Signing in..." status wraps a live message and its
@@ -339,24 +322,19 @@ const Avatar = styled.img`
   border-radius: 50%;
 `;
 
-// Below, anchors the popover under the chip; `position: relative` is the only
+// Anchors the popover under the chip; `position: relative` is the only
 // layout role this plays, so it doesn't disturb the flex row it sits in.
-// Above, the chip can land anywhere in the wrapped row, and a menu as wide as
-// the navigation hung off its right edge would run off the window's left, so
-// the menu is anchored to the row (`Wrapper`) instead.
-const ProfileWrapper = styled.div<{ $placement: Placement }>`
-  position: ${({ $placement }) =>
-    $placement === "above" ? "static" : "relative"};
+const ProfileWrapper = styled.div`
+  position: relative;
   display: inline-flex;
   align-items: center;
 `;
 
-const Popover = styled.div<{ $placement: Placement }>`
-  ${({ theme, $placement }) => css`
+const Popover = styled.div`
+  ${({ theme }) => css`
     position: absolute;
-    ${$placement === "above"
-      ? "bottom: calc(100% + 0.375rem); left: 0;"
-      : "top: calc(100% + 0.375rem); right: 0;"}
+    top: calc(100% + 0.375rem);
+    right: 0;
     z-index: 5;
     width: 14rem;
     padding: 0.375rem;
@@ -542,12 +520,10 @@ const AuthError = styled.span`
 /**
  * Where the chips give way.
  *
- * The chips sit in the navigation's footer, which is the width
- * `SIDEBAR_STYLE` (`BaseLayoutShell`) gives it whatever the window, so a media
- * query on the window says nothing about their room. The breakpoint is a
- * stand-in for the chips' real room until the session footer is rebuilt
- * (HOO-2070): below it the two least load-bearing pieces here, the balance
- * and the "Sign in" wording, drop out.
+ * The header centres the stepper by giving both side zones an equal `1fr`
+ * track, so the narrow left zone reserves as much width as this one needs.
+ * Rather than move the stepper off centre, the two least load-bearing pieces
+ * here — the balance and the "Sign in" wording — drop out on a narrow window.
  * Both remain reachable: the balance in the wallet panel, the wording in the
  * button's `aria-label`.
  */

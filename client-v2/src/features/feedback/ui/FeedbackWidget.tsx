@@ -1,5 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useRef } from "react";
-import type { CSSProperties, ReactNode, RefObject } from "react";
+import { useCallback, useRef } from "react";
 import { useTheme } from "styled-components";
 
 import { useRenderOnChange } from "@/hooks";
@@ -28,36 +27,14 @@ const warn = () =>
     </span>
   ));
 
-/** What `FeedbackTrigger` reads from the `FeedbackHost` above it */
-interface TriggerContext {
-  canShare: boolean;
-  sending: boolean;
-  onShare: () => void;
-  onGithub: (link: GithubLink) => void;
-  triggerRef: RefObject<HTMLButtonElement | null>;
-  font: CSSProperties;
-}
-
-const FeedbackTriggerContext = createContext<TriggerContext | null>(null);
-
-/**
- * The form and its state, sending through `FeedbackProviderContext`, with the
- * trigger rendered anywhere below it by `FeedbackTrigger`. Split so the state
- * sits above what unmounts the trigger: the navigation's footer holds it, and
- * on a phone that footer is in a Sheet that unmounts on close, so a draft or a
- * send kept beside the trigger would go with it.
- */
-export const FeedbackHost = ({ children }: { children: ReactNode }) => {
+/** The floating feedback trigger, its menu and the form, sending through `FeedbackProviderContext` */
+export const FeedbackWidget = () => {
   const provider = useFeedbackProvider();
   const theme = useTheme();
-  const font = useMemo(
-    () => ({
-      fontFamily: theme.font.code.family,
-      fontSize: theme.font.code.size.medium,
-    }),
-    [theme]
-  );
-  // Empty while the trigger is unmounted; the form then returns focus nowhere
+  const font = {
+    fontFamily: theme.font.code.family,
+    fontSize: theme.font.code.size.medium,
+  };
   const trigger = useRef<HTMLButtonElement>(null);
   useRenderOnChange(PgConnection.onDidChangeCluster);
   const { state, open, close, edit, submit } = useFeedbackForm({
@@ -73,22 +50,16 @@ export const FeedbackHost = ({ children }: { children: ReactNode }) => {
     []
   );
 
-  const sending = state.send === "sending";
-  const context = useMemo<TriggerContext>(
-    () => ({
-      canShare: provider.available,
-      sending,
-      onShare: open,
-      onGithub: github("menu"),
-      triggerRef: trigger,
-      font,
-    }),
-    [provider.available, sending, open, github, font]
-  );
-
   return (
-    <FeedbackTriggerContext.Provider value={context}>
-      {children}
+    <>
+      <BaseFeedbackWidget
+        canShare={provider.available}
+        sending={state.send === "sending"}
+        onShare={open}
+        onGithub={github("menu")}
+        triggerRef={trigger}
+        font={font}
+      />
       <BaseFeedbackForm
         open={state.open}
         send={state.send}
@@ -100,15 +71,6 @@ export const FeedbackHost = ({ children }: { children: ReactNode }) => {
         returnFocusTo={trigger}
         font={font}
       />
-    </FeedbackTriggerContext.Provider>
+    </>
   );
-};
-
-/** The "Feedback" button and its menu, for the `FeedbackHost` above it */
-export const FeedbackTrigger = () => {
-  const context = useContext(FeedbackTriggerContext);
-  if (!context) {
-    throw new Error("FeedbackTrigger must be rendered inside FeedbackHost");
-  }
-  return <BaseFeedbackWidget {...context} />;
 };

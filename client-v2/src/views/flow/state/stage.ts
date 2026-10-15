@@ -60,7 +60,7 @@ export const STAGES: readonly Stage[] = [
 
 const ERROR_HEADER = /^error(?:\[E\d+\])?: (.+)$/;
 // rustc's own summary lines are not a diagnostic of their own - matches
-// `parseBuildReport`'s `SUMMARY` in `stages/build-report.ts` so the stepper
+// `parseBuildReport`'s `SUMMARY` in `stages/build-report.ts` so the header
 // count and the Build surface's count always agree.
 const SUMMARY = /^(could not compile|aborting due to)/;
 
