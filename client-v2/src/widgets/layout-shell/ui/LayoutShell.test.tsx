@@ -21,16 +21,33 @@ import {
 const deploy = vi.hoisted(() => ({
   starts: new Set<(input: string | null) => void>(),
 }));
+// The open file and project the phone's bar and picker name, and the listeners
+// the Files sheet closes on
+const explorer = vi.hoisted(() => ({
+  opens: new Set<() => void>(),
+  name: undefined as string | undefined,
+  path: null as string | null,
+}));
 vi.mock("@/utils", async () => {
   const { PgKeybind } = await import("@/utils/keybind");
-  const { PgEditor } = await import("@/utils/editor");
   const { PgCommon } = await import("@/utils/common");
   const { PgView } = await import("@/utils/view");
   return {
     PgKeybind,
-    PgEditor,
     PgCommon,
     PgView,
+    PgExplorer: {
+      onNeedRender: () => ({ dispose: () => {} }),
+      onDidOpenFile: (cb: () => void) => {
+        explorer.opens.add(cb);
+        return { dispose: () => explorer.opens.delete(cb) };
+      },
+      get currentWorkspaceName() {
+        return explorer.name;
+      },
+      getCurrentFile: () => (explorer.path ? { path: explorer.path } : null),
+      getRelativePath: (path: string) => path.replace("/proj/", ""),
+    },
     PgCommand: {
       deploy: {
         onDidStart: (cb: (input: string | null) => void) => {
@@ -42,11 +59,11 @@ vi.mock("@/utils", async () => {
   };
 });
 
-import { PgEditor } from "@/utils/editor";
 import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
+import { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import LayoutShell from "./LayoutShell";
 
 const listeners = new Set<() => void>();
@@ -81,6 +98,8 @@ let sent: ReturnType<typeof memoryProvider>;
 beforeEach(() => {
   width = 1440;
   window.innerWidth = 1440;
+  explorer.name = undefined;
+  explorer.path = null;
   vi.stubGlobal("matchMedia", screenMedia);
   vi.stubGlobal("ResizeObserver", NoopResizeObserver);
   localStorage.clear();
@@ -447,9 +466,9 @@ it("should say once that the layout could not be saved, not on every toggle", ()
 });
 
 it("should report Cmd+B as a key after a toggle that changed nothing", () => {
-  // On a phone the button opens the Sheet and the Sheet reports itself; the
+  // On a narrow window the button opens the Sheet and the Sheet reports itself; the
   // mark the button set must not outlive that
-  resizeTo(700);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
@@ -518,7 +537,7 @@ it("should set the assistant Sheet in the theme's font and draw no stock close b
 });
 
 it("should set the navigation Sheet in the theme's font", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   const sheet = document.querySelector<HTMLElement>(
@@ -530,7 +549,7 @@ it("should set the navigation Sheet in the theme's font", () => {
 });
 
 it("should open the navigation Sheet below 768 px and report it as the navigation", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   const sheet = document.querySelector(
@@ -545,7 +564,7 @@ it("should open the navigation Sheet below 768 px and report it as the navigatio
 });
 
 it("should report the navigation Sheet toggled by Cmd+B below 768 px as a key", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   press({ key: "b", metaKey: true });
   press({ key: "b", metaKey: true });
@@ -556,7 +575,7 @@ it("should report the navigation Sheet toggled by Cmd+B below 768 px as a key", 
 });
 
 it("should report the navigation Sheet closed by Escape as a key and by its own button as a button", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   fireEvent.keyDown(
@@ -574,7 +593,7 @@ it("should report the navigation Sheet closed by Escape as a key and by its own 
 });
 
 it("should open and close the Sheet by Cmd+E below 768 px, as the navigation", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   const sheet = () =>
     document.querySelector('[data-slot="sidebar"][data-mobile="true"]');
@@ -591,7 +610,7 @@ it("should open and close the Sheet by Cmd+E below 768 px, as the navigation", (
 });
 
 it("should close the Sheet by the files column's button below 768 px", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   fireEvent.click(
@@ -615,7 +634,7 @@ it("should render the navigation and the files open in the Sheet, whatever the s
       open: { nav: false, files: false, assistant: true, console: false },
     })
   );
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   const sheet = document.querySelector(
@@ -658,15 +677,6 @@ it("should fall back on a corrupt saved layout and report it", () => {
   expect(
     sent.events.filter((event) => event.name === "layout_restore_failed")
   ).toEqual([expect.objectContaining({ params: { reason: "corrupt" } })]);
-});
-
-it("should report a blocked edit once per load", () => {
-  shell();
-  document.dispatchEvent(new CustomEvent(PgEditor.events.READ_ONLY_EDIT));
-  document.dispatchEvent(new CustomEvent(PgEditor.events.READ_ONLY_EDIT));
-  expect(
-    sent.events.filter((event) => event.name === "layout_readonly_edit_blocked")
-  ).toHaveLength(1);
 });
 
 it("should close the Sheet when crossing to wide and keep the saved state", () => {
@@ -731,7 +741,7 @@ const openModal = () => {
 };
 
 it("should close the navigation Sheet when a modal opens", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   openModal();
@@ -750,7 +760,7 @@ it("should close the navigation Sheet when a modal opens", () => {
 });
 
 it("should close the navigation Sheet for what the navigation opens over it, as auto", () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   tap(screen.getByRole("button", { name: "Open settings" }));
@@ -771,9 +781,9 @@ it("should leave no mark when the navigation asks to close a Sheet that is not o
   expect(toggled()).toEqual([{ panel: "nav", open: false, via: "button" }]);
 });
 
-it("should report nothing for a modal on a desktop when the Sheet was left open on a phone", () => {
+it("should report nothing for a modal on a desktop when the Sheet was left open on a narrow window", () => {
   // The stock Sidebar keeps the Sheet open across 768 px, where it shows none
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   act(() => resizeTo(1440));
@@ -887,7 +897,7 @@ it("should report the Sheet's next tap as a button after a desktop Cmd+E changed
   // cannot label a tap after the window narrows
   shell();
   press({ key: "e", metaKey: true });
-  act(() => resizeTo(500));
+  act(() => resizeTo(740));
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   expect(toggled().at(-1)).toEqual({
     panel: "nav",
@@ -896,8 +906,8 @@ it("should report the Sheet's next tap as a button after a desktop Cmd+E changed
   });
 });
 
-it("should toggle the files column by Cmd+E again after a trip through the phone's Sheet", () => {
-  resizeTo(500);
+it("should toggle the files column by Cmd+E again after a trip through the narrow window's Sheet", () => {
+  resizeTo(740);
   shell();
   press({ key: "e", metaKey: true });
   press({ key: "e", metaKey: true });
@@ -912,7 +922,7 @@ it("should toggle the files column by Cmd+E again after a trip through the phone
 });
 
 it("should not label a tap on the Sheet's overlay a key because a Cmd+E left no change", async () => {
-  resizeTo(500);
+  resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
   // Radix starts listening for an outside tap a tick after the Sheet opens
@@ -943,4 +953,363 @@ it("should report the rail's unfolding once when it is asked twice in one tick",
     press({ key: "b", metaKey: true });
   });
   expect(toggled()).toEqual([{ panel: "nav", open: true, via: "key" }]);
+});
+
+describe("on a phone", () => {
+  const events = (name: string) =>
+    sent.events.filter((event) => event.name === name).map((e) => e.params);
+  const phoneShell = () => {
+    resizeTo(390);
+    return shell();
+  };
+  const button = (name: string) => screen.getByRole("button", { name });
+  const isChecked = (name: string) =>
+    screen.getByRole("radio", { name }).getAttribute("aria-checked");
+  const escapeSheet = () =>
+    fireEvent.keyDown(document.querySelector('[data-slot="sheet-content"]')!, {
+      key: "Escape",
+    });
+  const savedBefore = () => {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
+    return localStorage.getItem(LAYOUT_STORAGE_KEY);
+  };
+  /** The outlet's box, which carries the page's sizing classes */
+  const boxOf = (el: Element) => el.closest("div[class*='flex']")!;
+  const consoleBox = () =>
+    consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']")!;
+
+  it("lands on the work page showing the code", () => {
+    phoneShell();
+    expect(isChecked("Code")).toBe("true");
+    expect(events("layout_page_shown")).toEqual([]);
+  });
+
+  it("opens the preview on the last stage it showed, then back to write", () => {
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    expect(PgFlow.state.stage).toBe("build");
+    expect(events("layout_page_shown")).toEqual([
+      { page: "preview", via: "button" },
+    ]);
+    act(() => PgFlow.setStage("deploy"));
+    fireEvent.click(button("Back to the code"));
+    expect(PgFlow.state.stage).toBe("write");
+    fireEvent.click(button("Preview the build"));
+    expect(PgFlow.state.stage).toBe("deploy");
+  });
+
+  it("follows a stage set from elsewhere to its page", () => {
+    phoneShell();
+    act(() => PgFlow.setStage("build"));
+    expect(events("layout_page_shown")).toEqual([
+      { page: "preview", via: "auto" },
+    ]);
+  });
+
+  it("tells a section that is not the current page apart by `inert`", () => {
+    phoneShell();
+    const inertOf = (name: string) =>
+      screen.getByRole("region", { name }).hasAttribute("inert");
+    expect([
+      inertOf("Navigation"),
+      inertOf("Work"),
+      inertOf("Preview"),
+    ]).toEqual([true, false, true]);
+    fireEvent.click(button("Preview the build"));
+    expect([
+      inertOf("Navigation"),
+      inertOf("Work"),
+      inertOf("Preview"),
+    ]).toEqual([true, true, false]);
+  });
+
+  it("puts the stage on the page that shows it", () => {
+    phoneShell();
+    const stageOf = () => screen.getByText("stage").closest("section")!;
+    expect(stageOf().getAttribute("aria-label")).toBe("Work");
+    act(() => PgFlow.setStage("build"));
+    expect(stageOf().getAttribute("aria-label")).toBe("Preview");
+  });
+
+  it("brings the assistant to the work page, in Chat, when the product asks", () => {
+    phoneShell();
+    act(() => PgFlow.setStage("build"));
+    act(() => PgAssistant.requestPrompt("fix this"));
+    expect(events("layout_work_view")).toContainEqual({
+      view: "chat",
+      via: "auto",
+    });
+    expect(events("layout_page_shown").at(-1)).toEqual({
+      page: "work",
+      via: "auto",
+    });
+    expect(isChecked("Chat")).toBe("true");
+  });
+
+  it("switches Chat and Code by Ctrl+R", () => {
+    phoneShell();
+    press({ key: "r", ctrlKey: true });
+    expect(events("layout_work_view")).toEqual([{ view: "chat", via: "key" }]);
+    expect(isChecked("Chat")).toBe("true");
+    // Already on Work: the key moves no page, so it reports none
+    expect(events("layout_page_shown")).toEqual([]);
+    // The assistant's Sheet is not the phone's
+    expect(toggled()).toEqual([]);
+  });
+
+  it("shows the assistant in Chat and the stage in Code", () => {
+    phoneShell();
+    const assistantBox = () =>
+      boxOf(screen.getByRole("button", { name: /assistant/ }));
+    expect(assistantBox().classList.contains("hidden")).toBe(true);
+    expect(boxOf(screen.getByText("stage")).classList.contains("hidden")).toBe(
+      false
+    );
+    fireEvent.click(screen.getByRole("radio", { name: "Chat" }));
+    expect(assistantBox().classList.contains("hidden")).toBe(false);
+    expect(events("layout_work_view")).toEqual([
+      { view: "chat", via: "button" },
+    ]);
+  });
+
+  it("opens the console on a deploy, for the visit and unsaved", () => {
+    phoneShell();
+    expect(consoleBox().classList.contains("h-2/5")).toBe(false);
+    expect((consoleBox() as HTMLElement).style.height).toBe("28px");
+    act(() => deploy.starts.forEach((cb) => cb(null)));
+    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("opens Files from the picker and closes it when a file opens", () => {
+    phoneShell();
+    fireEvent.click(button("Files"));
+    expect(
+      document.querySelector('[data-slot="sheet-content"]')
+    ).not.toBeNull();
+    act(() => explorer.opens.forEach((cb) => cb()));
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
+  });
+
+  it("closes the Files sheet when a modal opens over it", () => {
+    phoneShell();
+    fireEvent.click(button("Files"));
+    expect(
+      document.querySelector('[data-slot="sheet-content"]')
+    ).not.toBeNull();
+    openModal();
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
+    expect(toggled().at(-1)).toEqual({
+      panel: "files",
+      open: false,
+      via: "auto",
+    });
+  });
+
+  it("names the project and the open file", () => {
+    explorer.name = "my-program";
+    explorer.path = "/proj/src/lib.rs";
+    phoneShell();
+    expect(screen.getByText("my-program")).toBeTruthy();
+    expect(button("Files, lib.rs open").textContent).toContain("src/");
+  });
+
+  it("moves to the work page when the navigation asks to close", () => {
+    phoneShell();
+    fireEvent.click(button("Menu"));
+    fireEvent.click(button("Open settings"));
+    expect(events("layout_page_shown").at(-1)).toEqual({
+      page: "work",
+      via: "auto",
+    });
+  });
+
+  it("writes nothing to the saved layout on a visit", () => {
+    const before = savedBefore();
+    phoneShell();
+    press({ key: "e", metaKey: true });
+    press({ key: "e", metaKey: true });
+    press({ key: "j", ctrlKey: true });
+    press({ key: "r", ctrlKey: true });
+    fireEvent.click(consoleButton());
+    fireEvent.click(button("Files"));
+    escapeSheet();
+    fireEvent.click(button("Preview the build"));
+    fireEvent.click(button("Back to the code"));
+    fireEvent.click(button("Menu"));
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+  });
+
+  it("reports the console and the Files sheet, with what did it", () => {
+    phoneShell();
+    fireEvent.click(consoleButton());
+    press({ key: "j", ctrlKey: true });
+    act(() => deploy.starts.forEach((cb) => cb(null)));
+    tap(button("Files"));
+    press({ key: "e", metaKey: true });
+    press({ key: "e", metaKey: true });
+    escapeSheet();
+    tap(button("Files"));
+    escapeSheet();
+    expect(toggled()).toEqual([
+      { panel: "console", open: true, via: "button" },
+      { panel: "console", open: false, via: "key" },
+      { panel: "console", open: true, via: "auto" },
+      { panel: "files", open: true, via: "button" },
+      { panel: "files", open: false, via: "key" },
+      { panel: "files", open: true, via: "key" },
+      { panel: "files", open: false, via: "key" },
+      { panel: "files", open: true, via: "button" },
+      { panel: "files", open: false, via: "key" },
+    ]);
+  });
+
+  it("reports a tap on the Files sheet's overlay as a button", async () => {
+    phoneShell();
+    tap(button("Files"));
+    // Radix starts listening for an outside tap a tick after the Sheet opens
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    tap(sheetOverlay());
+    expect(toggled().at(-1)).toEqual({
+      panel: "files",
+      open: false,
+      via: "button",
+    });
+  });
+
+  it("brings Work back with the stage on it after a wide visit that picked Write", () => {
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    expect(PgFlow.state.stage).toBe("build");
+    act(() => resizeTo(1280));
+    act(() => PgFlow.setStage("write"));
+    act(() => resizeTo(390));
+    const stageOf = () => screen.getByText("stage").closest("section")!;
+    expect(stageOf().getAttribute("aria-label")).toBe("Work");
+    expect(stageOf().getAttribute("inert")).toBeNull();
+    expect(
+      screen.getByRole("region", { name: "Preview" }).getAttribute("inert")
+    ).not.toBeNull();
+  });
+
+  it("folds the console to its bar and opens it to a share of the page", () => {
+    phoneShell();
+    expect((consoleBox() as HTMLElement).style.height).toBe("28px");
+    expect(consoleBox().classList.contains("overflow-hidden")).toBe(true);
+    fireEvent.click(consoleButton());
+    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
+    expect((consoleBox() as HTMLElement).style.height).toBe("");
+  });
+
+  it("brings Work into view when Ctrl+R switches the view from the preview", () => {
+    phoneShell();
+    fireEvent.click(button("Preview the build"));
+    press({ key: "r", ctrlKey: true });
+    expect(events("layout_page_shown").at(-1)).toEqual({
+      page: "work",
+      via: "key",
+    });
+    expect(events("layout_work_view")).toEqual([{ view: "chat", via: "key" }]);
+  });
+
+  it("follows a swipe: the preview opens on the last stage, Work goes back to write", () => {
+    vi.useFakeTimers();
+    const widthDescriptor = Object.getOwnPropertyDescriptor(
+      HTMLElement.prototype,
+      "clientWidth"
+    );
+    // jsdom has no layout: each page is as wide as the phone
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", {
+      configurable: true,
+      get: () => 390,
+    });
+    try {
+      phoneShell();
+      act(() => PgFlow.setStage("deploy"));
+      fireEvent.click(button("Back to the code"));
+      expect(PgFlow.state.stage).toBe("write");
+      const pager = screen.getByTestId("phone-pager");
+      const swipeTo = (page: number) => {
+        pager.scrollLeft = page * 390;
+        fireEvent.scroll(pager);
+        act(() => {
+          vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+        });
+      };
+      swipeTo(2);
+      expect(events("layout_page_shown").at(-1)).toEqual({
+        page: "preview",
+        via: "swipe",
+      });
+      expect(PgFlow.state.stage).toBe("deploy");
+      swipeTo(1);
+      expect(events("layout_page_shown").at(-1)).toEqual({
+        page: "work",
+        via: "swipe",
+      });
+      expect(PgFlow.state.stage).toBe("write");
+    } finally {
+      vi.useRealTimers();
+      if (widthDescriptor) {
+        Object.defineProperty(
+          HTMLElement.prototype,
+          "clientWidth",
+          widthDescriptor
+        );
+      } else {
+        delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+      }
+    }
+  });
+
+  it("closes the assistant back to Code by its own toggle", () => {
+    phoneShell();
+    fireEvent.click(screen.getByRole("radio", { name: "Chat" }));
+    fireEvent.click(button("Collapse assistant"));
+    expect(isChecked("Code")).toBe("true");
+    expect(events("layout_work_view")).toEqual([
+      { view: "chat", via: "button" },
+      { view: "code", via: "button" },
+    ]);
+  });
+
+  it("closes the Files sheet by the column's own button", () => {
+    phoneShell();
+    tap(button("Files"));
+    fireEvent.click(button("Collapse project panel"));
+    expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
+    expect(toggled().at(-1)).toEqual({
+      panel: "files",
+      open: false,
+      via: "button",
+    });
+  });
+
+  it("sends no page event for a stage set or a deploy on a wide window", () => {
+    shell();
+    act(() => PgFlow.setStage("build"));
+    act(() => PgFlow.setStage("write"));
+    expect(events("layout_page_shown")).toEqual([]);
+  });
+
+  it("shows a stage set wide on the preview once the window narrows", () => {
+    shell();
+    act(() => PgFlow.setStage("build"));
+    act(() => resizeTo(390));
+    const stageOf = () => screen.getByText("stage").closest("section")!;
+    expect(stageOf().getAttribute("aria-label")).toBe("Preview");
+    expect(stageOf().hasAttribute("inert")).toBe(false);
+    expect(events("layout_page_shown")).toEqual([
+      { page: "preview", via: "auto" },
+    ]);
+  });
+
+  it("opens the preview on the last stage a wide window showed", () => {
+    shell();
+    act(() => PgFlow.setStage("deploy"));
+    act(() => PgFlow.setStage("write"));
+    act(() => resizeTo(390));
+    fireEvent.click(button("Preview the build"));
+    expect(PgFlow.state.stage).toBe("deploy");
+  });
 });

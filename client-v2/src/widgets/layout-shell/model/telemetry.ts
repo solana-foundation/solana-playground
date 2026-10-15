@@ -1,7 +1,12 @@
 import { createTracker } from "../../../shared/lib/telemetry";
-import type { NoParams } from "../../../shared/lib/telemetry";
 import type { Viewport } from "../../../shared/lib/hooks/use-viewport";
 import type { LayoutPanel, RestoreFailure } from "./layout-state";
+import type {
+  PageSource,
+  PhonePage,
+  WorkView,
+  WorkViewSource,
+} from "./phone-pages";
 
 /**
  * What opened or closed a panel: a click, a key, a drag of its edge, or the
@@ -24,10 +29,17 @@ type LayoutEvents = {
   };
   /** The window's width class, once per page load. */
   layout_viewport: { viewport: Viewport };
-  /** The user tried to type in the read-only editor; the first time in a page load. */
-  layout_readonly_edit_blocked: NoParams;
   /** The saved layout could not be read and the defaults were used; `reason` says why. */
   layout_restore_failed: { reason: RestoreFailure };
+  /**
+   * A phone page came into view after the load; `via` says what moved it: a
+   * swipe, a button, a key (Ctrl+R from another page) or the product (`auto`).
+   * Crossing into the phone width with the stage off `write` is the product
+   * bringing the preview into view, so it sends one `auto` event.
+   */
+  layout_page_shown: { page: PhonePage; via: PageSource };
+  /** The work page switched between the assistant and the code. */
+  layout_work_view: { view: WorkView; via: WorkViewSource };
 };
 
 export const layoutTelemetry = createTracker<LayoutEvents>();

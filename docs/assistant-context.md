@@ -163,10 +163,12 @@ Done:
   where the editor takes the key; the column's own button always works)
   and the stage, with the terminal in a console
   drawer under the stage (Cmd+J). The assistant is a resizable panel on
-  screens 1024 px and wider and a side Sheet below that; between 768 and
-  1023 px the navigation starts as a rail; below 768 px the navigation and
-  Files share one Sheet, and below 600 px the editor is read-only and says
-  why. The frame has no phone structure yet (HOO-2062). A New Workspace
+  screens 1024 px and wider and a side Sheet from 720 to 1023 px; from 768
+  to 1023 px the navigation starts as a rail; from 720 to 767 px the
+  navigation and Files share one Sheet. Below 720 px the app is three swiped
+  pages: the navigation, Work (Chat or Code, with Files in a Sheet) and
+  Preview (the Build, Deploy or Interact stage over the console); there the assistant is the Chat view
+  of Work, not a Sheet. The editor edits at every width. A New Workspace
   gallery starts a project from 34 upstream programs or 16 tutorials. The
   gear chip in the navigation's footer opens a settings overlay embedding
   the existing settings registry.
@@ -200,8 +202,7 @@ model connected at all. The `tools/list` and `tools/call` round trips are
 verified against the live server; what has not been exercised is a full turn
 where a *model* chooses to call one, since that needs a key.
 
-Not started: real wallet adapters, a phone structure for the frame and the
-stages (HOO-2062).
+Not started: real wallet adapters.
 
 ## What is real and what is mocked
 

@@ -52,6 +52,11 @@ its own, with its buttons pinned to the foot.
 - **WHEN** the navigation is open as a sheet on a narrow screen and a dialog opens
 - **THEN** the sheet closes and the dialog has the focus
 
+#### Scenario: A dialog closes the Files sheet on a phone
+
+- **WHEN** the Files sheet is open on a screen narrower than 720 px and a dialog opens from the file tree
+- **THEN** the sheet closes and the dialog has the focus
+
 #### Scenario: A dialog on a phone (manual)
 
 - **WHEN** a dialog opens on a screen narrower than 768 px

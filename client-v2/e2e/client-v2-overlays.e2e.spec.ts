@@ -88,21 +88,32 @@ test("client-v2-overlays: Escape closes a dialog without an answer", async ({
   await expect(file(page, "lib.rs")).toBeVisible();
 });
 
-test.describe("on a phone", () => {
-  test("client-v2-overlays: A dialog closes the left sheet", async ({
-    seededPage: page,
-  }) => {
-    // Seeded on a desktop-sized page: the project tree lives in a closed
-    // Sheet on a phone, which the fixture could not wait on
-    await page.setViewportSize({ width: 375, height: 800 });
-    await page.getByRole("button", { name: /project panel/i }).click();
-    const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
-    await expect(sheet).toBeVisible();
-    await openRename(page);
-    await expect(sheet).toBeHidden();
-    const dialog = page.getByRole("dialog", { name: "Rename 'lib.rs'" });
-    await expect(dialog.getByRole("textbox")).toBeFocused();
-  });
+test("client-v2-overlays: A dialog closes the left sheet", async ({
+  seededPage: page,
+}) => {
+  // Seeded on a desktop-sized page: the project tree lives in a closed
+  // Sheet on a narrow window, which the fixture could not wait on
+  await page.setViewportSize({ width: 740, height: 800 });
+  await page.getByRole("button", { name: /project panel/i }).click();
+  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
+  await expect(sheet).toBeVisible();
+  await openRename(page);
+  await expect(sheet).toBeHidden();
+  const dialog = page.getByRole("dialog", { name: "Rename 'lib.rs'" });
+  await expect(dialog.getByRole("textbox")).toBeFocused();
+});
+
+test("client-v2-overlays: A dialog closes the Files sheet on a phone", async ({
+  seededPage: page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.getByRole("button", { name: /^Files/ }).click();
+  const sheet = page.locator('[data-slot="sheet-content"]');
+  await expect(sheet).toBeVisible();
+  await openRename(page);
+  await expect(sheet).toBeHidden();
+  const dialog = page.getByRole("dialog", { name: "Rename 'lib.rs'" });
+  await expect(dialog.getByRole("textbox")).toBeFocused();
 });
 
 test("client-v2-overlays: A toast clear of the rail", async ({

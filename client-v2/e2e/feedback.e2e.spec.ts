@@ -80,14 +80,14 @@ test("client-v2-feedback: A link from the menu", async ({
 
 // The form is out of reach here (no Sentry on the dev server), so a draft
 // outliving the Sheet is covered by `FeedbackWidget.integration.test.tsx`
-test("the trigger opens its menu from the navigation's Sheet on a phone", async ({
+test("the trigger opens its menu from the navigation's Sheet on a narrow window", async ({
   page,
 }) => {
-  // The fixture waits on the project tree, which a phone keeps in the closed
+  // The fixture waits on the project tree, which a narrow window keeps in the closed
   // Sheet, so seed on a desktop-sized page and narrow it afterwards
   await page.setViewportSize({ width: 1280, height: 800 });
   await seedWorkspace(page);
-  await page.setViewportSize({ width: 375, height: 812 });
+  await page.setViewportSize({ width: 740, height: 812 });
   // The editor focuses itself when it opens the first file; landing after the
   // menu opened, it would close the menu
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();

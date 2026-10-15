@@ -48,8 +48,8 @@ afterEach(() => {
   window.innerWidth = initialInnerWidth;
 });
 
-it("should draw the lines at 1024, 768 and 600", () => {
-  expect(LAYOUT_BREAKPOINTS).toEqual({ compact: 1024, left: 768, phone: 600 });
+it("should draw the lines at 1024, 768 and 720", () => {
+  expect(LAYOUT_BREAKPOINTS).toEqual({ compact: 1024, left: 768, phone: 720 });
 });
 
 it("should keep the lines in order, which viewportOf's checks rely on", () => {
@@ -63,8 +63,8 @@ it.each([
   [1024, "wide"],
   [1023, "compact"],
   [768, "compact"],
-  [600, "compact"],
-  [599, "phone"],
+  [720, "compact"],
+  [719, "phone"],
   [375, "phone"],
 ])("should call %i px %s", (width, expected) => {
   screen.resize(width);

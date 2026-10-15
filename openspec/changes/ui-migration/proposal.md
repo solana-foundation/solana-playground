@@ -48,9 +48,11 @@ existing code moves.
 - The classic layout (`?classic`) is removed with the shell; Flow is the only
   layout.
 - The layout shell adds the telemetry events `layout_panel_toggled`,
-  `layout_viewport` (field `viewport`), `layout_readonly_edit_blocked` and
-  `layout_restore_failed` (prefix `layout`), described in the
-  `client-v2-layout` spec. The four-column frame names the panels in
+  `layout_viewport` (field `viewport`) and `layout_restore_failed` (prefix
+  `layout`), described in the `client-v2-layout` spec. The 5.1 shell also
+  added `layout_readonly_edit_blocked`; the phone's three pages (5.7) remove
+  it with the read-only editor and add `layout_page_shown` and
+  `layout_work_view`. The four-column frame names the panels in
   `layout_panel_toggled` `nav`, `files`, `assistant` and `console` (`left`
   is gone), and its navigation (`widgets/app-nav`) adds `nav_item_opened`
   (prefix `nav`).
@@ -65,7 +67,7 @@ existing code moves.
   happens to a saved theme that no longer exists.
 - `client-v2-browser-support`: the browsers the production bundle targets.
 - `client-v2-layout`: the arrangement of the panels, what of it survives a
-  reload, how it changes with screen width, and where the editor is read-only.
+  reload, how it changes with screen width, and what a phone shows.
 - `client-v2-overlays`: menus, dialogs, tooltips and toasts: how they open,
   close and answer, where they sit on screen, and what they report.
 - `client-v2-controls`: how the development loop's switch, a choice of a few

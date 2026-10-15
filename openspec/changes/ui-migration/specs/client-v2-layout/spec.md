@@ -3,8 +3,7 @@
 ## Purpose
 
 How the IDE's panels are arranged, what of that arrangement survives a
-reload, how it changes with the width of the screen, and where the editor is
-read-only.
+reload, how it changes with the width of the screen, and what a phone shows.
 
 ## ADDED Requirements
 
@@ -53,18 +52,30 @@ Folding a panel SHALL hide it without discarding what it holds.
 - **THEN** the navigation folds to a rail of icons, then opens at its full
   width
 
-### Requirement: Phones read, wider screens edit
+### Requirement: A phone is three pages
 
-Below 600 px wide the code editor SHALL be read-only and SHALL say why when
-the user tries to type. From 600 px it SHALL edit. The assistant SHALL be
-usable at every width.
+Below 720 px wide the product SHALL show three pages side by side, moved
+between by a swipe or by the buttons in each page's bar: the menu (the
+navigation), the work page (the assistant or the code, switched by Chat and
+Code) and the preview (the current stage over the console). A load SHALL
+land on the work page showing the code. The code editor SHALL edit at every
+width. The 720 px value SHALL be held in one place.
 
 #### Scenario: A phone
 
-- **WHEN** a user opens a project on a 375 px wide screen and types in the
-  editor
-- **THEN** the code does not change, a message says editing works from 600
-  px, and the assistant opens and accepts a prompt
+- **WHEN** a user on a 390 px wide screen opens a project, types in the
+  editor, picks another file from "Files", opens "Preview the build", goes
+  "Back to the code", opens "Menu" and then Chat
+- **THEN** the code changes, the other file opens, the Build stage shows
+  over the console, the code is shown again, the navigation fills the
+  screen, and the assistant accepts a prompt
+
+#### Scenario: Turning a phone across 720 px
+
+- **WHEN** a user with a file open and a command run in the console widens
+  the window from 390 px to 1024 px and back
+- **THEN** the same file is open with its edits, the console shows the same
+  session, and the saved layout is as it was before
 
 #### Scenario: A portrait iPad
 
@@ -84,7 +95,7 @@ every load and the
 assistant a Sheet opened by "Expand assistant". The rail's footer SHALL hold
 the cluster's dot, coloured by whether the cluster answers and named "Cluster:
 <name>", which opens the settings on the cluster, and an "Account" button,
-which unfolds the navigation. Below 768 px the navigation
+which unfolds the navigation. From 720 to 767 px the navigation
 and the files column SHALL share one Sheet opened by "Expand project panel",
 and opening the settings from its footer SHALL close that Sheet, whose overlay
 would otherwise cover the settings and keep focus from them.
@@ -117,12 +128,19 @@ would otherwise cover the settings and keep focus from them.
 - **THEN** the settings open with focus on the cluster, then close, and the
   navigation opens at its full width with the cluster chip in its footer
 
-#### Scenario: Settings on a phone
+#### Scenario: Settings on a narrow window
 
-- **WHEN** a user on a 375 px wide window opens the navigation's Sheet and
+- **WHEN** a user on a 740 px wide window opens the navigation's Sheet and
   taps the cluster chip
 - **THEN** the Sheet closes, the settings open with focus on the cluster,
   and picking another cluster changes it
+
+#### Scenario: Settings on a phone
+
+- **WHEN** a user on a 390 px wide screen opens "Menu" and taps the cluster
+  chip
+- **THEN** the settings open with focus on the cluster, and picking another
+  cluster changes it
 
 ### Requirement: The navigation opens the gallery
 
@@ -167,14 +185,27 @@ drag of the panel's edge or the product itself did it (the product opens the
 console on a deploy and the assistant on "Fix with assistant", and closes the
 navigation's Sheet when a modal opens or the settings open from it, since the
 Sheet would keep focus from them);
-`layout_readonly_edit_blocked` the first time in a page load that a user
-tries to type in a read-only editor; and `layout_restore_failed` with the
+`layout_page_shown` with the page (`menu`, `work` or `preview`) and whether
+a swipe, a button, a key or the product moved it, each time a phone page comes
+into view after the load (crossing into the phone width with the stage off
+Write is the product bringing the preview into view: one `auto` event); `layout_work_view` with the view (`chat` or `code`) and
+whether a button, a key or the product switched it; and `layout_restore_failed` with the
 reason when a saved layout cannot be read.
 
 #### Scenario: Toggling the assistant by key
 
 - **WHEN** a user presses Ctrl+R with the assistant open
 - **THEN** `layout_panel_toggled` is sent with the assistant, closed, by key
+
+#### Scenario: Opening the preview on a phone
+
+- **WHEN** a user on a 390 px wide screen taps "Preview the build"
+- **THEN** `layout_page_shown` is sent with the page `preview`, by button
+
+#### Scenario: Swiping between pages on a phone
+
+- **WHEN** a user on a 390 px wide screen swipes from the code to the preview
+- **THEN** the Build stage shows and `layout_page_shown` is sent once, with the page `preview`, by swipe
 
 #### Scenario: A corrupt saved layout is reported
 

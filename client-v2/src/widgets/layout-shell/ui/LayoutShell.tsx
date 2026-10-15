@@ -2,12 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTheme } from "styled-components";
 
-import { useKeybind } from "@/hooks";
+import { useExplorer, useKeybind } from "@/hooks";
 import { useIsLeftSheet, useViewport } from "@/shared/lib/hooks/use-viewport";
-import { PgCommand, PgCommon, PgEditor, PgView } from "@/utils";
+import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import { PgFlow } from "@/views/flow/state/stage";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import type {
+  PageSource,
+  PhonePage,
+  PreviewStage,
+  WorkView,
+  WorkViewSource,
+} from "../model/phone-pages";
 import { layoutTelemetry } from "../model/telemetry";
 import type { ToggleSource } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
@@ -20,8 +28,9 @@ export interface LayoutShellProps {
    * from there up and opens or closes the Sheet below it. `closeSheet` is for
    * a control in the navigation that opens something the Sheet's modal
    * overlay would cover (settings, from the status chips): it closes the
-   * Sheet as the product's doing, `via: "auto"`, and does nothing where no
-   * Sheet is open.
+   * Sheet as the product's doing, `via: "auto"`; on a phone, where the
+   * navigation is a page, it brings Work into view; otherwise it closes the
+   * Sheet if one is open.
    */
   nav: (panel: {
     collapsed: boolean;
@@ -48,8 +57,11 @@ const isEditable = (target: EventTarget | null) =>
   ) !== null;
 
 /**
- * The four-column frame, connected: the layout state and its storage, the
- * keys, the panels the product opens on its own, and the `layout_*` events.
+ * The frame and the phone's pager, connected: the layout state and its
+ * storage, the keys, the panels the product opens on its own, and the
+ * `layout_*` events. Below `LAYOUT_BREAKPOINTS.phone` it drives `BasePhonePager`
+ * instead of the columns; that page, view, Files Sheet and console are
+ * visit state, never written to the saved layout.
  */
 const LayoutShell = ({
   nav,
@@ -60,10 +72,29 @@ const LayoutShell = ({
   assistant,
 }: LayoutShellProps) => {
   const viewport = useViewport();
+  const phone = viewport === "phone";
   const isMobile = useIsLeftSheet();
   const theme = useTheme();
   const { state, setOpen, setHorizontal, setWork, setVertical } =
     useLayoutState();
+  // The phone's state is the visit's: a phone writes nothing to `layout`
+  const [page, setPage] = useState<PhonePage>("work");
+  const [view, setView] = useState<WorkView>("code");
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [phoneConsole, setPhoneConsole] = useState(false);
+  // Held in state, not read off `PgFlow.state`, so a stage change re-renders
+  const [flowStage, setFlowStage] = useState(PgFlow.state.stage);
+  const lastPreview = useRef<PreviewStage>("build");
+  // Mirror `filesOpen` and `phoneConsole` for the keys, which can fire twice
+  // in a tick and for the subscriptions, which outlive renders
+  const filesNow = useRef(false);
+  const phoneConsoleNow = useRef(false);
+  // The subscriptions below outlive renders, so they read these
+  const pageRef = useRef(page);
+  pageRef.current = page;
+  const viewRef = useRef(view);
+  viewRef.current = view;
+  useExplorer();
   // Below `LAYOUT_BREAKPOINTS.compact` the assistant is a Sheet, closed on
   // arrival and never saved
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -131,21 +162,109 @@ const LayoutShell = ({
     });
   };
 
-  const assistantShown = viewport === "wide" ? state.open.assistant : sheetOpen;
+  const showPage = (next: PhonePage, via: PageSource) => {
+    if (pageRef.current === next) return;
+    pageRef.current = next;
+    setPage(next);
+    layoutTelemetry.track("layout_page_shown", { page: next, via });
+    const toStage = stageForPage(next, PgFlow.state.stage, lastPreview.current);
+    if (toStage) PgFlow.setStage(toStage);
+  };
+  // The phone's Files sheet and console are the visit's: reported, never saved
+  const setPhoneFiles = (open: boolean, via: ToggleSource) => {
+    if (filesNow.current === open) return;
+    filesNow.current = open;
+    setFilesOpen(open);
+    layoutTelemetry.track("layout_panel_toggled", {
+      panel: "files",
+      open,
+      via,
+    });
+  };
+  const setPhoneConsoleOpen = (open: boolean, via: ToggleSource) => {
+    if (phoneConsoleNow.current === open) return;
+    phoneConsoleNow.current = open;
+    setPhoneConsole(open);
+    layoutTelemetry.track("layout_panel_toggled", {
+      panel: "console",
+      open,
+      via,
+    });
+  };
+  const showView = (next: WorkView, via: WorkViewSource) => {
+    if (viewRef.current === next) return;
+    viewRef.current = next;
+    setView(next);
+    layoutTelemetry.track("layout_work_view", { view: next, via });
+  };
+
+  // A stage set from elsewhere moves the pager to the page that shows it
+  useEffect(() => {
+    const sub = PgFlow.onDidChange((flow) => {
+      setFlowStage(flow.stage);
+      // Tracked at every width, not only on a phone: the Preview a phone opens
+      // on is the last non-write stage shown anywhere
+      if (flow.stage !== "write") lastPreview.current = flow.stage;
+      if (!phone) return;
+      const next = pageForStage(flow.stage, pageRef.current);
+      if (next) showPage(next, "auto");
+    });
+    return () => sub.dispose();
+    // `showPage` reads only refs and stable setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone]);
+
+  // Files closes when any file opens, and when a modal opens: the Sheet is a
+  // modal dialog that traps focus, so a Rename opened from the file tree
+  // could not be typed into while it stays open
+  useEffect(() => {
+    if (!phone) return;
+    const subs = [
+      PgExplorer.onDidOpenFile(() => setPhoneFiles(false, "auto")),
+      PgView.onDidOpenModal(() => setPhoneFiles(false, "auto")),
+    ];
+    return () => subs.forEach((sub) => sub.dispose());
+  }, [phone]);
+
+  const wideOrSheet = viewport === "wide" ? state.open.assistant : sheetOpen;
+  const assistantShown = phone ? view === "chat" : wideOrSheet;
   const setAssistant = (open: boolean, via: ToggleSource) => {
-    if (viewport === "wide") setOpen("assistant", { open, via });
+    if (phone) {
+      // A key keeps its own source; a drag never reaches a phone
+      const source: PageSource =
+        via === "key" || via === "auto" ? via : "button";
+      showPage("work", source);
+      // A drag only resizes the wide panel, so none reaches a phone: the
+      // mapping only narrows the type
+      showView(open ? "chat" : "code", via === "drag" ? "button" : via);
+    } else if (viewport === "wide") setOpen("assistant", { open, via });
     else setSheet(open, via);
+  };
+  /** The console opening on its own: the visit's on a phone, else saved */
+  const openConsole = () => {
+    if (phone) setPhoneConsoleOpen(true, "auto");
+    else setOpen("console", { open: true, via: "auto" });
   };
 
   // The handlers read what they toggle, so they are renewed with it
-  useKeybind("Ctrl+R", () => setAssistant(!assistantShown, "key"), [
-    viewport,
-    assistantShown,
-  ]);
+  useKeybind(
+    "Ctrl+R",
+    () => {
+      if (phone) {
+        // The view is shown on Work: bring it into view first
+        showPage("work", "key");
+        showView(view === "chat" ? "code" : "chat", "key");
+      } else setAssistant(!assistantShown, "key");
+    },
+    [viewport, assistantShown, view]
+  );
   useKeybind(
     "Ctrl+J",
-    () => setOpen("console", { open: !state.open.console, via: "key" }),
-    [state.open.console]
+    () => {
+      if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");
+      else setOpen("console", { open: !state.open.console, via: "key" });
+    },
+    [viewport, state.open.console]
   );
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘E on a Mac. Monaco binds ⌘E
   // (find with selection) while it has focus; this one wins only outside it.
@@ -155,7 +274,8 @@ const LayoutShell = ({
   // meaning in one, so it still folds the column. On Windows and Linux Ctrl is
   // the primary modifier and means nothing in a field, so the key works
   // everywhere there, Monaco included.
-  // Below `LAYOUT_BREAKPOINTS.left` the files column is in the navigation's
+  // On a phone the key toggles the pager's own Files Sheet. Below
+  // `LAYOUT_BREAKPOINTS.left` the files column is in the navigation's
   // Sheet, so the key opens and closes that Sheet, which reports itself as
   // `nav` a render later and takes the mark; the column's desktop flag, which
   // nothing there shows, is left alone.
@@ -174,6 +294,10 @@ const LayoutShell = ({
         // `PgKeybind` prevents the default itself unless told not to, which
         // would also swallow the keys left to a field above
         ev.preventDefault();
+        if (phone) {
+          setPhoneFiles(!filesNow.current, "key");
+          return;
+        }
         navVia.current = "key";
         if (sheetToggle.current?.()) return;
         // A defence: the next pointer or key input clears the mark in the
@@ -183,44 +307,31 @@ const LayoutShell = ({
       },
       opts: { noPreventDefault: true },
     },
-    [state.open.files]
+    [state.open.files, phone]
   );
 
   useEffect(() => {
     // `onDidChange` replays the current state first; that one is the baseline
     let prevDeploy: StageStatus | undefined;
     const subs = [
-      PgCommand.deploy.onDidStart(() =>
-        setOpen("console", { open: true, via: "auto" })
-      ),
+      PgCommand.deploy.onDidStart(openConsole),
       PgFlow.onDidChange((flow) => {
         if (
           prevDeploy !== undefined &&
           flow.deploy === "failed" &&
           prevDeploy !== "failed"
         ) {
-          setOpen("console", { open: true, via: "auto" });
+          openConsole();
         }
         prevDeploy = flow.deploy;
       }),
       PgAssistant.onDidRequestPrompt(() => setAssistant(true, "auto")),
     ];
     return () => subs.forEach((sub) => sub.dispose());
-    // `setOpen` is stable; `setAssistant` changes only with the viewport
+    // `setOpen` is stable; `setAssistant` and `openConsole` change only with
+    // the viewport
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewport]);
-
-  useEffect(() => {
-    let reported = false;
-    const onBlocked = () => {
-      if (reported) return;
-      reported = true;
-      layoutTelemetry.track("layout_readonly_edit_blocked", {});
-    };
-    document.addEventListener(PgEditor.events.READ_ONLY_EDIT, onBlocked);
-    return () =>
-      document.removeEventListener(PgEditor.events.READ_ONLY_EDIT, onBlocked);
-  }, []);
 
   /** The mark a button left, else the last input; the mark is used once */
   const takeNavVia = (): ToggleSource => {
@@ -284,6 +395,20 @@ const LayoutShell = ({
     navVia.current = "auto";
     if (!sheetClose.current?.()) navVia.current = null;
   }, []);
+  // On a phone the navigation is a page, and "closing" it goes back to Work
+  const closeNav = () => {
+    if (phone) showPage("work", "auto");
+    else closeSheetAuto();
+  };
+
+  const filePath = PgExplorer.getCurrentFile()?.path;
+  const relativeFile = filePath ? PgExplorer.getRelativePath(filePath) : null;
+  const file = relativeFile
+    ? {
+        dir: relativeFile.slice(0, relativeFile.lastIndexOf("/") + 1),
+        name: relativeFile.slice(relativeFile.lastIndexOf("/") + 1),
+      }
+    : null;
   const closeLeftSheetOn = useCallback(
     (close: () => boolean) => {
       sheetClose.current = close;
@@ -331,7 +456,7 @@ const LayoutShell = ({
         nav({
           collapsed: stock.collapsed,
           toggle: toggleNav(stock.toggle, stock.isMobile),
-          closeSheet: closeSheetAuto,
+          closeSheet: closeNav,
         })
       }
       files={(stock) => {
@@ -356,12 +481,27 @@ const LayoutShell = ({
         fontFamily: theme.font.code.family,
         fontSize: theme.font.code.size.medium,
       }}
+      phone={{
+        page,
+        onSwipe: (next) => showPage(next, "swipe"),
+        onGo: (next) => showPage(next, "button"),
+        view,
+        onView: (next) => showView(next, "button"),
+        title: PgExplorer.currentWorkspaceName ?? "",
+        file,
+        filesOpen,
+        onFilesOpenChange: (open) => setPhoneFiles(open, lastInput.current),
+        stageOn: stagePageOf(flowStage),
+        consoleOpen: phoneConsole,
+      }}
       stageBar={stageBar}
       stage={stage}
       console={console({
-        open: state.open.console,
-        toggle: () =>
-          setOpen("console", { open: !state.open.console, via: "button" }),
+        open: phone ? phoneConsole : state.open.console,
+        toggle: () => {
+          if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "button");
+          else setOpen("console", { open: !state.open.console, via: "button" });
+        },
       })}
       assistant={assistant({
         open: assistantShown,
