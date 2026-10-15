@@ -32,6 +32,10 @@ export type ProviderId =
   | "openrouter"
   | "gemini";
 
+/** The deployment's own backend, which needs a session instead of a key */
+export const isDefaultBackend = (id: ProviderId | undefined) =>
+  id === "default";
+
 /** Same-origin rail whose upstream and key are configured server-side */
 export const DEFAULT_BACKEND_URL = "/api/agent";
 

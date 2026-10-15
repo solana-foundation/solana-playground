@@ -5,6 +5,7 @@ import { PgSession } from "./model/session";
 
 export { PgSession } from "./model/session";
 export type { SessionUser } from "./model/session";
+export { SIGNED_OUT_REASON } from "./config.mjs";
 
 /**
  * Command pre-check: the airdrop demo requires an identity.

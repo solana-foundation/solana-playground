@@ -41,6 +41,9 @@ export interface SessionUser {
   login: string | null;
 }
 
+/** Where a sign-in started, when its listeners must tell it apart from the header's */
+export type SignInOrigin = "assistant";
+
 /**
  * The signed-in user, from our backend rather than from GitHub.
  *
@@ -61,9 +64,8 @@ export class PgSession {
   /**
    * Re-read the session cookie.
    *
-   * Never throws: a network failure means we cannot prove anyone is signed in,
-   * which is the same state as signed out, and the panel must keep working
-   * either way.
+   * Never throws: a failed read leaves the user signed out, since nobody can be
+   * proved signed in, and is logged (reported when it threw or answered 5xx).
    */
   static async refresh() {
     let next: SessionUser | null = null;
@@ -83,9 +85,18 @@ export class PgSession {
               login: body.user.login ?? null,
             }
           : null;
+      } else if (response.status >= 500) {
+        log.error(new Error(`session read answered ${response.status}`), {
+          report: true,
+          context: { status: response.status },
+        });
+      } else {
+        log.warn(`session read answered ${response.status}`, {
+          context: { status: response.status },
+        });
       }
-    } catch {
-      next = null;
+    } catch (error) {
+      log.error(error, { report: true, context: { step: "refresh" } });
     }
 
     PgSession._set(next);
@@ -103,17 +114,28 @@ export class PgSession {
    * Nothing secret crosses the channel. Better Auth sets an HttpOnly session
    * cookie on our origin during its callback, and cookies are per-origin
    * rather than per-window, so the reply only has to say "finished" and this
-   * side re-reads the session.
+   * side re-reads the session. Rejects when that read finds nobody signed in.
    */
-  static async signIn() {
+  static async signIn({ from }: { from?: SignInOrigin } = {}) {
     authTelemetry.track("auth_sign_in_started", {});
+    PgSession._signingInFrom = from ?? null;
     try {
       await PgSession._signInThroughPopup();
     } catch (error) {
       authTelemetry.track("auth_sign_in_failed", { reason: reasonOf(error) });
       throw error;
+    } finally {
+      PgSession._signingInFrom = null;
     }
     authTelemetry.track("auth_signed_in", {});
+  }
+
+  /**
+   * The origin passed to the `signIn` in progress, or `null` when none runs or it named none.
+   * Still set when `onDidChange` fires for that sign-in; cleared once it settles.
+   */
+  static get signingInFrom(): SignInOrigin | null {
+    return PgSession._signingInFrom;
   }
 
   private static async _signInThroughPopup() {
@@ -175,6 +197,13 @@ export class PgSession {
     }
 
     await PgSession.refresh();
+    // `refresh` never throws, so a failed read would otherwise pass for a sign-in
+    if (!PgSession.get()) {
+      throw new SignInFailed(
+        "request-failed",
+        "Signed in with GitHub, but the session could not be read. Try again."
+      );
+    }
   }
 
   /** Stop waiting on the popup. Inert unless a sign-in is outstanding. */
@@ -260,9 +289,11 @@ export class PgSession {
     PgSession._listeners.clear();
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
+    PgSession._signingInFrom = null;
   }
 
   private static _user: SessionUser | null = null;
+  private static _signingInFrom: SignInOrigin | null = null;
   private static _onSignOut: (() => Promise<void>) | null = null;
   private static readonly _listeners = new Set<() => void>();
 

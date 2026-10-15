@@ -14,11 +14,12 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | [Optional: unstable server](#6-optional-unstable-server) | the server's unstable functionality, tested on purpose |
 | [Parallel runs](#8-parallel-runs) | groups of cases run at once, on rotated ports |
 | [client-v2 production build](#7-client-v2-production-build) | memory, the esbuild minifier, browser floor, type checks outside the build |
+| [Default backend access](#9-default-backend-access) | `/api/agent` refuses every request without a session, from the browser and from `curl` |
 
 Case IDs are stable: refer to a case by ID, not by position.
 
 Every case states its success result under "Expect": what must be observed, not only that a command exits 0. Cases that
-test a failure on purpose (C-2, C-3, C-5, M-4) say so in their title or steps.
+test a failure on purpose (C-2, C-3, C-5, M-4, G-2 to G-5) say so in their title or steps.
 
 Console messages that are expected and fail no case:
 
@@ -797,3 +798,101 @@ queue.
 - [ ] Start no more groups than Docker's memory allows: each client container runs a CRA dev server or build of
       several GB, and emulation adds to it.
 - [ ] Stop each group with `docker compose -p pg-slot<k> down -v` so its volumes go with it.
+
+## 9. Default backend access
+
+`POST /api/agent` spends the deployment's paid model key, so it answers only a user signed in with GitHub, on the
+deployment's own origin. No request without a session reaches the upstream: not from the panel, and not from `curl`
+or any other HTTP client. The answers are listed in
+[Assistant default backend](../client-v2/docs/deploy-client-vercel.md#assistant-default-backend).
+
+Precondition, local: `yarn --cwd client-v2 dev` with sign-in configured (`SIGN_IN_ENV` in
+`client-v2/src/features/auth/config.mjs`), a migrated Postgres, `AUTH_BASE_URL=http://localhost:3000`, and
+`AGENT_API_KEY` set. A placeholder key is enough for every case: a turn that passes the gate reaches the upstream and
+comes back as the upstream's own refusal, which spends nothing. Against a deployment, read `http://localhost:3000` as
+its origin.
+
+A turn's body, used by every case:
+
+```sh
+TURN='{"messages":[{"role":"user","content":"hi"}]}'
+```
+
+### G-1. the probe reports the backend only with sign-in
+
+```sh
+curl -s http://localhost:3000/api/agent
+```
+
+Expect: `{"configured":true,"model":"…"}`. Restart the dev server without `GITHUB_CLIENT_ID`: the same request answers
+`{"configured":false,"model":null}`.
+
+### G-2. a request without a session is refused, from any client
+
+```sh
+curl -s -i -X POST http://localhost:3000/api/agent -H 'content-type: application/json' -d "$TURN"
+```
+
+Expect: `401` with `{"error":"Sign in with GitHub to use the default backend.","reason":"signed-out"}`. The same with
+`-H 'origin: http://localhost:3000'`, and with `-H 'content-type: text/plain'`.
+
+### G-3. a forged session is refused
+
+```sh
+curl -s -i -X POST http://localhost:3000/api/agent -H 'content-type: application/json' \
+  -H 'cookie: better-auth.session_token=forged.value' -d "$TURN"
+```
+
+Expect: `401` with `reason: "signed-out"`.
+
+### G-4. a request from another site is refused, signed in or not
+
+```sh
+curl -s -i -X POST http://localhost:3000/api/agent -H 'content-type: text/plain' \
+  -H 'origin: https://evil.example' -d "$TURN"
+```
+
+Expect: `403` with `{"error":"Cross-origin request refused"}`. The same with a valid session cookie from G-6.
+
+### G-5. sign-in not configured refuses every same-origin turn
+
+Restart the dev server without `GITHUB_CLIENT_ID`, then run the G-2 request. A second dev server on another port
+works too, with `PORT` and `AUTH_BASE_URL` set to that port. A cross-origin request still answers G-4's `403`: the
+origin check runs first.
+
+Expect: `503` with `{"error":"Sign-in is not configured on this deployment, so its default backend is off. Pick another
+backend and supply your own key."}`.
+
+### G-6. the browser, signed out and signed in
+
+Signed out:
+
+- [ ] The assistant panel's Default backend carries the tag "sign-in needed" and the description "Sign in with GitHub
+      to use it, or bring your own key below.", and the button reads **Sign in with GitHub**, not **Start**.
+- [ ] In the browser console, a turn from the page itself is refused:
+
+  ```js
+  const r = await fetch("/api/agent", { method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }) });
+  [r.status, await r.json()]
+  ```
+
+  Expect: `401` with `reason: "signed-out"`.
+
+Signed in with GitHub. This half needs a real GitHub OAuth app whose callback is `AUTH_BASE_URL`; placeholder
+`GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` values cover only the signed-out half.
+
+- [ ] After a reload, wait until `/api/auth/get-session` has answered in the network tab: until then the panel shows the
+      signed-out state. Then Default carries "no key needed" and the button reads **Start**.
+- [ ] The same console request passes the gate: the body has no `reason`. With a placeholder key the status is still
+      `401`, from the upstream, and the body reads `Upstream 401: …`.
+- [ ] Copy the `better-auth.session_token` cookie from the browser's devtools into G-2's request as
+      `-H 'cookie: better-auth.session_token=<value>'`, URL-encoded as devtools shows it or decoded: it passes the
+      gate too, and G-4 with the same cookie still answers `403`.
+
+### G-7. a deployment
+
+Run G-1 to G-4 against a preview or production origin, then the rules in
+[Firewall](../client-v2/docs/firewall.md#verifying).
+
+Expect: the same answers as locally, and `429` once a loop passes the `/api/agent` rate limit.

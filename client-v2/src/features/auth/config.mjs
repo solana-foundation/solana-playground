@@ -21,6 +21,21 @@ export const AUTH_MESSAGE_TYPE = "pg-auth-complete";
 /** Names both the popup window and the BroadcastChannel fallback */
 export const AUTH_CHANNEL_NAME = "pg-auth-complete";
 
+/** `reason` on a 401 from a route that needs a session, so the browser can tell it from any other 401 */
+export const SIGNED_OUT_REASON = "signed-out";
+
+/**
+ * The variables sign-in cannot run without. `missingConfig` reports these, and
+ * `scripts/check-agent-env.mjs` fails a Vercel build that sets the agent key
+ * without them, since `/api/agent` would refuse every turn.
+ */
+export const SIGN_IN_ENV = [
+  "DATABASE_URL",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "AUTH_SECRET",
+];
+
 /**
  * How long the browser waits for the popup to answer, in seconds.
  *

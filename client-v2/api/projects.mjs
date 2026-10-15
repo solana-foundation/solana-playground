@@ -2,14 +2,13 @@
  * Project snapshot sync.
  *
  * Deliberately plain ESM using raw Node request/response APIs, like the rest
- * of `api/` -- see `api/health.mjs` for why. The small helpers below
- * (`sendJson`, `readBody`, `isAllowedOrigin`) are duplicated from
- * `api/conversations.mjs` on purpose: `api/` has no shared module yet, and
- * copying a handful of short functions is cheaper than inventing one. The
- * reasoning that would be worth sharing is written down here once and pointed
- * at from there.
+ * of `api/` -- see `api/health.mjs` for why. `sendJson` and `readBody` are
+ * duplicated in `api/conversations.mjs` on purpose: copying two short functions
+ * is cheaper than a shared module. `isAllowedOrigin` comes from the auth slice,
+ * because every route acting for a signed-in user needs it and its reasoning is
+ * long.
  */
-import { requireUser, resolveBaseURL } from "../src/features/auth/server.mjs";
+import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import { warnAboutMissingObservabilityIds } from "../src/features/api/server/observability.mjs";
 import { withObservability } from "../src/features/api/server/with-observability.mjs";
 import {
@@ -140,46 +139,6 @@ export const readBody = async (req) => {
     return { body: JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") };
   } catch {
     return { error: "malformed" };
-  }
-};
-
-/**
- * Whether a state-changing request came from our own deployment.
- *
- * Not a bug today, and kept deliberately. The session cookie is `SameSite=Lax`,
- * which keeps it off a cross-site PUT, and a JSON PUT or a DELETE needs a
- * preflight that nothing here answers -- but both of those are inherited
- * defaults rather than decisions made in this file. The day someone sets
- * `sameSite: "none"`, which embedding or a sibling subdomain would require,
- * these routes become CSRF over a signed-in user's projects, and nothing in
- * the code would flag that change as load-bearing. This is that control
- * written down, so the next person to touch cookie attributes finds it here.
- *
- * `resolveBaseURL()` is `undefined` when neither `AUTH_BASE_URL` nor
- * `VERCEL_URL` is set, which is local development: there is no deployment
- * origin to compare against, so there is no check to make. Both sides are
- * reduced to `URL.origin` because `AUTH_BASE_URL` may legitimately carry a
- * path and an `Origin` header never does.
- *
- * A request carrying no `Origin` at all is allowed through. Every browser
- * sends one on PUT, POST and DELETE, so a missing header is a client that had
- * to attach the session cookie itself -- not the attack this guards against.
- * It also keeps the tests honest: `yarn test-api` calls these handlers
- * directly, and making every body-level case fake a header would have each of
- * them assert the header rather than the thing the case is about.
- *
- * @param {import("node:http").IncomingMessage} req
- */
-const isAllowedOrigin = (req) => {
-  const expected = resolveBaseURL();
-  const origin = req.headers.origin;
-  if (!expected || !origin) return true;
-
-  try {
-    return new URL(origin).origin === new URL(expected).origin;
-  } catch {
-    // An `Origin` we cannot even parse is not one of ours
-    return false;
   }
 };
 

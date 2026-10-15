@@ -11,7 +11,7 @@ import { expect, test } from "@playwright/test";
 
 const LONG = { timeout: 60_000 };
 const PROMPT = "Explain this build error and propose a fix: E0308";
-const HINT = /Connect a backend to send this to the assistant/;
+const HINT = /Connect a backend, or sign in for the default one, to send this/;
 
 type AssistantWindow = Window & {
   __pgAssistant?: {
@@ -39,6 +39,7 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
   );
   await expect(page.getByText(HINT)).toBeVisible(LONG);
 
+  // TODO: open "Bring your own key" first; with a default backend configured the alternatives start collapsed
   await page.getByRole("button", { name: "OpenAI-compatible" }).click();
   await page.locator("#assistant-base-url").fill("http://mock-llm.test/v1");
   await page.locator("#assistant-model").fill("mock-model");

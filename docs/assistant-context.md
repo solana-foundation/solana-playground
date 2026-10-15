@@ -139,8 +139,9 @@ Done:
   (`https://api.solpg.io`) — CORS allows `http://localhost:3000` and a real build
   returned in 3.5 seconds. No Docker, no Rust toolchain needed.
 - Runtime and architecture decided and written down (`decisions.md`).
-- The assistant panel: the default backend needs no key and is preselected
-  when the deployment configured one; Anthropic, and OpenAI-compatible with
+- The assistant panel: the default backend needs no key, only a GitHub
+  sign-in, and is preselected when the deployment configured one; Anthropic,
+  and OpenAI-compatible with
   ready-made OpenRouter and Gemini presets, are selectable. The Anthropic
   provider has not yet been exercised against a live key.
 - Three redesign iterations shipped: the Solana-brand theme (tokens sourced
@@ -208,6 +209,9 @@ Honesty rule for the demo — never present a mocked step as working.
   client asks `/api/sync` whether the deployment has a database and stays
   purely local when it does not, so signing out or deploying without one
   changes nothing about how the playground works.
+- **Real, behind sign-in:** the default backend. It answers only a user
+  signed in with GitHub; signed out, the panel offers sign-in or a backend on
+  the user's own key. There is no per-user spend cap yet.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the
   transaction signature yet, because the deploy command it hooks into
@@ -236,9 +240,9 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Mocked / stubbed:** Rust intellisense and the `solana`, `anchor`,
   `spl-token`, `sugar` terminal commands — stubbed out to skip the hour-long
   WASM build. They throw a clear message pointing at `wasm/build.sh`.
-- **Prototype-grade:** the default backend's complete absence of a cost gate:
-  anything that reaches our origin can spend the configured key, so it needs a
-  challenge and a per-session limit before it points at a paid account.
+- **Prototype-grade:** the default backend's spend: sign-in decides who can
+  spend the configured key, but nothing yet caps how much one signed-in user
+  spends.
 - **Real, kept per tab:** your own key. It is kept in the tab's
   `sessionStorage`: a reload keeps it and a new tab asks again, while a tab the
   browser duplicates or restores (a reopened closed tab, a restored session)

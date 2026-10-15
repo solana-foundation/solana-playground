@@ -1,3 +1,5 @@
+// `@types/mocha` also declares a global `it`, without `each`
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 
 import {
@@ -21,6 +23,7 @@ const signedIn = (user: {
 describe("PgSession", () => {
   afterEach(() => {
     (global.fetch as Mock | undefined)?.mockReset?.();
+    vi.restoreAllMocks();
     PgSession.reset();
     resetLogger();
   });
@@ -57,15 +60,27 @@ describe("PgSession", () => {
     expect(PgSession.get()).toBeNull();
   });
 
-  it("treats a failed request as signed out rather than throwing", async () => {
-    global.fetch = vi
-      .fn()
-      .mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
+  it.each([
+    ["a request that throws", new Error("offline"), "error", true],
+    ["a 5xx", 503, "error", true],
+    ["a 4xx", 404, "warn", false],
+  ] as const)(
+    "treats %s as signed out, and logs it",
+    async (_label, answer, level, report) => {
+      const request = vi.spyOn(globalThis, "fetch");
+      if (answer instanceof Error) request.mockRejectedValue(answer);
+      else request.mockResolvedValue({ ok: false, status: answer } as Response);
+      const logged = memoryProvider();
+      initLogger({ providers: [logged] });
 
-    await PgSession.refresh();
+      await PgSession.refresh();
 
-    expect(PgSession.get()).toBeNull();
-  });
+      expect(PgSession.get()).toBeNull();
+      expect(logged.entries).toEqual([
+        expect.objectContaining({ ns: "auth:session", level, report }),
+      ]);
+    }
+  );
 
   it("notifies subscribers when the user changes", async () => {
     global.fetch = signedIn({ id: "u1", name: null, image: null });
@@ -143,7 +158,10 @@ describe("PgSession", () => {
             json: async () => ({ url: "https://x/" }),
           });
         }
-        return Promise.resolve({ ok: true, json: async () => null });
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ user: { id: "u1" } }),
+        });
       }) as unknown as typeof fetch;
     PgSession.setOpenChannel(() => ({
       receive: async () => ({ delivered: true as const, data: {} }),
@@ -168,7 +186,10 @@ describe("PgSession", () => {
               ok: true,
               json: async () => ({ url: "https://x/" }),
             })
-          : Promise.resolve({ ok: true, json: async () => null })
+          : Promise.resolve({
+              ok: true,
+              json: async () => ({ user: { id: "u1" } }),
+            })
       ) as unknown as typeof fetch;
 
     let accept!: (data: unknown) => boolean;
@@ -189,6 +210,25 @@ describe("PgSession", () => {
     expect(accept({ type: "pg-auth-complete", nonce })).toBe(true);
     expect(accept({ type: "pg-auth-complete", nonce: "forged" })).toBe(false);
     expect(accept({ type: "something-else", nonce })).toBe(false);
+  });
+
+  it("says the session could not be read when the popup finished but no user is signed in", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input) =>
+        ({
+          ok: true,
+          json: async () =>
+            input === "/api/auth/get-session" ? null : { url: "https://x/" },
+        } as Response)
+    );
+    PgSession.setOpenChannel(() => ({
+      receive: async () => ({ delivered: true as const, data: {} }),
+      cancel: () => {},
+    }));
+
+    await expect(PgSession.signIn()).rejects.toThrow(
+      "Signed in with GitHub, but the session could not be read. Try again."
+    );
   });
 
   it("reports a blocked popup distinctly from a failed sign-in", async () => {

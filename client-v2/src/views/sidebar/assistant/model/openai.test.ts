@@ -1,5 +1,6 @@
 import { createOpenAiProvider } from "./openai";
 import { PgAssistant, type ChatItem } from "../store";
+import { PgSession } from "../../../../features/auth";
 
 vi.mock("./prompt", () => ({
   systemPrompt: () => "system",
@@ -117,6 +118,50 @@ describe("the OpenAI-compatible turn loop", () => {
     respondWith([data({ error: { message: "upstream exploded" } })]);
 
     await expect(provider().send("hi")).rejects.toThrow("upstream exploded");
+  });
+
+  describe("a signed-out refusal", () => {
+    const refusal = "Sign in with GitHub to use the default backend.";
+
+    beforeEach(() => {
+      vi.spyOn(PgSession, "refresh").mockResolvedValue();
+      vi.spyOn(globalThis, "fetch").mockResolvedValue(
+        new Response(JSON.stringify({ error: refusal, reason: "signed-out" }), {
+          status: 401,
+          statusText: "Unauthorized",
+        })
+      );
+    });
+
+    afterEach(() => vi.restoreAllMocks());
+
+    it("shows the default backend's refusal as its own sentence", async () => {
+      await expect(provider().send("hi")).rejects.toThrow(
+        new RegExp(`^${refusal}$`)
+      );
+    });
+
+    // The browser still thought it was signed in, so the panel hid sign-in
+    it("re-reads the session, so the panel offers sign-in again", async () => {
+      await provider()
+        .send("hi")
+        .catch(() => undefined);
+
+      expect(PgSession.refresh).toHaveBeenCalled();
+    });
+
+    it("shows another endpoint's 401 as its raw status, even in the same shape", async () => {
+      const ownKey = createOpenAiProvider({
+        id: "openai",
+        baseUrl: "https://llm.example.test/v1",
+        model: "m",
+        apiKey: "k",
+        label: "own key",
+      });
+
+      await expect(ownKey.send("hi")).rejects.toThrow(/^401 Unauthorized/);
+      expect(PgSession.refresh).not.toHaveBeenCalled();
+    });
   });
 });
 

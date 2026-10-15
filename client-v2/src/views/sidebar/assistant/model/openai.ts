@@ -2,7 +2,9 @@ import { createTools } from "./tools";
 import { describeProject, systemPrompt } from "./prompt";
 import { redactKey } from "./redact-key";
 import { PgAssistant } from "../store";
+import { PgSession, SIGNED_OUT_REASON } from "../../../../features/auth";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
+import { DEFAULT_BACKEND_URL } from "./types";
 import type { Provider, ProviderId, ToolDefinition, ToolInput } from "./types";
 
 /** A turn that has not finished after this many round trips is looping */
@@ -141,6 +143,29 @@ const runToolCall = async (tools: ToolDefinition[], call: ToolCall) => {
 };
 
 /**
+ * The sentence `/api/agent` refuses a signed-out turn with, or `undefined` for
+ * any other failure. Read only from our own backend, so another endpoint can
+ * never put its text in front of the user this way.
+ */
+const signedOutRefusal = (
+  config: OpenAiConfig,
+  status: number,
+  body: string
+): string | undefined => {
+  if (config.url !== DEFAULT_BACKEND_URL || status !== 401) return undefined;
+  try {
+    const parsed = JSON.parse(body);
+    return parsed?.reason === SIGNED_OUT_REASON &&
+      typeof parsed.error === "string"
+      ? parsed.error
+      : undefined;
+  } catch {
+    // Not JSON, so not our backend's refusal: the caller shows the raw status
+    return undefined;
+  }
+};
+
+/**
  * One request: stream the text into the store as it arrives, and return the
  * finished assistant message (text plus any tool calls) for the history.
  */
@@ -188,10 +213,14 @@ const streamOneCompletion = async (
     // Redacted before it is cut, or a cut through the key would leave its
     // head behind for `PgAssistant.addError`, which redacts the whole key only
     const body = redactKey(raw, config.apiKey);
+    const refusal = signedOutRefusal(config, response.status, body);
+    // The session ended server-side; ending it here lets the store's listener reopen the picker
+    if (refusal) void PgSession.refresh();
     throw new Error(
-      `${response.status} ${response.statusText}${
-        body ? ` — ${body.slice(0, 300)}` : ""
-      }`
+      refusal ??
+        `${response.status} ${response.statusText}${
+          body ? ` — ${body.slice(0, 300)}` : ""
+        }`
     );
   }
 

@@ -14,11 +14,18 @@ import {
 import type { PopupReceipt } from "../lib/popup-channel";
 import { PgSession } from "./session";
 
-const startsSignIn = (ok = true) =>
-  vi.spyOn(globalThis, "fetch").mockResolvedValue({
-    ok,
-    json: async () => ({ url: "https://github.com/login/oauth/x" }),
-  } as Response);
+/** Sign-in starts (or is refused); the session read afterwards finds `user` */
+const startsSignIn = (ok = true, user: { id: string } | null = { id: "u1" }) =>
+  vi.spyOn(globalThis, "fetch").mockImplementation(
+    async (input) =>
+      ({
+        ok,
+        json: async () =>
+          input === "/api/auth/get-session"
+            ? { user }
+            : { url: "https://github.com/login/oauth/x" },
+      } as Response)
+  );
 
 const popupAnswers = (receipt: PopupReceipt | undefined) =>
   PgSession.setOpenChannel(
@@ -72,6 +79,14 @@ describe("auth telemetry", () => {
             throw new SyntaxError("Unexpected token <");
           },
         } as unknown as Response),
+    ],
+    [
+      "request-failed",
+      "the session cannot be read after the popup",
+      () => {
+        startsSignIn(true, null);
+        popupAnswers({ delivered: true, data: {} });
+      },
     ],
     [
       "popup-blocked",

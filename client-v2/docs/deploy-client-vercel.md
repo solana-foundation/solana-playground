@@ -23,10 +23,16 @@ as soon as the Root Directory points at `client-v2`.
    - `AUTH_BASE_URL` — the production origin. **Required here, not optional:**
      without it `resolveBaseURL()` (`src/features/auth/model/auth.mjs`) falls
      back to `VERCEL_URL`, the per-deployment hostname, so the session cookie
-     and the write-origin checks in `api/projects.mjs` and
-     `api/conversations.mjs` are issued for a host nobody visits.
+     and the origin checks (`isAllowedOrigin`) in `api/agent.mjs`,
+     `api/mcp.mjs`, `api/projects.mjs` and `api/conversations.mjs` are issued
+     for a host nobody visits. A production build with `AGENT_API_KEY` fails
+     without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
-   - `AGENT_*` — only once `/api/agent` has something in front of it.
+   - `AGENT_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
+     `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
+     rules. `/api/agent` answers only signed-in users, and a production build
+     fails when the key is set without sign-in or `AUTH_BASE_URL`
+     (`scripts/check-agent-env.mjs`).
 3. **GitHub OAuth app for production.** Its callback URL is
    `<AUTH_BASE_URL>/api/auth/callback/github`. A GitHub OAuth app takes a
    single callback, so production gets its own app rather than sharing a
@@ -215,9 +221,12 @@ browser never sees. The key enables the Default backend; without one the option 
 unconfigured and the panel falls back to bring-your-own-key. A Vercel build
 without the key fails: `vercel.json`'s `buildCommand` runs
 `scripts/check-agent-env.mjs` first, so set the key for Production and Preview
-alike. Store it as a Secret. A local `vercel build` (the `Makefile.vercel`
-deploy targets) pulls a Secret as an empty value; the check accepts that,
-since the deployment reads the real value at runtime:
+alike. Store it as a Secret. A production build also fails when the key is set
+without sign-in's variables or without a parseable `AUTH_BASE_URL`. On Vercel's
+build machine (`CI` set) an empty value counts as unset, as it does at runtime.
+A local `vercel build` (the `Makefile.vercel` deploy targets) pulls a Secret as
+an empty value; there the check accepts an empty value and warns, since the
+deployment reads the real value at runtime:
 
 | Variable | Meaning |
 | --- | --- |
@@ -229,9 +238,29 @@ since the deployment reads the real value at runtime:
 The defaults for model and effort are Nous-specific: pointing `AGENT_BASE_URL`
 elsewhere usually means setting both as well.
 
-There is no cost gate in front of this route. Anything that can reach the
-deployment can spend that key, so put a challenge and a per-session limit
-in front of it before pointing it at a paid account.
+Only a signed-in user spends the key. `POST /api/agent` refuses before it reads
+the body or calls the upstream:
+
+| Answer | When |
+| --- | --- |
+| `403` | The `Origin` header names another site (`isAllowedOrigin`, as the sync routes use) |
+| `503` | Sign-in is not configured: `SIGN_IN_ENV` in `src/features/auth/config.mjs` names the variables, all listed under [Conversation and project sync](#conversation-and-project-sync) |
+| `503` | The session lookup failed, a database or Better Auth outage; logged as `auth: session lookup failed` |
+| `401` | No Better Auth session |
+
+The `403` compares against `AUTH_BASE_URL` (or `VERCEL_URL`), as on the sync
+routes: a page opened on another hostname of the same deployment, such as a
+branch alias or a `www` domain, gets `403` on turns and sync writes.
+
+An upstream that refuses the key with `401` or `403` is answered `502` and
+logged as `agent: upstream refused the key`, so the panel never reads it as its
+own sign-in or origin refusal. Other upstream errors, `429` included, keep their
+status.
+
+`GET /api/agent` reports `configured: false` while sign-in is not configured, so
+the panel never offers a backend that would refuse every turn. Sign-in limits who
+spends the key, not how much: per-session and daily caps are HOO-1751, and the
+request rate per client is capped by the [firewall](firewall.md) rules.
 
 ## Conversation and project sync
 
@@ -293,8 +322,9 @@ database that cannot be reached, not one whose schema is merely out of date.
 - **No signed-in end-to-end coverage.** The e2e suite runs signed out, so the
   sync paths it exercises are the ones that decline to do anything. Two-browser
   behaviour has only been checked by hand.
-- **`/api/agent` is still ungated** — see the section above. Sync does not
-  change that.
+- **`/api/agent` has no spend cap per user.** A signed-in user can spend the
+  key without limit apart from the firewall's request rate. See
+  [Assistant default backend](#assistant-default-backend).
 - The deployed-preview reachability of `DATABASE_URL` has not been verified;
   everything so far has run against a local container.
 - **No deployment has ever succeeded.** Of the last 100, all were Git-triggered:

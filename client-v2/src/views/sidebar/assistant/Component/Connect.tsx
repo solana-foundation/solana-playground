@@ -6,6 +6,8 @@ import GradientButton from "../../../../components/GradientButton";
 import Input from "../../../../components/Input";
 import Link from "../../../../components/Link";
 import Select from "../../../../components/Select";
+import { PgSession } from "../../../../features/auth";
+import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
 import { PgAssistant } from "../store";
 import {
   isDefaultBackendRemembered,
@@ -13,6 +15,7 @@ import {
 } from "../model/remembered-backend";
 import {
   DEFAULT_BACKEND_URL,
+  isDefaultBackend,
   PROVIDERS,
   type Effort,
   type ProviderId,
@@ -99,6 +102,9 @@ const Connect = () => {
   // the model id does not mean retyping the key
   const current = PgAssistant.connection;
   const defaultBackend = useDefaultBackend();
+  // `/api/agent` spends the deployment's key only for a signed-in caller
+  useRenderOnChange(PgSession.onDidChange);
+  const signedIn = !!PgSession.get();
 
   const initial = PROVIDERS.find((p) => p.id === (current?.id ?? "default"))!;
 
@@ -106,6 +112,7 @@ const Connect = () => {
     current?.id ?? "default"
   );
   const [expanded, setExpanded] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
   const [key, setKey] = useState(current?.apiKey ?? "");
   const [endpoint, setEndpoint] = useState<{
     baseUrl: string;
@@ -117,6 +124,10 @@ const Connect = () => {
 
   /** The probe is still out: the default is neither offered nor ruled out yet */
   const pending = defaultBackend === undefined;
+  /** The probe confirmed this deployment serves a default backend */
+  const isDefaultBackendConfigured = defaultBackend === true;
+  /** Served here, and `/api/agent` answers this user because they are signed in */
+  const canUseDefaultBackend = isDefaultBackendConfigured && signedIn;
 
   /**
    * Reconnect to the key-based backend this tab was using before a reload.
@@ -154,12 +165,12 @@ const Connect = () => {
    * throw the choice away mid-edit.
    */
   useEffect(() => {
-    if (defaultBackend !== true) return;
+    if (!canUseDefaultBackend) return;
     if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
     if (!isDefaultBackendRemembered()) return;
 
     PgAssistant.connect({ id: "default", apiKey: "" });
-  }, [defaultBackend]);
+  }, [canUseDefaultBackend]);
 
   /**
    * Declared unavailable, or a default backend this deployment has not
@@ -167,7 +178,7 @@ const Connect = () => {
    * ready and then withdrawn a moment later.
    */
   const isUnavailable = (p: ProviderInfo) =>
-    !!p.unavailable || (p.id === "default" && defaultBackend !== true);
+    !!p.unavailable || (p.id === "default" && !isDefaultBackendConfigured);
 
   // The probe can rule out the preselected default after the fact; fall back
   // rather than leaving a dead option selected
@@ -197,7 +208,13 @@ const Connect = () => {
   const endpointReady =
     !provider.endpoint ||
     (!!endpoint?.baseUrl.trim() && !!endpoint?.model.trim());
-  const ready = keyReady && endpointReady && !isUnavailable(provider);
+  /** Served here, but `/api/agent` refuses this user's turns until they sign in */
+  const needsSignInFor = (p: ProviderInfo) =>
+    isDefaultBackend(p.id) && isDefaultBackendConfigured && !signedIn;
+  /** The button signs in instead of connecting */
+  const needsSignIn = needsSignInFor(provider);
+  const ready =
+    keyReady && endpointReady && !isUnavailable(provider) && !needsSignIn;
 
   const trimmedEndpoint = endpoint
     ? { baseUrl: endpoint.baseUrl.trim(), model: endpoint.model.trim() }
@@ -225,10 +242,34 @@ const Connect = () => {
 
   const defaultDescription = (p: ProviderInfo) => {
     if (pending) return "Checking this deployment for a default backend…";
-    return defaultBackend
+    if (!isDefaultBackendConfigured) {
+      return (
+        "Not configured on this deployment — pick a backend below and supply " +
+        "your own key."
+      );
+    }
+    return signedIn
       ? p.description
-      : "Not configured on this deployment — pick a backend below and supply " +
-          "your own key.";
+      : "Sign in with GitHub to use it, or bring your own key below.";
+  };
+
+  const connectLabel = () => {
+    if (current) return "Switch";
+    if (provider.needsKey) return "Connect";
+    return "Start";
+  };
+
+  const signIn = () => {
+    setSignInError(null);
+    return PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
+      // Not reported: a blocked popup or a cancelled sign-in is expected
+      log.info("sign-in from the assistant panel failed", {
+        context: { error: String(error) },
+      });
+      setSignInError(
+        error instanceof Error ? error.message : "Sign-in failed. Try again."
+      );
+    });
   };
 
   /**
@@ -245,7 +286,10 @@ const Connect = () => {
     >
       <ProviderName $selected={selectedBar === p.id}>
         {p.name}
-        {!p.needsKey && !isUnavailable(p) && <NoKey>no key needed</NoKey>}
+        {needsSignInFor(p) && <SignInNeeded>sign-in needed</SignInNeeded>}
+        {!p.needsKey && !isUnavailable(p) && !needsSignInFor(p) && (
+          <NoKey>no key needed</NoKey>
+        )}
       </ProviderName>
       {!compact && (
         <ProviderDescription>
@@ -257,7 +301,7 @@ const Connect = () => {
 
   return (
     <Wrapper>
-      {current && (
+      {current && !PgAssistant.needsSignIn && (
         <Back onClick={() => PgAssistant.keepBackend()}>Back to chat</Back>
       )}
 
@@ -274,7 +318,7 @@ const Connect = () => {
             patches you apply yourself.
           </Lead>
         )}
-        {!current && defaultBackend && (
+        {!current && isDefaultBackendConfigured && (
           <Lead>
             Out of the box it runs on this deployment's own backend, with the
             capabilities listed below. Bring your own key to run it on something
@@ -405,14 +449,23 @@ const Connect = () => {
         </>
       )}
 
-      <ConnectButton
-        kind="primary"
-        fullWidth
-        disabled={!ready}
-        onClick={connect}
-      >
-        {current ? "Switch" : provider.needsKey ? "Connect" : "Start"}
-      </ConnectButton>
+      {needsSignIn ? (
+        <>
+          <ConnectButton kind="primary" fullWidth onClick={signIn}>
+            Sign in with GitHub
+          </ConnectButton>
+          {signInError && <SignInError role="alert">{signInError}</SignInError>}
+        </>
+      ) : (
+        <ConnectButton
+          kind="primary"
+          fullWidth
+          disabled={!ready}
+          onClick={connect}
+        >
+          {connectLabel()}
+        </ConnectButton>
+      )}
 
       {switching && (
         <Note>
@@ -571,6 +624,13 @@ const NoKey = styled.span`
   `}
 `;
 
+const SignInNeeded = styled.span`
+  ${({ theme }) => css`
+    color: ${theme.colors.state.warning.color};
+    font-size: ${theme.font.code.size.xsmall};
+  `}
+`;
+
 const ProviderDescription = styled.div`
   ${({ theme }) => css`
     padding-top: 0.1875rem;
@@ -660,6 +720,15 @@ const Picker = styled.div`
 
 const ConnectButton = styled(GradientButton)`
   margin-top: 0.75rem;
+`;
+
+const SignInError = styled.div`
+  ${({ theme }) => css`
+    padding-top: 0.5rem;
+    color: ${theme.colors.state.error.color};
+    font-size: ${theme.font.code.size.xsmall};
+    line-height: 1.6;
+  `}
 `;
 
 const Note = styled.div`

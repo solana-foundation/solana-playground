@@ -8,7 +8,9 @@
  */
 export {
   getAuth,
+  isAllowedOrigin,
   missingConfig,
+  readSession,
   requireUser,
-  resolveBaseURL,
 } from "./model/auth.mjs";
+export { SIGNED_OUT_REASON } from "./config.mjs";

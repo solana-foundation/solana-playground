@@ -26,6 +26,7 @@ describe("/api/auth", () => {
     delete process.env.DATABASE_URL;
     delete process.env.GITHUB_CLIENT_ID;
     delete process.env.GITHUB_CLIENT_SECRET;
+    delete process.env.AUTH_SECRET;
   });
 
   it("503s when the database is not configured, instead of crashing on import", async () => {
@@ -63,19 +64,22 @@ describe("/api/auth", () => {
       "DATABASE_URL",
       "GITHUB_CLIENT_ID",
       "GITHUB_CLIENT_SECRET",
+      "AUTH_SECRET",
     ]);
   });
 
   it("names only what is actually absent", async () => {
     process.env.DATABASE_URL = "postgres://x/y";
     process.env.GITHUB_CLIENT_ID = "id";
+    process.env.GITHUB_CLIENT_SECRET = "secret";
     const mod = await load();
     const res = makeRes();
     await mod.default(
       { method: "GET", url: "/auth/session", headers: {} },
       res
     );
-    assert.deepEqual(JSON.parse(res.body).missing, ["GITHUB_CLIENT_SECRET"]);
+    // It signs the session cookie, so it is as required as the rest
+    assert.deepEqual(JSON.parse(res.body).missing, ["AUTH_SECRET"]);
   });
 
   // Names, never values -- the body is public and the secret is a secret

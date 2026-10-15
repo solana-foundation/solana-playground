@@ -6,7 +6,7 @@
  */
 import { validate as isUuid } from "uuid";
 
-import { requireUser, resolveBaseURL } from "../src/features/auth/server.mjs";
+import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import { warnAboutMissingObservabilityIds } from "../src/features/api/server/observability.mjs";
 import { withObservability } from "../src/features/api/server/with-observability.mjs";
 import {
@@ -115,29 +115,6 @@ export const readBody = async (req) => {
     return { body: JSON.parse(Buffer.concat(chunks).toString("utf8") || "{}") };
   } catch {
     return { error: "malformed" };
-  }
-};
-
-/**
- * Whether a state-changing request came from our own deployment.
- *
- * The same guard as `api/projects.mjs`, duplicated for the reason the note at
- * the top of that file gives. Why it exists at all when `SameSite=Lax` already
- * covers it, why `resolveBaseURL()` being `undefined` means there is nothing
- * to check, and why a missing `Origin` is allowed through are all written down
- * there rather than twice.
- *
- * @param {import("node:http").IncomingMessage} req
- */
-const isAllowedOrigin = (req) => {
-  const expected = resolveBaseURL();
-  const origin = req.headers.origin;
-  if (!expected || !origin) return true;
-
-  try {
-    return new URL(origin).origin === new URL(expected).origin;
-  } catch {
-    return false;
   }
 };
 

@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page, Request } from "@playwright/test";
 import {
   hasDefaultBackend,
+  json,
   NO_DEFAULT_BACKEND,
   seedWorkspace,
 } from "./fixtures";
@@ -34,6 +35,16 @@ type AssistantWindow = Window & {
   __pgAssistant?: { isConnected: boolean; items: unknown[] };
 };
 
+/**
+ * The panel offers the default backend only to a signed-in user, because
+ * `/api/agent` refuses anyone else. Neither test sends a turn, so the
+ * browser's view of the session is all they need.
+ */
+const signIn = (page: Page) =>
+  page.route("**/api/auth/get-session", (r) =>
+    json(r, { user: { id: "u1", name: "Tester", image: null, login: "t" } })
+  );
+
 const isConnected = (page: Page) =>
   page.evaluate(() => !!(window as AssistantWindow).__pgAssistant?.isConnected);
 
@@ -45,6 +56,7 @@ test("the default backend reconnects itself after a reload", async ({
   page,
 }) => {
   test.setTimeout(240_000);
+  await signIn(page);
 
   await page.goto("/");
   test.skip(!(await hasDefaultBackend(page)), NO_DEFAULT_BACKEND);
@@ -69,6 +81,7 @@ test("the default backend reconnects itself after a reload", async ({
 
 test("disconnecting is not undone by the next reload", async ({ page }) => {
   test.setTimeout(240_000);
+  await signIn(page);
 
   await page.goto("/");
   test.skip(!(await hasDefaultBackend(page)), NO_DEFAULT_BACKEND);

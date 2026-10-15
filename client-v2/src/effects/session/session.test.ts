@@ -305,6 +305,64 @@ describe("the session effect", () => {
     effect.dispose();
   });
 
+  describe("signing in through the popup", () => {
+    /** Loads signed in, signs out, and forgets what the load switched to */
+    const signedOutAfterLoad = async () => {
+      const effect = session();
+      await settle();
+      await PgSession.refreshWith(null);
+      switchWorkspace.mockClear();
+      return effect;
+    };
+
+    beforeEach(() => {
+      sync.mockResolvedValue(result({ latest: "Newest" }));
+      vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: true,
+        json: async () => ({ url: "https://github.com/login/oauth/x" }),
+      } as never);
+      PgSession.setOpenChannel(() => ({
+        receive: async () => ({ delivered: true as const, data: {} }),
+        cancel: () => {},
+      }));
+    });
+
+    it("keeps the open project when the sign-in started in the assistant panel", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signIn({ from: "assistant" });
+      await settle();
+
+      // The composer still holds a prompt written for this project
+      expect(switchWorkspace).not.toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("opens the newest project when the sign-in started from the header", async () => {
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signIn();
+      await settle();
+
+      expect(switchWorkspace).toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+
+    it("opens the newest project from the panel when no project is open", async () => {
+      vi.spyOn(PgExplorer, "currentWorkspaceName", "get").mockReturnValue(
+        undefined
+      );
+      const effect = await signedOutAfterLoad();
+
+      await PgSession.signIn({ from: "assistant" });
+      await settle();
+
+      // Nothing to keep, so a panel sign-in must not skip the switch outright
+      expect(switchWorkspace).toHaveBeenCalledWith("Newest");
+      effect.dispose();
+    });
+  });
+
   it("reopens the current project when the server replaced its files", async () => {
     sync.mockResolvedValue(
       result({ replaced: ["Hello Anchor"], latest: "Hello Anchor" })

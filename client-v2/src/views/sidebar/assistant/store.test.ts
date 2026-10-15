@@ -6,6 +6,7 @@ import {
 } from "./store";
 import { MIN_REDACTED_KEY_LENGTH, REDACTED_KEY } from "./model/redact-key";
 import { isDefaultBackendRemembered } from "./model/remembered-backend";
+import { PgSession } from "../../../features/auth";
 import {
   MAX_MESSAGES_PER_THREAD,
   PgChatStorage,
@@ -489,6 +490,81 @@ describe("PgAssistant backend memory", () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     PgAssistant.disconnect();
     expect(isDefaultBackendRemembered()).toBe(false);
+  });
+});
+
+describe("PgAssistant when the session changes", () => {
+  const signedIn = (name: string | null) =>
+    PgSession.refreshWith({ id: "u1", name, image: null, login: null });
+
+  // Not `PgSession.reset()`: it drops every listener, the store's included.
+  // Disconnecting first, so ending the session here cannot reach the store.
+  const signedOutAndDisconnected = async () => {
+    PgAssistant.disconnect();
+    localStorage.clear();
+    sessionStorage.clear();
+    await PgSession.refreshWith(null);
+  };
+
+  beforeEach(signedOutAndDisconnected);
+  afterEach(signedOutAndDisconnected);
+
+  it("returns a default-backend user to the picker when the session ends", async () => {
+    await signedIn(null);
+    PgAssistant.connect({ id: "default", apiKey: "" });
+
+    await PgSession.refreshWith(null);
+
+    expect(PgAssistant.isPickingBackend).toBe(true);
+  });
+
+  it("leaves a key-based backend alone when the session ends", async () => {
+    await signedIn(null);
+    PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+
+    await PgSession.refreshWith(null);
+
+    expect(PgAssistant.isPickingBackend).toBe(false);
+  });
+
+  it("stays in chat when a signed-in user's profile refreshes", async () => {
+    await signedIn(null);
+    PgAssistant.connect({ id: "default", apiKey: "" });
+
+    // A changed field notifies listeners although the user is still signed in
+    await signedIn("Ada");
+
+    expect(PgAssistant.isPickingBackend).toBe(false);
+  });
+
+  it("keeps the picker open while the default backend has no session", async () => {
+    await signedIn(null);
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    await PgSession.refreshWith(null);
+
+    PgAssistant.keepBackend();
+
+    expect(PgAssistant.isPickingBackend).toBe(true);
+  });
+
+  it("closes the picker for the default backend once signed in again", async () => {
+    await signedIn(null);
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    await PgSession.refreshWith(null);
+    await signedIn(null);
+
+    PgAssistant.keepBackend();
+
+    expect(PgAssistant.isPickingBackend).toBe(false);
+  });
+
+  it("closes the picker for a key-based backend with no session", async () => {
+    PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+    PgAssistant.pickBackend();
+
+    PgAssistant.keepBackend();
+
+    expect(PgAssistant.isPickingBackend).toBe(false);
   });
 });
 

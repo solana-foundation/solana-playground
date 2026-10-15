@@ -146,8 +146,8 @@ const Chat = () => {
         <ConnectSlot>
           {promptWaiting && (
             <WaitingHint role="status">
-              Connect a backend to send this to the assistant. Your prompt is
-              waiting in the composer.
+              Connect a backend, or sign in for the default one, to send this to
+              the assistant. Your prompt is waiting in the composer.
             </WaitingHint>
           )}
           <Connect />

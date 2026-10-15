@@ -66,10 +66,11 @@ export const session = (): Disposable => {
    * ambiguity by overwriting.
    *
    * @param openLatest whether to open the account's most recently touched
-   * project afterwards. True when the user has just signed in, where landing
-   * on their newest work is the point of signing in; false when a cookie was
-   * merely restored on load, where it would yank them off whatever URL they
-   * opened.
+   * project afterwards. True when the user has just signed in from the header,
+   * where landing on their newest work is the point of signing in; false when
+   * a cookie was merely restored on load, where it would yank them off
+   * whatever URL they opened, or when the sign-in started in the assistant
+   * panel, mid-task.
    */
   const adopt = async ({ openLatest }: { openLatest: boolean }) => {
     let result;
@@ -213,7 +214,11 @@ export const session = (): Disposable => {
     // app has to keep working offline, and `__pgSyncDiagnostics.failures()` is
     // where a sync that did not happen can be found.
     if (nowSignedIn && !signedIn) {
-      void adopt({ openLatest: restored }).catch((e) => report("adopt", e));
+      // A panel sign-in happens mid-task, with a prompt written for the open project
+      const fromPanel = PgSession.signingInFrom === "assistant";
+      void adopt({ openLatest: restored && !fromPanel }).catch((e) =>
+        report("adopt", e)
+      );
     }
     signedIn = nowSignedIn;
   });

@@ -20,7 +20,7 @@ import { PROVIDERS, type ProviderId } from "./types";
  * site data blocked, and the panel has to open either way. A failure is
  * logged by what was attempted, never with the value.
  */
-const BACKEND_KEY = "assistant.backend";
+export const REMEMBERED_BACKEND_KEY = "assistant.backend";
 const CONNECTION_KEY = "assistant.connection";
 
 const DEFAULT_ID: ProviderId = "default";
@@ -207,7 +207,7 @@ export const rememberBackend = (connection: Connection) => {
   // Written down as a whole id rather than a flag, so switching to a
   // key-based backend overwrites it instead of leaving a stale `true` behind
   attempt("remember the backend", () =>
-    localStorage.setItem(BACKEND_KEY, connection.id)
+    localStorage.setItem(REMEMBERED_BACKEND_KEY, connection.id)
   );
 
   if (connection.id === DEFAULT_ID) {
@@ -233,7 +233,9 @@ export const rememberBackend = (connection: Connection) => {
  * is not
  */
 export const forgetBackend = () => {
-  attempt("forget the backend", () => localStorage.removeItem(BACKEND_KEY));
+  attempt("forget the backend", () =>
+    localStorage.removeItem(REMEMBERED_BACKEND_KEY)
+  );
   return dropKept("forget the key");
 };
 
@@ -241,7 +243,7 @@ export const forgetBackend = () => {
 export const isDefaultBackendRemembered = () =>
   guarded(
     "read the remembered backend",
-    () => localStorage.getItem(BACKEND_KEY) === DEFAULT_ID,
+    () => localStorage.getItem(REMEMBERED_BACKEND_KEY) === DEFAULT_ID,
     false
   );
 
