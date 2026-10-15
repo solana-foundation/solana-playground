@@ -70,6 +70,9 @@ existing code moves.
   close and answer, where they sit on screen, and what they report.
 - `client-v2-controls`: how the development loop's switch, a choice of a few
   and a select behave for the user, by pointer and by keyboard.
+- `client-v2-buttons`: what a button does when pressed: the one call to
+  action of a screen, waiting on the work it starts, copying a value, and
+  reporting a click that fails.
 
 ### Modified Capabilities
 

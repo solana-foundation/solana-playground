@@ -820,7 +820,6 @@ export class PgTheme {
     this._theme.components ??= {};
 
     return this._skeleton()
-      ._button()
       ._card()
       ._text()
       ._svg()
@@ -977,24 +976,6 @@ export class PgTheme {
     skeleton.bg ??= "var(--surface-raised)";
     skeleton.highlightColor ??= "var(--surface-hover)";
     skeleton.borderRadius ??= theme.default.borderRadius;
-
-    return this;
-  }
-
-  /** Set default button component */
-  private static _button() {
-    const button = this._getComponent("button");
-    const theme = this._themeReady;
-
-    // Default
-    button.default ??= {};
-    button.default.bg ??= "transparent";
-    button.default.color ??= "inherit";
-    button.default.borderColor ??= "transparent";
-    button.default.borderRadius ??= theme.default.borderRadius;
-    button.default.fontSize ??= theme.font.code.size.medium;
-    button.default.fontWeight ??= "normal";
-    button.default.hover ??= {};
 
     return this;
   }
@@ -1298,9 +1279,6 @@ export class PgTheme {
     // Main send expanded input
     wallet.main.send.expanded.input ??= {};
     wallet.main.send.expanded.input.marginBottom ??= "0.75rem";
-    // Main send expanded button
-    wallet.main.send.expanded.sendButton ??= {};
-    wallet.main.send.expanded.sendButton.marginBottom ??= "0.25rem";
 
     // Main transactions
     wallet.main.transactions ??= {};
@@ -1316,9 +1294,6 @@ export class PgTheme {
     // Main transactions title text
     wallet.main.transactions.title.text ??= {};
     wallet.main.transactions.title.text.fontWeight ??= "bold";
-    // Main transactions title button
-    wallet.main.transactions.title.refreshButton ??= {};
-    wallet.main.transactions.title.refreshButton.marginRight ??= "0.5rem";
     // Main transactions table
     wallet.main.transactions.table ??= {};
     // Main transactions table default
@@ -1597,9 +1572,6 @@ export class PgTheme {
     home.resources.card.description.color ??=
       theme.colors.default.textSecondary;
     home.resources.card.description.height ??= "60%";
-    // Resources card button
-    home.resources.card.button ??= {};
-    home.resources.card.button.width ??= "100%";
 
     // Tutorials
     home.tutorials ??= {};

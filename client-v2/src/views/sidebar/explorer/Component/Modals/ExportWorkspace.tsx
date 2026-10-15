@@ -1,7 +1,6 @@
 import { FC } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../../../components/Button";
 import Markdown from "../../../../../components/Markdown";
 import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
 import type { ModalPageProps } from "@/widgets/overlays";
@@ -9,6 +8,8 @@ import Text from "../../../../../components/Text";
 import { ExportFile, Info } from "../../../../../components/Icons";
 import { PgFramework, PgView } from "../../../../../utils";
 import { createLogger } from "@/shared/lib/logger";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const log = createLogger("explorer:export-workspace");
 
@@ -61,16 +62,23 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
         </InfoText>
 
         <ButtonsWrapper>
-          <Button
+          <AsyncButton
+            type="button"
             onClick={convertAndExport}
-            kind="primary-transparent"
-            rightIcon={<ExportFile />}
+            onError={reportButtonFailure}
           >
             Convert and export
-          </Button>
-          <Button onClick={exportWithoutChanges} rightIcon={<ExportFile />}>
+            <ExportFile data-icon="inline-end" />
+          </AsyncButton>
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onClick={exportWithoutChanges}
+            onError={reportButtonFailure}
+          >
             Export without changes
-          </Button>
+            <ExportFile data-icon="inline-end" />
+          </AsyncButton>
         </ButtonsWrapper>
       </Content>
     </ModalFrame>

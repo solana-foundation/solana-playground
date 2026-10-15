@@ -1,7 +1,8 @@
 import { FC } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../../components/Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Img from "../../../../components/Img";
 import TutorialDetails from "../../../../components/Tutorial/TutorialDetails";
 import { PgTutorial, TutorialData } from "../../../../utils";
@@ -34,13 +35,13 @@ const FeaturedTutorial: FC<React.PropsWithChildren<FeaturedTutorialProps>> = ({
           ]}
         />
 
-        <Button
+        <AsyncButton
           onClick={() => PgTutorial.open(tutorial.name)}
-          kind="secondary"
-          fontWeight="bold"
+          onError={reportButtonFailure}
+          variant="secondary"
         >
           START LEARNING
-        </Button>
+        </AsyncButton>
       </RightBottomWrapper>
     </RightWrapper>
   </Wrapper>

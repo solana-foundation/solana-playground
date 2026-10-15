@@ -73,8 +73,8 @@ export const BaseModalFrame = ({
 
   const handleSubmit = (ev: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     ev.preventDefault();
-    // Legacy buttons in a body render a bare `<button>`, which submits the
-    // form too; only the footer's button is the dialog's submit
+    // Any button in the body without `type="button"` submits the form too;
+    // only the footer's button is the dialog's submit
     if (ev.nativeEvent.submitter !== submitRef.current) return;
     if (submit?.status === "ready") submit.onSubmit();
   };

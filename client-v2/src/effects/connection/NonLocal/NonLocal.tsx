@@ -1,7 +1,7 @@
 import { FC, useEffect } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../components/Button";
+import { Button } from "@/shared/ui/button";
 import { Endpoint } from "../../../constants";
 import { PgConnection, PgSettings, PgView } from "../../../utils";
 import type { ToastChildProps } from "../../../utils/view";
@@ -47,12 +47,12 @@ export const NonLocal: FC<React.PropsWithChildren<ToastChildProps>> = ({
       <ButtonsWrapper>
         <Button
           onClick={() => (PgSettings.connection.endpoint = Endpoint.LOCALNET)}
-          kind="secondary-transparent"
-          size="small"
+          variant="ghost"
+          size="sm"
         >
           Yes
         </Button>
-        <Button kind="no-border" size="small">
+        <Button variant="ghost" size="sm">
           No
         </Button>
       </ButtonsWrapper>

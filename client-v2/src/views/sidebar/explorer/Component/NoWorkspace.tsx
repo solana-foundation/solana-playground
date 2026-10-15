@@ -1,10 +1,11 @@
 import styled from "styled-components";
 
-import Button from "../../../../components/Button";
 import Text from "../../../../components/Text";
 import { CreateWorkspace } from "./Modals";
 import { Plus } from "../../../../components/Icons";
 import { PgView } from "../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const NoWorkspace = () => {
   const createWorkspace = () => PgView.setModal(CreateWorkspace);
@@ -12,9 +13,15 @@ const NoWorkspace = () => {
   return (
     <Wrapper>
       <Text>Start by creating a new project.</Text>
-      <Button onClick={createWorkspace} fullWidth leftIcon={<Plus />}>
+      <AsyncButton
+        variant="outline"
+        onClick={createWorkspace}
+        onError={reportButtonFailure}
+        className="w-full"
+      >
+        <Plus data-icon="inline-start" />
         Create a new project
-      </Button>
+      </AsyncButton>
     </Wrapper>
   );
 };
@@ -27,10 +34,6 @@ const Wrapper = styled.div`
 
   & > button {
     margin-top: 1rem;
-
-    & svg {
-      margin-right: 0.5rem !important;
-    }
   }
 `;
 

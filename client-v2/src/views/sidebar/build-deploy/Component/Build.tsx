@@ -1,10 +1,11 @@
 import styled from "styled-components";
 
-import Button from "../../../../components/Button";
 import Text from "../../../../components/Text";
 import { Wrench } from "../../../../components/Icons";
 import { useExplorer, useRenderOnChange } from "../../../../hooks";
 import { PgCommand, PgGlobal } from "../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const Build = () => {
   const buildLoading = useRenderOnChange(PgGlobal.onDidChangeBuildLoading);
@@ -16,15 +17,16 @@ const Build = () => {
 
   return (
     <Wrapper>
-      <Button
-        kind="secondary"
+      <AsyncButton
+        variant="secondary"
         onClick={() => PgCommand.build.execute()}
         loading={buildLoading}
-        fullWidth
-        leftIcon={<Wrench />}
+        onError={reportButtonFailure}
+        className="w-full"
       >
+        <Wrench data-icon="inline-start" />
         {buildLoading ? "Building..." : "Build"}
-      </Button>
+      </AsyncButton>
     </Wrapper>
   );
 };

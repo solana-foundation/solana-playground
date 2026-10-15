@@ -1,7 +1,10 @@
 import { FC, Fragment } from "react";
+import { Link as RouterLink } from "react-router-dom";
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Link from "../../Link";
 import Markdown from "../../Markdown";
 import TutorialDetails from "../TutorialDetails";
@@ -19,11 +22,12 @@ export const About: FC<
   return (
     <Wrapper>
       <GoBackButtonWrapper>
-        <Link href="/tutorials">
-          <Button kind="no-border" leftIcon={<PointedArrow rotate="180deg" />}>
+        <Button asChild variant="ghost">
+          <RouterLink to="/tutorials">
+            <PointedArrow data-icon="inline-start" rotate="180deg" />
             Go back to tutorials
-          </Button>
-        </Link>
+          </RouterLink>
+        </Button>
       </GoBackButtonWrapper>
 
       <TutorialAboutPage>
@@ -54,21 +58,19 @@ export const About: FC<
             </GeneratedTopLeftWrapper>
 
             <GeneratedTopRightWrapper>
-              <Button
+              <AsyncButton
                 onClick={start}
-                kind={isFinished ? "no-border" : "secondary"}
-                color={isFinished ? "success" : undefined}
-                fontWeight="bold"
-                leftIcon={
-                  isFinished ? (
-                    <span>{Emoji.CHECKMARK}</span>
-                  ) : (
-                    <Triangle rotate="90deg" />
-                  )
-                }
+                onError={reportButtonFailure}
+                variant={isFinished ? "ghost" : "secondary"}
+                className={isFinished ? "text-success" : undefined}
               >
+                {isFinished ? (
+                  <span data-icon="inline-start">{Emoji.CHECKMARK}</span>
+                ) : (
+                  <Triangle data-icon="inline-start" rotate="90deg" />
+                )}
                 {isFinished ? "COMPLETED" : isStarted ? "CONTINUE" : "START"}
-              </Button>
+              </AsyncButton>
             </GeneratedTopRightWrapper>
           </GeneratedTopWrapper>
 
@@ -110,11 +112,6 @@ const GoBackButtonWrapper = styled.div`
   align-items: center;
   height: ${({ theme }) => theme.components.tabs.tab.default.height};
   padding-left: 1rem;
-
-  & svg {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
 `;
 
 const TutorialAboutPage = styled.div`

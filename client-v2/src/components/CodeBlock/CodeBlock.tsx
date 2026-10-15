@@ -1,7 +1,8 @@
 import { useState } from "react";
 import styled, { css, useTheme } from "styled-components";
 
-import Button from "../Button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { highlight } from "./highlight";
 import { PgTheme, resolveTextMateTheme } from "../../utils";
 import { resolveColor } from "../../shared/lib/css-color";
@@ -21,7 +22,7 @@ const CodeBlock = ({ lang, children: code, ...props }: CodeBlockProps) => {
   return (
     <Wrapper ref={wrapperRef} {...props}>
       <CopyButtonWrapper ref={copyButtonWrapperRef}>
-        <Button.Copy copyText={code} />
+        <CopyButton value={code} onError={reportButtonFailure} />
       </CopyButtonWrapper>
 
       <Code lang={lang}>{code}</Code>
@@ -62,15 +63,6 @@ const CopyButtonWrapper = styled.div`
     right: 1rem;
     border-radius: ${theme.default.borderRadius};
     box-shadow: ${theme.default.boxShadow};
-
-    & button {
-      padding: 0.375rem;
-
-      & > svg {
-        width: 1.25rem;
-        height: 1.25rem;
-      }
-    }
   `}
 `;
 

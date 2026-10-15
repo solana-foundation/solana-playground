@@ -1,6 +1,7 @@
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../Text";
 import { Warning } from "../../Icons";
@@ -24,7 +25,14 @@ export const Remove = () => (
           You can recover the wallet later if you save the keypair.
         </Text>
       </WarningTextWrapper>
-      <Button onClick={() => PgWallet.export()}>Save keypair</Button>
+      <AsyncButton
+        type="button"
+        variant="outline"
+        onClick={() => PgWallet.export()}
+        onError={reportButtonFailure}
+      >
+        Save keypair
+      </AsyncButton>
     </MainContent>
   </ModalFrame>
 );

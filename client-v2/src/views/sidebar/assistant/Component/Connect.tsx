@@ -3,6 +3,7 @@ import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "cn";
+import { BrandButton } from "@/shared/ui/brand-button";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";
@@ -14,7 +15,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import GradientButton from "../../../../components/GradientButton";
 import Link from "../../../../components/Link";
 import { PgSession } from "../../../../features/auth";
 import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
@@ -245,9 +245,7 @@ const Connect = () => {
   };
   const switching = !!current && !PgAssistant.isCurrent(next);
 
-  // `Button` restores its own state after awaiting this handler, so unmounting
-  // synchronously would leave it setting state on an unmounted component.
-  const connect = () => setTimeout(() => PgAssistant.connect(next), 0);
+  const connect = () => PgAssistant.connect(next);
 
   // Nothing selectable is on screen while the default is ruled out, so the
   // alternatives stay open and the toggle that could hide them goes away
@@ -535,20 +533,19 @@ const Connect = () => {
 
       {needsSignIn ? (
         <>
-          <ConnectButton kind="primary" fullWidth onClick={signIn}>
+          <BrandButton className="mt-3 w-full" onClick={signIn}>
             Sign in with GitHub
-          </ConnectButton>
+          </BrandButton>
           {signInError && <SignInError role="alert">{signInError}</SignInError>}
         </>
       ) : (
-        <ConnectButton
-          kind="primary"
-          fullWidth
+        <BrandButton
+          className="mt-3 w-full"
           disabled={!ready}
           onClick={connect}
         >
           {connectLabel()}
-        </ConnectButton>
+        </BrandButton>
       )}
 
       {switching && (
@@ -707,10 +704,6 @@ const Chevron = styled.span<{ $open: boolean }>`
     transition: transform ${theme.default.transition.duration.medium}
       ${theme.default.transition.type};
   `}
-`;
-
-const ConnectButton = styled(GradientButton)`
-  margin-top: 0.75rem;
 `;
 
 const SignInError = styled.div`

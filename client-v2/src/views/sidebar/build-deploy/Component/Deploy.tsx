@@ -1,15 +1,24 @@
-import { useMemo } from "react";
+import { useMemo, type ReactElement } from "react";
 import styled from "styled-components";
 
 import Text from "../../../../components/Text";
-import Button, { ButtonProps } from "../../../../components/Button";
 import { Pause, Rocket, Triangle } from "../../../../components/Icons";
 import { PgCommand, PgGlobal } from "../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   useProgramInfo,
   useRenderOnChange,
   useWallet,
 } from "../../../../hooks";
+
+/** The deploy button's icon for each state of a deploy */
+const DEPLOY_ICONS: Record<typeof PgGlobal.deployState, ReactElement> = {
+  ready: <Rocket data-icon="inline-start" />,
+  cancelled: <Rocket data-icon="inline-start" />,
+  loading: <Pause data-icon="inline-start" />,
+  paused: <Triangle rotate="90deg" data-icon="inline-start" />,
+};
 
 const Deploy = () => {
   const buildLoading = useRenderOnChange(PgGlobal.onDidChangeBuildLoading);
@@ -43,22 +52,20 @@ const Deploy = () => {
       : "Deploy";
   }, [deployState, deployed]);
 
-  const deployButtonProps = useMemo<ButtonProps>(
-    () => ({
-      kind: "primary",
-      onClick: () => PgCommand.deploy.execute(),
-      disabled: buildLoading,
-      loading: deployState === "cancelled",
-      leftIcon:
-        deployState === "loading" ? (
-          <Pause />
-        ) : deployState === "paused" ? (
-          <Triangle rotate="90deg" />
-        ) : (
-          <Rocket />
-        ),
-    }),
-    [buildLoading, deployState]
+  const deployButton = (
+    <AsyncButton
+      // Not returned: the button must stay pressable while the deploy runs,
+      // since a second press pauses it and a third continues it
+      onClick={() => {
+        PgCommand.deploy.execute().catch(reportButtonFailure);
+      }}
+      onError={reportButtonFailure}
+      disabled={buildLoading}
+      loading={deployState === "cancelled"}
+    >
+      {DEPLOY_ICONS[deployState]}
+      {deployButtonText}
+    </AsyncButton>
   );
 
   // First time state
@@ -90,9 +97,12 @@ const Deploy = () => {
     return (
       <Wrapper>
         <Text>Your wallet must be connected for program deployments.</Text>
-        <Button onClick={() => PgCommand.connect.execute()} kind="primary">
+        <AsyncButton
+          onClick={() => PgCommand.connect.execute()}
+          onError={reportButtonFailure}
+        >
           Connect to Playground Wallet
-        </Button>
+        </AsyncButton>
       </Wrapper>
     );
   }
@@ -144,16 +154,12 @@ const Deploy = () => {
     return (
       <Wrapper>
         <Text>{text}</Text>
-        <Button {...deployButtonProps}>{deployButtonText}</Button>
+        {deployButton}
       </Wrapper>
     );
   }
 
-  return (
-    <Wrapper>
-      <Button {...deployButtonProps}>{deployButtonText}</Button>
-    </Wrapper>
-  );
+  return <Wrapper>{deployButton}</Wrapper>;
 };
 
 const Wrapper = styled.div`

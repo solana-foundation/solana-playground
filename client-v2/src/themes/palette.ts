@@ -9,8 +9,6 @@ const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, term
   BG_RAISED = "var(--surface-raised)", // cards, inputs, menus
   BG_HOVER = "var(--surface-hover)",
   PRIMARY = "var(--primary)",
-  PRIMARY_HOVER = "var(--accent-fill-hover)",
-  ON_PRIMARY = "var(--primary-foreground)",
   SECONDARY = "var(--track-brand)",
   GRADIENT = "var(--gradient-product)",
   TEXT_PRIMARY = "var(--text-primary)",
@@ -81,25 +79,6 @@ const PALETTE: ThemeParam = {
   },
 
   components: {
-    button: {
-      default: {
-        borderRadius: "9999px",
-        fontFamily: DISPLAY_FONT,
-      },
-      overrides: {
-        primary: {
-          color: ON_PRIMARY,
-          hover: { bg: PRIMARY_HOVER },
-        },
-        outline: {
-          border: `1px solid ${BORDER_STRONG}`,
-          hover: {
-            bg: BG_HOVER,
-            borderColor: BORDER_STRONG,
-          },
-        },
-      },
-    },
     editor: {
       default: {
         bg: "transparent",
@@ -337,18 +316,3 @@ const PALETTE: ThemeParam = {
 };
 
 export default PALETTE;
-
-if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
-
-  describe("themes/palette", () => {
-    describe("palette", () => {
-      it("writes on a primary fill with the design system's on-primary colour", () => {
-        // `--text-primary` is near-black in Light: about 3:1 on the purple fill
-        expect(PALETTE.components?.button?.overrides?.primary?.color).toBe(
-          "var(--primary-foreground)"
-        );
-      });
-    });
-  });
-}

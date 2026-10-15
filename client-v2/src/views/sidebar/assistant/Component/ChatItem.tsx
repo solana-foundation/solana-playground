@@ -1,12 +1,14 @@
 import { FC, useMemo } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../../components/Button";
-import GradientButton from "../../../../components/GradientButton";
 import Markdown from "../../../../components/Markdown";
 import { diffLines, summarizeDiff } from "../diff";
 import { PgAssistant, type ChatItem as Item } from "../store";
 import { alpha } from "../../../../utils/theme/alpha";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { BrandButton } from "@/shared/ui/brand-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const ChatItem: FC<
   React.PropsWithChildren<{
@@ -23,7 +25,7 @@ const ChatItem: FC<
      * Runs the action that can prove the current lesson step — the move after a
      * patch lands, and the reply's main CTA when offered.
      */
-    onVerifyStep?: () => void;
+    onVerifyStep?: () => void | Promise<unknown>;
     verifyStepLabel?: string;
     verifyStepTitle?: string | false | null;
     /**
@@ -75,14 +77,17 @@ const ChatItem: FC<
             </MakeChange>
           )}
           {onVerifyStep && (
-            <VerifyStep
-              kind="primary"
-              size="small"
+            // Left-aligned with the reply's own text rather than stretched, so
+            // it reads as this message's next move and not as the panel's
+            <AsyncButton
+              size="sm"
               title={verifyStepTitle || undefined}
               onClick={onVerifyStep}
+              onError={reportButtonFailure}
+              className="mt-2 self-start"
             >
               {verifyStepLabel}
-            </VerifyStep>
+            </AsyncButton>
           )}
           {onSkipStep && (
             <MakeChange
@@ -129,12 +134,8 @@ const Approval: FC<
   const { request, status } = item;
   const pending = status === "pending";
 
-  // The shared Button restores its own state after awaiting onClick; resolving
-  // synchronously unmounts the pending actions row under it. Defer a tick.
-  const allow = () =>
-    setTimeout(() => PgAssistant.resolveApproval(item.id, true), 0);
-  const deny = () =>
-    setTimeout(() => PgAssistant.resolveApproval(item.id, false), 0);
+  const allow = () => PgAssistant.resolveApproval(item.id, true);
+  const deny = () => PgAssistant.resolveApproval(item.id, false);
 
   const label =
     status === "allowed"
@@ -167,10 +168,15 @@ const Approval: FC<
 
       {pending ? (
         <Actions>
-          <GradientButton kind="primary" size="small" fullWidth onClick={allow}>
+          <BrandButton
+            variant="accent"
+            size="sm"
+            className="w-full"
+            onClick={allow}
+          >
             {request.type === "patch" ? "Apply" : "Allow"}
-          </GradientButton>
-          <Button kind="outline" size="small" onClick={deny}>
+          </BrandButton>
+          <Button variant="outline" size="sm" onClick={deny}>
             {request.type === "patch" ? "Reject" : "Deny"}
           </Button>
         </Actions>
@@ -269,13 +275,6 @@ const Tick = styled.svg`
     flex-shrink: 0;
     stroke: ${theme.colors.state.success.color};
   `}
-`;
-
-// Left-aligned with the reply's own text rather than stretched, so it reads as
-// this message's next move and not as the panel's
-const VerifyStep = styled(Button)`
-  align-self: flex-start;
-  margin-top: 0.5rem;
 `;
 
 const MakeChange = styled.button<{ $quiet?: boolean }>`

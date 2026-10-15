@@ -1,8 +1,8 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
 import Input from "../../Input";
+import { Button } from "@/shared/ui/button";
 import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../Text";
 import { Info } from "../../Icons";
@@ -47,7 +47,11 @@ export const Add = () => {
             Saving the keypair will allow you to recover the wallet.
           </Text>
         </WarningTextWrapper>
-        <Button onClick={() => PgWallet.export({ name, keypair })}>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => PgWallet.export({ name, keypair })}
+        >
           Save keypair
         </Button>
       </MainContent>

@@ -4,7 +4,6 @@ import styled from "styled-components";
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
 import Interaction from "../Interaction";
-import Button from "../../../../../components/Button";
 import Foldable from "../../../../../components/Foldable";
 import { Emoji } from "../../../../../constants";
 import {
@@ -15,6 +14,9 @@ import {
   PgTerminal,
   PgTx,
 } from "../../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   IdlInstruction,
   PgProgramInteraction,
@@ -194,19 +196,24 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
         </ArgsAndAccountsWrapper>
 
         <ButtonWrapper>
-          <Button
-            kind="primary"
+          <AsyncButton
+            className="px-6"
             onClick={handleTest}
+            onError={reportButtonFailure}
             disabled={!wallet || disabled}
           >
             Test
-          </Button>
+          </AsyncButton>
 
           {(instruction.values.accounts.length > 0 ||
             instruction.values.args.length > 0) && (
             <>
-              <Button onClick={fillRandom}>Fill</Button>
-              <Button onClick={reset}>Reset</Button>
+              <Button variant="outline" className="px-6" onClick={fillRandom}>
+                Fill
+              </Button>
+              <Button variant="outline" className="px-6" onClick={reset}>
+                Reset
+              </Button>
             </>
           )}
         </ButtonWrapper>
@@ -235,10 +242,6 @@ const ButtonWrapper = styled.div`
   justify-content: center;
   margin-top: 1rem;
   gap: 1rem;
-
-  & > button {
-    padding: 0.5rem 1.5rem;
-  }
 `;
 
 export default Instruction;

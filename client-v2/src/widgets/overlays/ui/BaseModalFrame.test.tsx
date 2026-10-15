@@ -143,7 +143,7 @@ it("should not submit when a button in the body without a type is clicked", () =
   const onClick = vi.fn();
   renderFrame({
     submit: submitOf("ready", onSubmit),
-    // Legacy buttons render a bare `<button>`, which submits its form
+    // A `<button>` without `type="button"` submits its form
     children: <button onClick={onClick}>Copy</button>,
   });
 

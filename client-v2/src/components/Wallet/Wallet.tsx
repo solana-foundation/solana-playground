@@ -6,7 +6,7 @@ import Balance from "./Balance";
 import Send from "./Send";
 import Settings from "./Settings";
 import Transactions from "./Transactions";
-import Button from "../Button";
+import { Button } from "@/shared/ui/button";
 import FadeIn from "../FadeIn";
 import ErrorBoundary from "../ErrorBoundary";
 import Img from "../Img";
@@ -254,19 +254,16 @@ const WalletRename: FC<React.PropsWithChildren<WalletRenameProps>> = ({
 };
 
 const WalletClose = () => (
-  <CloseButton
+  <Button
+    variant="ghost"
+    size="icon-sm"
     onClick={() => (PgWallet.show = false)}
-    kind="icon"
     title="Close"
+    className="absolute right-4"
   >
     <Close />
-  </CloseButton>
+  </Button>
 );
-
-const CloseButton = styled(Button)`
-  position: absolute;
-  right: 1rem;
-`;
 
 const WalletMain = () => (
   <MainWrapper id={PgView.ids.WALLET_MAIN}>

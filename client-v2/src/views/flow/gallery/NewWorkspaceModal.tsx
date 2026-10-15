@@ -5,7 +5,7 @@ import type { ProgramListing } from "./ProgramsTab";
 import ProgramsTab from "./ProgramsTab";
 import StartFromScratch from "./StartFromScratch";
 import TutorialsTab, { Empty } from "./TutorialsTab";
-import Button from "../../../components/Button";
+import { Button } from "@/shared/ui/button";
 import { createLogger } from "../../../shared/lib/logger";
 import { ModalFrame } from "@/widgets/overlays";
 import { PgCommon, PgTutorial } from "../../../utils";
@@ -135,7 +135,11 @@ const NewWorkspaceModal = ({
           {tab === "programs" && registry.status === "failed" && (
             <Empty>
               Could not load the programs.{" "}
-              <Button kind="secondary" onClick={() => setAttempt(attempt + 1)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setAttempt(attempt + 1)}
+              >
                 Retry
               </Button>
             </Empty>

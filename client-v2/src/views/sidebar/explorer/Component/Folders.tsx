@@ -1,19 +1,20 @@
 import {
+  cloneElement,
   ComponentPropsWithoutRef,
   CSSProperties,
   FC,
   forwardRef,
   MouseEvent,
-  ReactNode,
+  ReactElement,
   useCallback,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { cn } from "cn";
 import styled, { css, useTheme } from "styled-components";
 
 import ExplorerButtons from "./ExplorerButtons";
-import Button, { ButtonProps } from "../../../../components/Button";
 import Dnd, { DragStartEvent, DragEndEvent } from "../../../../components/Dnd";
 import LangIcon from "../../../../components/LangIcon";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
@@ -32,6 +33,8 @@ import { useExplorerContextMenu } from "./useExplorerContextMenu";
 import { useResetCtxSelected } from "./useResetCtxSelected";
 import { useHandleItemState } from "./useHandleItemState";
 import { useKeybind } from "../../../../hooks";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const Folders = () => {
   useHandleItemState();
@@ -81,7 +84,6 @@ const Folders = () => {
                     onClick={ctxMenu.runBuild}
                     disabled={ctxMenu.buildLoading}
                     icon={<Wrench />}
-                    addTextMargin
                   >
                     Build
                   </SectionButton>
@@ -89,7 +91,6 @@ const Folders = () => {
                     onClick={ctxMenu.runDeploy}
                     disabled={ctxMenu.deployState !== "ready"}
                     icon={<Rocket />}
-                    addTextMargin
                   >
                     Deploy
                   </SectionButton>
@@ -115,7 +116,6 @@ const Folders = () => {
                   onClick={ctxMenu.runClientFolder}
                   icon={<Triangle rotate="90deg" />}
                   title="Run All (in client dir)"
-                  addTextMargin
                 >
                   Run
                 </SectionButton>
@@ -239,34 +239,30 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
   );
 };
 
-interface SectionButtonProps extends ButtonProps {
-  icon: ReactNode;
-  addTextMargin?: boolean;
+interface SectionButtonProps
+  extends Omit<ComponentPropsWithoutRef<typeof AsyncButton>, "onError"> {
+  icon: ReactElement<{ "data-icon"?: string }>;
 }
 
-const SectionButton: FC<React.PropsWithChildren<SectionButtonProps>> = ({
-  onClick,
+const SectionButton: FC<SectionButtonProps> = ({
   icon,
-  addTextMargin,
   children,
+  className,
   ...props
 }) => (
-  <Button onClick={onClick} kind="icon" {...props}>
-    {icon}
-    <SectionButtonText addTextMargin={addTextMargin}>
-      {children}
-    </SectionButtonText>
-  </Button>
+  <AsyncButton
+    variant="ghost"
+    size="xs"
+    className={cn("text-muted-foreground hover:text-foreground", className)}
+    onError={reportButtonFailure}
+    {...props}
+  >
+    {/* Each icon spreads its props onto its <svg>, which is how the data-icon
+        reaches the element the button sizes */}
+    {cloneElement(icon, { "data-icon": "inline-start" })}
+    {children}
+  </AsyncButton>
 );
-
-const SectionButtonText = styled.span<
-  Pick<SectionButtonProps, "addTextMargin">
->`
-  ${({ addTextMargin }) => css`
-    margin: 0 0.25rem;
-    ${addTextMargin && "margin-left: 0.50rem"};
-  `}
-`;
 
 interface FolderGroupProps {
   folders: string[];

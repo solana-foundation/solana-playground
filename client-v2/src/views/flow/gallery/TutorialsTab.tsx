@@ -1,9 +1,10 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../components/Button";
 import Img from "../../../components/Img";
 import { PgTheme, PgTutorial, PgView } from "../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 interface TutorialsTabProps {
   /** Lowercased search query from the modal's search box */
@@ -49,7 +50,10 @@ const TutorialsTab: FC<React.PropsWithChildren<TutorialsTabProps>> = ({
             <Sub>{t.description}</Sub>
             {error?.name === t.name && <ErrorText>{error.message}</ErrorText>}
           </Body>
-          <Button
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onError={reportButtonFailure}
             onClick={async () => {
               setError(null);
               try {
@@ -65,7 +69,7 @@ const TutorialsTab: FC<React.PropsWithChildren<TutorialsTabProps>> = ({
             }}
           >
             Open
-          </Button>
+          </AsyncButton>
         </Card>
       ))}
     </Grid>

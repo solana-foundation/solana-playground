@@ -2,7 +2,6 @@ import { FC, useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
 import UpstreamSettings from "../../../app/Panels/Side/Left/Settings";
-import Button from "../../../components/Button";
 import {
   Close,
   ExportFile,
@@ -11,6 +10,9 @@ import {
 } from "../../../components/Icons";
 import Link from "../../../components/Link";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Endpoint, PLATFORM_ENDPOINTS } from "../../../constants";
 import {
   useBlockExplorer,
@@ -185,7 +187,12 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
     >
       <Head>
         <Title>Settings</Title>
-        <Button kind="icon" aria-label="Close settings" onClick={onClose}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Close settings"
+          onClick={onClose}
+        >
           <Close />
         </Button>
       </Head>
@@ -202,30 +209,34 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
       <Section>
         <Eyebrow>Project</Eyebrow>
         <Row>
-          <Button
-            leftIcon={<ExportFile />}
+          <AsyncButton
+            variant="outline"
             onClick={() => PgFramework.exportWorkspace()}
+            onError={reportButtonFailure}
           >
+            <ExportFile data-icon="inline-start" />
             Export project (zip)
-          </Button>
+          </AsyncButton>
         </Row>
         <Row>
-          <Button
-            kind="outline"
-            size="small"
-            leftIcon={<Github />}
+          <AsyncButton
+            variant="outline"
+            size="sm"
             onClick={() => PgView.setModal(ImportGithub)}
+            onError={reportButtonFailure}
           >
+            <Github data-icon="inline-start" />
             From GitHub
-          </Button>
-          <Button
-            kind="outline"
-            size="small"
-            leftIcon={<ImportFile />}
+          </AsyncButton>
+          <AsyncButton
+            variant="outline"
+            size="sm"
             onClick={() => PgView.setModal(ImportFs)}
+            onError={reportButtonFailure}
           >
+            <ImportFile data-icon="inline-start" />
             From files
-          </Button>
+          </AsyncButton>
         </Row>
       </Section>
 

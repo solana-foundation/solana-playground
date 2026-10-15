@@ -1,7 +1,7 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
+import { Button } from "@/shared/ui/button";
 import Link from "../Link";
 import Text from "../Text";
 import { Clock, Refresh, Sad, Error as ErrorIcon } from "../Icons";
@@ -56,9 +56,15 @@ const Transactions = () => {
     <TxsWrapper>
       <TxsTitleWrapper>
         <TxsTitleText>Transactions</TxsTitleText>
-        <TxsRefreshButton kind="icon" title="Refresh" onClick={refresh}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Refresh"
+          onClick={refresh}
+          className="mr-2"
+        >
           <Refresh />
-        </TxsRefreshButton>
+        </Button>
       </TxsTitleWrapper>
 
       <TxsTable>
@@ -110,14 +116,6 @@ const TxsTitleText = styled.span`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(
       theme.components.wallet.main.transactions.title.text
-    )};
-  `}
-`;
-
-const TxsRefreshButton = styled(Button)`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.title.refreshButton
     )};
   `}
 `;

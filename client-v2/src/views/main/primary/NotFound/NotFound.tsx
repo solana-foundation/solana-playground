@@ -1,7 +1,8 @@
 import type { FC } from "react";
 import styled from "styled-components";
 
-import Button from "../../../../components/Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Text from "../../../../components/Text";
 import { Error } from "../../../../components/Icons";
 import { PgRouter } from "../../../../utils";
@@ -22,12 +23,13 @@ const NotFound: FC<React.PropsWithChildren<NotFoundProps>> = ({
     <Text kind="error" icon={<Error />}>
       {text ?? `URL path not found: ${PgRouter.location.pathname}`}
     </Text>
-    <Button
-      kind="primary-transparent"
+    <AsyncButton
+      variant="ghost"
       onClick={() => PgRouter.navigate(navigate?.path)}
+      onError={reportButtonFailure}
     >
       {navigate?.name ?? "Go home"}
-    </Button>
+    </AsyncButton>
   </Wrapper>
 );
 

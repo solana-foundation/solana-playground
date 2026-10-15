@@ -1,25 +1,29 @@
-import { ChangeEvent, FC, useRef, useState } from "react";
+import {
+  ChangeEvent,
+  ComponentProps,
+  FC,
+  PropsWithChildren,
+  useRef,
+  useState,
+} from "react";
 import styled, { css } from "styled-components";
 
-import Button, { ButtonKind } from "./Default";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { Button } from "@/shared/ui/button";
 
 interface ImportButtonProps {
   onImport: (ev: ChangeEvent<HTMLInputElement>) => Promise<void>;
   accept?: string;
   showImportText?: boolean;
-  buttonKind?: ButtonKind;
-  noButton?: boolean;
-  dir?: boolean;
+  variant?: ComponentProps<typeof Button>["variant"];
   title?: string;
 }
 
-const ImportButton: FC<React.PropsWithChildren<ImportButtonProps>> = ({
+const ImportButton: FC<PropsWithChildren<ImportButtonProps>> = ({
   onImport,
   accept,
-  buttonKind = "outline",
+  variant = "outline",
   showImportText,
-  noButton,
-  dir,
   title,
   children,
 }) => {
@@ -32,15 +36,22 @@ const ImportButton: FC<React.PropsWithChildren<ImportButtonProps>> = ({
   };
 
   const handleChange = async (ev: ChangeEvent<HTMLInputElement>) => {
-    await onImport(ev);
-    const files = ev.target.files;
-    if (!files?.length) setImportText("");
-    else setImportText(files[0].name);
+    // Read before the import runs: an import may reset the input, which
+    // empties its file list
+    const name = ev.target.files?.[0]?.name ?? "";
+    try {
+      await onImport(ev);
+    } catch (error) {
+      // The picker has no other way to say it failed, and the file name
+      // below would claim it was imported
+      reportButtonFailure(error);
+      setImportText("");
+      // so the same file, once corrected, fires a change again
+      ev.target.value = "";
+      return;
+    }
+    setImportText(name);
   };
-
-  const dirProps = dir
-    ? { webkitdirectory: "", mozdirectory: "", directory: "", multiple: true }
-    : {};
 
   return (
     <Wrapper>
@@ -49,15 +60,10 @@ const ImportButton: FC<React.PropsWithChildren<ImportButtonProps>> = ({
         type="file"
         onChange={handleChange}
         accept={accept}
-        {...dirProps}
       />
-      {noButton ? (
-        <div onClick={handleClick}>{children}</div>
-      ) : (
-        <Button kind={buttonKind} title={title} onClick={handleClick}>
-          {children}
-        </Button>
-      )}
+      <Button variant={variant} title={title} onClick={handleClick}>
+        {children}
+      </Button>
       {showImportText && importText && <ImportInfo>{importText}</ImportInfo>}
     </Wrapper>
   );
@@ -69,10 +75,6 @@ const Wrapper = styled.div`
 
   & input[type="file"] {
     display: none;
-  }
-
-  & > div {
-    width: 100%;
   }
 `;
 

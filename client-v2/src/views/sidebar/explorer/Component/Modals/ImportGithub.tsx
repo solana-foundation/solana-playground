@@ -1,7 +1,6 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../../../components/Button";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
@@ -22,6 +21,9 @@ import {
   PgRouter,
   PgView,
 } from "../../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 export const ImportGithub = () => {
   // Handle user input
@@ -141,29 +143,41 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => (
     </FrameworkWrapper>
 
     <ExampleButtonsWrapper>
-      <Button
+      <AsyncButton
+        type="button"
+        variant="outline"
         onClick={async () => {
           await PgGithub.import(framework.githubExample.url);
           PgView.closeModal();
         }}
-        rightIcon={<ImportWorkspace />}
+        onError={reportButtonFailure}
       >
         Import
-      </Button>
+        <ImportWorkspace data-icon="inline-end" />
+      </AsyncButton>
 
       <Button
+        type="button"
+        variant="outline"
         onClick={() => {
           PgRouter.navigate("/" + framework.githubExample.url);
           PgView.closeModal();
         }}
-        rightIcon={<Eye />}
       >
         Open
+        <Eye data-icon="inline-end" />
       </Button>
 
-      <Link href={framework.githubExample.url}>
-        <Button rightIcon={<Github />}>Open in GitHub</Button>
-      </Link>
+      <Button asChild variant="outline">
+        <a
+          href={framework.githubExample.url}
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          Open in GitHub
+          <Github data-icon="inline-end" />
+        </a>
+      </Button>
     </ExampleButtonsWrapper>
   </ExampleWrapper>
 );

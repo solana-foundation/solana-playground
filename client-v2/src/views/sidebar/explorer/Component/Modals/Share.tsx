@@ -1,7 +1,6 @@
 import { FC, useState } from "react";
 import styled from "styled-components";
 
-import Button from "../../../../../components/Button";
 import FilePicker from "../../../../../components/FilePicker";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
@@ -11,6 +10,8 @@ import Text from "../../../../../components/Text";
 import { Checkmark, Sad } from "../../../../../components/Icons";
 import { PgCommon, PgExplorer, PgRouter, PgShare } from "../../../../../utils";
 import { createLogger } from "@/shared/lib/logger";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const log = createLogger("explorer:share");
 
@@ -96,7 +97,11 @@ const SuccessPage: FC<React.PropsWithChildren<SuccessPageProps>> = ({
 
         <SuccessInputWrapper>
           <Input value={shareLink} readOnly />
-          <Button.Copy copyText={shareLink} />
+          <CopyButton
+            type="button"
+            value={shareLink}
+            onError={reportButtonFailure}
+          />
         </SuccessInputWrapper>
         <SuccessLinkWrapper>
           <Link href={shareLink}>Go to the link</Link>

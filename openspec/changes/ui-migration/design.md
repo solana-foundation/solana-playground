@@ -212,15 +212,15 @@ reload), the terminal (input, resize, no leaked `PgTerm` from the `useMemo`
 factory running twice under strict mode), hot reload (`react-refresh` 0.11;
 fallback `FAST_REFRESH=false`).
 
-| Library                 | With React 19                                         | Action                             |
-| ----------------------- | ----------------------------------------------------- | ---------------------------------- |
-| `typescript` `=5.0.4`   | `@types/react` 19 declares TS 5.6                     | Lift the pin (HOO-1855), not first |
-| `styled-components` 5.3 | Runs; 5.1.36 types accept React 19                    | Keep 5                             |
-| `react-use-clipboard`   | No release supports React 19                          | Replace in `hooks/useCopy.tsx`     |
-| `react-select` 5.5      | Peer range excludes 19                                | Removed by 5.5                     |
-| `re-resizable` 6.9      | Peer range excludes 19                                | 6.11 or newer                      |
-| `react-rnd` 10.3        | Works (passes `nodeRef`, so `findDOMNode` is skipped) | Bump anyway                        |
-| Our code                | 20+ `FC` with implicit `children`; 9 global `JSX.`    | Mechanical fixes                   |
+| Library                 | With React 19                                         | Action                                                                                   |
+| ----------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `typescript` `=5.0.4`   | `@types/react` 19 declares TS 5.6                     | Lift the pin (HOO-1855), not first                                                       |
+| `styled-components` 5.3 | Runs; 5.1.36 types accept React 19                    | Keep 5                                                                                   |
+| `react-use-clipboard`   | No release supports React 19                          | Replace in `hooks/useCopy.tsx`; 5.4 kept it, for Wallet Settings' Copy address menu item |
+| `react-select` 5.5      | Peer range excludes 19                                | Removed by 5.5                                                                           |
+| `re-resizable` 6.9      | Peer range excludes 19                                | 6.11 or newer                                                                            |
+| `react-rnd` 10.3        | Works (passes `nodeRef`, so `findDOMNode` is skipped) | Bump anyway                                                                              |
+| Our code                | 20+ `FC` with implicit `children`; 9 global `JSX.`    | Mechanical fixes                                                                         |
 
 HOO-1772 and HOO-1773 change the Monaco and language-server modules; they do
 not land in the same week as the upgrade.
@@ -563,6 +563,63 @@ react-select showed the last option. A setting with Custom shows "Custom".
   (`role="tab"`, `flow-left-tab-*`), which `Segmented` would turn into
   radios. The gallery is restyled by HOO-2068.
 - Checkbox and Switch: the leaves task (HOO-2058).
+
+## Buttons (5.4)
+
+Decided with Slava on 2026-10-14 (HOO-2059). Every button comes from the
+design system: `Button`, `BrandButton`, `AsyncButton` and `CopyButton`, all
+installed with `yarn ds-add`. `HelpTip` arrived with 5.6 and is not touched
+here. One PR, stacked on 5.6's.
+
+| Was (legacy) | Becomes |
+|---|---|
+| `GradientButton`, the one call to action of a view | `BrandButton`, `ring` |
+| `kind="primary"` | `Button`, `default`; `BrandButton` `accent` where it is a call to action and the ring would be too loud |
+| `secondary`, `outline`, `primary-outline`, `secondary-outline` | `Button`, `secondary` or `outline` |
+| `transparent`, `no-border`, `primary-transparent`, `secondary-transparent` | `Button`, `ghost` |
+| `kind="icon"` | `Button`, `ghost`, `size="icon-sm"` |
+| `kind="error"` | `Button`, `destructive` |
+| `Button.Copy` | `CopyButton` |
+| `Button.Export` | `Button asChild` around the `<a download>` |
+| `Button.Import` | `components/ImportButton`, the same hidden file input on `Button` |
+| `leftIcon`, `rightIcon` | children with `data-icon="inline-start"` / `"inline-end"` |
+| `color`, `bg`, `hoverColor`, `fontWeight`, `fullWidth`, `size` | a variant, or a class |
+
+The brand buttons: the Build stage's four ("Continue to Deploy" twice and
+"Fix with assistant" twice; its Build, Retry build and Rebuild are
+`AsyncButton`s), Deploy, the assistant's "Allow", Connect and Start from
+scratch.
+
+**Waiting is opted into.** The legacy `Button` disabled itself and spun on
+every click (icon buttons excepted), awaiting the handler's result.
+`AsyncButton` does the same for a handler that returns a promise or any
+thenable, so it goes only where the handler returns one or the caller passes
+`loading` (the sidebar's Build, the IDL's init/upgrade, the wallet's Send
+with `loadingText="Sending..."`). `loading` adds to the button's own wait and
+never replaces it, so the sidebar's Deploy does not return its deploy: a
+second press while it runs pauses it. Every other button is a plain `Button`.
+
+**A click that fails is logged.** The design system's `AsyncButton` awaited
+the promise in a `try`/`finally`, so a rejection escaped as an unhandled
+rejection; with `CopyButton`, a refused `writeText` was an unhandled
+rejection too. Both gain
+`onError(error)`, changed in `design-system/` and reinstalled. Without it,
+`AsyncButton` rethrows as before and `CopyButton` shows no "Copied". In
+client-v2 every `AsyncButton` and `CopyButton` passes `reportButtonFailure`,
+which logs through `createLogger("ui:button")` without `report: true`. It
+replaces the legacy `Button`'s `console.error`, which only wrote to the
+console: many of these failures are caused by the user (a cancelled deploy, a
+wallet refusal) or already printed by the terminal command, so they must not
+page the team. What reaches Sentry is HOO-1800's call. Decided with Slava
+2026-10-14.
+
+Removed: `components/Button`, `components/GradientButton`, and the theme's
+`components.button` override type. `client-v2/CLAUDE.md` loses its paragraph
+on `GradientButton`; comments that cite it (`views/flow/tokens.ts`, the
+stepper) cite `BrandButton`.
+
+Kept: every id, `aria-label` and test id on a button. The design system's
+`data-slot` names (`button`, `brand-button`, `copy-button`) come with it.
 
 ## Risks / Trade-offs
 

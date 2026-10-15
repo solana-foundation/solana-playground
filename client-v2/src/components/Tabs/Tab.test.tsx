@@ -27,18 +27,10 @@ vi.mock("../../utils", () => ({
   PgTheme: { convertToCSS: () => "" },
 }));
 
-// The icons, the button and the language icon are styled-components that read
-// the app theme; they are not what is under test.
+// The icons and the language icon are styled-components that read the app
+// theme; they are not what is under test.
 vi.mock("../Icons", () => ({ Close: () => <svg aria-hidden /> }));
 vi.mock("../LangIcon", () => ({ default: () => null }));
-vi.mock("../Button", async () => {
-  const { forwardRef } = await import("react");
-  return {
-    default: forwardRef<HTMLButtonElement>((props, ref) => (
-      <button type="button" ref={ref} {...props} />
-    )),
-  };
-});
 
 // Every theme path the styled wrapper reads answers with the same stand-in
 const theme: DefaultTheme = new Proxy({} as DefaultTheme, { get: () => theme });

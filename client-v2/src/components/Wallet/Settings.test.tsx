@@ -35,8 +35,8 @@ vi.mock("./hooks", () => ({
   useDarken: () => ({ darken: vi.fn(), lighten: vi.fn() }),
 }));
 
-// The icons and the button are styled-components that read the app theme;
-// they are not what is under test.
+// The icons are styled-components that read the app theme; they are not what
+// is under test.
 vi.mock("../Icons", () => {
   const Icon = () => <svg aria-hidden />;
   return {
@@ -48,15 +48,6 @@ vi.mock("../Icons", () => {
     Plus: Icon,
     ThreeDots: Icon,
     Trash: Icon,
-  };
-});
-vi.mock("../Button", async () => {
-  const { forwardRef } = await import("react");
-  return {
-    // Radix's `asChild` hands its props and ref to this element
-    default: forwardRef<HTMLButtonElement>((props, ref) => (
-      <button type="button" ref={ref} {...props} />
-    )),
   };
 });
 vi.mock("../Img", () => ({ default: () => null }));

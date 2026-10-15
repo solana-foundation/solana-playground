@@ -1,6 +1,6 @@
 import styled from "styled-components";
 
-import Button from "../../../../../components/Button";
+import ImportButton from "../../../../../components/ImportButton";
 import {
   PgCommon,
   PgExplorer,
@@ -8,6 +8,8 @@ import {
   PgServer,
 } from "../../../../../utils";
 import { useRenderOnChange } from "../../../../../hooks";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const ProgramBinary = () => (
   <Wrapper>
@@ -22,7 +24,7 @@ const Wrapper = styled.div`
 `;
 
 const Import = () => (
-  <Button.Import
+  <ImportButton
     accept=".so"
     onImport={async (ev) => {
       const files = ev.target.files;
@@ -31,20 +33,15 @@ const Import = () => (
         return;
       }
 
-      try {
-        const file = files[0];
-        const fileName = file.name;
-        const arrayBuffer = await file.arrayBuffer();
-        const bytes = new Uint8Array(arrayBuffer);
-        PgProgramInfo.update({ importedProgram: { bytes, fileName } });
-      } catch (err: any) {
-        console.log(err.message);
-      }
+      // A file that cannot be read throws; ImportButton reports it
+      const file = files[0];
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      PgProgramInfo.update({ importedProgram: { bytes, fileName: file.name } });
     }}
     showImportText
   >
     Import
-  </Button.Import>
+  </ImportButton>
 );
 
 const Export = () => {
@@ -52,15 +49,17 @@ const Export = () => {
   if (!uuid) return null;
 
   return (
-    <Button
+    <AsyncButton
+      variant="outline"
       onClick={async () => {
         const programBuffer = await PgServer.deploy(uuid);
         const programName = PgExplorer.currentWorkspaceName ?? "program";
         PgCommon.export(`${programName}.so`, programBuffer);
       }}
+      onError={reportButtonFailure}
     >
       Export
-    </Button>
+    </AsyncButton>
   );
 };
 

@@ -3,12 +3,12 @@ import styled from "styled-components";
 
 import InputLabel from "../InputLabel";
 import InstructionInput from "./InstructionInput";
-import Button from "../../../../../components/Button";
 import SearchBar, {
   SearchBarDropdownProps,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
 import { Edit, Plus, Trash } from "../../../../../components/Icons";
+import { Button } from "@/shared/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import {
   IdlType,
@@ -111,7 +111,9 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                             })
                           );
                         }}
-                        kind="icon"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label="Edit seed"
                       >
                         <Edit />
                       </Button>
@@ -127,8 +129,10 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                           seeds.filter((_, i) => i !== index)
                         );
                       }}
-                      kind="icon"
-                      hoverColor="error"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="hover:text-destructive"
+                      aria-label="Delete seed"
                     >
                       <Trash />
                     </Button>
@@ -179,17 +183,16 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
 
       <SeedButtonsWrapper>
         <Button
+          variant="outline"
           onClick={() => {
             setSeeds((seeds) => [...seeds, { state: "selecting" }]);
           }}
-          leftIcon={<Plus />}
         >
+          <Plus data-icon="inline-start" />
           Add Seed
         </Button>
 
-        <Button onClick={generate} kind="primary-transparent">
-          Generate
-        </Button>
+        <Button onClick={generate}>Generate</Button>
       </SeedButtonsWrapper>
     </Wrapper>
   );

@@ -9,7 +9,7 @@ import {
 } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
+import { Button } from "@/shared/ui/button";
 import LangIcon from "../LangIcon";
 import { Close } from "../Icons";
 import { PgExplorer, PgTheme } from "../../utils";
@@ -83,7 +83,8 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
             <Name>{fileName}</Name>
             <Button
               ref={closeButtonRef}
-              kind="icon"
+              variant="ghost"
+              size="icon-sm"
               onClick={closeFile}
               title="Close (Alt+W)"
             >
@@ -123,11 +124,6 @@ const Wrapper = styled.div<
     & button {
       ${!isCurrent && "opacity: 0;"}
       margin: 0 0.25rem 0 0.5rem;
-
-      & svg {
-        width: 0.875rem;
-        height: 0.875rem;
-      }
     }
 
     &:hover button {

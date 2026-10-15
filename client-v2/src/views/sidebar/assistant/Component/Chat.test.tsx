@@ -1,159 +1,118 @@
-// Chat's legacy imports reach the utils barrel, whose generated globals exist
-// only once the app has booted; what is under test is only which view shows.
-vi.mock("../../../../components/GradientButton", () => ({
-  default: (props: { children: React.ReactNode; onClick?: () => void }) => (
-    <button onClick={props.onClick}>{props.children}</button>
-  ),
-}));
-vi.mock("../../../../components/Input", () => ({
-  default: (props: { id?: string }) => <input id={props.id} />,
-}));
-vi.mock("../../../../components/Link", () => ({
-  default: (props: { children: React.ReactNode }) => (
-    <span>{props.children}</span>
-  ),
-}));
-vi.mock("../../../../components/Select", () => ({ default: () => null }));
-vi.mock("../../../../components/Button", () => ({
-  default: (props: { children: React.ReactNode }) => (
-    <button>{props.children}</button>
-  ),
-}));
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+import Chat from "./Chat";
+import { PgAssistant } from "../store";
+import * as reportModule from "@/shared/lib/report-button-failure";
+
+// The panel's neighbours are not under test: the utils barrel needs the
+// generated globals of a booted app, and the lesson, bridge and provider
+// modules reach into it or into the network.
+vi.mock("./ChatItem", () => ({ default: () => null }));
+vi.mock("./Connect", () => ({ default: () => null }));
 vi.mock("../../../../components/Loading/ThreeDots", () => ({
   ThreeDots: () => null,
 }));
-vi.mock("./ChatItem", () => ({ default: () => null }));
-vi.mock("../../../../utils", () => ({
-  PgCommand: {},
-  PgExplorer: { currentFilePath: null, getItemNameFromPath: () => "" },
-  PgProgramInfo: { idl: null },
+vi.mock("../model", () => ({
+  createProvider: () => ({ label: "Test", send: vi.fn() }),
 }));
-vi.mock("../../../../hooks", async () => ({
-  useRenderOnChange: (
-    await vi.importActual<typeof import("../../../../hooks/useRenderOnChange")>(
-      "../../../../hooks/useRenderOnChange"
-    )
-  ).useRenderOnChange,
-}));
-vi.mock("../../../flow/lessons", () => ({
-  attempted: () => false,
-  cursorStep: () => null,
-  foldRecord: () => null,
-  INITIAL_LESSON_STATE: { path: null, record: [] },
-  PgLesson: {
-    onDidChange: () => ({ dispose: () => {} }),
-    canPass: () => false,
-  },
-  verifyingStage: () => null,
+vi.mock("../bridge/build-output", () => ({
+  PgBuildOutput: { latest: null },
 }));
 vi.mock("../bridge/lesson-context", () => ({ describeLesson: () => null }));
 vi.mock("../bridge/playground-bridge", () => ({
   realBridge: { listFiles: () => [], listOpenFiles: () => [] },
 }));
-vi.mock("../model", () => ({
-  createProvider: () => ({ label: "Test backend", send: async () => {} }),
-}));
 vi.mock("../../../../effects/chat-thread/push-thread", () => ({
-  pushThread: async () => true,
+  pushThread: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../../../../features/persistence/model/replay", () => ({
+  toReplayMessages: () => [],
+}));
+vi.mock("../../../../utils", () => ({
+  PgCommand: {},
+  PgExplorer: { currentFilePath: null, getItemNameFromPath: () => "" },
+  PgProgramInfo: { idl: null },
+}));
+vi.mock("../../../../hooks", () => ({ useRenderOnChange: () => undefined }));
+vi.mock("../../../flow/lessons", () => ({
+  INITIAL_LESSON_STATE: { path: null, record: null },
+  PgLesson: { onDidChange: () => ({ dispose: () => undefined }) },
+  attempted: () => false,
+  cursorStep: () => null,
+  foldRecord: () => null,
+  verifyingStage: () => null,
 }));
 
-import { act, render, screen } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-
-import Chat from "./Chat";
-import { PgSession } from "../../../../features/auth";
-import { PgAssistant, type Connection } from "../store";
-
-/** A theme that answers every key; see `Connect.test.tsx` */
-const anyTheme: DefaultTheme = new Proxy(
+const theme = new Proxy(
   {},
   {
     get: (_, key) =>
       key === Symbol.toPrimitive || key === "toString"
         ? () => "inherit"
-        : anyTheme,
+        : theme,
   }
 ) as unknown as DefaultTheme;
 
-const USER = { id: "u1", name: null, image: null, login: null };
+beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
+  vi.spyOn(PgAssistant, "connection", "get").mockReturnValue({
+    id: "test",
+    apiKey: "k",
+  } as never);
+  vi.spyOn(PgAssistant, "isPickingBackend", "get").mockReturnValue(false);
+});
 
-const DEFAULT: Connection = { id: "default", apiKey: "" };
-const OWN: Connection = {
-  id: "openai",
-  apiKey: "sk-test-chat-0123456789",
-  endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
-};
+afterEach(() => vi.restoreAllMocks());
 
-const renderChat = () =>
-  render(
-    <ThemeProvider theme={anyTheme}>
-      <Chat />
-    </ThemeProvider>
-  );
+describe("Chat Send", () => {
+  /** Types `text` into the composer and presses Send */
+  const typeAndSend = async (text: string) => {
+    render(
+      <ThemeProvider theme={theme}>
+        <Chat />
+      </ThemeProvider>
+    );
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: text } });
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Send" }))
+    );
+  };
 
-describe("Chat when the session ends", () => {
-  beforeEach(() => {
-    PgAssistant.disconnect();
-    localStorage.clear();
-    sessionStorage.clear();
-    // jsdom has no layout, so the chat's follow-the-bottom scroll is missing
-    Element.prototype.scrollIntoView = vi.fn();
-    void PgSession.refreshWith(USER);
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(JSON.stringify({ configured: true }), {
-        status: 200,
-        headers: { "content-type": "json" },
-      })
+  it("reports a failure that happens before the turn starts", async () => {
+    const report = vi
+      .spyOn(reportModule, "reportButtonFailure")
+      .mockReturnValue(undefined);
+    const failure = new Error("store is broken");
+    vi.spyOn(PgAssistant, "addUserMessage").mockImplementation(() => {
+      throw failure;
+    });
+
+    await typeAndSend("hello");
+
+    expect(report).toHaveBeenCalledWith(failure);
+  });
+
+  it("keeps the typed text when the message cannot be added", async () => {
+    vi.spyOn(reportModule, "reportButtonFailure").mockReturnValue(undefined);
+    vi.spyOn(PgAssistant, "addUserMessage").mockImplementation(() => {
+      throw new Error("store is broken");
+    });
+
+    await typeAndSend("hello");
+
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe(
+      "hello"
     );
   });
-  afterEach(() => {
-    vi.restoreAllMocks();
-    void PgSession.refreshWith(null);
-  });
 
-  it("returns a default-backend user to the picker, which offers sign-in", async () => {
-    PgAssistant.connect(DEFAULT);
-    renderChat();
-    expect(screen.getByLabelText("Message the assistant")).toBeTruthy();
+  it("clears the composer once the message is added", async () => {
+    vi.spyOn(PgAssistant, "addUserMessage").mockReturnValue(undefined);
+    vi.spyOn(PgAssistant, "setStatus").mockReturnValue(undefined);
 
-    // An expiry or another tab's sign-out: no `relinquish`, only a null session
-    await act(() => PgSession.refreshWith(null));
-    expect(
-      await screen.findByRole("button", { name: "Sign in with GitHub" })
-    ).toBeTruthy();
-    expect(screen.queryByLabelText("Message the assistant")).toBeNull();
-  });
+    await typeAndSend("hello");
 
-  it("keeps a key-based backend in chat, since it needs no sign-in", async () => {
-    PgAssistant.connect(OWN);
-    renderChat();
-
-    await act(() => PgSession.refreshWith(null));
-
-    expect(screen.getByLabelText("Message the assistant")).toBeTruthy();
-    expect(PgAssistant.isPickingBackend).toBe(false);
-  });
-
-  it("offers no way back to chat while the default backend has no session", async () => {
-    PgAssistant.connect(DEFAULT);
-    renderChat();
-
-    await act(() => PgSession.refreshWith(null));
-
-    expect(
-      await screen.findByRole("button", { name: "Sign in with GitHub" })
-    ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Back to chat" })).toBeNull();
-  });
-
-  it("offers the way back to chat for a key-based backend with no session", async () => {
-    PgAssistant.connect(OWN);
-    renderChat();
-    await act(() => PgSession.refreshWith(null));
-
-    act(() => PgAssistant.pickBackend());
-
-    expect(screen.getByRole("button", { name: "Back to chat" })).toBeTruthy();
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
   });
 });

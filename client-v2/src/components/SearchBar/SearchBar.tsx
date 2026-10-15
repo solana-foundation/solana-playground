@@ -10,7 +10,7 @@ import {
 } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
+import { Button } from "@/shared/ui/button";
 import Input, { InputProps } from "../Input";
 import { Close, PointedArrow, Search } from "../Icons";
 import { SpinnerWithBg } from "../Loading";
@@ -363,26 +363,29 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
         />
 
         {props.value && (
-          <InputCloseButton
-            kind="no-border"
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Clear search"
+            className={`absolute inset-y-0 my-auto ${INPUT_CLOSE_BUTTON_SIDE[searchButtonPosition]}`}
             onClick={() => {
               setInputValue("", { focus: true });
               setSelectedItems({ completed: [], pending: [] });
               setIsVisible(true);
             }}
-            position={searchButtonPosition}
           >
             <Close />
-          </InputCloseButton>
+          </Button>
         )}
 
-        <SearchButton
-          kind="icon"
+        <Button
+          variant="ghost"
+          aria-label="Search"
+          className={`absolute h-full w-(--search-button-width) px-0 ${SEARCH_BUTTON_SIDE[searchButtonPosition]}`}
           onClick={searchTopResult}
-          position={searchButtonPosition}
         >
           <Search />
-        </SearchButton>
+        </Button>
       </SearchInputWrapper>
 
       {(filteredItems || itemState.Component) && (
@@ -391,21 +394,29 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
             <SpinnerWithBg loading={loading}>
               {itemState.isInSubSearch && (
                 <SubSearchTopWrapper>
-                  <GoBackButton
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Back"
+                    className="[&_svg:not([class*='size-'])]:size-5"
                     onClick={() => {
                       setItemState({ items, isInSubSearch: false });
                       setSelectedItems((items) => ({ ...items, pending: [] }));
                       inputRef.current?.focus();
                     }}
-                    kind="no-border"
                   >
                     <PointedArrow rotate="180deg" />
-                  </GoBackButton>
+                  </Button>
 
                   {itemState.closeButton && (
-                    <SubSearchCloseButton kind="icon" onClick={reset}>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label="Close"
+                      onClick={reset}
+                    >
                       <Close />
-                    </SubSearchCloseButton>
+                    </Button>
                   )}
                 </SubSearchTopWrapper>
               )}
@@ -463,30 +474,18 @@ const SearchInput = styled(Input)<SearchButtonPosition>`
   `}
 `;
 
-const InputCloseButton = styled(Button)<SearchButtonPosition>`
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  margin: auto;
-  padding: 0.25rem;
-  right: ${({ position }) => {
-    return position === "left"
-      ? "0.25rem"
-      : "calc(var(--search-button-width) + 0.25rem)";
-  }};
-`;
+/* Both maps are keyed by the search button's position, not by where the
+   button they place sits: with the search button on the left, the clear
+   button goes to the right edge. Written out so Tailwind sees the classes. */
+const INPUT_CLOSE_BUTTON_SIDE = {
+  left: "right-1",
+  right: "right-[calc(var(--search-button-width)+0.25rem)]",
+} as const;
 
-const SearchButton = styled(Button)<SearchButtonPosition>`
-  position: absolute;
-  width: var(--search-button-width);
-  height: 100%;
-  ${({ position }) => {
-    const opposite = position === "left" ? "right" : "left";
-    return `${position}: 0;
-    border-top-${opposite}-radius: 0;
-    border-bottom-${opposite}-radius: 0;`;
-  }}
-`;
+const SEARCH_BUTTON_SIDE = {
+  left: "left-0 rounded-r-none",
+  right: "right-0 rounded-l-none",
+} as const;
 
 const DropdownWrapper = styled.div<{ isCustomComponent: boolean }>`
   ${({ isCustomComponent, theme }) => css`
@@ -517,15 +516,6 @@ const SubSearchTopWrapper = styled.div`
     background: ${theme.components.input.bg};
   `}
 `;
-
-const GoBackButton = styled(Button)`
-  & svg {
-    width: 1.25rem;
-    height: 1.25rem;
-  }
-`;
-
-const SubSearchCloseButton = styled(Button)``;
 
 const DropdownItem = styled.div<{
   isSelected: boolean;

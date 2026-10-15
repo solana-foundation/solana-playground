@@ -1,10 +1,10 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { BrandButton } from "@/shared/ui/brand-button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import Img from "../../../components/Img";
 import Input from "../../../components/Input";
-import GradientButton from "../../../components/GradientButton";
 import { PgExplorer, PgFramework, PgView, PgTheme } from "../../../utils";
 
 /**
@@ -19,17 +19,24 @@ const StartFromScratch: FC<React.PropsWithChildren<unknown>> = () => {
     PgFramework.all[0]?.name
   );
   const [name, setName] = useState("");
-  const [error, setError] = useState("");
+  // A bad name blocks Start until it is edited; a failed creation does not,
+  // so a press after it is a retry
+  const [nameError, setNameError] = useState("");
+  const [createError, setCreateError] = useState("");
+  // Off while a project is being made, so a second press cannot make it twice
+  const [creating, setCreating] = useState(false);
 
   const create = async () => {
     if (!framework) return;
 
     const projectName = name.trim() || defaultName(framework);
     if (!PgExplorer.isWorkspaceNameValid(projectName)) {
-      setError("Invalid project name");
+      setNameError("Invalid project name");
       return;
     }
 
+    setCreateError("");
+    setCreating(true);
     try {
       const { getDefaultFiles, defaultOpenFile } = PgFramework.get(framework);
       const { files } = await getDefaultFiles();
@@ -39,7 +46,11 @@ const StartFromScratch: FC<React.PropsWithChildren<unknown>> = () => {
       });
       PgView.setModal(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create project");
+      setCreateError(
+        e instanceof Error ? e.message : "Could not create project"
+      );
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -74,20 +85,21 @@ const StartFromScratch: FC<React.PropsWithChildren<unknown>> = () => {
           value={name}
           onChange={(e) => {
             setName(e.target.value);
-            setError("");
+            setNameError("");
+            setCreateError("");
           }}
-          error={error}
-          setError={setError}
+          error={nameError || createError}
           placeholder={framework ? defaultName(framework) : "project name"}
           aria-label="Project name"
         />
-        <GradientButton
-          kind="primary"
-          disabled={!!error || !framework}
+        <BrandButton
+          type="button"
+          disabled={!!nameError || !framework || creating}
+          aria-busy={creating || undefined}
           onClick={create}
         >
           Start &rarr;
-        </GradientButton>
+        </BrandButton>
       </Controls>
     </Row>
   );

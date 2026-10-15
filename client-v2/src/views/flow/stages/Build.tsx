@@ -6,11 +6,13 @@ import { parseBuildReport } from "./build-report";
 import type { BuildDiagnostic, BuildReport } from "./build-report";
 import { isRestoredBuild, ownOutput } from "./build-surface";
 import { humanize } from "./humanize";
-import Button from "../../../components/Button";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
-import GradientButton from "../../../components/GradientButton";
 import { PgAssistant } from "../../sidebar/assistant/store";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { BrandButton } from "@/shared/ui/brand-button";
+import { Button } from "@/shared/ui/button";
 import { PgFlow } from "../state/stage";
 import type { FlowState } from "../state/stage";
 import {
@@ -137,17 +139,18 @@ const Build = () => {
             compiler's report is no longer here. Build again to see it.
           </Muted>
           <Actions>
-            <Button
-              kind="primary"
-              disabled={building}
+            <AsyncButton
+              loading={building}
+              loadingText="Building..."
               onClick={() => PgCommand.build.execute()}
+              onError={reportButtonFailure}
             >
-              {building ? "Building..." : "Build"}
-            </Button>
+              Build
+            </AsyncButton>
             {!failed && (
-              <GradientButton onClick={() => PgFlow.setStage("deploy")}>
+              <BrandButton onClick={() => PgFlow.setStage("deploy")}>
                 Continue to Deploy
-              </GradientButton>
+              </BrandButton>
             )}
           </Actions>
         </Card>
@@ -180,13 +183,14 @@ const Build = () => {
           under Settings -&gt; Build server URL.
         </Muted>
         <Actions>
-          <Button
-            kind="primary"
-            disabled={building}
+          <AsyncButton
+            loading={building}
+            loadingText="Building..."
             onClick={() => PgCommand.build.execute()}
+            onError={reportButtonFailure}
           >
-            {building ? "Building..." : "Retry build"}
-          </Button>
+            Retry build
+          </AsyncButton>
         </Actions>
       </Surface>
     );
@@ -194,7 +198,7 @@ const Build = () => {
 
   // Also reached while the very first build is in flight: there is no
   // previous surface to hold onto, so the empty state itself says
-  // "Building..." instead of offering a live Build button mid-run.
+  // "Building..." and its Build button waits, disabled, until the run ends.
   if (!own) {
     return (
       <Surface>
@@ -222,13 +226,14 @@ const Build = () => {
           )}
         </Muted>
         <Actions>
-          <Button
-            kind="primary"
-            disabled={building}
+          <AsyncButton
+            loading={building}
+            loadingText="Building..."
             onClick={() => PgCommand.build.execute()}
+            onError={reportButtonFailure}
           >
-            {building ? "Building..." : "Build"}
-          </Button>
+            Build
+          </AsyncButton>
         </Actions>
       </Surface>
     );
@@ -264,13 +269,17 @@ const Build = () => {
           </StatusRow>
           <Muted>The IDL below reflects this build. Deploy when ready.</Muted>
           <Actions>
-            <GradientButton onClick={() => PgFlow.setStage("deploy")}>
+            <BrandButton onClick={() => PgFlow.setStage("deploy")}>
               Continue to Deploy
-            </GradientButton>
+            </BrandButton>
             <IdlActions showGenerate />
-            <Button onClick={() => PgFramework.exportWorkspace()}>
+            <AsyncButton
+              variant="outline"
+              onClick={() => PgFramework.exportWorkspace()}
+              onError={reportButtonFailure}
+            >
               Export project
-            </Button>
+            </AsyncButton>
           </Actions>
         </Card>
       </Surface>
@@ -314,13 +323,15 @@ const Build = () => {
           <Headline>Build failed</Headline>
           <Meta>{meta}</Meta>
         </HeaderText>
-        <Button
-          kind="outline"
-          disabled={building}
+        <AsyncButton
+          variant="outline"
+          loading={building}
+          loadingText="Building..."
           onClick={() => PgCommand.build.execute()}
+          onError={reportButtonFailure}
         >
-          {building ? "Building..." : "Rebuild"}
-        </Button>
+          Rebuild
+        </AsyncButton>
       </HeaderRow>
 
       <CardList>
@@ -333,7 +344,7 @@ const Build = () => {
             </Explanation>
             <CardActions>
               <CardActionsLeft>
-                <GradientButton
+                <BrandButton
                   onClick={() =>
                     PgAssistant.requestPrompt(
                       "Explain this build failure and propose a fix:\n" +
@@ -342,7 +353,7 @@ const Build = () => {
                   }
                 >
                   Fix with assistant
-                </GradientButton>
+                </BrandButton>
               </CardActionsLeft>
               {compilerToggle}
             </CardActions>
@@ -394,14 +405,15 @@ const Build = () => {
                   {/* Gradient is reserved for one CTA per screen; only the
                       first card gets it, the rest use a plain `Button`. */}
                   {i === 0 ? (
-                    <GradientButton onClick={fix}>
-                      Fix with assistant
-                    </GradientButton>
+                    <BrandButton onClick={fix}>Fix with assistant</BrandButton>
                   ) : (
-                    <Button onClick={fix}>Fix with assistant</Button>
+                    <Button variant="outline" onClick={fix}>
+                      Fix with assistant
+                    </Button>
                   )}
                   {d.file && (
                     <Button
+                      variant="outline"
                       onClick={() => PgExplorer.openFile(d.file as string)}
                     >
                       Open in editor

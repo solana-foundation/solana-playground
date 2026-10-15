@@ -2,7 +2,7 @@ import { SetStateAction, useCallback } from "react";
 import styled, { css } from "styled-components";
 
 import Tab from "./Tab";
-import Button from "../Button";
+import { Button } from "@/shared/ui/button";
 import Dnd from "../Dnd";
 import Img from "../Img";
 import { PgExplorer, PgTheme, PgView, PgWallet } from "../../utils";
@@ -80,8 +80,9 @@ const Wallet = () => {
     <WalletWrapper>
       <Button
         onClick={() => (PgWallet.show = !PgWallet.show)}
-        kind="icon"
-        fontWeight="bold"
+        variant="ghost"
+        size="sm"
+        className="rounded-r-none bg-background"
       >
         <Img src="/icons/sidebar/wallet.png" alt="Wallet" />
         Wallet
@@ -96,12 +97,6 @@ const WalletWrapper = styled.div`
     align-items: center;
 
     & > button {
-      background: ${theme.colors.default.bgPrimary};
-      border-top-left-radius: ${theme.default.borderRadius};
-      border-bottom-left-radius: ${theme.default.borderRadius};
-      border-top-right-radius: 0;
-      border-bottom-right-radius: 0;
-
       & img {
         filter: invert(0.5);
         margin-right: 0.375rem;

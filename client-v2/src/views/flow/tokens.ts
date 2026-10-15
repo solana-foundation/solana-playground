@@ -16,7 +16,7 @@ export const BOTTOM_BAR_PX = 28;
 export const BOTTOM_BAR_HEIGHT = `${BOTTOM_BAR_PX}px`;
 
 /**
- * The product's gradient token, the same one `GradientButton` paints with
+ * The product's gradient token, the same one `BrandButton`'s ring paints with
  * (logomark, stepper active dot, the one decisive CTA per view).
  */
 export const GRADIENT = "var(--gradient-product)";

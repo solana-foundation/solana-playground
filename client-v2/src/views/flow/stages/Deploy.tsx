@@ -2,9 +2,7 @@ import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
 import IdlActions from "./IdlActions";
-import Button from "../../../components/Button";
 import Link from "../../../components/Link";
-import GradientButton from "../../../components/GradientButton";
 import {
   useBlockExplorer,
   useProgramInfo,
@@ -18,10 +16,21 @@ import {
   PgProgramInfo,
   PgTheme,
 } from "../../../utils";
+import { BrandButton } from "@/shared/ui/brand-button";
+import { Button } from "@/shared/ui/button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { PgDeployHistory } from "../state/deploy-history";
 import type { DeployRecord } from "../state/deploy-history";
 import { PgFlow } from "../state/stage";
 import type { FlowState } from "../state/stage";
+
+/** Why the Deploy button is off, for its tooltip; undefined when it is on */
+const deployBlockedReason = (built: boolean, deploying: boolean) => {
+  if (!built) return "Build successfully first";
+  if (deploying) return "A deploy is already running";
+  return undefined;
+};
 
 const Deploy = () => {
   const [flow, setFlow] = useState<FlowState>(PgFlow.state);
@@ -94,21 +103,16 @@ const Deploy = () => {
       )}
 
       <Actions>
-        <GradientButton
+        <BrandButton
           disabled={!built || deploying}
-          title={
-            !built
-              ? "Build successfully first"
-              : deploying
-              ? "A deploy is already running"
-              : undefined
-          }
+          aria-busy={deploying || undefined}
+          title={deployBlockedReason(built, deploying)}
           onClick={() => {
             // Interact's deployment switcher may have pointed the project
             // at an imported id; redeploying always targets the project's
             // own key, never whatever Interact last selected.
             PgProgramInfo.update({ customPk: null });
-            PgCommand.deploy.execute();
+            PgCommand.deploy.execute().catch(reportButtonFailure);
           }}
         >
           {deploying
@@ -118,7 +122,7 @@ const Deploy = () => {
             : latest
             ? `Redeploy to ${cluster}`
             : `Deploy to ${cluster}`}
-        </GradientButton>
+        </BrandButton>
         <IdlActions showUpload />
       </Actions>
       {built && !latest && programInfo.pk && (
@@ -131,7 +135,10 @@ const Deploy = () => {
           <Row>
             <Key>Program id</Key>
             <Mono title={latest.programId}>{latest.programId}</Mono>
-            <Button.Copy copyText={latest.programId} />
+            <CopyButton
+              value={latest.programId}
+              onError={reportButtonFailure}
+            />
             <Link
               href={explorer.getAddressUrl(latest.programId)}
               aria-label={`View latest deployment (${latest.programId}) on Explorer`}
@@ -185,7 +192,10 @@ const Deploy = () => {
             <Time>{new Date(latest.at).toLocaleString()}</Time>
           </Row>
           <Actions>
-            <Button onClick={() => PgFlow.setStage("interact")}>
+            <Button
+              variant="outline"
+              onClick={() => PgFlow.setStage("interact")}
+            >
               Interact
             </Button>
           </Actions>

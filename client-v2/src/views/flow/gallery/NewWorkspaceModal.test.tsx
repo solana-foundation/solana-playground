@@ -15,15 +15,6 @@ vi.mock("../../../utils", () => ({
 vi.mock("@/widgets/overlays", () => ({
   ModalFrame: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
-vi.mock("../../../components/Button", () => ({
-  default: ({
-    children,
-    onClick,
-  }: {
-    children: React.ReactNode;
-    onClick: () => void;
-  }) => <button onClick={onClick}>{children}</button>,
-}));
 vi.mock("./StartFromScratch", () => ({ default: () => null }));
 vi.mock("./TutorialsTab", () => ({
   default: () => null,

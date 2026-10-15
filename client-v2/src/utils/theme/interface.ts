@@ -1,7 +1,6 @@
 import { StandardProperties } from "csstype";
 import { ITerminalOptions as XtermOptions } from "xterm";
 
-import { ButtonKind } from "../../components/Button";
 import { TextKind } from "../../components/Text";
 import { AllRequired, ChildRequired, NestedRequired } from "../types";
 
@@ -84,9 +83,6 @@ export interface ThemeParam {
 
   /** Override the component defaults */
   components?: {
-    /** Button component */
-    button?: OverridableComponent<ButtonKind>;
-
     /** Card component */
     card?: DefaultComponent;
 
@@ -251,12 +247,12 @@ export interface ThemeParam {
           /** Send section foldable title text */
           title?: DefaultComponent;
           /** Expanded send component */
-          expanded?: ExtendibleComponent<"input" | "sendButton">;
+          expanded?: ExtendibleComponent<"input">;
         }>;
         /** Transaction history section */
         transactions?: ExtendibleComponent<{
           /** Transactions title */
-          title?: ExtendibleComponent<"text" | "refreshButton">;
+          title?: ExtendibleComponent<"text">;
           /** Transactions table */
           table?: ExtendibleComponent<{
             /** Transactions table header */
@@ -287,9 +283,7 @@ export interface ThemeParam {
             /** Resources title */
             title?: DefaultComponent;
             /** Resource card */
-            card?: ExtendibleComponent<
-              "image" | "title" | "description" | "button"
-            >;
+            card?: ExtendibleComponent<"image" | "title" | "description">;
           }>;
           /** Tutorials section */
           tutorials?: ExtendibleComponent<"title" | "card">;
@@ -442,7 +436,7 @@ type ExtendibleComponents =
   | "wallet";
 
 /** Components that use `OverridableComponent` type */
-type OverridableComponents = "button" | "text";
+type OverridableComponents = "text";
 
 /** Theme to be used while setting the defaults internally */
 export type ThemeInternal = Omit<ImportableTheme, "import"> &
@@ -537,7 +531,7 @@ type ExtendibleComponent<
 
 /** A component with multiple kinds */
 type OverridableComponent<T extends string> = {
-  /** Default StandardProperties values of the Button component */
+  /** Default StandardProperties values of the component */
   default?: DefaultComponent;
   /** Override the defaults with specificity */
   overrides?: {

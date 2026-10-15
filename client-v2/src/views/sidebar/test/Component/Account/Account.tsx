@@ -4,7 +4,6 @@ import styled from "styled-components";
 import CodeResult from "../CodeResult";
 import InputLabel from "../InputLabel";
 import Interaction from "../Interaction";
-import Button from "../../../../../components/Button";
 import Foldable from "../../../../../components/Foldable";
 import SearchBar from "../../../../../components/SearchBar";
 import Text from "../../../../../components/Text";
@@ -12,6 +11,8 @@ import { SpinnerWithBg } from "../../../../../components/Loading";
 import { PgCommon, PgWeb3 } from "../../../../../utils";
 import { PgProgramInteraction } from "../../../../../utils/program-interaction";
 import { useWallet } from "../../../../../hooks";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 interface AccountProps {
   accountName: string;
@@ -83,15 +84,22 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
       </InputWrapper>
 
       <ButtonsWrapper>
-        <Button
+        <AsyncButton
+          variant="outline"
           onClick={fetchOne}
+          onError={reportButtonFailure}
           disabled={!wallet || fetchAllLoading || !address || addressError}
         >
           Fetch
-        </Button>
-        <Button onClick={fetchAll} disabled={!wallet || fetchOneLoading}>
+        </AsyncButton>
+        <AsyncButton
+          variant="outline"
+          onClick={fetchAll}
+          onError={reportButtonFailure}
+          disabled={!wallet || fetchOneLoading}
+        >
           Fetch All
-        </Button>
+        </AsyncButton>
       </ButtonsWrapper>
 
       {(fetchedData || fetchError) && (

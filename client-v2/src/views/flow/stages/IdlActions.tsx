@@ -1,9 +1,10 @@
 import { ChangeEvent, FC, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../components/Button";
+import ImportButton from "../../../components/ImportButton";
+import { Button } from "@/shared/ui/button";
 import { useRenderOnChange } from "../../../hooks";
-import { PgProgramInfo } from "../../../utils";
+import { PgCommon, PgProgramInfo } from "../../../utils";
 
 interface IdlActionsProps {
   showGenerate?: boolean;
@@ -45,24 +46,26 @@ const IdlActions: FC<React.PropsWithChildren<IdlActionsProps>> = ({
   return (
     <Row>
       {showGenerate && idl && (
-        <Button.Export href={idl} fileName="idl.json">
-          Download IDL
-        </Button.Export>
+        <Button asChild variant="outline">
+          <a href={PgCommon.getDataUrl(idl)} download="idl.json">
+            Download IDL
+          </a>
+        </Button>
       )}
       {showGenerate && !idl && (
-        <Button disabled title="Build successfully first">
+        <Button variant="outline" disabled title="Build successfully first">
           Download IDL
         </Button>
       )}
       {showUpload && (
         <>
-          <Button.Import
+          <ImportButton
             accept=".json"
             title="Replaces the IDL this browser uses in Interact -- nothing is written on-chain"
             onImport={handleUpload}
           >
             Load IDL file
-          </Button.Import>
+          </ImportButton>
           {note && <Note $error={note.error}>{note.text}</Note>}
         </>
       )}

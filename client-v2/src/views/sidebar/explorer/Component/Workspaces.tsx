@@ -1,6 +1,8 @@
 import styled from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
 import {
   Select,
   SelectContent,
@@ -10,7 +12,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import Button from "../../../../components/Button";
 import Text from "../../../../components/Text";
 import {
   CreateWorkspace,
@@ -58,41 +59,57 @@ const WorkspaceButtons = () => {
 
   return (
     <ButtonsWrapper>
-      <Button onClick={handleCreate} kind="icon" title="Create">
+      <WorkspaceButton onClick={handleCreate} title="Create">
         <Plus />
-      </Button>
+      </WorkspaceButton>
 
-      <Button onClick={handleRename} kind="icon" title="Rename">
+      <WorkspaceButton onClick={handleRename} title="Rename">
         <Edit />
-      </Button>
+      </WorkspaceButton>
 
-      <Button
+      <WorkspaceButton
         onClick={handleDelete}
-        kind="icon"
-        hoverColor="error"
         title="Delete"
+        className="hover:text-destructive"
       >
         <Trash />
-      </Button>
+      </WorkspaceButton>
 
-      <Button onClick={handleGithub} kind="icon" title="Import from Github">
+      <WorkspaceButton onClick={handleGithub} title="Import from Github">
         <Github />
-      </Button>
+      </WorkspaceButton>
 
-      <Button
+      <WorkspaceButton
         onClick={handleFsImport}
-        kind="icon"
         title="Import from local file system"
       >
         <ImportFile />
-      </Button>
+      </WorkspaceButton>
 
-      <Button onClick={handleFsExport} kind="icon" title="Export">
+      <WorkspaceButton onClick={handleFsExport} title="Export">
         <ExportFile />
-      </Button>
+      </WorkspaceButton>
     </ButtonsWrapper>
   );
 };
+
+/** An icon button whose click opens a modal and waits for it to close.
+    While it waits the spinner takes the icon's place, and the title stays
+    its accessible name. */
+export const WorkspaceButton = (
+  props: Omit<
+    React.ComponentProps<typeof AsyncButton>,
+    "onError" | "variant" | "size" | "loadingText"
+  > & { title: string }
+) => (
+  <AsyncButton
+    variant="ghost"
+    size="icon-sm"
+    onError={reportButtonFailure}
+    loadingText={<span className="sr-only">{props.title}</span>}
+    {...props}
+  />
+);
 
 const log = createLogger("explorer:workspaces");
 
@@ -196,9 +213,15 @@ const TemporaryWarning = () => {
       <Text icon={<Info color="info" />}>
         This is a temporary project, import it to persist changes.
       </Text>
-      <Button onClick={handleImport} leftIcon={<ImportWorkspace />} fullWidth>
+      <AsyncButton
+        variant="outline"
+        onClick={handleImport}
+        onError={reportButtonFailure}
+        className="w-full"
+      >
+        <ImportWorkspace data-icon="inline-start" />
         Import
-      </Button>
+      </AsyncButton>
     </TemporaryWarningWrapper>
   );
 };

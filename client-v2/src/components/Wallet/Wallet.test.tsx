@@ -61,7 +61,6 @@ vi.mock("./Send", () => ({ default: () => null }));
 vi.mock("./Settings", () => ({ default: () => null }));
 vi.mock("./Transactions", () => ({ default: () => null }));
 vi.mock("react-rnd", () => ({ Rnd: () => null }));
-vi.mock("../Button", () => ({ default: () => null }));
 vi.mock("../FadeIn", () => ({ default: () => null }));
 vi.mock("../ErrorBoundary", () => ({ default: () => null }));
 vi.mock("../Input", () => ({ default: () => null }));

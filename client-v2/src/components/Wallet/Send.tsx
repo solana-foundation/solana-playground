@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Input from "../Input";
 import Foldable from "../Foldable";
 import {
@@ -116,15 +117,16 @@ const SendExpanded = () => {
         }}
         placeholder="SOL amount"
       />
-      <ExpandedButton
+      <AsyncButton
         onClick={send}
+        onError={reportButtonFailure}
         disabled={disabled}
-        loading={{ text: "Sending..." }}
-        kind="primary-transparent"
-        fullWidth
+        loadingText="Sending..."
+        variant="ghost"
+        className="mb-1 w-full"
       >
         Send
-      </ExpandedButton>
+      </AsyncButton>
     </ExpandedWrapper>
   );
 };
@@ -138,14 +140,6 @@ const ExpandedWrapper = styled.div`
 const ExpandedInput = styled(Input)`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(theme.components.wallet.main.send.expanded.input)};
-  `}
-`;
-
-const ExpandedButton = styled(Button)`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.send.expanded.sendButton
-    )};
   `}
 `;
 

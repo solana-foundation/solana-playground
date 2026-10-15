@@ -1,8 +1,8 @@
 import { FC, useRef } from "react";
 import styled from "styled-components";
 
-import Button from "../Button";
 import Img from "../Img";
+import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,7 +78,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
         }}
       >
         <DropdownMenuTrigger asChild>
-          <Button kind="icon" title="More">
+          <Button variant="ghost" size="icon-sm" title="More">
             <ThreeDots />
           </Button>
         </DropdownMenuTrigger>

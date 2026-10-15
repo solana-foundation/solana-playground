@@ -1,7 +1,8 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { ModalFrame } from "@/widgets/overlays";
 import Text from "../../Text";
 import { Warning } from "../../Icons";
@@ -74,10 +75,22 @@ export const Setup = () => {
           </Text>
         </WarningTextWrapper>
         <WalletButtonsWrapper>
-          <Button onClick={handleExport} kind="primary-outline">
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onClick={handleExport}
+            onError={reportButtonFailure}
+          >
             Save keypair
-          </Button>
-          <Button onClick={handleImport}>Import keypair</Button>
+          </AsyncButton>
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onClick={handleImport}
+            onError={reportButtonFailure}
+          >
+            Import keypair
+          </AsyncButton>
         </WalletButtonsWrapper>
         {text && <KeypairText>{text}</KeypairText>}
       </Content>

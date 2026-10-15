@@ -11,10 +11,11 @@ import {
   Sub,
   Title,
 } from "./TutorialsTab";
-import Button from "../../../components/Button";
 import Img from "../../../components/Img";
 import { ImportCancelledError, PgGithub, PgView } from "../../../utils";
 import type { ImportProgress } from "../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 /** One entry of `public/programs/programs.json`. */
 export interface ProgramListing {
@@ -86,7 +87,10 @@ const ProgramsTab: FC<React.PropsWithChildren<ProgramsTabProps>> = ({
               <ProgressText>{getProgressText(progress)}</ProgressText>
             )}
           </Body>
-          <Button
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onError={reportButtonFailure}
             onClick={async () => {
               setError(null);
               setProgress({ repo: p.repo, loaded: 0, total: null });
@@ -110,7 +114,7 @@ const ProgramsTab: FC<React.PropsWithChildren<ProgramsTabProps>> = ({
             }}
           >
             Open
-          </Button>
+          </AsyncButton>
         </Card>
       ))}
     </Grid>

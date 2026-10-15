@@ -3,12 +3,13 @@ import styled from "styled-components";
 
 import FromSeed from "./FromSeed";
 import Label from "../InputLabel";
-import Button from "../../../../../components/Button";
 import SearchBar, {
   SearchBarItem,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
 import { PgCommon, PgWallet, PgWeb3 } from "../../../../../utils";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   GeneratableInstruction,
   Idl,
@@ -186,7 +187,7 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
             {...searchBarProps}
           />
           <CopyButtonWrapper>
-            <Button.Copy copyText={value} />
+            <CopyButton value={value} onError={reportButtonFailure} />
           </CopyButtonWrapper>
         </InputWithCopyButtonWrapper>
       </Row>
