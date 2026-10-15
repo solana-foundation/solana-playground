@@ -1,8 +1,16 @@
-import { useMemo } from "react";
 import styled from "styled-components";
 
+import { createLogger } from "@/shared/lib/logger";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
 import Button from "../../../../components/Button";
-import Select from "../../../../components/Select";
 import Text from "../../../../components/Text";
 import {
   CreateWorkspace,
@@ -86,68 +94,68 @@ const WorkspaceButtons = () => {
   );
 };
 
-const WorkspaceSelect = () => {
+const log = createLogger("explorer:workspaces");
+
+export const WorkspaceSelect = () => {
   const explorer = useExplorer();
 
-  const options = useMemo(() => {
-    const [tutorials, projects] = PgCommon.filterWithRemaining(
-      explorer.allWorkspaceNames!,
-      PgTutorial.isWorkspaceTutorial
-    );
+  const [tutorials, projects] = PgCommon.filterWithRemaining(
+    explorer.allWorkspaceNames!,
+    PgTutorial.isWorkspaceTutorial
+  );
 
-    const options = [
-      {
-        label: "Projects",
-        options: projects.map((name) => ({ label: name, value: name })),
-      },
-    ];
-    if (tutorials.length) {
-      options.push({
-        label: "Tutorials",
-        options: tutorials.map((name) => ({ label: name, value: name })),
-      });
-    }
+  const switchWorkspace = async (name: string) => {
+    if (name === explorer.currentWorkspaceName) return;
 
-    return options;
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [explorer.allWorkspaceNames!.length]);
-
-  const value = useMemo(() => {
-    for (const option of options) {
-      const val = option.options.find(
-        (option) => option.value === explorer.currentWorkspaceName
-      );
-      if (val) return val;
-    }
-  }, [explorer.currentWorkspaceName, options]);
+    // Calling `PgExplorer.switchWorkspace` for both tutorial and
+    // non-tutorial workspaces would be enough here, but we're manually
+    // opening the tutorial when needed to avoid editor flickering i.e.
+    // there is a small window just after the workspace switch, when the
+    // editor has just enough time to open the new workspace, but the
+    // `PgTutorial.open` has not yet run, which results in the user
+    // briefly seeing the last opened file of the tutorial before the
+    // loading screen kicks in.
+    //
+    // NOTE: If we ever add a loading transition for switching between
+    // workspaces, or even a delay before opening new workspace files in
+    // the editor, this check will no longer be necessary.
+    if (PgTutorial.isWorkspaceTutorial(name)) await PgTutorial.open(name);
+    else await PgExplorer.switchWorkspace(name);
+  };
 
   return (
-    <SelectWrapper>
-      <Select
-        options={options}
-        value={value}
-        onChange={async (props) => {
-          const name = props?.value!;
-          if (name === value?.value) return;
-
-          // Calling `PgExplorer.switchWorkspace` for both tutorial and
-          // non-tutorial workspaces would be enough here, but we're manually
-          // opening the tutorial when needed to avoid editor flickering i.e.
-          // there is a small window just after the workspace switch, when the
-          // editor has just enough time to open the new workspace, but the
-          // `PgTutorial.open` has not yet run, which results in the user
-          // briefly seeing the last opened file of the tutorial before the
-          // loading screen kicks in.
-          //
-          // NOTE: If we ever add a loading transition for switching between
-          // workspaces, or even a delay before opening new workspace files in
-          // the editor, this check will no longer be necessary.
-          if (PgTutorial.isWorkspaceTutorial(name)) await PgTutorial.open(name);
-          else await PgExplorer.switchWorkspace(name);
-        }}
-      />
-    </SelectWrapper>
+    <Select
+      value={explorer.currentWorkspaceName ?? ""}
+      onValueChange={(name) => {
+        switchWorkspace(name).catch((e) =>
+          log.error(e, { report: true, context: { workspace: name } })
+        );
+      }}
+    >
+      <SelectTrigger aria-label="Project" className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        <SelectGroup>
+          <SelectLabel>Projects</SelectLabel>
+          {projects.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        {tutorials.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Tutorials</SelectLabel>
+            {tutorials.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+      </SelectContent>
+    </Select>
   );
 };
 
@@ -178,12 +186,6 @@ const ButtonsWrapper = styled.div`
   display: flex;
   align-items: center;
   gap: 0 0.5rem;
-`;
-
-const SelectWrapper = styled.div`
-  & > select {
-    width: 100%;
-  }
 `;
 
 const TemporaryWarning = () => {

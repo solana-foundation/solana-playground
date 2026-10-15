@@ -825,7 +825,6 @@ export class PgTheme {
       ._text()
       ._svg()
       ._input()
-      ._select()
       ._tooltip()
       ._progressBar()
       ._uploadArea()
@@ -1063,77 +1062,6 @@ export class PgTheme {
       theme.colors.default.primary,
       "medium"
     )}`;
-
-    return this;
-  }
-
-  /** Set default select component */
-  private static _select() {
-    const select = this._getComponent("select");
-    const theme = this._themeReady;
-    const input = theme.components.input;
-
-    // Default
-    select.default ??= {};
-    select.default.fontSize ??= theme.font.code.size.small;
-
-    // Control
-    select.control ??= {};
-    select.control.bg ??= input.bg;
-    select.control.borderColor ??= theme.colors.default.border;
-    select.control.borderRadius ??= theme.default.borderRadius;
-    select.control.minHeight ??= "fit-content";
-    select.control.hover ??= {};
-    select.control.hover.borderColor ??= theme.colors.state.hover.color;
-    select.control.hover.cursor ??= "pointer";
-    select.control.focusWithin ??= {};
-    select.control.focusWithin.boxShadow ??= `0 0 0 1px ${alpha(
-      theme.colors.default.primary,
-      "high"
-    )}`;
-
-    // Menu
-    select.menu ??= {};
-    select.menu.bg ??= input.bg;
-    select.menu.color ??= input.color;
-    select.menu.borderRadius ??= input.borderRadius;
-
-    // Option
-    select.option ??= {};
-    select.option.bg ??= input.bg;
-    select.option.color ??= theme.colors.default.textSecondary;
-    select.option.cursor ??= "pointer";
-    // Option::before
-    select.option.before ??= {};
-    select.option.before.color ??= theme.colors.default.primary;
-    // Option:focus
-    select.option.focus ??= {};
-    select.option.focus.bg ??= theme.colors.state.hover.bg;
-    select.option.focus.color ??= theme.colors.default.primary;
-    // Option:active
-    select.option.active ??= {};
-    select.option.active.bg ??= theme.colors.state.hover.bg;
-
-    // Single Value
-    select.singleValue ??= {};
-    select.singleValue.bg ??= input.bg;
-    select.singleValue.color ??= input.color;
-
-    // Input
-    select.input ??= {};
-    select.input.color ??= input.color;
-
-    // Group Heading
-    select.groupHeading ??= {};
-    select.groupHeading.color ??= theme.colors.default.textSecondary;
-
-    // Dropdown Indicator
-    select.dropdownIndicator ??= {};
-    select.dropdownIndicator.padding ??= "0.25rem";
-
-    // Indicator Separator
-    select.indicatorSeparator ??= {};
-    select.indicatorSeparator.bg ??= theme.colors.default.textSecondary;
 
     return this;
   }

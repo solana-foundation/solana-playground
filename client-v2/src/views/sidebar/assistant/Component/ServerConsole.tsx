@@ -1,6 +1,7 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
+import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
 import { callTool, listTools, McpUnreachableError } from "../grounding";
@@ -182,18 +183,20 @@ const ServerConsole = ({
           {tools.length > 0 && (
             <>
               <Label htmlFor={`mcp-tool-${server.id}`}>TOOL</Label>
-              <Picker
+              <NativeSelect
+                size="sm"
+                className="w-full [&_select]:font-mono [&_select]:text-xs"
                 id={`mcp-tool-${server.id}`}
                 value={selected ?? ""}
                 onChange={(ev) => pick(ev.target.value)}
               >
-                <option value="">Pick a tool…</option>
+                <NativeSelectOption value="">Pick a tool…</NativeSelectOption>
                 {tools.map((tool) => (
-                  <option key={tool.name} value={tool.name}>
+                  <NativeSelectOption key={tool.name} value={tool.name}>
                     {tool.name}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </Picker>
+              </NativeSelect>
 
               {selected && (
                 <>
@@ -292,19 +295,6 @@ const Label = styled.label`
     color: ${theme.colors.default.textSecondary};
     font-size: ${theme.font.code.size.xsmall};
     letter-spacing: 0.06em;
-  `}
-`;
-
-const Picker = styled.select`
-  ${({ theme }) => css`
-    width: 100%;
-    padding: 0.3125rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font: inherit;
-    font-size: ${theme.font.code.size.small};
   `}
 `;
 

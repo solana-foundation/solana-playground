@@ -94,8 +94,10 @@ regression against 5.1 has misread this rule.
       Collapsible and the like) swapped app-wide (HOO-2058; parallel)
 - [ ] 5.4 Elements: buttons (BrandButton, AsyncButton, CopyButton, HelpTip)
       (HOO-2059; parallel)
-- [ ] 5.5 Elements: controls (Stepper, Segmented, Select, NativeSelect,
-      RadioGroup, Field, InputGroup) (HOO-2060; parallel)
+- [x] 5.5 Elements: controls (Stepper, Segmented, Select, NativeSelect,
+      RadioGroup, Field) swapped app-wide; react-select and
+      `components/Select` removed (HOO-2060; parallel; design.md, "Controls
+      (5.5)"; plan: [plans/5.5-controls.md](plans/5.5-controls.md))
 - [x] 5.6 Elements: menus and overlays (Dialog, Modal, DropdownMenu,
       ContextMenu, Popover, Drawer, Sonner) from the design system;
       react-toastify and the legacy `Menu`, `Modal`, `ModalBackdrop`,

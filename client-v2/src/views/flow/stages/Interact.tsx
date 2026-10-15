@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import IdlActions from "./IdlActions";
 import Test from "../../sidebar/test/Component/Test";
 import { PgExplorer, PgProgramInfo, PgWeb3 } from "../../../utils";
@@ -93,20 +94,24 @@ const Interact = () => {
         <ToolbarActions>
           <Label>
             Deployment
-            <Select
+            <NativeSelect
+              size="sm"
+              className="[&_select]:font-mono [&_select]:text-xs [&_select]:tabular-nums"
               value={selected ?? ""}
               onChange={(ev) => pick(ev.target.value)}
               disabled={history.length === 0}
             >
-              {history.length === 0 && <option value="">none yet</option>}
+              {history.length === 0 && (
+                <NativeSelectOption value="">none yet</NativeSelectOption>
+              )}
               {history.map((r, i) => (
-                <option key={r.id} value={r.id}>
+                <NativeSelectOption key={r.id} value={r.id}>
                   {i === 0 ? "latest \u00b7 " : ""}
                   {r.cluster} {"\u00b7"} {r.programId.slice(0, 6)}&hellip;{" "}
                   {"\u00b7"} {new Date(r.at).toLocaleTimeString()}
-                </option>
+                </NativeSelectOption>
               ))}
-            </Select>
+            </NativeSelect>
           </Label>
           <IdlActions showUpload />
         </ToolbarActions>
@@ -177,28 +182,6 @@ const Label = styled.label`
     gap: 0.5rem;
     font-size: ${theme.font.other.size.small};
     color: ${theme.colors.default.textSecondary};
-  `}
-`;
-
-const Select = styled.select`
-  ${({ theme }) => css`
-    padding: 0.375rem 0.5rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    background: ${theme.colors.default.bgSecondary};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.small};
-    font-variant-numeric: tabular-nums;
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: 1px;
-    }
   `}
 `;
 

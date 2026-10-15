@@ -170,18 +170,6 @@ export interface ThemeParam {
     /** Progress bar component */
     progressbar?: ExtendibleComponent<"indicator">;
 
-    /** Select component */
-    select?: ExtendibleComponent<
-      | "control"
-      | "menu"
-      | "option"
-      | "singleValue"
-      | "input"
-      | "groupHeading"
-      | "dropdownIndicator"
-      | "indicatorSeparator"
-    >;
-
     /** Skeleton component */
     skeleton?: DefaultComponent & {
       highlightColor?: Color;
@@ -447,7 +435,6 @@ type ExtendibleComponents =
   | "editor"
   | "markdown"
   | "progressbar"
-  | "select"
   | "tabs"
   | "terminal"
   | "tutorial"

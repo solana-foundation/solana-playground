@@ -68,6 +68,8 @@ existing code moves.
   reload, how it changes with screen width, and where the editor is read-only.
 - `client-v2-overlays`: menus, dialogs, tooltips and toasts: how they open,
   close and answer, where they sit on screen, and what they report.
+- `client-v2-controls`: how the development loop's switch, a choice of a few
+  and a select behave for the user, by pointer and by keyboard.
 
 ### Modified Capabilities
 

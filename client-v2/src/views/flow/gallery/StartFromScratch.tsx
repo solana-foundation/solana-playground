@@ -1,6 +1,7 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import Img from "../../../components/Img";
 import Input from "../../../components/Input";
 import GradientButton from "../../../components/GradientButton";
@@ -52,21 +53,19 @@ const StartFromScratch: FC<React.PropsWithChildren<unknown>> = () => {
         <Sub>A working starter you shape with the assistant.</Sub>
       </Text>
 
-      <Frameworks role="radiogroup" aria-label="Framework">
+      <Segmented
+        variant="gradient"
+        aria-label="Framework"
+        value={framework}
+        onValueChange={(f) => setFramework(f as FrameworkName)}
+      >
         {PgFramework.all.map((f) => (
-          <FrameworkOption
-            key={f.name}
-            type="button"
-            role="radio"
-            aria-checked={framework === f.name}
-            $active={framework === f.name}
-            onClick={() => setFramework(f.name)}
-          >
+          <SegmentedItem key={f.name} value={f.name}>
             <FrameworkIcon src={f.icon} $circle={f.circleImage} />
             {f.name}
-          </FrameworkOption>
+          </SegmentedItem>
         ))}
-      </Frameworks>
+      </Segmented>
 
       <Controls>
         {/* `Input` renders `error` as a message above itself, so a creation
@@ -154,45 +153,6 @@ const Sub = styled.div`
     margin-top: 0.125rem;
     color: ${theme.colors.default.textSecondary};
     font-size: ${theme.font.other.size.small};
-  `}
-`;
-
-const Frameworks = styled.div`
-  display: flex;
-  gap: 0.375rem;
-`;
-
-const FrameworkOption = styled.button<{ $active: boolean }>`
-  ${({ theme, $active }) => css`
-    display: flex;
-    align-items: center;
-    gap: 0.375rem;
-    padding: 0.375rem 0.625rem;
-    border: 1px solid
-      ${$active ? theme.colors.default.primary : theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    background: ${$active
-      ? PgTheme.alpha(theme.colors.default.primary, "high")
-      : "transparent"};
-    color: ${theme.colors.default.textPrimary};
-    font: inherit;
-    font-size: ${theme.font.other.size.small};
-    white-space: nowrap;
-    cursor: pointer;
-    transition: border-color ${theme.default.transition.duration.short}
-      ${theme.default.transition.type};
-
-    &:hover {
-      border-color: ${theme.colors.default.primary};
-    }
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      transition: none;
-    }
   `}
 `;
 
