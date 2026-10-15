@@ -1,4 +1,10 @@
-import { PgAssistant, turnProducedApproval, type ChatItem } from "./store";
+import {
+  KEY_NOT_FORGOTTEN,
+  PgAssistant,
+  turnProducedApproval,
+  type ChatItem,
+} from "./store";
+import { MIN_REDACTED_KEY_LENGTH, REDACTED_KEY } from "./model/redact-key";
 import { isDefaultBackendRemembered } from "./model/remembered-backend";
 import {
   MAX_MESSAGES_PER_THREAD,
@@ -9,6 +15,7 @@ import {
 // craco's webpack alias and in `vitest.config.ts`'s `resolve.alias`, and this
 // import is what fails when the vitest mapping drifts from the other two.
 import { PgFs } from "@/utils/explorer/fs";
+import { storedValues } from "../../../test-utils/stored-values";
 
 /** Storage writes are fired and forgotten; this waits for them to land */
 const settled = () => PgAssistant.whenPersisted();
@@ -458,6 +465,7 @@ describe("PgAssistant reply provenance", () => {
 describe("PgAssistant backend memory", () => {
   beforeEach(() => {
     localStorage.clear();
+    sessionStorage.clear();
     PgAssistant.disconnect();
   });
 
@@ -466,7 +474,7 @@ describe("PgAssistant backend memory", () => {
     expect(isDefaultBackendRemembered()).toBe(true);
   });
 
-  it("does not remember a backend the user had to bring a key for", () => {
+  it("does not remember a key-based backend as the default", () => {
     PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
     expect(isDefaultBackendRemembered()).toBe(false);
   });
@@ -612,9 +620,9 @@ describe("PgAssistant threads", () => {
       },
     ]);
 
-    // A reload leaves no connection behind -- it is in memory only -- so the
-    // first thing the user does is connect, and that must not be mistaken for
-    // switching away from a backend they were already talking to
+    // A reload starts with no connection in memory, so the first thing the
+    // user does is connect, and that must not be mistaken for switching away
+    // from a backend they were already talking to
     PgAssistant.disconnect();
     await PgAssistant.loadThread("t1");
     expect(PgAssistant.items).toHaveLength(1);
@@ -657,5 +665,102 @@ describe("PgAssistant threads", () => {
 
     await PgAssistant.loadThread("t1", true);
     expect(PgAssistant.items).toHaveLength(1);
+  });
+});
+
+describe("the user's own key", () => {
+  const KEY = "sk-test-store-0123456789";
+  const openai = {
+    id: "openai" as const,
+    apiKey: KEY,
+    endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
+  };
+
+  beforeEach(async () => {
+    PgAssistant.disconnect();
+    sessionStorage.clear();
+    localStorage.clear();
+    await PgAssistant.loadThread("own-key");
+  });
+
+  const errorTexts = () =>
+    PgAssistant.items.flatMap((item) =>
+      item.kind === "error" ? [item.text] : []
+    );
+
+  it("is kept for this tab and nowhere durable", async () => {
+    PgAssistant.connect(openai);
+    PgAssistant.addUserMessage("hello");
+    await settled();
+
+    expect(sessionStorage.getItem("assistant.connection")).toContain(KEY);
+    expect(JSON.stringify(storedValues(localStorage))).not.toContain(KEY);
+    expect(JSON.stringify(await PgChatStorage.read("own-key"))).not.toContain(
+      KEY
+    );
+  });
+
+  it("is redacted from a provider error before it is stored", async () => {
+    PgAssistant.connect(openai);
+    PgAssistant.addError(`401: Incorrect API key provided: ${KEY}. Retry.`);
+    await settled();
+
+    expect(JSON.stringify(PgAssistant.items)).not.toContain(KEY);
+    expect(JSON.stringify(PgAssistant.items)).toContain(REDACTED_KEY);
+    expect(JSON.stringify(await PgChatStorage.read("own-key"))).not.toContain(
+      KEY
+    );
+  });
+
+  it("is redacted from an error at exactly the minimum length", () => {
+    const apiKey = "a".repeat(MIN_REDACTED_KEY_LENGTH);
+    PgAssistant.connect({ id: "openai", apiKey, endpoint: openai.endpoint });
+    PgAssistant.addError(`rejected ${apiKey} here`);
+
+    expect(errorTexts()).toEqual([`rejected ${REDACTED_KEY} here`]);
+  });
+
+  it("is left alone in an error when it is one short of the minimum", () => {
+    const apiKey = "a".repeat(MIN_REDACTED_KEY_LENGTH - 1);
+    PgAssistant.connect({ id: "openai", apiKey, endpoint: openai.endpoint });
+    PgAssistant.addError(`rejected ${apiKey} here`);
+
+    expect(errorTexts()).toEqual([`rejected ${apiKey} here`]);
+  });
+
+  it("is forgotten on disconnect", () => {
+    PgAssistant.connect(openai);
+    PgAssistant.disconnect();
+    expect(sessionStorage.getItem("assistant.connection")).toBeNull();
+    expect(PgAssistant.items).toEqual([]);
+  });
+
+  it("tells the user to close the tab when disconnecting cannot remove it", async () => {
+    PgAssistant.connect(openai);
+    PgAssistant.addUserMessage("hello");
+    await settled();
+    // Neither the removal nor its blanking fallback goes through
+    for (const method of ["removeItem", "setItem"] as const) {
+      const original = Storage.prototype[method] as (...args: string[]) => void;
+      vi.spyOn(Storage.prototype, method).mockImplementation(function (
+        this: Storage,
+        ...args: string[]
+      ) {
+        if (this === sessionStorage) throw new Error("blocked");
+        original.apply(this, args);
+      } as never);
+    }
+
+    PgAssistant.disconnect();
+    await settled();
+    vi.restoreAllMocks();
+
+    expect(PgAssistant.items).toEqual([
+      expect.objectContaining({ kind: "notice", text: KEY_NOT_FORGOTTEN }),
+    ]);
+    // Shown in this tab only: the stored thread keeps its conversation
+    expect(JSON.stringify(await PgChatStorage.read("own-key"))).not.toContain(
+      KEY_NOT_FORGOTTEN
+    );
   });
 });

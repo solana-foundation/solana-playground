@@ -101,8 +101,8 @@ export const createAnthropicProvider = (
 
   const client = new Anthropic({
     apiKey,
-    // The key is the user's own and goes only to Anthropic. See
-    // docs/decisions.md -> D3 for why it is not persisted anywhere.
+    // The key is the user's own and goes only to Anthropic, as `x-api-key`.
+    // It is kept for this tab in `sessionStorage`; see `remembered-backend`.
     dangerouslyAllowBrowser: true,
   });
 

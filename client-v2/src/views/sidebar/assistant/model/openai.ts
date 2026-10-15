@@ -1,5 +1,6 @@
 import { createTools } from "./tools";
 import { describeProject, systemPrompt } from "./prompt";
+import { redactKey } from "./redact-key";
 import { PgAssistant } from "../store";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { Provider, ProviderId, ToolDefinition, ToolInput } from "./types";
@@ -157,7 +158,6 @@ const streamOneCompletion = async (
       headers: {
         "Content-Type": "application/json",
         // The key is the user's own and goes only to the endpoint they typed in.
-        // See docs/decisions.md -> D3 for why it is not persisted anywhere.
         ...(config.apiKey ? { Authorization: `Bearer ${config.apiKey}` } : {}),
       },
       body: JSON.stringify({
@@ -184,7 +184,10 @@ const streamOneCompletion = async (
   );
 
   if (!response.ok || !response.body) {
-    const body = await response.text().catch(() => "");
+    const raw = await response.text().catch(() => "");
+    // Redacted before it is cut, or a cut through the key would leave its
+    // head behind for `PgAssistant.addError`, which redacts the whole key only
+    const body = redactKey(raw, config.apiKey);
     throw new Error(
       `${response.status} ${response.statusText}${
         body ? ` — ${body.slice(0, 300)}` : ""

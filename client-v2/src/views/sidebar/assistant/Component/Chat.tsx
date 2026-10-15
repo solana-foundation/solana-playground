@@ -29,7 +29,10 @@ import {
 } from "../../../flow/lessons";
 import type { LessonState } from "../../../flow/lessons";
 import type { Connection } from "../store";
-import type { Provider } from "../model/types";
+import { PROVIDERS, type Provider } from "../model/types";
+
+/** Why both header buttons are disabled while a turn runs */
+const FINISH_TURN_FIRST = "Finish this turn first";
 
 const SUGGESTIONS = [
   "Why did my build fail?",
@@ -297,6 +300,9 @@ const Chat = () => {
   const skippableId =
     onFinishedReply && stepAttempted && PgLesson.canPass() ? lastItem.id : null;
 
+  // Only a backend the user brought a key for has one kept in this tab
+  const holdsKey = !!PROVIDERS.find((p) => p.id === connection.id)?.needsKey;
+
   // Cover the silent gaps: before the first token and while tools run.
   // Once text streams into the last assistant item the dots come down.
   const thinking =
@@ -306,13 +312,25 @@ const Chat = () => {
     <Wrapper>
       <BackendBar>
         <BackendLabel>{provider.current.instance.label}</BackendLabel>
-        <ChangeBackend
-          title={busy ? "Finish this turn first" : "Pick another backend"}
-          disabled={busy}
-          onClick={() => PgAssistant.pickBackend()}
-        >
-          Change
-        </ChangeBackend>
+        <BackendActions>
+          {holdsKey && (
+            <ChangeBackend
+              aria-label="Forget key"
+              title={busy ? FINISH_TURN_FIRST : "Remove your key from this tab"}
+              disabled={busy}
+              onClick={() => PgAssistant.disconnect()}
+            >
+              Forget key
+            </ChangeBackend>
+          )}
+          <ChangeBackend
+            title={busy ? FINISH_TURN_FIRST : "Pick another backend"}
+            disabled={busy}
+            onClick={() => PgAssistant.pickBackend()}
+          >
+            Change
+          </ChangeBackend>
+        </BackendActions>
       </BackendBar>
 
       <Messages role="log" aria-label="Conversation">
@@ -645,6 +663,12 @@ const BackendLabel = styled.span`
     text-overflow: ellipsis;
     white-space: nowrap;
   `}
+`;
+
+const BackendActions = styled.div`
+  display: flex;
+  flex-shrink: 0;
+  gap: 0.375rem;
 `;
 
 const ChangeBackend = styled.button`

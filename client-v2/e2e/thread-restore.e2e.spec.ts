@@ -75,11 +75,13 @@ const stillRemembers = async (page: Page) => {
     .toBe(true);
   await expect.poll(() => items(page), LONG).toContain("remember me");
 
-  // Restoring it is only half the job. The connection is in memory only, so
-  // picking a backend is the first thing the user does after every reload --
-  // and that used to be taken for a backend *switch*, which resets the panel
-  // and then wrote the emptied list back over the stored thread. Restored and
-  // then immediately thrown away is indistinguishable from never saved.
+  // Restoring it is only half the job. A reload starts with no live connection
+  // (a key-based backend comes back from sessionStorage, the default after its
+  // probe), so connecting from nothing is the first thing that happens after
+  // every reload -- and that used to be taken for a backend *switch*, which
+  // resets the panel and then wrote the emptied list back over the stored
+  // thread. Restored and then immediately thrown away is indistinguishable
+  // from never saved.
   await page.evaluate(() =>
     (window as AssistantWindow).__pgAssistant!.connect({
       id: "anthropic",

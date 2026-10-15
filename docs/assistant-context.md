@@ -208,7 +208,6 @@ Honesty rule for the demo — never present a mocked step as working.
   client asks `/api/sync` whether the deployment has a database and stays
   purely local when it does not, so signing out or deploying without one
   changes nothing about how the playground works.
-- **Still prototype-grade:** the default backend has no cost gate.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the
   transaction signature yet, because the deploy command it hooks into
@@ -237,11 +236,17 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Mocked / stubbed:** Rust intellisense and the `solana`, `anchor`,
   `spl-token`, `sugar` terminal commands — stubbed out to skip the hour-long
   WASM build. They throw a clear message pointing at `wasm/build.sh`.
-- **Prototype-grade:** the assistant's key handling — kept in memory only,
-  re-entered per session, never written to storage — and the default backend's
-  complete absence of a cost gate: anything that reaches our origin can spend
-  the configured key, so it needs a challenge and a per-session limit before it
-  points at a paid account.
+- **Prototype-grade:** the default backend's complete absence of a cost gate:
+  anything that reaches our origin can spend the configured key, so it needs a
+  challenge and a per-session limit before it points at a paid account.
+- **Real, kept per tab:** your own key. It is kept in the tab's
+  `sessionStorage`: a reload keeps it and a new tab asks again, while a tab the
+  browser duplicates or restores (a reopened closed tab, a restored session)
+  carries it and reconnects, as after a reload. Forget key in the chat header
+  removes it. It goes from the browser straight to the provider as a header on
+  every request, never through our server, and is never logged or synced.
+  Project code runs in the same origin and could read it while the tab is open;
+  that is why it is not in `localStorage`.
 
 ## Answering questions about this project
 

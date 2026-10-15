@@ -119,3 +119,29 @@ describe("the OpenAI-compatible turn loop", () => {
     await expect(provider().send("hi")).rejects.toThrow("upstream exploded");
   });
 });
+
+describe("an error from the endpoint", () => {
+  const KEY = "sk-redact-0123456789abcdef";
+
+  it("leaves no part of the key in the message, wherever the body cuts", async () => {
+    // Past the 300 characters the message keeps, so a cut before redacting
+    // would leave the key's head behind
+    const echoed = `${"x".repeat(290)}${KEY} is not a valid key.`;
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(echoed, { status: 401, statusText: "Unauthorized" })
+    );
+    const keyed = createOpenAiProvider({
+      id: "openai",
+      baseUrl: "https://api.example.test/v1",
+      model: "gpt-x",
+      apiKey: KEY,
+    });
+
+    const failure = await keyed.send("hi").catch((e: Error) => e.message);
+
+    expect(failure).toContain("401");
+    for (let i = 0; i + 8 <= KEY.length; i++) {
+      expect(failure).not.toContain(KEY.slice(i, i + 8));
+    }
+  });
+});
