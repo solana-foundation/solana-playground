@@ -12,8 +12,9 @@ import { PROVIDERS, type ProviderId } from "./types";
  * while a tab the browser duplicates or restores (a reopened closed tab, a
  * restored session) carries it and reconnects, as after a reload. Project
  * code runs in this origin and can read either store; `sessionStorage` bounds
- * that to the tab the user is already working in. See the design of the
- * OpenSpec change `assistant-own-key-storage` (HOO-1748).
+ * that to the tab the user is already working in. See the design in
+ * `openspec/changes/archive/2026-10-15-assistant-own-key-storage/design.md`
+ * (HOO-1748).
  *
  * Every access is guarded. Storage throws rather than returning `null` with
  * site data blocked, and the panel has to open either way. A failure is

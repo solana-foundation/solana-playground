@@ -197,7 +197,7 @@ Expect:
 - [ ] the IDE renders: file explorer, editor, and terminal. Typing `help` in the terminal lists the commands, which
       proves the wasm packages loaded.
 - [ ] the network tab shows no failed request on load (no 4xx, 5xx, or HTML served for a non-HTML file), apart from
-      the S-1 known gap.
+      `crates/core.rs`, `alloc.rs` and `std.rs`: upstream's client does not generate them (client-v2 does, see S-1).
 - [ ] response headers include `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Opener-Policy: same-origin`.
       The wasm packages need both.
 - [ ] the editor opens a project; rust-analyzer completions work (see S-3); static assets are served (see S-10).
@@ -322,7 +322,7 @@ contains `/unstable/`.
 
 ### D-8. client-v2 standalone container
 
-Precondition: a branch with the `client-v2-standalone` profile in `compose.yaml` (from `feat/vercel-wasm-cache`).
+Precondition: the `client-v2-standalone` profile in `compose.yaml`.
 
 ```sh
 docker compose --profile client-v2-standalone up --build
@@ -366,9 +366,8 @@ A status of `200` alone proves nothing for a crate file: the single-page-app fal
 `index.html` and `200`, and Rust Analyzer then panics with `Unexpected('<')`. Every crate check in section 4 also asserts
 the body is not HTML.
 
-The client-v2 requirements for these files are the OpenSpec change `rust-analyzer-crates`, capability
-`client-v2-editor-crates`, on `feat/vercel-wasm-cache`. S-1 to S-3 and S-6 to S-9 walk its manual scenarios; when the
-change is archived, its spec in `openspec/specs/` is the authority and these cases follow it.
+The client-v2 requirements for these files are the spec `openspec/specs/client-v2-editor-crates/spec.md`. S-1 to S-3,
+S-6 to S-9 and D-8 walk its manual scenarios.
 
 Where client-v2's crate files come from. Every path writes them to `client-v2/public/crates`, and each generator skips
 when its key file there matches its inputs:
@@ -392,10 +391,6 @@ curl -s http://localhost:3000/crates/std.rs | head -c 200
 ```
 
 Expect: Rust source for each, not `<!doctype html>`.
-
-Known gap: on `master` nothing generates these three, so each request returns `index.html` or a
-`404`, depending on the server. The
-generator, `client-v2/scripts/generate-default-crates.mjs`, is on `feat/vercel-wasm-cache` until that change merges.
 
 ### S-2. rust-analyzer supported crates
 
@@ -446,8 +441,6 @@ Expect:
 - [ ] `std::array::from_fn` resolves (stabilized in Rust 1.63, so it proves the default crates are not older).
 - [ ] `Pubkey::find_` offers `find_program_address` with its signature and documentation.
 - [ ] each hover shows the definition.
-
-While S-1 fails, steps 2 and 3 are expected to fail.
 
 Known limitation: a crate outside `supported-crates.json`, such as `clockwork_sdk` in some tutorials, has no crate
 file, so its imports stay unresolved. This is not a regression.
@@ -669,8 +662,8 @@ Expect: one image per directory in `server/templates/`.
 ## 7. client-v2 production build
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
-not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the OpenSpec change
-`esbuild-minifier`, capability `client-v2-build`, on `feat/vercel-wasm-cache`; M-1 to M-4 walk its manual scenarios.
+not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-4 walk its manual scenarios.
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine

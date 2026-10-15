@@ -224,9 +224,9 @@ const isSame = (a: Connection | null, b: Connection) =>
 /**
  * Everything the panel renders.
  *
- * The API key is held in memory and, so a reload keeps it, in this tab's
- * `sessionStorage`; it is never written anywhere durable. See
- * `remembered-backend` and the OpenSpec change `assistant-own-key-storage`.
+ * The API key is held in memory and in this tab's `sessionStorage`, so a
+ * reload keeps it; it is never written anywhere durable. See
+ * `remembered-backend` and the spec `openspec/specs/assistant-own-key/spec.md`.
  * Conversation items are durable: the open thread is mirrored to IndexedDB on
  * every change under its own thread id, which `PgThreadIndex` maps from the
  * workspace, so a reload and a project switch both come back to the right
