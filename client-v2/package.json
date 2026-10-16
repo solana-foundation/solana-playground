@@ -278,8 +278,7 @@
       },
       {
         "files": [
-          "src/shared/lib/ids.ts",
-          "src/shared/lib/ids.test.ts"
+          "src/shared/lib/ids.ts"
         ],
         "rules": {
           "no-restricted-imports": "off",

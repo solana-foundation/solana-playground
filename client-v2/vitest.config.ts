@@ -40,6 +40,8 @@ export default defineConfig({
       "src/**/__tests__/**/*.{js,jsx,ts,tsx}",
       "src/**/*.{spec,test}.{js,jsx,ts,tsx}",
     ],
+    // Textual match: the guard's text anywhere in a src file makes it a test file (AGENTS.md, "Tests: a module's unit tests live in the module")
+    includeSource: ["src/**/*.{ts,tsx}"],
     css: false,
     // The closest match to CRA 5's Jest `resetMocks: true`, with two
     // differences: a `vi.fn(impl)` is reset back to `impl`, and a `vi.spyOn`

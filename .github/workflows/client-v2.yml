@@ -156,6 +156,26 @@ jobs:
   build:
     uses: ./.github/workflows/reusable-client-v2-build.yml
 
+      # webpack drops the `import.meta.vitest` blocks by its own evaluation of `import.meta`, with no
+      # setting of ours; if that stops, the build stays green and ships the tests, so three titles that
+      # exist only in blocks are looked for (client-v2/AGENTS.md, "Tests: a module's unit tests live in
+      # the module"). Each title must still sit in a non-test file holding the guard, so a rename fails here.
+      - name: Check in-source tests stay out of the bundle
+        run: |
+          for title in \
+            "mints a v4 without crypto.randomUUID, which insecure origins lack" \
+            "is namespaced, so it cannot collide with a project uuid" \
+            "should read back what it wrote, under one key"; do
+            grep -rlF --exclude='*.test.*' -- "$title" src/ | xargs -r grep -lF 'import.meta.vitest' | grep -q . || {
+              echo "::error::\"$title\" is not in an in-source test block under src/: name another in-source test title in this step"
+              exit 1
+            }
+            if grep -qF -- "$title" build/static/js/*.js; then
+              echo "::error::\"$title\" is in build/static/js: an in-source test block reached the bundle (webpack no longer evaluates import.meta.vitest to undefined)"
+              exit 1
+            fi
+          done
+
   # The browser suite (`client-v2/e2e/`, Playwright) in its own job, so
   # `checks` stays short and a browser failure reads as one. No Postgres and
   # no secret: every spec stubs the account endpoints with `page.route`, and
