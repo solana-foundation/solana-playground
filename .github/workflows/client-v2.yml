@@ -1,14 +1,13 @@
 name: client-v2
 
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
-# `client/`'s build or tests; this one guards `client-v2/` and never touches
-# the Rust workspaces. Keep the branch list identical on master and new-face,
-# so a merge in either direction leaves it unchanged.
+# `client/`'s build or tests; this one guards `client-v2/` on pushes to
+# master and on every pull request, whatever its base, and never touches the
+# Rust workspaces.
 on:
   push:
-    branches: ["master", "new-face"]
+    branches: ["master"]
   pull_request:
-    branches: ["master", "new-face"]
 
   workflow_dispatch:
 
