@@ -1,12 +1,12 @@
 name: CI
 
-# Validation gate for pushes to master-2.0 and pull requests into it.
+# Validation gate for pushes to master and pull requests into it.
 # Deployment is handled separately by cicd.yml.
 on:
   push:
-    branches: ["master-2.0"]
+    branches: ["master"]
   pull_request:
-    branches: ["master-2.0"]
+    branches: ["master"]
 
   workflow_dispatch:
 

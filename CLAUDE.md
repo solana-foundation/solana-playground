@@ -9,16 +9,21 @@ This file records only what the code and git history do not make obvious.
 `solana-foundation/solana-playground`, forked from
 `solana-playground/solana-playground`.
 
-`master-2.0` is the integration branch. `ci.yml` checks formatting and clippy
-for `client/`, `server/` and `wasm/`, but not `client/`'s build or tests;
-`client-v2.yml` guards `client-v2/`; `preview.yml` deploys a
-labelled PR's preview. All three run on `master-2.0` only. Feature branches
-come off `master-2.0` and PRs go against `master-2.0`. Foundation `master`
-is merged into it.
+`solana-foundation/solana-playground` `master` is the reference branch. New
+work reaches it through PRs; upstream `solana-playground/solana-playground`
+reaches it as squashed sync commits, one chunk of functionality each.
 
-`master` is still the repository's default branch, so scheduled workflows
-(`preview-sweep.yml`) run from its copy only, and `cicd.yml` deploys App
-Engine from a tagged commit pushed to it.
+`master` is the integration branch and the repository's default branch.
+`ci.yml` checks formatting and clippy for `client/`, `server/` and `wasm/`,
+but not `client/`'s build or tests; `client-v2.yml` guards `client-v2/`;
+`preview.yml` deploys a labelled PR's preview. All three run on `master`, and
+`client-v2.yml` also on `new-face`, the integration branch for the redesign.
+Feature branches come off `master` and PRs go against `master`, except
+redesign work, which goes against `new-face`.
+
+As the default branch, `master` is where scheduled workflows
+(`preview-sweep.yml`) run from, and `cicd.yml` deploys App Engine from a
+tagged commit pushed to it.
 
 ## Two clients
 

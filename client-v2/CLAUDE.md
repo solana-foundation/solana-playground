@@ -303,7 +303,7 @@ check's job (HOO-1859); the rest hold by review.
   in CI's order, minus the production build. Opt in to running it on every
   push with `git config core.hooksPath .githooks` once per clone.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` job of
-  `client-v2.yml`) on every PR to `master-2.0`, and a red spec fails the
+  `client-v2.yml`) on every PR to `master`, and a red spec fails the
   PR's checks. It needs no server and no Postgres: every spec stubs the account
   endpoints with `page.route`, and the dev server serves `api/*.mjs` itself.
   Two tests connect to the keyless default backend and skip themselves where

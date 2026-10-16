@@ -11,8 +11,8 @@ name: preview
 # - label removed, or PR closed or merged: delete the branch.
 #
 # What this misses (a cancelled teardown, a failed delete) is swept by
-# preview-sweep.yml, once that file is on the default branch: GitHub runs a
-# schedule only from there. Until then, see client-v2/docs/neon.md, "Cleanup".
+# preview-sweep.yml, which GitHub runs on its schedule from the default branch,
+# master.
 #
 # The label name is spelled out in the `if:`s below because job conditions
 # cannot read `env`; keep the three, and PREVIEW_LABEL in preview-sweep.yml,
@@ -20,7 +20,7 @@ name: preview
 # and deletes every one.
 on:
   pull_request:
-    branches: ["master-2.0"]
+    branches: ["master"]
     types: [opened, reopened, synchronize, labeled, unlabeled, closed]
 
 permissions: {}
