@@ -46,6 +46,9 @@ Two rules on top of the direction:
 A slice's segments: `ui/` for React, `model/` for logic, `lib/` for leaf
 helpers. Its public API is `index.ts` for browser code and `server.mjs` for
 `api/` routes; import a slice through its public API, never a deep path.
+A unit test that exercises one module and mocks no module sits at the
+module's end, in an in-source test block; `AGENTS.md` ("Tests: a module's
+unit tests live in the module") lists the tests that keep a `*.test.ts` file.
 
 **Every slice with an `index.ts` measures itself.** Under `features/` and
 `widgets/`, it declares its events in `model/telemetry.ts` with
@@ -253,7 +256,8 @@ check's job (HOO-1859); the rest hold by review.
 - **Mock the network through the test runner** (`vi.spyOn`, `vi.fn`), not by
   assigning `global.fetch` in each test. `setupTests.ts` installs a `fetch`
   that throws, so a test that forgets its stub fails instead of reaching the
-  network.
+  network. In an in-source block, `vi` is destructured from
+  `import.meta.vitest` like the rest of the test API.
 - **Do not collapse status codes.** A `429` and a `204` are different
   answers and get different branches. A streamed error is a complete frame
   of its own (`\n\ndata: ...\n\n`), and its test feeds a chunk cut
@@ -273,15 +277,18 @@ check's job (HOO-1859); the rest hold by review.
   styled component with a utility; change the styled rule, or move the
   component by the UI move rule.
 - **Build configuration is not unit-tested.** Guard the outcome instead: CI
-  greps the built CSS (or bundle) for what the configuration must produce.
-  A test that asserts the shape of `craco.config.js` passes while the build
-  is wrong.
+  greps the built CSS (or bundle) for what the configuration must produce:
+  Tailwind's `.flex` rule, the `_Pg*` class names, and no in-source test
+  title. A test that asserts the shape of `craco.config.js` passes while the
+  build is wrong.
 
 ## Before a PR
 
 - **A test for a bug fails first.** Run it against the code before the fix
   and put the failing output, or the commit it failed at, in the PR
   description. A test that passes with the fix reverted proves nothing.
+  Where the test goes is in `AGENTS.md`: the module's in-source block for a
+  unit test of that module alone, a test file for the cases the rule lists.
 - **Infrastructure needs a reproduced problem.** Before building a proxy,
   a fallback or a migration for a problem someone reported, reproduce it
   live (a probe, a curl, a screenshot, dated) and put that in the PR. A PR

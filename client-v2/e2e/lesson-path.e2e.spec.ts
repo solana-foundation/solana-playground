@@ -168,7 +168,7 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
 
   // The first ask opens the door rather than answering outright. The e2e
   // has no connected model, so there is no transcript to assert on --
-  // the prompt text itself is unit-tested in `hints.test.ts`. What is
+  // the prompt text itself is covered by the in-source tests of `hints.ts`. What is
   // deterministic here is the band's own action label: rung zero reads
   // "I'm stuck"; one click with no attempt yet recorded moves it to
   // "Try it first" (`band-copy.ts`'s `assistantLabel`).
