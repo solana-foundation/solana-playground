@@ -19,9 +19,11 @@ is merged into it.
 `master` is still the repository's default branch, so scheduled workflows
 (`preview-sweep.yml`) run from its copy only, and `cicd.yml` deploys App
 Engine from a tagged commit pushed to it.
-Greptile reviews PRs against `master` as configured in `greptile.json`; a
-new rule file is added to its `customContext.files` list (specs need no
-entry: the instructions point at `openspec/`).
+
+Greptile reviews only PRs into `master` on the foundation repository, as
+`greptile.json` configures; PRs into `master-2.0` get no Greptile review.
+When adding a file of review rules, add it to `customContext.files` in
+`greptile.json`. Specs need no entry: its instructions point at `openspec/`.
 
 ## Two clients
 
