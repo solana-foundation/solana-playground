@@ -1,18 +1,14 @@
 import {
   ComponentPropsWithoutRef,
   forwardRef,
-  MouseEvent,
   useCallback,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import styled, { css } from "styled-components";
 
-import { Button } from "@/shared/ui/button";
+import { BaseEditorTab, EditorTabDrag } from "./BaseEditorTab";
 import LangIcon from "../LangIcon";
-import { Close } from "../Icons";
-import { PgExplorer, PgTheme } from "../../utils";
+import { PgExplorer } from "../../utils";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -23,13 +19,47 @@ import {
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import type { SortableItemCommonProps } from "../Dnd/Sortable";
 
-interface TabProps extends ComponentPropsWithoutRef<"div"> {
+type SortableFlags = Partial<
+  Pick<SortableItemCommonProps, "isDragging" | "isDragOverlay">
+>;
+
+interface TabProps
+  extends Omit<ComponentPropsWithoutRef<"div">, "onSelect">,
+    SortableFlags {
   path: string;
   index: number;
+  /** The sortable's item component, handed back to every item */
+  Item?: unknown;
+  /** dnd-kit's sortable state, on the drag overlay only */
+  sortable?: unknown;
 }
 
+const dragOf = ({
+  isDragging,
+  isDragOverlay,
+}: SortableFlags): EditorTabDrag | undefined => {
+  if (isDragOverlay) return "overlay";
+  if (isDragging) return "source";
+  return undefined;
+};
+
 const Tab = forwardRef<HTMLDivElement, TabProps>(
-  ({ path, index, ...props }, ref) => {
+  (
+    {
+      path,
+      index,
+      // Props `Dnd.Sortable` spreads into every item. `Item` and `sortable`
+      // (on the overlay) are not DOM attributes. `id` is one, but the
+      // sortable's would replace the path the tab takes as its id
+      Item: _Item,
+      sortable: _sortable,
+      id: _id,
+      isDragging,
+      isDragOverlay,
+      ...props
+    },
+    ref
+  ) => {
     const [isSelected, setIsSelected] = useState(false);
 
     const fileName = useMemo(
@@ -37,15 +67,7 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
       [path]
     );
 
-    const closeButtonRef = useRef<HTMLButtonElement>(null);
-    const changeTab = useCallback(
-      (ev: MouseEvent<HTMLDivElement>) => {
-        if (!closeButtonRef.current?.contains(ev.target as Node)) {
-          PgExplorer.openFile(path);
-        }
-      },
-      [path]
-    );
+    const changeTab = useCallback(() => PgExplorer.openFile(path), [path]);
 
     const closeFile = useCallback(() => PgExplorer.closeFile(path), [path]);
 
@@ -71,26 +93,18 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
     return (
       <ContextMenu onOpenChange={setIsSelected}>
         <ContextMenuTrigger asChild>
-          <Wrapper
-            onClick={changeTab}
-            title={path}
+          <BaseEditorTab
             ref={ref}
-            isSelected={isSelected}
-            isCurrent={path === PgExplorer.currentFilePath}
-            {...(props as SortableItemCommonProps)}
-          >
-            <LangIcon path={path} />
-            <Name>{fileName}</Name>
-            <Button
-              ref={closeButtonRef}
-              variant="ghost"
-              size="icon-sm"
-              onClick={closeFile}
-              title="Close (Alt+W)"
-            >
-              <Close />
-            </Button>
-          </Wrapper>
+            path={path}
+            name={fileName}
+            icon={<LangIcon path={path} />}
+            current={path === PgExplorer.currentFilePath}
+            menuOpen={isSelected}
+            onSelect={changeTab}
+            onClose={closeFile}
+            drag={dragOf({ isDragging, isDragOverlay })}
+            {...props}
+          />
         </ContextMenuTrigger>
         {/* Every label is a MenuItemText: one element to match, and the shortcut stays at the far edge */}
         <ContextMenuContent>
@@ -116,32 +130,5 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
     );
   }
 );
-
-const Wrapper = styled.div<
-  { isSelected: boolean; isCurrent: boolean } & SortableItemCommonProps
->`
-  ${({ theme, isSelected, isCurrent, isDragging, isDragOverlay }) => css`
-    & button {
-      ${!isCurrent && "opacity: 0;"}
-      margin: 0 0.25rem 0 0.5rem;
-    }
-
-    &:hover button {
-      opacity: 1;
-    }
-
-    ${PgTheme.convertToCSS(theme.components.tabs.tab.default)};
-    ${isSelected && PgTheme.convertToCSS(theme.components.tabs.tab.selected)};
-    ${isCurrent && PgTheme.convertToCSS(theme.components.tabs.tab.current)};
-    ${isDragging && PgTheme.convertToCSS(theme.components.tabs.tab.drag)};
-    ${isDragOverlay &&
-    PgTheme.convertToCSS(theme.components.tabs.tab.dragOverlay)};
-  `}
-`;
-
-const Name = styled.span`
-  margin-left: 0.375rem;
-  white-space: nowrap;
-`;
 
 export default Tab;

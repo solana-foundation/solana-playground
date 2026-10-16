@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FC } from "react";
 
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/shared/ui/stepper";
 import type { StepperStatus } from "@/shared/ui/stepper";
 
+import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
 import { STAGES } from "../state/stage";
 import type { FlowState, Stage, StageStatus } from "../state/stage";
 
@@ -55,28 +56,40 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
 };
 
 /**
- * Below this width the four labels collapse to their initials. The breakpoint
- * follows the window, not the stage bar's own width. The full name stays in
- * each tab's `aria-label`.
- */
-const STEPPER_COMPACT_QUERY = "(max-width: 80rem)";
-
-const subscribeCompact = (onChange: () => void) => {
-  const list = window.matchMedia(STEPPER_COMPACT_QUERY);
-  list.addEventListener("change", onChange);
-  return () => list.removeEventListener("change", onChange);
-};
-const isCompact = () => window.matchMedia(STEPPER_COMPACT_QUERY).matches;
-
-/**
  * The write -> build -> deploy -> interact loop, drawn with the design
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
 const Stepper: FC<StepperProps> = ({ state, onSelect, target }) => {
-  const compact = useSyncExternalStore(subscribeCompact, isCompact);
+  // The root fills the stage bar, so what it measures is the room the bar
+  // gives, not the list's own width. Folding the labels shrinks the list but
+  // not the root, so the fold cannot flip itself back. Until the first
+  // measurement the labels show in full; the observer's first callback runs
+  // before paint, and the state it sets commits after. A hidden bar reports
+  // a width of 0, which says nothing about the room it gives once shown, so
+  // the last real width stands.
+  const ref = useRef<HTMLDivElement>(null);
+  const [room, setRoom] = useState<number | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[entries.length - 1];
+      if (entry && entry.contentRect.width > 0) {
+        setRoom(entry.contentRect.width);
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const compact = room !== null && room < STEPPER_FULL_WIDTH_PX;
   return (
-    <DsStepper value={state.stage} onValueChange={(v) => onSelect(v as Stage)}>
+    <DsStepper
+      ref={ref}
+      className="w-full min-w-0 items-center"
+      value={state.stage}
+      onValueChange={(v) => onSelect(v as Stage)}
+    >
       <StepperList compact={compact}>
         {STAGES.map((stage) => {
           const status = statusOf(state, stage);

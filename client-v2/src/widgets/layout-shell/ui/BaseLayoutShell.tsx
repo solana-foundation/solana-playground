@@ -44,7 +44,7 @@ const HANDLE_PX = 8;
  * `work.min` is an open files column at its minimum, the handle and the stage
  * at its minimum, so the work area never takes less than both need: on a
  * narrow window with every column open the assistant gives way instead.
- * The console folds to its handle, the bar `ConsoleDrawer` draws at
+ * The console folds to its bar, which `BaseConsoleDrawer` draws at
  * `BOTTOM_BAR_PX`.
  */
 export const PANEL_SIZES = {

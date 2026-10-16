@@ -115,8 +115,9 @@ regression against 5.1 has misread this rule.
       (HOO-2063; after 5.2)
 - [ ] 5.9 Tutorials and Programs pages, opened from the navigation
       (HOO-2064; after 5.2)
-- [ ] 5.10 Workspace: the Write stage, editor tabs, console drawer and
-      terminal look (HOO-2065; after 5.2)
+- [x] 5.10 Workspace: the Write stage, editor tabs, console drawer and
+      terminal look (HOO-2065; after 5.2; plan:
+      [plans/5.10-write-stage.md](plans/5.10-write-stage.md))
 - [ ] 5.11 Workspace: the Build and Deploy stages (HOO-2066; after 5.2)
 - [ ] 5.12 Workspace: the Interact stage (HOO-1676; after 5.2)
 - [ ] 5.13 Projects: New project (HOO-2068; after 5.2)

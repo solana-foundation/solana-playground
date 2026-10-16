@@ -1,11 +1,13 @@
 import { SetStateAction, useCallback } from "react";
 import styled, { css } from "styled-components";
 
+import { BaseEditorTabs } from "./BaseEditorTabs";
+
 import Tab from "./Tab";
 import { Button } from "@/shared/ui/button";
 import Dnd from "../Dnd";
 import Img from "../Img";
-import { PgExplorer, PgTheme, PgView, PgWallet } from "../../utils";
+import { PgExplorer, PgView, PgWallet } from "../../utils";
 import {
   useExplorer,
   useKeybind,
@@ -41,36 +43,21 @@ export const Tabs = () => {
   if (!explorer.tabs.length) return null;
 
   return (
-    <Wrapper id={PgView.ids.TABS}>
-      <TabsWrapper>
-        <Dnd.Sortable
-          items={explorer.tabs as string[]}
-          setItems={setItems}
-          Item={Tab}
-          getItemProps={(path, index) => ({ path, index })}
-          strategy="horizontal"
-        />
-      </TabsWrapper>
-
-      <Wallet />
-    </Wrapper>
+    <BaseEditorTabs
+      id={PgView.ids.TABS}
+      current={explorer.currentFilePath ?? undefined}
+      end={<Wallet />}
+    >
+      <Dnd.Sortable
+        items={explorer.tabs as string[]}
+        setItems={setItems}
+        Item={Tab}
+        getItemProps={(path, index) => ({ path, index })}
+        strategy="horizontal"
+      />
+    </BaseEditorTabs>
   );
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tabs.default)};
-  `}
-`;
-
-const TabsWrapper = styled.div`
-  display: flex;
-  width: 100%;
-  overflow-x: auto;
-  overflow-y: hidden;
-
-  ${PgTheme.getScrollbarCSS({ height: "0.25rem !important" })};
-`;
 
 const Wallet = () => {
   const wallet = useWallet();

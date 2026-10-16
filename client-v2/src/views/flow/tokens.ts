@@ -4,7 +4,7 @@
 export const GAP = "8px";
 
 /**
- * Height of the bar pinned to a panel's bottom edge -- the console handle and
+ * Height of the bar pinned to a panel's bottom edge -- the console's bar and
  * the left panel's new-file action. Shared so their top borders read as one
  * line across the canvas.
  */

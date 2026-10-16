@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import Tab from "./Tab";
 
@@ -55,6 +55,41 @@ const openMenuOf = async (path: string, index: number) => {
 
 const closed = () =>
   explorer.closeFile.mock.calls.map((call: string[]) => call[0]);
+
+describe("Tab root", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("keeps the sortable's bookkeeping off the DOM", () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    render(
+      <ThemeProvider theme={theme}>
+        <Tab
+          path="/a.rs"
+          index={0}
+          Item={() => null}
+          id="/other"
+          sortable={{ index: 0 }}
+        />
+      </ThemeProvider>
+    );
+    const root = screen.getByTitle("/a.rs");
+    expect(root.hasAttribute("sortable")).toBe(false);
+    expect(root.hasAttribute("item")).toBe(false);
+    expect(root.id).toBe("/a.rs");
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("keeps the design system's slot name under the context menu", () => {
+    render(
+      <ThemeProvider theme={theme}>
+        <Tab path="/a.rs" index={0} />
+      </ThemeProvider>
+    );
+    expect(screen.getByTitle("/a.rs").getAttribute("data-slot")).toBe(
+      "editor-tab"
+    );
+  });
+});
 
 describe("Tab context menu", () => {
   it("Close closes only this tab", async () => {

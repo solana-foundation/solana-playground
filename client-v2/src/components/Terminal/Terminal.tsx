@@ -42,7 +42,7 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
         convertEol: true,
         rendererType: "dom",
         fontFamily: theme.font.code.family,
-        fontSize: 14,
+        fontSize: 13,
         cursorBlink: xterm.cursor.blink,
         cursorStyle: xterm.cursor.kind,
         tabStopWidth: 4,
@@ -62,15 +62,19 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
 
   useExposeStatic(PgTerminal.events.STATIC, term);
 
-  // Open terminal
+  // Open terminal. `PgTerm.open` prints the welcome and a prompt, which no
+  // cleanup can take back, so a term is opened once: StrictMode's second run
+  // of this effect in dev keeps the same `term` and must leave it alone.
+  const openedRef = useRef<PgTerm | null>(null);
   useEffect(() => {
-    if (terminalRef.current) {
-      if (terminalRef.current.hasChildNodes()) {
-        terminalRef.current.removeChild(terminalRef.current.childNodes[0]);
-      }
+    if (!terminalRef.current || openedRef.current === term) return;
 
-      term.open(terminalRef.current);
+    if (terminalRef.current.hasChildNodes()) {
+      terminalRef.current.removeChild(terminalRef.current.childNodes[0]);
     }
+
+    term.open(terminalRef.current);
+    openedRef.current = term;
   }, [term]);
 
   // Handle resize
@@ -98,8 +102,12 @@ const Wrapper = styled.div`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(theme.components.terminal.default)};
 
+    /* Same ground as xterm's background, so the padding around the rows
+       matches the screen */
+    background: var(--surface-well);
+
     & .xterm {
-      padding: 0.25rem 1rem;
+      padding: 0.75rem;
     }
 
     & .xterm-viewport {

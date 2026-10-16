@@ -6,13 +6,16 @@ import { expect, test } from "@playwright/test";
  * style pass), the build stays green and every utility goes inert. The Flow
  * wrapper's three utilities repeat its styled rule, so a screenshot cannot
  * tell either; this reads the rules themselves out of the utilities layer.
+ * The anchor only proves that some element carries the three utilities,
+ * since design-system parts use them too; the rule checks below are what
+ * guard the build.
  */
 test("Tailwind utilities reach the page in the utilities layer", async ({
   page,
 }) => {
   await page.goto("/");
   const wrapper = page.locator("div.flex.flex-col.overflow-hidden");
-  await expect(wrapper).toHaveCount(1);
+  await expect(wrapper.first()).toBeVisible();
 
   const rules = await page.evaluate(() => {
     const found: Record<string, string> = {};
@@ -53,9 +56,9 @@ test("Tailwind utilities reach the page in the utilities layer", async ({
  */
 test("data-checked utilities match Radix's data-state", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("div.flex.flex-col.overflow-hidden")).toHaveCount(
-    1
-  );
+  await expect(
+    page.locator("div.flex.flex-col.overflow-hidden").first()
+  ).toBeVisible();
 
   const selectors = await page.evaluate(() => {
     const found: string[] = [];
