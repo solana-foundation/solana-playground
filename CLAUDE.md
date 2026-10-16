@@ -21,8 +21,7 @@ is merged into it.
 Engine from a tagged commit pushed to it.
 
 Greptile reviews only PRs into `master` on the foundation repository, as
-`greptile.json` configures; PRs into `master-2.0` get no Greptile review.
-When adding a file of review rules, add it to `customContext.files` in
+`greptile.json` configures. When adding a file of review rules, add it to `customContext.files` in
 `greptile.json`. Specs need no entry: its instructions point at `openspec/`.
 
 ## Two clients
