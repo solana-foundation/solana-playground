@@ -20,7 +20,7 @@ name: preview
 # and deletes every one.
 on:
   pull_request:
-    branches: ["master-2.0"]
+    branches: ["master"]
     types: [opened, reopened, synchronize, labeled, unlabeled, closed]
 
 permissions: {}

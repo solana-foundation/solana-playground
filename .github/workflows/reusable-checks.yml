@@ -8,7 +8,7 @@ on:
     inputs:
       # The `build` job: `yarn setup` (the WASM compile), then type check,
       # unit tests and production build of upstream's `client/`, 20+ minutes.
-      # ci.yml turns it off, so nothing on master-2.0 checks `client/`, which
+      # ci.yml turns it off, so nothing on master checks `client/`, which
       # this fork does not edit. The WASM still compiles for every preview,
       # in vercel-install.sh on a cache miss. cicd.yml's deploy gate keeps it.
       build:

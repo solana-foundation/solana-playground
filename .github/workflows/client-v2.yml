@@ -1,13 +1,13 @@
 name: client-v2
 
 # The fork's frontend checks. Upstream's ci.yml checks only formatting and
-# clippy on master-2.0, not `client/`'s build or tests; this one guards
-# `client-v2/` on master-2.0 and never touches the Rust workspaces.
+# clippy, not `client/`'s build or tests; this one guards `client-v2/` on
+# pushes to master and on every pull request, whatever its base, and never
+# touches the Rust workspaces.
 on:
   push:
-    branches: ["master-2.0"]
+    branches: ["master"]
   pull_request:
-    branches: ["master-2.0"]
 
   workflow_dispatch:
 
