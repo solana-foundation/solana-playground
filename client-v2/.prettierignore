@@ -1,0 +1,14 @@
+# Ignore artifacts:
+build
+# Skip build folders inside src, e.g. src/commands/build
+!src/**/build
+public
+
+# Declaration files:
+*.d.ts
+
+# markdownlint-cli2 owns Markdown; prettier re-aligns compact tables:
+*.md
+
+# Generated:
+src/views/sidebar/assistant/content/assistant-context.md

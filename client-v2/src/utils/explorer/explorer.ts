@@ -1,0 +1,1995 @@
+import { PgFs } from "./fs";
+import { PgWorkspace } from "./workspace";
+import {
+  isMissing,
+  report,
+} from "../../features/persistence/model/diagnostics";
+import { PgCommon } from "../common";
+import { PgLanguage } from "../language";
+import { PgView } from "../view";
+import type { Disposable } from "../types";
+import type {
+  EditorBuffers,
+  Explorer,
+  TupleFiles,
+  Folder,
+  FullFile,
+  ItemMetaFile,
+  ExplorerFiles,
+  Position,
+} from "./types";
+
+export class PgExplorer {
+  /** Internal state */
+  private static _explorer = this._getDefaultState();
+  /** Whether the explorer is initialized */
+  private static _isInitialized = false;
+  /** Whether the current explorer state is temporary */
+  private static _isTemporary: boolean;
+  /** Workspace functionality */
+  private static _workspace: PgWorkspace | null = null;
+  /** Current initialized workspace name */
+  private static _initializedWorkspaceName: string | null = null;
+  /** The mounted editor's buffers -- see `registerEditorBuffers` */
+  private static _editorBuffers: EditorBuffers | null = null;
+
+  /** `indexedDB` file system */
+  static readonly fs = PgFs;
+
+  /** Explorer errors */
+  static readonly errors = {
+    ALREADY_EXISTS: "Already exists",
+    INVALID_NAME: "Invalid name",
+    TYPE_MISMATCH: "Types don't match",
+    SRC_DELETE: "Cannot delete src folder",
+    SRC_RENAME: "Cannot rename src folder",
+  };
+
+  /** Explorer event names */
+  static readonly events = {
+    ON_DID_INIT: "explorerondidinit",
+    ON_DID_CREATE_ITEM: "explorerondidcreateitem",
+    ON_DID_RENAME_ITEM: "explorerondidrenameitem",
+    ON_DID_DELETE_ITEM: "explorerondiddeleteitem",
+    ON_DID_SAVE_FILE: "explorerondidsavefile",
+    ON_DID_OPEN_FILE: "explorerondidopenfile",
+    ON_DID_CLOSE_FILE: "explorerondidclosefile",
+    ON_DID_SET_TABS: "explorerondidsettabs",
+    ON_DID_CREATE_WORKSPACE: "explorerondidcreateworkspace",
+    ON_DID_RENAME_WORKSPACE: "explorerondidrenameworkspace",
+    ON_DID_DELETE_WORKSPACE: "explorerondiddeleteworkspace",
+    ON_DID_SWITCH_WORKSPACE: "explorerondidswitchworkspace",
+  };
+
+  /* -------------------------------- Getters ------------------------------- */
+
+  /** Get whether the explorer is initialized */
+  static get isInitialized() {
+    return this._isInitialized;
+  }
+
+  /** Get whether the current workspace is temporary */
+  static get isTemporary() {
+    return this._isTemporary;
+  }
+
+  /** Get explorer files */
+  static get files() {
+    return this._explorer.files;
+  }
+
+  /** Get explorer tabs */
+  static get tabs() {
+    return this._explorer.tabs as readonly string[];
+  }
+
+  /** Get current file path */
+  // TODO: Make this a regular method (implicit getter may cause bugs)
+  static get currentFilePath() {
+    // Do not use `Array.at` because it gives incorrect results when there is no
+    // current file (`this._currentIndex === -1`)
+    if (this._currentIndex === -1) return null;
+    return this.tabs[this._currentIndex];
+  }
+
+  /** Get current file path index */
+  private static get _currentIndex() {
+    return this._explorer.currentIndex;
+  }
+
+  /** Get current workspace name */
+  static get currentWorkspaceName() {
+    return this._workspace?.currentName;
+  }
+
+  /**
+   * Stable id of the current workspace.
+   *
+   * What sync keys on. Unlike the name, it survives a rename -- which is why
+   * a renamed project keeps its conversation.
+   */
+  static get currentWorkspaceId() {
+    return this._workspace?.currentId;
+  }
+
+  /** Stable id of a workspace by name, or `undefined` if there is none */
+  static workspaceIdOf(name: string) {
+    return this._workspace?.idOf(name);
+  }
+
+  /** Local name of a workspace by id, or `undefined` if there is none */
+  static workspaceNameOf(id: string) {
+    return this._workspace?.nameOf(id);
+  }
+
+  /** Get names of all workspaces */
+  static get allWorkspaceNames() {
+    return this._workspace?.allNames;
+  }
+
+  /* ---------------------------- Public methods ---------------------------- */
+
+  /**
+   * Re-read the list of workspaces from the store, keeping this tab's own
+   * current one. Writes nothing.
+   *
+   * Tabs of one browser share the store, but each read the list once at load
+   * and saved that copy back on every switch -- undoing a workspace another
+   * tab had created, deleted or renamed since. Which one is current is every
+   * tab's own, and the store holds whichever tab saved last, so that part is
+   * never taken from it. A config that cannot be read tells nothing, so the
+   * list in memory stays as it is rather than becoming empty.
+   *
+   * @returns `false` when the store's list was left alone and may hold what
+   * this tab has yet to see: a change of this tab's own to the list is not
+   * saved yet, or the config failed to read. `true` otherwise, a store with
+   * no config at all included -- there is nothing in it to take.
+   */
+  static async refreshWorkspaces() {
+    const workspace = this._workspace;
+    if (!workspace) return true;
+    const saved = this._savedWorkspaces;
+    let stored;
+    try {
+      stored = PgWorkspace.migrate(
+        await this.fs.readToJSON(PgWorkspace.WORKSPACES_CONFIG_PATH)
+      );
+    } catch (e) {
+      if (isMissing(e)) return true;
+      report("refresh workspaces", e);
+      return false;
+    }
+    // A create, rename or delete of this tab's own changes memory first and
+    // saves later, after awaits. Taking the store's list inside that window
+    // would undo it -- and so would taking it after a save that landed while
+    // it was being read. Its own save follows, and other tabs hear of that.
+    const inMemory = JSON.stringify(workspace.get().workspaces);
+    if (inMemory !== saved || this._savedWorkspaces !== saved) return false;
+
+    // Read after the wait: the user may have switched while it ran
+    workspace.setCurrent({
+      workspaces: stored.workspaces,
+      currentId: workspace.currentId,
+    });
+    this._savedWorkspaces = JSON.stringify(stored.workspaces);
+    return true;
+  }
+
+  /** The list as this tab last saved or read it, for `refreshWorkspaces` */
+  private static _savedWorkspaces: string | null = null;
+
+  /**
+   * Initialize explorer.
+   *
+   * @param params -
+   * - `files`: Files to initialize the explorer from
+   * - `name`: Initialize the given workspace name
+   */
+  static init(params?: { files?: ExplorerFiles | TupleFiles; name?: string }) {
+    // Two inits running side by side both create the workspace directories
+    // and the second fails with EEXIST. React's strict mode mounts the router
+    // effect twice, which starts two route handlers at once, so run them one
+    // after another instead.
+    const run = this._initQueue.then(() => this._init(params));
+    this._initQueue = run.catch(() => {});
+    return run;
+  }
+
+  /** Tail of the running and queued `init` calls */
+  private static _initQueue: Promise<void> = Promise.resolve();
+
+  private static async _init(params?: {
+    files?: ExplorerFiles | TupleFiles;
+    name?: string;
+  }) {
+    if (params?.files) {
+      this._isTemporary = true;
+      this._workspace = null;
+
+      // Reset the explorer state
+      this._explorer = this._getDefaultState();
+
+      // Files
+      this._explorer.files = Array.isArray(params.files)
+        ? this._convertToExplorerFiles(params.files)
+        : params.files;
+
+      // Tabs, current
+      const currentFilePath = this._getDefaultOpenFile(this._explorer.files);
+      if (currentFilePath) this.openFile(currentFilePath);
+    } else if (
+      this._initializedWorkspaceName !==
+      (params?.name ?? this.currentWorkspaceName)
+    ) {
+      this._isTemporary = false;
+      if (!this._workspace) await this._initWorkspaces();
+
+      // Check whether the workspace exists
+      const workspaceName = params?.name ?? this.currentWorkspaceName;
+      if (workspaceName && this.allWorkspaceNames!.includes(workspaceName)) {
+        await this.switchWorkspace(workspaceName);
+      }
+      // Reset files if there are no workspaces
+      else if (this.allWorkspaceNames!.length === 0) {
+        // Reset the explorer state
+        this._explorer = this._getDefaultState();
+      }
+    } else {
+      // Skip initializing if the workspace has already been initialized
+      return;
+    }
+
+    // Sanity check for the tab and current file state
+    // Invalid case: https://github.com/solana-playground/solana-playground/issues/91#issuecomment-1336388179
+    //
+    // This should no longer be an issue after the partial rewrite of explorer,
+    // but keeping it anyway just in case the same problem occurs in the future.
+    if (PgExplorer.tabs.length && !PgExplorer.currentFilePath) {
+      console.log("Tab and current file state is partially invalid");
+      PgExplorer.openFile(PgExplorer.tabs[0]);
+    }
+
+    this._isInitialized = true;
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_INIT);
+  }
+
+  /**
+   * If the project is not temporary(default):
+   * - Name and path checks
+   * - Create new item in `indexedDB`
+   * - If create is successful, also create the item in the state
+   *
+   * If the project is temporary:
+   * - Name and path checks
+   * - Create item in the state
+   */
+  static async createItem(
+    path: string,
+    content: string = "",
+    opts?: {
+      skipNameValidation?: boolean;
+      override?: boolean;
+      openOptions?: {
+        dontOpen?: boolean;
+        onlyRefreshIfAlreadyOpen?: boolean;
+      };
+    }
+  ) {
+    const fullPath = this.convertToFullPath(path);
+
+    // Invalid name
+    if (
+      !opts?.skipNameValidation &&
+      !PgExplorer.isItemNameValid(PgExplorer.getItemNameFromPath(fullPath))
+    ) {
+      throw new Error(PgExplorer.errors.INVALID_NAME);
+    }
+
+    const files = this.files;
+
+    // Check whether the item already exists
+    if (files[fullPath] && !opts?.override) {
+      throw new Error(PgExplorer.errors.ALREADY_EXISTS);
+    }
+
+    const itemType = PgExplorer.getItemTypeFromPath(fullPath);
+
+    // Ordering of `indexedDB` calls and state calls matter. If `indexedDB` call fails,
+    // state will not change. Can't say the same if the ordering was in reverse.
+    if (itemType.file) {
+      if (!this.isTemporary) {
+        await this.fs.writeFile(fullPath, content, { createParents: true });
+      }
+
+      files[fullPath] = {
+        content,
+        meta: files[fullPath]?.meta ?? {},
+      };
+
+      if (!opts?.openOptions || opts?.openOptions?.onlyRefreshIfAlreadyOpen) {
+        const isCurrentFile = this.currentFilePath === fullPath;
+
+        // Close the file if we are overriding to correctly display the new content
+        if (opts?.override && isCurrentFile) this.closeFile(fullPath);
+
+        // Open if it's the current file or there is no open options
+        if (!opts?.openOptions || isCurrentFile) this.openFile(fullPath);
+      }
+    }
+    // Folder
+    else {
+      if (!this.isTemporary) await this.fs.createDir(fullPath);
+
+      files[fullPath] = {};
+    }
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_ITEM);
+
+    await this.saveMeta();
+  }
+
+  /**
+   * If the project is not temporary(default):
+   * - Name and path checks
+   * - Rename in `indexedDB`
+   * - If rename is successful also rename item in the state
+   *
+   * If the project is temporary:
+   * - Name and path checks
+   * - Rename in state
+   */
+  static async renameItem(
+    oldPath: string,
+    newPath: string,
+    opts?: { skipNameValidation?: boolean; override?: boolean }
+  ) {
+    oldPath = this.convertToFullPath(oldPath);
+    newPath = this.convertToFullPath(newPath);
+
+    // Return if there is no change
+    if (PgCommon.isPathsEqual(newPath, oldPath)) return;
+
+    if (!opts?.skipNameValidation && !PgExplorer.isItemNameValid(newPath)) {
+      throw new Error(PgExplorer.errors.INVALID_NAME);
+    }
+    if (PgCommon.isPathsEqual(oldPath, this.getCurrentSrcPath())) {
+      throw new Error(PgExplorer.errors.SRC_RENAME);
+    }
+
+    const itemType = PgExplorer.getItemTypeFromPath(oldPath);
+    const newItemType = PgExplorer.getItemTypeFromPath(newPath);
+    if (
+      (itemType.file && !newItemType.file) ||
+      (itemType.folder && !newItemType.folder)
+    ) {
+      throw new Error(PgExplorer.errors.TYPE_MISMATCH);
+    }
+
+    if (!opts?.override) {
+      // Check whether `newPath` exists because `fs.rename` doesn't throw when
+      // `newPath` exists
+      let newPathExists: boolean;
+      if (itemType.file) {
+        newPathExists = !!this.getFile(newPath);
+      } else {
+        const { files, folders } = this.getFolderContent(newPath);
+        newPathExists = files.length > 0 || folders.length > 0;
+      }
+      if (newPathExists) throw new Error(PgExplorer.errors.ALREADY_EXISTS);
+    }
+
+    // Rename in `indexedDB`
+    if (!this.isTemporary) await this.fs.rename(oldPath, newPath);
+
+    // Rename in state
+    const files = this.files;
+    const rename = (oldPath: string, newPath: string) => {
+      // Store the item
+      const item = files[oldPath];
+
+      // Delete the old item
+      delete files[oldPath];
+
+      // Set the new path
+      files[newPath] = item;
+
+      // Handle tabs if it's a file
+      if (PgExplorer.getItemTypeFromPath(newPath).file) {
+        // Rename tabs manually instead of closing the old file and opening the
+        // new file in order to keep the tab order
+        const tabIndex = this.tabs.indexOf(oldPath);
+        if (tabIndex !== -1) this._explorer.tabs[tabIndex] = newPath;
+      }
+    };
+
+    // Rename in state
+    if (itemType.file) {
+      rename(oldPath, newPath);
+
+      // Moving all elements from a folder results with the parent folder
+      // disappearing, add the folder back to mitigate
+      files[PgExplorer.getParentPathFromPath(oldPath)] = {};
+    } else {
+      // We need to loop through all files in order to change every child path
+      for (const path in files) {
+        // /programs/my_program/logs/logfile.log
+        // If we are renaming 'my_program' then we can replace '/programs/my_program/'
+        // with '/programs/<new_name>/'
+        if (path.startsWith(oldPath)) {
+          const childPath = path.replace(
+            oldPath,
+            oldPath.endsWith("/") ? PgCommon.appendSlash(newPath) : newPath
+          );
+          rename(path, childPath);
+        }
+      }
+    }
+
+    // Set tabs to close the duplicate paths
+    if (opts?.override) this.setTabs(this.tabs);
+
+    // Keep the same current file after rename
+    PgCommon.createAndDispatchCustomEvent(
+      this.events.ON_DID_OPEN_FILE,
+      this.getCurrentFile()
+    );
+    PgCommon.createAndDispatchCustomEvent(
+      this.events.ON_DID_RENAME_ITEM,
+      oldPath
+    );
+
+    await this.saveMeta();
+  }
+
+  /**
+   * If the project is not temporary(default):
+   * - Delete from `indexedDB`(recursively)
+   * - If delete is successful, delete from state
+   *
+   * If the project is temporary:
+   * - Delete from state
+   */
+  static async deleteItem(path: string) {
+    const fullPath = this.convertToFullPath(path);
+
+    // Can't delete src folder
+    if (PgCommon.isPathsEqual(fullPath, this.getCurrentSrcPath())) {
+      throw new Error(PgExplorer.errors.SRC_DELETE);
+    }
+
+    if (!this.isTemporary) {
+      const metadata = await this.fs.getMetadata(fullPath);
+      if (metadata.isFile()) await this.fs.removeFile(fullPath);
+      else await this.fs.removeDir(fullPath, { recursive: true });
+    }
+
+    // If we are deleting current file's parent(s), we need to set the current
+    // file to the last tab
+    const isCurrentFile = this.currentFilePath === fullPath;
+    const isCurrentParent = this.currentFilePath?.startsWith(fullPath);
+
+    for (const path in this.files) {
+      if (path.startsWith(fullPath)) {
+        delete this.files[path];
+        this.closeFile(path);
+      }
+    }
+
+    // Deleting all elements from a folder results with the parent folder
+    // disappearing, add the folder back to mitigate
+    this.files[PgExplorer.getParentPathFromPath(fullPath)] = {};
+
+    // Change the current file to the closest tab when current file or its
+    // parent is deleted
+    if (isCurrentFile || isCurrentParent) {
+      const lastTabPath = this.tabs.at(-1);
+      if (lastTabPath) this.openFile(lastTabPath);
+    }
+
+    PgCommon.createAndDispatchCustomEvent(
+      this.events.ON_DID_DELETE_ITEM,
+      fullPath
+    );
+
+    await this.saveMeta();
+  }
+
+  /**
+   * Create a new workspace and change the current workspace to the created workspace.
+   *
+   * @param name new workspace name
+   * @param opts -
+   * - `files`: `TupleFiles` to create the workspace from
+   * - `defaultOpenFile`: default file to open in the editor
+   * - `fromTemporary`: whether to create new workspace from a temporary project
+   * - `skipNameValidation`: whether to skip workspace name validation
+   * - `id`: an existing id to adopt, for a workspace restored from the server
+   */
+  static async createWorkspace(
+    name: string,
+    opts?: {
+      files?: TupleFiles;
+      defaultOpenFile?: string;
+      fromTemporary?: boolean;
+      skipNameValidation?: boolean;
+      id?: string;
+    }
+  ) {
+    name = name.trim();
+    if (!opts?.skipNameValidation && !this.isWorkspaceNameValid(name)) {
+      throw new Error(PgWorkspace.errors.INVALID_NAME);
+    }
+
+    if (opts?.fromTemporary && this.isTemporary) {
+      // The reason we are not just getting the necessary files and re-calling this
+      // function with { files } is because we would lose the tab info. Instead we
+      // are creating a valid workspace state and writing it to `indexedDB`.
+
+      // Init workspace
+      await this._initWorkspaces();
+      // Create a new workspace in state
+      this._workspace!.create(name);
+
+      // It's important to set `_isTemporary` after the workspace is created,
+      // otherwise there is a chance the creation fails, and the state ends up
+      // being invalid.
+      // See https://github.com/solana-playground/solana-playground/issues/275
+      this._isTemporary = false;
+
+      // Change state paths(temporary projects start with /src)
+      const getFullPath = (path: string) => {
+        return PgCommon.joinPaths(PgExplorer.PATHS.ROOT_DIR_PATH, name, path);
+      };
+      for (const path in this.files) {
+        const data = this.files[path];
+        delete this.files[path];
+        this.files[getFullPath(path)] = data;
+      }
+      this.setTabs(this.tabs.map(getFullPath));
+
+      // Save files from state to `indexedDB`
+      await this._writeAllFromState();
+
+      await this.switchWorkspace(name);
+
+      return;
+    }
+
+    if (!this._workspace) throw new Error(PgWorkspace.errors.NOT_FOUND);
+
+    // Create a new workspace in state
+    this._workspace.create(name, opts?.id);
+
+    // Create files
+    if (opts?.files) {
+      for (const [path, content] of opts.files) {
+        await this.fs.writeFile(path, content, { createParents: true });
+      }
+
+      // Set the default open file
+      opts.defaultOpenFile ??= this._getDefaultOpenFile(opts.files);
+    }
+
+    await this.switchWorkspace(name, {
+      defaultOpenFile: opts?.defaultOpenFile,
+    });
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_WORKSPACE);
+  }
+
+  /**
+   * Change the current workspace to the given workspace.
+   *
+   * @param name workspace name to change to
+   * @param opts -
+   * - `defaultOpenFile`: the file to open in the editor
+   */
+  static async switchWorkspace(
+    name: string,
+    opts?: { defaultOpenFile?: string }
+  ) {
+    // Save metadata before changing the workspace to never lose data
+    await this.saveMeta();
+
+    // Set the workspace
+    this.setWorkspaceName(name);
+    await this._saveWorkspaces();
+
+    // Initialize the workspace
+    await this._initCurrentWorkspace();
+
+    // Open the default file if it has been specified
+    if (opts?.defaultOpenFile) {
+      this.openFile(opts.defaultOpenFile);
+
+      // Save metadata to never lose default open file
+      await this.saveMeta();
+    } else {
+      PgCommon.createAndDispatchCustomEvent(
+        this.events.ON_DID_OPEN_FILE,
+        this.getCurrentFile()
+      );
+    }
+
+    // Set initialized workspace name
+    this._initializedWorkspaceName = name;
+
+    // Dispatch change event
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_SWITCH_WORKSPACE);
+  }
+
+  /**
+   * Add a workspace from outside this browser, without opening it.
+   *
+   * Everything else that creates a workspace switches to it, because the user
+   * just asked for it. An imported one arrives while the user is in the middle
+   * of something else, and a switch is not private: `routes/tutorials` listens
+   * for it and navigates away when the new workspace is not the tutorial,
+   * which also closes the open conversation. So this writes the files and
+   * registers the workspace, and leaves `currentId` exactly where it was.
+   *
+   * Only the current workspace is ever held in memory, so the imported files
+   * go straight to the backing store -- there is no in-memory state for them
+   * to be missing from.
+   *
+   * @param name workspace name, which must not already be in use
+   * @param opts -
+   * - `id`: the id to adopt, so the source device and this one agree
+   * - `files`: project-relative paths to contents
+   */
+  static async importWorkspace(
+    name: string,
+    opts: { id: string; files: Record<string, string> }
+  ) {
+    if (!this._workspace) throw new Error(PgWorkspace.errors.NOT_FOUND);
+    // Before any file is written: the files go under the name, and a name
+    // already in use is another workspace's directory
+    if (this._workspace.allNames.includes(name)) {
+      throw new Error(PgWorkspace.errors.ALREADY_EXISTS);
+    }
+
+    for (const [path, content] of Object.entries(opts.files)) {
+      await this.fs.writeFile(
+        PgCommon.joinPaths(this.PATHS.ROOT_DIR_PATH, name, path),
+        content,
+        { createParents: true }
+      );
+    }
+
+    this._workspace.add(name, opts.id);
+    await this._saveWorkspaces();
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_WORKSPACE);
+  }
+
+  /**
+   * Overwrite a workspace's files with the given ones.
+   *
+   * A replace, not a merge: the snapshot is the whole project, so a file
+   * deleted on the other device has to disappear here too rather than linger
+   * as a file nobody wrote. That is what makes the server's copy authoritative
+   * instead of merely newer.
+   *
+   * Writes to the backing store and leaves the in-memory state alone, because
+   * only the current workspace has any -- a caller replacing the *current*
+   * workspace has to re-open it afterwards for the editor to catch up.
+   *
+   * @param name local workspace name, which must already exist
+   * @param files project-relative paths to contents
+   */
+  static async replaceWorkspaceFiles(
+    name: string,
+    files: Record<string, string>
+  ) {
+    const dir = PgCommon.joinPaths(this.PATHS.ROOT_DIR_PATH, name);
+    const metadataPath = PgCommon.joinPaths(dir, PgWorkspace.METADATA_PATH);
+
+    // Which tabs are open, and where the caret is, is this device's business:
+    // the snapshot deliberately leaves it out so that merely *looking* at a
+    // project is not a change other devices have to reconcile. That makes it
+    // local state, and a sync operation has no business being the thing that
+    // deletes it -- which clearing the directory below otherwise does.
+    //
+    // Losing it is not cosmetic. With no tabs there is no current file, so the
+    // editor has nothing to re-read and goes on rendering the version the user
+    // just chose to replace, until the page is reloaded.
+    const metadata = await this.fs.readToJSONOrDefault<ItemMetaFile>(
+      metadataPath,
+      []
+    );
+
+    try {
+      await this.fs.removeDir(dir, { recursive: true });
+    } catch {
+      // Nothing there to clear is the ordinary case for a workspace that is
+      // registered but whose directory never landed; the writes below are
+      // what matter
+    }
+
+    for (const [path, content] of Object.entries(files)) {
+      await this.fs.writeFile(PgCommon.joinPaths(dir, path), content, {
+        createParents: true,
+      });
+    }
+
+    // Only the entries that still name a file the incoming snapshot has, so
+    // the editor does not come back pointing at something the other device
+    // deleted
+    const kept = metadata.filter((meta) => files[meta.path] !== undefined);
+    if (kept.length) {
+      await this.fs.writeFile(metadataPath, JSON.stringify(kept), {
+        createParents: true,
+      });
+    }
+
+    await this.fs.flush();
+  }
+
+  /**
+   * Let the editor say where its copies of files live.
+   *
+   * A registry rather than an event, because a caller that has just rewritten
+   * files needs the buffers updated *before* it goes on -- sync holds pushes
+   * until the editor agrees with the store, and an event gives it nothing to
+   * wait on.
+   */
+  static registerEditorBuffers(buffers: EditorBuffers): Disposable {
+    this._editorBuffers = buffers;
+    return {
+      dispose: () => {
+        if (this._editorBuffers === buffers) this._editorBuffers = null;
+      },
+    };
+  }
+
+  /** The editor's buffers, or `null` when no editor is mounted */
+  static get editorBuffers(): EditorBuffers | null {
+    return this._editorBuffers;
+  }
+
+  /**
+   * Rename a workspace, the current one unless `opts.from` names another.
+   *
+   * Another one is renamed where it lies, without switching to it: sync
+   * renames a project renamed on another device when it takes that device's
+   * copy, and the project need not be the one the user is in.
+   *
+   * @param newName new workspace name
+   * @param opts -
+   * - `from`: the workspace to rename; defaults to the current one
+   */
+  static async renameWorkspace(
+    newName: string,
+    opts?: { from?: string; announce?: boolean }
+  ) {
+    newName = newName.trim();
+    if (!this.isWorkspaceNameValid(newName)) {
+      throw new Error(PgWorkspace.errors.INVALID_NAME);
+    }
+
+    const from = opts?.from;
+    if (from !== undefined && from !== this.currentWorkspaceName) {
+      if (!this._workspace?.allNames.includes(from)) {
+        throw new Error(PgWorkspace.errors.NOT_FOUND);
+      }
+      if (this._workspace.allNames.includes(newName)) {
+        throw new Error(PgWorkspace.errors.ALREADY_EXISTS);
+      }
+
+      const fromPath = PgCommon.joinPaths(this.PATHS.ROOT_DIR_PATH, from);
+      const newPath = PgCommon.joinPaths(this.PATHS.ROOT_DIR_PATH, newName);
+      await this.fs.rename(fromPath, newPath);
+      try {
+        this._workspace.rename(newName, from);
+        await this._saveWorkspaces();
+      } catch (e) {
+        // Put back what moved, or the list names a directory that is gone
+        if (this._workspace.allNames.includes(newName)) {
+          this._workspace.rename(from, newName);
+        }
+        await this.fs.rename(newPath, fromPath);
+        await this._saveWorkspaces().catch(() => {});
+        throw e;
+      }
+      // Announced only when the user asked for it, and with the renamed
+      // workspace's id: a listener that took it as a rename of the current
+      // workspace flagged the open project dirty for a rename it never had.
+      // A rename sync made to follow another device is not announced at all.
+      if (opts?.announce) {
+        PgCommon.createAndDispatchCustomEvent(
+          this.events.ON_DID_RENAME_WORKSPACE,
+          { id: this.workspaceIdOf(newName) }
+        );
+      }
+      return;
+    }
+
+    const workspacePath = this.getRequiredCurrentWorkspacePath();
+    if (this.allWorkspaceNames!.includes(newName)) {
+      throw new Error(PgWorkspace.errors.ALREADY_EXISTS);
+    }
+
+    // Rename workspace folder
+    const newPath = workspacePath.replace(this.currentWorkspaceName!, newName);
+    await this.renameItem(workspacePath, newPath, { skipNameValidation: true });
+
+    // Rename workspace in state
+    this._workspace!.rename(newName);
+
+    await this.switchWorkspace(newName);
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_RENAME_WORKSPACE);
+  }
+
+  /**
+   * Delete a workspace and everything in it.
+   *
+   * @param name the workspace to delete; defaults to the current one
+   * @throws if not in a workspace, or if `name` is not one
+   *
+   * Deleting a workspace the user is not in leaves them where they are — the
+   * switch below would otherwise discard unsaved editor state in the project
+   * they are actually working on, to remove a different one.
+   */
+  static async deleteWorkspace(name?: string) {
+    if (!this._workspace) throw new Error(PgWorkspace.errors.NOT_FOUND);
+    const workspace = this._workspace;
+    const workspaceName = name ?? this.currentWorkspaceName;
+    if (!workspaceName) throw new Error(PgWorkspace.errors.CURRENT_NOT_FOUND);
+    if (!workspace.allNames.includes(workspaceName)) {
+      throw new Error(PgWorkspace.errors.NOT_FOUND);
+    }
+
+    const isCurrent = workspaceName === this.currentWorkspaceName;
+    const workspacePath = PgCommon.joinPaths(
+      PgExplorer.PATHS.ROOT_DIR_PATH,
+      PgCommon.appendSlash(workspaceName)
+    );
+
+    // Delete from `indexedDB`
+    await this.deleteItem(workspacePath);
+
+    // Delete from state
+    workspace.delete(workspaceName);
+
+    if (!isCurrent) {
+      await this._saveWorkspaces();
+    } else if (workspace.allNames.length) {
+      const lastWorkspace = workspace.allNames.at(-1)!;
+      await this.switchWorkspace(lastWorkspace);
+    } else {
+      workspace.setCurrent({ workspaces: [] });
+      await this._saveWorkspaces();
+      PgCommon.createAndDispatchCustomEvent(
+        this.events.ON_DID_SWITCH_WORKSPACE
+      );
+    }
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_DELETE_WORKSPACE);
+  }
+
+  /**
+   * Saves file metadata to `indexedDB`
+   *
+   * NOTE: Only runs when the project is not temporary.
+   */
+  static async saveMeta() {
+    if (this.isTemporary) return;
+
+    const paths = Object.keys(this.files);
+    if (!paths.length) return;
+
+    // Nothing is current, so there is nowhere for this to go. `deleteWorkspace`
+    // removes the workspace from state and only then moves to another one, so
+    // `switchWorkspace` -- which saves metadata first -- runs inside a window
+    // where the explorer holds workspaces and none of them is current.
+    //
+    // Upstream passed through that window by accident: the pointer was a name,
+    // so it went on naming the workspace just deleted and the check below
+    // rejected it as an invalid state. The pointer is an id now and resolves
+    // through the list, so the same window answers "no current workspace" and
+    // the required-path getter threw -- leaving the explorer wedged with
+    // workspaces it could not render, which is what `Folders` fell over on.
+    // The file map at that point holds the deleted workspace's paths, so the
+    // check below is what would have rejected them anyway.
+    const workspacePath = this.getCurrentWorkspacePath();
+    if (!workspacePath) return;
+    const isInvalidState = paths.some(
+      (path) => !path.startsWith(workspacePath)
+    );
+    if (isInvalidState) return;
+
+    const metaFile = paths
+      .reduce((acc, path) => {
+        // Only save the files in the current workspace
+        if (path.startsWith(workspacePath)) {
+          acc.push({
+            path,
+            isTabs: this.tabs.includes(path),
+            isCurrent: this.currentFilePath === path,
+            position: this.files[path].meta?.position,
+          });
+        }
+
+        return acc;
+      }, [] as ItemMetaFile)
+      .sort((a, b) => {
+        // Sort based on tab order
+        if (!a.isTabs) return 1;
+        if (!b.isTabs) return -1;
+        return this.tabs.indexOf(a.path) - this.tabs.indexOf(b.path);
+      })
+      .map((meta) => ({ ...meta, path: this.getRelativePath(meta.path) }));
+
+    // Save file
+    await this.fs.writeFile(
+      PgWorkspace.METADATA_PATH,
+      JSON.stringify(metaFile),
+      { createParents: true }
+    );
+  }
+
+  /* ----------------------------- State methods ---------------------------- */
+
+  /**
+   * Get all files as `TupleFiles`
+   *
+   * @returns all files as an array of [path, content] tuples
+   */
+  static getAllFiles() {
+    return this._convertToTupleFiles(this.files);
+  }
+
+  /**
+   * Save the file to the state only.
+   *
+   * @param path file path
+   * @param content file content
+   */
+  static saveFileToState(path: string, content: string) {
+    path = this.convertToFullPath(path);
+    if (!this.files[path]) return;
+
+    this.files[path].content = content;
+    // The only signal that a file's *contents* changed. `onDidCreateItem` and
+    // friends cover the tree's shape, and nothing covered an edit -- so
+    // anything mirroring the workspace had no way to know it had gone stale.
+    // Dispatched from here rather than from the editor because this is what
+    // `getAllFiles` reads, so a listener is guaranteed to see the new content.
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_SAVE_FILE);
+  }
+
+  /**
+   * Get the full file data.
+   *
+   * @param path path of the file, defaults to the current file if it exists
+   */
+  static getFile(path: string): FullFile | null {
+    path = this.convertToFullPath(path);
+    const itemInfo = this.files[path];
+    if (itemInfo) return { path, ...this.files[path] };
+    return null;
+  }
+
+  /**
+   * Get file content from state.
+   *
+   * @param path file path
+   * @returns the file content from state
+   */
+  static getFileContent(path: string) {
+    return this.getFile(path)?.content;
+  }
+
+  /**
+   * Get the item names from inside the given folder and group them into
+   * `files` and `folders`.
+   *
+   * @param path folder path
+   * @returns the groupped folder items
+   */
+  static getFolderContent(path: string) {
+    path = PgCommon.appendSlash(PgExplorer.convertToFullPath(path));
+
+    const files = this.files;
+    const filesAndFolders: Folder = { folders: [], files: [] };
+
+    for (const itemPath in files) {
+      if (itemPath.startsWith(path)) {
+        const item = itemPath.split(path)[1].split("/")[0];
+        if (
+          !filesAndFolders.files.includes(item) &&
+          !filesAndFolders.folders.includes(item) &&
+          item
+        ) {
+          // It's a file if it contains '.'
+          // TODO: Implement a better system for folders and files
+          if (item.includes(".")) filesAndFolders.files.push(item);
+          else filesAndFolders.folders.push(item);
+        }
+      }
+    }
+
+    return filesAndFolders;
+  }
+
+  /**
+   * Get the current open file from state if it exists.
+   *
+   * @returns the current file
+   */
+  static getCurrentFile() {
+    if (this.currentFilePath) return this.getFile(this.currentFilePath);
+    return null;
+  }
+
+  /**
+   * Get the current file's language from it's path.
+   *
+   * @returns the current language name
+   */
+  static getCurrentFileLanguage() {
+    if (this.currentFilePath) {
+      return PgLanguage.getFromPath(this.currentFilePath);
+    }
+  }
+
+  /**
+   * Get whether current file is a regular JS/TS or test JS/TS file.
+   *
+   * @returns whether the current file is a JavaScript-like file
+   */
+  static isCurrentFileJsLike() {
+    if (this.currentFilePath) {
+      return PgLanguage.getIsPathJsLike(this.currentFilePath);
+    }
+  }
+
+  /**
+   * Open the file at the given path.
+   *
+   * This method mutates the existing tabs array.
+   *
+   * @param path file path
+   */
+  static openFile(path: string) {
+    path = this.convertToFullPath(path);
+
+    // Return if it's already the current file
+    if (this.currentFilePath === path) return;
+
+    // Add to tabs if it hasn't yet been added
+    if (!this.tabs.includes(path)) this._explorer.tabs.push(path);
+
+    // Update the current file index
+    this._explorer.currentIndex = this.tabs.indexOf(path);
+
+    PgCommon.createAndDispatchCustomEvent(
+      this.events.ON_DID_OPEN_FILE,
+      this.getCurrentFile()
+    );
+  }
+
+  /**
+   * Close the file at the given path.
+
+   * This method mutates the existing tabs array.
+   *
+   * @param path file path
+   */
+  static closeFile(path: string) {
+    path = this.convertToFullPath(path);
+
+    // If closing the current file, change the current file to the next tab
+    if (this.currentFilePath === path) {
+      const pathToOpen =
+        this.tabs.at(this._currentIndex + 1) ?? this.tabs.at(-2);
+      if (pathToOpen) this.openFile(pathToOpen);
+    }
+
+    // Update tabs and the current index
+    //
+    // NOTE: This is actually required to be stored because removing the tab
+    // may make `this.currentFilePath` `undefined`, which then makes the current
+    // index `-1`. Custom getter is the source of the problem, as it makes it
+    // hard to spot when the value changed.
+    const currentFilePath = this.currentFilePath;
+    if (currentFilePath) {
+      this._explorer.tabs.splice(this.tabs.indexOf(path), 1);
+      this._explorer.currentIndex = this.tabs.indexOf(currentFilePath);
+    }
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CLOSE_FILE);
+  }
+
+  /**
+   * Set the tab paths without duplication.
+   *
+   * @param tabs tab paths to set
+   */
+  static setTabs(tabs: readonly string[]) {
+    const currentPath = this.currentFilePath;
+    this._explorer.tabs = [...new Set(tabs)];
+    if (currentPath) {
+      this._explorer.currentIndex = this.tabs.indexOf(currentPath);
+    }
+
+    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_SET_TABS);
+  }
+
+  /**
+   * Get the position data for the file from state.
+   *
+   * @param path file path
+   * @returns the file's position data
+   */
+  static getEditorPosition(path: string): Position {
+    return (
+      this.getFile(path)?.meta?.position ?? {
+        cursor: { from: 0, to: 0 },
+        topLineNumber: 1,
+      }
+    );
+  }
+
+  /**
+   * Save editor position data to state.
+   *
+   * @param path file path
+   * @param position position data
+   */
+  static saveEditorPosition(path: string, position: Position) {
+    path = this.convertToFullPath(path);
+
+    this.files[path].meta ??= {};
+    this.files[path].meta!.position = position;
+  }
+
+  /**
+   * Set the current workspace name.
+   *
+   * @param name workspace name
+   */
+  static setWorkspaceName(name: string) {
+    this._workspace!.setCurrentName(name);
+  }
+
+  /**
+   * Get the path without the workspace path prefix.
+   *
+   * @param fullPath full path
+   * @returns the relative path
+   */
+  static getRelativePath(fullPath: string) {
+    // /src/lib.rs -> src/lib.rs
+    if (PgExplorer.isTemporary) return fullPath.substring(1);
+
+    // /name/src/lib.rs -> src/lib.rs
+    return fullPath.replace(this.getRequiredCurrentWorkspacePath(), "");
+  }
+
+  /**
+   * Get the canonical path, i.e. the full path from the project root and
+   * directory paths end with `/`.
+   *
+   * @param path item path
+   * @returns the canonical path
+   */
+  static getCanonicalPath(path: string) {
+    path = PgExplorer.convertToFullPath(path);
+    if (PgExplorer.getItemTypeFromPath(path).file) return path;
+    return PgCommon.appendSlash(path);
+  }
+
+  // TODO: Path module
+  /**
+   * Convert the given path to a full path.
+   *
+   * @param path path to convert
+   * @returns the full path
+   */
+  static convertToFullPath(path: string) {
+    // Return absolute path
+    if (path.startsWith(this.PATHS.ROOT_DIR_PATH)) return path;
+
+    // Convert to absolute path if it doesn't start with '/'
+    return PgCommon.joinPaths(this.getProjectRootPath(), path);
+  }
+
+  /**
+   * Get the current project root path.
+   *
+   * This is not to be confused with root path(`/`).
+   *
+   * @returns the current project root path
+   */
+  static getProjectRootPath() {
+    if (this.isTemporary) return this.PATHS.ROOT_DIR_PATH;
+    return this.getRequiredCurrentWorkspacePath();
+  }
+
+  /**
+   * Get the current `src` directory path.
+   *
+   * @returns the current `src` directory path with `/` appended
+   */
+  static getCurrentSrcPath() {
+    const srcPath = PgCommon.joinPaths(
+      this.getProjectRootPath(),
+      this.PATHS.SRC_DIRNAME
+    );
+    return PgCommon.appendSlash(srcPath);
+  }
+
+  /**
+   * Get full path of current workspace (`/` appended), or `null` if not in a
+   * workspace.
+   *
+   * @returns the workspace path
+   */
+  static getCurrentWorkspacePath() {
+    if (!this.currentWorkspaceName) return null;
+
+    return PgCommon.joinPaths(
+      PgExplorer.PATHS.ROOT_DIR_PATH,
+      PgCommon.appendSlash(this.currentWorkspaceName)
+    );
+  }
+
+  /**
+   * Get full path of current workspace (`/` appended).
+   *
+   * @throws if not currently in a workspace
+   * @returns the workspace path
+   */
+  static getRequiredCurrentWorkspacePath() {
+    if (!this._workspace) {
+      throw new Error(PgWorkspace.errors.NOT_FOUND);
+    }
+    if (!this.currentWorkspaceName) {
+      throw new Error(PgWorkspace.errors.CURRENT_NOT_FOUND);
+    }
+
+    // Previous checks guarantee definition
+    return this.getCurrentWorkspacePath()!;
+  }
+
+  /* --------------------------- Change listeners --------------------------- */
+
+  /**
+   * Runs after explorer state has changed and the UI needs to re-render.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onNeedRender(cb: () => unknown) {
+    return PgCommon.batchChanges(cb, [
+      PgExplorer.onDidInit,
+      PgExplorer.onDidCreateItem,
+      PgExplorer.onDidDeleteItem,
+      PgExplorer.onDidOpenFile,
+      PgExplorer.onDidCloseFile,
+    ]);
+  }
+
+  /**
+   * Runs after explorer has been initialized.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidInit(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_INIT, cb);
+  }
+
+  /**
+   * Runs after creating a new item.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidCreateItem(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_CREATE_ITEM, cb);
+  }
+
+  /**
+   * Runs after renaming an item.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidRenameItem(cb: (path: string) => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_RENAME_ITEM, cb);
+  }
+
+  /**
+   * Runs after deleting an item.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  /**
+   * Runs after a file's contents change.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidSaveFile(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_SAVE_FILE, cb);
+  }
+
+  static onDidDeleteItem(cb: (path: string) => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_DELETE_ITEM, cb);
+  }
+
+  /**
+   * Runs after switching to a different file.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidOpenFile(cb: (file: FullFile | null) => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_OPEN_FILE, cb, {
+      value: PgExplorer.getCurrentFile(),
+    });
+  }
+
+  /**
+   * Runs after closing a file.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidCloseFile(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_CLOSE_FILE, cb);
+  }
+
+  /**
+   * Runs after setting tabs.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidSetTabs(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_SET_TABS, cb);
+  }
+
+  /**
+   * Runs after creating a workspace.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidCreateWorkspace(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_CREATE_WORKSPACE, cb);
+  }
+
+  /**
+   * Runs after renaming a workspace.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  /**
+   * @param cb receives the renamed workspace's id when it was not the current
+   * one, and nothing for a rename of the current workspace
+   */
+  static onDidRenameWorkspace(cb: (renamed?: { id?: string }) => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_RENAME_WORKSPACE, cb);
+  }
+
+  /**
+   * Runs after deleting a workspace.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidDeleteWorkspace(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_DELETE_WORKSPACE, cb);
+  }
+
+  /**
+   * Runs after switching to a different workspace.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidSwitchWorkspace(cb: () => unknown) {
+    return PgCommon.onDidChange(PgExplorer.events.ON_DID_SWITCH_WORKSPACE, cb);
+  }
+
+  /* ---------------------------- Private methods --------------------------- */
+
+  /**
+   * Initialize explorer with the current workspace.
+   *
+   * Only the current workspace at a time will be in the memory.
+   */
+  private static async _initCurrentWorkspace() {
+    // No workspace to open is a state, not a fault: the recovery below resets
+    // to none when the config named workspaces the filesystem does not have,
+    // and then calls back into here. Demanding one turned that rescue into
+    // "Current workspace not found" -- the same failure it was recovering
+    // from, now with nothing left to recover. `init` reaches the identical
+    // end state by its own route when there are no workspaces at all, and
+    // `Flow` answers it by offering to make one.
+    const workspacePath = this.getCurrentWorkspacePath();
+    if (!workspacePath) {
+      this._explorer = this._getDefaultState();
+      return;
+    }
+
+    const workspace = this._workspace!;
+
+    // Reset files
+    this._explorer.files = {};
+
+    // Sets up the files from `indexedDB` to the state
+    const setupFiles = async (path: string) => {
+      const itemNames = await this.fs.readDir(path);
+
+      // Empty directory
+      if (!itemNames.length) {
+        this.files[path] = {};
+        return;
+      }
+
+      const subItemPaths = itemNames
+        .filter(PgExplorer.isItemNameValid)
+        .map((itemName) => {
+          return PgExplorer.getCanonicalPath(
+            PgCommon.joinPaths(path, itemName)
+          );
+        });
+      for (const subItemPath of subItemPaths) {
+        const metadata = await this.fs.getMetadata(subItemPath);
+        if (metadata.isFile()) {
+          try {
+            // This might fail if the user closes the window when a file delete
+            // operation has not been completed yet
+            const content = await this.fs.readToString(subItemPath);
+            this.files[subItemPath] = { content };
+          } catch (e: any) {
+            console.log(`Couldn't read to string: ${e.message} ${subItemPath}`);
+          }
+        } else {
+          await setupFiles(subItemPath);
+        }
+      }
+    };
+
+    try {
+      await setupFiles(workspacePath);
+    } catch (e: any) {
+      console.log("Couldn't setup files:", e.message);
+
+      // The most likely cause for `setupFiles` failure is if the current
+      // workspace doesn't exist in the filesystem but it's saved as the
+      // current workspace. To fix this, set the current workspace name to
+      // either the last workspace, or reset all workspaces in the case of no
+      // valid workspace directory in `/`.
+      if (workspace.allNames.length) {
+        const rootDirs = await this.fs.readDir(PgExplorer.PATHS.ROOT_DIR_PATH);
+        const workspaceDirs = rootDirs.filter(PgExplorer.isItemNameValid);
+        if (!workspaceDirs.length) {
+          // Reset workspaces since there is no workspace directories
+          this._workspace = new PgWorkspace();
+        } else {
+          // Remove the current workspace.
+          //
+          // NOTE: Intentionally avoiding using `this.deleteWorkspace`, in order
+          // to keep the files in case we want to recover in the future.
+          if (workspace.currentName) workspace.delete(workspace.currentName);
+
+          // Switch to the last available workspace
+          const lastWorkspaceName = workspaceDirs.at(-1)!;
+          workspace.setCurrentName(lastWorkspaceName);
+        }
+
+        await this._saveWorkspaces();
+        await this._initCurrentWorkspace();
+        return;
+      }
+
+      console.log("No workspace found. Most likely needs initial setup.");
+    }
+
+    // Runs when `indexedDB` is empty
+    if (!Object.keys(this.files).length && !this.allWorkspaceNames?.length) {
+      console.log("Setting up default FS...");
+      // For backwards compatibility reasons, we check whether explorer key is used in localStorage
+      // and move the localStorage FS to `indexedDB`.
+      // TODO: delete this check after moving domains
+      const lsExplorerStr = localStorage.getItem("explorer");
+      if (lsExplorerStr) {
+        // Create a default workspace
+        workspace.create(PgWorkspace.DEFAULT_WORKSPACE_NAME);
+        // Save workspaces
+        await this._saveWorkspaces();
+
+        const lsExplorer: Explorer = JSON.parse(lsExplorerStr);
+        const lsFiles = lsExplorer.files;
+        for (const path in lsFiles) {
+          const oldData = lsFiles[path];
+          delete lsFiles[path];
+          lsFiles[path.replace(PgExplorer.PATHS.ROOT_DIR_PATH, workspacePath)] =
+            {
+              content: oldData.content,
+              // @ts-ignore // ignoring because the type of oldData changed
+              meta: { current: oldData.current, tabs: oldData.tabs },
+            };
+        }
+        this._explorer.files = lsFiles;
+      } else {
+        // There are no files in state and `indexedDB`
+        // return and show create a project option
+        return;
+      }
+
+      // Save file(s) to `indexedDB`
+      await this._writeAllFromState();
+
+      // Create tab info file
+      await this.saveMeta();
+    }
+
+    // Load metadata info from `indexedDB`
+    let metaFile = await this.fs.readToJSONOrDefault<ItemMetaFile>(
+      PgWorkspace.METADATA_PATH,
+      []
+    );
+
+    // Convert the old metadata file
+    // TODO: Delete in 2024
+    if (!Array.isArray(metaFile)) {
+      type OldItemMetaFile = Record<
+        string,
+        {
+          current?: boolean;
+          tabs?: boolean;
+          position?: Position;
+        }
+      >;
+
+      const oldMetaFile = metaFile as OldItemMetaFile;
+      metaFile = [];
+      for (const path in oldMetaFile) {
+        const meta = oldMetaFile[path];
+        metaFile.push({
+          path,
+          isTabs: meta.tabs,
+          isCurrent: meta.current,
+          position: meta.position,
+        });
+      }
+    }
+
+    // Metadata file paths are relative, convert to full path
+    const fullPathMetaFile = metaFile.map((meta) => ({
+      ...meta,
+      path: this.convertToFullPath(meta.path),
+    }));
+
+    // Tabs
+    const tabs = fullPathMetaFile
+      .filter((meta) => meta.isTabs)
+      .map((meta) => meta.path);
+    this.setTabs(tabs);
+
+    // Current
+    const current = fullPathMetaFile.find((meta) => meta.isCurrent);
+    this._explorer.currentIndex = current
+      ? this.tabs.indexOf(current.path)
+      : -1;
+
+    // Nothing to show. The metadata is what remembers which file was open, so
+    // a workspace that has never had one -- or whose metadata did not survive
+    // having its files replaced from another device -- opens with an empty
+    // editor over a full file tree, and stays that way until the user clicks
+    // something. Falling back to the same default a new project gets means
+    // re-reading a workspace always lands somewhere.
+    if (this._explorer.currentIndex === -1) {
+      const defaultOpenFile = this._getDefaultOpenFile(this.files);
+      if (defaultOpenFile) this.openFile(defaultOpenFile);
+    }
+
+    // Metadata
+    for (const itemMeta of fullPathMetaFile) {
+      const file = this.files[itemMeta.path];
+      if (file?.content !== undefined) {
+        file.meta = { position: itemMeta.position };
+      }
+    }
+  }
+
+  /** Write all state data to `indexedDB`. */
+  private static async _writeAllFromState() {
+    for (const path in this.files) {
+      const itemType = PgExplorer.getItemTypeFromPath(path);
+      if (itemType.file) {
+        await this.fs.writeFile(path, this.files[path].content ?? "", {
+          createParents: true,
+        });
+      } else {
+        await this.fs.createDir(path, { createParents: true });
+      }
+    }
+  }
+
+  /**
+   * Read workspaces config from `indexedDB`.
+   *
+   * @returns the workspaces state
+   */
+  private static async _getWorkspaces() {
+    // Migrated here rather than at each call site: this is the only door the
+    // on-disk shape comes through, and every existing user still has the
+    // pre-id one. `migrate` is idempotent, so a migrated config passes
+    // straight through.
+    return PgWorkspace.migrate(
+      await this.fs.readToJSONOrDefault(
+        PgWorkspace.WORKSPACES_CONFIG_PATH,
+        PgWorkspace.DEFAULT
+      )
+    );
+  }
+
+  /** Initialize workspaces from `indexedDB` to state. */
+  private static async _initWorkspaces() {
+    const workspaces = await this._getWorkspaces();
+    this._workspace ??= new PgWorkspace();
+    this._workspace.setCurrent(workspaces);
+    await this._saveWorkspaces();
+  }
+
+  /** Saves workspaces from state to `indexedDB`. */
+  private static async _saveWorkspaces() {
+    if (this._workspace) {
+      // Recorded as saved once it has landed, not before. Until then the
+      // store may still hold the old list -- or keep it, if the write fails
+      // -- and recorded early, this tab's own change would read as the
+      // store's at the next refresh, and be replaced by it.
+      const saving = JSON.stringify(this._workspace.get().workspaces);
+      await this.fs.writeFile(
+        PgWorkspace.WORKSPACES_CONFIG_PATH,
+        JSON.stringify(this._workspace.get()),
+        { createParents: true }
+      );
+
+      // Every structural workspace change funnels through here, and the
+      // backing store defers its directory-tree write by 500ms. Without this,
+      // a reload in that window finds the config listing a workspace whose
+      // directory was never persisted -- "No project", with the files still
+      // on disk but unreachable.
+      await this.fs.flush();
+      // Only while memory still holds what was written: a later change has
+      // a save of its own coming, and a refresh meanwhile has recorded what
+      // it took
+      if (JSON.stringify(this._workspace.get().workspaces) === saving) {
+        this._savedWorkspaces = saving;
+      }
+    }
+  }
+
+  /**
+   * Get the default explorer state.
+   *
+   * NOTE: This is intentionally a method instead of a property in order to create a
+   * new object each time since explorer methods mutate the existing object.
+   *
+   * @returns the default explorer state
+   */
+  private static _getDefaultState(): Explorer {
+    return {
+      files: {},
+      tabs: [],
+      currentIndex: -1,
+    };
+  }
+
+  /* ------------------------------- Utilities ------------------------------ */
+
+  /** Paths */
+  static readonly PATHS = {
+    ROOT_DIR_PATH: "/",
+    SRC_DIRNAME: "src",
+    CLIENT_DIRNAME: "client",
+    TESTS_DIRNAME: "tests",
+    WORKSPACE_DIRNAME: ".workspace",
+  };
+
+  /**
+   * Get item's name from its path.
+   *
+   * @param path item path
+   * @returns the item name
+   */
+  static getItemNameFromPath(path: string) {
+    const items = path.split("/");
+    const name = path.endsWith("/") ? items.at(-2) : items.at(-1);
+    return name!;
+  }
+
+  // TODO: Implement a better identifier
+  /**
+   * Get the item's type from its name.
+   *
+   * @param itemName item name
+   * @returns the item type
+   */
+  static getItemTypeFromName(itemName: string) {
+    if (itemName.includes(".")) return { file: true };
+    return { folder: true };
+  }
+
+  /**
+   * Get the item's type from its path.
+   *
+   * @param path item path
+   * @returns the item type
+   */
+  static getItemTypeFromPath(path: string) {
+    return PgExplorer.getItemTypeFromName(PgExplorer.getItemNameFromPath(path));
+  }
+
+  /**
+   * Get the item's type from the given element.
+   *
+   * @param el item element
+   * @returns the item type
+   */
+  static getItemTypeFromEl(el: HTMLDivElement) {
+    const path = PgExplorer.getItemPathFromEl(el);
+    if (path) return PgExplorer.getItemTypeFromPath(path);
+  }
+
+  /**
+   * Get the item's path from the given element.
+   *
+   * @param el item element
+   * @returns the item path
+   */
+  static getItemPathFromEl(el: Element) {
+    return el?.getAttribute("data-path");
+  }
+
+  /**
+   * Get the parent's path from the given path with `/` appended.
+   *
+   * @param path item path
+   * @returns the parent path
+   */
+  static getParentPathFromPath(path: string) {
+    const pad =
+      this.getItemTypeFromPath(path).folder && path.endsWith("/") ? 2 : 1;
+
+    const names = path.split("/");
+    const parentPath = names
+      .filter((_itemName, i) => i !== names.length - pad)
+      .reduce((acc, itemName) => (acc += `/${itemName}`));
+
+    return PgCommon.appendSlash(parentPath);
+  }
+
+  /**
+   * Get the parent path from the given element.
+   *
+   * @param el item element
+   * @returns the parent path
+   */
+  static getParentPathFromEl(el: HTMLDivElement) {
+    const itemType = PgExplorer.getItemTypeFromEl(el);
+
+    if (itemType?.folder) {
+      return PgExplorer.getItemPathFromEl(el);
+    } else if (itemType?.file) {
+      // The file's owner folder is parent element's previous sibling
+      return PgExplorer.getItemPathFromEl(
+        el.parentElement!.previousElementSibling as HTMLDivElement
+      );
+    }
+  }
+
+  /**
+   * Get the element from its path.
+   *
+   * @param path item path
+   * @returns the element
+   */
+  static getElFromPath(path: string) {
+    return document.querySelector(`[data-path='${path}']`) as
+      | HTMLDivElement
+      | undefined;
+  }
+
+  /** Get the root folder elemement. */
+  static getRootFolderEl() {
+    return document.getElementById(PgView.ids.ROOT_DIR);
+  }
+
+  /** Get the current selected element. */
+  static getSelectedEl() {
+    return document.getElementsByClassName(PgView.classNames.SELECTED)[0] as
+      | HTMLDivElement
+      | undefined;
+  }
+
+  /**
+   * Set the current selected element.
+   *
+   * @param newEl new element to select
+   */
+  static setSelectedEl(newEl: HTMLDivElement) {
+    PgExplorer.getSelectedEl()?.classList.remove(PgView.classNames.SELECTED);
+    newEl.classList.add(PgView.classNames.SELECTED);
+  }
+
+  /** Get the selected context element. */
+  static getCtxSelectedEl() {
+    const ctxSelectedEls = document.getElementsByClassName(
+      PgView.classNames.CTX_SELECTED
+    );
+    if (ctxSelectedEls.length) return ctxSelectedEls[0];
+  }
+
+  /** Set the selected context element. */
+  static setCtxSelectedEl(newEl: HTMLDivElement) {
+    PgExplorer.removeCtxSelectedEl();
+    newEl.classList.add(PgView.classNames.CTX_SELECTED);
+  }
+
+  /** Remove the selected context element. */
+  static removeCtxSelectedEl() {
+    PgExplorer.getCtxSelectedEl()?.classList.remove(
+      PgView.classNames.CTX_SELECTED
+    );
+  }
+
+  /**
+   * Open the given folder element.
+   *
+   * @param el folder element
+   */
+  static openFolder(el: HTMLDivElement) {
+    // Folder icon
+    el.classList.add(PgView.classNames.OPEN);
+
+    // Toggle inside folder
+    const insideFolderEl = el.nextElementSibling;
+    if (insideFolderEl) {
+      insideFolderEl.classList.remove(PgView.classNames.HIDDEN);
+    }
+  }
+
+  /**
+   * Toggle open/close state of the given folder element.
+   *
+   * @param el folder element
+   */
+  static toggleFolder(el: HTMLDivElement) {
+    // Folder icon
+    el.classList.toggle(PgView.classNames.OPEN);
+
+    // Toggle inside folder
+    const insideFolderEl = el.nextElementSibling;
+    if (insideFolderEl)
+      insideFolderEl.classList.toggle(PgView.classNames.HIDDEN);
+  }
+
+  /**
+   * Recursively open all parent folders of the given path.
+   *
+   * @param path item path
+   */
+  static openAllParents(path: string) {
+    for (;;) {
+      const parentPath = this.getParentPathFromPath(path);
+      const parentEl = this.getElFromPath(parentPath);
+      if (!parentEl) break;
+
+      this.openFolder(parentEl);
+      if (parentPath === this.PATHS.ROOT_DIR_PATH) break;
+
+      path = parentPath;
+    }
+  }
+
+  /** Collapse all folders in the UI. */
+  static collapseAllFolders() {
+    // Close all folders
+    const folderElements = document.getElementsByClassName(
+      PgView.classNames.FOLDER
+    );
+    for (const folder of folderElements) {
+      folder.classList.remove(PgView.classNames.OPEN);
+    }
+
+    // Hide all folder inside elements
+    const insideElements = document.getElementsByClassName(
+      PgView.classNames.FOLDER_INSIDE
+    );
+    for (const folderInside of insideElements) {
+      folderInside.classList.add(PgView.classNames.HIDDEN);
+    }
+  }
+
+  /**
+   * Get whether the given name can be used for an item.
+   *
+   * @param name item name
+   * @returns whether the item name is valid
+   */
+  static isItemNameValid(name: string) {
+    return (
+      /^(?![.])[\w\d.-/]+/.test(name) &&
+      !name.includes("//") &&
+      !name.includes("..") &&
+      !name.endsWith("/") &&
+      !name.endsWith(".")
+    );
+  }
+
+  /**
+   * Get whether the given name can be used for a workspace.
+   *
+   * @param name item name
+   * @returns whether the workspace name is valid
+   */
+  static isWorkspaceNameValid(name: string) {
+    return !!name.match(/^(?!\s)[\w\s-]+$/);
+  }
+
+  /* --------------------------- Private utilities -------------------------- */
+
+  /**
+   * Convert the given `ExplorerFiles` to `TupleFiles`.
+   *
+   * @returns all files as an array of [path, content] tuples
+   */
+  private static _convertToTupleFiles(explorerFiles: ExplorerFiles) {
+    const tupleFiles: TupleFiles = [];
+    for (const path in explorerFiles) {
+      const content = explorerFiles[path].content;
+      if (content !== undefined) tupleFiles.push([path, content]);
+    }
+
+    return tupleFiles;
+  }
+
+  /**
+   * Convert the given `TupleFiles` to `ExplorerFiles`.
+   *
+   * @param tupleFiles tuple files to convert
+   * @returns the converted `ExplorerFiles`
+   */
+  private static _convertToExplorerFiles(tupleFiles: TupleFiles) {
+    const explorerFiles: ExplorerFiles = {};
+    for (const [path, content] of tupleFiles) {
+      const fullPath = PgCommon.joinPaths(PgExplorer.PATHS.ROOT_DIR_PATH, path);
+      explorerFiles[fullPath] = { content };
+    }
+
+    return explorerFiles;
+  }
+
+  /**
+   * Get the default open file from the given tuple files.
+   *
+   * @param files tuple or explorer files
+   * @returns the default open file path
+   */
+  private static _getDefaultOpenFile(files: TupleFiles | ExplorerFiles) {
+    if (!Array.isArray(files)) files = this._convertToTupleFiles(files);
+
+    let defaultOpenFile: string | undefined;
+    const libRsFile = files.find(([path]) => path.endsWith("lib.rs"));
+    if (libRsFile) {
+      defaultOpenFile = libRsFile[0];
+    } else if (files.length) {
+      defaultOpenFile = files[0][0];
+    }
+
+    return defaultOpenFile;
+  }
+}

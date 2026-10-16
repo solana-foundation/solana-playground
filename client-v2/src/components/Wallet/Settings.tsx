@@ -1,0 +1,117 @@
+import { FC } from "react";
+import styled from "styled-components";
+
+import Button from "../Button";
+import Img from "../Img";
+import Menu, { MenuItemProps } from "../Menu";
+import {
+  Airdrop,
+  Copy,
+  Edit,
+  ExportFile,
+  ImportFile,
+  Plus,
+  ThreeDots,
+  Trash,
+} from "../Icons";
+import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
+import { useAirdrop, useDarken } from "./hooks";
+import { useCopy } from "../../hooks";
+
+interface SettingsProps {
+  showRename: Fn;
+}
+
+const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
+  showRename,
+}) => {
+  const { airdrop, airdropCondition } = useAirdrop();
+  const { darken, lighten } = useDarken();
+
+  const wallet = PgWallet.current!;
+  const isPg = wallet.isPg;
+  const [copied, copyAddress] = useCopy(wallet.publicKey.toBase58());
+
+  const defaultSettings: MenuItemProps[] = [
+    {
+      name: copied ? "Copied address" : "Copy address",
+      onClick: copyAddress,
+      color: copied ? "success" : undefined,
+      icon: <Copy />,
+    },
+    {
+      name: "Airdrop",
+      onClick: airdrop,
+      hoverColor: "success",
+      showCondition: airdropCondition,
+      icon: <Airdrop />,
+    },
+    {
+      name: "Add",
+      onClick: async () => {
+        const { Add } = await import("./Modals/Add");
+        await PgView.setModal(Add);
+      },
+      icon: <Plus />,
+    },
+    {
+      name: "Rename",
+      onClick: showRename,
+      icon: <Edit />,
+      showCondition: isPg,
+    },
+    {
+      name: "Remove",
+      onClick: async () => {
+        const { Remove } = await import("./Modals/Remove");
+        await PgView.setModal(Remove);
+      },
+      hoverColor: "error",
+      icon: <Trash />,
+      showCondition: isPg,
+    },
+    {
+      name: "Import",
+      onClick: PgWallet.import,
+      icon: <ImportFile />,
+    },
+    {
+      name: "Export",
+      onClick: PgWallet.export,
+      icon: <ExportFile />,
+      showCondition: isPg,
+    },
+  ];
+
+  const standardWalletSettings: MenuItemProps[] = PgWallet.standardWallets.map(
+    (wallet) => ({
+      name: wallet.connected
+        ? `Disconnect from ${wallet.name}`
+        : `Connect to ${wallet.name}`,
+      onClick: () => PgCommand.connect.execute(wallet.name.toLowerCase()),
+      hoverColor: wallet.connected ? "error" : "secondary",
+      icon: <Img src={wallet.icon} alt={wallet.name} />,
+    })
+  );
+
+  return (
+    <Wrapper>
+      <Menu.Dropdown
+        items={defaultSettings.concat(standardWalletSettings)}
+        onShow={darken}
+        onHide={lighten}
+      >
+        <Button kind="icon" title="More">
+          <ThreeDots />
+        </Button>
+      </Menu.Dropdown>
+    </Wrapper>
+  );
+};
+
+const Wrapper = styled.div`
+  position: absolute;
+  left: 1rem;
+`;
+
+export default Settings;

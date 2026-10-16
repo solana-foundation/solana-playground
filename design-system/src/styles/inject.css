@@ -1,0 +1,48 @@
+/* The system's classes for a page that is not built on it: what Studio lays
+ * into the product when a specimen is added.
+ *
+ * No global preflight, so the product's own styling is left alone. The
+ * utilities sit outside any layer on purpose. The product's styles are
+ * unlayered, and an unlayered rule beats every layered one, so layered
+ * utilities would lose to a bare `button {}` in the product. Unlayered, they
+ * win on specificity instead, as a class should. */
+@import url("https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@400..700&family=Stack+Sans+Text:wght@300..700&display=swap");
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./tokens.css";
+@import "./theme.css";
+
+@source "../";
+
+@custom-variant dark (&:is(.dark *));
+
+/* A small reset for the system's own elements, and only those, so a
+ * specimen looks the same in the product as on its page. :where() keeps it
+ * at no specificity at all, so any class still wins. */
+:where([data-slot], [data-slot] *, [data-slot] ::before, [data-slot] ::after) {
+  box-sizing: border-box;
+  border: 0 solid;
+  margin: 0;
+  padding: 0;
+}
+:where([data-slot]) {
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+}
+:where([data-slot] button, [data-slot] input, [data-slot] textarea, [data-slot] select, button[data-slot], input[data-slot], textarea[data-slot]) {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  background-color: transparent;
+  border-radius: 0;
+}
+:where([data-slot] svg, svg[data-slot]) {
+  display: block;
+  vertical-align: middle;
+}
+:where([data-slot] a) {
+  color: inherit;
+  text-decoration: inherit;
+}

@@ -1,0 +1,312 @@
+import { useCallback, useEffect, useState } from "react";
+import styled, { css } from "styled-components";
+
+import Button from "../../../components/Button";
+import { ConflictResolver } from "../ui/ConflictResolver";
+import { PgProjectSync } from "../model/project-sync";
+import { persistenceTelemetry } from "../model/telemetry";
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import type { Conflict, Resolution } from "../model/project-sync";
+
+/** `src/lib.rs`, or `src/lib.rs and 2 other files` */
+const describePaths = (paths: string[]) =>
+  paths.length === 1
+    ? paths[0]
+    : `${paths[0]} and ${paths.length - 1} other file${
+        paths.length > 2 ? "s" : ""
+      }`;
+
+/**
+ * A divergent conflict's files, by whether they still conflict (`open`) or
+ * were raised again only because a refused answer was about them, and now
+ * merge on their own (`settled`; see `refusedOf` in `project-sync.ts`). A
+ * conflict that names no files counts every path as open.
+ */
+const splitPaths = ({ paths = [], files }: Conflict) => {
+  if (!files) return { open: paths, settled: [] };
+  const settled = files.filter((f) => f.kind === "settled").map((f) => f.path);
+  const open = files.filter((f) => f.kind !== "settled").map((f) => f.path);
+  return { open, settled };
+};
+
+/** The path a message names first, set in code style */
+const namedPath = (conflict: Conflict) => {
+  const { open, settled } = splitPaths(conflict);
+  return open[0] ?? settled[0];
+};
+
+/**
+ * What a divergent conflict says. Everything else has already been merged by
+ * the time this shows, so it names what is left rather than offering to
+ * replace the whole project -- unless an answer was refused, in which case
+ * files it was about wait, unmerged, for the user to look again.
+ */
+const divergentMessage = (conflict: Conflict) => {
+  const { open, settled } = splitPaths(conflict);
+  if (open.length) {
+    const same = `${describePaths(
+      open
+    )} changed on another device and on this one, in the same place.`;
+    return settled.length
+      ? `${same} Other files changed again while you were resolving; review them before applying.`
+      : `${same} Everything else was merged.`;
+  }
+  if (settled.length) {
+    return `${describePaths(
+      settled
+    )} changed on another device while you were resolving. Review before applying.`;
+  }
+  return "This project changed on another device, and this one has unsaved changes.";
+};
+
+/** What the user is shown, and what each answer does */
+const PROMPTS: Record<
+  Conflict["kind"],
+  {
+    message: (conflict: Conflict) => string;
+    // Only the answers a button can give alone; `resolved` carries content
+    actions: {
+      label: string;
+      resolution: Extract<Resolution, string>;
+      primary?: boolean;
+    }[];
+  }
+> = {
+  divergent: {
+    message: divergentMessage,
+    actions: [
+      { label: "Keep this version", resolution: "keep-local", primary: true },
+      { label: "Take the other version", resolution: "take-server" },
+    ],
+  },
+  "deleted-elsewhere": {
+    message: () =>
+      "This project was deleted on another device, but you have unsaved changes here.",
+    actions: [
+      {
+        label: "Keep as a new project",
+        resolution: "keep-as-new",
+        primary: true,
+      },
+      { label: "Delete anyway", resolution: "delete-local" },
+    ],
+  },
+  // The two below are refusals rather than questions, so they name the thing
+  // the user has to go and change and then offer the one answer there is. The
+  // retry is not a convenience: a project with a question outstanding is not
+  // pushed again, so without something to press, renaming the project or
+  // deleting the file that made it too big would fix the cause and leave it
+  // stuck anyway.
+  "name-taken": {
+    message: () =>
+      "Another project in your account already uses this name, so this one cannot be uploaded. Rename it, then try again.",
+    actions: [{ label: "Try again", resolution: "retry", primary: true }],
+  },
+  "too-large": {
+    message: () =>
+      "This project is too large to sync. Remove or shrink its largest files, then try again.",
+    actions: [{ label: "Try again", resolution: "retry", primary: true }],
+  },
+};
+
+/**
+ * Say why a project has stopped syncing, and offer the way out.
+ *
+ * Mostly that means asking which copy to keep, because the failure this
+ * prevents is "I opened the project on my phone and lost an afternoon on my
+ * laptop". Asked only about what a merge could not settle -- lines both
+ * devices changed. Anything that overlaps, or merely touches, is a question
+ * rather than a guess, because a bad merge is worse than a question.
+ *
+ * It is the *only* place the user is asked anything. Every other outcome --
+ * taking the server's copy, pushing this device's, finishing a delete -- is
+ * decided by `reconcile` without involving them, because in those cases only
+ * one side has work in it.
+ *
+ * The refusals (`name-taken`, `too-large`) are here for a different reason:
+ * not because there is a choice to make, but because a project that has
+ * stopped uploading is otherwise indistinguishable from one that is up to
+ * date. Silence is the wrong answer to "your work is no longer being saved".
+ *
+ * Shown for the current workspace only, and re-read on every change to the
+ * outstanding set. It used to subscribe to a raise-only event and so stayed on
+ * screen for the rest of the session once triggered, including over unrelated
+ * projects.
+ */
+const SyncBanner = () => {
+  const [conflict, setConflict] = useState<Conflict | null>(null);
+  const [busy, setBusy] = useState(false);
+  // The project whose resolve view is open. Kept apart from `conflict`: an
+  // answer clears the question before it uploads, and the view decides for
+  // itself whether that means it is done
+  const [resolving, setResolving] = useState<string | null>(null);
+  const closeResolver = useCallback(() => setResolving(null), []);
+
+  const refresh = useCallback(() => {
+    setConflict(PgProjectSync.conflictFor(PgExplorer.currentWorkspaceId));
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    const subscriptions = [
+      PgProjectSync.onDidChangeConflicts(refresh),
+      // A conflict belongs to a project, so switching away from it has to take
+      // the banner with it
+      PgExplorer.onDidSwitchWorkspace(refresh),
+    ];
+    return () => {
+      for (const sub of subscriptions) sub.dispose();
+    };
+  }, [refresh]);
+
+  const answer = async (resolution: Resolution) => {
+    if (!conflict) return;
+    if (resolution === "keep-local" || resolution === "take-server") {
+      persistenceTelemetry.track("sync_whole_file_answered", {
+        answer: resolution,
+        from: "banner",
+      });
+    }
+    setBusy(true);
+    try {
+      // A resolution that failed -- offline, or the server refused again --
+      // leaves the prompt up. Clearing it here would strand the project with
+      // nothing on screen to say so.
+      await PgProjectSync.resolve(conflict.projectId, resolution);
+    } finally {
+      setBusy(false);
+      refresh();
+    }
+  };
+
+  const renderBanner = (conflict: Conflict) => {
+    const prompt = PROMPTS[conflict.kind];
+    // Line by line needs the lines: a divergence the merge never got as far as
+    // naming files keeps the two whole-project answers only
+    const resolvable =
+      conflict.kind === "divergent" && !!conflict.files?.length;
+    const message = prompt.message(conflict);
+
+    const named = namedPath(conflict);
+    const at = named ? message.indexOf(named) : -1;
+
+    return (
+      <Wrapper role="alert">
+        <Icon viewBox="0 0 24 24" width="18" height="18" aria-hidden>
+          <path
+            d="M12 3.5L2.5 20h19L12 3.5zM12 10v4.5M12 17.25v.01"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </Icon>
+        <Body>
+          <Message>
+            {named && at >= 0 ? (
+              <>
+                {message.slice(0, at)}
+                <Path>{named}</Path>
+                {message.slice(at + named.length)}
+              </>
+            ) : (
+              message
+            )}
+          </Message>
+          <Actions>
+            {resolvable && (
+              <Button
+                kind="outline"
+                size="small"
+                disabled={busy || !!resolving}
+                onClick={() => setResolving(conflict.projectId)}
+              >
+                Resolve…
+              </Button>
+            )}
+            {prompt.actions.map((action) => (
+              <Button
+                key={action.resolution}
+                kind={action.primary ? "primary" : "outline"}
+                size="small"
+                disabled={busy}
+                onClick={() => void answer(action.resolution)}
+              >
+                {action.label}
+              </Button>
+            ))}
+          </Actions>
+        </Body>
+      </Wrapper>
+    );
+  };
+
+  // Beside the banner rather than in it, so the view stays mounted, choices
+  // and all, while an answer briefly clears the question
+  return (
+    <>
+      {conflict && renderBanner(conflict)}
+      {resolving && (
+        <ConflictResolver projectId={resolving} onClose={closeResolver} />
+      )}
+    </>
+  );
+};
+
+/** A card in the layout's flow; the mount point supplies the page gutters */
+const Wrapper = styled.div`
+  ${({ theme }) => css`
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.625rem 1rem;
+    border: 1px solid ${theme.colors.default.border};
+    border-left: 3px solid ${theme.colors.state.warning.color};
+    border-radius: ${theme.default.borderRadius};
+    background: ${theme.colors.default.bgSecondary};
+    color: ${theme.colors.default.textPrimary};
+    font-family: ${theme.font.other.family};
+    font-size: ${theme.font.other.size.small};
+    line-height: 1.4;
+  `}
+`;
+
+const Icon = styled.svg`
+  flex-shrink: 0;
+  color: ${({ theme }) => theme.colors.state.warning.color};
+`;
+
+/** Message left, buttons right; the buttons drop below when it gets narrow */
+const Body = styled.div`
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  min-width: 0;
+`;
+
+const Message = styled.p`
+  flex: 1 1 20rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+`;
+
+const Path = styled.code`
+  ${({ theme }) => css`
+    padding: 0.0625rem 0.375rem;
+    background: ${theme.colors.default.bgPrimary};
+    font-family: ${theme.font.code.family};
+    font-size: ${theme.font.code.size.small};
+  `}
+`;
+
+const Actions = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+`;
+
+export default SyncBanner;

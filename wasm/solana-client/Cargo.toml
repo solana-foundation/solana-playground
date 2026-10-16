@@ -29,7 +29,7 @@ serde_with = "3.9"
 solana-extra-wasm = { path = "../utils/solana-extra", version = "=1.18.0" }
 solana-sdk = "~1.18"
 thiserror = "1"
-wasm-bindgen = { version = "0.2.88", optional = true }
+wasm-bindgen = { workspace = true, optional = true }
 wasm-bindgen-futures = { version = "0.4.38", optional = true }
 web-sys = { version = "0.3.65", features = ["AbortController", "MessageEvent", "WebSocket"] }
 

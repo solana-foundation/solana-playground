@@ -1,0 +1,352 @@
+import { useEffect, useRef, useState } from "react";
+import styled, { css } from "styled-components";
+
+import Chevron from "./Chevron";
+import ConsoleDrawer from "./console/ConsoleDrawer";
+import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
+import Header from "./header/Header";
+import LeftPanel from "./left/LeftPanel";
+import ObjectiveBand from "./lessons/ObjectiveBand";
+import Reader from "./lessons/Reader";
+// The barrel registers every lesson path as a side effect, so importing
+// it here is also what populates the registry for the whole app.
+import {
+  describeStep,
+  entryReading,
+  graderClass,
+  INITIAL_LESSON_STATE,
+  PgLesson,
+} from "./lessons";
+import type { LessonState } from "./lessons";
+import GearSidebar from "./settings/GearSidebar";
+import type { SettingsFocus } from "./settings/GearSidebar";
+import StageRouter from "./stages/StageRouter";
+import { PgDeployHistory } from "./state/deploy-history";
+import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
+import type { FlowState } from "./state/stage";
+import { GAP } from "./tokens";
+import { FeedbackWidget } from "@/features/feedback";
+import SyncBanner from "@/features/persistence/Component/SyncBanner";
+import Assistant from "@/views/sidebar/assistant/Component";
+import ModalBackdrop from "@/components/ModalBackdrop";
+import Toast from "@/components/Toast";
+import Wallet from "@/components/Wallet";
+import { PgExplorer, PgView } from "@/utils";
+import { LayoutShell } from "@/widgets/layout-shell";
+import type { Disposable } from "@/utils/types";
+
+/**
+ * The Flow layout: header, left project/file tabs, the stage router in the
+ * center with a collapsible console beneath it, and the assistant on the
+ * right, all placed by `LayoutShell`.
+ */
+const Flow = () => {
+  const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
+  const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
+  const [reading, setReading] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Lives here, not in `LeftPanel`: below `LAYOUT_BREAKPOINTS.left` the shell
+  // puts it in a Sheet that unmounts it on close, and crossing that width swaps
+  // the rail for the Sheet, so anything `LeftPanel` held goes with it.
+  const [pendingCreate, setPendingCreate] = useState(false);
+  const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
+
+  useEffect(() => {
+    const subs = [
+      PgFlow.init(),
+      PgLesson.init(),
+      PgDeployHistory.init(),
+      PgFlow.onDidChange(setState),
+      PgLesson.onDidChange(setLesson),
+    ];
+    return () => subs.forEach((s) => s.dispose());
+  }, []);
+
+  const openGallery = () => PgView.setModal(NewWorkspaceModal);
+  // Toggles rather than opens: the header controls are the only way in, so a
+  // second click on one has to be the way out.
+  const toggleSettings = (focus: SettingsFocus = "panel") => {
+    setSettingsFocus(focus);
+    setSettingsOpen((open) => !open);
+  };
+
+  // Whether the empty-workspace gallery has already been opened once for
+  // this mount of `Flow`.
+  const openedGalleryOnInit = useRef(false);
+  /** Watches for the account's projects to land under an auto-opened gallery */
+  const imported = useRef<Disposable | null>(null);
+
+  useEffect(() => {
+    // `PgExplorer` initializes asynchronously (`routes/common.tsx`), so
+    // `allWorkspaceNames` may still be `undefined` on the first render --
+    // only decide once it has actually settled, otherwise every cold start
+    // would flash the gallery before we know whether there are projects.
+    //
+    // `PgExplorer.init()` reruns on every route navigation, so `onDidInit`
+    // fires more than once for the lifetime of `Flow`. Open the gallery at
+    // most once: dispose the subscription right after it fires so later
+    // navigations (e.g. into and out of a tutorial) never stack a second
+    // modal on top of one the user already interacted with.
+    const openIfEmpty = () => {
+      if (openedGalleryOnInit.current) return;
+      if (PgExplorer.allWorkspaceNames?.length === 0) {
+        openedGalleryOnInit.current = true;
+        sub.dispose();
+        openGallery();
+        // "You have no projects" is a guess until the account has answered.
+        // A browser signed in to an account with work on it is empty only for
+        // as long as the sync takes, and the gallery was landing on top of
+        // projects that arrived a moment later. Waiting for the sync instead
+        // would delay the gallery for everyone who genuinely is new, so it
+        // opens on time and stands down if it turns out to be wrong.
+        imported.current = PgExplorer.onDidCreateWorkspace(() => {
+          if (PgExplorer.allWorkspaceNames?.length) {
+            imported.current?.dispose();
+            PgView.closeModal();
+          }
+        });
+      }
+    };
+    const sub = PgExplorer.onDidInit(openIfEmpty);
+    if (PgExplorer.allWorkspaceNames) openIfEmpty();
+    return () => {
+      sub.dispose();
+      imported.current?.dispose();
+    };
+  }, []);
+
+  const described = describeStep(lesson);
+
+  const read = () => setReading(true);
+
+  // A learner who fixes the code while the page is open should come back
+  // to the editor, not to the next step's prose.
+  useEffect(() => {
+    setReading(false);
+  }, [described?.step.id]);
+
+  // Entering the lesson lands on the page -- once (D34). Declared after
+  // the effect above so that, on the commit where both fire (a load
+  // moves the cursor too), open wins. The record learns `opened` from
+  // the Reader once the page content actually loads, which moves the
+  // record's tail off `enter` -- so the next state returns null here and
+  // the effect is inert; closing the sheet by hand does not reopen it,
+  // while a page that failed to load gets another chance on re-entry.
+  const entryStep = entryReading(lesson);
+  useEffect(() => {
+    if (entryStep) read();
+    // `read` is recreated every render; the step id is the real trigger
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entryStep?.id]);
+
+  return (
+    <Wrapper>
+      <Header
+        onOpenGallery={openGallery}
+        onToggleSettings={toggleSettings}
+        settingsOpen={settingsOpen}
+      />
+      {/* In flow, not floating: it is a blocking question, and the file it
+          names has to stay visible beneath it */}
+      <BannerSlot>
+        <SyncBanner />
+      </BannerSlot>
+      <LayoutShell
+        left={({ collapsed, toggle }) => (
+          <LeftPanel
+            collapsed={collapsed}
+            onToggle={toggle}
+            pendingCreate={pendingCreate}
+            onPendingCreateChange={setPendingCreate}
+          />
+        )}
+        stage={
+          <Center>
+            <ObjectiveBand
+              state={lesson}
+              flow={state}
+              onRead={read}
+              onOpenGallery={openGallery}
+            />
+            <Stage>
+              <StageRouter stage={state.stage} />
+              {reading && described && (
+                <Reader
+                  key={described.step.id}
+                  step={described.step}
+                  position={described.number}
+                  criterion={described.verifiedBy}
+                  offersAttest={
+                    described.offersPrimary &&
+                    graderClass(described.step.verify) === "attestation"
+                  }
+                  onLoaded={() => PgLesson.opened(described.step.id)}
+                  onClose={() => setReading(false)}
+                  onAttest={() => {
+                    PgLesson.attest();
+                    setReading(false);
+                  }}
+                />
+              )}
+            </Stage>
+          </Center>
+        }
+        console={({ open, toggle }) => (
+          <ConsoleDrawer open={open} onToggle={toggle} />
+        )}
+        assistant={({ open, toggle }) => (
+          <Right $open={open}>
+            <Collapse
+              type="button"
+              aria-label={open ? "Collapse assistant" : "Expand assistant"}
+              onClick={toggle}
+            >
+              <Chevron $flip={!open} />
+            </Collapse>
+            {open && <Assistant />}
+          </Right>
+        )}
+      />
+
+      <GearSidebar
+        open={settingsOpen}
+        focus={settingsFocus}
+        onClose={() => setSettingsOpen(false)}
+      />
+
+      <Wallet />
+      <FeedbackWidget />
+      <PortalAbove id={PgView.ids.PORTAL_ABOVE} />
+      <StyledModalBackdrop />
+      <PortalBelow id={PgView.ids.PORTAL_BELOW}>
+        <Toast />
+      </PortalBelow>
+    </Wrapper>
+  );
+};
+
+export default Flow;
+
+// The three utilities repeat what the styled rule below already sets, so the
+// screen does not change. They are here so that Tailwind reaching the page
+// can be checked on a screen every visit renders: `e2e/tailwind.e2e.spec.ts`
+// reads their rules out of the utilities layer, and CI greps the built CSS.
+const Wrapper = styled.div.attrs({
+  className: "flex flex-col overflow-hidden",
+})`
+  ${({ theme }) => css`
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+    background: ${theme.colors.default.bgPrimary};
+  `}
+`;
+
+// Empty while there is no conflict, and then takes no room at all
+const BannerSlot = styled.div`
+  padding: 0 ${GAP} ${GAP};
+
+  &:empty {
+    display: none;
+  }
+`;
+
+// The floating center panel holding the stage. It is open at the bottom: the
+// console panel under it carries the sides and bottom border, so the two read
+// as one surface.
+const Center = styled.div`
+  ${({ theme }) => css`
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    background: ${theme.colors.default.bgSecondary};
+    border: 1px solid ${theme.colors.default.border};
+    border-bottom: none;
+    border-radius: ${theme.default.borderRadius} ${theme.default.borderRadius} 0
+      0;
+    overflow: hidden;
+  `}
+`;
+
+// display: flex here matters: Primary's own wrapper sizes itself with
+// flex: 1; min-height: 0 (from theme.views.main.primary.default), which
+// only takes effect inside a flex container. Without this, the editor's
+// height collapses to its content size and Monaco never gets a real box
+// to paint into.
+const Stage = styled.div`
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* The lesson reader covers the stage, not the whole layout */
+  position: relative;
+`;
+
+const Right = styled.aside<{ $open: boolean }>`
+  ${({ theme, $open }) => css`
+    position: relative;
+    --flow-handle-inset: ${$open ? "1rem" : "0px"};
+    width: 100%;
+    height: 100%;
+    border: 1px solid ${theme.colors.default.border};
+    border-radius: ${theme.default.borderRadius};
+    background: ${theme.colors.default.bgSecondary};
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  `}
+`;
+
+const Collapse = styled.button`
+  ${({ theme }) => css`
+    /* The handle owns the panel's left gutter; the assistant header reads
+       --flow-handle-inset (set on Right) and starts after it. */
+    position: absolute;
+    /* Centre on the assistant header row (its eyebrow and chips sit
+       ~20px below the panel top): 4px offset + 32px tall = 20px centre. */
+    top: 0.25rem;
+    left: 0;
+    width: 1.5rem;
+    height: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: ${theme.colors.default.textSecondary};
+    cursor: pointer;
+    z-index: 1;
+
+    &:focus-visible {
+      outline: 2px solid ${theme.colors.default.primary};
+      outline-offset: 2px;
+    }
+  `}
+`;
+
+// Above everything the shell draws: the stock Sidebar (z-10), the header
+// (z-20) and the Sheets (z-50), which portal to `body` beside these. The
+// explorer's context menu opens here from inside the project Sheet, so it
+// must sit over that Sheet; a modal closes the Sheet as it opens
+// (`LayoutShell`), since the Sheet traps focus. A modal Sheet also turns off
+// pointer events on `body`, so each portal turns them back on for itself.
+const PortalAbove = styled.div`
+  z-index: 62;
+  pointer-events: auto;
+`;
+const StyledModalBackdrop = styled(ModalBackdrop)`
+  z-index: 61;
+  pointer-events: auto;
+`;
+// Toasts open at the bottom left, over the left panel and its Sheet, and
+// below the modal backdrop so a modal still covers them.
+const PortalBelow = styled.div`
+  z-index: 60;
+  pointer-events: auto;
+`;

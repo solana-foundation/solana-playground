@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Opt-in pre-push hook: `git config core.hooksPath .githooks` once per clone.
+# Runs client-v2's `check` script, the same list CI runs minus the production
+# build, so a push that CI would reject fails here first.
+set -e
+root=$(git rev-parse --show-toplevel)
+cd "$root/client-v2"
+if [ ! -d node_modules ]; then
+  echo "pre-push: client-v2/node_modules missing; skipping check" >&2
+  exit 0
+fi
+# `run` is required: yarn 1's built-in `check` shadows the script of that name
+yarn --silent run check

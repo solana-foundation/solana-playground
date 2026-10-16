@@ -1,0 +1,234 @@
+/* The tokens, as Tailwind utilities. Shared by the design system page
+ * (index.css) and the stylesheet Studio injects into the product
+ * (inject.css), so a class means the same thing in both. */
+
+@theme inline {
+  /* ── shadcn's colours ─────────────────────────────────────────────── */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* ── Playground's colours ─────────────────────────────────────────── */
+  --color-surface-base: var(--surface-base);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-well: var(--surface-well);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-subtle: var(--text-tertiary);
+  --color-border-strong: var(--border-strong);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-ink: var(--warning-ink);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-error: var(--error);
+  --color-error-foreground: var(--error-foreground);
+  --color-track-brand: var(--track-brand);
+  --color-track-product: var(--track-product);
+  --color-brand-green: var(--brand-green);
+  --color-brand-purple: var(--brand-purple);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-violet: var(--brand-violet);
+  --color-brand-periwinkle: var(--brand-periwinkle);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-deep-green: var(--brand-deep-green);
+  --color-syntax-keyword: var(--syntax-keyword);
+  --color-syntax-type: var(--syntax-type);
+  --color-syntax-function: var(--syntax-function);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-comment: var(--syntax-comment);
+  --color-syntax-plain: var(--syntax-plain);
+
+  /* ── type ──────────────────────────────────────────────────────────── */
+  --font-sans: var(--font-text);
+  --font-heading: var(--font-headline);
+  --font-mono: var(--font-code);
+
+  /* ── radius: controls 8, panels 12, cards and dialogs 16 ──────────── */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-control: var(--radius);
+  --radius-panel: calc(var(--radius) * 1.5);
+  --radius-card: calc(var(--radius) * 2);
+
+  /* ── layout sizes ──────────────────────────────────────────────────── */
+  --spacing-gap: var(--layout-gap);
+  --spacing-head: var(--layout-head);
+  --spacing-subhead: var(--layout-subhead);
+  --spacing-bar: var(--layout-bar);
+  --spacing-rail: var(--layout-rail);
+  --spacing-inset: var(--layout-inset);
+  --spacing-phone-bar: var(--phone-bar);
+  --spacing-phone-head: var(--phone-head);
+  --spacing-phone-row: var(--phone-row);
+  --spacing-target: var(--target);
+
+  /* ── elevation ─────────────────────────────────────────────────────── */
+  --shadow-panel: var(--shadow-panel-value);
+  --shadow-modal: var(--shadow-modal-value);
+  --shadow-glow: var(--shadow-glow-value);
+  --shadow-thumb: var(--shadow-thumb-value);
+  --shadow-sheet: var(--shadow-sheet-value);
+  --shadow-composer: var(--shadow-composer-value);
+
+  /* ── motion ────────────────────────────────────────────────────────── */
+  --ease-out: var(--ease-out-value);
+  --ease-move: var(--ease-move-value);
+  --ease-pop: var(--ease-pop-value);
+  --ease-standard: var(--ease-standard-value);
+  --ease-menu: var(--ease-menu-value);
+  --animate-rise: rise var(--duration-slow) var(--ease-out-value) both;
+  --animate-pop: pop 440ms var(--ease-pop-value) both;
+  --animate-pulse-dot: pulse-dot 1.2s ease-in-out infinite;
+  --animate-caret: caret 1.1s step-end infinite;
+  --animate-menu-in: menu-in var(--duration-menu) var(--ease-menu-value) both;
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.45; transform: scale(0.8); }
+  }
+  @keyframes caret {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+  }
+  @keyframes menu-in {
+    from { opacity: 0; transform: translateY(4px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+
+  @keyframes rise {
+    from { opacity: 0; transform: translate3d(0, 0.5rem, 0); }
+    to { opacity: 1; transform: translate3d(0, 0, 0); }
+  }
+  @keyframes pop {
+    0% { opacity: 0; transform: translate3d(0, 0.5em, 0) scale(0.86); }
+    62% { opacity: 1; transform: translate3d(0, -0.045em, 0) scale(1.015); }
+    100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
+  }
+}
+
+/* Sizes and weights are values rather than references, so they sit in a
+ * plain @theme: the utilities then read them as variables, and a change in
+ * Studio's Design tab reaches every text-* and font-* class on the page. */
+@theme {
+  /* The product's scale, one set of sizes for every screen */
+  --text-display: 1.75rem;
+  --text-display--line-height: 1.15;
+  --text-display--letter-spacing: -0.02em;
+  --text-title: 1.0625rem;
+  --text-title--line-height: 1.3;
+  --text-body: 1rem;
+  --text-body--line-height: 1.5;
+  --text-control: 0.9375rem;
+  --text-control--line-height: 1.3;
+  --text-caption: 0.8125rem;
+  --text-caption--line-height: 1.45;
+  --text-code: 0.8125rem;
+  --text-code--line-height: 1.6;
+
+  /* Lighter than the usual 400/500: light text on a dark ground blooms */
+  --font-weight-read: 320;
+  --font-weight-label: 380;
+  --font-weight-headline: 400;
+  --font-weight-act: 440;
+}
+
+/* The brand's fill and its type, where a class is clearer than a value */
+@utility bg-brand-fill {
+  background-image: var(--gradient-brand);
+}
+@utility text-brand-fill {
+  background-image: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+@utility bg-gradient-product {
+  background-image: var(--gradient-product);
+}
+@utility bg-gradient-product-flat {
+  background-image: var(--gradient-product-flat);
+}
+
+/* The bars that float over the stage (views/flow/components/frosted.ts) */
+@utility frosted {
+  background-color: var(--frosted);
+  -webkit-backdrop-filter: blur(18px) saturate(1.15);
+  backdrop-filter: blur(18px) saturate(1.15);
+}
+
+/* A 1px ring of Solana's two colours round a fill (gradientStroke). The fill
+ * is --stroke-fill, so the one class works on any surface. */
+@utility gradient-stroke {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--stroke-fill, var(--surface-hover)), var(--stroke-fill, var(--surface-hover))) padding-box,
+    var(--gradient-product) border-box;
+}
+
+/* The brand action (brandAction): the ring at rest, the whole gradient
+ * fading in underneath on hover and press. */
+@utility brand-action {
+  position: relative;
+  isolation: isolate;
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--stroke-fill, var(--surface-hover)), var(--stroke-fill, var(--surface-hover))) padding-box,
+    var(--gradient-product) border-box;
+  &::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--gradient-product);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  &:hover:not(:disabled)::before,
+  &:active:not(:disabled)::before {
+    opacity: 1;
+  }
+}
+
+@utility bg-backdrop {
+  background-color: var(--backdrop);
+  backdrop-filter: blur(6px);
+}

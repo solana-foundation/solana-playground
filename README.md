@@ -41,7 +41,10 @@ You can open an issue to request more crates.
 
 ## Run locally
 
+- [client-v2 setup](client-v2/README.md#setup) -- the fork's client, where
+  the work happens
 - [Client setup](https://github.com/solana-playground/solana-playground/tree/master/client#setup)
+  (upstream's `client/`, untouched here)
 - [Server setup](https://github.com/solana-playground/solana-playground/tree/master/server#setup)
 
 ##### Recommended versions
@@ -52,7 +55,19 @@ node --version
 
 yarn --version
 # 1.22.22
+
+openspec --version   # planning CLI, optional: npm i -g @fission-ai/openspec
+# 1.14.0
 ```
+
+## Working with agents
+
+`client-v2/CLAUDE.md` holds the rules every contributor and coding agent
+follows in the client: layers, components, what review keeps finding, and
+the checklist before a PR. Planning runs through [OpenSpec](https://openspec.dev):
+specs and change proposals live in [`openspec/`](openspec/README.md), the
+`/opsx:*` commands are committed under `.claude/`, and the `check` script in
+`client-v2/` runs what CI runs.
 
 ### Run with Docker
 

@@ -1,0 +1,66 @@
+schema: spec-driven
+
+# Read by every /opsx:* command before it writes an artifact. Constraints an
+# agent cannot infer from the code; the rules themselves live in
+# client-v2/CLAUDE.md and are not repeated here.
+context: |
+  The product is Solana Playground's client-v2: a fork of upstream's Create
+  React App client (React 17 today, React 19 arriving in change
+  ui-migration), moving to Tailwind 4, shadcn/ui on Radix and vitest. Create
+  React App stays; Next is a later, separate decision.
+  client/ is upstream's and byte-identical; server/ is not modified. All
+  changes go in client-v2/ and design-system/. client-v2 is not synced with
+  the upstream frontend; wanted upstream work is ported as a feature.
+  New code follows client-v2/CLAUDE.md: feature-sliced layers, the
+  Base<Name>/<Name> component pair, shared/ui installed and never edited,
+  ids and aria-labels preserved across moves, the change rule for moving
+  legacy code. The legacy roots (components/, views/, utils/, ...) are
+  exempt from the layer rules until code moves out of them.
+  Everything written here is English. Reference Linear tickets as HOO-nnnn
+  and pull requests as #nn. Do not cite decision-log numbers (D51 and the
+  like) or the documentation branch: neither resolves on master.
+  Several people and agents work in parallel; a task is sized for one small
+  PR, and a change names which tasks may run at the same time.
+  Every feature and widget is measured: it sends product events through
+  shared/lib/telemetry and logs through shared/lib/logger. A change that
+  builds or alters one proposes its events (what the user does there and
+  how it can fail) even when the request does not mention analytics, and
+  asks the user to confirm or trim them.
+
+rules:
+  proposal:
+    - State what is out of scope under Impact, not only what is in
+    - Name the user-visible consequence of every infrastructure item
+    - A change that adds or changes a slice under features/ or widgets/ lists
+      the telemetry events it adds, renames or removes under What Changes, or
+      says it changes none
+  specs:
+    - Requirements describe behaviour a test, a reviewer or a lint can check
+    - Element ids, aria-labels and test ids are part of a UI requirement
+    - Each telemetry event a change adds or renames is described in a
+      requirement of its slice's spec, giving the name, when it fires, and
+      each parameter with its allowed values
+  tasks:
+    - Each task names its Linear ticket or says "ticket to file"
+    - Each task says which tasks it depends on when the order matters
+    - A task that adds or changes a slice under features/ or widgets/
+      declares, describes and emits that slice's events from the spec, with
+      tests that assert them through the memory provider
+
+operations:
+  apply:
+    guidance:
+      - Before the PR, run yarn lint, yarn check-format, yarn test-types and
+        the unit tests in client-v2; CI runs the same
+      - Run the pr-review-toolkit review before gh pr create and fix what it
+        finds in the same PR
+      - Never edit client/ or server/
+      - A slice the task touches emits the events its spec describes; when
+        the spec describes none and the slice has user actions, stop and
+        propose events before writing code
+  archive:
+    guidance:
+      - Run only when a human asked for it in this session
+      - Before archiving, confirm every task in tasks.md is ticked, then
+        delete tasks.md
+      - Say which spec files changed

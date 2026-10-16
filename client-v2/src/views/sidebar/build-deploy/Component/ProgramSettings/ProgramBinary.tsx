@@ -1,0 +1,67 @@
+import styled from "styled-components";
+
+import Button from "../../../../../components/Button";
+import {
+  PgCommon,
+  PgExplorer,
+  PgProgramInfo,
+  PgServer,
+} from "../../../../../utils";
+import { useRenderOnChange } from "../../../../../hooks";
+
+const ProgramBinary = () => (
+  <Wrapper>
+    <Import />
+    <Export />
+  </Wrapper>
+);
+
+const Wrapper = styled.div`
+  display: flex;
+  gap: 1rem;
+`;
+
+const Import = () => (
+  <Button.Import
+    accept=".so"
+    onImport={async (ev) => {
+      const files = ev.target.files;
+      if (!files?.length) {
+        PgProgramInfo.update({ importedProgram: null });
+        return;
+      }
+
+      try {
+        const file = files[0];
+        const fileName = file.name;
+        const arrayBuffer = await file.arrayBuffer();
+        const bytes = new Uint8Array(arrayBuffer);
+        PgProgramInfo.update({ importedProgram: { bytes, fileName } });
+      } catch (err: any) {
+        console.log(err.message);
+      }
+    }}
+    showImportText
+  >
+    Import
+  </Button.Import>
+);
+
+const Export = () => {
+  const uuid = useRenderOnChange(PgProgramInfo.onDidChangeUuid);
+  if (!uuid) return null;
+
+  return (
+    <Button
+      onClick={async () => {
+        const programBuffer = await PgServer.deploy(uuid);
+        const programName = PgExplorer.currentWorkspaceName ?? "program";
+        PgCommon.export(`${programName}.so`, programBuffer);
+      }}
+    >
+      Export
+    </Button>
+  );
+};
+
+export default ProgramBinary;

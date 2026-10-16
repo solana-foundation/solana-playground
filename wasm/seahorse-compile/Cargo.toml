@@ -14,4 +14,4 @@ crate-type = ["cdylib", "rlib"]
 console_error_panic_hook = "*"
 seahorse-dev = "0.2.0"
 solana-playground-utils-wasm = { path = "../utils/solana-playground-utils" }
-wasm-bindgen = "*"
+wasm-bindgen = { workspace = true }

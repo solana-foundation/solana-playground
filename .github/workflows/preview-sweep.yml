@@ -1,0 +1,110 @@
+name: preview-sweep
+
+# The safety net under preview.yml: deletes Neon preview branches no open,
+# labelled PR still needs. preview.yml drops a branch on close or unlabel, but a
+# cancelled or failed teardown leaves one behind, and every one left counts
+# against the project's branch cap.
+#
+# Scope `managed` (the schedule) touches only `preview/pr-<n>`, the names
+# preview.yml creates. Scope `all-preview` also takes any other `preview/*`
+# branch -- those the Vercel integration created per git branch before its
+# option was turned off, and those `make deploy-client-to-vercel-preview` cuts
+# per local branch -- unless an open PR still has that head branch. Neither
+# scope touches `main` (the default branch) or a protected one.
+on:
+  schedule:
+    - cron: "17 4 * * *"
+  workflow_dispatch:
+    inputs:
+      scope:
+        description: "managed: preview/pr-<n> only. all-preview: every preview/* branch"
+        type: choice
+        options: [managed, all-preview]
+        default: managed
+      dry_run:
+        description: "List what would be deleted, delete nothing"
+        type: boolean
+        default: true
+
+permissions: {}
+
+defaults:
+  run:
+    # Explicit, for pipefail: the implicit default runs `bash -e` without it.
+    shell: bash
+
+concurrency:
+  group: preview-sweep
+
+jobs:
+  sweep:
+    name: sweep preview branches
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    env:
+      NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+      NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      GH_TOKEN: ${{ github.token }}
+      # A scheduled run has no inputs: it deletes, managed scope only.
+      SCOPE: ${{ inputs.scope || 'managed' }}
+      DRY_RUN: ${{ inputs.dry_run || 'false' }}
+      # Must match preview.yml's: a stale name keeps no preview alive.
+      PREVIEW_LABEL: preview
+      # A branch younger than this may belong to a deploy that started after
+      # the PR list below was read.
+      MIN_AGE_MINUTES: 60
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github/scripts
+
+      - name: Sweep
+        run: |
+          limit=1000
+          gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit "$limit" \
+            --json number,headRefName,labels > prs.json
+          # A truncated list would read as closed PRs, and their previews go.
+          if [ "$(jq length prs.json)" -ge "$limit" ]; then
+            echo "::error::$limit or more open PRs; raise the limit before sweeping"
+            exit 1
+          fi
+          # PRs whose preview/pr-<n> is live, and head branches with an open PR.
+          keep_managed=$(jq -r --arg l "$PREVIEW_LABEL" '.[] | select(any(.labels[]; .name == $l)) | "preview/pr-\(.number)"' prs.json)
+          keep_legacy=$(jq -r '.[] | "preview/\(.headRefName)"' prs.json)
+
+          bash .github/scripts/neon.sh list > branches.txt
+          deleted=0 kept=0 failed=0
+          while read -r name age; do
+            if [[ "$name" =~ ^preview/pr-[0-9]+$ ]]; then
+              keep=$keep_managed
+            elif [[ "$name" == preview/* ]]; then
+              if [ "$SCOPE" != all-preview ]; then
+                echo "skip $name (not managed; run with scope all-preview to include it)"
+                continue
+              fi
+              keep=$keep_legacy
+            else
+              continue
+            fi
+            # An age that is not a number is kept, never read as old.
+            if grep -qxF "$name" <<<"$keep" || ! [[ "$age" =~ ^[0-9]+$ ]] || [ "$age" -lt "$MIN_AGE_MINUTES" ]; then
+              kept=$((kept + 1))
+              continue
+            fi
+            if [ "$DRY_RUN" = true ]; then
+              echo "would delete $name (age ${age}m)"
+            elif ! bash .github/scripts/neon.sh delete "$name"; then
+              # One failure must not stop the rest of the sweep.
+              echo "::warning::could not delete $name"
+              failed=$((failed + 1))
+              continue
+            fi
+            deleted=$((deleted + 1))
+          done < branches.txt
+
+          verb=$([ "$DRY_RUN" = true ] && echo "Would delete" || echo "Deleted")
+          echo "$verb $deleted preview branches, kept $kept, failed $failed; $(wc -l < branches.txt) unprotected branches in the project before the sweep." | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$failed" -eq 0 ]

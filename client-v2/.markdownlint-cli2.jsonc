@@ -1,0 +1,18 @@
+{
+  "globs": ["AGENTS.md", "docs/**/*.md", "src/**/*.md", "api/**/*.md"],
+  "ignores": [
+    // Generated from docs/assistant-context.md by scripts/sync-assistant-context.mjs
+    "src/views/sidebar/assistant/content/assistant-context.md"
+  ],
+  "config": {
+    "MD013": false,
+    // These files are fragments rendered inside the app, not standalone documents.
+    "MD041": false,
+    // Adjacent callouts are separate blockquotes on purpose; joining them renders one box.
+    "MD028": false,
+    // Repeated subheadings such as "Steps" under different sections are fine.
+    "MD024": { "siblings_only": true },
+    // Aligned tables re-pad every row when one cell widens; compact keeps a diff to the changed row.
+    "MD060": { "style": "compact" }
+  }
+}

@@ -1,0 +1,8 @@
+# Tests the `e2e` job expects to skip, one title per line. The job fails on a
+# skip that is not here and warns on a line that no longer skips, so this is
+# maintained by hand and read in CI with jq. Why each one skips is in the
+# test, next to its `test.skip` / `test.fixme`.
+the default backend reconnects itself after a reload
+disconnecting is not undone by the next reload
+switching tabs mid-debounce raises no conflict
+reloading a project the account already has writes nothing

@@ -4,3 +4,6 @@
 **/generated.ts
 */build
 server/mongodb
+# Generated in the image; a local copy would make the crate generators skip
+client-v2/public
+client-v2/.cache

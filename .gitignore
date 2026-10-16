@@ -13,6 +13,11 @@
 
 # Misc
 .env
+.env*.local
+.env.production
+# The Sentry wizard writes an auth token into these
+.env.sentry-build-plugin
+.sentryclirc
 */deploy.sh
 
 */npm-debug.log*
@@ -31,3 +36,37 @@ server/programs/*
 # WASM
 **/www
 .vercel
+
+# WASM build output (real packages from wasm/build.sh, or stubs from wasm/stub-packages.sh)
+wasm/*/pkg/
+
+# Rust toolchains and target dir for client-v2/scripts/vercel-install.sh
+client-v2/.cache/
+
+# macOS
+.DS_Store
+
+
+# Synced from docs/assistant-context.md by client-v2/scripts/sync-assistant-context.mjs
+client-v2/src/views/sidebar/assistant/content/assistant-context.md
+
+# Mirrored from the client/public submodule by `make update-static`
+client-v2/public/
+
+# Claude Code worktrees
+.claude/worktrees/
+
+# Playwright MCP session artifacts
+.playwright-mcp/
+
+# Playwright test output
+client-v2/test-results/
+client-v2/playwright-report/
+
+# Scratch space for plan-execution tooling
+.superpowers/
+
+.idea/
+
+# Review reports the /sx:review-pr skill writes
+.github/reviews/

@@ -1,0 +1,312 @@
+{
+  "name": "solpg",
+  "description": "UI for Solana Playground",
+  "version": "0.1.0",
+  "author": "@acheroncrypto",
+  "license": "GPL-3.0",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.117.1",
+    "@clockwork-xyz/sdk": "^0.3.1",
+    "@coral-xyz/anchor": "^0.29.0",
+    "@dnd-kit/core": "^6.0.8",
+    "@dnd-kit/sortable": "^7.0.2",
+    "@isomorphic-git/lightning-fs": "^4.6.0",
+    "@metaplex-foundation/js": "^0.19.4",
+    "@metaplex-foundation/mpl-bubblegum": "*",
+    "@metaplex-foundation/mpl-candy-machine-core": "*",
+    "@metaplex-foundation/mpl-token-metadata": "*",
+    "@project-serum/anchor": "^0.23.0",
+    "@sentry/node": "11.4.0",
+    "@sentry/react": "^11.4.0",
+    "@solana-playground/anchor-cli": "../wasm/anchor-cli/pkg",
+    "@solana-playground/playnet": "../wasm/pkgs/playnet",
+    "@solana-playground/rust-analyzer": "../wasm/rust-analyzer/pkg",
+    "@solana-playground/rustfmt": "../wasm/pkgs/rustfmt",
+    "@solana-playground/seahorse-compile": "../wasm/seahorse-compile/pkg",
+    "@solana-playground/solana-cli": "../wasm/solana-cli/pkg",
+    "@solana-playground/spl-token-cli": "../wasm/spl-token-cli/pkg",
+    "@solana-playground/sugar-cli": "../wasm/sugar-cli/pkg",
+    "@solana/buffer-layout": "^4.0.0",
+    "@solana/spl-account-compression": "*",
+    "@solana/spl-token": "*",
+    "@solana/spl-token-metadata": "^0.1.2",
+    "@solana/wallet-adapter-base": "0.9.27",
+    "@solana/wallet-adapter-react": "0.15.39",
+    "@solana/web3.js": "*",
+    "assert": "^2.0.0",
+    "better-auth": "^1.7.5",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.4.0",
+    "crypto-browserify": "^3.12.0",
+    "diff": "^5.0.0",
+    "jszip": "^3.10.1",
+    "lucide-react": "^1.53.0",
+    "mocha": "^10.0.0",
+    "monaco-editor": "=0.37.1",
+    "monaco-vim": "^0.4.4",
+    "pako": "^2.1.0",
+    "pg": "^8.13.1",
+    "prettier": "^2.7.1",
+    "process": "^0.11.10",
+    "radix-ui": "^1.7.0",
+    "re-resizable": "^6.11.2",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-dropzone": "^14.2.2",
+    "react-markdown": "^9.1.0",
+    "react-resizable-panels": "^4.14.2",
+    "react-rnd": "^10.5.2",
+    "react-router-dom": "^6.3.0",
+    "react-scripts": "5.0.0",
+    "react-select": "^5.10.2",
+    "react-toastify": "^9.0.0",
+    "react-use-clipboard": "^1.0.8",
+    "remark-gfm": "^4.0.1",
+    "shiki": "^0.14.4",
+    "stream-browserify": "^3.0.0",
+    "styled-components": "^5.3.3",
+    "tw-animate-css": "^1.4.0",
+    "typescript": "=5.0.4",
+    "uuid": "^8.3.2",
+    "vscode-oniguruma": "^1.7.0",
+    "vscode-textmate": "^9.0.0",
+    "xterm": "^4.18.0",
+    "xterm-addon-fit": "^0.5.0",
+    "xterm-addon-web-links": "^0.5.1"
+  },
+  "devDependencies": {
+    "@craco/craco": "^6.4.3",
+    "@fission-ai/openspec": "1.14.0",
+    "@playwright/test": "^1.62.1",
+    "@sentry/cli": "^2",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/bn.js": "^5.1.1",
+    "@types/diff": "^5.0.0",
+    "@types/mocha": "^9.1.1",
+    "@types/node": "^17.0.21",
+    "@types/pako": "^2.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/styled-components": "^5.1.36",
+    "@types/uuid": "^8.3.4",
+    "circular-dependency-plugin": "^5.2.2",
+    "csstype": "^3.1.2",
+    "esbuild": "0.25.9",
+    "jsdom": "^29.1.1",
+    "markdownlint-cli2": "0.23.2",
+    "monaco-editor-webpack-plugin": "^7.0.1",
+    "postcss": "^8.5.16",
+    "postcss-flexbugs-fixes": "^5.0.2",
+    "postcss-normalize": "^10.0.1",
+    "postcss-preset-env": "^7.0.1",
+    "shadcn": "^4.21.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.20.5",
+    "vite": "^8.3.2",
+    "vitest": "^5.0.3"
+  },
+  "resolutions": {
+    "@solana/buffer-layout": "^4.0.0",
+    "styled-components": "^5",
+    "typescript": "5.0.4",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0"
+  },
+  "engines": {
+    "node": "^22.20.0"
+  },
+  "scripts": {
+    "setup": "yarn build-wasm && yarn install && yarn generate",
+    "start": "yarn generate && craco start",
+    "dev": "yarn generate-fast && craco start",
+    "dev-cra": "BROWSER=none craco start",
+    "dev-vercel": "yarn generate-fast && npx vercel dev --cwd .. --listen ${VERCEL_DEV_PORT:-3000}",
+    "build": "bash ../wasm/build.sh && yarn install --frozen-lockfile --check-files && yarn build:bundle",
+    "build:bundle": "yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
+    "build-fast": "yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
+    "build-wasm": "build=\"../wasm/build.sh\" && chmod +x $build && $build --update",
+    "format": "prettier --write src/ api/",
+    "check-format": "prettier --check src/ api/",
+    "format-md": "markdownlint-cli2 --fix",
+    "check-md": "markdownlint-cli2",
+    "check-colors": "node scripts/check-colors.mjs",
+    "ds-add": "node scripts/ds-add.mjs",
+    "lint": "eslint --ext .ts,.tsx,.mjs src api e2e",
+    "spec:validate": "openspec validate --all --strict --no-interactive",
+    "spec:coverage": "node scripts/spec-coverage.mjs",
+    "check": "yarn test-types && yarn check-format && yarn check-md && yarn lint && yarn check-colors && yarn spec:validate && yarn spec:coverage && yarn test-unit && yarn test-api",
+    "generate": "node scripts/update-static.mjs && yarn generate-crates && yarn generate-default-crates && yarn generate-exports && yarn generate-packages && yarn generate-tutorials && yarn sync-assistant-context",
+    "generate-fast": "node scripts/update-static.mjs && yarn generate-exports && yarn generate-packages && yarn generate-tutorials && yarn sync-assistant-context",
+    "generate-crates": "node scripts/generate-crates.mjs",
+    "generate-default-crates": "node scripts/generate-default-crates.mjs",
+    "generate-exports": "node scripts/generate-exports.mjs",
+    "generate-packages": "node scripts/generate-packages.mjs",
+    "generate-tutorials": "node scripts/generate-tutorials.mjs",
+    "sync-assistant-context": "node scripts/sync-assistant-context.mjs",
+    "sync-readme": "node scripts/sync-readme.mjs",
+    "test": "yarn test-types && yarn test-unit && yarn build:bundle",
+    "test-types": "tsc --noEmit",
+    "test-unit": "vitest run",
+    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\"",
+    "db-migrate": "dbmate --no-dump-schema up",
+    "db-rollback": "dbmate --no-dump-schema down",
+    "db-status": "dbmate status",
+    "db-new": "dbmate new",
+    "test-e2e": "playwright test",
+    "db-dump": "./scripts/db-dump.sh"
+  },
+  "eslintConfig": {
+    "extends": [
+      "react-app"
+    ],
+    "overrides": [
+      {
+        "files": [
+          "src/**",
+          "e2e/**"
+        ],
+        "rules": {
+          "no-restricted-syntax": [
+            "error",
+            {
+              "selector": "MemberExpression[property.name='randomUUID']",
+              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
+              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "e2e/**"
+        ],
+        "rules": {
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "uuid",
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                }
+              ],
+              "patterns": [
+                {
+                  "group": [
+                    "uuid/*"
+                  ],
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                }
+              ]
+            }
+          ],
+          "no-restricted-syntax": [
+            "error",
+            {
+              "selector": "MemberExpression[property.name='randomUUID']",
+              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
+              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "Literal[regex.pattern=/\\{8\\}\\\\?-/]",
+              "message": "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex."
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/{app,features,shared,entities,widgets}/**"
+        ],
+        "rules": {
+          "no-empty": [
+            "error",
+            {
+              "allowEmptyCatch": false
+            }
+          ],
+          "no-nested-ternary": "error",
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "uuid",
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                }
+              ],
+              "patterns": [
+                {
+                  "group": [
+                    "uuid/*"
+                  ],
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                }
+              ]
+            }
+          ],
+          "no-restricted-syntax": [
+            "error",
+            {
+              "selector": "MemberExpression[property.name='randomUUID']",
+              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
+              "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "Literal[regex.pattern=/\\{8\\}\\\\?-/]",
+              "message": "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex."
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/shared/lib/ids.ts",
+          "src/shared/lib/ids.test.ts"
+        ],
+        "rules": {
+          "no-restricted-imports": "off",
+          "no-restricted-syntax": "off"
+        }
+      },
+      {
+        "files": [
+          "**/*.test.ts",
+          "**/*.test.tsx",
+          "**/*.test.mjs",
+          "e2e/**"
+        ],
+        "rules": {
+          "import/first": "off"
+        }
+      }
+    ]
+  },
+  "browserslist": {
+    "production": [
+      "chrome >= 111",
+      "edge >= 111",
+      "firefox >= 128",
+      "opera >= 97",
+      "safari >= 16.4"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  }
+}

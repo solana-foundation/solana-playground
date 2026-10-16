@@ -1,0 +1,33 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;500&family=Stack+Sans+Headline:wght@400..700&family=Stack+Sans+Text:wght@300..700&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+@import "./styles/tokens.css";
+@import "./styles/theme.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    @apply font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Studio's bar, while it shows, lies over the top 34px of the page */
+html:has(.ribbon.studio-built):not(.studio-rib-off) body {
+  padding-top: 34px;
+}
+html:has(.ribbon.studio-built):not(.studio-rib-off) [data-ds-header] {
+  top: 34px;
+}
+html:has(.ribbon.studio-built):not(.studio-rib-off) [data-ds-aside] {
+  top: calc(3.5rem + 34px);
+  height: calc(100vh - 3.5rem - 34px);
+}

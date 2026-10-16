@@ -1,0 +1,24 @@
+import { FC, useEffect, useState } from "react";
+
+interface DelayedProps {
+  /** The amount of milliseconds to sleep before rendering the `children` */
+  delay?: number;
+}
+
+const Delayed: FC<React.PropsWithChildren<DelayedProps>> = ({
+  delay,
+  children,
+}) => {
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const id = setTimeout(() => setReady(true), delay);
+    return () => clearTimeout(id);
+  }, [delay]);
+
+  if (!ready) return null;
+
+  return <>{children}</>;
+};
+
+export default Delayed;

@@ -17,4 +17,4 @@ default = ["js"]
 js = []
 
 [dependencies]
-wasm-bindgen = "*"
+wasm-bindgen = { workspace = true }

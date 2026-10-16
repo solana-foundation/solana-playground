@@ -1,0 +1,105 @@
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
+
+/*
+ * Tailwind 4 without preflight: its reset would fight the styled-components
+ * globals until the last of those is gone. `source(none)` plus `@source "./"`
+ * pins the class scan to `src/` instead of everything under the build cwd:
+ * `public/` alone holds several MB of tutorial, crate and grammar JSON. The
+ * path is relative to this file, so moving index.css moves the scan.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@source "./";
+
+/*
+ * The design system's components in `shared/ui` (`yarn ds-add`): the
+ * enter/exit animations, and shadcn's `data-open`/`data-closed` variants
+ * that Radix's `data-state` needs.
+ */
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/*
+ * The design system's tokens (`yarn ds-add playground-tokens`, never edited
+ * here). `:root` is light; `.dark` on <html> is the product default, set by
+ * `applyThemeMode`. The variant makes shadcn's `dark:` follow that class, not
+ * the OS setting.
+ */
+@import "./app/styles/playground-tokens.css";
+@import "./app/styles/playground-theme.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * The resolve view's hunk lines, and the lines a side changed on its own
+ * (`changed`), in Monaco, which keeps only plain class
+ * names on a decoration (`hunkLineClass` in features/persistence). Each is
+ * `mergeHunkVariants`' look for that state, so the editors and the ribbons
+ * change colour together; `hunk-class.test.ts` checks they still match.
+ */
+.pg-merge-hunk-conflict {
+  @apply bg-error/12 shadow-[inset_2px_0_0_var(--color-error)];
+}
+.pg-merge-hunk-changed {
+  @apply bg-info/10 shadow-[inset_2px_0_0_var(--color-info)];
+}
+.pg-merge-hunk-resolved {
+  @apply bg-success/10 shadow-[inset_2px_0_0_var(--color-success)];
+}
+.pg-merge-hunk-dismissed {
+  @apply bg-muted-foreground/8 shadow-[inset_2px_0_0_var(--color-muted-foreground)];
+}
+
+/*
+ * Without preflight, a design-system element would keep the browser's
+ * button face and border. This resets those elements only, as the design
+ * system's `inject.css` does for pages not built on it; `:where` keeps it
+ * at no specificity, so every utility still wins.
+ */
+@layer base {
+  :where([data-slot], [data-slot] *, [data-slot] ::before, [data-slot]
+      ::after) {
+    border: 0 solid;
+  }
+  :where([data-slot]) {
+    font-family: var(--font-text);
+    -webkit-font-smoothing: antialiased;
+  }
+  :where([data-slot] button, [data-slot]
+      input, button[data-slot], input[data-slot]) {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+    background-color: transparent;
+    border-radius: 0;
+  }
+}
+
+/*
+ * This file's own reset sits in `base`, below `utilities`. Unlayered CSS
+ * beats every layer, so left outside it the `*` rule would silently cancel
+ * `p-*` and `m-*` on every element, and the `a` rule the text colour and
+ * `underline` utilities on links.
+ * styled-components rules are unlayered and still win over a utility on the
+ * same element and property until that component is migrated.
+ */
+@layer base {
+  /* Remove default margin and padding */
+  *,
+  ::after,
+  ::before {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    position: relative;
+  }
+
+  a {
+    text-decoration: none;
+    color: inherit;
+  }
+}

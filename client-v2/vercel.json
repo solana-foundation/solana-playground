@@ -1,0 +1,33 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "bash scripts/vercel-install.sh",
+  "buildCommand": "node scripts/check-agent-env.mjs && REACT_APP_VERCEL_ENV=$VERCEL_ENV REACT_APP_VERCEL_GIT_COMMIT_SHA=$VERCEL_GIT_COMMIT_SHA NODE_OPTIONS='--max-old-space-size=6144' yarn build:bundle",
+  "devCommand": "yarn dev-cra",
+  "outputDirectory": "build",
+  "trailingSlash": false,
+  "functions": {
+    "api/agent.mjs": {
+      "maxDuration": 300
+    }
+  },
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cross-Origin-Embedder-Policy", "value": "require-corp" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" }
+      ]
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/auth/:authPath+",
+      "destination": "/api/auth"
+    },
+    {
+      "source": "/((?!api/|static/|.*\\..*).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
