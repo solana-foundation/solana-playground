@@ -1,7 +1,8 @@
 name: CI
 
-# Validation gate for pushes to master and for every pull request, whatever
-# its base, so internal PRs into feature branches are checked too.
+# Validation gate for pushes to master and for every pull request whose base
+# carries this file, since a pull_request run reads the workflow from the PR's
+# merge ref; internal PRs into feature branches are checked too.
 # Deployment is handled separately by cicd.yml.
 on:
   push:

@@ -129,6 +129,8 @@ export default defineConfig({
   // sequentially takes longer than everything that follows it.
   expect: { timeout: 20_000 },
   fullyParallel: false,
+  // A committed `test.only` would run one test and drop the rest from the report.
+  forbidOnly: !!process.env.CI,
   workers,
   // One retry in CI, none locally. The runner is three times slower than a
   // laptop and reorders what lands first, so a spec can fail there on timing

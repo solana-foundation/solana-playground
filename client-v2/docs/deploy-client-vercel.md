@@ -75,7 +75,7 @@ runs against the newer schema; revisit this once one is not.
 | Plan / Build Machine | Enterprise + **Enhanced** |
 | Framework Preset | Other |
 | Root Directory | `client-v2` |
-| Production Branch | `master-2.0`; switch to `master` once `master-2.0` is merged into `master` |
+| Production Branch | `master` |
 | Ignored Build Step | Automatic |
 
 ## How long a function may run

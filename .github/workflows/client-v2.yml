@@ -2,7 +2,8 @@ name: client-v2
 
 # The fork's frontend checks. Upstream's ci.yml checks only formatting and
 # clippy, not `client/`'s build or tests; this one guards `client-v2/` on
-# pushes to master and on every pull request, whatever its base, and never
+# pushes to master and on every pull request whose base carries this file (a
+# pull_request run reads the workflow from the PR's merge ref), and never
 # touches the Rust workspaces.
 on:
   push:
