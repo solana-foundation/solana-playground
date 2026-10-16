@@ -18,9 +18,6 @@ on:
 permissions:
   contents: read
 
-permissions:
-  contents: read
-
 jobs:
   format_client:
     name: Format client
