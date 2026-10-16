@@ -1,6 +1,6 @@
 # Neon preview databases
 
-A PR into `master` labelled `preview` gets a preview deployment with its own Neon branch, `preview/pr-<number>`, cut from
+A PR into any branch of `hoodieshq/solana-playground` labelled `preview` gets a preview deployment with its own Neon branch, `preview/pr-<number>`, cut from
 `main`, the project's default branch. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses
 the project's default branch through the project-level `DATABASE_URL`; see
 [Deploy the client to Vercel](deploy-client-vercel.md).
@@ -32,7 +32,8 @@ extends it to every other `preview/*` branch whose git branch has no open PR: th
 hand-deployed previews. It never touches `main` (the default branch) or a protected branch.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
-`master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`.
+`master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`. Both preview workflows run only
+on `hoodieshq/solana-playground`, the repository that holds the Neon and Vercel credentials.
 
 ## Configuration
 
@@ -49,8 +50,8 @@ Both go in two places:
   repository secret, the project ID as a repository variable, since it grants nothing on its own:
 
   ```sh
-  gh secret set NEON_API_KEY --repo solana-foundation/solana-playground
-  gh variable set NEON_PROJECT_ID --repo solana-foundation/solana-playground
+  gh secret set NEON_API_KEY --repo hoodieshq/solana-playground
+  gh variable set NEON_PROJECT_ID --repo hoodieshq/solana-playground
   ```
 
 The app never reads either, so neither is set in the Vercel dashboard.
@@ -64,10 +65,10 @@ The app never reads either, so neither is set in the Vercel dashboard.
 | `VERCEL_PROJECT_ID` | variable | `projectId` in `.vercel/project.json` |
 
 ```sh
-gh secret set VERCEL_TOKEN --repo solana-foundation/solana-playground
-gh variable set VERCEL_ORG_ID --repo solana-foundation/solana-playground
-gh variable set VERCEL_PROJECT_ID --repo solana-foundation/solana-playground
-gh label create preview --repo solana-foundation/solana-playground --description "Deploy a preview with its own database"
+gh secret set VERCEL_TOKEN --repo hoodieshq/solana-playground
+gh variable set VERCEL_ORG_ID --repo hoodieshq/solana-playground
+gh variable set VERCEL_PROJECT_ID --repo hoodieshq/solana-playground
+gh label create preview --repo hoodieshq/solana-playground --description "Deploy a preview with its own database"
 ```
 
 In Vercel, turn off the Neon integration's database branch for Preview deployments (Storage → the Neon store →

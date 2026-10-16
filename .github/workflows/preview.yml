@@ -1,19 +1,18 @@
 name: preview
 
-# A preview deployment of client-v2, with its own Neon database, for a PR into
-# master that carries the `preview` label -- and only for one. The Neon
-# project caps its branch count, so the Vercel integration's
-# branch-per-deployment option is off (see client-v2/docs/neon.md) and this
-# workflow owns the branch instead:
+# A preview deployment of client-v2, with its own Neon database, for a PR that
+# carries the `preview` label -- and only for one. The Neon project caps its
+# branch count, so the Vercel integration's branch-per-deployment option is
+# off (see client-v2/docs/neon.md) and this workflow owns the branch instead:
 #
 # - labelled, opened/reopened or pushed to while labelled: create (or reuse)
 #   `preview/pr-<number>` from `main`, migrate it, build, deploy with it
 #   as DATABASE_URL, and post the URL on the PR;
 # - label removed, or PR closed or merged: delete the branch.
 #
-# What this misses (a cancelled teardown, a failed delete) is swept by
-# preview-sweep.yml, which GitHub runs on its schedule from the default branch,
-# master.
+# Previews follow the label on a PR into any branch of
+# hoodieshq/solana-playground. What this misses (a cancelled teardown, a
+# failed delete) is swept by preview-sweep.yml.
 #
 # The label name is spelled out in the `if:`s below because job conditions
 # cannot read `env`; keep the three, and PREVIEW_LABEL in preview-sweep.yml,
@@ -21,7 +20,6 @@ name: preview
 # and deletes every one.
 on:
   pull_request:
-    branches: ["master"]
     types: [opened, reopened, synchronize, labeled, unlabeled, closed]
 
 permissions: {}
@@ -42,8 +40,13 @@ env:
 jobs:
   deploy:
     name: deploy preview branch
-    # A fork's PR gets no secrets. Unrelated label changes do not redeploy.
+    # A fork's PR gets no secrets, and Dependabot gets only Dependabot
+    # secrets. Unrelated label changes do not redeploy.
+    # Temporary: replace the repository check with `vars.NEON_PROJECT_ID != ''`,
+    # so a repository without Neon skips by configuration, not by name.
     if: >-
+      github.repository == 'hoodieshq/solana-playground' &&
+      github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) ||
@@ -168,7 +171,11 @@ jobs:
 
   teardown:
     name: drop preview database
+    # Temporary: replace the repository check with `vars.NEON_PROJECT_ID != ''`,
+    # so a repository without Neon skips by configuration, not by name.
     if: >-
+      github.repository == 'hoodieshq/solana-playground' &&
+      github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'closed' ||
        (github.event.action == 'unlabeled' && github.event.label.name == 'preview'))
@@ -200,7 +207,7 @@ jobs:
       - name: Delete the Neon branches
         run: |
           bash .github/scripts/neon.sh delete "$BRANCH"
-          if [[ "$HEAD_REF" =~ ^(pr-[0-9]+|master|master-2\.0)$ ]]; then
+          if [[ "$HEAD_REF" =~ ^(pr-[0-9]+|master)$ ]]; then
             echo "keeping preview/$HEAD_REF: not this PR's to delete"
           else
             bash .github/scripts/neon.sh delete "preview/$HEAD_REF"

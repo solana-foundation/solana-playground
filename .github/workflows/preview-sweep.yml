@@ -39,6 +39,9 @@ concurrency:
 jobs:
   sweep:
     name: sweep preview branches
+    # Temporary: replace with `vars.NEON_PROJECT_ID != ''`, so a repository
+    # without Neon skips by configuration, not by name.
+    if: github.repository == 'hoodieshq/solana-playground'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
