@@ -249,6 +249,15 @@ changes. Asked to build something in the client, look there first.
   browser console, `__pgSyncDiagnostics.failures()` lists them. A missing file
   is not a failure and is deliberately silent.
 
+- **`wasm/` carries two fork-owned pins that an upstream sync must keep:**
+  the exact `wasm-bindgen` version under `[workspace.dependencies]` in
+  `wasm/Cargo.toml`, which every member that depends on `wasm-bindgen`
+  references with `workspace = true`, and the one in
+  `wasm/rust-analyzer/Cargo.toml`, outside the workspace. wasm-pack needs a
+  `wasm-bindgen` binary at the exact crate version, and
+  `client-v2/scripts/vercel-install.sh` installs it from what those pins lock
+  (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
+  the pin and the lockfile together.
 - **`wasm/stub-packages.sh` is not optional.** Six of the eight local
   `wasm/*/pkg` deps compile from Rust and take about an hour. `yarn install`
   refuses to run while those directories are missing. None is on the UI or test

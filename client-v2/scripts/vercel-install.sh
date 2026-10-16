@@ -12,9 +12,16 @@ export CARGO_HOME="$RUST_ROOT/cargo"
 export RUSTUP_HOME="$RUST_ROOT/rustup"
 export CARGO_TARGET_DIR="$RUST_ROOT/target"
 export PATH="$CARGO_HOME/bin:$PATH"
+# Matches wasm/build.sh's parsing of the same file.
+RUST_VERSION=$(awk '/channel/{gsub(/"/, ""); print $3 }' ../wasm/rust-toolchain.toml)
 
 WASM_CACHE="$PWD/node_modules/.cache/wasm-pkg"
 INSTALL_MARK="node_modules/.cache/install-key"
+
+# all_packages in wasm/build.sh, which does not export it; the loop in build_wasm_packages builds one package per PATH.
+WASM_PACKAGES=(anchor-cli rust-analyzer seahorse-compile solana-cli spl-token-cli sugar-cli)
+# One wasm-bindgen per version the packages resolve, kept with the rest of the Rust state.
+WASM_BINDGEN_ROOT="$RUST_ROOT/wasm-bindgen"
 
 DEFAULT_CRATES_CACHE="$PWD/node_modules/.cache/default-crates"
 CRATES_DIR="$PWD/public/crates"
@@ -111,22 +118,101 @@ remote_upload() {
     || echo ">>> $3: Remote Cache upload failed; a build without the Build Cache copy rebuilds" >&2
 }
 
+# $1: package. Prints the lockfile wasm-pack reads for it: the one at the package's workspace root.
+wasm_lockfile() {
+  local manifest
+  # Locating a manifest needs no particular toolchain, and the package's own may not be installed yet.
+  # set -e does not reach into a command substitution, so the failure is returned by hand.
+  manifest=$(cd "../wasm/$1" && cargo "+$RUST_VERSION" locate-project --workspace --message-format plain) || return 1
+  [ -n "$manifest" ] || return 1
+  printf '%s/Cargo.lock' "$(dirname "$manifest")"
+}
+
+# $1: package. Prints the wasm-bindgen version its lockfile resolves, the one wasm-pack will demand.
+wasm_bindgen_version() {
+  local lockfile version
+  lockfile=$(wasm_lockfile "$1") || { echo ">>> wasm-bindgen: cannot locate the workspace of $1" >&2; return 1; }
+  # Checked before the build: wasm-pack's own `cargo metadata` would rewrite a lockfile that does not match its manifest; --locked refuses it instead.
+  cargo "+$RUST_VERSION" metadata --locked --format-version 1 --manifest-path "$(dirname "$lockfile")/Cargo.toml" >/dev/null \
+    || { echo ">>> wasm-bindgen: $lockfile does not match its manifest; run cargo update -p wasm-bindgen there" >&2; return 1; }
+  version=$(awk '$0 == "name = \"wasm-bindgen\"" { found = 1; next } found && /^version = / { gsub(/"/, "", $3); print $3; exit }' "$lockfile")
+  if [ -z "$version" ]; then
+    echo ">>> wasm-bindgen: no wasm-bindgen package in $lockfile for $1" >&2
+    return 1
+  fi
+  printf '%s' "$version"
+}
+
+# $1: directory, $2: version. wasm-pack compares the second word of `--version`, so this does too.
+wasm_bindgen_reports() {
+  [ "$("$1/wasm-bindgen" --version 2>/dev/null | awk '{ print $2 }')" = "$2" ]
+}
+
+# $1: version, $2: destination. wasm-pack's own target choice: x86_64 Linux takes the musl build; any macOS takes the x86_64 build, which arm64 runs under Rosetta when it is installed.
+download_wasm_bindgen() {
+  local target url
+  case "$(uname -sm)" in
+    "Linux x86_64") target=x86_64-unknown-linux-musl ;;
+    Darwin*) target=x86_64-apple-darwin ;;
+    *)
+      echo ">>> wasm-bindgen $1: no prebuilt binary for $(uname -sm)" >&2
+      return 1
+      ;;
+  esac
+  url="https://github.com/rustwasm/wasm-bindgen/releases/download/$1/wasm-bindgen-$1-$target.tar.gz"
+  curl -fsSL "$url" \
+    | tar -xzf - -C "$2" --strip-components=1 "wasm-bindgen-$1-$target/wasm-bindgen" "wasm-bindgen-$1-$target/wasm-bindgen-test-runner" \
+    || { echo ">>> wasm-bindgen $1: prebuilt $url unusable, compiling instead" >&2; return 1; }
+}
+
+# $1: version, $2: destination. --locked keeps the crate's own Cargo.lock; unlocked, the pinned Cargo resolves dependencies it cannot build.
+cargo_install_wasm_bindgen() {
+  local root="$2.cargo"
+  cargo install wasm-bindgen-cli --version "$1" --locked --root "$root"
+  mv "$root/bin/wasm-bindgen" "$root/bin/wasm-bindgen-test-runner" "$2"
+  rm -rf "$root"
+}
+
+# $1: version. Leaves wasm-bindgen and wasm-bindgen-test-runner in $WASM_BINDGEN_ROOT/<version>.
+install_wasm_bindgen() {
+  local dir="$WASM_BINDGEN_ROOT/$1"
+  if wasm_bindgen_reports "$dir" "$1"; then
+    echo ">>> wasm-bindgen $1: cached"
+    return
+  fi
+  mkdir -p "$dir"
+  if download_wasm_bindgen "$1" "$dir" && wasm_bindgen_reports "$dir" "$1"; then
+    echo ">>> wasm-bindgen $1: prebuilt"
+    return
+  fi
+  cargo_install_wasm_bindgen "$1" "$dir"
+  if ! wasm_bindgen_reports "$dir" "$1"; then
+    echo ">>> wasm-bindgen $1: $dir/wasm-bindgen does not report that version" >&2
+    return 1
+  fi
+  echo ">>> wasm-bindgen $1: cargo install --locked"
+}
+
 build_wasm_packages() {
   mkdir -p "$CARGO_HOME" "$RUSTUP_HOME" "$CARGO_TARGET_DIR"
-
-  # Matches wasm/build.sh's parsing of the same file.
-  local rust_version
-  rust_version=$(awk '/channel/{gsub(/"/, ""); print $3 }' ../wasm/rust-toolchain.toml)
 
   if [ ! -x "$CARGO_HOME/bin/rustup" ]; then
     # Version comes from wasm/rust-toolchain.toml so the initial `cargo install wasm-pack`
     # has a working toolchain before per-package rust-toolchain.toml files apply.
     curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
-      | sh -s -- -y --no-modify-path --default-toolchain "$rust_version" --profile minimal --target wasm32-unknown-unknown
+      | sh -s -- -y --no-modify-path --default-toolchain "$RUST_VERSION" --profile minimal --target wasm32-unknown-unknown
   fi
-  rustup default "$rust_version"
+  rustup default "$RUST_VERSION"
 
-  bash ../wasm/build.sh
+  # One package at a time, its wasm-bindgen first on PATH: wasm-pack takes a matching binary from PATH; otherwise
+  # it downloads a prebuilt tarball and, when that fails, runs an unlocked `cargo install` that the pinned toolchain cannot build.
+  local package version
+  for package in "${WASM_PACKAGES[@]}"; do
+    # Its own line: set -e ignores a failure inside a command substitution used as an argument.
+    version=$(wasm_bindgen_version "$package")
+    install_wasm_bindgen "$version"
+    PATH="$WASM_BINDGEN_ROOT/$version:$PATH" bash ../wasm/build.sh "$package"
+  done
 }
 
 # $1: tar to write. Older archives cannot match again and count against the Build Cache size limit.

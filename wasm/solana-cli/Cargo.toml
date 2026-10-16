@@ -33,5 +33,5 @@ solana-remote-wallet = { version = "~1.18", default-features = false }
 solana-sdk = "*"
 solana-version = "~1.18"
 thiserror = "1.0.31"
-wasm-bindgen = "*"
+wasm-bindgen = { workspace = true }
 wasm-bindgen-futures = "*"

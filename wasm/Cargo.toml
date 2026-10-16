@@ -10,3 +10,6 @@ members = [
 ]
 exclude = ["playnet", "rust-analyzer"]
 resolver = "2"
+
+[workspace.dependencies]
+wasm-bindgen = "=0.2.92"
