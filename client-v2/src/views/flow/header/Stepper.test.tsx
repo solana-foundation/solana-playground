@@ -107,7 +107,7 @@ describe("Stepper", () => {
     );
   });
 
-  it("folds to initials when the stage bar is narrower than the full list", () => {
+  it("folds to initials when its row is narrower than the full list", () => {
     render(<Stepper state={INITIAL_FLOW_STATE} onSelect={() => {}} />);
     resizeTo(STEPPER_FULL_WIDTH_PX - 1);
     expect(screen.getByRole("tablist").getAttribute("data-compact")).toBe(
@@ -126,5 +126,22 @@ describe("Stepper", () => {
     expect(screen.getByRole("tablist").getAttribute("data-compact")).toBe(
       "false"
     );
+  });
+});
+
+describe("fill", () => {
+  beforeEach(() => {
+    vi.stubGlobal("ResizeObserver", StubResizeObserver);
+  });
+
+  it("stretches the list across the row, its stages sharing the width", () => {
+    const { container, rerender } = render(
+      <Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} fill />
+    );
+    const list = () =>
+      container.querySelector('[data-slot="stepper-list"]')!.className;
+    expect(list()).toMatch(/\bw-full\b/);
+    rerender(<Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} />);
+    expect(list()).not.toMatch(/\bw-full\b/);
   });
 });

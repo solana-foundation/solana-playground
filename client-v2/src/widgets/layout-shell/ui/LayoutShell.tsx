@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTheme } from "styled-components";
 
-import { useExplorer, useKeybind } from "@/hooks";
+import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useIsLeftSheet, useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import { PgFlow } from "@/views/flow/state/stage";
@@ -20,6 +20,7 @@ import { layoutTelemetry } from "../model/telemetry";
 import type { ToggleSource } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
 import BaseLayoutShell from "./BaseLayoutShell";
+import BaseStageBar from "./BaseStageBar";
 import type { AssistantWide } from "./BaseLayoutShell";
 
 export interface LayoutShellProps {
@@ -38,8 +39,11 @@ export interface LayoutShellProps {
     toggle: () => void;
     closeSheet: () => void;
   }) => ReactNode;
-  /** Across the top of the files column and the stage */
-  stageBar: ReactNode;
+  /**
+   * The stage tabs, in a row across the files column and the stage, under the
+   * shell's own stage bar; on a phone, in the preview page's bar
+   */
+  stageTabs: ReactNode;
   /**
    * The files column. `collapsed` is never true in the Sheet below
    * `LAYOUT_BREAKPOINTS.left`, where it sits open under the navigation.
@@ -74,7 +78,7 @@ const isEditable = (target: EventTarget | null) =>
  */
 const LayoutShell = ({
   nav,
-  stageBar,
+  stageTabs,
   files,
   stage,
   console,
@@ -104,6 +108,9 @@ const LayoutShell = ({
   const viewRef = useRef(view);
   viewRef.current = view;
   useExplorer();
+  // The project's name shows in the stage bar and the phone's bar; a rename
+  // opens no file, so `useExplorer`'s events miss it
+  useRenderOnChange(PgExplorer.onDidRenameWorkspace);
   // Below `LAYOUT_BREAKPOINTS.compact` the assistant is a Sheet, closed on
   // arrival and never saved
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -469,8 +476,9 @@ const LayoutShell = ({
         })
       }
       files={(stock) => {
-        // In the Sheet the column is always open, so its button closes the
-        // Sheet, as ⌘E does there
+        // In the Sheet the column is always open, so a control of its own, if
+        // it draws one, closes the Sheet, as ⌘E does there (Flow's column
+        // draws none since the stage bar took its toggle)
         if (stock.isMobile) {
           return files({
             collapsed: false,
@@ -503,7 +511,34 @@ const LayoutShell = ({
         stageOn: stagePageOf(flowStage),
         consoleOpen: phoneConsole,
       }}
-      stageBar={stageBar}
+      stageBar={
+        <BaseStageBar
+          // While the assistant is out of view (hidden, or its Sheet closed),
+          // its head cannot name the project, so the bar does
+          title={
+            assistantShown ? null : PgExplorer.currentWorkspaceName ?? null
+          }
+          files={
+            isMobile
+              ? null
+              : {
+                  open: state.open.files,
+                  onToggle: () =>
+                    setOpen("files", {
+                      open: !state.open.files,
+                      via: "button",
+                    }),
+                }
+          }
+          // The panel's toggle on a wide window; below it, what opens the
+          // Sheet: the frame has no other opener for it
+          assistant={{
+            open: assistantShown,
+            onToggle: () => setAssistant(!assistantShown, "button"),
+          }}
+        />
+      }
+      stageTabs={stageTabs}
       stage={stage}
       console={console({
         open: phone ? phoneConsole : state.open.console,
@@ -517,19 +552,17 @@ const LayoutShell = ({
           open: assistantShown,
           toggle: () => setAssistant(!assistantShown, "button"),
           wide,
-          setWide,
+          // Only the user's click is measured, and only a change the shell
+          // made: its own narrowing on a fold never comes through here
+          setWide: (next) => {
+            const changed = setWide(next);
+            if (changed) {
+              layoutTelemetry.track("layout_assistant_widened", { wide: next });
+            }
+            return changed;
+          },
           canWiden,
         })
-      }
-      assistantOpener={
-        <button
-          type="button"
-          aria-label="Expand assistant"
-          className="rounded-l-md border border-r-0 border-border bg-card px-1.5 py-2 text-muted-foreground hover:text-foreground"
-          onClick={() => setAssistant(true, "button")}
-        >
-          &#8249;
-        </button>
       }
     />
   );

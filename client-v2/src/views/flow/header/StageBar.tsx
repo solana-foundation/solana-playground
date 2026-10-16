@@ -14,10 +14,13 @@ import type { LessonState } from "../lessons";
 import { INITIAL_FLOW_STATE, PgFlow, STAGES } from "../state/stage";
 import type { FlowState } from "../state/stage";
 import { useKeybind } from "../../../hooks";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 
 /**
- * The dev-loop stepper, centred across the top of the files column and the
- * stage (`LayoutShell`'s `stageBar`). It owns the Ctrl+1..4 stage keys and
+ * The dev-loop stepper: in the frame, a full-width row of stage tabs under the
+ * stage bar, across the files column and the stage (`LayoutShell`'s
+ * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, in the preview
+ * page's bar, where it keeps its own width. It owns the Ctrl+1..4 stage keys and
  * points the stepper at the stage the current lesson step is graded on. The
  * project list and the status chips live in the navigation (`AppNav`),
  * not here.
@@ -49,26 +52,44 @@ const StageBar: FC = () => {
     []
   );
 
+  const row = useViewport() !== "phone";
   return (
-    <Bar>
-      <Stepper state={state} onSelect={PgFlow.setStage} target={target} />
+    <Bar $row={row}>
+      <Stepper
+        state={state}
+        onSelect={PgFlow.setStage}
+        target={target}
+        fill={row}
+      />
     </Bar>
   );
 };
 
 export default StageBar;
 
-// Transparent on the black page ground -- the floating panels below carry
-// their own edges, so the bar needs none of its own.
-const Bar = styled.div`
-  ${({ theme }) => css`
+// In the frame, a 38 px row with the columns' bottom line, as the prototype
+// draws the stage tabs; on a phone, centred in the preview page's bar
+const Bar = styled.div<{ $row: boolean }>`
+  ${({ theme, $row }) => css`
     flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: center;
     min-width: 0;
-    padding-bottom: 0.5rem;
     background: transparent;
     font-family: ${theme.font.other.family};
+    /* The stepper's thumb and items stack with z-index; kept inside the row,
+       so they never rise over a window opened above the work area (the
+       wallet, z-index 1), which the full-width row reaches */
+    isolation: isolate;
+    ${$row
+      ? css`
+          height: 38px;
+          padding: 0 0.5rem;
+          border-bottom: 1px solid ${theme.colors.default.border};
+        `
+      : css`
+          padding-bottom: 0.5rem;
+        `}
   `}
 `;

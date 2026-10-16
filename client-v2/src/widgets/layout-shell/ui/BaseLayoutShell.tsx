@@ -21,7 +21,7 @@ import {
   SidebarProvider,
   useSidebar,
 } from "@/shared/ui/sidebar";
-import { BOTTOM_BAR_PX, GAP } from "@/views/flow/tokens";
+import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
 import BasePhonePager from "./BasePhonePager";
 import type { PhonePagerState } from "./BasePhonePager";
 import type {
@@ -31,11 +31,11 @@ import type {
   WorkLayout,
 } from "../model/layout-state";
 
-const FILES = { default: 232, min: 192, folded: 52 } as const;
+const FILES = { default: 240, min: 192, folded: 0 } as const;
 /** The stage over the console, beside the files column inside `work` */
 const STAGE = { min: 240 } as const;
-/** The handles between the columns: `w-2` */
-const HANDLE_PX = 8;
+/** The handles between the columns: the stock 1 px line */
+const HANDLE_PX = 1;
 
 /**
  * Sizes in px; the design system gives the navigation's in rem
@@ -48,7 +48,7 @@ const HANDLE_PX = 8;
  * `BOTTOM_BAR_PX`.
  */
 export const PANEL_SIZES = {
-  assistant: { default: 348, min: 280, max: 560, folded: 24 },
+  assistant: { default: 368, min: 280, max: 560, folded: 0 },
   files: FILES,
   stage: STAGE,
   console: { default: 256, min: 120, folded: BOTTOM_BAR_PX },
@@ -69,6 +69,8 @@ const SIDEBAR_STYLE = {
  * Same variants as `shared/ui/sheet`'s own `data-[side=right]:w-3/4
  * data-[side=right]:sm:max-w-sm`: an unprefixed width loses to them. The
  * assistant's Sheet is only in the frame (`compact`); the phone is the pager.
+ * It keeps 21.75 rem (348 px): the panel's 368 px default is the prototype's
+ * width at 1440, and the tablet is unchanged by 5.25.
  */
 const ASSISTANT_SHEET_WIDTH =
   "data-[side=right]:w-[21.75rem] data-[side=right]:sm:max-w-[21.75rem]";
@@ -122,7 +124,11 @@ export type FilesStock =
  */
 export interface AssistantWide {
   wide: boolean;
-  setWide: (wide: boolean) => void;
+  /**
+   * Widens or narrows the panel; returns whether it changed it, so a caller
+   * measures only what happened (`layout_assistant_widened`)
+   */
+  setWide: (wide: boolean) => boolean;
   /** Whether `setWide` can do anything now, so Widen is offered only then */
   canWiden: boolean;
 }
@@ -206,19 +212,19 @@ export interface BaseLayoutShellProps {
    */
   toggleLeftSheetOn: (toggle: () => boolean) => Disposable;
   /**
-   * Across the top of the work area, over the files column and the stage; on
-   * a phone, in the bar of the preview page
+   * The 44 px bar at the top of the work area, over the files column and the
+   * stage (`BaseStageBar`); not on a phone, whose pager has its own bar
    */
   stageBar: ReactNode;
+  /**
+   * The stage tabs, in a row under `stageBar` across the files column and the
+   * stage; on a phone, in the bar of the preview page
+   */
+  stageTabs: ReactNode;
   stage: ReactNode;
   console: ReactNode;
   /** Renders the assistant, in its panel, its Sheet or the pager's page */
   assistant: (wide: AssistantWide) => ReactNode;
-  /**
-   * Below `LAYOUT_BREAKPOINTS.compact`: what opens the assistant Sheet, on the
-   * right edge
-   */
-  assistantOpener: ReactNode;
   /**
    * The font a Sheet's content is set in. Sheets portal outside the app
    * wrapper that sets it, so they would fall back to the browser's.
@@ -292,8 +298,7 @@ const NavSlot = ({
 
 /**
  * Below `LAYOUT_BREAKPOINTS.left` the stock Sidebar is a Sheet with no
- * visible opener (⌘B, ⌘E and the files column's button inside it open and
- * close it too), so this renders one at the left edge and reports the Sheet
+ * visible opener (⌘B and ⌘E open and close it too), so this renders one at the left edge and reports the Sheet
  * opening and closing (not the value it starts with). Its label is the fixed
  * "Expand project panel", not one that names the project: tests and the
  * browser suite find the element by it.
@@ -430,18 +435,19 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
   /** Folded, or below `LAYOUT_BREAKPOINTS.compact`: there is no panel to widen */
   const wideEnds = props.viewport !== "wide" || !props.assistantState.open;
   const setWide = (next: boolean) => {
-    if (wideEnds) return;
+    if (wideEnds) return false;
     const panel = assistantRef.current;
-    if (!panel || next === (wideFrom !== null)) return;
+    if (!panel || next === (wideFrom !== null)) return false;
     if (next) {
       setWideFrom(assistantOpenSize.current);
       // A resize the product makes reaches `onLayoutChanged` with
       // `isUserInteraction` false, so `settle` saves nothing for it
       panel.resize(PANEL_SIZES.assistant.max);
-      return;
+      return true;
     }
     panel.resize(wideFrom ?? PANEL_SIZES.assistant.default);
     setWideFrom(null);
+    return true;
   };
   // Folding, or leaving for the Sheet or the pager, ends `wide`; the panel
   // reopens at the size it had before it was widened, not at the maximum
@@ -458,12 +464,15 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
     canWiden: !wideEnds,
   });
 
-  // The files flag does not follow the viewport, so there is no crossing to
-  // skip: below `LAYOUT_BREAKPOINTS.left` the column is not in the group, and
-  // nothing there changes its flag (⌘E and its button work the Sheet), so on
-  // the way back it mounts at the size its saved flag gives.
+  // Hidden, the files column is not in the group at all (design.md, "Frame
+  // chrome (5.25)"): a collapsible panel at 0 px stays in the library's
+  // layout, which snapped it open to its minimum when a drag of the
+  // assistant's edge reflowed the work area. Opening mounts it at the width it
+  // last had; below `LAYOUT_BREAKPOINTS.left` it is in the Sheet instead.
+  const filesShown = !isMobile && props.filesState.open;
+  // A drag that folds the open column is the one fold left to the library
   useEffect(() => {
-    if (isMobile) return;
+    if (!filesShown) return;
     const panel = filesRef.current;
     const folded = foldedOf(panel);
     if (!panel || folded === undefined) return;
@@ -474,9 +483,10 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.filesState.open, filesRef, foldedOf]);
   useEffect(() => {
-    // The column mounts again on the way back from the Sheet, and settles again
-    if (isMobile) filesSettled.current = false;
-  }, [isMobile]);
+    // The column mounts again when shown, or on the way back from the Sheet,
+    // and settles again
+    if (!filesShown) filesSettled.current = false;
+  }, [filesShown]);
 
   useEffect(() => {
     const panel = consoleRef.current;
@@ -599,7 +609,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
               toggle: () => props.phone.onFilesOpenChange(false),
             })}
             assistant={assistant}
-            stageBar={props.stageBar}
+            stageBar={props.stageTabs}
             stageNode={stageNode}
             consoleNode={consoleNode}
             sheetFont={props.sheetFont}
@@ -609,19 +619,19 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
         <SidebarProvider
           open={props.navOpen}
           onOpenChange={props.onNavOpenChange}
-          style={{ ...SIDEBAR_STYLE, padding: GAP }}
+          style={SIDEBAR_STYLE}
           className="relative min-h-0 flex-1"
         >
           {/* The stock Sidebar's container is fixed at the window's full height.
           Flow draws the sync banner above the provider, so the Sidebar sits
-          inside the provider instead, inset by the gutter, where the banner
-          pushes it down rather than being covered by it. The container's
-          edge line and fill are dropped, so the navigation sits on the
-          page's ground like the other columns. */}
+          inside the provider instead, where the banner pushes it down rather
+          than being covered by it. The frame is flush (design.md, "Frame
+          chrome (5.25)"): the container keeps its right line, the columns'
+          divider, and drops its fill, so the navigation sits on the page's
+          ground like the other columns. */}
           <Sidebar
             collapsible="icon"
-            className="absolute inset-y-0 h-auto group-data-[side=left]:border-r-0 [&>[data-slot=sidebar-inner]]:bg-transparent"
-            style={{ left: GAP, top: GAP, bottom: GAP }}
+            className="absolute inset-y-0 left-0 h-auto border-border [&>[data-slot=sidebar-inner]]:bg-transparent"
           >
             <div className="contents" style={props.sheetFont}>
               <NavSlot nav={props.nav} files={props.files} />
@@ -632,7 +642,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             closeOn={props.closeLeftSheetOn}
             toggleOn={props.toggleLeftSheetOn}
           />
-          <SidebarInset className="relative min-h-0 min-w-0 md:ml-2">
+          <SidebarInset className="relative min-h-0 min-w-0">
             {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is the
             same, so a rotate across it does not remount the stage, Monaco or
             the console's terminal; across `LAYOUT_BREAKPOINTS.phone` the
@@ -691,26 +701,35 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                   {assistant}
                 </ResizablePanel>
               )}
-              {wide && <ResizableHandle className="w-2 bg-transparent" />}
+              {/* Hidden, the assistant takes no width and its handle would double
+              the navigation's line; it stays a drag target, only unseen */}
+              {wide && (
+                <ResizableHandle
+                  className={
+                    props.assistantState.open ? undefined : "bg-transparent"
+                  }
+                />
+              )}
               <ResizablePanel
                 id="work"
                 minSize={PANEL_SIZES.work.min}
                 className="flex min-w-0 flex-col"
               >
                 {/* Over the files column and the stage both, as the prototype
-                draws it */}
+                draws them: the column bar, then the stage tabs */}
                 {props.stageBar}
-                {/* Below `LAYOUT_BREAKPOINTS.left` the files column is in the
-                navigation's Sheet, so the group holds only the stage and,
-                like the horizontal group below `compact`, neither takes nor
-                saves its layout */}
+                {props.stageTabs}
+                {/* Hidden, or below `LAYOUT_BREAKPOINTS.left` where the files
+                column is in the navigation's Sheet, the group holds only the
+                stage and, like the horizontal group below `compact`, neither
+                takes nor saves its layout */}
                 <ResizablePanelGroup
                   orientation="horizontal"
                   id="layout-work"
                   className="h-auto min-h-0 flex-1"
-                  defaultLayout={isMobile ? undefined : props.work}
+                  defaultLayout={filesShown ? props.work : undefined}
                   onLayoutChanged={
-                    isMobile
+                    !filesShown
                       ? undefined
                       : (layout, meta) =>
                           settle(
@@ -726,17 +745,13 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                           )
                   }
                 >
-                  {!isMobile && (
+                  {filesShown && (
                     <ResizablePanel
                       id="files"
                       panelRef={filesRef}
                       collapsible
                       collapsedSize={PANEL_SIZES.files.folded}
-                      defaultSize={
-                        props.filesState.open
-                          ? PANEL_SIZES.files.default
-                          : PANEL_SIZES.files.folded
-                      }
+                      defaultSize={filesOpenSize.current}
                       minSize={PANEL_SIZES.files.min}
                       groupResizeBehavior="preserve-pixel-size"
                       className="flex min-w-0 flex-col"
@@ -752,9 +767,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                       {props.files({ isMobile: false })}
                     </ResizablePanel>
                   )}
-                  {!isMobile && (
-                    <ResizableHandle className="w-2 bg-transparent" />
-                  )}
+                  {filesShown && <ResizableHandle />}
                   <ResizablePanel
                     id="center"
                     minSize={PANEL_SIZES.stage.min}
@@ -767,10 +780,6 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             </ResizablePanelGroup>
             {props.viewport !== "wide" && (
               <>
-                {/* Under the settings panel (fixed, z-2) when it opens over it */}
-                <div className="absolute top-1 right-0 z-1">
-                  {props.assistantOpener}
-                </div>
                 <Sheet
                   open={props.assistantState.open}
                   onOpenChange={props.assistantState.onOpenChange}

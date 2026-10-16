@@ -40,6 +40,12 @@ type LayoutEvents = {
   layout_page_shown: { page: PhonePage; via: PageSource };
   /** The work page switched between the assistant and the code. */
   layout_work_view: { view: WorkView; via: WorkViewSource };
+  /**
+   * Widen or Narrow in the assistant's head was clicked and changed the
+   * panel; `wide` is the new state. Not sent when hiding the assistant or a
+   * drag of its edge ends the widening, which are no one's choice of width.
+   */
+  layout_assistant_widened: { wide: boolean };
 };
 
 export const layoutTelemetry = createTracker<LayoutEvents>();

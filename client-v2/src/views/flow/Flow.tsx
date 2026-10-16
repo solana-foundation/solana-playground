@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Chevron from "./Chevron";
 import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import Logomark from "./header/Logomark";
@@ -43,9 +42,9 @@ import type { Disposable } from "@/utils/types";
  * navigation (`AppNav`, holding the logo, the project list, and the status
  * chips and the feedback trigger in its footer, which on the rail gives way to
  * `RailFooter`'s cluster dot and account button), the assistant, the files
- * column, and the stage router over its collapsible console, with the
- * `StageBar` stepper across the last two. The sync banner sits above all four,
- * full width.
+ * column, and the stage router over its collapsible console, with the shell's
+ * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
+ * last two. The sync banner sits above all four, full width.
  *
  * The feedback form and its state sit in `FeedbackHost`, above the frame, not
  * in the footer with the trigger: below `LAYOUT_BREAKPOINTS.left` the footer
@@ -63,10 +62,6 @@ const FlowFrame = () => {
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   const [reading, setReading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  // Lives here, not in `LeftPanel`: below `LAYOUT_BREAKPOINTS.left` the shell
-  // puts it in a Sheet that unmounts it on close, and crossing that width swaps
-  // the rail for the Sheet, so anything `LeftPanel` held goes with it.
-  const [pendingCreate, setPendingCreate] = useState(false);
   const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
 
   useEffect(() => {
@@ -197,15 +192,8 @@ const FlowFrame = () => {
             }
           />
         )}
-        stageBar={<StageBar />}
-        files={({ collapsed, toggle }) => (
-          <LeftPanel
-            collapsed={collapsed}
-            onToggle={toggle}
-            pendingCreate={pendingCreate}
-            onPendingCreateChange={setPendingCreate}
-          />
-        )}
+        stageTabs={<StageBar />}
+        files={({ collapsed }) => <LeftPanel collapsed={collapsed} />}
         stage={
           <Center>
             <ObjectiveBand
@@ -242,19 +230,11 @@ const FlowFrame = () => {
         )}
         assistant={({ open, toggle, ...widen }) => (
           <Right>
-            {open ? (
-              // The head carries "Collapse assistant", and Widen while the
-              // shell says it can widen
-              <Assistant widen={widen} onHide={toggle} />
-            ) : (
-              <Collapse
-                type="button"
-                aria-label="Expand assistant"
-                onClick={toggle}
-              >
-                <Chevron $flip={false} />
-              </Collapse>
-            )}
+            {/* The head carries "Collapse assistant", and Widen while the
+                shell says it can widen. Hidden, the column takes no width and
+                the stage bar carries "Expand assistant" (design.md, "Frame
+                chrome (5.25)") */}
+            {open && <Assistant widen={widen} onHide={toggle} />}
           </Right>
         )}
       />
@@ -301,9 +281,8 @@ const BannerSlot = styled.div`
   }
 `;
 
-// The floating center panel holding the stage. It is open at the bottom: the
-// console panel under it carries the sides and bottom border, so the two read
-// as one surface.
+// The stage's column. The frame is flush (design.md, "Frame chrome (5.25)"):
+// no card edges, the page's background; the shell draws the dividers.
 const Center = styled.div`
   ${({ theme }) => css`
     display: flex;
@@ -311,11 +290,7 @@ const Center = styled.div`
     flex: 1;
     min-width: 0;
     min-height: 0;
-    background: ${theme.colors.default.bgSecondary};
-    border: 1px solid ${theme.colors.default.border};
-    border-bottom: none;
-    border-radius: ${theme.default.borderRadius} ${theme.default.borderRadius} 0
-      0;
+    background: ${theme.colors.default.bgPrimary};
     overflow: hidden;
   `}
 `;
@@ -340,36 +315,9 @@ const Right = styled.aside`
     position: relative;
     width: 100%;
     height: 100%;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    background: ${theme.colors.default.bgSecondary};
+    background: ${theme.colors.default.bgPrimary};
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  `}
-`;
-
-const Collapse = styled.button`
-  ${({ theme }) => css`
-    /* Only on the folded strip: open, the assistant's head carries
-       "Collapse assistant" */
-    position: absolute;
-    top: 0.25rem;
-    left: 0;
-    width: 1.5rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    color: ${theme.colors.default.textSecondary};
-    cursor: pointer;
-    z-index: 1;
-
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
   `}
 `;

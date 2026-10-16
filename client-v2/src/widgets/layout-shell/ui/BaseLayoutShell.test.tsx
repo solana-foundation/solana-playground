@@ -186,10 +186,10 @@ const props = (
     toggleLeftSheetOn:
       choice.toggleLeftSheetOn ?? (() => ({ dispose: () => {} })),
     stageBar: <header>stage bar</header>,
+    stageTabs: <nav>stage tabs</nav>,
     stage: choice.stage ?? <main>stage slot</main>,
     console: choice.console ?? <div className="xterm">console slot</div>,
     assistant: choice.assistant ?? (() => <section>assistant slot</section>),
-    assistantOpener: <button type="button">Expand assistant</button>,
     phone: {
       page: "work",
       onSwipe: vi.fn(),
@@ -292,10 +292,10 @@ it("should hand the navigation the stock toggle and whether it is a rail", () =>
       closeLeftSheetOn={shell.closeLeftSheetOn}
       toggleLeftSheetOn={shell.toggleLeftSheetOn}
       stageBar={shell.stageBar}
+      stageTabs={shell.stageTabs}
       stage={shell.stage}
       console={shell.console}
       assistant={shell.assistant}
-      assistantOpener={shell.assistantOpener}
       phone={shell.phone}
     />
   );
@@ -351,10 +351,11 @@ it("should keep a folded console mounted", () => {
   expect(document.querySelector(".xterm")).not.toBeNull();
 });
 
-it("should put the assistant in a closed Sheet below 1024 px, with its opener", () => {
+it("should put the assistant in a closed Sheet below 1024 px, opened from the stage bar", () => {
   render(<BaseLayoutShell {...props("compact")} />);
   expect(screen.queryByText("assistant slot")).toBeNull();
-  expect(screen.getByRole("button", { name: "Expand assistant" })).toBeTruthy();
+  // No opener of the frame's own on the edge: the stage bar carries it
+  expect(screen.queryByRole("button", { name: "Expand assistant" })).toBeNull();
   expect(
     document.querySelectorAll('[data-slot="resizable-panel-group"]')
   ).toHaveLength(3);
@@ -383,10 +384,10 @@ it("should show the assistant Sheet when it is open", () => {
       closeLeftSheetOn={open.closeLeftSheetOn}
       toggleLeftSheetOn={open.toggleLeftSheetOn}
       stageBar={open.stageBar}
+      stageTabs={open.stageTabs}
       stage={open.stage}
       console={open.console}
       assistant={open.assistant}
-      assistantOpener={open.assistantOpener}
       phone={open.phone}
     />
   );
@@ -402,6 +403,79 @@ it("should set the design system's sidebar widths", () => {
   expect(wrapper.style.getPropertyValue("--sidebar-width-icon")).toBe(
     "3.25rem"
   );
+});
+
+it("should draw the stage bar, then the stage tabs, over the work area", () => {
+  render(<BaseLayoutShell {...props("wide")} />);
+  const bar = screen.getByText("stage bar");
+  const tabs = screen.getByText("stage tabs");
+  expect(
+    bar.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+});
+
+describe("the flush frame", () => {
+  it("has no inset on the provider and no gutter on the inset", () => {
+    render(<BaseLayoutShell {...props("wide")} />);
+    const wrapper = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-wrapper"]'
+    )!;
+    expect(wrapper.style.padding).toBe("");
+    const inset = document.querySelector('[data-slot="sidebar-inset"]')!;
+    expect(inset.className).not.toMatch(/\bmd:ml-2\b/);
+    const sidebar = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-container"]'
+    )!;
+    expect(sidebar.style.top).toBe("");
+    expect(sidebar.style.bottom).toBe("");
+  });
+
+  it("draws the columns' handles as the stock 1 px line", () => {
+    render(<BaseLayoutShell {...props("wide")} />);
+    const handlesFound = document.querySelectorAll(
+      '[data-slot="resizable-handle"]'
+    );
+    expect(handlesFound.length).toBeGreaterThan(0);
+    handlesFound.forEach((handle) => {
+      expect(handle.className).not.toMatch(/\bw-2\b/);
+      expect(handle.className).not.toMatch(/\bbg-transparent\b/);
+    });
+  });
+
+  it("draws no handle for a hidden files column, and an unseen one for a hidden assistant", () => {
+    render(
+      <BaseLayoutShell
+        {...props("wide", { filesOpen: false, assistantOpen: false })}
+      />
+    );
+    const handlesFound = document.querySelectorAll(
+      '[data-slot="resizable-handle"]'
+    );
+    // The assistant's and the stage/console one; none beside the files column
+    expect(handlesFound).toHaveLength(2);
+    expect(handlesFound[0].className).toMatch(/\bbg-transparent\b/);
+  });
+
+  it("lets the navigation draw its right line", () => {
+    render(<BaseLayoutShell {...props("wide")} />);
+    const sidebar = document.querySelector('[data-slot="sidebar-container"]')!;
+    expect(sidebar.className).not.toMatch(/border-r-0/);
+    // In the frame's line colour: a bare `border-r` is currentColor in
+    // Tailwind 4 until the global reset (5.24) lands
+    expect(sidebar.className).toMatch(/\bborder-border\b/);
+  });
+
+  it("opens the columns at the prototype's widths at 1440", () => {
+    // nav 232 · assistant 368 · files 240 · editor 600 (design.md 5.25)
+    expect(PANEL_SIZES.assistant.default).toBe(368);
+    expect(PANEL_SIZES.files.default).toBe(240);
+  });
+
+  it("hides the assistant and the files column to no width", () => {
+    expect(PANEL_SIZES.assistant.folded).toBe(0);
+    expect(PANEL_SIZES.files.folded).toBe(0);
+    expect(PANEL_SIZES.handle).toBe(1);
+  });
 });
 
 it("should keep the console mounted when the window crosses 1024 px", () => {
@@ -687,12 +761,18 @@ it("should report an error from isCollapsed other than the expected one, once", 
   expect(errors[0].error?.message).toBe("broken");
 });
 
-it("should collapse the files column when filesState turns false", () => {
-  const { files } = handles();
+it("should take a hidden files column out of the group, and its handle", () => {
   const { rerender } = render(<BaseLayoutShell {...props("wide")} />);
-  expect(files.collapse).not.toHaveBeenCalled();
+  expect(document.querySelector("#files[data-panel]")).not.toBeNull();
   rerender(<BaseLayoutShell {...props("wide", { filesOpen: false })} />);
-  expect(files.collapse).toHaveBeenCalledTimes(1);
+  // Not collapsed to 0 px: a 0 px panel stays in the library's layout, which
+  // snapped it open when a drag of the assistant's edge reflowed the work area
+  expect(document.querySelector("#files[data-panel]")).toBeNull();
+  expect(
+    document.querySelector(
+      '[data-slot="resizable-handle"][aria-controls="files"]'
+    )
+  ).toBeNull();
 });
 
 it("should take and save the work layout the user dragged", () => {
@@ -803,19 +883,14 @@ it("should put back the files column again after a trip through the navigation's
 });
 
 it("should open a reopened files column at the width it was dragged to", () => {
-  const { files } = handles();
   const { rerender } = render(<BaseLayoutShell {...props("wide")} />);
   // Dragged to 300 px while open
   act(() => panelSpies.panels["files"].onResize!({ inPixels: 300 }));
   rerender(<BaseLayoutShell {...props("wide", { filesOpen: false })} />);
-  expect(files.collapse).toHaveBeenCalledTimes(1);
-  // Folded: the library reports the folded width, which is not remembered
-  files.isCollapsed.mockReturnValue(true);
-  act(() =>
-    panelSpies.panels["files"].onResize!({ inPixels: PANEL_SIZES.files.folded })
-  );
   rerender(<BaseLayoutShell {...props("wide", { filesOpen: true })} />);
-  expect(files.resize).toHaveBeenLastCalledWith(300);
+  expect(
+    (panelSpies.panels["files"] as { defaultSize?: unknown }).defaultSize
+  ).toBe(300);
 });
 
 it("should neither resubscribe nor need a stable function when the caller passes new ones each render", () => {
@@ -949,6 +1024,33 @@ describe("widening the assistant", () => {
     act(() => seen.last!.setWide(false));
     expect(panel.resize).toHaveBeenLastCalledWith(400);
     expect(seen.last!.wide).toBe(false);
+  });
+
+  it("should say whether it changed the panel, so only a real change is measured", () => {
+    const { seen, assistant } = slot();
+    render(<BaseLayoutShell {...props("wide", { assistant })} />);
+    let changed: boolean | undefined;
+    act(() => {
+      changed = seen.last!.setWide(true);
+    });
+    expect(changed).toBe(true);
+    // Already wide: nothing to do
+    act(() => {
+      changed = seen.last!.setWide(true);
+    });
+    expect(changed).toBe(false);
+  });
+
+  it("should say it changed nothing while the panel has not registered", () => {
+    panelSpies.handles[0] =
+      undefined as unknown as typeof panelSpies.handles[0];
+    const { seen, assistant } = slot();
+    render(<BaseLayoutShell {...props("wide", { assistant })} />);
+    let changed: boolean | undefined;
+    act(() => {
+      changed = seen.last!.setWide(true);
+    });
+    expect(changed).toBe(false);
   });
 
   it("should save nothing for the library's own layout after a widen", () => {

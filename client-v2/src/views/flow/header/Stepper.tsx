@@ -44,6 +44,11 @@ interface StepperProps {
   onSelect: (stage: Stage) => void;
   /** The stage the current lesson step is aiming at; `null` outside a lesson. */
   target?: Stage | null;
+  /**
+   * Stretch the list across its row, the stages sharing the width equally
+   * (the frame's stage tabs, design.md "Frame chrome (5.25)")
+   */
+  fill?: boolean;
 }
 
 /** `upcoming` and `active` both mean "nothing to report": the thumb marks the current stage */
@@ -60,8 +65,8 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
-const Stepper: FC<StepperProps> = ({ state, onSelect, target }) => {
-  // The root fills the stage bar, so what it measures is the room the bar
+const Stepper: FC<StepperProps> = ({ state, onSelect, target, fill }) => {
+  // The root fills its row, so what it measures is the room the row
   // gives, not the list's own width. Folding the labels shrinks the list but
   // not the root, so the fold cannot flip itself back. Until the first
   // measurement the labels show in full; the observer's first callback runs
@@ -90,7 +95,7 @@ const Stepper: FC<StepperProps> = ({ state, onSelect, target }) => {
       value={state.stage}
       onValueChange={(v) => onSelect(v as Stage)}
     >
-      <StepperList compact={compact}>
+      <StepperList compact={compact} className={fill ? "w-full" : undefined}>
         {STAGES.map((stage) => {
           const status = statusOf(state, stage);
           return (

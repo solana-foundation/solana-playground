@@ -1,6 +1,9 @@
 /** Shared layout/color constants for the Flow canvas (panels, stage bar). */
 
-/** Gutter between the black page ground and each floating panel. */
+/**
+ * The sync banner slot's side and bottom padding (`Flow`'s `BannerSlot`); the
+ * frame itself is flush (design.md, "Frame chrome (5.25)")
+ */
 export const GAP = "8px";
 
 /**

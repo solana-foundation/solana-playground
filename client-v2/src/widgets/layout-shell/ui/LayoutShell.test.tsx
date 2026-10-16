@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { ThemeProvider } from "styled-components";
 import type { DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -25,6 +25,7 @@ const deploy = vi.hoisted(() => ({
 // the Files sheet closes on
 const explorer = vi.hoisted(() => ({
   opens: new Set<() => void>(),
+  renames: new Set<() => void>(),
   name: undefined as string | undefined,
   path: null as string | null,
 }));
@@ -41,6 +42,10 @@ vi.mock("@/utils", async () => {
       onDidOpenFile: (cb: () => void) => {
         explorer.opens.add(cb);
         return { dispose: () => explorer.opens.delete(cb) };
+      },
+      onDidRenameWorkspace: (cb: () => void) => {
+        explorer.renames.add(cb);
+        return { dispose: () => explorer.renames.delete(cb) };
       },
       get currentWorkspaceName() {
         return explorer.name;
@@ -84,6 +89,7 @@ import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
 import { SWIPE_SETTLE_MS } from "./BasePhonePager";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import LayoutShell from "./LayoutShell";
 
 const listeners = new Set<() => void>();
@@ -164,44 +170,53 @@ const theme = {
 const shell = () =>
   render(
     <ThemeProvider theme={theme}>
-      <LayoutShell
-        nav={({ collapsed, toggle, closeSheet }) => (
-          <>
-            <button type="button" onClick={toggle}>
-              {collapsed ? "Expand navigation" : "Collapse navigation"}
+      <TooltipProvider>
+        <LayoutShell
+          nav={({ collapsed, toggle, closeSheet }) => (
+            <>
+              <button type="button" onClick={toggle}>
+                {collapsed ? "Expand navigation" : "Collapse navigation"}
+              </button>
+              {/* Stands for the cluster chip, which opens settings */}
+              <button type="button" onClick={closeSheet}>
+                Open settings
+              </button>
+            </>
+          )}
+          stageTabs={<div>stage tabs</div>}
+          files={({ collapsed, toggle }) => (
+            // Stands for a control inside the column; the stage bar carries
+            // "Collapse project panel" / "Expand project panel"
+            <button type="button" aria-expanded={!collapsed} onClick={toggle}>
+              Files column control
             </button>
-            {/* Stands for the cluster chip, which opens settings */}
-            <button type="button" onClick={closeSheet}>
-              Open settings
-            </button>
-          </>
-        )}
-        stageBar={<div>stage bar</div>}
-        files={({ collapsed, toggle }) => (
-          <button type="button" onClick={toggle}>
-            {collapsed ? "Expand project panel" : "Collapse project panel"}
-          </button>
-        )}
-        stage={<main>stage</main>}
-        console={({ open, toggle }) => (
-          <button
-            type="button"
-            aria-label="Console"
-            aria-expanded={open}
-            onClick={toggle}
-          />
-        )}
-        assistant={({ open, toggle, wide, setWide }) => (
-          <>
-            <button type="button" onClick={toggle}>
-              {open ? "Collapse assistant" : "Expand assistant"}
-            </button>
-            <button type="button" onClick={() => setWide(!wide)}>
-              {wide ? "Narrow the assistant" : "Widen the assistant"}
-            </button>
-          </>
-        )}
-      />
+          )}
+          stage={<main>stage</main>}
+          console={({ open, toggle }) => (
+            <button
+              type="button"
+              aria-label="Console"
+              aria-expanded={open}
+              onClick={toggle}
+            />
+          )}
+          assistant={({ open, toggle, wide, setWide }) => (
+            <>
+              {/* The head's Hide; folded, the assistant shows nothing, and the
+                stage bar carries "Expand assistant", for the panel and the Sheet alike */}
+              {open && (
+                <button type="button" onClick={toggle}>
+                  Collapse assistant
+                </button>
+              )}
+              <span>assistant body</span>
+              <button type="button" onClick={() => setWide(!wide)}>
+                {wide ? "Narrow the assistant" : "Widen the assistant"}
+              </button>
+            </>
+          )}
+        />
+      </TooltipProvider>
     </ThemeProvider>
   );
 
@@ -328,18 +343,20 @@ it("should send each toggle once under StrictMode", async () => {
   render(
     <StrictMode>
       <ThemeProvider theme={theme}>
-        <LayoutShell
-          nav={() => null}
-          stageBar={null}
-          files={() => null}
-          stage={<main>stage</main>}
-          console={({ open, toggle }) => (
-            <button type="button" aria-label="Console" onClick={toggle}>
-              {String(open)}
-            </button>
-          )}
-          assistant={() => null}
-        />
+        <TooltipProvider>
+          <LayoutShell
+            nav={() => null}
+            stageTabs={null}
+            files={() => null}
+            stage={<main>stage</main>}
+            console={({ open, toggle }) => (
+              <button type="button" aria-label="Console" onClick={toggle}>
+                {String(open)}
+              </button>
+            )}
+            assistant={() => null}
+          />
+        </TooltipProvider>
       </ThemeProvider>
     </StrictMode>
   );
@@ -609,7 +626,7 @@ it("should open the navigation Sheet below 768 px and report it as the navigatio
   expect(sheet).not.toBeNull();
   // The navigation and the files column share it
   expect(sheet!.textContent).toContain("Collapse navigation");
-  expect(sheet!.textContent).toContain("Collapse project panel");
+  expect(sheet!.textContent).toContain("Files column control");
   expect(toggled()).toEqual([{ panel: "nav", open: true, via: "button" }]);
   expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
 });
@@ -664,9 +681,7 @@ it("should close the Sheet by the files column's button below 768 px", () => {
   resizeTo(740);
   shell();
   tap(screen.getByRole("button", { name: "Expand project panel" }));
-  fireEvent.click(
-    screen.getByRole("button", { name: "Collapse project panel" })
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Files column control" }));
   expect(
     document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
   ).toBeNull();
@@ -692,8 +707,12 @@ it("should render the navigation and the files open in the Sheet, whatever the s
     '[data-slot="sidebar"][data-mobile="true"]'
   )!;
   expect(sheet.textContent).toContain("Collapse navigation");
-  expect(sheet.textContent).toContain("Collapse project panel");
-  expect(sheet.textContent).not.toContain("Expand project panel");
+  // Open in the Sheet, whatever the desktop flag says
+  expect(
+    within(sheet as HTMLElement)
+      .getByRole("button", { name: "Files column control" })
+      .getAttribute("aria-expanded")
+  ).toBe("true");
 });
 
 it("should save the open state and read it back", () => {
@@ -1110,10 +1129,7 @@ describe("on a phone", () => {
 
   it("shows the assistant in Chat and the stage in Code", () => {
     phoneShell();
-    const assistantBox = () =>
-      boxOf(
-        screen.getByRole("button", { name: /^(Collapse|Expand) assistant$/ })
-      );
+    const assistantBox = () => boxOf(screen.getByText("assistant body"));
     expect(assistantBox().classList.contains("hidden")).toBe(true);
     expect(boxOf(screen.getByText("stage")).classList.contains("hidden")).toBe(
       false
@@ -1329,7 +1345,7 @@ describe("on a phone", () => {
   it("closes the Files sheet by the column's own button", () => {
     phoneShell();
     tap(button("Files"));
-    fireEvent.click(button("Collapse project panel"));
+    fireEvent.click(button("Files column control"));
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
     expect(toggled().at(-1)).toEqual({
       panel: "files",
@@ -1364,5 +1380,132 @@ describe("on a phone", () => {
     act(() => resizeTo(390));
     fireEvent.click(button("Preview the build"));
     expect(PgFlow.state.stage).toBe("deploy");
+  });
+});
+
+describe("the stage bar", () => {
+  it("folds the files column from its toggle, via button", () => {
+    shell();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Collapse project panel" })
+    );
+    expect(toggled()).toEqual([{ panel: "files", open: false, via: "button" }]);
+    expect(
+      screen.getByRole("button", { name: "Expand project panel" })
+    ).toBeTruthy();
+  });
+
+  it("hides the assistant from its toggle and names the project", () => {
+    explorer.name = "Counter";
+    shell();
+    expect(screen.queryByText("Counter")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: false, via: "button" },
+    ]);
+    expect(screen.getByText("Counter")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
+    expect(screen.queryByText("Counter")).toBeNull();
+  });
+
+  it("opens the assistant Sheet from the bar between 768 and 1023 px", () => {
+    resizeTo(900);
+    shell();
+    const bar = document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    fireEvent.click(
+      within(bar).getByRole("button", { name: "Expand assistant" })
+    );
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: true, via: "button" },
+    ]);
+    expect(
+      document.querySelector('[data-slot="sheet-content"]')
+    ).not.toBeNull();
+  });
+
+  it("names the project again after a rename", () => {
+    explorer.name = "Counter";
+    shell();
+    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
+    explorer.name = "Counter v2";
+    act(() => explorer.renames.forEach((cb) => cb()));
+    expect(screen.getByText("Counter v2")).toBeTruthy();
+  });
+
+  it("names the project between 768 and 1023 px while the assistant's Sheet is closed", () => {
+    explorer.name = "Counter";
+    resizeTo(900);
+    shell();
+    const bar = () =>
+      document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    expect(within(bar()).getByText("Counter")).toBeTruthy();
+    fireEvent.click(
+      within(bar()).getByRole("button", { name: "Expand assistant" })
+    );
+    // Open, the Sheet's head names it
+    expect(within(bar()).queryByText("Counter")).toBeNull();
+  });
+
+  it("leaves one Expand assistant between 768 and 1023 px", () => {
+    resizeTo(900);
+    shell();
+    expect(
+      screen.getAllByRole("button", { name: "Expand assistant" })
+    ).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Hide the assistant" })
+    ).toBeNull();
+  });
+
+  it("leaves one Expand project panel below 768 px", () => {
+    resizeTo(740);
+    shell();
+    expect(
+      screen.getAllByRole("button", { name: "Expand project panel" })
+    ).toHaveLength(1);
+  });
+
+  it("is not drawn on a phone", () => {
+    resizeTo(390);
+    shell();
+    expect(document.querySelector('[data-slot="stage-bar"]')).toBeNull();
+    expect(screen.getAllByText("stage tabs").length).toBeGreaterThan(0);
+  });
+});
+
+describe("layout_assistant_widened", () => {
+  const widened = () =>
+    sent.events
+      .filter((event) => event.name === "layout_assistant_widened")
+      .map((event) => event.params);
+
+  it("is sent for Widen and for Narrow", () => {
+    shell();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Widen the assistant" })
+    );
+    fireEvent.click(
+      screen.getByRole("button", { name: "Narrow the assistant" })
+    );
+    expect(widened()).toEqual([{ wide: true }, { wide: false }]);
+  });
+
+  it("is not sent when hiding a widened assistant narrows it", () => {
+    shell();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Widen the assistant" })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Hide the assistant" }));
+    expect(widened()).toEqual([{ wide: true }]);
+  });
+
+  it("is not sent where there is nothing to widen", () => {
+    resizeTo(900);
+    shell();
+    fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Widen the assistant" })
+    );
+    expect(widened()).toEqual([]);
   });
 });

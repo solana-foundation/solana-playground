@@ -101,7 +101,7 @@ export function BaseAssistantHead({
   const widenLabel = wide ? "Narrow the assistant" : "Widen the assistant";
 
   return (
-    <div className="flex shrink-0 items-center gap-1 border-b border-border py-1.5 pr-1.5 pl-3">
+    <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3">
       <h2
         className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
         title={title}

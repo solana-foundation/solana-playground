@@ -30,6 +30,13 @@ read SHALL give the default layout without breaking the page.
 - **WHEN** the saved layout is corrupt and the user loads the product
 - **THEN** the default layout appears and the product works
 
+#### Scenario: A layout saved before the column bars
+
+- **WHEN** a user whose saved layout was written before the column bars
+  (files column folded, assistant open and resized) loads the product
+- **THEN** the files column is hidden and the assistant is open at the width
+  it was given
+
 ### Requirement: Panels fold without losing their state
 
 Folding a panel SHALL hide it without discarding what it holds.
@@ -41,10 +48,10 @@ Folding a panel SHALL hide it without discarding what it holds.
 
 #### Scenario: Folding the project panel
 
-- **WHEN** a user presses ⌘E with the files column ("Collapse project
-  panel") open, then again
-- **THEN** the column folds to a rail holding "Expand project panel" and
-  "New file", then opens at its full width
+- **WHEN** a user presses ⌘E with the files column open, then clicks
+  "Expand project panel" in the stage bar
+- **THEN** the column hides and takes no width, then opens at the width it
+  last had
 
 #### Scenario: Folding the navigation
 
@@ -198,6 +205,32 @@ would otherwise cover the settings and keep focus from them.
 - **THEN** the settings open with focus on the cluster, and picking another
   cluster changes it
 
+### Requirement: The frame is flush, with a bar over each column
+
+From 720 px wide the product SHALL draw its columns edge to edge on one
+background, separated by 1 px lines, with no inset and no gaps. Each column
+SHALL start with a 44 px bar: the navigation's head, the assistant's head,
+and over the files column and the stage a bar with "Collapse project panel"
+/ "Expand project panel" (except from 720 to 767 px, where the files column
+is in the navigation's Sheet and its left-edge opener carries the name), the
+assistant's toggle and "Documentation". The
+stage tabs SHALL sit in a full-width row under that bar. A hidden assistant
+or files column SHALL take no width.
+
+#### Scenario: The frame at 1440
+
+- **WHEN** a user opens a project on a 1440 px wide window
+- **THEN** the navigation starts at the window's left edge, every column
+  bar is 44 px tall with its top at the window's top, and the four stage
+  tabs together span the files column and the stage
+
+#### Scenario: Hiding the assistant from the stage bar
+
+- **WHEN** a user on a 1440 px wide window clicks "Hide the assistant" in
+  the stage bar, then "Expand assistant"
+- **THEN** the assistant takes no width and the project's name shows in the
+  stage bar, then the assistant opens at the width it had
+
 ### Requirement: The navigation opens the gallery
 
 Until Home and the Tutorials and Programs pages exist, the navigation's
@@ -329,7 +362,8 @@ Sheet would keep focus from them);
 a swipe, a button, a key or the product moved it, each time a phone page comes
 into view after the load (crossing into the phone width with the stage off
 Write is the product bringing the preview into view: one `auto` event); `layout_work_view` with the view (`chat` or `code`) and
-whether a button, a key or the product switched it; and `layout_restore_failed` with the
+whether a button, a key or the product switched it; `layout_assistant_widened` with whether the
+assistant is now `wide`, each time Widen or Narrow is clicked; and `layout_restore_failed` with the
 reason when a saved layout cannot be read.
 
 #### Scenario: Toggling the assistant by key
@@ -346,6 +380,11 @@ reason when a saved layout cannot be read.
 
 - **WHEN** a user on a 390 px wide screen swipes from the code to the preview
 - **THEN** the Build stage shows and `layout_page_shown` is sent once, with the page `preview`, by swipe
+
+#### Scenario: Widening the assistant
+
+- **WHEN** a user on a 1440 px wide window clicks "Widen the assistant"
+- **THEN** `layout_assistant_widened` is sent with `wide: true`
 
 #### Scenario: A corrupt saved layout is reported
 

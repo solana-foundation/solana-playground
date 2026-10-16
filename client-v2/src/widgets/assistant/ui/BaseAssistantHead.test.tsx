@@ -236,3 +236,11 @@ describe("BaseAssistantHead", () => {
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 });
+
+it("is the frame's 44 px column bar", () => {
+  setup();
+  const head = screen.getByRole("heading", { name: "hello-anchor" })
+    .parentElement!;
+  expect(head.className).toMatch(/\bh-11\b/);
+  expect(head.className).toMatch(/\bborder-b\b/);
+});

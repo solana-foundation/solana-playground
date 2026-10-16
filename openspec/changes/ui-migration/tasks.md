@@ -146,3 +146,8 @@ regression against 5.1 has misread this rule.
 - [ ] 5.24 Global reset on, styled-components out; Monaco and xterm excluded
       from preflight or checked on their own (HOO-2077; after every other
       task in this section)
+- [x] 5.25 Frame chrome: flush columns with 1 px dividers, the 44 px bars
+      over the assistant (5.17's head) and the stage, full-width stage tabs;
+      a hidden assistant or files column takes no width (HOO-2122; after 5.2,
+      5.10 and 5.17; design.md, "Frame chrome (5.25)"; plan:
+      [plans/5.25-frame-chrome.md](plans/5.25-frame-chrome.md))

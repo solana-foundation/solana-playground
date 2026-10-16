@@ -1,15 +1,12 @@
 import { expect, leaveEditor, test } from "./fixtures";
 
 /**
- * Collapsing the files column to a rail and back.
- *
- * The rail's "+" is the one worth a browser: it expands the panel and then
- * waits for the explorer tree to mount before creating, and that hand-off has
- * no unit-testable seam.
+ * Hiding the files column and bringing it back. The column leaves the layout
+ * while hidden (design.md, "Frame chrome (5.25)"); the stage bar's toggle and
+ * ⌘E are the two ways back.
  */
 
-const OPEN_PX = 232; // 14.5rem
-const RAIL_PX = 52; // 3.25rem
+const OPEN_PX = 240; // the prototype's files column at 1440
 
 const panel = (page: import("@playwright/test").Page) =>
   page.locator("#files[data-panel]");
@@ -19,53 +16,23 @@ test("cmd+e toggles the files column", async ({ seededPage: page }) => {
   await leaveEditor(page);
 
   await page.keyboard.press("Meta+e");
-  await expect(panel(page)).toHaveJSProperty("offsetWidth", RAIL_PX);
+  await expect(panel(page)).toHaveCount(0);
 
   await page.keyboard.press("Meta+e");
   await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);
 });
 
-test("the chevron toggles the panel and the hint survives collapse", async ({
+test("the stage bar's toggle hides and shows the column", async ({
   seededPage: page,
 }) => {
   const collapse = page.getByRole("button", { name: "Collapse project panel" });
   const expand = page.getByRole("button", { name: "Expand project panel" });
 
   await collapse.click();
-  await expect(panel(page)).toHaveJSProperty("offsetWidth", RAIL_PX);
-  // Collapsed, this hint is the only affordance saying how to get the panel
-  // back, so losing it is a real regression rather than a cosmetic one.
-  await expect(expand).toContainText("⌘E");
+  await expect(panel(page)).toHaveCount(0);
+  await expect(expand).toHaveAttribute("aria-expanded", "false");
 
   await expand.click();
   await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);
-  await expect(collapse).toContainText("⌘E");
-});
-
-test("the rail's + expands the panel and opens the new-file input", async ({
-  seededPage: page,
-}) => {
-  // The editor takes focus when it opens the workspace's first file
-  // (`Monaco.tsx`, on a model switch). On a laptop that has happened long
-  // before this test clicks anything; on a slow runner it can land after the
-  // new-file input has focused itself, and the input loses focus to the
-  // editor. The claim here is about the rail's "+", not about who wins that
-  // race, so wait for the editor to be up and focused before starting. The
-  // textarea is Monaco's own node, so a class is the handle it offers.
-  const editor = page.locator(".monaco-editor textarea.inputarea");
-  await expect(editor).toBeVisible();
-  await expect(editor).toBeFocused();
-
-  // Folded by its button, not ⌘E: Monaco keeps ⌘E (find with selection)
-  // while it has focus, and the editor holds it here by design
-  await page.getByRole("button", { name: "Collapse project panel" }).click();
-  await expect(panel(page)).toHaveJSProperty("offsetWidth", RAIL_PX);
-
-  // Only the rail's "+" exists while collapsed; the footer button is unmounted.
-  await page.getByRole("button", { name: "New file" }).click();
-
-  await expect(panel(page)).toHaveJSProperty("offsetWidth", OPEN_PX);
-  const input = page.locator("#root-dir input");
-  await expect(input).toBeVisible();
-  await expect(input).toBeFocused();
+  await expect(collapse).toHaveAttribute("aria-expanded", "true");
 });
