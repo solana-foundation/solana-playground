@@ -10,7 +10,7 @@ name: preview-sweep
 # branch -- those the Vercel integration created per git branch before its
 # option was turned off, and those `make deploy-client-to-vercel-preview` cuts
 # per local branch -- unless an open PR still has that head branch. Neither
-# scope touches `preview-base`, the default branch, or a protected one.
+# scope touches `main` (the default branch) or a protected one.
 on:
   schedule:
     - cron: "17 4 * * *"

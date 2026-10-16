@@ -10,9 +10,7 @@ order is the point: each step assumes the ones above it, and steps 1–7 come
 holds the persistence code, so any push to it — or a redeploy — ships that code
 as soon as the Root Directory points at `client-v2`.
 
-1. **One-time setup is done** — [below](#one-time-setup). In particular
-   `preview-base` must already exist *before* step 6, or every later preview
-   inherits production's tables.
+1. **One-time setup is done** — [below](#one-time-setup).
 2. **Production env vars**, scoped to Production —
    [Assistant default backend](#assistant-default-backend) and
    [Conversation and project sync](#conversation-and-project-sync):
@@ -137,7 +135,7 @@ Setting the dashboard Root Directory to `client-v2` makes both paths agree; the 
    ```
 
    The root `Makefile` includes `client-v2/Makefile.vercel`, so a bare `make <target>` from the repo root runs the same targets, and `make help` lists them.
-6. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable), then cut `preview-base` **before** anything migrates the shared database. Both steps are in [Neon preview databases](neon.md#configuration).
+6. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
 

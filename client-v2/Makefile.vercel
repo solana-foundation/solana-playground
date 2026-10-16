@@ -1,3 +1,6 @@
+# do we still need this?
+
+
 # Local Vercel deploy targets. See client-v2/docs/deploy-client-vercel.md.
 # Targets assume repo-root cwd (.vercel/ state at root); the built directory is
 # forced to $(CLIENT_DIR) below, so the dashboard Root Directory only governs
@@ -36,7 +39,7 @@ VERCEL_TOKEN_ARG = $${VERCEL_TOKEN:+--token=$$VERCEL_TOKEN}
 
 .PHONY: vercel-bootstrap vercel-auth vercel-link-preview vercel-link-production \
 	deploy-client-to-vercel-preview deploy-client-to-vercel-production deploy-client-to-vercel-prod-fast \
-	neon-preview-base preview-db-branch migrate-preview-db migrate-production-db
+	preview-db-branch migrate-preview-db migrate-production-db
 
 # Both IDs come from the link file because an exported VERCEL_PROJECT_ID outranks
 # it in the CLI's project resolution, leaving orgId unresolved.
@@ -156,8 +159,7 @@ deploy-client-to-vercel-prod-fast: ## Rebuild without the wasm/install step and 
 # resolved for the checked-out git branch, so on a branch with branch-scoped
 # Preview variables it names that branch's Neon database: run from `master-2.0`
 # it once reported "nothing to apply" off `preview/master-2.0` while `main` had
-# no schema at all. Cutting `preview-base` BEFORE running this is what keeps
-# preview branches empty.
+# no schema at all.
 migrate-production-db: ## Apply pending migrations to the production database (SERVES PRODUCTION)
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
 	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
@@ -187,15 +189,6 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 		read -r reply || { echo "aborted: no answer on stdin" >&2; exit 1; }; \
 		[ "$$reply" = yes ] || { echo "aborted" >&2; exit 1; }; \
 		DATABASE_URL="$$url" dbmate --no-dump-schema up
-
-# `preview-base` is the empty parent every preview branch is cut from. Run this
-# once, while the production database still has no schema -- after
-# migrate-production-db it would no longer be empty, and previews would inherit
-# tables that dbmate then tries to create again.
-neon-preview-base: ## Create the empty parent branch previews are cut from (run once, before migrate-production-db)
-	@: $${NEON_API_KEY:?NEON_API_KEY is unset} $${NEON_PROJECT_ID:?NEON_PROJECT_ID is unset}
-	npx --yes neonctl@latest branches create --name preview-base \
-		--project-id "$$NEON_PROJECT_ID" --no-secrets
 
 preview-db-branch: ## Create (or reuse) this git branch's Neon branch
 	@url=$$($(NEON_BRANCH_URL)) || exit 1; \

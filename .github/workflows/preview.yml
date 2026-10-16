@@ -6,7 +6,7 @@ name: preview
 # off (see client-v2/docs/neon.md) and this workflow owns the branch instead:
 #
 # - labelled, opened/reopened or pushed to while labelled: create (or reuse)
-#   `preview/pr-<number>` from `preview-base`, migrate it, build, deploy with it
+#   `preview/pr-<number>` from `main`, migrate it, build, deploy with it
 #   as DATABASE_URL, and post the URL on the PR;
 # - label removed, or PR closed or merged: delete the branch.
 #
@@ -40,7 +40,7 @@ env:
 
 jobs:
   deploy:
-    name: deploy preview
+    name: deploy preview branch
     # A fork's PR gets no secrets. Unrelated label changes do not redeploy.
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&

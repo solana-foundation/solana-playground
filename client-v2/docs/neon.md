@@ -1,7 +1,7 @@
 # Neon preview databases
 
-A PR into `master-2.0` labelled `preview` gets a preview deployment with its own Neon branch, `preview/pr-<number>`, cut from the
-empty parent `preview-base`. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses
+A PR into `master-2.0` labelled `preview` gets a preview deployment with its own Neon branch, `preview/pr-<number>`, cut from
+`main`, the project's default branch. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses
 the project's default branch through the project-level `DATABASE_URL`; see
 [Deploy the client to Vercel](deploy-client-vercel.md).
 
@@ -29,7 +29,7 @@ integration's project-level ones, if still set for Preview, are unused.
 cancelled or failed. Daily, it deletes every `preview/pr-<n>` older than its `MIN_AGE_MINUTES` whose PR is no
 longer open and labelled. Run by hand (Actions → preview-sweep → Run workflow) it defaults to a dry run, and scope `all-preview`
 extends it to every other `preview/*` branch whose git branch has no open PR: the integration's leftovers and
-hand-deployed previews. It never touches `preview-base`, the default branch or a protected branch.
+hand-deployed previews. It never touches `main` (the default branch) or a protected branch.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
 `master`. Until `preview-sweep.yml` is on `master`, it neither runs daily nor can be started from the Actions tab;
@@ -77,20 +77,16 @@ Settings), or every pushed branch keeps getting a Neon branch regardless of the 
 A Vercel-managed Neon account has no CLI login, so `neon login` cannot work: the project-scoped key is the only
 way in.
 
-## One-time setup
+## The parent branch
 
-Cut the empty parent every preview branches from, **before** anything migrates the shared database:
+Every preview branch is cut from `main`, the default branch production uses (`NEON_BASE_BRANCH` overrides it).
+A copy-on-write branch carries `main`'s schema and its `schema_migrations`, so dbmate applies only the migrations
+the PR adds. It carries `main`'s rows too: a preview database holds a copy of production's data as of the moment
+the branch was cut. A `--schema-only` branch is no way around that: it carries the tables but leaves
+`schema_migrations` empty, so dbmate would try to create tables that already exist.
 
-```sh
-make -f client-v2/Makefile.vercel neon-preview-base
-```
-
-Order matters: `preview-base` is useful only because it is empty. Cut it after `migrate-production-db` and every
-preview inherits tables that dbmate then tries to create again.
-
-Previews branch from `preview-base` rather than from the default branch for two reasons. A plain copy-on-write
-branch would carry production's rows into every preview. A `--schema-only` branch would carry the tables but leave
-`schema_migrations` empty, so dbmate would try to create tables that already exist. An empty parent avoids both.
+The empty `preview-base` parent this replaced is no longer read by anything. Delete it from the Neon project once
+no preview branch still has it as its parent.
 
 ## A branch per git branch
 
@@ -103,7 +99,7 @@ name comes from the local branch checked out where `make` runs. Three targets ca
 | `migrate-preview-db` | Applies pending migrations to it, with no confirmation prompt |
 | `deploy-client-to-vercel-preview` | Passes its pooled URL as the deployment's `DATABASE_URL` |
 
-`migrate-preview-db` applies the whole migration history on first use. The branch belongs to one git branch and
+`migrate-preview-db` applies the migrations the git branch adds over `main`'s. The branch belongs to one git branch and
 nothing else reads it, so a bad migration costs a `neon branches delete`, not an incident, and two people testing
 two migrations cannot corrupt each other. Before previews had their own branches, preview and production shared a
 single database.
@@ -125,7 +121,7 @@ npx neonctl@latest branches delete preview/<git-branch> --project-id "$NEON_PROJ
 
 ## Known gaps
 
-- **The `Makefile.vercel` Neon targets are untested against real Neon.** `neon-preview-base`, `preview-db-branch`
-  and `migrate-preview-db` were exercised with a stubbed `neonctl` against a local Postgres, which proves the
-  arguments and the shell but not that the Neon API accepts them. `neon-preview-base` is the smallest real call
+- **The `Makefile.vercel` Neon targets are untested against real Neon.** `preview-db-branch` and
+  `migrate-preview-db` were exercised with a stubbed `neonctl` against a local Postgres, which proves the
+  arguments and the shell but not that the Neon API accepts them. `preview-db-branch` is the smallest real call
   and fails fastest.

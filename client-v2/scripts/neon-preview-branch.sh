@@ -3,13 +3,11 @@
 # branch on first use. One isolated database per preview, so two people testing
 # migrations on two branches cannot corrupt each other.
 #
-# Previews are cut from `preview-base`, not from the project's default branch.
-# Base was created while the database was still empty and nothing ever writes to
-# it, so every preview starts with no schema and no rows and dbmate applies the
-# whole migration history. The alternatives are both wrong: branching from the
-# default branch copies production's rows into every preview, and `--schema-only`
-# copies the tables but leaves `schema_migrations` empty, which makes dbmate try
-# to create tables that are already there.
+# Previews are cut from `main`, the project's default branch. A copy-on-write
+# branch carries its schema and `schema_migrations`, so dbmate applies only the
+# migrations this git branch adds. `--schema-only` would not do: it copies the
+# tables but leaves `schema_migrations` empty, which makes dbmate try to create
+# tables that are already there.
 #
 # Pass --pooled for the connection string the deployed app uses. Leave it off for
 # migrations, which need a direct connection rather than the PgBouncer endpoint.
@@ -26,7 +24,7 @@ set -e
 : "${NEON_PROJECT_ID:?NEON_PROJECT_ID is unset -- add it to client-v2/.env}"
 
 DATABASE=${NEON_DATABASE:-neondb}
-BASE_BRANCH=${NEON_BASE_BRANCH:-preview-base}
+BASE_BRANCH=${NEON_BASE_BRANCH:-main}
 
 neon() { npx --yes neonctl@latest "$@"; }
 

@@ -14,7 +14,7 @@ set -euo pipefail
 
 : "${NEON_API_KEY:?NEON_API_KEY secret is unset}"
 : "${NEON_PROJECT_ID:?NEON_PROJECT_ID variable is unset}"
-BASE_BRANCH=${NEON_BASE_BRANCH:-preview-base}
+BASE_BRANCH=${NEON_BASE_BRANCH:-main}
 DATABASE=${NEON_DATABASE:-neondb}
 
 API=https://console.neon.tech/api/v2/projects/$NEON_PROJECT_ID
@@ -76,8 +76,9 @@ cmd_ensure() {
   local name=$1 id parent
   id=$(branch_id "$name")
   if [ -z "$id" ]; then
-    # Cut from the empty preview-base, never the default branch: see
-    # client-v2/docs/neon.md for why a preview must start with no schema.
+    # Cut from `main`, so the preview starts with production's schema and
+    # `schema_migrations` and dbmate applies only what the PR adds: see
+    # client-v2/docs/neon.md.
     parent=$(branch_id "$BASE_BRANCH")
     [ -n "$parent" ] || { echo "neon: no parent branch $BASE_BRANCH" >&2; return 1; }
     id=$(api -X POST "$API/branches" -d "$(jq -n --arg name "$name" --arg parent "$parent" \
@@ -95,7 +96,7 @@ cmd_uri() {
   [ "${2:-}" = pooled ] && pooled=true
   id=$(branch_id "$name")
   [ -n "$id" ] || { echo "neon: no branch $name" >&2; return 1; }
-  # The one role the integration made; inherited from preview-base.
+  # The one role the integration made; inherited from the parent branch.
   role=$(api "$API/branches/$id/roles" | jq -r '[.roles[] | select(.protected | not) | .name] | if length == 1 then .[0] else error("expected one role, got \(.)") end')
   api -G --data-urlencode "branch_id=$id" --data-urlencode "database_name=$DATABASE" \
     --data-urlencode "role_name=$role" --data-urlencode "pooled=$pooled" \
