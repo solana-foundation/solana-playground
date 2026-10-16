@@ -21,6 +21,13 @@ class SignInFailed extends Error {
 const reasonOf = (error: unknown): SignInFailure =>
   error instanceof SignInFailed ? error.reason : "request-failed";
 
+/**
+ * Whether a rejected `PgSession.signIn` ended at a known step (cancelled,
+ * blocked, refused); anything else is an error the team should hear of
+ */
+export const isSignInFailure = (error: unknown) =>
+  error instanceof SignInFailed;
+
 const log = createLogger("auth:session");
 
 /** Distinguishes this flow's reply from anything else on the same-origin bus */
@@ -46,13 +53,13 @@ export type SignInOrigin = "assistant";
 
 /**
  * Where the last sign-in stands. Held here, not by the control that started
- * it: the status chips sit in the navigation's Sheet on a phone, which
- * unmounts them on close, and a sign-in outlives that.
+ * it: the session footer sits in the navigation's Sheet on a narrow window,
+ * which unmounts it on close, and a sign-in outlives that.
  */
 export type SignInState =
   | { status: "idle" }
   | { status: "pending" }
-  | { status: "failed"; message: string };
+  | { status: "failed"; reason: SignInFailure; message: string };
 
 const IDLE: SignInState = { status: "idle" };
 
@@ -153,6 +160,7 @@ export class PgSession {
       authTelemetry.track("auth_sign_in_failed", { reason: reasonOf(error) });
       PgSession._setSignIn({
         status: "failed",
+        reason: reasonOf(error),
         message: error instanceof Error ? error.message : String(error),
       });
       throw error;
@@ -686,9 +694,21 @@ if (import.meta.vitest) {
 
         expect(PgSession.signInState()).toEqual({
           status: "failed",
+          reason: "cancelled",
           message: "Sign-in cancelled.",
         });
         expect(changed).toHaveBeenCalledTimes(2);
+      });
+
+      it("tells a sign-in that ended at a known step from any other error", async () => {
+        const popup = heldPopup();
+        const pending = PgSession.signIn();
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        const known = await pending.catch((error: unknown) => error);
+
+        expect(isSignInFailure(known)).toBe(true);
+        expect(isSignInFailure(new TypeError("fetch failed"))).toBe(false);
       });
 
       it("does not start a second sign-in while one is pending", async () => {

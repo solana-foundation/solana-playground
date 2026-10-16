@@ -127,8 +127,9 @@ regression against 5.1 has misread this rule.
       duplicate and zip (HOO-2069; after 5.2 and 5.6; design.md, "The
       project list (5.14)"; plan:
       [plans/5.14-project-list.md](plans/5.14-project-list.md))
-- [ ] 5.15 Projects: the session footer and account menu (HOO-2070; after
-      5.2 and 5.6)
+- [x] 5.15 Projects: the session footer and account menu (HOO-2070; after
+      5.2 and 5.6; design.md, "Session footer and account menu (5.15)";
+      plan: [plans/5.15-session-footer.md](plans/5.15-session-footer.md))
 - [ ] 5.16 Projects: the Get set up checklist (HOO-2075; after 5.15)
 - [x] 5.17 Assistant: the composer and Connect a model (HOO-2067; after 5.2;
       design.md, "The composer and Connect a model (5.17)"; plan:

@@ -376,7 +376,8 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
   The rail's footer holds two icons, as the prototype draws it: the
   cluster's dot, coloured by its status like the chip's, which opens the
   settings on the cluster, and the account (the avatar, or a user icon),
-  which unfolds the navigation. The feedback trigger is not on the rail; the
+  which unfolds the navigation (5.15: it opens the account menu instead). The
+  feedback trigger is not on the rail; the
   prototype keeps "Report a bug" in the account's menu. Between 768 and 1024
   the rail is where the navigation starts, so without its footer a cluster
   that is down would show nowhere.
@@ -702,7 +703,7 @@ LayoutShell
 ├─ BaseLayoutShell owns the outlets: stage, console, rendered once, through portals
 ├─ >= phone: the four-column frame (5.2), unchanged
 └─ <  phone: BasePhonePager (scroll-snap, three full-width pages)
-   ├─ menu     the navigation, full width (AppNav, its footer and chips)
+   ├─ menu     the navigation, full width (AppNav and its session footer)
    ├─ work     bar: Menu, project name, Chat | Code, Preview
    │           Code: a file picker over the stage outlet (the Write stage)
    │           Chat: the assistant
@@ -741,7 +742,7 @@ LayoutShell
   Sheet titled Files holding `LeftPanel` as it is; opening a file closes it.
   ⌘E opens and closes it on a phone.
 - **The navigation's `closeSheet`** has no Sheet to close on the Menu page;
-  there it moves to Work, so settings opened from the chips are seen.
+  there it moves to Work, so settings opened from the footer are seen.
   `FeedbackHost` stays above the frame, so a draft survives the move between
   pages and across 720.
 - **The assistant.** Chat shows it. `PgAssistant.onDidRequestPrompt` ("Fix
@@ -1122,6 +1123,64 @@ _Rejected:_ a second bar over the assistant (5.17's head is that bar);
 keeping the 24 px strip and the 52 px rail (the prototype has neither, and
 the stage bar's toggles replace them); a `layout` key per bar (the stored
 layout is one value).
+
+## Session footer and account menu (5.15)
+
+Decided with Slava on 2026-10-16 (HOO-2070), from the prototype's sidebar
+(`#app`, its footer open, folded and signed out) and the design system's
+"Session footer" block. One PR.
+
+- **Two rows replace the chips.** The cluster row (the dot, the name, opens
+  the settings on the cluster) and the account row (avatar, login or "Sign
+  in", the wallet's short address and balance, a ⇕ mark) open what the chips
+  opened. `StatusChips` and its `CHIPS_COMPACT_AT` stop-gap are deleted: the
+  rows truncate instead of dropping pieces.
+- **One account menu, two anchors.** The account row opens it above itself;
+  on the rail, "Account" opens the same menu beside the rail instead of
+  unfolding the navigation, as the prototype does. Its groups: the session
+  (sign in, or the profile, "Open GitHub profile" and "Sign out"), then
+  Settings (⌘,), Docs and the feedback entries, then the wallet. The
+  prototype's "Proposal" group (UX evaluation, Back to deck) is left out.
+- **Sign-out asks in a `Dialog`**, not in the menu: a menu closes on the
+  click that would confirm. Its Sign out waits on the sign-out, busy, so it
+  cannot run twice.
+- **A failed sign-in** shows "Couldn't sign in" under the account row,
+  announced, and its reason in full at the head of the menu, which the rail
+  shows too. A sign-in the user cancelled shows nothing. A session that
+  arrives after a failed sign-in wins over it (`AccountView.session` is one
+  union).
+- **The feedback trigger goes into the menu.** "Share feedback" (where a send
+  can succeed), "Suggest an idea" and "Report a bug" sit in the account menu;
+  the round "Feedback" button is removed. `FeedbackHost` keeps the form and
+  its state above the frame and gives the menu its actions; a send in flight
+  shows on the account row and on the rail's "Account". The requirement is
+  revised in `feedback-widget`'s delta, which is not yet archived.
+- **The cluster that is down** turns the dot red, adds ", down" to the names,
+  and puts a warning first in the menu that opens the settings on the
+  cluster.
+- **⌘, toggles the settings** (Ctrl+, off macOS) from anywhere, through the
+  same `toggleSettings` the rows use.
+- **A widget, `widgets/session-footer`**: `BaseSessionFooter` and
+  `SessionFooter`, `BaseRailFooter` and `RailFooter`, `BaseAccountMenu` (both
+  footers connect it through `useAccount`), and `useClusterStatus`, moved
+  out of the legacy
+  `views/flow/header/`. It meets `features/auth` (`PgSession`, whose
+  `signInState()` holds sign-in progress and failure) and `features/feedback`
+  here, which is why it is a widget. `BaseAppNav` keeps its `footer` and
+  `railFooter` slots, so the project list (5.14) and this step touch
+  different lines.
+- **Telemetry**, prefix `session`: `session_account_menu_opened {from:
+  footer | rail}` and `session_account_item_picked {item}`. Under
+  `session-footer:account`, a wallet connect or disconnect that throws is
+  logged with `report: true` and the user gets a toast (a setup the user
+  closed is only logged); a sign-in that failed at a known step is logged,
+  and counted by `auth`; any other sign-in or sign-out error is reported.
+
+Kept: "Cluster: <name>" on the rail's dot, "Change cluster, currently
+<name>" on the cluster row, "Connect wallet", "Sign in with GitHub" and the
+settings trigger attribute that lets a second click close the settings. The
+account controls, the row and the rail's button alike, are named
+"Account: <login>" or "Account, signed out"; tests match `/^Account/`.
 
 ## Risks / Trade-offs
 

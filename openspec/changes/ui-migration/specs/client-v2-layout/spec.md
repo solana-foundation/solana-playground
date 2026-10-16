@@ -152,13 +152,13 @@ From 1024 px wide the product SHALL show, left to right, the navigation, the
 assistant, the files column, and the stage over the console, with the stage
 bar (`flow-stage-tab-*`: Write, Build, Deploy, Interact) across the files
 column and the stage. There SHALL be no top header: the project list
-SHALL be in the navigation and the cluster, wallet and settings controls in
-its footer. Between 768 and 1023 px the navigation SHALL start as a rail on
-every load and the
+SHALL be in the navigation and the session footer, a cluster row and an
+account row, at its foot. Between 768 and 1023 px the navigation SHALL start
+as a rail on every load and the
 assistant a Sheet opened by "Expand assistant". The rail's footer SHALL hold
 the cluster's dot, coloured by whether the cluster answers and named "Cluster:
 <name>", which opens the settings on the cluster, and an "Account" button,
-which unfolds the navigation. From 720 to 767 px the navigation
+which opens the account menu beside the rail. From 720 to 767 px the navigation
 and the files column SHALL share one Sheet opened by "Expand project panel",
 and opening the settings from its footer SHALL close that Sheet, whose overlay
 would otherwise cover the settings and keep focus from them.
@@ -189,19 +189,19 @@ would otherwise cover the settings and keep focus from them.
 - **WHEN** a user on an 834 px wide window clicks the cluster's dot at the
   foot of the rail, clicks it again, then clicks "Account"
 - **THEN** the settings open with focus on the cluster, then close, and the
-  navigation opens at its full width with the cluster chip in its footer
+  account menu opens beside the rail
 
 #### Scenario: Settings on a narrow window
 
 - **WHEN** a user on a 740 px wide window opens the navigation's Sheet and
-  taps the cluster chip
+  taps the cluster row
 - **THEN** the Sheet closes, the settings open with focus on the cluster,
   and picking another cluster changes it
 
 #### Scenario: Settings on a phone
 
 - **WHEN** a user on a 390 px wide screen opens "Menu" and taps the cluster
-  chip
+  row
 - **THEN** the settings open with focus on the cluster, and picking another
   cluster changes it
 
@@ -230,6 +230,71 @@ or files column SHALL take no width.
   the stage bar, then "Expand assistant"
 - **THEN** the assistant takes no width and the project's name shows in the
   stage bar, then the assistant opens at the width it had
+
+### Requirement: The session footer and account menu
+
+The navigation's footer SHALL be two rows. The cluster row SHALL show the
+cluster's dot and name, be named "Change cluster, currently <name>", and open
+the settings on the cluster. The account row SHALL show the GitHub avatar (a
+user icon when signed out), the login or "Sign in", and, with a wallet
+connected, its shortened address and balance; it SHALL open the account
+menu above it. The account menu SHALL hold, in order: "Sign in with GitHub"
+when signed out (while signing in, "Signing in..." with "Cancel"), or when
+signed in the profile's name, "Open GitHub profile" and "Sign out"; then
+"Settings", "Docs" and the feedback entries; then the wallet, either "Connect
+wallet" or its address and balance (opening the wallet window) and
+"Disconnect wallet" ("Disconnect <name>" for an extension wallet, which hands
+back to the Playground wallet). "Docs" SHALL open `https://solana.com/docs` in
+a new tab.
+"Sign out" SHALL ask "Sign out of GitHub?" in a dialog before it ends the
+session. A failed sign-in SHALL show "Couldn't sign in" under the account
+row, above the wallet's line when a wallet is connected, and its reason at the
+head of the menu; a sign-in the user cancelled SHALL show nothing. ⌘, (Ctrl+, off macOS) SHALL open and close the settings anywhere in
+the product. A cluster that does not answer SHALL turn the dot red, add
+", down" to the cluster row's and the rail dot's names, and put a warning
+first in the account menu that opens the settings on the cluster. The menu
+SHALL have no "Proposal" group.
+
+The footer SHALL send `session_account_menu_opened` with `from` (`footer` or
+`rail`) each time the account menu opens, and `session_account_item_picked`
+with `item` (`sign-in`, `cancel-sign-in`, `github-profile`, `sign-out`,
+`settings`, `docs`, `cluster-down`, `connect-wallet`, `wallet`,
+`disconnect-wallet`) each time a user picks one of its items; the feedback
+entries are measured by `features/feedback`.
+
+#### Scenario: Signing in from the account menu
+
+- **WHEN** a signed-out user opens the account menu, picks "Sign in with
+  GitHub", and the sign-in fails
+- **THEN** the account row shows "Signing in..." with "Cancel" while it
+  waits, then "Couldn't sign in" under "Sign in"
+
+#### Scenario: Signing out asks first
+
+- **WHEN** a signed-in user picks "Sign out" in the account menu, then
+  "Cancel", then "Sign out" again and confirms
+- **THEN** the session stays after "Cancel" and ends after the confirmation,
+  and the account row shows "Sign in"
+
+#### Scenario: Settings from the menu and by key
+
+- **WHEN** a user picks "Settings" in the account menu, closes the settings,
+  then presses ⌘, twice
+- **THEN** the settings open, close, open and close again
+
+#### Scenario: The wallet in the menu
+
+- **WHEN** a user with no wallet connected picks "Connect wallet" in the
+  account menu, then opens the menu again
+- **THEN** the account row shows the wallet's shortened address and balance,
+  and the menu offers "Disconnect wallet"
+
+#### Scenario: A cluster that is down
+
+- **WHEN** the cluster stops answering and the user opens the account menu
+- **THEN** the cluster's dot is red, the cluster row is named "Change
+  cluster, currently <name>, down", and the menu's first item opens the
+  settings on the cluster
 
 ### Requirement: The navigation opens the gallery
 

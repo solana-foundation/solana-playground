@@ -74,7 +74,6 @@ Tasks 1.1 and 2.1 may run at the same time.
 ## 4. Walk-through
 
 - [ ] 4.1 On a Vercel preview with `SENTRY_PREVIEW_ENABLED=true`, check every
-  `(manual)` scenario of `client-v2-feedback`, including the trigger with
-  the project panel open, folded to its rail and as a phone Sheet, and with
-  a toast showing, and record the result and the
-  Sentry feedback ids in the PR. Depends on 3.4. Ticket to file.
+  `(manual)` scenario of `client-v2-feedback`, including the account menu
+  with the navigation open, folded to its rail and as a phone page, and
+  record the result and the Sentry feedback ids in the PR. Depends on 3.4. Ticket to file.

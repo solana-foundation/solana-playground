@@ -22,7 +22,7 @@ import { useViewport } from "@/shared/lib/hooks/use-viewport";
  * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, in the preview
  * page's bar, where it keeps its own width. It owns the Ctrl+1..4 stage keys and
  * points the stepper at the stage the current lesson step is graded on. The
- * project list and the status chips live in the navigation (`AppNav`),
+ * project list and the session footer live in the navigation (`AppNav`),
  * not here.
  */
 const StageBar: FC = () => {

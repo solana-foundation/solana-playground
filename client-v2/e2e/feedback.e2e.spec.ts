@@ -14,8 +14,12 @@ const linesOn = (page: Page) => {
   return lines;
 };
 
+/** The feedback entries sit in the account menu, opened from the footer's account row */
 const openMenu = (page: Page) =>
-  page.getByRole("button", { name: "Feedback" }).click();
+  page
+    .locator('[data-slot="sidebar-footer"]')
+    .getByRole("button", { name: /^Account/ })
+    .click();
 
 // A GitHub link opens a tab; answering it here keeps the suite off the network
 test.beforeEach(async ({ context }) => {
@@ -80,7 +84,7 @@ test("client-v2-feedback: A link from the menu", async ({
 
 // The form is out of reach here (no Sentry on the dev server), so a draft
 // outliving the Sheet is covered by `FeedbackWidget.integration.test.tsx`
-test("the trigger opens its menu from the navigation's Sheet on a narrow window", async ({
+test("the account menu opens from the navigation's Sheet on a narrow window", async ({
   page,
 }) => {
   // The fixture waits on the project tree, which a narrow window keeps in the closed
@@ -94,7 +98,7 @@ test("the trigger opens its menu from the navigation's Sheet on a narrow window"
   await page.getByRole("button", { name: "Expand project panel" }).click();
   const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
 
-  await sheet.getByRole("button", { name: "Feedback" }).click();
+  await sheet.getByRole("button", { name: /^Account/ }).click();
 
   await expect(
     page.getByRole("menuitem", { name: "Report a bug" })

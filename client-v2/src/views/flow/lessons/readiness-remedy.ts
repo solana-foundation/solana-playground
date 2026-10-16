@@ -6,7 +6,7 @@ import { PgCommand, PgSettings, PgTerminal } from "../../../utils";
 /**
  * The one action that clears a blocker.
  *
- * Each is the same thing the navigation's chip or the stage button already
+ * Each is the same thing the account menu or the stage button already
  * does, so the explainer never has a path of its own to drift on. Kept
  * out of the band so it can be tested without a rendered tree -- this
  * is the layer where a wrong endpoint or a swallowed rejection hides.

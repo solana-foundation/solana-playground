@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useMemo, useRef } from "react";
-import type { CSSProperties, ReactNode, RefObject } from "react";
+import type { ReactNode, RefObject } from "react";
 import { useTheme } from "styled-components";
 
 import { useRenderOnChange } from "@/hooks";
@@ -9,7 +9,7 @@ import { useFeedbackProvider } from "../model/context";
 import { feedbackTelemetry } from "../model/telemetry";
 import { useFeedbackForm } from "../model/use-feedback-form";
 import { BaseFeedbackForm } from "./BaseFeedbackForm";
-import { BaseFeedbackWidget } from "./BaseFeedbackWidget";
+import { BaseFeedbackMenuItems } from "./BaseFeedbackMenuItems";
 
 const thank = () =>
   PgView.setToast(
@@ -27,31 +27,31 @@ const warn = () =>
   PgView.setToast(
     () => (
       <span>
-        <strong>Could not send feedback.</strong> Open Feedback to try again;
-        what you wrote is kept.
+        <strong>Could not send feedback.</strong> Open Share feedback in the
+        account menu to try again; what you wrote is kept.
       </span>
     ),
     { options: { name: "feedback-failed" } }
   );
 
-/** What `FeedbackTrigger` reads from the `FeedbackHost` above it */
-interface TriggerContext {
+/** What the account menu and its control read from the `FeedbackHost` above them */
+interface MenuContext {
   canShare: boolean;
   sending: boolean;
   onShare: () => void;
   onGithub: (link: GithubLink) => void;
   triggerRef: RefObject<HTMLButtonElement | null>;
-  font: CSSProperties;
 }
 
-const FeedbackTriggerContext = createContext<TriggerContext | null>(null);
+const FeedbackMenuContext = createContext<MenuContext | null>(null);
 
 /**
  * The form and its state, sending through `FeedbackProviderContext`, with the
- * trigger rendered anywhere below it by `FeedbackTrigger`. Split so the state
- * sits above what unmounts the trigger: the navigation's footer holds it, and
- * on a phone that footer is in a Sheet that unmounts on close, so a draft or a
- * send kept beside the trigger would go with it.
+ * menu entries (`FeedbackMenuItems`) and the send status (`useFeedbackSend`)
+ * read anywhere below it. Split so the state sits above what unmounts the
+ * account menu: the navigation's footer holds it, and on a narrow window that
+ * footer is in a Sheet that unmounts on close, so a draft or a send kept
+ * beside the menu would go with it.
  */
 export const FeedbackHost = ({ children }: { children: ReactNode }) => {
   const provider = useFeedbackProvider();
@@ -63,7 +63,7 @@ export const FeedbackHost = ({ children }: { children: ReactNode }) => {
     }),
     [theme]
   );
-  // Empty while the trigger is unmounted; the form then returns focus nowhere
+  // Empty while no account control is mounted; the form then returns focus nowhere
   const trigger = useRef<HTMLButtonElement>(null);
   useRenderOnChange(PgConnection.onDidChangeCluster);
   const { state, open, close, edit, submit } = useFeedbackForm({
@@ -80,20 +80,19 @@ export const FeedbackHost = ({ children }: { children: ReactNode }) => {
   );
 
   const sending = state.send === "sending";
-  const context = useMemo<TriggerContext>(
+  const context = useMemo<MenuContext>(
     () => ({
       canShare: provider.available,
       sending,
       onShare: open,
       onGithub: github("menu"),
       triggerRef: trigger,
-      font,
     }),
-    [provider.available, sending, open, github, font]
+    [provider.available, sending, open, github]
   );
 
   return (
-    <FeedbackTriggerContext.Provider value={context}>
+    <FeedbackMenuContext.Provider value={context}>
       {children}
       <BaseFeedbackForm
         open={state.open}
@@ -106,15 +105,34 @@ export const FeedbackHost = ({ children }: { children: ReactNode }) => {
         returnFocusTo={trigger}
         font={font}
       />
-    </FeedbackTriggerContext.Provider>
+    </FeedbackMenuContext.Provider>
   );
 };
 
-/** The "Feedback" button and its menu, for the `FeedbackHost` above it */
-export const FeedbackTrigger = () => {
-  const context = useContext(FeedbackTriggerContext);
-  if (!context) {
-    throw new Error("FeedbackTrigger must be rendered inside FeedbackHost");
-  }
-  return <BaseFeedbackWidget {...context} />;
+const useMenuContext = (who: string) => {
+  const context = useContext(FeedbackMenuContext);
+  if (!context) throw new Error(`${who} must be rendered inside FeedbackHost`);
+  return context;
+};
+
+/** The feedback entries for the account menu, from the `FeedbackHost` above */
+export const FeedbackMenuItems = () => {
+  const { canShare, onShare, onGithub } = useMenuContext("FeedbackMenuItems");
+  return (
+    <BaseFeedbackMenuItems
+      canShare={canShare}
+      onShare={onShare}
+      onGithub={onGithub}
+    />
+  );
+};
+
+/**
+ * Whether a send is in flight, and the ref the form returns focus to. The
+ * account control that is mounted (the footer's row or the rail's "Account")
+ * attaches the ref and shows `sending`
+ */
+export const useFeedbackSend = () => {
+  const { sending, triggerRef } = useMenuContext("useFeedbackSend");
+  return { sending, triggerRef };
 };

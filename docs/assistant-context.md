@@ -151,11 +151,12 @@ Done:
   re-anatomizing the UI around the Write → Build → Deploy → Interact loop
   (`decisions.md` → D10, D17). Flow is the only layout, a frame of four
   columns with no header. From the left: the navigation (Home, New project,
-  Tutorials, Programs, the project list under them, and the cluster,
-  wallet, GitHub and settings chips and the feedback trigger in its footer;
-  Cmd+B folds it to a rail of icons, whose footer keeps the cluster's status
-  dot, which opens the settings on the cluster, and an account button, which
-  unfolds it; the rail has no feedback trigger), the
+  Tutorials, Programs, the project list under them, and its session
+  footer: a cluster row, which opens the settings on the cluster, and an
+  account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
+  entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
+  keeps the cluster's status dot and an Account button that opens the same
+  menu), the
   assistant, then the work area. Across the top of the work area runs the
   stage bar, with the stepper (Write → Build → Deploy →
   Interact, state derived from real build/deploy events); under it sit the
@@ -170,8 +171,8 @@ Done:
   Preview (the Build, Deploy or Interact stage over the console); there the assistant is the Chat view
   of Work, not a Sheet. The editor edits at every width. A New Workspace
   gallery starts a project from 34 upstream programs or 16 tutorials. The
-  gear chip in the navigation's footer opens a settings overlay embedding
-  the existing settings registry.
+  cluster row, the account menu's Settings or Cmd+, open a settings overlay
+  embedding the existing settings registry.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
 - Conversations and project code are persisted. Threads are keyed by project

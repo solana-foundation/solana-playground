@@ -8,6 +8,7 @@ export const EVENT_PREFIXES = {
   observability: "obs",
   overlays: "overlay",
   persistence: "sync",
+  "session-footer": "session",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];

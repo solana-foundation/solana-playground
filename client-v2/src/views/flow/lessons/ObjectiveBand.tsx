@@ -48,8 +48,8 @@ const ObjectiveBand: FC<React.PropsWithChildren<ObjectiveBandProps>> = ({
   onRead,
   onOpenGallery,
 }) => {
-  // What the proving action needs, from the same sources the navigation
-  // footer's chips read. Subscribed here, before the early return below, so the
+  // What the proving action needs, from the same sources the navigation's
+  // session footer reads. Subscribed here, before the early return below, so the
   // hooks run on every render.
   const wallet = useWallet();
   const balance = useBalance();

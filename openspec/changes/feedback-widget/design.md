@@ -204,6 +204,10 @@ in the navigation's Sheet, which unmounts its content on close, and crossing
 that width swaps the Sheet for the rail. A legacy root may import a feature;
 the slice adds no UI to the legacy root itself.
 
+The trigger moved into the account menu in `ui-migration` 5.15
+(2026-10-16): the menu carries the three entries, and a send in flight shows
+on the account row.
+
 ### What the browser suite can reach
 
 The e2e dev server has no `VERCEL_ENV`, so it carries no Sentry and the form

@@ -11,7 +11,16 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "../../../shared/lib/telemetry";
-import { FeedbackHost, FeedbackTrigger } from "./FeedbackWidget";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/shared/ui/dropdown-menu";
+import {
+  FeedbackHost,
+  FeedbackMenuItems,
+  useFeedbackSend,
+} from "./FeedbackWidget";
 
 // The utils barrel reads generated globals that exist only in the built app
 const setToast = vi.fn();
@@ -73,26 +82,41 @@ afterEach(async () => {
   await Sentry.close();
 });
 
+/** An account control as the session footer draws it: a menu holding the feedback entries */
+const AccountControl = () => {
+  const { sending, triggerRef } = useFeedbackSend();
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button ref={triggerRef} type="button" aria-busy={sending || undefined}>
+          Account
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <FeedbackMenuItems />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
+
 /**
- * The host where `Flow` puts it, and the trigger where the navigation's
+ * The host where `Flow` puts it, and the account control where the session
  * footer does; `footer: false` is the footer unmounted, as the navigation's
  * Sheet unmounts it on close
  */
 const page = ({ footer }: { footer: boolean }) => (
   <ThemeProvider theme={theme}>
-    <FeedbackHost>{footer && <FeedbackTrigger />}</FeedbackHost>
+    <FeedbackHost>{footer && <AccountControl />}</FeedbackHost>
   </ThemeProvider>
 );
 
-it("should send one rated feedback from the trigger to Sentry, then thank the user", async () => {
+const account = () => screen.getByRole("button", { name: "Account" });
+
+it("should send one rated feedback from the account menu to Sentry, then thank the user", async () => {
   render(page({ footer: true }));
 
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+  await userEvent.click(account());
   const share = await screen.findByRole("menuitem", { name: "Share feedback" });
-  expect(
-    share.closest<HTMLElement>('[data-slot="dropdown-menu-content"]')?.style
-      .fontFamily
-  ).toBe("monospace");
   await userEvent.click(share);
   await screen.findByRole("heading", { name: "Give feedback" });
   await userEvent.click(screen.getByRole("radio", { name: "4 of 5 stars" }));
@@ -134,7 +158,7 @@ it("should send one rated feedback from the trigger to Sentry, then thank the us
 
 const openForm = async () => {
   render(page({ footer: true }));
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+  await userEvent.click(account());
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Share feedback" })
   );
@@ -162,7 +186,7 @@ it("should keep a rejected form open with the typed message and say so inside it
   ]);
 });
 
-it("should let the user close a sending form, show the send on the trigger, and keep the text when it fails", async () => {
+it("should let the user close a sending form, show the send on the account control, and keep the text when it fails", async () => {
   statusCode = 500;
   let release = () => {};
   held = new Promise<void>((resolve) => (release = resolve));
@@ -177,13 +201,17 @@ it("should let the user close a sending form, show the send on the trigger, and 
   await waitFor(() =>
     expect(screen.queryByRole("heading", { name: "Give feedback" })).toBeNull()
   );
-  expect(screen.getByRole("status", { name: "Sending feedback" })).toBeTruthy();
+  expect(account().getAttribute("aria-busy")).toBe("true");
   release();
   await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
   render(setToast.mock.calls[0][0]());
   expect(screen.getByText("Could not send feedback.")).toBeTruthy();
+  // The button the old toast pointed at is gone; the form is in the account menu
+  expect(document.body.textContent).toContain(
+    "Open Share feedback in the account menu to try again"
+  );
 
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+  await userEvent.click(account());
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Share feedback" })
   );
@@ -205,12 +233,12 @@ it("should track a GitHub link opened from the form as from the form", async () 
   ]);
 });
 
-it("should keep the draft and the send when the trigger unmounts and comes back", async () => {
+it("should keep the draft and the send when the account control unmounts and comes back", async () => {
   statusCode = 500;
   let release = () => {};
   held = new Promise<void>((resolve) => (release = resolve));
   const { rerender } = render(page({ footer: true }));
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+  await userEvent.click(account());
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Share feedback" })
   );
@@ -225,15 +253,15 @@ it("should keep the draft and the send when the trigger unmounts and comes back"
   );
 
   rerender(page({ footer: false }));
-  expect(screen.queryByRole("button", { name: "Feedback" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Account" })).toBeNull();
   rerender(page({ footer: true }));
-  expect(screen.getByRole("status", { name: "Sending feedback" })).toBeTruthy();
+  expect(account().getAttribute("aria-busy")).toBe("true");
 
   rerender(page({ footer: false }));
   release();
   await waitFor(() => expect(setToast).toHaveBeenCalledTimes(1));
   rerender(page({ footer: true }));
-  await userEvent.click(screen.getByRole("button", { name: "Feedback" }));
+  await userEvent.click(account());
   await userEvent.click(
     await screen.findByRole("menuitem", { name: "Share feedback" })
   );

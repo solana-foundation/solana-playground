@@ -41,6 +41,11 @@ const stagePanel = (page: Page) => page.locator("#stage[data-panel]");
 const navColumn = (page: Page) =>
   page.locator('[data-slot="sidebar-container"]');
 const nav = (page: Page) => page.locator('[data-slot="sidebar"]');
+/** The footer's account row, or the rail's "Account", whatever the session */
+const account = (page: Page) =>
+  nav(page)
+    .locator('[data-slot="sidebar-footer"]')
+    .getByRole("button", { name: /^Account/ });
 // The separator that resizes the console is the one controlling the stage
 const consoleSeparator = (page: Page) =>
   page.locator('[data-slot="resizable-handle"][aria-controls="stage"]');
@@ -314,8 +319,8 @@ test("client-v2-layout: Folding the navigation", async ({
   await expect(column).toHaveJSProperty("offsetWidth", 232);
   await page.keyboard.press("ControlOrMeta+b");
   await expect(column).toHaveJSProperty("offsetWidth", 52);
-  // A rail of icons: the items stay, the project list and the chips give way to
-  // the cluster's dot and the account
+  // A rail of icons: the items stay, the project list and the session footer
+  // give way to the cluster's dot and the account
   await expect(
     nav(page).getByRole("button", { name: "Expand navigation" })
   ).toBeVisible();
@@ -326,14 +331,12 @@ test("client-v2-layout: Folding the navigation", async ({
     0
   );
   await expect(
-    nav(page).getByRole("button", { name: "Open settings" })
+    nav(page).getByRole("button", { name: /^Change cluster/ })
   ).toHaveCount(0);
   await expect(
     nav(page).getByRole("button", { name: /^Cluster: / })
   ).toBeVisible();
-  await expect(
-    nav(page).getByRole("button", { name: "Account" })
-  ).toBeVisible();
+  await expect(account(page)).toBeVisible();
   await page.keyboard.press("ControlOrMeta+b");
   await expect(column).toHaveJSProperty("offsetWidth", 232);
   await expect(
@@ -645,15 +648,11 @@ test("client-v2-layout: A corrupt saved layout is reported", async ({
 test("the wallet window's close button is clickable at the top of the work area", async ({
   seededPage: page,
 }) => {
-  // Connected from the navigation's footer chip, which then reads "Toggle
-  // wallet" (and would disconnect, so it is not what opens the window)
-  await nav(page)
-    .getByRole("button", { name: "Connect wallet", exact: true })
-    .click();
+  // Connected from the account menu; the account row then shows the wallet
+  await account(page).click();
+  await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(
-    nav(page).getByRole("button", { name: "Toggle wallet", exact: true })
-  ).toBeVisible();
+  await expect(account(page)).toContainText("SOL");
   // The window is opened by the editor tab bar's "Wallet" button. Its icon's
   // alt text joins its accessible name ("Wallet Wallet"), so it is found by
   // its text, which is the label alone.
@@ -889,11 +888,9 @@ test("client-v2-layout: Everything the header did", async ({
   await expect(current).toHaveText("e2e-project");
   await expect(page.locator("#root-dir")).toBeVisible();
 
-  // The settings, from the navigation's footer
-  await page
-    .locator('[data-slot="sidebar-footer"]')
-    .getByRole("button", { name: "Open settings" })
-    .click();
+  // The settings, from the navigation's footer, through the account menu
+  await account(page).click();
+  await page.getByRole("menuitem", { name: /^Settings/ }).click();
   const settings = page.getByRole("region", { name: "Settings" });
   await expect(settings).toBeVisible();
   await page.keyboard.press("Escape");
@@ -935,15 +932,21 @@ test.describe("on a tablet", () => {
     const settings = page.getByRole("region", { name: "Settings" });
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
-    // A second click on the dot is the way out, as on the chip
+    // A second click on the dot is the way out, as on the footer's cluster row
     await footer.getByRole("button", { name: /^Cluster: / }).click();
     await expect(settings).toBeHidden();
 
-    await footer.getByRole("button", { name: "Account" }).click();
-    await expect(navColumn(page)).toHaveJSProperty("offsetWidth", 232);
-    await expect(
-      footer.getByRole("button", { name: /^Change cluster, currently / })
-    ).toBeVisible();
+    // "Account" opens the account menu beside the rail; the rail stays.
+    // Measured first: the open menu hides the rest from the accessibility tree
+    const trigger = await boxOf(account(page));
+    await account(page).click();
+    const menu = page.getByRole("menu", { name: "Account" });
+    await expect(menu).toBeVisible();
+    await expect(navColumn(page)).toHaveJSProperty("offsetWidth", 52);
+    // Beside the rail's Account, not over it
+    expect((await boxOf(menu)).x).toBeGreaterThanOrEqual(
+      trigger.x + trigger.width
+    );
   });
 });
 
@@ -1027,15 +1030,12 @@ test("a dragged files column keeps its width over a reload", async ({
     .toBeLessThan(4);
 });
 
-// The profile chip sits in the navigation's footer at the bottom left of the
-// window, so its menu opens upward and is anchored to the chips' row: one
-// opening downward, or hung off the chip's right edge, would run off the window
-test("the GitHub profile menu opens inside the window, its Sign out on top", async ({
-  page,
-}) => {
-  // Signing in for real needs a live GitHub round trip, so the account
-  // endpoints are stubbed, as `account-sync.e2e.spec.ts` does, for an
-  // account that holds nothing yet
+/**
+ * Signing in for real needs a live GitHub round trip, so the account
+ * endpoints are stubbed, as `account-sync.e2e.spec.ts` does, for an account
+ * that holds nothing yet
+ */
+const stubSignedIn = async (page: Page) => {
   await page.route("**/api/auth/get-session", (r) =>
     json(r, { user: { id: "u1", name: "Tester", image: null, login: "t" } })
   );
@@ -1046,13 +1046,19 @@ test("the GitHub profile menu opens inside the window, its Sign out on top", asy
       ? json(r, { updatedAt: new Date().toISOString() })
       : json(r, { projects: [] })
   );
+};
+
+// The account row sits in the navigation's footer at the bottom left of the
+// window, so its menu opens upward: one opening downward would run off the
+// window
+test("the account menu opens inside the window, its Sign out on top", async ({
+  page,
+}) => {
+  await stubSignedIn(page);
   await seedWorkspace(page);
 
-  await page
-    .locator('[data-slot="sidebar-footer"]')
-    .getByRole("button", { name: "GitHub profile: t" })
-    .click();
-  const menu = page.locator('div[aria-label="GitHub profile"]');
+  await account(page).click();
+  const menu = page.getByRole("menu", { name: "Account" });
   await expect(menu).toBeVisible();
 
   const box = await boxOf(menu);
@@ -1062,7 +1068,7 @@ test("the GitHub profile menu opens inside the window, its Sign out on top", asy
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
   expect(box.y + box.height).toBeLessThanOrEqual(viewport.height);
 
-  const signOut = menu.getByRole("button", { name: "Sign out" });
+  const signOut = menu.getByRole("menuitem", { name: "Sign out" });
   const onTop = await signOut.evaluate((el) => {
     const rect = el.getBoundingClientRect();
     const hit = document.elementFromPoint(
@@ -1193,4 +1199,176 @@ test("a widened assistant, hidden and shown, opens at the width it had before", 
   await expect
     .poll(async () => Math.abs((await widthOf(page)) - before))
     .toBeLessThanOrEqual(2);
+});
+
+test("client-v2-layout: Signing in from the account menu", async ({
+  seededPage: page,
+}) => {
+  // The sign-in request is held, so the wait can be seen, then fails
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    await held;
+    await route.fulfill({ status: 500, body: "" });
+  });
+  await account(page).click();
+  await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
+
+  const footer = nav(page).locator('[data-slot="sidebar-footer"]');
+  await expect(footer.getByText("Signing in...")).toBeVisible();
+  await expect(footer.getByRole("button", { name: "Cancel" })).toBeVisible();
+  release();
+  await expect(account(page)).toContainText("Sign in");
+  await expect(account(page)).toContainText("Couldn't sign in");
+});
+
+test("client-v2-layout: Signing out asks first", async ({ page }) => {
+  await stubSignedIn(page);
+  await seedWorkspace(page);
+  let signedOut = false;
+  await page.route("**/api/auth/sign-out", (route) => {
+    signedOut = true;
+    return json(route, { success: true });
+  });
+  await expect(account(page)).toHaveAccessibleName("Account: t");
+
+  await account(page).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  expect(signedOut).toBe(false);
+  await expect(account(page)).toHaveAccessibleName("Account: t");
+
+  await account(page).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await dialog.getByRole("button", { name: "Sign out" }).click();
+  await expect(account(page)).toHaveAccessibleName("Account, signed out");
+  expect(signedOut).toBe(true);
+});
+
+test("client-v2-layout: Settings from the menu and by key", async ({
+  seededPage: page,
+}) => {
+  const settings = page.getByRole("region", { name: "Settings" });
+  await account(page).click();
+  await page.getByRole("menuitem", { name: /^Settings/ }).click();
+  await expect(settings).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(settings).toBeHidden();
+
+  // From inside the editor too, which binds keys of its own
+  await page.locator(".monaco-editor .view-lines").first().click();
+  await page.keyboard.press("ControlOrMeta+Comma");
+  await expect(settings).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Comma");
+  await expect(settings).toBeHidden();
+
+  // Settings in the menu closes them while they are open, by mouse: opening
+  // the menu must not count as a click outside them
+  await page.keyboard.press("ControlOrMeta+Comma");
+  await expect(settings).toBeVisible();
+  await account(page).click();
+  await page.getByRole("menuitem", { name: /^Settings/ }).click();
+  await expect(settings).toBeHidden();
+});
+
+test("client-v2-layout: The wallet in the menu", async ({
+  seededPage: page,
+}) => {
+  await account(page).click();
+  await page.getByRole("menuitem", { name: "Connect wallet" }).click();
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
+
+  await expect(account(page)).toContainText(/\w{4}…\w{4} · /);
+  await account(page).click();
+  await expect(
+    page.getByRole("menuitem", { name: "Disconnect wallet" })
+  ).toBeVisible();
+});
+
+test("client-v2-layout: A cluster that is down", async ({
+  seededPage: page,
+}) => {
+  // A cluster is down when its slot does not move between two reads a second
+  // apart (`PgConnection.getIsClusterDown`), so every `getSlot` answers the
+  // same slot; anything else goes to the cluster as usual
+  await page.route("https://api.devnet.solana.com/**", async (route) => {
+    const body = route.request().postDataJSON() as {
+      id?: unknown;
+      method?: string;
+    } | null;
+    if (body?.method !== "getSlot") return route.continue();
+    return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+  });
+  await page.reload();
+
+  const row = nav(page).getByRole("button", {
+    name: "Change cluster, currently devnet, down",
+  });
+  await expect(row).toBeVisible({ timeout: 15_000 });
+  await account(page).click();
+  const first = page
+    .getByRole("menu", { name: "Account" })
+    .getByRole("menuitem")
+    .first();
+  await expect(first).toContainText("devnet is not answering");
+  await first.click();
+  const network = page
+    .getByRole("region", { name: "Settings" })
+    .getByRole("radiogroup", { name: "Network" });
+  await expect(network.getByRole("radio", { checked: true })).toBeFocused();
+});
+
+// The Sheet's overlay would cover the settings and trap focus away from them,
+// so ⌘, closes it as the cluster row does
+test("⌘, closes the navigation's Sheet on a narrow window", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await seedWorkspace(page);
+  await page.setViewportSize({ width: 740, height: 812 });
+  // The editor focuses itself when it opens the first file; landing after
+  // the Sheet closed, it would take focus from the settings
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await page.getByRole("button", { name: "Expand project panel" }).click();
+  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
+  await expect(sheet).toBeVisible();
+
+  await page.keyboard.press("ControlOrMeta+Comma");
+
+  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+});
+
+// The sign-in lives in the session, not in the footer, so the Sheet that
+// holds the footer on a narrow window can close and reopen around it
+test("a sign-in outlives the navigation's Sheet on a narrow window", async ({
+  page,
+}) => {
+  let release = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/auth/sign-in/social", async (route) => {
+    await held;
+    await route.fulfill({ status: 500, body: "" });
+  });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await seedWorkspace(page);
+  await page.setViewportSize({ width: 740, height: 812 });
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
+  const sheetAccount = sheet.getByRole("button", { name: /^Account/ });
+
+  await page.getByRole("button", { name: "Expand project panel" }).click();
+  await sheetAccount.click();
+  await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
+  // Closed by its overlay, right of the Sheet
+  await page.mouse.click(720, 400);
+  await expect(sheet).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Expand project panel" }).click();
+  await expect(sheet.getByText("Signing in...")).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Cancel" })).toBeVisible();
+  release();
+  await expect(sheetAccount).toContainText("Couldn't sign in");
 });

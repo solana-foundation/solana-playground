@@ -29,7 +29,7 @@ export interface LayoutShellProps {
    * `LAYOUT_BREAKPOINTS.left`, which has no rail; `toggle` folds the rail
    * from there up and opens or closes the Sheet below it. `closeSheet` is for
    * a control in the navigation that opens something the Sheet's modal
-   * overlay would cover (settings, from the status chips): it closes the
+   * overlay would cover (settings, from the session footer): it closes the
    * Sheet as the product's doing, `via: "auto"`; on a phone, where the
    * navigation is a page, it brings Work into view; otherwise it closes the
    * Sheet if one is open.
@@ -402,7 +402,7 @@ const LayoutShell = ({
 
   // What closes the navigation's Sheet, from `closeLeftSheetOn`
   const sheetClose = useRef<(() => boolean) | null>(null);
-  // A modal, or settings opened from the navigation's own chips, closes the
+  // A modal, or settings opened from the navigation's own footer, closes the
   // Sheet: the Sheet is a modal dialog that traps focus and covers both. The
   // product's doing, not the user's, so it is reported as `auto`. The mark is
   // dropped when there was no Sheet to close, so it cannot label a later

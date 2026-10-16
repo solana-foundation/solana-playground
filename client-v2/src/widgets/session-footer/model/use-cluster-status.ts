@@ -9,7 +9,7 @@ export interface ClusterStatus {
 }
 
 /**
- * The cluster status both the footer's chip and the rail's dot show,
+ * The cluster status the footer's row and the rail's dot show,
  * re-rendering when either part changes
  */
 export const useClusterStatus = (): ClusterStatus => {

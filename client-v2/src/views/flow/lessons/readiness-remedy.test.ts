@@ -51,7 +51,7 @@ describe("remedy", () => {
     expect(PgCommand.build.execute).toHaveBeenCalledTimes(1);
   });
 
-  it("runs the same connect the navigation's chip runs", () => {
+  it("runs the same connect the account menu's Connect wallet runs", () => {
     remedy({ kind: "needs-wallet" })();
     expect(PgCommand.connect.execute).toHaveBeenCalledTimes(1);
   });
