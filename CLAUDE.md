@@ -9,10 +9,16 @@ This file records only what the code and git history do not make obvious.
 `solana-foundation/solana-playground`, forked from
 `solana-playground/solana-playground`.
 
-`master` is the integration branch. `ci.yml` guards `client/`, `server/` and
-`wasm/`; `client-v2.yml` guards `client-v2/`. Feature branches come off
-`master` and PRs go against `master`. Upstream changes arrive as squashed
-sync commits.
+`master-2.0` is the integration branch. `ci.yml` checks formatting and clippy
+for `client/`, `server/` and `wasm/`, but not `client/`'s build or tests;
+`client-v2.yml` guards `client-v2/`; `preview.yml` deploys a
+labelled PR's preview. All three run on `master-2.0` only. Feature branches
+come off `master-2.0` and PRs go against `master-2.0`. Foundation `master`
+is merged into it.
+
+`master` is still the repository's default branch, so scheduled workflows
+(`preview-sweep.yml`) run from its copy only, and `cicd.yml` deploys App
+Engine from a tagged commit pushed to it.
 
 ## Two clients
 

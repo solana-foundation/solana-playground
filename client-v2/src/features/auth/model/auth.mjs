@@ -11,6 +11,7 @@
  * probe in `/api/sync` and the dev server both need that.
  */
 import { betterAuth } from "better-auth";
+import { oAuthProxy } from "better-auth/plugins";
 
 import { authEnv } from "../../../shared/config/server-env.mjs";
 import { getPool, isConfigured } from "../../persistence/server.mjs";
@@ -42,6 +43,45 @@ let instance = null;
 export const resolveBaseURL = () => {
   const { AUTH_BASE_URL, VERCEL_URL } = authEnv();
   return AUTH_BASE_URL || (VERCEL_URL ? `https://${VERCEL_URL}` : undefined);
+};
+
+/**
+ * Better Auth's OAuth proxy, so every preview signs in through one GitHub app:
+ * a preview sends GitHub to the host's callback (`AUTH_OAUTH_PROXY_URL`), and
+ * the host hands the profile back encrypted with `AUTH_OAUTH_PROXY_SECRET`.
+ * How it is deployed: `docs/deploy-client-vercel.md`, "Sign-in on previews".
+ *
+ * Off without the secret. Only a Vercel preview whose proxy URL names another
+ * origin completes a proxied sign-in; every other deployment is the host and
+ * drops the plugin's endpoints, which turn an encrypted payload into a
+ * session. The secret sits in every preview's environment, so on the host they
+ * would let whoever holds one sign in as anyone. The role is decided that way
+ * round so a production deployment given the proxy URL by mistake still drops
+ * them.
+ *
+ * Exported for tests.
+ *
+ * @returns {object[]} the plugins to install, empty when the proxy is off
+ */
+export const oauthProxyPlugins = () => {
+  const { AUTH_OAUTH_PROXY_URL, AUTH_OAUTH_PROXY_SECRET, VERCEL_ENV } =
+    authEnv();
+  if (!AUTH_OAUTH_PROXY_SECRET) return [];
+
+  const self = resolveBaseURL();
+  const plugin = oAuthProxy({
+    productionURL: AUTH_OAUTH_PROXY_URL ?? self,
+    // The origin the session cookie is issued for, never a request's Host
+    currentURL: self,
+    secret: AUTH_OAUTH_PROXY_SECRET,
+  });
+
+  const isPreview =
+    VERCEL_ENV === "preview" &&
+    AUTH_OAUTH_PROXY_URL !== undefined &&
+    self !== undefined &&
+    new URL(AUTH_OAUTH_PROXY_URL).origin !== new URL(self).origin;
+  return [isPreview ? plugin : { ...plugin, endpoints: {} }];
 };
 
 /**
@@ -85,7 +125,7 @@ export const isAllowedOrigin = (req) => {
 };
 
 /**
- * Which of the settings sign-in needs are absent.
+ * Which of the settings sign-in needs are absent or unusable.
  *
  * The same list `getAuth` refuses on, so the two cannot drift, and the reason
  * `/api/auth` gives for a 503. Names only, never values: on a platform where
@@ -106,7 +146,17 @@ export const missingConfig = () => {
     // Signs the session cookie; a deployment must never fall back to a default
     AUTH_SECRET: !!env.AUTH_SECRET,
   };
-  return SIGN_IN_ENV.filter((name) => !present[name]);
+  // The OAuth proxy's settings are optional, so not in `SIGN_IN_ENV`; only a
+  // half-set or malformed proxy is reported
+  const proxyURL = env.AUTH_OAUTH_PROXY_URL;
+  return [
+    ...SIGN_IN_ENV.filter((name) => !present[name]),
+    // A proxy URL alone leaves the proxy off, and the preview then sends GitHub
+    // its own callback, which GitHub rejects with nothing said here
+    proxyURL && !env.AUTH_OAUTH_PROXY_SECRET ? "AUTH_OAUTH_PROXY_SECRET" : null,
+    // Unparseable, it would throw from `getAuth` on every request
+    proxyURL && !URL.canParse(proxyURL) ? "AUTH_OAUTH_PROXY_URL" : null,
+  ].filter(Boolean);
 };
 
 /**
@@ -125,6 +175,7 @@ export const getAuth = () => {
       database: pool,
       baseURL: resolveBaseURL(),
       secret: env.AUTH_SECRET,
+      plugins: oauthProxyPlugins(),
       user: {
         additionalFields: {
           // The @handle. Better Auth's core schema has `name` and `image` but
@@ -137,6 +188,9 @@ export const getAuth = () => {
         github: {
           clientId: env.GITHUB_CLIENT_ID,
           clientSecret: env.GITHUB_CLIENT_SECRET,
+          // Not applied to a sign-in through the OAuth proxy, whose payload
+          // carries only Better Auth's own user fields: a preview's user has
+          // no `login` (see "Sign-in on previews" in the deploy doc).
           mapProfileToUser: (profile) => ({ login: profile.login }),
           // Scope is deliberately not set. Better Auth already requests
           // `read:user user:email`, and the option appends rather than

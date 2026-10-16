@@ -35,8 +35,8 @@ as soon as the Root Directory points at `client-v2`.
      (`scripts/check-agent-env.mjs`).
 3. **GitHub OAuth app for production.** Its callback URL is
    `<AUTH_BASE_URL>/api/auth/callback/github`. A GitHub OAuth app takes a
-   single callback, so production gets its own app rather than sharing a
-   preview's.
+   single callback, so previews have no app of their own: they sign in through
+   the host's, by the [OAuth proxy](#sign-in-on-previews).
 4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
    production origin.
 5. **Dry run on a preview**, from `master`:
@@ -275,10 +275,15 @@ before this existed.
 | `SYNC_ENABLED` | Kill switch. Only the exact string `true` enables sync; unset or anything else keeps the app local-only |
 | `AUTH_SECRET` | Better Auth signing secret. Generate one per environment; rotating it signs everyone out |
 | `AUTH_BASE_URL` | The deployment's own origin, e.g. `https://example.vercel.app`. Better Auth builds the OAuth callback from it, so a wrong value breaks sign-in with no error at the browser |
-| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL` |
+| `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` | The OAuth app. Its callback URL must match `AUTH_BASE_URL`; previews carry the host's pair |
+| `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
+| `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
-**Migrations are applied by hand, never by a function.** Every preview gets its
-own Neon branch, so its schema is its own problem:
+**Migrations are never applied by a function.** Every preview gets its own Neon
+branch, so its schema is its own problem. A labelled PR's preview is migrated by
+`preview.yml` on every deploy (see
+[Previews from a PR label](neon.md#previews-from-a-pr-label)); a preview
+deployed by hand is migrated by hand:
 
 ```sh
 make -f client-v2/Makefile.vercel migrate-preview-db
@@ -303,10 +308,10 @@ It prints the target host first, then the pending migrations, then requires a
 typed `yes`. It skips the prompt entirely when nothing is pending, so the warning
 never becomes something to click through.
 
-**Nothing applies migrations automatically, in any environment.** CI runs
-`yarn db-migrate` only against its own throwaway service container
-(`client-v2.yml:101`), which proves the history replays from scratch but touches
-nothing real. The Git integration deploys `master` to production with no
+**Nothing migrates production automatically.** The only real databases CI
+migrates are labelled PRs' preview branches. Its `yarn db-migrate` in
+`client-v2.yml` runs against a throwaway service container, which proves the
+history replays from scratch but touches nothing real. The Git integration deploys `master` to production with no
 hook before or after it. Production is therefore migrated by a person running
 `migrate-production-db` from a laptop, and the ordering is theirs to get right:
 migrate first, then merge to `master`. A deployment that ships ahead of its migration runs
@@ -316,6 +321,37 @@ A preview deployment pointed at a database that has not been migrated will
 answer `db: "unreachable"` from `/api/sync` and stay local, which is the
 intended failure rather than a broken app. Note the limit of that: it covers a
 database that cannot be reached, not one whose schema is merely out of date.
+
+### Sign-in on previews
+
+A preview's origin changes on every deployment and a GitHub OAuth app takes one
+callback, so previews sign in through the host's app with Better Auth's OAuth
+proxy (`oauthProxyPlugins` in `src/features/auth/model/auth.mjs`). The host is
+the Production deployment, `https://solana-playground-teal.vercel.app`. A
+preview sends GitHub to the host's callback; the host trades the code for the
+profile and redirects back to the preview with it encrypted; the preview
+creates the user and the session in its own database.
+
+Set once in the Vercel dashboard:
+
+- **Production:** `AUTH_OAUTH_PROXY_SECRET`.
+- **Preview:** `AUTH_OAUTH_PROXY_URL=https://solana-playground-teal.vercel.app`,
+  the same `AUTH_OAUTH_PROXY_SECRET`, and the host's `GITHUB_CLIENT_ID` and
+  `GITHUB_CLIENT_SECRET`.
+
+Only a deployment with `VERCEL_ENV=preview` and a proxy URL naming another
+origin completes a proxied sign-in. Every other one is the host and drops the
+proxy's completion endpoints: the secret sits in every preview's environment,
+and on the host those endpoints would turn a forged payload into a session. The
+host must run this code before any preview can sign in.
+
+Accepted risk: whoever holds one preview's environment can forge a session on
+any other preview. Previews hold only test data in their own Neon branches.
+
+A user signed in on a preview has no `login`: the proxy forwards only Better
+Auth's own user fields, so `mapProfileToUser` does not reach it. The header
+chip shows the GitHub name instead, and the account menu has no `@login` line
+and no GitHub profile link.
 
 ### Known gaps
 
@@ -327,10 +363,11 @@ database that cannot be reached, not one whose schema is merely out of date.
   [Assistant default backend](#assistant-default-backend).
 - The deployed-preview reachability of `DATABASE_URL` has not been verified;
   everything so far has run against a local container.
-- **No deployment has ever succeeded.** Of the last 100, all were Git-triggered:
-  98 cancelled by the Ignored Build Step (`exit 0` for anything that is not
-  production, so preview builds are switched off at the project level) and 2
-  errored on `master`. The Makefile has never produced one.
+- **Git-triggered preview builds never run.** The Ignored Build Step exits 0
+  for anything that is not production, so preview builds are switched off at
+  the project level. Previews come from a runner instead (`preview.yml`, or the
+  Makefile by hand), which builds and deploys the prebuilt output; the first
+  one deployed on 2026-10-15.
 - **The Neon targets are untested against real Neon.** See
   [Neon preview databases](neon.md#known-gaps).
 

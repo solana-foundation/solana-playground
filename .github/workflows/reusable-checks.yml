@@ -5,6 +5,15 @@ name: Checks
 # two trigger workflows can't drift apart.
 on:
   workflow_call:
+    inputs:
+      # The `build` job: `yarn setup` (the WASM compile), then type check,
+      # unit tests and production build of upstream's `client/`, 20+ minutes.
+      # ci.yml turns it off, so nothing on master-2.0 checks `client/`, which
+      # this fork does not edit. The WASM still compiles for every preview,
+      # in vercel-install.sh on a cache miss. cicd.yml's deploy gate keeps it.
+      build:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -115,6 +124,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    if: inputs.build
     needs:
       [format_client, format_server, format_wasm, clippy_server, clippy_wasm]
 
