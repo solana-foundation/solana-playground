@@ -78,6 +78,9 @@ existing code moves.
 - `client-v2-elements`: how the small elements a screen is built from behave
   for the user: a section that folds, a checkbox and its label, a note that
   says what kind it is.
+- `client-v2-stages`: what the Build and Deploy stages show: a failed build's
+  diagnostics with the faulty line marked, the latest deployment's program id
+  to copy, and the stage's action at the foot on a phone.
 
 ### Modified Capabilities
 

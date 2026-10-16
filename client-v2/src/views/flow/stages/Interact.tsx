@@ -113,7 +113,7 @@ const Interact = () => {
               ))}
             </NativeSelect>
           </Label>
-          <IdlActions showUpload />
+          <IdlActions mode="button" />
         </ToolbarActions>
       </Toolbar>
       <Panel>
