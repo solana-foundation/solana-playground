@@ -6,7 +6,7 @@ import { PROJECT_NAME } from "@/constants";
 import { PgView } from "@/utils/view";
 import { overlayTelemetry } from "../model/telemetry";
 import { BaseModalFrame } from "./BaseModalFrame";
-import type { ModalSize, SubmitStatus } from "./BaseModalFrame";
+import type { ModalSize, SubmitStatus, SubmitVariant } from "./BaseModalFrame";
 import { useBlockDismiss, useIsTopModal, useOpenReport } from "./modal-layer";
 
 const log = createLogger("overlays:modal-frame");
@@ -19,7 +19,8 @@ export type ModalSubmit = {
   /** Keep the dialog open after a successful submit */
   noCloseOnSubmit?: boolean;
   disabled?: boolean;
-  variant?: "default" | "destructive";
+  /** `brand` for the view's one call to action; see `SubmitVariant` */
+  variant?: SubmitVariant;
 };
 
 export type ModalFrameProps = {

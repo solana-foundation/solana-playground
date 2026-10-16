@@ -128,7 +128,9 @@ regression against 5.1 has misread this rule.
 - [ ] 5.15 Projects: the session footer and account menu (HOO-2070; after
       5.2 and 5.6)
 - [ ] 5.16 Projects: the Get set up checklist (HOO-2075; after 5.15)
-- [ ] 5.17 Assistant: the composer and Connect a model (HOO-2067; after 5.2)
+- [x] 5.17 Assistant: the composer and Connect a model (HOO-2067; after 5.2;
+      design.md, "The composer and Connect a model (5.17)"; plan:
+      [plans/5.17-composer-connect.md](plans/5.17-composer-connect.md))
 - [ ] 5.18 Assistant: the thread, messages, diffs and approvals (HOO-1794;
       after 5.17)
 - [ ] 5.19 Lessons: objective band, step rail, Steps and Files, the reader

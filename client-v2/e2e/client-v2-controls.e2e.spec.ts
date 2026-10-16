@@ -137,6 +137,10 @@ test.describe("client-v2-controls", () => {
       LONG
     );
 
+    // Connect a model opens from the head's More, not on its own
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+
     const toggle = page.getByRole("button", { name: "Bring your own key" });
     await toggle.click();
     const group = page.getByRole("radiogroup", { name: "Backend" });
@@ -145,10 +149,17 @@ test.describe("client-v2-controls", () => {
 
     await group.getByRole("radio", { checked: true }).focus();
     // Radix checks the radio the arrow focused only while the key is still
-    // down, and moves the focus on a timer: hold it as a hand would
-    await page.keyboard.press("ArrowDown", { delay: 100 });
+    // down, and moves the focus on a timer: hold the key until the radio is
+    // checked, as a hand would, rather than for a fixed time a slow runner
+    // can outlast
+    const arrowTo = async (index: number) => {
+      await page.keyboard.down("ArrowDown");
+      await expect(radios.nth(index)).toBeChecked();
+      await page.keyboard.up("ArrowDown");
+    };
+    await arrowTo(1);
     await expect(radios.nth(1)).toBeFocused();
-    await page.keyboard.press("ArrowDown", { delay: 100 });
+    await arrowTo(2);
 
     await expect(
       page.getByRole("button", { name: "Hide other backends" })

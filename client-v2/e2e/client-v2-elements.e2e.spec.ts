@@ -13,7 +13,9 @@ test("client-v2-elements: An unknown page is an alert", async ({
 test("client-v2-elements: A skill is switched by its name", async ({
   seededPage: page,
 }) => {
-  await page.getByRole("tab", { name: "Sources" }).click();
+  // Sources and tools opens from the assistant head's More menu
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: /Sources and tools/ }).click();
 
   // The first skill row; its visible name is the checkbox's accessible name
   const row = page

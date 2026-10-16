@@ -2,6 +2,7 @@
 export const EVENT_PREFIXES = {
   auth: "auth",
   "app-nav": "nav",
+  assistant: "assistant",
   feedback: "feedback",
   "layout-shell": "layout",
   observability: "obs",

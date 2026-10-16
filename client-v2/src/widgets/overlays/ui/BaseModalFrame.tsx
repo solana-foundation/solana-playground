@@ -2,6 +2,7 @@ import { useRef } from "react";
 import type { KeyboardEvent, ReactNode, SyntheticEvent } from "react";
 import { cn } from "cn";
 
+import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import {
   ModalBody,
@@ -16,6 +17,13 @@ import { isInsideToast } from "@/shared/lib/toast-layer";
 /** `wide` is for dialogs with a code or a table in the body */
 export type ModalSize = "default" | "wide";
 
+/**
+ * How the submit is drawn: the stock `Button`'s `default` or `destructive`,
+ * or `brand`, the ring `BrandButton`, for a dialog whose submit is its view's
+ * one call to action
+ */
+export type SubmitVariant = "default" | "destructive" | "brand";
+
 /** Whether the submit can be pressed, and why not */
 export type SubmitStatus = "ready" | "disabled" | "busy";
 
@@ -28,7 +36,7 @@ export type BaseModalFrameProps = {
   submit?: {
     text: string;
     status: SubmitStatus;
-    variant: "default" | "destructive";
+    variant: SubmitVariant;
     onSubmit: () => void;
     /** Shown as a Cancel button beside the submit */
     onCancel?: () => void;
@@ -37,11 +45,19 @@ export type BaseModalFrameProps = {
   children?: ReactNode;
 };
 
+/**
+ * What a field needs to be one the user can reach: enabled and in the tab
+ * order. Radix keeps a native control beside a radio group or a select inside
+ * a form, `aria-hidden` and out of the tab order, which must not take focus.
+ */
+const REACHABLE =
+  ':not(:disabled):not([aria-hidden="true"]):not([tabindex="-1"])';
+
 /** A field of the body that takes focus when the dialog opens */
 const FIRST_FIELD = [
-  '[data-slot="modal-body"] input:not([type="hidden"]):not([type="file"]):not(:disabled)',
-  '[data-slot="modal-body"] textarea:not(:disabled)',
-  '[data-slot="modal-body"] select:not(:disabled)',
+  `[data-slot="modal-body"] input:not([type="hidden"]):not([type="file"])${REACHABLE}`,
+  `[data-slot="modal-body"] textarea${REACHABLE}`,
+  `[data-slot="modal-body"] select${REACHABLE}`,
 ].join(", ");
 
 /**
@@ -70,6 +86,13 @@ export const BaseModalFrame = ({
   const formRef = useRef<HTMLFormElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const canSubmit = submit?.status === "ready";
+  /** What either kind of submit button shows */
+  const submitLabel = submit && (
+    <>
+      {submit.status === "busy" && <Spinner />}
+      {submit.text}
+    </>
+  );
 
   const handleSubmit = (ev: SyntheticEvent<HTMLFormElement, SubmitEvent>) => {
     ev.preventDefault();
@@ -149,15 +172,20 @@ export const BaseModalFrame = ({
                 Cancel
               </Button>
             )}
-            <Button
-              ref={submitRef}
-              type="submit"
-              variant={submit.variant}
-              disabled={!canSubmit}
-            >
-              {submit.status === "busy" && <Spinner />}
-              {submit.text}
-            </Button>
+            {submit.variant === "brand" ? (
+              <BrandButton ref={submitRef} type="submit" disabled={!canSubmit}>
+                {submitLabel}
+              </BrandButton>
+            ) : (
+              <Button
+                ref={submitRef}
+                type="submit"
+                variant={submit.variant}
+                disabled={!canSubmit}
+              >
+                {submitLabel}
+              </Button>
+            )}
           </ModalFooter>
         )}
       </form>

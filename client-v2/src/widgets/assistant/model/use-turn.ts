@@ -1,0 +1,376 @@
+import { useEffect, useReducer, useRef, useState } from "react";
+
+import { createLogger } from "@/shared/lib/logger";
+
+import { pushThread } from "../../../effects/chat-thread/push-thread";
+import { report, toReplayMessages } from "../../../features/persistence";
+import { createProvider } from "../../../views/sidebar/assistant/model";
+import {
+  isDefaultBackendRemembered,
+  rememberedConnection,
+} from "../../../views/sidebar/assistant/model/remembered-backend";
+import type { Provider } from "../../../views/sidebar/assistant/model/types";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import type {
+  Connection,
+  PromptRequest,
+} from "../../../views/sidebar/assistant/store";
+import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
+import { reportButtonFailure } from "../../../shared/lib/report-button-failure";
+import { DEFAULT_CONNECTION } from "./connection";
+import { probeDefaultBackend } from "./default-backend";
+import { assistantTelemetry } from "./telemetry";
+import type { AssistantEvents } from "./telemetry";
+
+export type { ConnectPreset };
+
+const log = createLogger("assistant:turn");
+const connectLog = createLogger("assistant:connect");
+
+/**
+ * The rejection an aborted fetch or stream ends with. By name: a
+ * `DOMException` is not an `Error` everywhere (jsdom's is not).
+ */
+const isAbort = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  "name" in error &&
+  error.name === "AbortError";
+
+/** Where Connect a model was opened from */
+export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
+
+/**
+ * Opens Connect a model and marks it open (`PgAssistant.pickBackend`), or
+ * does nothing while it is open already. The panel hands in the widget's
+ * `openConnectDialog`; this module only decides when to call it.
+ */
+export type ConnectOpener = (via: ConnectVia, preset?: ConnectPreset) => void;
+
+export interface TurnOptions {
+  open: ConnectOpener;
+}
+
+/**
+ * Where the turn is. `stopping` is a stopped turn still unwinding:
+ * `cancelPending` drops the store's status to idle before its provider does.
+ */
+export type TurnPhase = "idle" | "running" | "awaiting" | "stopping";
+
+/**
+ * One assistant turn at a time, shared by the thread and the composer.
+ *
+ * Called once by the panel and handed to both: two calls would hold two
+ * providers, two histories and two Stop buttons for one conversation.
+ */
+export interface Turn {
+  /** Send a prompt; with nothing connected, connect the default or open Connect */
+  send(text: string): Promise<void>;
+  /** Abort the turn in flight and deny whatever it is waiting on */
+  stop(): void;
+  phase: TurnPhase;
+  /** `phase` is not idle: a turn runs, waits on an approval, or unwinds */
+  busy: boolean;
+  /** What is in the composer */
+  input: string;
+  setInput(value: string): void;
+  /** Open Connect a model, on `preset`'s backend when given */
+  openConnect: ConnectOpener;
+  /** A requested prompt waits in the composer for a backend to be connected */
+  promptWaiting: boolean;
+  /** Bumped whenever the composer's input should take focus */
+  focusRequest: number;
+}
+
+/**
+ * Connect the deployment's default when it has one; `null` when it has none,
+ * or while Connect a model is open, for the caller to ask the user.
+ */
+const connectDefault = async (): Promise<Connection | null> => {
+  const backend = await probeDefaultBackend();
+  if (backend.state !== "present") return null;
+  // Another caller may have connected while the probe was out; and a user
+  // choosing in Connect a model is not overruled by a send behind the dialog
+  if (!PgAssistant.connection && !PgAssistant.isPickingBackend) {
+    PgAssistant.connect(DEFAULT_CONNECTION);
+  }
+  return PgAssistant.connection;
+};
+
+export const useTurn = ({ open }: TurnOptions): Turn => {
+  const [, render] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => PgAssistant.onDidChange(render).dispose, []);
+
+  const [input, setInput] = useState("");
+  const [focusRequest, focus] = useReducer((n: number) => n + 1, 0);
+  // A prompt that arrived with no backend waits in the composer. Saying so is
+  // the panel's job, not the conversation's: a notice item would outlive the
+  // connect and be stored with the thread
+  const [promptWaiting, setPromptWaiting] = useState(false);
+
+  const provider = useRef<{
+    connection: Connection;
+    instance: Provider;
+  } | null>(null);
+  const turn = useRef<AbortController | null>(null);
+  // Set from the first `send` until its turn starts, so a second send in the
+  // meantime (a double Enter, a suggestion clicked twice) cannot start another
+  // while the first is still finding a backend
+  const starting = useRef(false);
+
+  // The store says what a live turn is doing; the controller says whether a
+  // turn is over, since a stopped one still has to unwind
+  const phaseOf = (): TurnPhase => {
+    if (turn.current?.signal.aborted) return "stopping";
+    if (PgAssistant.status !== "idle") return PgAssistant.status;
+    if (turn.current) return "running";
+    return "idle";
+  };
+  const phase = phaseOf();
+  const busy = phase !== "idle";
+
+  const connection = PgAssistant.connection;
+  // Connecting answers the hint; a later disconnect must not bring it back
+  useEffect(() => {
+    if (connection) setPromptWaiting(false);
+  }, [connection]);
+
+  /**
+   * Reconnect what this tab was using before a reload, without asking again.
+   *
+   * First the key-based backend kept in this tab's `sessionStorage` by
+   * `rememberBackend` (a new tab has none; a tab the browser duplicates or
+   * restores carries it). It needs no probe, so it is connected on mount,
+   * before the probe can answer, and the default's reconnect then finds a
+   * connection and stands down: a kept key wins over a remembered default.
+   *
+   * Then the keyless default, only if the user picked it before and only once
+   * the probe confirms this deployment still serves it. `probeDefaultBackend`
+   * is shared with the composer and Connect a model, so the page asks once
+   * (again only after a failure).
+   *
+   * Neither overrules a live connection or a choice in progress in Connect a
+   * model. A Forget key stays forgotten because `forgetBackend` drops what
+   * both would read.
+   */
+  useEffect(() => {
+    if (!PgAssistant.connection && !PgAssistant.isPickingBackend) {
+      const kept = rememberedConnection();
+      if (kept) PgAssistant.connect(kept);
+    }
+
+    let live = true;
+    probeDefaultBackend()
+      .then((backend) => {
+        if (!live || backend.state !== "present") return;
+        if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
+        if (!isDefaultBackendRemembered()) return;
+        PgAssistant.connect(DEFAULT_CONNECTION);
+      })
+      .catch((error: unknown) => {
+        // Nothing on screen asked for it: the panel opens unconnected, and
+        // the first send connects or asks
+        connectLog.error(error, {
+          report: true,
+          context: { reconnect: "default" },
+        });
+      });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Through a ref: `onDidRequestPrompt` subscribes once, with the first
+  // render's `open`; the ref hands it the latest
+  const opener = useRef(open);
+  opener.current = open;
+  const openConnect = (via: ConnectVia, preset?: ConnectPreset) =>
+    opener.current(via, preset);
+
+  /** Whether a turn, or a send still finding its backend, is under way */
+  const occupied = () =>
+    starting.current || !!turn.current || PgAssistant.status !== "idle";
+
+  /**
+   * @returns `false` when the send was refused because another one is under
+   * way, so a caller holding text the user never typed can keep it
+   */
+  const start = async (text: string): Promise<boolean> => {
+    const trimmed = text.trim();
+    if (!trimmed) return true;
+    if (occupied()) return false;
+
+    // Only a send with nothing connected waits, so a connected one has started
+    // its turn by the time it first yields
+    let current = PgAssistant.connection;
+    if (!current) {
+      starting.current = true;
+      try {
+        current = await connectDefault();
+      } finally {
+        starting.current = false;
+      }
+      // A turn may have started while the probe was out
+      if (occupied()) return false;
+    }
+    if (!current) {
+      // Nothing to send to: the prompt stays where the user can send it once
+      // a backend is connected
+      setInput(text);
+      openConnect("send");
+      return true;
+    }
+
+    // One provider per connection; it owns the conversation history. Every
+    // connect and tune stores a new object, so identity catches any change, a
+    // re-pick included; a rebuild is harmless: the new provider is seeded from
+    // what is rendered.
+    if (provider.current?.connection !== current) {
+      provider.current = {
+        connection: current,
+        // Seeded from what is rendered, so reopening a stored thread gives the
+        // model the conversation rather than amnesia behind a full transcript
+        instance: createProvider(current, toReplayMessages(PgAssistant.items)),
+      };
+    }
+    const instance = provider.current.instance;
+
+    PgAssistant.addUserMessage(trimmed);
+    // Cleared only once the message is in: a store that throws leaves the
+    // typed text where the user can send it again
+    setInput("");
+    const controller = new AbortController();
+    turn.current = controller;
+    PgAssistant.setStatus("running");
+
+    try {
+      await instance.send(trimmed, controller.signal);
+    } catch (e) {
+      if (!controller.signal.aborted) {
+        PgAssistant.addError(e instanceof Error ? e.message : String(e));
+      } else if (isAbort(e)) {
+        // Stopping is the user's own doing, and `stop` already said so
+        log.debug("the stopped turn unwound");
+      } else {
+        // Stopped, but the turn ended on something other than the abort: not
+        // the user's to read, since they stopped it, but a bug to hear of
+        log.error(e, { report: true, context: { stopped: true } });
+      }
+    } finally {
+      if (turn.current === controller) turn.current = null;
+      PgAssistant.setStatus("idle");
+      focus();
+
+      // End of turn is the natural commit point: the exchange is complete and
+      // the user is reading rather than typing. Deliberately not awaited --
+      // a slow or failed upload must not hold up the panel, and the local
+      // copy is already written either way.
+      const threadId = PgAssistant.threadId;
+      if (threadId) {
+        void pushThread(threadId).catch((e) => report("push turn", e));
+      }
+    }
+    return true;
+  };
+  // `start` answers its own failures once a turn runs; one before that (the
+  // store throwing on the new message) would be an unhandled rejection with
+  // nothing on screen
+  const send = async (text: string) => {
+    await start(text).catch(reportButtonFailure);
+  };
+  // Bridges `onDidRequestPrompt`, which subscribes once, to this render's `start`
+  const startRef = useRef(start);
+  startRef.current = start;
+
+  /**
+   * Aborting the request is not enough on its own: a tool waiting on an
+   * approval holds the agent loop open, so deny whatever is pending too.
+   *
+   * A stopped turn stays busy until its provider unwinds; a second Stop in
+   * that window has nothing left to stop and must not say so twice.
+   */
+  const stop = () => {
+    if (!turn.current || turn.current.signal.aborted) return;
+    turn.current.abort();
+    PgAssistant.cancelPending();
+    PgAssistant.addNotice("Stopped.");
+    assistantTelemetry.track("assistant_turn_stopped", {});
+  };
+
+  // "Fix with assistant" and similar callers outside the panel ask for a
+  // prompt to be sent through `PgAssistant.requestPrompt`; this is the only
+  // place that turns the request into an actual send
+  useEffect(() => {
+    /** A prompt the user did not type gets one look before it costs a turn */
+    const place = (text: string) => {
+      setInput(text);
+      focus();
+    };
+    /**
+     * With a backend to run it: send, or leave it for a look first. A send
+     * refused because another is under way leaves it in the composer rather
+     * than dropping a prompt the user never typed and cannot retype.
+     */
+    const run = ({ text, send }: PromptRequest) => {
+      if (!send) {
+        place(text);
+        return;
+      }
+      startRef.current(text).then(
+        (started) => {
+          if (!started) place(text);
+        },
+        (e) => {
+          place(text);
+          reportButtonFailure(e);
+        }
+      );
+    };
+    return PgAssistant.onDidRequestPrompt(
+      (request) => {
+        if (PgAssistant.isConnected) {
+          run(request);
+          return;
+        }
+        probeDefaultBackend()
+          .then((backend) => {
+            // Connected while the probe was out, or the default can be; not
+            // behind an open Connect a model, where the user is choosing
+            const canConnectDefault =
+              backend.state === "present" && !PgAssistant.isPickingBackend;
+            if (PgAssistant.isConnected || canConnectDefault) {
+              if (!PgAssistant.isConnected) {
+                PgAssistant.connect(DEFAULT_CONNECTION);
+              }
+              run(request);
+              return;
+            }
+            setInput(request.text);
+            setPromptWaiting(true);
+            openConnect("send");
+          })
+          .catch((e: unknown) => {
+            // A prompt the user did not type, and cannot retype, is kept
+            place(request.text);
+            reportButtonFailure(e);
+          });
+      },
+      { sends: true }
+    ).dispose;
+    // `openConnect`, `place` and `run` only touch the store, state setters and
+    // the `startRef` and `opener` refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  return {
+    send,
+    stop,
+    phase,
+    busy,
+    input,
+    setInput,
+    openConnect,
+    promptWaiting,
+    focusRequest,
+  };
+};

@@ -317,13 +317,11 @@ check's job (HOO-1859); the rest hold by review.
   merge commit; see the root `CLAUDE.md`, "This is a fork"), and a red spec
   fails the PR's checks. It needs no server and no Postgres: every spec
   stubs the account endpoints with `page.route`, and the dev server serves
-  `api/*.mjs` itself.
-  Two tests connect to the keyless default backend and skip themselves where
-  `/api/agent` reports none configured (CI included); they run only on a
-  machine with the default backend configured. Two sync tests ("switching
+  `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,
+  so none depends on the machine's default backend. Two sync tests ("switching
   tabs mid-debounce raises no conflict", "reloading a project the account
   already has writes nothing") are `test.fixme` on the runner, where the
-  load's timing differs and the sync races they guard show. The four are
+  load's timing differs and the sync races they guard show. The two are
   listed by title in `e2e/known-skips.txt`; the job fails on any skip that
   is not in the list and warns on an entry that no longer skips. CI retries a
   failed spec once, because the runner is three times slower than a laptop and

@@ -56,6 +56,10 @@ existing code moves.
   `layout_panel_toggled` `nav`, `files`, `assistant` and `console` (`left`
   is gone), and its navigation (`widgets/app-nav`) adds `nav_item_opened`
   (prefix `nav`).
+- The assistant (`widgets/assistant`, 5.17) adds `assistant_model_picked`,
+  `assistant_effort_changed`, `assistant_connect_opened`,
+  `assistant_turn_stopped` and `assistant_default_probe_failed` (prefix
+  `assistant`), described in the `client-v2-assistant` spec.
 
 ## Capabilities
 
@@ -81,11 +85,14 @@ existing code moves.
 - `client-v2-stages`: what the Build and Deploy stages show: a failed build's
   diagnostics with the faulty line marked, the latest deployment's program id
   to copy, and the stage's action at the foot on a phone.
+- `client-v2-assistant`: how the assistant's composer names the model it
+  talks to, how a turn is sent and stopped, and how a model is connected.
 
 ### Modified Capabilities
 
-None. `openspec/specs/` is empty before this change; these are the first
-capabilities it records.
+- `assistant-own-key`: the picker and the chat header's Forget key are gone
+  (5.17), so its scenarios name Connect a model, the composer's model button
+  and Forget key in the assistant head's More menu.
 
 ## Impact
 

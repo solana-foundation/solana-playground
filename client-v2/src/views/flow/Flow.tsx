@@ -31,10 +31,10 @@ import type { FlowState } from "./state/stage";
 import { GAP } from "./tokens";
 import { FeedbackHost, FeedbackTrigger } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
-import Assistant from "@/views/sidebar/assistant/Component";
 import Wallet from "@/components/Wallet";
 import { PgExplorer, PgView } from "@/utils";
 import { AppNav } from "@/widgets/app-nav";
+import { Assistant } from "@/widgets/assistant";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import type { Disposable } from "@/utils/types";
@@ -241,18 +241,21 @@ const FlowFrame = () => {
         console={({ open, toggle }) => (
           <ConsoleDrawer open={open} onToggle={toggle} />
         )}
-        assistant={({ open, toggle }) => (
-          <Right $open={open}>
-            <Collapse
-              type="button"
-              aria-label={open ? "Collapse assistant" : "Expand assistant"}
-              onClick={toggle}
-            >
-              {/* The assistant folds toward the left edge: open, the chevron
-                  points left (fold); folded, right (open) */}
-              <Chevron $flip={open} />
-            </Collapse>
-            {open && <Assistant />}
+        assistant={({ open, toggle, ...widen }) => (
+          <Right>
+            {open ? (
+              // The head carries "Collapse assistant", and Widen while the
+              // shell says it can widen
+              <Assistant widen={widen} onHide={toggle} />
+            ) : (
+              <Collapse
+                type="button"
+                aria-label="Expand assistant"
+                onClick={toggle}
+              >
+                <Chevron $flip={false} />
+              </Collapse>
+            )}
           </Right>
         )}
       />
@@ -333,10 +336,9 @@ const Stage = styled.div`
   position: relative;
 `;
 
-const Right = styled.aside<{ $open: boolean }>`
-  ${({ theme, $open }) => css`
+const Right = styled.aside`
+  ${({ theme }) => css`
     position: relative;
-    --flow-handle-inset: ${$open ? "1rem" : "0px"};
     width: 100%;
     height: 100%;
     border: 1px solid ${theme.colors.default.border};
@@ -350,11 +352,9 @@ const Right = styled.aside<{ $open: boolean }>`
 
 const Collapse = styled.button`
   ${({ theme }) => css`
-    /* The handle owns the panel's left gutter; the assistant header reads
-       --flow-handle-inset (set on Right) and starts after it. */
+    /* Only on the folded strip: open, the assistant's head carries
+       "Collapse assistant" */
     position: absolute;
-    /* Centre on the assistant header row (its eyebrow and chips sit
-       ~20px below the panel top): 4px offset + 32px tall = 20px centre. */
     top: 0.25rem;
     left: 0;
     width: 1.5rem;

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { createElement, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   initLogger,
@@ -77,7 +77,7 @@ vi.mock("react-resizable-panels", async (importOriginal) => {
 
 import { useSidebar } from "@/shared/ui/sidebar";
 import BaseLayoutShell, { PANEL_SIZES } from "./BaseLayoutShell";
-import type { BaseLayoutShellProps } from "./BaseLayoutShell";
+import type { AssistantWide, BaseLayoutShellProps } from "./BaseLayoutShell";
 
 class NoopResizeObserver {
   observe() {}
@@ -135,6 +135,7 @@ interface PropsChoice {
   work?: BaseLayoutShellProps["work"];
   stage?: ReactNode;
   console?: ReactNode;
+  assistant?: BaseLayoutShellProps["assistant"];
 }
 
 /**
@@ -187,7 +188,7 @@ const props = (
     stageBar: <header>stage bar</header>,
     stage: choice.stage ?? <main>stage slot</main>,
     console: choice.console ?? <div className="xterm">console slot</div>,
-    assistant: <section>assistant slot</section>,
+    assistant: choice.assistant ?? (() => <section>assistant slot</section>),
     assistantOpener: <button type="button">Expand assistant</button>,
     phone: {
       page: "work",
@@ -915,4 +916,147 @@ it("renders the pager, not the sidebar frame, on a phone", () => {
   const navigation = screen.getByRole("region", { name: "Navigation" });
   expect(within(navigation).getByText("nav slot")).toBeTruthy();
   expect(screen.getByTestId("phone-pager")).toBeTruthy();
+});
+
+describe("widening the assistant", () => {
+  /** The shell's assistant slot, recording what it was last handed */
+  const slot = () => {
+    const seen: { last: AssistantWide | null } = { last: null };
+    const assistant = (wide: AssistantWide) => {
+      seen.last = wide;
+      return <section>assistant slot</section>;
+    };
+    return { seen, assistant };
+  };
+
+  it("should size the panel to its maximum and back to the size it had", () => {
+    const { assistant: panel } = handles();
+    const { seen, assistant } = slot();
+    render(<BaseLayoutShell {...props("wide", { assistant })} />);
+    act(() => panelSpies.panels.assistant.onResize!({ inPixels: 400 }));
+    expect(seen.last!.wide).toBe(false);
+    expect(seen.last!.canWiden).toBe(true);
+
+    act(() => seen.last!.setWide(true));
+    expect(panel.resize).toHaveBeenLastCalledWith(PANEL_SIZES.assistant.max);
+    expect(seen.last!.wide).toBe(true);
+    act(() =>
+      panelSpies.panels.assistant.onResize!({
+        inPixels: PANEL_SIZES.assistant.max,
+      })
+    );
+
+    act(() => seen.last!.setWide(false));
+    expect(panel.resize).toHaveBeenLastCalledWith(400);
+    expect(seen.last!.wide).toBe(false);
+  });
+
+  it("should save nothing for the library's own layout after a widen", () => {
+    const { seen, assistant } = slot();
+    const wide = props("wide", { assistant });
+    render(<BaseLayoutShell {...wide} />);
+    act(() => seen.last!.setWide(true));
+    act(() =>
+      panelSpies.groups["layout-horizontal"].onLayoutChanged!(
+        { assistant: 40, work: 60 },
+        { isUserInteraction: false }
+      )
+    );
+    expect(wide.onHorizontalLayout).not.toHaveBeenCalled();
+    expect(seen.last!.wide).toBe(true);
+  });
+
+  it("should stop being wide on a drag, and leave the dragged size alone", () => {
+    const { assistant: panel } = handles();
+    const { seen, assistant } = slot();
+    const wide = props("wide", { assistant });
+    render(<BaseLayoutShell {...wide} />);
+    act(() => seen.last!.setWide(true));
+    panel.resize.mockClear();
+    act(() =>
+      panelSpies.groups["layout-horizontal"].onLayoutChanged!(
+        { assistant: 30, work: 70 },
+        { isUserInteraction: true }
+      )
+    );
+    expect(seen.last!.wide).toBe(false);
+    expect(panel.resize).not.toHaveBeenCalled();
+    expect(wide.onHorizontalLayout).toHaveBeenCalledWith({
+      assistant: 30,
+      work: 70,
+    });
+  });
+
+  it("should do nothing below 1024 px, where the assistant is a Sheet", () => {
+    const { assistant: panel } = handles();
+    const { seen, assistant } = slot();
+    render(
+      <BaseLayoutShell
+        {...props("compact", { assistant, assistantSheetOpen: true })}
+      />
+    );
+    act(() => seen.last!.setWide(true));
+    expect(panel.resize).not.toHaveBeenCalled();
+    expect(seen.last!.wide).toBe(false);
+    expect(seen.last!.canWiden).toBe(false);
+  });
+
+  it("should do nothing while the panel is folded", () => {
+    const { assistant: panel } = handles();
+    panel.isCollapsed.mockReturnValue(true);
+    const { seen, assistant } = slot();
+    render(
+      <BaseLayoutShell
+        {...props("wide", { assistant, assistantOpen: false })}
+      />
+    );
+    act(() => seen.last!.setWide(true));
+    expect(panel.resize).not.toHaveBeenCalled();
+    expect(seen.last!.wide).toBe(false);
+  });
+
+  it("should reopen a panel folded while wide at the size it had before", () => {
+    const { assistant: panel } = handles();
+    const { seen, assistant } = slot();
+    const { rerender } = render(
+      <BaseLayoutShell {...props("wide", { assistant })} />
+    );
+    act(() => seen.last!.setWide(true));
+    act(() =>
+      panelSpies.panels.assistant.onResize!({
+        inPixels: PANEL_SIZES.assistant.max,
+      })
+    );
+    rerender(
+      <BaseLayoutShell
+        {...props("wide", { assistant, assistantOpen: false })}
+      />
+    );
+    expect(panel.collapse).toHaveBeenCalledTimes(1);
+    expect(seen.last!.wide).toBe(false);
+    panel.isCollapsed.mockReturnValue(true);
+    panel.resize.mockClear();
+    rerender(<BaseLayoutShell {...props("wide", { assistant })} />);
+    expect(panel.resize).toHaveBeenCalledWith(PANEL_SIZES.assistant.default);
+  });
+
+  it("should stop being wide when the window narrows to the Sheet", () => {
+    const { seen, assistant } = slot();
+    const { rerender } = render(
+      <BaseLayoutShell {...props("wide", { assistant })} />
+    );
+    act(() => seen.last!.setWide(true));
+    rerender(<BaseLayoutShell {...props("compact", { assistant })} />);
+    rerender(<BaseLayoutShell {...props("wide", { assistant })} />);
+    expect(seen.last!.wide).toBe(false);
+  });
+
+  it("should do nothing on a phone, where the assistant is a page of the pager", () => {
+    const { assistant: panel } = handles();
+    const { seen, assistant } = slot();
+    render(<BaseLayoutShell {...props("phone", { assistant })} />);
+    act(() => seen.last!.setWide(true));
+    expect(panel.resize).not.toHaveBeenCalled();
+    expect(seen.last!.wide).toBe(false);
+  });
 });

@@ -20,6 +20,7 @@ import { layoutTelemetry } from "../model/telemetry";
 import type { ToggleSource } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
 import BaseLayoutShell from "./BaseLayoutShell";
+import type { AssistantWide } from "./BaseLayoutShell";
 
 export interface LayoutShellProps {
   /**
@@ -46,7 +47,15 @@ export interface LayoutShellProps {
   files: (panel: { collapsed: boolean; toggle: () => void }) => ReactNode;
   stage: ReactNode;
   console: (panel: { open: boolean; toggle: () => void }) => ReactNode;
-  assistant: (panel: { open: boolean; toggle: () => void }) => ReactNode;
+  /**
+   * The assistant, in its panel or, below `LAYOUT_BREAKPOINTS.compact`, its
+   * Sheet. `toggle` folds the panel or closes the Sheet; `wide` and `setWide`
+   * size the panel to its maximum and back for the visit (`AssistantWide`),
+   * and `canWiden` says when that can happen: never for the Sheet.
+   */
+  assistant: (
+    panel: { open: boolean; toggle: () => void } & AssistantWide
+  ) => ReactNode;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -503,10 +512,15 @@ const LayoutShell = ({
           else setOpen("console", { open: !state.open.console, via: "button" });
         },
       })}
-      assistant={assistant({
-        open: assistantShown,
-        toggle: () => setAssistant(!assistantShown, "button"),
-      })}
+      assistant={({ wide, setWide, canWiden }) =>
+        assistant({
+          open: assistantShown,
+          toggle: () => setAssistant(!assistantShown, "button"),
+          wide,
+          setWide,
+          canWiden,
+        })
+      }
       assistantOpener={
         <button
           type="button"

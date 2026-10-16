@@ -59,6 +59,26 @@ vi.mock("@/utils", async () => {
   };
 });
 
+// The library's own panels, with each panel ref the shell creates kept in
+// order (assistant, files, console), so a test can watch the imperative calls
+// on the real handle. Named one by one, as `BaseLayoutShell.test.tsx` does.
+const panelRefs = vi.hoisted(
+  () => [] as Array<{ current: { resize(size: number): void } | null }>
+);
+vi.mock("react-resizable-panels", async (importOriginal) => {
+  const real = await importOriginal<typeof import("react-resizable-panels")>();
+  return {
+    Group: real.Group,
+    Panel: real.Panel,
+    Separator: real.Separator,
+    usePanelRef: () => {
+      const ref = real.usePanelRef();
+      if (!panelRefs.includes(ref)) panelRefs.push(ref);
+      return ref;
+    },
+  };
+});
+
 import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
@@ -96,6 +116,7 @@ class NoopResizeObserver {
 
 let sent: ReturnType<typeof memoryProvider>;
 beforeEach(() => {
+  panelRefs.length = 0;
   width = 1440;
   window.innerWidth = 1440;
   explorer.name = undefined;
@@ -170,10 +191,15 @@ const shell = () =>
             onClick={toggle}
           />
         )}
-        assistant={({ open, toggle }) => (
-          <button type="button" onClick={toggle}>
-            {open ? "Collapse assistant" : "Expand assistant"}
-          </button>
+        assistant={({ open, toggle, wide, setWide }) => (
+          <>
+            <button type="button" onClick={toggle}>
+              {open ? "Collapse assistant" : "Expand assistant"}
+            </button>
+            <button type="button" onClick={() => setWide(!wide)}>
+              {wide ? "Narrow the assistant" : "Widen the assistant"}
+            </button>
+          </>
         )}
       />
     </ThemeProvider>
@@ -363,6 +389,31 @@ it("should drop the dragged assistant sizes when the assistant is folded", () =>
   // The other groups' drags stay
   expect(folded.w).toEqual({ files: 25, center: 75 });
   expect(folded.vert).toEqual({ stage: 70, console: 30 });
+});
+
+it("should widen the assistant panel to its maximum, and save nothing", () => {
+  localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
+  shell();
+  const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
+  const assistantPanel = panelRefs[0].current!;
+  const resize = vi.spyOn(assistantPanel, "resize");
+  fireEvent.click(screen.getByRole("button", { name: "Widen the assistant" }));
+  expect(resize).toHaveBeenCalledWith(560);
+  expect(
+    screen.getByRole("button", { name: "Narrow the assistant" })
+  ).toBeTruthy();
+  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(saved);
+  expect(toggled()).toEqual([]);
+});
+
+it("should not widen the assistant Sheet below 1024 px", () => {
+  resizeTo(800);
+  shell();
+  fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
+  fireEvent.click(screen.getByRole("button", { name: "Widen the assistant" }));
+  expect(
+    screen.getByRole("button", { name: "Widen the assistant" })
+  ).toBeTruthy();
 });
 
 it("should drop the dragged console sizes when the console is folded", () => {
@@ -1060,7 +1111,9 @@ describe("on a phone", () => {
   it("shows the assistant in Chat and the stage in Code", () => {
     phoneShell();
     const assistantBox = () =>
-      boxOf(screen.getByRole("button", { name: /assistant/ }));
+      boxOf(
+        screen.getByRole("button", { name: /^(Collapse|Expand) assistant$/ })
+      );
     expect(assistantBox().classList.contains("hidden")).toBe(true);
     expect(boxOf(screen.getByText("stage")).classList.contains("hidden")).toBe(
       false

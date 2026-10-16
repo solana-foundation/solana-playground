@@ -1,11 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Request } from "@playwright/test";
-import {
-  hasDefaultBackend,
-  json,
-  NO_DEFAULT_BACKEND,
-  seedWorkspace,
-} from "./fixtures";
+import { json, seedWorkspace } from "./fixtures";
 
 /**
  * The panel comes back usable after a reload, without being asked twice.
@@ -15,12 +10,10 @@ import {
  * -- and making the user click the same button on every single reload, before
  * the assistant could be used at all, was the whole of the difference.
  *
- * "the default backend reconnects itself after a reload" and "disconnecting is
- * not undone by the next reload" are only reachable on a deployment that
- * serves a default backend, which is what the probe in `Connect` decides; they
- * skip where it is not configured, rather than failing on an environment they
- * were never about. The `assistant-own-key` tests need no default backend and
- * run everywhere.
+ * Each test stubs `/api/agent` to what it needs: the default's tests to a
+ * deployment that serves one, the `assistant-own-key` block to one that
+ * serves none unless a test says otherwise. So every test runs wherever the
+ * dev server runs, configured or not.
  */
 
 const LONG = { timeout: 60_000 };
@@ -48,9 +41,26 @@ const signIn = (page: Page) =>
 const isConnected = (page: Page) =>
   page.evaluate(() => !!(window as AssistantWindow).__pgAssistant?.isConnected);
 
-/** The picker's connect button reads "Start" for the keyless default */
-const start = (page: Page) =>
-  page.getByRole("button", { name: "Start", exact: true });
+const stubDefault = (page: Page) =>
+  page.route("**/api/agent", (route) => {
+    if (route.request().method() === "GET")
+      return json(route, { configured: true, model: "z-ai/glm-5.3-flash:US" });
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n',
+    });
+  });
+
+const composer = (page: Page) =>
+  page.getByRole("textbox", { name: "Message the assistant" });
+
+/** The first message connects the default: no key, no connect step */
+const sendFirstMessage = async (page: Page) => {
+  await composer(page).fill("hi");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect.poll(() => isConnected(page), LONG).toBe(true);
+};
 
 test("the default backend reconnects itself after a reload", async ({
   page,
@@ -58,8 +68,8 @@ test("the default backend reconnects itself after a reload", async ({
   test.setTimeout(240_000);
   await signIn(page);
 
+  await stubDefault(page);
   await page.goto("/");
-  test.skip(!(await hasDefaultBackend(page)), NO_DEFAULT_BACKEND);
 
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible(LONG);
@@ -67,24 +77,23 @@ test("the default backend reconnects itself after a reload", async ({
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);
 
-  // A first visit still asks: choosing a backend is how the panel introduces
-  // what it can reach, and nothing has been chosen yet
-  await expect(start(page)).toBeVisible(LONG);
-  await start(page).click();
-  await expect.poll(() => isConnected(page), LONG).toBe(true);
+  await expect(composer(page)).toBeVisible(LONG);
+  await sendFirstMessage(page);
 
   await page.reload();
 
   await expect.poll(() => isConnected(page), LONG).toBe(true);
-  await expect(start(page)).toBeHidden(LONG);
+  await expect(
+    page.getByRole("button", { name: "Connect a model" })
+  ).toBeHidden();
 });
 
 test("disconnecting is not undone by the next reload", async ({ page }) => {
   test.setTimeout(240_000);
   await signIn(page);
 
+  await stubDefault(page);
   await page.goto("/");
-  test.skip(!(await hasDefaultBackend(page)), NO_DEFAULT_BACKEND);
 
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible(LONG);
@@ -92,9 +101,8 @@ test("disconnecting is not undone by the next reload", async ({ page }) => {
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);
 
-  await expect(start(page)).toBeVisible(LONG);
-  await start(page).click();
-  await expect.poll(() => isConnected(page), LONG).toBe(true);
+  await expect(composer(page)).toBeVisible(LONG);
+  await sendFirstMessage(page);
 
   // Disconnecting says "stop using this backend", and a reload that quietly
   // reconnected would be the app overruling that
@@ -105,7 +113,12 @@ test("disconnecting is not undone by the next reload", async ({ page }) => {
   );
   await page.reload();
 
-  await expect(start(page)).toBeVisible(LONG);
+  // The composer is back with the default named, and nothing is connected
+  await expect(page.getByRole("button", { name: "GLM 5.3 Flash" })).toBeVisible(
+    LONG
+  );
+  // The model button reads "GLM 5.3 Flash" only once the shared probe has
+  // answered, and the reconnect effect has run by then
   expect(await isConnected(page)).toBe(false);
 });
 
@@ -164,9 +177,42 @@ const carriesKey = (req: Request) =>
     (part) => part.includes(KEY)
   );
 
-/** The picker's heading when nothing is connected */
-const picker = (page: Page) =>
-  page.getByText("An assistant that can see your project");
+/**
+ * The composer's model button with nothing connected and no default on the
+ * deployment (`stubNoDefault`). It reads so only once the shared probe has
+ * answered, and the kept-key reconnect runs on mount, before that: a
+ * connection made on load would already show here.
+ */
+const connectButton = (page: Page) =>
+  page.getByRole("button", { name: "Connect a model", exact: true });
+
+/**
+ * Nothing connected: the store says so, and the composer offers to connect.
+ * Its own step, since the composer and the store answer at different times.
+ */
+const expectNothingConnected = async (page: Page) => {
+  await expect(connectButton(page)).toBeVisible(LONG);
+  expect(await connected(page)).toBeNull();
+};
+
+/**
+ * The deployment serves no default backend, for every page of the context
+ * (`A new tab asks again` opens a second): with nothing connected, the
+ * composer's model button then reads "Connect a model" wherever the suite
+ * runs
+ */
+const stubNoDefault = (page: Page) =>
+  page
+    .context()
+    .route("**/api/agent", (route) =>
+      json(route, { configured: false, model: null })
+    );
+
+/** Forget key, from the head's More */
+const forgetKey = async (page: Page) => {
+  await page.getByRole("button", { name: "More", exact: true }).click();
+  await page.getByRole("menuitem", { name: "Forget key" }).click();
+};
 
 /** Every value the origin's IndexedDB holds, as one string */
 const indexedDbDump = (page: Page) =>
@@ -203,20 +249,62 @@ const indexedDbDump = (page: Page) =>
 
 test.describe("assistant-own-key", () => {
   test.setTimeout(240_000);
+  test.beforeEach(({ page }) => stubNoDefault(page));
 
   test("assistant-own-key: Reloading the tab keeps the connection", async ({
     page,
   }) => {
+    // The deployment serves a default, and this browser remembers picking it
+    // once: the key kept for this tab still wins, because it reconnects on
+    // load before the probe can answer and the default's reconnect then
+    // finds a connection
+    await page.route("**/api/agent", (route) =>
+      json(route, { configured: true, model: "z-ai/glm-5.3-flash:US" })
+    );
     await seedWorkspace(page, "own-key-reload");
     await connectOwn(page);
+    await page.evaluate(() =>
+      localStorage.setItem("assistant.backend", "default")
+    );
     await page.reload();
 
     await expect
       .poll(() => connected(page), LONG)
       .toMatchObject({ id: "openai", apiKey: KEY, endpoint: OWN.endpoint });
-    // The picker opens on the keyless default, which has no key field, so
-    // only its heading says whether it is on screen
-    await expect(picker(page)).toBeHidden();
+    // Connected, the model button names the model instead
+    await expect(page.getByRole("button", { name: "gpt-x" })).toBeVisible(LONG);
+    // Nothing asks for the key again
+    await expect(page.locator("#assistant-api-key")).toHaveCount(0);
+    // The probe has answered by now; give the default's reconnect a window
+    // to show itself
+    await page.waitForTimeout(QUIET_WINDOW_MS);
+    expect(await connected(page)).toMatchObject({ id: "openai", apiKey: KEY });
+  });
+
+  test("a model tuned in the composer comes back after a reload", async ({
+    page,
+  }) => {
+    await seedWorkspace(page, "own-key-tuned");
+    await connectOwn(page, {
+      id: "anthropic",
+      apiKey: KEY,
+      settings: { model: "claude-opus-5-5", effort: "medium" },
+    });
+    await page.getByRole("button", { name: "Opus 5.5" }).click(LONG);
+    await page.getByRole("menuitemradio", { name: /Sonnet 5\.5/ }).click();
+    await expect(page.getByRole("button", { name: "Sonnet 5.5" })).toBeVisible(
+      LONG
+    );
+
+    await page.reload();
+
+    await expect(page.getByRole("button", { name: "Sonnet 5.5" })).toBeVisible(
+      LONG
+    );
+    expect(await connected(page)).toMatchObject({
+      id: "anthropic",
+      apiKey: KEY,
+    });
   });
 
   test("assistant-own-key: Storage that refuses access", async ({ page }) => {
@@ -234,30 +322,42 @@ test.describe("assistant-own-key", () => {
       .toMatchObject({ id: "openai" });
 
     await page.reload();
-    await expect(picker(page)).toBeVisible(LONG);
-    expect(await connected(page)).toBeNull();
+    await expectNothingConnected(page);
   });
 
   test("assistant-own-key: Changing the backend is not undone", async ({
     page,
   }) => {
     await seedWorkspace(page, "own-key-change");
-    await connectOwn(page);
-    await page.evaluate(() =>
-      (window as OwnWindow).__pgAssistant!.pickBackend()
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Connect a model" });
+    await expect(dialog.locator("#assistant-api-key")).toBeVisible(LONG);
+
+    // A key kept for this tab, with nothing connected: what the panel's
+    // reconnect on mount picks up
+    await page.evaluate(
+      (c) => sessionStorage.setItem("assistant.connection", JSON.stringify(c)),
+      OWN
     );
-    await expect(page.locator("#assistant-api-key")).toBeVisible(LONG);
+    // Folding the panel unmounts it and opening it mounts it again, and with
+    // it the reconnect; the dialog stays, since it lives outside the panel
+    const expand = page.locator('[aria-label="Expand assistant"]');
+    await page.keyboard.press("ControlOrMeta+r");
+    await expect(expand).toHaveCount(1);
+    await page.keyboard.press("ControlOrMeta+r");
+    await expect(expand).toHaveCount(0);
 
     // A reconnect would be asynchronous, so give one a window to show itself
     await page.waitForTimeout(QUIET_WINDOW_MS);
 
-    expect(await connected(page)).toMatchObject({ id: "openai", apiKey: KEY });
+    expect(await connected(page)).toBeNull();
     expect(
       await page.evaluate(
         () => (window as OwnWindow).__pgAssistant!.isPickingBackend
       )
     ).toBe(true);
-    await expect(page.locator("#assistant-api-key")).toBeVisible();
+    await expect(dialog.locator("#assistant-api-key")).toBeVisible();
   });
 
   test("assistant-own-key: A new tab asks again", async ({ page, context }) => {
@@ -266,10 +366,7 @@ test.describe("assistant-own-key", () => {
 
     const second = await context.newPage();
     await second.goto("/");
-    // The picker on screen means `Connect` has mounted, and its reconnect
-    // from `sessionStorage` runs on mount: a connection now would be one
-    await expect(picker(second)).toBeVisible(LONG);
-    expect(await connected(second)).toBeNull();
+    await expectNothingConnected(second);
     expect(
       JSON.stringify(await storedValues(second, "sessionStorage"))
     ).not.toContain(KEY);
@@ -284,12 +381,11 @@ test.describe("assistant-own-key", () => {
       JSON.stringify(await storedValues(page, "sessionStorage"))
     ).toContain(KEY);
 
-    await page.getByRole("button", { name: "Forget key" }).click();
-    await expect(picker(page)).toBeVisible(LONG);
+    await forgetKey(page);
+    await expectNothingConnected(page);
     await page.reload();
 
-    await expect(picker(page)).toBeVisible(LONG);
-    expect(await connected(page)).toBeNull();
+    await expectNothingConnected(page);
     expect(
       JSON.stringify(await storedValues(page, "sessionStorage"))
     ).not.toContain(KEY);

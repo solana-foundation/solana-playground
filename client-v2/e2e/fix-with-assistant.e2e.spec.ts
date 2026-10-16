@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { json } from "./fixtures";
 
 /**
  * "Fix with assistant" pressed before any backend is connected.
@@ -26,6 +27,10 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
 }) => {
   test.setTimeout(240_000);
 
+  // No default backend, so the requested prompt has nothing to go to
+  await page.route("**/api/agent", (route) =>
+    json(route, { configured: false, model: null })
+  );
   await page.goto("/");
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible(LONG);
@@ -45,22 +50,22 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
   await page.locator("#assistant-model").fill("mock-model");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  await expect(page.getByPlaceholder(/Ask about this project/)).toHaveValue(
-    PROMPT,
-    LONG
-  );
+  await expect(
+    page.getByRole("textbox", { name: "Message the assistant" })
+  ).toHaveValue(PROMPT, LONG);
   await expect(page.getByText(HINT)).toBeHidden();
   const kinds = await page.evaluate(() =>
     (window as AssistantWindow).__pgAssistant!.items.map((i) => i.kind)
   );
   expect(kinds).not.toContain("notice");
 
-  // Back on the picker, the hint answered by that connect stays gone
+  // Disconnected, the composer offers to connect again, and the hint answered
+  // by that connect stays gone
   await page.evaluate(() =>
     (window as AssistantWindow).__pgAssistant!.disconnect()
   );
   await expect(
-    page.getByRole("radio", { name: "OpenAI-compatible" })
+    page.getByRole("button", { name: "Connect a model" })
   ).toBeVisible(LONG);
   await expect(page.getByText(HINT)).toBeHidden();
 });

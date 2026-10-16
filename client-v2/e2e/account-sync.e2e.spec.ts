@@ -5,7 +5,6 @@ import { isUuid } from "../src/shared/lib/ids";
 import type { Page, Route } from "@playwright/test";
 import {
   applyWrite,
-  hasDefaultBackend,
   json,
   LONG,
   makeLocalProject,
@@ -137,22 +136,15 @@ test("the conversation is on screen before a backend is picked", async ({
   await stubAccount(page);
   await page.goto("/");
 
-  // Picking a backend is per-browser, so a second device always starts at the
-  // picker. The thread is in memory well before that, and used to be invisible
-  // until the user clicked through -- which reads as "it did not sync".
+  // Picking a backend is per-browser, so a second device always starts with
+  // nothing connected. The thread is in memory well before that, and used to
+  // be invisible until the user clicked through -- which reads as "it did not
+  // sync". The composer is always there now, so the claim is that the
+  // conversation is readable beside it, whatever the deployment's default.
   await expect(page.getByText(SAID)).toBeVisible(LONG);
-  // The picker's connect button reads "Start" for the keyless default backend
-  // and "Connect" for one that needs a key -- which is what it falls back to
-  // where the dev server has no default configured (see `hasDefaultBackend`),
-  // CI included. The claim here is "the picker is up and the conversation is
-  // already readable", so either label proves it; the exact label is checked
-  // only where the default exists, rather than skipping the whole test and
-  // with it the only guard on the hidden-conversation regression.
-  const connect = page.getByRole("button", { name: /^(Start|Connect)$/ });
-  await expect(connect).toBeVisible(LONG);
-  if (await hasDefaultBackend(page)) {
-    await expect(connect).toHaveText("Start");
-  }
+  await expect(
+    page.getByRole("textbox", { name: "Message the assistant" })
+  ).toBeVisible(LONG);
 });
 
 /** The same project is open again: not an imported copy beside it */

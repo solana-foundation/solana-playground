@@ -202,6 +202,34 @@ test("the assistant keeps its width when the window widens", async ({
     .toBeLessThan(2);
 });
 
+test("Widen sizes the assistant to its maximum for the visit, and saves nothing", async ({
+  seededPage: page,
+}) => {
+  await expect(assistantPanel(page)).toBeVisible();
+  const before = await widthOf(page);
+  const saved = await savedLayout(page);
+  await page.getByRole("button", { name: "Widen the assistant" }).click();
+  await expect
+    .poll(async () => Math.abs((await widthOf(page)) - 560))
+    .toBeLessThan(2);
+  await page.waitForTimeout(300);
+  expect(await savedLayout(page)).toBe(saved);
+
+  await page.getByRole("button", { name: "Narrow the assistant" }).click();
+  await expect
+    .poll(async () => Math.abs((await widthOf(page)) - before))
+    .toBeLessThan(2);
+
+  // Not saved, so a reload opens at the width the assistant had before
+  await page.getByRole("button", { name: "Widen the assistant" }).click();
+  await expect.poll(() => widthOf(page)).toBeGreaterThan(before + 100);
+  await page.reload();
+  await expect(assistantPanel(page)).toBeVisible();
+  await expect
+    .poll(async () => Math.abs((await widthOf(page)) - before))
+    .toBeLessThan(2);
+});
+
 test("client-v2-layout: An unreadable saved layout", async ({
   seededPage: page,
 }) => {
@@ -357,10 +385,7 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Collapse navigation" }).click();
     await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
     await page.getByRole("radio", { name: "Chat" }).click();
-    // A fresh profile has no backend, so the assistant opens on its picker; a
-    // key of any value connects, as nothing is sent until a message is.
-    await page.getByRole("textbox", { name: "API KEY" }).fill("e2e-key");
-    await page.getByRole("button", { name: "Connect", exact: true }).click();
+    // The composer is there and takes typing with nothing connected
     const composer = page.getByRole("textbox", {
       name: "Message the assistant",
     });
@@ -743,7 +768,11 @@ test.describe("a select inside the assistant Sheet", () => {
     await page.getByRole("button", { name: "Expand assistant" }).click();
     const sheet = page.locator('[data-slot="sheet-content"]');
     await expect(sheet).toBeVisible();
-    await sheet.getByText("claude-opus-5-5").click();
+    // Connect a model opens from the head's More, as a dialog over the Sheet
+    await sheet.getByRole("button", { name: "More" }).click();
+    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Connect a model" });
+    await dialog.getByRole("combobox", { name: "Model" }).click();
     const option = page.getByRole("option").first();
     await expect(option).toBeVisible();
     await expect(option).toContainText("claude");

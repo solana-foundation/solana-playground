@@ -259,8 +259,8 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Real, kept per tab:** your own key. It is kept in the tab's
   `sessionStorage`: a reload keeps it and a new tab asks again, while a tab the
   browser duplicates or restores (a reopened closed tab, a restored session)
-  carries it and reconnects, as after a reload. Forget key in the chat header
-  removes it. It goes from the browser straight to the provider as a header on
+  carries it and reconnects, as after a reload. Forget key, in the panel
+  head's More menu, removes it. It goes from the browser straight to the provider as a header on
   every request, never through our server, and is never logged or synced.
   Project code runs in the same origin and could read it while the tab is open;
   that is why it is not in `localStorage`.

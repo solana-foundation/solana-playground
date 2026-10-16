@@ -254,7 +254,7 @@ export class PgAssistant {
     return !!PgAssistant._connection;
   }
 
-  /** Whether the backend picker is open on top of an existing connection */
+  /** Whether Connect a model is open; reconnects stand down while it is */
   static get isPickingBackend() {
     return PgAssistant._pickingBackend;
   }
@@ -262,13 +262,14 @@ export class PgAssistant {
   /**
    * Choose a backend for this tab.
    *
-   * Re-picking the current one is a no-op beyond closing the picker; switching
+   * Re-picking the current one keeps the conversation and marks Connect a
+   * model closed; switching
    * to a different one starts a new conversation, because the history lives
    * inside the provider and the new one cannot see the old transcript.
    *
    * Connecting when nothing is connected is *not* a switch, and must not reset
    * anything. The live connection starts empty after every reload, and by the
-   * time one is made -- the user's pick, or `Connect`'s reconnect on load from
+   * time one is made -- the user's pick, or `useTurn`'s reconnect on load from
    * `remembered-backend` -- `chat-thread` may already have restored this
    * workspace's conversation from storage. Treating that as a switch cleared
    * the restored thread on every single reload.
@@ -298,12 +299,42 @@ export class PgAssistant {
     PgAssistant._emitOnly();
   }
 
+  /**
+   * Switch the model or effort on the connected backend, keeping the thread.
+   *
+   * Does not `clear`, unlike `connect` with a different connection: the
+   * provider for the next turn is rebuilt from what is rendered (`useTurn`
+   * compares connection identity), so the new settings apply to the
+   * next turn and the transcript on screen stays the history it works from.
+   * Remembered as `connect` remembers, so a reload of this tab keeps the new
+   * model and effort. `_emitOnly` for the same reason as `connect`: nothing
+   * here is the user writing to the conversation.
+   *
+   * @throws when `canTune(next)` is false
+   */
+  static tune(next: Connection) {
+    if (!PgAssistant.canTune(next)) {
+      throw new Error("tune changes model or effort, not the backend");
+    }
+    PgAssistant._connection = next;
+    rememberBackend(next);
+    PgAssistant._emitOnly();
+  }
+
+  /** Whether `tune(next)` would take it: the connected backend, with its key */
+  static canTune(next: Connection) {
+    const current = PgAssistant._connection;
+    return (
+      !!current && current.id === next.id && current.apiKey === next.apiKey
+    );
+  }
+
   /** Whether connecting with these settings would keep the conversation */
   static isCurrent(next: Connection) {
     return isSame(PgAssistant._connection, next);
   }
 
-  /** Reopen the picker, keeping the conversation in case the user comes back */
+  /** Mark Connect a model open, keeping the conversation */
   static pickBackend() {
     PgAssistant._pickingBackend = true;
     PgAssistant._emit();
@@ -315,7 +346,7 @@ export class PgAssistant {
   }
 
   /**
-   * Close the picker without changing anything.
+   * Mark Connect a model closed without changing anything.
    *
    * Refused while `needsSignIn`: every turn would get the 401 refusal, and a
    * refresh of an already null session fires no change to reopen the picker.
@@ -329,7 +360,7 @@ export class PgAssistant {
   /**
    * Drop the backend and the key, and clear the conversation with it.
    *
-   * What the chat header's Forget key button does. If the key could not be
+   * What Forget key in the assistant head's More does. If the key could not be
    * removed from this tab's storage, a notice says how to get rid of it.
    */
   static disconnect() {
@@ -484,14 +515,14 @@ export class PgAssistant {
    * assistant" on a build error card.
    *
    * The panel itself owns the actual send (its provider lives in a ref
-   * inside `Chat`), so this only notifies; it does not append a message
+   * inside `useTurn`), so this only notifies; it does not append a message
    * itself.
    *
    * Observers subscribe too and never send: `Flow` reopens the panel when it
-   * is collapsed, `Assistant` switches to the chat tab. `Chat` is the only
+   * is collapsed, `Assistant` switches to the chat tab. `useTurn` is the only
    * subscriber that can act on a request, so with none registered the request
    * is buffered in `_pendingPrompt` until one mounts a moment later and claims
-   * it -- which is exactly the collapsed-panel and other-tab cases.
+   * it -- which is exactly the collapsed-panel case.
    *
    * @param text the prompt to send
    * @param opts `send: false` leaves it in the composer for the user to edit,
@@ -897,7 +928,7 @@ export class PgAssistant {
   private static readonly _promptSenders = new Set<
     (request: PromptRequest) => void
   >();
-  // Set by `requestPrompt` when `Chat` is not around to receive it live;
+  // Set by `requestPrompt` when `useTurn` is not around to receive it live;
   // claimed and cleared by the next `onDidRequestPrompt` subscriber.
   private static _pendingPrompt: PromptRequest | null = null;
 
@@ -981,6 +1012,7 @@ if (import.meta.vitest) {
     let MIN_REDACTED_KEY_LENGTH: typeof import("./model/redact-key").MIN_REDACTED_KEY_LENGTH;
     let REDACTED_KEY: typeof import("./model/redact-key").REDACTED_KEY;
     let isDefaultBackendRemembered: typeof import("./model/remembered-backend").isDefaultBackendRemembered;
+    let rememberedConnection: typeof import("./model/remembered-backend").rememberedConnection;
     let truncationNoticeId: typeof import("../../../features/persistence/model/chat-storage").truncationNoticeId;
     let PgFs: typeof import("@/utils/explorer/fs").PgFs;
     let storedValues: typeof import("../../../test-utils/stored-values").storedValues;
@@ -988,7 +1020,7 @@ if (import.meta.vitest) {
       ({ MIN_REDACTED_KEY_LENGTH, REDACTED_KEY } = await import(
         "./model/redact-key"
       ));
-      ({ isDefaultBackendRemembered } = await import(
+      ({ isDefaultBackendRemembered, rememberedConnection } = await import(
         "./model/remembered-backend"
       ));
       ({ truncationNoticeId } = await import(
@@ -1846,6 +1878,98 @@ if (import.meta.vitest) {
         expect(
           JSON.stringify(await PgChatStorage.read("own-key"))
         ).not.toContain(KEY_NOT_FORGOTTEN);
+      });
+    });
+
+    describe("PgAssistant.tune", () => {
+      beforeEach(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+        PgAssistant.disconnect();
+        PgAssistant.clear();
+      });
+
+      it("changes model and effort and keeps the thread", () => {
+        PgAssistant.connect({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-opus-4-8", effort: "medium" },
+        });
+        PgAssistant.addUserMessage("hello");
+
+        PgAssistant.tune({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
+        });
+
+        expect(PgAssistant.items).toHaveLength(1);
+        expect(PgAssistant.connection?.settings).toEqual({
+          model: "claude-sonnet-5-5",
+          effort: "high",
+        });
+      });
+
+      it("keeps the tuned model and effort for a reload of this tab", () => {
+        PgAssistant.connect({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-opus-4-8", effort: "medium" },
+        });
+
+        PgAssistant.tune({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
+        });
+
+        expect(rememberedConnection()).toEqual({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
+        });
+      });
+
+      it("refuses another backend and leaves the connection", () => {
+        PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+
+        expect(() =>
+          PgAssistant.tune({ id: "openai", apiKey: "sk-test" })
+        ).toThrow("tune changes model or effort, not the backend");
+        expect(PgAssistant.connection?.id).toBe("anthropic");
+      });
+
+      it("refuses another key", () => {
+        PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+
+        expect(() =>
+          PgAssistant.tune({ id: "anthropic", apiKey: "sk-other" })
+        ).toThrow("tune changes model or effort, not the backend");
+        expect(PgAssistant.connection?.apiKey).toBe("sk-test");
+      });
+
+      it("says beforehand which changes it takes", () => {
+        expect(
+          PgAssistant.canTune({ id: "anthropic", apiKey: "sk-test" })
+        ).toBe(false);
+        PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+
+        expect(
+          PgAssistant.canTune({ id: "anthropic", apiKey: "sk-test" })
+        ).toBe(true);
+        expect(
+          PgAssistant.canTune({ id: "anthropic", apiKey: "sk-other" })
+        ).toBe(false);
+        expect(PgAssistant.canTune({ id: "openai", apiKey: "sk-test" })).toBe(
+          false
+        );
+      });
+
+      it("refuses when nothing is connected", () => {
+        expect(() =>
+          PgAssistant.tune({ id: "anthropic", apiKey: "sk-test" })
+        ).toThrow("tune changes model or effort, not the backend");
+        expect(PgAssistant.isConnected).toBe(false);
       });
     });
   });

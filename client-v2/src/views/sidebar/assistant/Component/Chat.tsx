@@ -1,26 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Empty, EmptyDescription } from "@/shared/ui/empty";
 import ChatItem from "./ChatItem";
-import Connect from "./Connect";
-import { Button } from "@/shared/ui/button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { ThreeDots } from "../../../../components/Loading/ThreeDots";
 import {
   PgAssistant,
   turnAppliedApproval,
   turnProducedApproval,
 } from "../store";
-import { PgBuildOutput } from "../bridge/build-output";
 import { describeLesson } from "../bridge/lesson-context";
-import { realBridge } from "../bridge/playground-bridge";
-import { createProvider } from "../model";
-import { pushThread } from "../../../../effects/chat-thread/push-thread";
-import { report } from "../../../../features/persistence/model/diagnostics";
-import { toReplayMessages } from "../../../../features/persistence/model/replay";
-import { PgCommand, PgExplorer, PgProgramInfo } from "../../../../utils";
+import { PgCommand } from "../../../../utils";
 import { useRenderOnChange } from "../../../../hooks";
 import {
   attempted,
@@ -31,11 +21,7 @@ import {
   verifyingStage,
 } from "../../../flow/lessons";
 import type { LessonState } from "../../../flow/lessons";
-import type { Connection } from "../store";
-import { PROVIDERS, type Provider } from "../model/types";
-
-/** Why both header buttons are disabled while a turn runs */
-const FINISH_TURN_FIRST = "Finish this turn first";
+import type { Turn } from "../../../../widgets/assistant";
 
 const SUGGESTIONS = [
   "Why did my build fail?",
@@ -59,214 +45,32 @@ const MAKE_CHANGE =
   "them one at a time. Skip the explanation you would usually give first and " +
   "summarise it in one line afterwards.";
 
-const Chat = () => {
+/**
+ * The conversation: the thread, its empty state and the thinking dots.
+ *
+ * The turn itself -- the provider, send, stop, and prompts asked for from
+ * outside the panel -- is `useTurn`'s, shared with the composer below; every
+ * action here starts a turn through `turn.send`.
+ */
+const Chat = ({ turn }: { turn: Turn }) => {
   useRenderOnChange(PgAssistant.onDidChange);
 
-  const [input, setInput] = useState("");
-  const provider = useRef<{
-    connection: Connection;
-    instance: Provider;
-  } | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  const turn = useRef<AbortController | null>(null);
-  // Bridges `onDidRequestPrompt`, which must subscribe unconditionally, to
-  // `send`, which only exists once a backend is connected below
-  const sendRef = useRef<(text: string) => void>(() => {});
-  // A prompt that arrived with no backend waits in the composer. Saying so is
-  // the picker's job: a notice item would outlive the connect and be stored
-  // with the thread
-  const [promptWaiting, setPromptWaiting] = useState(false);
-
-  // "Fix with assistant" and similar callers outside the panel ask for a
-  // prompt to be sent through `PgAssistant.requestPrompt`; this is the only
-  // place that turns the request into an actual send
-  useEffect(() => {
-    return PgAssistant.onDidRequestPrompt(
-      ({ text, send }) => {
-        if (!PgAssistant.isConnected) {
-          setInput(text);
-          setPromptWaiting(true);
-          return;
-        }
-        // A prompt the user did not type gets one look before it costs a turn
-        if (!send) {
-          setInput(text);
-          inputRef.current?.focus();
-          return;
-        }
-        sendRef.current(text);
-      },
-      { sends: true }
-    ).dispose;
-  }, []);
 
   const items = PgAssistant.items;
   const status = PgAssistant.status;
-  // A stopped turn still has to unwind, and `cancelPending` drops the status to
-  // idle before it does; the controller is what says a turn is really over
-  const busy = status !== "idle" || !!turn.current;
+  const { busy, send } = turn;
 
   // Follow the conversation as it grows
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: "end" });
   }, [items.length, status]);
 
-  // The textarea is disabled during a turn, which drops focus; hand it back
-  useEffect(() => {
-    if (!busy) inputRef.current?.focus();
-  }, [busy]);
-
   const [lessonState, setLessonState] =
     useState<LessonState>(INITIAL_LESSON_STATE);
   useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
 
-  const connection = PgAssistant.connection;
-  const picking = !connection || PgAssistant.isPickingBackend;
-  // Connecting answers the hint; a later disconnect must not bring it back
-  useEffect(() => {
-    if (!picking) setPromptWaiting(false);
-  }, [picking]);
-
-  if (picking) {
-    // The conversation is restored long before a backend is picked -- on
-    // another browser, picking one is the first thing the user does, and
-    // returning only the picker made a thread that was already in memory look
-    // like it had not been synced at all. Shown read-only: every action a
-    // `ChatItem` offers starts a turn, and there is nothing to run it.
-    return (
-      <Wrapper>
-        {items.length > 0 && (
-          <Messages role="log" aria-label="Conversation">
-            {items.map((item) => (
-              <ChatItem key={item.id} item={item} />
-            ))}
-            <div ref={bottomRef} />
-          </Messages>
-        )}
-
-        <ConnectSlot>
-          {promptWaiting && (
-            <Callout variant="info" role="status" className="mx-4 mt-3 w-auto">
-              <CalloutDescription>
-                Connect a backend, or sign in for the default one, to send this
-                to the assistant. Your prompt is waiting in the composer.
-              </CalloutDescription>
-            </Callout>
-          )}
-          <Connect />
-        </ConnectSlot>
-      </Wrapper>
-    );
-  }
-
-  // One provider per connection; it owns the conversation history. The store
-  // keeps the same object while the settings are unchanged, so identity is
-  // enough to catch a switched key or model as well as a switched provider.
-  if (provider.current?.connection !== connection) {
-    provider.current = {
-      connection,
-      // Seeded from what is rendered, so reopening a stored thread gives the
-      // model the conversation rather than amnesia behind a full transcript
-      instance: createProvider(connection, toReplayMessages(PgAssistant.items)),
-    };
-  }
-
-  const send = async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || busy) return;
-
-    PgAssistant.addUserMessage(trimmed);
-    // Cleared only once the message is in: a store that throws leaves the
-    // typed text where the user can send it again
-    setInput("");
-    PgAssistant.setStatus("running");
-
-    const controller = new AbortController();
-    turn.current = controller;
-
-    try {
-      await provider.current!.instance.send(trimmed, controller.signal);
-    } catch (e) {
-      // Stopping is the user's own doing; `stop` already said so
-      if (!controller.signal.aborted) {
-        PgAssistant.addError(e instanceof Error ? e.message : String(e));
-      }
-    } finally {
-      if (turn.current === controller) turn.current = null;
-      PgAssistant.setStatus("idle");
-
-      // End of turn is the natural commit point: the exchange is complete and
-      // the user is reading rather than typing. Deliberately not awaited --
-      // a slow or failed upload must not hold up the panel, and the local
-      // copy is already written either way.
-      const threadId = PgAssistant.threadId;
-      if (threadId) {
-        void pushThread(threadId).catch((e) => report("push turn", e));
-      }
-    }
-  };
-  // `send` answers its own failures once a turn runs; one that happens before
-  // that (the store throwing on the new message) would be an unhandled
-  // rejection with nothing on screen
-  const sendAndReport = (text: string) => {
-    send(text).catch(reportButtonFailure);
-  };
-  sendRef.current = sendAndReport;
-
-  /**
-   * Aborting the request is not enough on its own: a tool waiting on an
-   * approval holds the agent loop open, so deny whatever is pending too.
-   */
-  const stop = () => {
-    if (!turn.current) return;
-    turn.current.abort();
-    PgAssistant.cancelPending();
-    PgAssistant.addNotice("Stopped.");
-  };
-
-  // Mirror what `describeProject()` actually sends, so the row cannot claim
-  // less than the model gets. Paths only — never file content, since this runs
-  // on every render, including every streamed token.
-  const currentFilePath = PgExplorer.currentFilePath;
-  const filePaths = realBridge.listFiles();
-  const openPaths = realBridge.listOpenFiles();
   const lesson = describeLesson(lessonState);
-  const chips = [
-    lesson
-      ? {
-          label: `step ${lesson.stepIndex} of ${lesson.stepCount}`,
-          title: lesson.objective,
-        }
-      : null,
-    {
-      label: `${filePaths.length} ${filePaths.length === 1 ? "file" : "files"}`,
-      title: `Every path is sent each turn, and the assistant can read any of them:\n\n${filePaths.join(
-        "\n"
-      )}`,
-    },
-    openPaths.length > 1
-      ? {
-          label: `${openPaths.length} open`,
-          title: `Your open tabs are named each turn; only the active one is sent in full:\n\n${openPaths.join(
-            "\n"
-          )}`,
-        }
-      : null,
-    currentFilePath
-      ? {
-          label: `${PgExplorer.getItemNameFromPath(currentFilePath)} active`,
-          title: "The tab you are looking at, sent in full every turn",
-        }
-      : null,
-    PgBuildOutput.latest?.failed
-      ? { label: "build error", title: "The last build's compiler output" }
-      : null,
-    PgProgramInfo.idl
-      ? { label: "idl", title: "The built program's interface" }
-      : null,
-  ].filter((chip): chip is { label: string; title: string } => !!chip);
 
   // Offer "Make this change" on the reply the assistant just finished, and
   // only there: an older message describes code that has since moved on, and a
@@ -313,9 +117,6 @@ const Chat = () => {
   const skippableId =
     onFinishedReply && stepAttempted && PgLesson.canPass() ? lastItem.id : null;
 
-  // Only a backend the user brought a key for has one kept in this tab
-  const holdsKey = !!PROVIDERS.find((p) => p.id === connection.id)?.needsKey;
-
   // Cover the silent gaps: before the first token and while tools run.
   // Once text streams into the last assistant item the dots come down.
   const thinking =
@@ -323,29 +124,6 @@ const Chat = () => {
 
   return (
     <Wrapper>
-      <BackendBar>
-        <BackendLabel>{provider.current.instance.label}</BackendLabel>
-        <BackendActions>
-          {holdsKey && (
-            <ChangeBackend
-              aria-label="Forget key"
-              title={busy ? FINISH_TURN_FIRST : "Remove your key from this tab"}
-              disabled={busy}
-              onClick={() => PgAssistant.disconnect()}
-            >
-              Forget key
-            </ChangeBackend>
-          )}
-          <ChangeBackend
-            title={busy ? FINISH_TURN_FIRST : "Pick another backend"}
-            disabled={busy}
-            onClick={() => PgAssistant.pickBackend()}
-          >
-            Change
-          </ChangeBackend>
-        </BackendActions>
-      </BackendBar>
-
       <Messages role="log" aria-label="Conversation">
         {items.length === 0 ? (
           <Empty className="items-stretch justify-start gap-2 p-0 text-left">
@@ -353,10 +131,7 @@ const Chat = () => {
               TRY ASKING
             </EmptyDescription>
             {SUGGESTIONS.map((suggestion) => (
-              <Suggestion
-                key={suggestion}
-                onClick={() => sendAndReport(suggestion)}
-              >
+              <Suggestion key={suggestion} onClick={() => send(suggestion)}>
                 {suggestion}
               </Suggestion>
             ))}
@@ -367,9 +142,7 @@ const Chat = () => {
               key={item.id}
               item={item}
               onMakeChange={
-                item.id === changeableId
-                  ? () => sendAndReport(MAKE_CHANGE)
-                  : undefined
+                item.id === changeableId ? () => send(MAKE_CHANGE) : undefined
               }
               // Inside a lesson the same click skips the hint ladder, so it is
               // offered as a way out rather than as the obvious next step
@@ -401,78 +174,6 @@ const Chat = () => {
         )}
         <div ref={bottomRef} />
       </Messages>
-
-      <Composer>
-        {chips.length > 0 && (
-          <Context>
-            <ContextLabel>CONTEXT</ContextLabel>
-            {chips.map((chip) => (
-              <Chip key={chip.label} title={chip.title}>
-                {chip.label}
-              </Chip>
-            ))}
-          </Context>
-        )}
-
-        <InputRow>
-          <TextArea
-            ref={inputRef}
-            aria-label="Message the assistant"
-            value={input}
-            placeholder={
-              status === "awaiting"
-                ? "Waiting on your decision…"
-                : busy
-                ? "Working…"
-                : "Ask about this project…"
-            }
-            disabled={busy}
-            rows={2}
-            onChange={(ev) => setInput(ev.target.value)}
-            onKeyDown={(ev) => {
-              // `isComposing` guards IME input — Enter there commits the
-              // composition, it must not send the message
-              if (
-                ev.key === "Enter" &&
-                !ev.shiftKey &&
-                !ev.nativeEvent.isComposing
-              ) {
-                ev.preventDefault();
-                sendAndReport(input);
-              }
-            }}
-          />
-          {/* Distinct keys: Stop and Send are different actions, so one's
-              focus and press state must not carry over to the other. Send is
-              a plain Button, not an AsyncButton: `busy` already swaps it for
-              Stop while a turn runs, and its own spinner would bring the
-              disabled wait back. */}
-          {busy ? (
-            <Button
-              key="stop"
-              variant="secondary"
-              size="sm"
-              title="Stop this turn"
-              onClick={stop}
-            >
-              Stop
-            </Button>
-          ) : (
-            <Button
-              key="send"
-              size="sm"
-              disabled={!input.trim()}
-              onClick={() => sendAndReport(input)}
-            >
-              Send
-            </Button>
-          )}
-        </InputRow>
-
-        <Footer>
-          <span>nothing is written without your click</span>
-        </Footer>
-      </Composer>
     </Wrapper>
   );
 };
@@ -482,20 +183,6 @@ const Wrapper = styled.div`
   flex-direction: column;
   flex-grow: 1;
   min-height: 0;
-`;
-
-/**
- * Keeps the picker at its natural height under a restored conversation.
- *
- * Without it the two share the column and the picker is squeezed to whatever
- * the transcript leaves -- the transcript is the part that should scroll.
- */
-const ConnectSlot = styled.div`
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  min-height: 0;
-  overflow-y: auto;
 `;
 
 const Messages = styled.div`
@@ -542,156 +229,6 @@ const Thinking = styled.div`
   align-items: center;
   min-height: 0.75rem;
   padding-left: 0.625rem;
-`;
-
-const Composer = styled.div`
-  ${({ theme }) => css`
-    flex-shrink: 0;
-    border-top: 1px solid ${theme.colors.default.border};
-    padding: 0.5rem 0.75rem 0.75rem;
-    background: ${theme.colors.default.bgSecondary};
-
-    /**
-     * The sidebar sizes itself with \`calc(100vh - <bottom height>)\`, so if
-     * anything above it drifts by a pixel the panel is taller than the space it
-     * has and the composer lands below the fold. Sticking it to the bottom of
-     * the scrollport keeps it reachable either way.
-     */
-    position: sticky;
-    bottom: 0;
-    z-index: 1;
-  `}
-`;
-
-const Context = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.375rem;
-  flex-wrap: wrap;
-  padding-bottom: 0.5rem;
-`;
-
-const ContextLabel = styled.span`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.08em;
-  `}
-`;
-
-const Chip = styled.span`
-  ${({ theme }) => css`
-    padding: 0.0625rem 0.4375rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
-
-const InputRow = styled.div`
-  display: flex;
-  align-items: flex-end;
-  gap: 0.5rem;
-`;
-
-const TextArea = styled.textarea`
-  ${({ theme }) => css`
-    flex-grow: 1;
-    resize: none;
-    padding: 0.5rem 0.625rem;
-    background: ${theme.colors.default.bgSecondary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font: inherit;
-    font-size: ${theme.font.code.size.small};
-
-    &:focus {
-      outline: 1px solid ${theme.colors.default.primary};
-    }
-
-    &:disabled {
-      color: ${theme.colors.default.textSecondary};
-      cursor: not-allowed;
-    }
-  `}
-`;
-
-const Footer = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 0 0.5rem;
-    padding-top: 0.4375rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-
-    & > span {
-      white-space: nowrap;
-    }
-  `}
-`;
-
-const BackendBar = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    flex-shrink: 0;
-    padding: 0.4375rem 0.75rem;
-    border-bottom: 1px solid ${theme.colors.default.border};
-    background: ${theme.colors.default.bgSecondary};
-  `}
-`;
-
-const BackendLabel = styled.span`
-  ${({ theme }) => css`
-    overflow: hidden;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  `}
-`;
-
-const BackendActions = styled.div`
-  display: flex;
-  flex-shrink: 0;
-  gap: 0.375rem;
-`;
-
-const ChangeBackend = styled.button`
-  ${({ theme }) => css`
-    flex-shrink: 0;
-    padding: 0.125rem 0.5rem;
-    background: transparent;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    cursor: pointer;
-    transition: all ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-
-    &:hover:not(:disabled) {
-      background: ${theme.colors.state.hover.bg};
-      border-color: ${theme.colors.default.primary};
-    }
-
-    &:disabled {
-      color: ${theme.colors.default.textSecondary};
-      cursor: not-allowed;
-    }
-
-    &:focus-visible {
-      outline: 1px solid ${theme.colors.default.primary};
-      outline-offset: -1px;
-    }
-  `}
 `;
 
 export default Chat;
