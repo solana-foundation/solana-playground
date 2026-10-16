@@ -20,6 +20,10 @@ is merged into it.
 (`preview-sweep.yml`) run from its copy only, and `cicd.yml` deploys App
 Engine from a tagged commit pushed to it.
 
+Greptile reviews only PRs into `master` on the foundation repository, as
+`greptile.json` configures. When adding a file of review rules, add it to `customContext.files` in
+`greptile.json`. Specs need no entry: its instructions point at `openspec/`.
+
 ## Two clients
 
 - `client/` — upstream's. Largely untouched here. Don't edit unless the task
