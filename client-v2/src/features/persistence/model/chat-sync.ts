@@ -625,7 +625,6 @@ if (import.meta.vitest) {
           outcome: "failed",
         },
       ];
-      // Kept as `forEach` when the tests moved in-source; `it.each` type-checks in a block
       cases.forEach(({ body, json, outcome }) => {
         it(`reads a 410 whose body ${body} as ${outcome}`, async () => {
           refusedWith(json);

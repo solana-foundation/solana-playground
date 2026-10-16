@@ -33,7 +33,8 @@ if (import.meta.vitest) {
 
 A test keeps its own `*.test.ts` file when it calls `vi.mock`, renders React
 (`@testing-library/react`, `createRoot`), drives several modules together, tests a `.mjs` module
-(`node --test`), re-imports its module after `vi.resetModules()` (the block would run again
+(`node --test`), tests a runtime module the UI move rule never touches (`src/utils/explorer`,
+`src/commands/`), re-imports its module after `vi.resetModules()` (the block would run again
 mid-test), or is a second test file for a module and its file-scope hooks must not apply to the
 first.
 
@@ -43,7 +44,8 @@ Inside a block:
   `@types/mocha` declares that global without `each`, because `src/utils/js-runtime` imports mocha.
 - Do not add or widen a static import of the module for a test. A value from another module is
   loaded in `beforeAll` into a `let` typed as `typeof import("./other").name`; a type is an inline
-  `import("./other").Name` alias. The diff of a module that gains a block is the block alone. A
+  `import("./other").Name` alias. The diff of a module that gains a block is the block alone, with
+  one exception: a one-line change to a comment that named the deleted test file. A
   synchronous `require()` of an untyped module may stay at block top, as the Monaco internals in
   `editor-buffers.ts` do, because webpack never walks the dead branch; everything imported with
   `import()` goes through `beforeAll`.

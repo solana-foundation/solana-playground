@@ -146,6 +146,16 @@ jobs:
       - name: Unit tests
         run: yarn test-unit
 
+      # A dropped `includeSource` in vitest.config.ts removes 53 modules' in-source
+      # tests and keeps the suite green, so one block's title is looked up in
+      # what vitest collects.
+      - name: Check in-source tests are collected
+        run: |
+          yarn vitest list src/shared/lib/ids.ts | grep -qF "mints a v4 without crypto.randomUUID, which insecure origins lack" || {
+            echo "::error::the in-source block of src/shared/lib/ids.ts is not collected: includeSource in vitest.config.ts no longer applies"
+            exit 1
+          }
+
       # `node --test`, not vitest: `api/*.mjs` and the `.mjs` modules
       # behind each feature's `server.mjs` are plain ESM outside the
       # TypeScript build and need real Node.

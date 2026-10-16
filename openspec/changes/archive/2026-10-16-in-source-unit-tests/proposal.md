@@ -16,7 +16,7 @@ makes the block the ordinary place for a unit test, not an exception.
 
 - The unit suite collects in-source test blocks from `src/**/*.{ts,tsx}` in
   addition to the test files matched by `include`.
-- The 53 unit tests that exercise one sibling module and mock no module move
+- The 53 unit test files whose tests exercise one sibling module and mock no module move
   into that module's block. Test bodies and test names are unchanged. Five
   declarations change form because helpers are loaded after collection:
   `beforeEach(clearFailures)` and `afterEach(clearFailures)` in the merge

@@ -14,8 +14,8 @@ Four facts shape the approach:
 - webpack 5.71.0 drops the block unaided. `ImportMetaPlugin` evaluates an
   unknown `import.meta.<x>` to `undefined` with no side effects, `ConstPlugin`
   replaces the `if` test with `false`, and `JavascriptParser.walkIfStatement`
-  does not walk the dead branch. Nothing inside the block reaches a webpack
-  hook: no `require`, no `import()`, no `await`.
+  does not walk the dead branch. Because the branch is not walked, a
+  `require`, `import()` or `await` inside it reaches no webpack hook.
 - `craco.config.js` executes `yarn run tsx src/settings` at build time to
   define `GLOBAL_SETTINGS`. tsx compiles each `.ts` with esbuild in `cjs`
   format, which turns `import.meta.vitest` into a property of an empty object
@@ -100,10 +100,13 @@ The CI step greps `build/static/js/*.js` for three test titles, one each from
 a non-test file under `src/` that holds the guard text, so a title that moves
 back into a `*.test.ts` file, which is never bundled, fails the step instead
 of emptying it. Titles rather than `describe(` or `it(`: `js-runtime.ts`
-bundles mocha, so the function names are in the bundle legitimately. The block
-of `hunk-class.ts` imports `fs` and `path` dynamically, so a build that stopped
-dropping blocks would already fail on "Can't resolve 'fs'" before the title
-grep runs.
+bundles mocha, so the function names are in the bundle legitimately. `fs` and
+`path` are stubbed to empty modules by craco's `resolve.fallback`, so a block
+that reaches the bundle does not fail the build; only the title grep catches
+it. A second guard, the CI step "Check in-source tests are collected", runs
+`vitest list` on `shared/lib/ids.ts` after the unit tests and fails when a
+title from its block is missing: a dropped `includeSource` would otherwise
+remove 53 modules' tests and keep the suite green.
 
 ### The marker string is reserved
 

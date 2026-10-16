@@ -149,6 +149,7 @@ the lockfile, not from the folder's content. Install with `--check-files` after 
 ```sh
 yarn --cwd client-v2 install --frozen-lockfile
 yarn --cwd client-v2 run check
+yarn --cwd client-v2 vitest list src/shared/lib/ids.ts | grep -qF 'mints a v4 without crypto.randomUUID, which insecure origins lack' && echo blocks collected
 yarn --cwd client-v2 build-fast
 grep -q '\.flex{display:flex}' client-v2/build/static/css/main.*.css && echo tailwind ok
 grep -q '"_PgConnection"' client-v2/build/static/js/*.js && grep -q '"_PgProgramInfo"' client-v2/build/static/js/*.js && echo names ok
@@ -156,10 +157,11 @@ yarn --cwd client-v2 test-build
 ! grep -qF 'should read back what it wrote, under one key' client-v2/build/static/js/*.js && echo tests out
 ```
 
-Expect: exit code 0; `client-v2/build/index.html` exists; the three `grep` lines print `tailwind ok`, `names ok`, and
-`tests out`, and `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator
-class names survive minification", "Build tests", and "Check in-source tests stay out of the bundle" in
-`reusable-client-v2-build.yml` require. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+Expect: exit code 0; `client-v2/build/index.html` exists; the `vitest list` line prints `blocks collected`, as the step
+"Check in-source tests are collected" in `client-v2.yml` requires; the three `grep` lines print `tailwind ok`,
+`names ok`, and `tests out`, and `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS",
+"Check decorator class names survive minification", "Build tests", and "Check in-source tests stay out of the bundle"
+in `reusable-client-v2-build.yml` require. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 

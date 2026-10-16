@@ -12,8 +12,10 @@ so that a test of an internal needs no export and no test code reaches users.
 
 A unit test that exercises one module and mocks no module SHALL sit at the end
 of that module, in a block guarded by `import.meta.vitest`. A test that mocks a
-module, renders React, spans several modules, targets a `.mjs` module,
-re-imports its own module after resetting the module registry, or is a second
+module, renders React, spans several modules, targets a `.mjs` module, tests a
+runtime module the UI move rule never touches (`src/utils/explorer`,
+`src/commands/`), re-imports its own module after resetting the module
+registry, or is a second
 test file of a module whose file-scope hooks must not apply to the module's
 other tests SHALL keep a separate test file.
 
@@ -34,12 +36,14 @@ other tests SHALL keep a separate test file.
 A block SHALL take the test API from `import.meta.vitest`, SHALL load any other
 value it needs with a dynamic import inside a setup hook, SHALL refer to any
 other type with an inline `import()` type, and SHALL NOT add or widen a static
-import of the module. A block SHALL NOT contain a top-level `await`.
+import of the module. A synchronous `require()` of an untyped module MAY sit at
+block top. A block SHALL NOT contain a top-level `await`.
 
 #### Scenario: A reviewer diffs a module that gained a block (manual)
 
 - **WHEN** a module gains a block
-- **THEN** the diff of that module is one appended block and no change above it
+- **THEN** the diff of that module is one appended block and no change above
+  it, except a one-line change to a comment that named the deleted test file
 
 #### Scenario: The build-time settings script loads a module with a block (manual)
 
@@ -60,6 +64,12 @@ module that carries a block, because a match without tests fails the run.
 
 - **WHEN** `yarn test-unit src/shared/lib/ids.ts` runs
 - **THEN** the tests in that module's block run, and no other test runs
+
+#### Scenario: CI proves a block is collected (manual)
+
+- **WHEN** CI has run the unit tests
+- **THEN** a CI step lists the tests of `src/shared/lib/ids.ts` and fails the
+  run when a title from that module's block is missing from the list
 
 #### Scenario: The deleted test file's path (manual)
 

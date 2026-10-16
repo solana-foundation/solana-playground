@@ -41,8 +41,7 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi } = import.meta.vitest;
 
   // Monaco's module graph is large: transformed cold, under the whole suite,
-  // importing it alone can take longer than the default 5s. Kept as `vi.setConfig`
-  // when the tests moved in-source; `it`'s timeout argument type-checks in a block.
+  // importing it alone can take longer than the default 5s.
   vi.setConfig({ testTimeout: 60_000 });
 
   const RANGE = {
