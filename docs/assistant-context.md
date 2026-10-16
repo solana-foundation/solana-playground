@@ -151,7 +151,7 @@ Done:
   re-anatomizing the UI around the Write → Build → Deploy → Interact loop
   (`decisions.md` → D10, D17). Flow is the only layout, a frame of four
   columns with no header. From the left: the navigation (Home, New project,
-  Tutorials, Programs, the project switcher at its top, and the cluster,
+  Tutorials, Programs, the project list under them, and the cluster,
   wallet, GitHub and settings chips and the feedback trigger in its footer;
   Cmd+B folds it to a rail of icons, whose footer keeps the cluster's status
   dot, which opens the settings on the cluster, and an account button, which

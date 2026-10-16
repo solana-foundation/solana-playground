@@ -144,7 +144,7 @@ creating a file with or without a tab open included, SHALL focus the editor.
 From 1024 px wide the product SHALL show, left to right, the navigation, the
 assistant, the files column, and the stage over the console, with the stage
 bar (`flow-stage-tab-*`: Write, Build, Deploy, Interact) across the files
-column and the stage. There SHALL be no top header: the project switcher
+column and the stage. There SHALL be no top header: the project list
 SHALL be in the navigation and the cluster, wallet and settings controls in
 its footer. Between 768 and 1023 px the navigation SHALL start as a rail on
 every load and the
@@ -168,7 +168,7 @@ would otherwise cover the settings and keep focus from them.
 
 - **WHEN** a user on a 1280 px wide window switches the project, opens the
   settings and picks a stage by Ctrl+2
-- **THEN** each works from its new place: the switcher in the navigation,
+- **THEN** each works from its new place: the project list in the navigation,
   the settings from the navigation's footer, and the Build stage opens
 
 #### Scenario: A tablet
@@ -220,6 +220,90 @@ items.
 
 - **WHEN** a user clicks Tutorials in the navigation
 - **THEN** `nav_item_opened` is sent with `item` `tutorials`
+
+### Requirement: The navigation lists the projects
+
+From 768 px wide, and on a phone's menu page, the navigation SHALL list the
+user's projects under "Projects" and their lessons under "Lessons", pinned
+ones first, with the open one marked. Each row's "Actions for <name>" SHALL
+open a menu of Open (`O`), Pin or Unpin (`P`), Rename (`R`), Duplicate
+(`D`), Export as zip (`E`) and Delete (`⌫`); while it is open, the letter,
+or Backspace or Delete, SHALL run that item. A lesson's menu SHALL have no
+Rename and no Duplicate. The rail SHALL show no project list. Pins SHALL be
+kept on the device by workspace id, so a rename keeps them. A rename SHALL
+happen in the row and reach the account the way the rename dialog's does. A
+duplicate SHALL be a new project named "<name> copy" holding the files but
+not the program keypair. An export whose conversion fails SHALL tell the
+user and export the project as is.
+
+#### Scenario: Pinning a project
+
+- **WHEN** a user with projects "alpha" and "beta" picks Pin in the menu of
+  "beta" and reloads
+- **THEN** "beta" is listed first, with a pin, and its menu offers Unpin
+
+#### Scenario: Renaming in place
+
+- **WHEN** a user picks Rename in the menu of "alpha", types "gamma" and
+  presses Enter
+- **THEN** the row reads "gamma", its pin, if any, is kept, and a taken or
+  invalid name instead keeps the field open and marked invalid
+
+#### Scenario: A rename reaches the account
+
+- **WHEN** a signed-in user renames a project that is not open from the list
+- **THEN** the rename is announced with that project's id, so sync uploads
+  the new name
+
+#### Scenario: Duplicating a project
+
+- **WHEN** a user picks Duplicate in the menu of "alpha"
+- **THEN** "alpha copy" opens holding alpha's files, and no
+  `.workspace/program-info.json` of alpha's
+
+#### Scenario: Export with a failed conversion
+
+- **WHEN** a user picks Export as zip, then "Convert and export", and the
+  conversion fails
+- **THEN** a toast says the layout could not be converted and the project
+  downloads as is
+
+#### Scenario: Deleting from the list
+
+- **WHEN** a user picks Delete in the menu of a project that is not open and
+  confirms
+- **THEN** the project is gone from the list and the open project stays open
+
+#### Scenario: Letter keys in a project's menu
+
+- **WHEN** a user opens the menu of "alpha" and presses `D`
+- **THEN** "alpha" is duplicated, as if Duplicate had been clicked
+
+#### Scenario: The rail has no project list
+
+- **WHEN** a user folds the navigation on a 1280 px wide window
+- **THEN** no project row is shown, and unfolding it shows the list again
+
+#### Scenario: A lesson's menu
+
+- **WHEN** a user opens the menu of a started lesson
+- **THEN** it offers Open, Pin, Export as zip and Delete, and neither Rename
+  nor Duplicate
+
+### Requirement: The project list is measured
+
+The navigation SHALL send `nav_project_action` with the `action` (`open`,
+`pin`, `unpin`, `rename`, `duplicate`, `export` or `delete`) and whether a
+click or a key ran it each time a project action starts (`export` and
+`delete` when their dialog opens), and `nav_project_action_failed` with the
+`action` when the list's own part of it fails: an open, a pin, a rename, a
+duplicate, or a dialog that does not open. A failure inside the export or
+delete dialog is that dialog's to report.
+
+#### Scenario: Pinning by key
+
+- **WHEN** a user opens a project's menu and presses `P`
+- **THEN** `nav_project_action` is sent with `action` `pin`, by key
 
 ### Requirement: One layout
 

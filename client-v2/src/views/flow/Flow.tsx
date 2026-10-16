@@ -5,7 +5,6 @@ import Chevron from "./Chevron";
 import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import Logomark from "./header/Logomark";
-import ProjectSwitcher from "./header/ProjectSwitcher";
 import RailFooter from "./header/RailFooter";
 import StageBar from "./header/StageBar";
 import StatusChips from "./header/StatusChips";
@@ -33,7 +32,7 @@ import { FeedbackHost, FeedbackTrigger } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Wallet from "@/components/Wallet";
 import { PgExplorer, PgView } from "@/utils";
-import { AppNav } from "@/widgets/app-nav";
+import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { Assistant } from "@/widgets/assistant";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
@@ -41,7 +40,7 @@ import type { Disposable } from "@/utils/types";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
- * navigation (`AppNav`, holding the logo, the project switcher, and the status
+ * navigation (`AppNav`, holding the logo, the project list, and the status
  * chips and the feedback trigger in its footer, which on the rail gives way to
  * `RailFooter`'s cluster dot and account button), the assistant, the files
  * column, and the stage router over its collapsible console, with the
@@ -178,7 +177,7 @@ const FlowFrame = () => {
             collapsed={collapsed}
             onToggle={toggle}
             logo={<Logomark aria-hidden="true" />}
-            switcher={<ProjectSwitcher onOpenGallery={openGallery} />}
+            projects={<ProjectList />}
             footer={
               <>
                 <StatusChips

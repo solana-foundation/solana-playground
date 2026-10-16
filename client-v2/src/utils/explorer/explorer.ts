@@ -59,6 +59,7 @@ export class PgExplorer {
     ON_DID_RENAME_WORKSPACE: "explorerondidrenameworkspace",
     ON_DID_DELETE_WORKSPACE: "explorerondiddeleteworkspace",
     ON_DID_SWITCH_WORKSPACE: "explorerondidswitchworkspace",
+    ON_DID_CHANGE_WORKSPACE_LIST: "explorerondidchangeworkspacelist",
   };
 
   /* -------------------------------- Getters ------------------------------- */
@@ -172,6 +173,11 @@ export class PgExplorer {
       currentId: workspace.currentId,
     });
     this._savedWorkspaces = JSON.stringify(stored.workspaces);
+    if (this._savedWorkspaces !== saved) {
+      PgCommon.createAndDispatchCustomEvent(
+        this.events.ON_DID_CHANGE_WORKSPACE_LIST
+      );
+    }
     return true;
   }
 
@@ -789,9 +795,18 @@ export class PgExplorer {
           this._workspace.rename(from, newName);
         }
         await this.fs.rename(newPath, fromPath);
-        await this._saveWorkspaces().catch(() => {});
+        // The rename's own error is the one rethrown; a failed save of the
+        // restored list is reported beside it rather than lost
+        await this._saveWorkspaces().catch((saveError: unknown) =>
+          report("save workspaces after a failed rename", saveError)
+        );
         throw e;
       }
+      // The list's own event, unconditional: the project list must follow a
+      // rename sync made, which `ON_DID_RENAME_WORKSPACE` must not carry
+      PgCommon.createAndDispatchCustomEvent(
+        this.events.ON_DID_CHANGE_WORKSPACE_LIST
+      );
       // Announced only when the user asked for it, and with the renamed
       // workspace's id: a listener that took it as a rename of the current
       // workspace flagged the open project dirty for a rename it never had.
@@ -1363,6 +1378,21 @@ export class PgExplorer {
    */
   static onDidCreateWorkspace(cb: () => unknown) {
     return PgCommon.onDidChange(PgExplorer.events.ON_DID_CREATE_WORKSPACE, cb);
+  }
+
+  /**
+   * Runs when the list of workspaces changed without its own event: another
+   * tab's list taken by `refreshWorkspaces`, or a workspace that is not the
+   * current one renamed where it lies, which sync does unannounced.
+   *
+   * @param cb callback function to run
+   * @returns a dispose function to clear the event
+   */
+  static onDidChangeWorkspaceList(cb: () => unknown) {
+    return PgCommon.onDidChange(
+      PgExplorer.events.ON_DID_CHANGE_WORKSPACE_LIST,
+      cb
+    );
   }
 
   /**

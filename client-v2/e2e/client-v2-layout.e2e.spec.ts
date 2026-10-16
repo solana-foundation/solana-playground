@@ -1,10 +1,12 @@
 import type { Page } from "@playwright/test";
 
 import {
+  currentProject,
   expect,
   HELP_TAIL,
   json,
   leaveEditor,
+  projectRow,
   seedWorkspace,
   test,
 } from "./fixtures";
@@ -319,7 +321,7 @@ test("client-v2-layout: Folding the navigation", async ({
   await expect(column).toHaveJSProperty("offsetWidth", 232);
   await page.keyboard.press("ControlOrMeta+b");
   await expect(column).toHaveJSProperty("offsetWidth", 52);
-  // A rail of icons: the items stay, the switcher and the chips give way to
+  // A rail of icons: the items stay, the project list and the chips give way to
   // the cluster's dot and the account
   await expect(
     nav(page).getByRole("button", { name: "Expand navigation" })
@@ -327,7 +329,9 @@ test("client-v2-layout: Folding the navigation", async ({
   for (const item of ["Home", "New project", "Tutorials", "Programs"]) {
     await expect(nav(page).getByRole("button", { name: item })).toBeVisible();
   }
-  await expect(nav(page).locator('[aria-haspopup="true"]')).toHaveCount(0);
+  await expect(nav(page).getByRole("group", { name: "Projects" })).toHaveCount(
+    0
+  );
   await expect(
     nav(page).getByRole("button", { name: "Open settings" })
   ).toHaveCount(0);
@@ -877,8 +881,8 @@ test("client-v2-layout: Everything the header did", async ({
   seededPage: page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
-  const switcher = nav(page).locator('[aria-haspopup="true"]');
-  await expect(switcher).toContainText("e2e-project");
+  const current = currentProject(page);
+  await expect(current).toHaveText("e2e-project");
 
   // A second project, so there is one to switch back to
   await nav(page).getByRole("button", { name: "New project" }).click();
@@ -887,15 +891,11 @@ test("client-v2-layout: Everything the header did", async ({
   await gallery.getByLabel("Project name").fill("second");
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden();
-  await expect(switcher).toContainText("second");
+  await expect(current).toHaveText("second");
 
-  // The switcher, in the navigation
-  await switcher.click();
-  await page
-    .getByLabel("Projects and lessons")
-    .getByText("e2e-project", { exact: true })
-    .click();
-  await expect(switcher).toContainText("e2e-project");
+  // The project list, in the navigation
+  await projectRow(page, "e2e-project").click();
+  await expect(current).toHaveText("e2e-project");
   await expect(page.locator("#root-dir")).toBeVisible();
 
   // The settings, from the navigation's footer

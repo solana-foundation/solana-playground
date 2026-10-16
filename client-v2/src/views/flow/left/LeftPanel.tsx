@@ -37,7 +37,7 @@ interface LeftPanelProps {
 
 /**
  * Where you are inside the current project. Which project you are in is
- * the navigation switcher's job; the rail does not name the project too,
+ * the navigation's project list's job; the rail does not name the project too,
  * since two controls for one question would disagree.
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({

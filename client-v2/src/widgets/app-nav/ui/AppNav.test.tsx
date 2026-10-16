@@ -74,7 +74,7 @@ const draw = () =>
           collapsed={false}
           onToggle={() => {}}
           logo={null}
-          switcher={null}
+          projects={null}
           footer={null}
           railFooter={null}
         />

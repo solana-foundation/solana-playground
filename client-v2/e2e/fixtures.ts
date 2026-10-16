@@ -204,3 +204,49 @@ export const makeLocalProject = async (page: Page, name: string) => {
   expect(isUuid(id!)).toBe(true);
   return id!;
 };
+
+/**
+ * A project's row in the navigation's list: inside its groups, which are
+ * where the list is drawn both in the stock Sidebar and on a phone's menu
+ * page
+ */
+export const projectRow = (page: Page, name: string) =>
+  page
+    .locator('[data-sidebar="group"]')
+    .getByRole("button", { name, exact: true });
+
+/** The open project's row (`aria-current="page"`) in the navigation's list */
+export const currentProject = (page: Page) =>
+  page.locator(
+    '[data-sidebar="group"] [data-sidebar="menu-button"][aria-current="page"]'
+  );
+
+/** Opens a project's menu in the navigation's list and returns it */
+export const projectMenu = async (page: Page, name: string) => {
+  await page.getByRole("button", { name: `Actions for ${name}` }).click();
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  return menu;
+};
+
+/** Opens the gallery through the navigation's New project item */
+export const openGallery = async (page: Page) => {
+  await page
+    .locator('[data-slot="sidebar"]')
+    .getByRole("button", { name: "New project" })
+    .click();
+};
+
+/**
+ * Starts another project from the gallery, opened from the navigation; the
+ * gallery opens by itself only on a fresh profile
+ */
+export const startProject = async (page: Page, name: string) => {
+  await openGallery(page);
+  const gallery = page.locator("[data-gallery-modal]");
+  await expect(gallery).toBeVisible(LONG);
+  await gallery.getByLabel("Project name").fill(name);
+  await gallery.getByRole("button", { name: /^Start/ }).click();
+  await expect(gallery).toBeHidden(LONG);
+  await expect(currentProject(page)).toHaveText(name, LONG);
+};

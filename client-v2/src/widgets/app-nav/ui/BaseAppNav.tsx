@@ -24,11 +24,12 @@ const ITEMS: Record<NavItem, { label: string; Icon: ComponentType }> = {
 const ORDER = Object.keys(ITEMS) as NavItem[];
 
 export interface BaseAppNavProps {
-  /** The rail: icons only, no logo or switcher, `railFooter` for `footer` */
+  /** The rail: icons only, no logo or project list, `railFooter` for `footer` */
   collapsed: boolean;
   onToggle: () => void;
   logo: ReactNode;
-  switcher: ReactNode;
+  /** The project list, under the items; the rail has no room for it */
+  projects: ReactNode;
   footer: ReactNode;
   /** The footer's few icons the 52 px rail has room for, in its place */
   railFooter: ReactNode;
@@ -39,7 +40,7 @@ const BaseAppNav = ({
   collapsed,
   onToggle,
   logo,
-  switcher,
+  projects,
   footer,
   railFooter,
   onOpen,
@@ -57,7 +58,6 @@ const BaseAppNav = ({
           <PanelLeft />
         </Button>
       </div>
-      {!collapsed && switcher}
     </SidebarHeader>
     <SidebarContent>
       <SidebarMenu>
@@ -73,6 +73,7 @@ const BaseAppNav = ({
           );
         })}
       </SidebarMenu>
+      {!collapsed && projects}
     </SidebarContent>
     {/* Swapped, not hidden, on the rail: what the full footer holds keeps
         its state above it (`FeedbackHost`, `PgSession`), as it must anyway

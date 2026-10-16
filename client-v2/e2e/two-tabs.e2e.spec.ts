@@ -1,6 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { BrowserContext, Page, Route } from "@playwright/test";
-import { applyWrite } from "./fixtures";
+import {
+  applyWrite,
+  currentProject,
+  openGallery,
+  projectMenu,
+  projectRow,
+} from "./fixtures";
 
 /**
  * Two tabs of one browser on one project.
@@ -165,10 +171,7 @@ const openText = (page: Page) =>
 
 const openShared = async (page: Page) => {
   await page.goto("/");
-  await expect(page.locator('[aria-haspopup="true"]').first()).toContainText(
-    "Shared",
-    LONG
-  );
+  await expect(currentProject(page)).toContainText("Shared", LONG);
   await expect(editor(page)).toContainText("// v0", LONG);
 };
 
@@ -337,9 +340,9 @@ test("a project deleted in one tab is not re-uploaded by the other", async ({
   await openShared(b);
   await setVisible(b, false);
 
-  // Through the project switcher, the way a person would
-  const menu = await openMenu(a);
-  await menu.getByRole("button", { name: "Delete Shared" }).click();
+  // Through the navigation's project list, the way a person would
+  const menu = await projectMenu(a, "Shared");
+  await menu.getByRole("menuitem", { name: "Delete Shared" }).click();
   await a.getByRole("button", { name: "Delete", exact: true }).click();
   await expect.poll(() => state.deleted, LONG).toBe(true);
 
@@ -351,8 +354,8 @@ test("a project deleted in one tab is not re-uploaded by the other", async ({
   // The positive signal is B's reconcile finishing the delete: it moves B
   // off `Shared`, which is what the list no longer has.
   await setVisible(b, true);
-  await expect(switcher(b)).not.toContainText("Shared", LONG);
-  await expect(switcher(b)).toContainText("Other");
+  await expect(currentProject(b)).not.toHaveText("Shared", LONG);
+  await expect(currentProject(b)).toHaveText("Other");
   await expect(b.getByText("changed on another device")).toHaveCount(0);
   expect(state.putsAfterDelete).toBe(0);
 });
@@ -384,15 +387,6 @@ test("a file created in one tab appears in the other", async ({ context }) => {
   ).toBe(true);
 });
 
-const switcher = (page: Page) => page.locator('[aria-haspopup="true"]').first();
-
-const openMenu = async (page: Page) => {
-  await switcher(page).click();
-  const menu = page.getByLabel("Projects and lessons");
-  await expect(menu).toBeVisible();
-  return menu;
-};
-
 const createFile = async (page: Page, name: string) => {
   await page.getByRole("button", { name: "New file" }).click();
   const input = page.locator("#root-dir input");
@@ -416,27 +410,24 @@ const createdProjectSurvives = async ({
 
   // A new project in A. B loaded with a list that does not have it, and
   // every re-open in B saves B's list back over the store's.
-  const menu = await openMenu(a);
-  await menu.getByText("Browse gallery").click();
+  await openGallery(a);
   const gallery = a.locator("[data-gallery-modal]");
   await gallery.getByLabel("Project name").fill("Second");
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);
-  await expect(switcher(a)).toContainText("Second", LONG);
+  await expect(currentProject(a)).toHaveText("Second", LONG);
 
   // Back to Shared, and a new file there: B has Shared open, so it re-opens
   // it -- which used to wait for a reload once the list had changed
-  await (await openMenu(a)).getByText("Shared", { exact: true }).click();
-  await expect(switcher(a)).toContainText("Shared", LONG);
+  await projectRow(a, "Shared").click();
+  await expect(currentProject(a)).toHaveText("Shared", LONG);
   await createFile(a, "notes.rs");
   await expect(b.locator("#root-dir")).toContainText("notes.rs", LONG);
 
   for (const page of [a, b]) {
     await page.reload();
     await expect(page.locator("#root-dir")).toBeVisible(LONG);
-    const listed = await openMenu(page);
-    await expect(listed.getByText("Second", { exact: true })).toBeVisible();
-    await page.keyboard.press("Escape");
+    await expect(projectRow(page, "Second")).toBeVisible();
   }
 };
 

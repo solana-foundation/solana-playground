@@ -233,6 +233,41 @@ describe("PgExplorer.refreshWorkspaces", () => {
     expect(PgExplorer.currentWorkspaceName).toBe("renamed");
   });
 
+  it("tells a listener the list changed when it takes a neighbour's", async () => {
+    const alpha = PgExplorer.workspaceIdOf("alpha")!;
+    const beta = PgExplorer.workspaceIdOf("beta")!;
+    writeConfig({
+      workspaces: [
+        { id: alpha, name: "renamed" },
+        { id: beta, name: "beta" },
+      ],
+      currentId: beta,
+    });
+    const changed = vi.fn();
+    const { dispose } = PgExplorer.onDidChangeWorkspaceList(changed);
+
+    try {
+      await PgExplorer.refreshWorkspaces();
+    } finally {
+      dispose();
+    }
+
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when the neighbour's list is this tab's", async () => {
+    const changed = vi.fn();
+    const { dispose } = PgExplorer.onDidChangeWorkspaceList(changed);
+
+    try {
+      await PgExplorer.refreshWorkspaces();
+    } finally {
+      dispose();
+    }
+
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   it("drops a workspace deleted elsewhere", async () => {
     const alpha = PgExplorer.workspaceIdOf("alpha")!;
     writeConfig({
@@ -415,6 +450,25 @@ describe("renaming a workspace that is not the current one", () => {
     events.dispose();
 
     expect(events.seen).toEqual([]);
+  });
+
+  it("tells a listener the list changed, announced or not", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    const changed = vi.fn();
+    const { dispose } = PgExplorer.onDidChangeWorkspaceList(changed);
+
+    try {
+      await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
+      await PgExplorer.renameWorkspace("delta", {
+        from: "gamma",
+        announce: true,
+      });
+    } finally {
+      dispose();
+    }
+
+    expect(changed).toHaveBeenCalledTimes(2);
   });
 
   it("renames it on disk and in the list, and stays where it was", async () => {

@@ -1,5 +1,10 @@
 import { expect, test } from "./fixtures";
-import { seedWorkspace } from "./fixtures";
+import {
+  currentProject,
+  openGallery,
+  projectRow,
+  seedWorkspace,
+} from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -102,20 +107,14 @@ const readConfig = (page: Page) =>
     return "";
   });
 
-const switcher = (page: Page) => page.locator('[aria-haspopup="true"]').first();
-
 /**
  * Add a project to a profile that already has one.
  *
  * `seedWorkspace` goes through the gallery that only greets an empty profile,
- * so a second project has to be reached through the switcher.
+ * so a second project has to be reached through the navigation.
  */
 const addWorkspace = async (page: Page, name: string) => {
-  await switcher(page).click();
-  await page
-    .getByLabel("Projects and lessons")
-    .getByText("Browse gallery")
-    .click();
+  await openGallery(page);
 
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible();
@@ -124,7 +123,7 @@ const addWorkspace = async (page: Page, name: string) => {
 
   await expect(gallery).toBeHidden();
   await expect(page.locator("#root-dir")).toBeVisible();
-  await expect(switcher(page)).toContainText(name);
+  await expect(currentProject(page)).toHaveText(name);
 };
 
 test("a pre-id config still opens its project", async ({ page }) => {
@@ -136,7 +135,7 @@ test("a pre-id config still opens its project", async ({ page }) => {
   await page.reload();
 
   await expect(page.locator("#root-dir")).toBeVisible();
-  await expect(switcher(page)).toContainText("alpha");
+  await expect(currentProject(page)).toHaveText("alpha");
 });
 
 test("a pre-id config is rewritten with ids", async ({ page }) => {
@@ -197,7 +196,7 @@ test("a pre-id config with several projects migrates all of them", async ({
   await page.reload();
 
   await expect(page.locator("#root-dir")).toBeVisible();
-  await expect(switcher(page)).toContainText("beta");
+  await expect(currentProject(page)).toHaveText("beta");
 
   const config = JSON.parse(await readConfig(page));
   expect(config.workspaces.map((w: { name: string }) => w.name)).toEqual([
@@ -232,13 +231,9 @@ test("every project in a migrated config still opens", async ({ page }) => {
 
   // Switching is what proves the migrated ids actually resolve to directories
   for (const name of ["beta", "alpha"]) {
-    await switcher(page).click();
-    await page
-      .getByLabel("Projects and lessons")
-      .getByText(name, { exact: true })
-      .click();
+    await projectRow(page, name).click();
 
-    await expect(switcher(page)).toContainText(name);
+    await expect(currentProject(page)).toHaveText(name);
     await expect(page.locator("#root-dir")).not.toBeEmpty();
   }
 });
@@ -261,8 +256,7 @@ const startTutorial = async (page: Page) => {
     .catch(() => false);
 
   if (!openedItself) {
-    await switcher(page).click();
-    await page.getByRole("button", { name: "Browse gallery" }).click();
+    await openGallery(page);
     await expect(gallery).toBeVisible();
   }
 

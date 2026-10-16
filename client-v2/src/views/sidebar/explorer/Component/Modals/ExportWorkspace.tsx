@@ -7,43 +7,82 @@ import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
 import type { ModalPageProps } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ExportFile } from "../../../../../components/Icons";
-import { PgFramework, PgView } from "../../../../../utils";
+import { PgExplorer, PgFramework, PgView } from "../../../../../utils";
 import { createLogger } from "@/shared/lib/logger";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const log = createLogger("explorer:export-workspace");
 
-export const ExportWorkspace = () => (
-  <ModalPages name="export-workspace" defaultPage={modalPage(Default)} />
+interface ExportWorkspaceProps {
+  /** Which workspace to export; defaults to the one the user is in */
+  name?: string;
+}
+
+export const ExportWorkspace = ({ name }: ExportWorkspaceProps) => (
+  <ModalPages
+    name="export-workspace"
+    defaultPage={modalPage(Default, { name })}
+  />
 );
 
-type DefaultProps = ModalPageProps;
+type DefaultProps = ModalPageProps & ExportWorkspaceProps;
 
-const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
+const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
+  setPage,
+  name,
+}) => {
+  const label = name ?? PgExplorer.currentWorkspaceName ?? "the project";
+
   const convertAndExport = async () => {
+    let readme: string;
     try {
-      const { readme } = await PgFramework.exportWorkspace({ convert: true });
-      setPage(modalPage(Readme, { readme }));
+      ({ readme } = await PgFramework.exportWorkspace({
+        convert: true,
+        name,
+      }));
     } catch (e) {
-      // The export still happens, as is; the user hears that the layout
-      // stayed, and the team hears why the conversion failed
-      log.error(e, { report: true });
-      PgView.setToast(
-        () => <span>Could not convert the layout; exported it as is.</span>,
-        { options: { name: "export-convert-failed" } }
-      );
-      await exportWithoutChanges();
+      // A project of no known framework is an expected outcome, noted; any
+      // other conversion failure is the team's to hear of
+      if (PgFramework.isUnknownFramework(e)) {
+        log.warn("no framework to convert to; exporting as is");
+      } else {
+        log.error(e, { report: true, context: { step: "convert" } });
+      }
+      // Said only once the plain export has happened: when it fails too,
+      // `exportWithoutChanges` says so instead
+      if (await exportWithoutChanges()) {
+        PgView.setToast(
+          () => <span>Could not convert the layout; exported it as is.</span>,
+          { options: { name: "export-convert-failed" } }
+        );
+      }
+      return;
     }
+    // Outside the `try`: a failure to show the README must not export twice
+    setPage(modalPage(Readme, { readme }));
   };
 
+  /** Whether the project downloaded */
   const exportWithoutChanges = async () => {
-    await PgFramework.exportWorkspace();
+    try {
+      await PgFramework.exportWorkspace({ name });
+    } catch (e) {
+      // Nothing downloaded: the user hears it and the team hears why. The
+      // button's `onError` (`reportButtonFailure`) only logs, unreported,
+      // and would leave the dialog open as if the click had done nothing
+      log.error(e, { report: true, context: { step: "export" } });
+      PgView.setToast(() => <span>Could not export {label}.</span>, {
+        options: { name: "export-failed" },
+      });
+      return false;
+    }
     PgView.closeModal();
+    return true;
   };
 
   return (
-    <ModalFrame name="export-workspace" title="Export project">
+    <ModalFrame name="export-workspace" title={`Export ${label}`}>
       <Content>
         <Question>Convert the project layout?</Question>
 

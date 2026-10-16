@@ -263,7 +263,7 @@ const leaveDeleted = async (): Promise<ReloadResult> => {
  * and saved, which tells the other tabs too.
  *
  * `importWorkspace` writes no files for an empty set and dispatches
- * `ON_DID_CREATE_WORKSPACE`. That re-renders the project switcher, and
+ * `ON_DID_CREATE_WORKSPACE`. That re-renders the navigation's project list, and
  * `Flow.tsx` answers it by closing the gallery it opened over an empty
  * browser -- harmless here, where the list was not empty to begin with.
  *
