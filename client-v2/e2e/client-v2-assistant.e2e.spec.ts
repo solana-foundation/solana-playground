@@ -417,6 +417,13 @@ test.describe("The thread", () => {
     await expect(card.getByText("src/lib.rs")).toBeInViewport();
     await expect(card.getByRole("button", { name: "Apply" })).toBeInViewport();
     await expect(card.getByRole("button", { name: "Reject" })).toBeInViewport();
+    // Code reads in the code font: every `data-slot` element gets the text
+    // font from the base layer, so a line must ask for its own
+    const font = await card
+      .locator("[data-slot=diff-line]")
+      .first()
+      .evaluate((el) => getComputedStyle(el).fontFamily);
+    expect(font).toContain("monospace");
     const content = card.locator("[data-slot=diff-content]");
     expect(
       await content.evaluate((el) => el.scrollHeight > el.clientHeight)
