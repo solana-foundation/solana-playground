@@ -1,0 +1,71 @@
+name: client-v2 build
+
+# The production build of `client-v2/` and the checks on what it emits.
+# Build configuration is not unit-tested (client-v2/CLAUDE.md): each step
+# below asserts something the configuration must produce, so a craco,
+# webpack or minifier change that breaks it fails here instead of shipping.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+
+    defaults:
+      run:
+        working-directory: client-v2
+
+    steps:
+      # `generate-fast` copies `client-v2/public` out of the `client/public`
+      # submodule and dates tutorials from its history.
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: client-v2/.nvmrc
+          cache: "yarn"
+          cache-dependency-path: "client-v2/yarn.lock"
+
+      - name: Stub the unbuilt WASM packages
+        run: ../wasm/stub-packages.sh
+
+      - name: Install
+        run: yarn install --frozen-lockfile
+
+      - name: Production build
+        run: yarn build-fast
+
+      # Tailwind reaches the bundle only through craco's PostCSS override. If
+      # that stops applying (a craco upgrade, a second CSS rule added after
+      # craco's style pass), the build stays green and the page ships
+      # unstyled, so look for one utility the Flow wrapper always carries.
+      - name: Check Tailwind is in the built CSS
+        run: |
+          grep -q '\.flex{display:flex}' build/static/css/main.*.css || {
+            echo "::error::Tailwind utilities are missing from build/static/css -- craco's PostCSS override is not applying"
+            exit 1
+          }
+
+      # Change events are named after `_Pg*` classes; a minifier that drops the names passes the build and loops at runtime.
+      - name: Check decorator class names survive minification
+        run: |
+          for name in _PgConnection _PgProgramInfo; do
+            grep -q "\"$name\"" build/static/js/*.js || {
+              echo "::error::$name is missing from build/static/js: the minifier drops class names (keepNames in scripts/esbuild-minify.mjs)"
+              exit 1
+            }
+          done
+
+      # `*.build-test.mjs` reads `build/`, so it runs here rather than in `test-api`.
+      - name: Build tests
+        run: yarn test-build

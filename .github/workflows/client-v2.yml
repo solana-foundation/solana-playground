@@ -153,29 +153,9 @@ jobs:
       - name: API tests
         run: yarn test-api
 
-      - name: Production build
-        run: yarn build-fast
-
-      # Tailwind reaches the bundle only through craco's PostCSS override. If
-      # that stops applying (a craco upgrade, a second CSS rule added after
-      # craco's style pass), the build stays green and the page ships
-      # unstyled, so look for one utility the Flow wrapper always carries.
-      - name: Check Tailwind is in the built CSS
-        run: |
-          grep -q '\.flex{display:flex}' build/static/css/main.*.css || {
-            echo "::error::Tailwind utilities are missing from build/static/css -- craco's PostCSS override is not applying"
-            exit 1
-          }
-
-      # Change events are named after `_Pg*` classes; a minifier that drops the names passes the build and loops at runtime.
-      - name: Check decorator class names survive minification
-        run: |
-          for name in _PgConnection _PgProgramInfo; do
-            grep -q "\"$name\"" build/static/js/*.js || {
-              echo "::error::$name is missing from build/static/js: the minifier drops class names (keepNames in craco.config.js)"
-              exit 1
-            }
-          done
+  # The production build and the checks on what it emits, as their own check.
+  build:
+    uses: ./.github/workflows/reusable-client-v2-build.yml
 
   # The browser suite (`client-v2/e2e/`, Playwright) in its own job, so
   # `checks` stays short and a browser failure reads as one. No Postgres and

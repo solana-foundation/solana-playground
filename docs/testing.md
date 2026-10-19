@@ -136,7 +136,8 @@ Expect: every command exits 0; `git status --porcelain` prints nothing (generate
 
 ### B-3. client-v2: CI parity
 
-Mirrors the `checks` job in [client-v2.yml](../.github/workflows/client-v2.yml).
+Mirrors the `checks` job in [client-v2.yml](../.github/workflows/client-v2.yml) and the `build` job in
+[reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml).
 
 Precondition: B-1, or `wasm/stub-packages.sh` as CI runs it. The stubs skip the Rust build but disable Rust
 intellisense and the `solana`, `anchor`, `spl-token`, and `sugar` terminal commands, so S-3 needs B-1.
@@ -151,11 +152,12 @@ yarn --cwd client-v2 run check
 yarn --cwd client-v2 build-fast
 grep -q '\.flex{display:flex}' client-v2/build/static/css/main.*.css && echo tailwind ok
 grep -q '"_PgConnection"' client-v2/build/static/js/*.js && grep -q '"_PgProgramInfo"' client-v2/build/static/js/*.js && echo names ok
+yarn --cwd client-v2 test-build
 ```
 
-Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, as the
-post-build steps "Check Tailwind is in the built CSS" and "Check decorator class names survive minification" in
-`client-v2.yml` require. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
+`test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
+minification", and "Build tests" in `reusable-client-v2-build.yml` require. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 
@@ -691,7 +693,7 @@ grep -l '"_PgProgramInfo"' client-v2/build/static/js/*.js
 Expect:
 
 - [ ] each `grep` lists a file. CI runs the same check after `build-fast` ("Check decorator class names survive
-      minification" in `client-v2.yml`) and fails without them.
+      minification" in `reusable-client-v2-build.yml`) and fails without them.
 - [ ] on a production build (a preview, or `serve -s client-v2/build`), change the endpoint in Settings from Devnet to
       Testnet: the cluster label in the bottom bar changes to Testnet, and the tab does not freeze (the terminal still
       answers `help`). Decorators name change events after
@@ -731,18 +733,23 @@ Remove the type error.
 
 ```sh
 node --test client-v2/scripts/chunk-scope.test.mjs
+yarn --cwd client-v2 build-fast
+yarn --cwd client-v2 test-build
 ```
 
-`yarn --cwd client-v2 test-api` runs the same test, in CI too. It needs no build: it minifies a small chunk fixture
-with the options in `client-v2/scripts/esbuild-minify.mjs`, through `TerserPlugin.esbuildMinify`. It checks the
-minifier options, not the real build output.
+`chunk-scope.test.mjs` runs in `test-api` and needs no build: it minifies a small chunk fixture with the options in
+`client-v2/scripts/esbuild-minify.mjs`, through `TerserPlugin.esbuildMinify`. `test-build` runs
+`chunk-scope.build-test.mjs` over `client-v2/build/static/js`, the chunks that ship; CI runs it after the production
+build, in `reusable-client-v2-build.yml`.
 
 Expect:
 
-- [ ] the test passes.
-- [ ] with `format: "iife"` removed from `esbuildMinifyOptions` in `client-v2/scripts/esbuild-minify.mjs`, the test
-      fails and names the identifier the chunk declares at the top level. Chunks load as classic scripts, so their
-      top-level helpers are globals and a later chunk's same-named helper overwrites them. Restore the option.
+- [ ] both tests pass.
+- [ ] with `format: "iife"` removed from `esbuildMinifyOptions` in `client-v2/scripts/esbuild-minify.mjs`, both tests
+      fail and name the identifier a chunk declares at the top level (the build test after a rebuild). Chunks load as
+      classic scripts, so their top-level helpers are globals and a later chunk's same-named helper overwrites them.
+      Restore the option.
+- [ ] `test-build` without a `client-v2/build/` fails instead of passing.
 
 ## 8. Parallel runs
 

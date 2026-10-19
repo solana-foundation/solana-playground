@@ -22,8 +22,9 @@ redesign branches (section 5, "Screens", of the OpenSpec change
 
 `ci.yml` checks formatting for `client/`, `server/` and `wasm/` and clippy
 for `server/` and `wasm/`, but not `client/`'s build or tests;
-`client-v2.yml` guards `client-v2/`; `preview.yml` deploys a labelled PR's
-preview. All three run on `master`; `client-v2.yml` also runs on `new-face`.
+`client-v2.yml` guards `client-v2/`, with its production build and the
+checks on what that build emits in `reusable-client-v2-build.yml`;
+`preview.yml` deploys a labelled PR's preview. All three run on `master`; `client-v2.yml` also runs on `new-face`.
 
 GitHub runs scheduled workflows (`preview-sweep.yml`) only from the default
 branch. `cicd.yml` deploys App Engine from a tagged commit pushed to
