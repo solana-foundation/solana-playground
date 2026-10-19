@@ -319,7 +319,7 @@ main() {
   install_node_modules "$wasm_key"
 }
 
-# Sourced, it only defines the functions: client-v2-real-wasm.yml builds with build_wasm_packages alone.
+# Sourced, it only defines the functions: client-v2-reusable.yml keys and builds with wasm_source_key and build_wasm_packages.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   main "$@"
 fi

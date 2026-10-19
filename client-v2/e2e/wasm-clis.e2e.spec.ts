@@ -3,7 +3,7 @@ import { type Page } from "@playwright/test";
 import { WASM_STUB_MARKER } from "../scripts/wasm-stubs.mjs";
 import { expect, LONG, test } from "./fixtures";
 
-// `client-v2.yml` runs on the wasm stubs and excludes this tag; `client-v2-real-wasm.yml` runs only it.
+// `client-v2-with-stubs.yml` excludes this tag; `client-v2.yml` runs on the real packages and includes it.
 const REAL_WASM = { tag: "@real-wasm" };
 
 const terminal = (page: Page) => page.locator(".xterm-rows").first();

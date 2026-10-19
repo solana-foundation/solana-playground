@@ -311,11 +311,13 @@ check's job (HOO-1859); the rest hold by review.
   in CI's order, minus the production build. Opt in to running it on every
   push with `git config core.hooksPath .githooks` once per clone.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` job of
-  `client-v2.yml`) on every PR (GitHub reads the workflow from the PR's
-  merge commit; see the root `CLAUDE.md`, "This is a fork"), and a red spec
-  fails the PR's checks. It needs no server and no Postgres: every spec
-  stubs the account endpoints with `page.route`, and the dev server serves
-  `api/*.mjs` itself.
+  `client-v2-reusable.yml`, which `client-v2.yml` runs on the real wasm
+  packages) on every PR (GitHub reads the workflow from the PR's merge
+  commit; see the root `CLAUDE.md`, "This is a fork"), and a red spec fails
+  the PR's checks. The `@real-wasm` specs run the CLIs; the manual
+  `client-v2-with-stubs.yml` runs the suite on the stubs and leaves them out.
+  It needs no server and no Postgres: every spec stubs the account endpoints
+  with `page.route`, and the dev server serves `api/*.mjs` itself.
   Two tests connect to the keyless default backend and skip themselves where
   `/api/agent` reports none configured (CI included); they run only on a
   machine with the default backend configured. Two sync tests ("switching

@@ -138,16 +138,19 @@ Expect: every command exits 0; `git status --porcelain` prints nothing (generate
 
 ### B-3. client-v2: CI parity
 
-Mirrors the `checks` job in [client-v2.yml](../.github/workflows/client-v2.yml) and the `build` job in
-[reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml).
+Mirrors the `checks` job in [client-v2-reusable.yml](../.github/workflows/client-v2-reusable.yml) and the `build` job
+in [reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml), which
+[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
 
-Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) as CI runs it. The stubs skip
-the Rust build but disable Rust intellisense and the `solana`, `anchor`, `spl-token`, and `sugar` terminal commands, so
-S-3 and C-6 need B-7.
+Precondition: B-7. `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) mirrors
+[client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) instead: the stubs skip the Rust build but
+disable Rust intellisense and the `solana`, `anchor`, `spl-token`, and `sugar` terminal commands, so S-3, C-6, and the
+`check-build` line need B-7.
 
 ```sh
 yarn --cwd client-v2 run check
 yarn --cwd client-v2 build-fast
+(cd client-v2 && node scripts/wasm-stubs.mjs check-build build)
 grep -q '\.flex{display:flex}' client-v2/build/static/css/main.*.css && echo tailwind ok
 grep -q '"_PgConnection"' client-v2/build/static/js/*.js && grep -q '"_PgProgramInfo"' client-v2/build/static/js/*.js && echo names ok
 yarn --cwd client-v2 test-build
@@ -155,9 +158,10 @@ yarn --cwd client-v2 test-build
 
 Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
 `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
-minification", and "Build tests" in `reusable-client-v2-build.yml` require. `run check` covers the in-source
-collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle check
-(`scripts/in-source-tests.build-test.mjs`). Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+minification", and "Build tests" in `reusable-client-v2-build.yml` require; `check-build` prints
+`carries the real packages`. `run check` covers the in-source collection test (`scripts/in-source-collection.test.mjs`,
+under `test-api`) and `test-build` the bundle check (`scripts/in-source-tests.build-test.mjs`). Tests that need a
+database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 
@@ -267,9 +271,8 @@ Same steps and expectations as C-2, run against the C-4 session.
 
 Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [wasm-clis.e2e.spec.ts](../client-v2/e2e/wasm-clis.e2e.spec.ts) runs these steps:
-`PORT=<slot port> yarn --cwd client-v2 test-e2e --grep @real-wasm`, and the manual workflow
-[client-v2-real-wasm.yml](../.github/workflows/client-v2-real-wasm.yml) runs it on GitHub. `client-v2.yml` runs on the
-stubs and excludes the tag.
+`PORT=<slot port> yarn --cwd client-v2 test-e2e --grep @real-wasm`. The `e2e` job of `client-v2.yml` runs it on
+GitHub; `client-v2-with-stubs.yml` excludes the tag.
 
 Steps: connect the Playground Wallet, then run in the terminal `solana config get`, `spl-token --help`,
 `anchor --help`, and `sugar --help`.

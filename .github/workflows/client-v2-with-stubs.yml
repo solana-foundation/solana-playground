@@ -1,0 +1,20 @@
+name: client-v2 with stubs
+
+# The `client-v2.yml` jobs on the wasm stubs (`USE_WASM_STUBS=true`): no Rust
+# build, and the specs and checks that need the real packages left out. Run by
+# hand, for example to tell a wasm build failure from a client failure.
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: client-v2-with-stubs-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  client-v2:
+    uses: ./.github/workflows/client-v2-reusable.yml
+    with:
+      use-wasm-stubs: true
