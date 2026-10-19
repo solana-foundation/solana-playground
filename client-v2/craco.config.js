@@ -492,7 +492,8 @@ module.exports = {
         implementation: TerserPlugin.esbuildMinify,
         // Decorators name change events after `_Pg*` classes, and esbuild
         // keeps names only all or none
-        options: { keepNames: true, target: esbuildTarget() },
+        // iife keeps keepNames' helpers out of window, where chunks overwrote each other's
+        options: { keepNames: true, format: "iife", target: esbuildTarget() },
       };
       // Workers are threads in this process, outside `--max-old-space-size`
       jsMinimizer.options.parallel = 2;
