@@ -292,9 +292,9 @@ install_node_modules() {
     echo ">>> node_modules: current copy in Build Cache, skipping yarn install"
     return
   fi
-  # yarn 1 over a restored tree from another install key left web3.js's nested @noble/hashes out; a clean install does not. .cache holds the wasm and crate caches
-  if [ -d node_modules ]; then
-    echo ">>> node_modules: Build Cache copy has another install key, removing it before yarn install"
+  # Over a restored tree from another install key the build failed on @noble/hashes/sha3 and a clean install built; .cache alone is what the wasm and crate restores create
+  if [ -d node_modules ] && [ -n "$(find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -print -quit)" ]; then
+    echo ">>> node_modules: Build Cache copy has another install key, clearing all but .cache before yarn install"
     find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -exec rm -rf {} +
   fi
   yarn install --frozen-lockfile
