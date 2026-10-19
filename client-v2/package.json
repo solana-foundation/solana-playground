@@ -117,8 +117,7 @@
     "@types/react-dom": "^19.2.0",
     "elliptic": "^6.6.1",
     "crypto-js": "^4.2.0",
-    "axios": "^0.32.0",
-    "nth-check": "^2.0.1"
+    "axios": "^0.32.0"
   },
   "engines": {
     "node": "^22.20.0"
