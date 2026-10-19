@@ -185,7 +185,7 @@ counts.
    "Before a PR") still applies to every task.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
-   before the review agents run and before the PR is opened; it never runs
+   before the sx review runs and before the PR is opened; it never runs
    `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
    `tasks.md`, then `/opsx:archive` merges the deltas into `openspec/specs/`
    and moves the folder to `changes/archive/<date>-<name>/`, all committed in
@@ -298,17 +298,23 @@ check's job (HOO-1859); the rest hold by review.
   a fallback or a migration for a problem someone reported, reproduce it
   live (a probe, a curl, a screenshot, dated) and put that in the PR. A PR
   that solves a problem the repository does not have is closed, not fixed.
-- **Archiving is a human's call, asked before the review agents.** If the
+- **Archiving is a human's call, asked before the sx review.** If the
   PR ticks the change's last task, ask whether to close the change before
-  running `/pr-review-toolkit:review-pr` and opening the PR. On a yes,
+  running `/sx:review-pr` and opening the PR. On a yes,
   confirm every task is ticked, delete `tasks.md`, run `/opsx:archive` and
   commit the deletion and the archive in this PR; on a no, the PR
   description says `OpenSpec: <change> stays open (<who answered>, <date>)`.
   Never archive unasked.
-- **Run the review agents.** `/pr-review-toolkit:review-pr` before
-  `gh pr create`. Its agents (the toolkit's README lists them) cover the
-  headings every human review here has used: silent failures, type design,
-  test coverage, comments. What they find is fixed in the same PR.
+- **The author runs the sx review.** `/sx:review-pr full`, then
+  `/sx:review-pr`, on every PR and before `gh pr create`; the skill comes
+  from the `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills).
+  `full` runs the pr-review-toolkit agents (silent failures, type design,
+  test coverage, comments); the default run checks this repository's rules,
+  the OpenSpec change and Solana guidance. Human reviewers read the diff and
+  click through the preview, so the author's run is the review gate (agreed
+  on the 16 Oct 2026 call). Fix every critical finding, and the important
+  ones that are needed, in the same PR. A review gap outside the PR becomes
+  a Linear issue, closed later through agent rules or tooling.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,

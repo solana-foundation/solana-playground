@@ -52,8 +52,9 @@ operations:
     guidance:
       - Before the PR, run yarn lint, yarn check-format, yarn test-types and
         the unit tests in client-v2; CI runs the same
-      - Run the pr-review-toolkit review before gh pr create and fix what it
-        finds in the same PR
+      - Run /sx:review-pr full, then /sx:review-pr, before gh pr create; fix
+        the critical findings and the needed important ones in the same PR,
+        and file a Linear issue for a gap outside it
       - Never edit client/ or server/
       - A slice the task touches emits the events its spec describes; when
         the spec describes none and the slice has user actions, stop and
