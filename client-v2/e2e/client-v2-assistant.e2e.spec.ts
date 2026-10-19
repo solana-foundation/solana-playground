@@ -320,3 +320,200 @@ test.describe("Connect a model", () => {
     });
   });
 });
+
+/**
+ * The thread's own scenarios. Its items are written through the store the
+ * development build puts on `window`, as `thread-restore.e2e.spec.ts` does:
+ * what is under test is how the thread draws and answers them, not a model.
+ */
+type ThreadWindow = Window & {
+  __pgAssistant?: {
+    threadId?: string | null;
+    addUserMessage: (text: string) => void;
+    startAssistantMessage: () => string;
+    appendToAssistantMessage: (id: string, delta: string) => void;
+    setStatus: (status: string) => void;
+    requestApproval: (request: unknown) => Promise<unknown>;
+    whenPersisted: () => Promise<void>;
+  };
+};
+
+const PHONE = { width: 390, height: 844 };
+
+/**
+ * Waits for the store the development build puts on `window`, and for its
+ * thread: nothing is written to storage before a thread is open
+ */
+const storeReady = (page: Page) =>
+  expect
+    .poll(
+      () =>
+        page.evaluate(() => !!(window as ThreadWindow).__pgAssistant?.threadId),
+      LONG
+    )
+    .toBe(true);
+
+/** A patch of `lines` changed lines, waiting on the user */
+const proposePatch = async (page: Page, lines: number) => {
+  await storeReady(page);
+  await page.evaluate((count) => {
+    const after = Array.from({ length: count }, (_, i) => `line ${i}`).join(
+      "\n"
+    );
+    // Not awaited: it settles only when the card is answered
+    void (window as ThreadWindow).__pgAssistant!.requestApproval({
+      type: "patch",
+      path: "src/lib.rs",
+      before: "",
+      after,
+    });
+  }, lines);
+};
+
+/** Opens a project at desktop size, then shows the chat at phone size */
+const openOnPhone = async (page: Page, name: string) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await openProject(page, name);
+  await page.setViewportSize(PHONE);
+  await page.getByRole("radio", { name: "Chat" }).click();
+  await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+};
+
+const thread = (page: Page) => page.getByRole("log", { name: "Conversation" });
+
+test.describe("The thread", () => {
+  test.setTimeout(120_000);
+
+  test("client-v2-assistant: A reply with code on a phone", async ({
+    page,
+  }) => {
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
+    await openOnPhone(page, "thread-code-phone");
+
+    await storeReady(page);
+    await page.evaluate((line) => {
+      const store = (window as ThreadWindow).__pgAssistant!;
+      store.addUserMessage("Show me");
+      const id = store.startAssistantMessage();
+      store.appendToAssistantMessage(id, "Here:\n\n```rust\n" + line + "\n```");
+      store.setStatus("idle");
+    }, `let x = "${"a".repeat(200)}";`);
+
+    await expect(thread(page).getByText("Here:")).toBeVisible(LONG);
+    const width = await page.evaluate(
+      () => document.documentElement.scrollWidth
+    );
+    expect(width).toBeLessThanOrEqual(PHONE.width);
+  });
+
+  test("client-v2-assistant: A patch card on a phone", async ({ page }) => {
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
+    await openOnPhone(page, "thread-patch-phone");
+
+    await proposePatch(page, 60);
+
+    const card = page.locator("[data-slot=diff][data-status=pending]");
+    await expect(card).toBeVisible(LONG);
+    await expect(card.getByText("src/lib.rs")).toBeInViewport();
+    await expect(card.getByRole("button", { name: "Apply" })).toBeInViewport();
+    await expect(card.getByRole("button", { name: "Reject" })).toBeInViewport();
+    const content = card.locator("[data-slot=diff-content]");
+    expect(
+      await content.evaluate((el) => el.scrollHeight > el.clientHeight)
+    ).toBe(true);
+  });
+
+  test("client-v2-assistant: Reading back during an answer", async ({
+    page,
+  }) => {
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
+    await openProject(page, "thread-read-back");
+
+    await storeReady(page);
+    await page.evaluate(() => {
+      const store = (window as ThreadWindow).__pgAssistant!;
+      for (let i = 0; i < 30; i++) store.addUserMessage(`Message ${i}`);
+      (window as unknown as { __replyId: string }).__replyId =
+        store.startAssistantMessage();
+      store.setStatus("running");
+    });
+    await expect(thread(page).getByText("Message 29")).toBeVisible(LONG);
+
+    const viewport = page.locator("[data-slot=message-scroller-viewport]");
+    await viewport.hover();
+    await page.mouse.wheel(0, -100_000);
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollTop))
+      .toBeLessThan(10);
+    const top = await viewport.evaluate((el) => el.scrollTop);
+
+    await page.evaluate(() => {
+      const store = (window as ThreadWindow).__pgAssistant!;
+      const id = (window as unknown as { __replyId: string }).__replyId;
+      for (let i = 0; i < 20; i++) store.appendToAssistantMessage(id, "more ");
+    });
+
+    // A moment for the scroller to have followed, if it were going to
+    await page.waitForTimeout(500);
+    expect(await viewport.evaluate((el) => el.scrollTop)).toBe(top);
+
+    const toEnd = page.getByRole("button", { name: "Scroll to end" });
+    await expect(toEnd).toBeVisible();
+    await toEnd.click();
+    await expect(thread(page).getByText(/more more/)).toBeInViewport(LONG);
+  });
+
+  test("client-v2-assistant: Reloading with a card pending", async ({
+    page,
+  }) => {
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
+    await openProject(page, "thread-reload-pending");
+
+    await proposePatch(page, 3);
+    await expect(page.getByRole("button", { name: "Apply" })).toBeVisible(LONG);
+    await page.evaluate(() =>
+      (window as ThreadWindow).__pgAssistant!.whenPersisted()
+    );
+    // The write resolves before lightning-fs flushes it to IndexedDB, so a
+    // reload straight away can still lose it (as in thread-restore.e2e)
+    await page.waitForTimeout(1000);
+
+    await page.reload();
+
+    const card = page.locator("[data-slot=diff][data-status=unanswered]");
+    await expect(card).toBeVisible(LONG);
+    await expect(card.getByText("Not answered")).toBeVisible();
+    await expect(
+      card.getByText("not applied -- the session ended before you answered")
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
+  });
+
+  test("client-v2-assistant: Answering an approval is reported once", async ({
+    page,
+  }) => {
+    const lines = linesOn(page);
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
+    await openProject(page, "thread-answer-once");
+
+    await proposePatch(page, 2);
+    const apply = page.getByRole("button", { name: "Apply" });
+    await expect(apply).toBeVisible(LONG);
+    // Two presses before the card can re-render as answered
+    await apply.evaluate((button: HTMLElement) => {
+      button.click();
+      button.click();
+    });
+
+    await expect
+      .poll(() => lineOf(lines, "assistant_approval_answered"))
+      .toBeTruthy();
+    await page.waitForTimeout(300);
+    const answered = lines.filter((l) =>
+      l.startsWith("[telemetry:event] assistant_approval_answered ")
+    );
+    expect(answered).toHaveLength(1);
+    expect(answered[0]).toContain("kind: patch");
+    expect(answered[0]).toContain("answer: allow");
+  });
+});
