@@ -93,9 +93,10 @@ const EmptyThread = ({
 }) => (
   <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
     <CirclePlayIcon className="size-12 text-primary" aria-hidden />
-    <h2 className="text-xl font-semibold text-foreground">
+    {/* Under the panel head, which is the h2 */}
+    <h3 className="text-xl font-semibold text-foreground">
       {project ? `Ask about ${project}` : "Ask the assistant"}
-    </h2>
+    </h3>
     <p className="max-w-xs text-sm text-muted-foreground">
       It reads the file you are looking at and the last build error, and
       proposes patches you apply yourself.

@@ -41,14 +41,14 @@ describe("BaseThread", () => {
   it("an empty thread asks about the project", () => {
     renderThread([]);
     expect(
-      screen.getByRole("heading", { name: "Ask about Counter" })
+      screen.getByRole("heading", { name: "Ask about Counter", level: 3 })
     ).toBeTruthy();
   });
 
   it("an empty thread with no project asks about nothing in particular", () => {
     renderThread([], { project: null });
     expect(
-      screen.getByRole("heading", { name: "Ask the assistant" })
+      screen.getByRole("heading", { name: "Ask the assistant", level: 3 })
     ).toBeTruthy();
   });
 

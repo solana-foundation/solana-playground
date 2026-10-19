@@ -1192,7 +1192,9 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
   await expect
     .poll(async () => (await navColumn(page).boundingBox())!.x)
     .toBe(0);
-  const head = assistantPanel(page).getByRole("heading").locator("..");
+  const head = assistantPanel(page)
+    .getByRole("heading", { level: 2 })
+    .locator("..");
   const stageBar = page.locator('[data-slot="stage-bar"]');
   await expect.poll(() => barOf(head)).toEqual({ y: 0, height: 44 });
   await expect.poll(() => barOf(stageBar)).toEqual({ y: 0, height: 44 });
