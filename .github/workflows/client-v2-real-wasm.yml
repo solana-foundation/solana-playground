@@ -1,0 +1,96 @@
+name: client-v2 real wasm
+
+# `client-v2.yml` runs on the wasm stubs (`USE_WASM_STUBS`). This job builds
+# the real `wasm/*/pkg` packages and runs what needs them: the `@real-wasm`
+# browser specs and the bundle check Vercel's build runs. Manual only, because
+# a build without a warm cache takes about an hour.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-wasm:
+    name: real wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+
+    defaults:
+      run:
+        working-directory: client-v2
+
+    steps:
+      # `client-v2/public` is generated out of the `client/public` submodule,
+      # dated from its history.
+      - uses: actions/checkout@v6
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: client-v2/.nvmrc
+          cache: "yarn"
+          cache-dependency-path: "client-v2/yarn.lock"
+
+      # The cargo registry, the target folder and the wasm-bindgen binaries
+      # under `vercel-install.sh`'s `RUST_ROOT`. The toolchains are not
+      # cached: rustup reinstalls them in minutes, and a restored `cargo/bin`
+      # without them would skip the install that adds the wasm target.
+      - uses: actions/cache/restore@v6
+        id: rust-cache
+        with:
+          path: |
+            client-v2/.cache/rust/cargo/registry
+            client-v2/.cache/rust/cargo/git
+            client-v2/.cache/rust/target
+            client-v2/.cache/rust/wasm-bindgen
+          key: real-wasm-${{ runner.os }}-${{ hashFiles('wasm/**/Cargo.lock', 'wasm/**/rust-toolchain.toml') }}
+          restore-keys: real-wasm-${{ runner.os }}-
+
+      # Vercel's own build: the Rust version from `wasm/rust-toolchain.toml`,
+      # and each package built by `wasm/build.sh` with its pinned wasm-bindgen
+      # first on PATH (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen").
+      - name: Build the wasm packages
+        run: |
+          . scripts/vercel-install.sh
+          build_wasm_packages
+
+      # Saved even when a later step fails, so the next run starts warm.
+      - uses: actions/cache/save@v6
+        if: always() && steps.rust-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            client-v2/.cache/rust/cargo/registry
+            client-v2/.cache/rust/cargo/git
+            client-v2/.cache/rust/target
+            client-v2/.cache/rust/wasm-bindgen
+          key: ${{ steps.rust-cache.outputs.cache-primary-key }}
+
+      # The install half of `yarn setup`; its build half is the step above,
+      # which `yarn setup` would repeat without the pinned wasm-bindgen.
+      - name: Install
+        run: yarn install --frozen-lockfile --check-files
+
+      - name: Install Playwright browsers
+        run: yarn playwright install --with-deps chromium
+
+      # `test-e2e` refuses an installed stub, since USE_WASM_STUBS is unset.
+      # `yarn dev`, started by the Playwright config, runs `generate-fast`.
+      - name: Browser tests that run the CLIs
+        run: yarn test-e2e --grep @real-wasm
+
+      - name: Production build
+        run: yarn build-fast
+
+      - name: Check the bundle carries the real packages
+        run: node scripts/wasm-stubs.mjs check-build build
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: playwright-test-results-real-wasm
+          path: client-v2/test-results/
+          retention-days: 7
+          if-no-files-found: warn
