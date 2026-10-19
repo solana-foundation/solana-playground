@@ -173,6 +173,10 @@ not the OS. `PgTheme.set` toggles `dark` on `<html>` next to `colorScheme`.
 - `@source` names `src/` explicitly so Tailwind does not scan `public/`.
 - cssnano 5 is checked on Tailwind 4 output (`@property`, `@layer`,
   `color-mix()`) in the first Tailwind ticket.
+- cssnano runs without its `calc` step (5.18, `craco.config.js`):
+  postcss-calc cannot parse a `calc()` inside a `var()` fallback, which
+  shadcn's `scroll-fade-*` utilities emit, and CI fails the build on its
+  warning.
 
 ## The `@/` alias
 
