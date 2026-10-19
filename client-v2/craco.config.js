@@ -277,8 +277,7 @@ module.exports = {
         process: false,
         path: false,
         zlib: false,
-        // asn1.js 4 (via browserify-sign) tries `vm` inside a try/catch and falls back without it
-        vm: false,
+        vm: false, // parse-asn1's asn1.js 4 requires `vm` in a try/catch: unresolved it warns, stubbed it falls back
       };
 
       // Webpack treats `node:` as a URI scheme and rejects it before
@@ -490,10 +489,11 @@ module.exports = {
       }
       jsMinimizer.options.minimizer = {
         implementation: TerserPlugin.esbuildMinify,
-        // Decorators name change events after `_Pg*` classes, and esbuild
-        // keeps names only all or none
-        // iife keeps keepNames' helpers out of window, where chunks overwrote each other's
-        options: { keepNames: true, format: "iife", target: esbuildTarget() },
+        options: {
+          keepNames: true, // Decorators name change events after `_Pg*` classes; esbuild keeps all names or none
+          format: "iife", // Scopes keepNames' helpers per chunk: as globals, their minified names collide
+          target: esbuildTarget(),
+        },
       };
       // Workers are threads in this process, outside `--max-old-space-size`
       jsMinimizer.options.parallel = 2;
