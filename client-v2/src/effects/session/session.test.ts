@@ -461,53 +461,93 @@ describe("the session effect", () => {
 });
 
 describe("signing out", () => {
+  let order: string[];
+
   beforeEach(() => {
+    order = [];
     PgSession.reset();
     vi.spyOn(PgExplorer, "isInitialized", "get").mockReturnValue(true);
     vi.spyOn(PgSession, "refresh").mockResolvedValue(undefined);
-  });
-
-  afterEach(() => vi.restoreAllMocks());
-
-  it("closes the thread after handing it over, not before", async () => {
-    // Closing first would discard messages that had not been uploaded;
-    // leaving it open means the panel keeps rendering the previous user's
-    // transcript and writes it straight back into storage, from where the next
-    // account's sign-in dump uploads it.
-    const order: string[] = [];
-    vi.spyOn(PgChatSync, "handOver").mockImplementation(async () => {
-      order.push("handOver");
+    vi.spyOn(PgChatSync, "pushAll").mockImplementation(async () => {
+      order.push("pushChats");
+      return { handedOver: [], complete: true };
+    });
+    vi.spyOn(PgProjectSync, "pushCurrent").mockImplementation(async () => {
+      order.push("pushProject");
+      return "ok";
+    });
+    vi.spyOn(PgChatSync, "forget").mockImplementation(async () => {
+      order.push("forgetChats");
+    });
+    vi.spyOn(restore, "releaseLocalProjects").mockImplementation(async () => {
+      order.push("releaseProjects");
+      return [];
     });
     vi.spyOn(PgAssistant, "closeThread").mockImplementation(
       () => order.push("closeThread") as unknown as void
     );
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  const serverSignsOut = (answer: Partial<Response>) =>
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      order.push("request");
+      return answer as Response;
+    });
+
+  it("uploads before the request and tears down after it", async () => {
+    // Closing the thread before the hand-over would discard messages that
+    // had not been uploaded; leaving it open means the panel keeps rendering
+    // the previous user's transcript and writes it straight back into
+    // storage, from where the next account's sign-in dump uploads it.
+    serverSignsOut({ ok: true });
 
     const effect = session();
     await PgSession.signOut();
 
-    expect(order).toEqual(["handOver", "closeThread"]);
+    expect(order).toEqual([
+      "pushChats",
+      "pushProject",
+      "request",
+      "forgetChats",
+      "releaseProjects",
+      "closeThread",
+    ]);
+    effect.dispose();
+  });
+
+  it("tears nothing down when the server refuses the sign-out", async () => {
+    // The user is still signed in. Tearing down first left them with their
+    // conversation closed and their projects gone from the browser.
+    serverSignsOut({ ok: false, status: 500 });
+    PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
+
+    const effect = session();
+    await expect(PgSession.signOut()).rejects.toThrow();
+
+    expect(order).toEqual(["pushChats", "pushProject", "request"]);
+    expect(PgProjectSync.conflictFor("tut:hello")).not.toBeNull();
     effect.dispose();
   });
 
   it("closes the thread even when the hand-over fails", async () => {
-    vi.spyOn(PgChatSync, "handOver").mockRejectedValue(new Error("offline"));
-    const close = vi
-      .spyOn(PgAssistant, "closeThread")
-      .mockImplementation(() => undefined);
+    vi.spyOn(PgChatSync, "pushAll").mockRejectedValue(new Error("offline"));
+    serverSignsOut({ ok: true });
 
     const effect = session();
     await PgSession.signOut();
 
-    // The storage clear inside `handOver` is what did not happen, so the
-    // messages are still there for the next sign-in. What must not survive is
-    // the *rendered* thread, which would be re-persisted on the next change.
-    expect(close).toHaveBeenCalled();
+    // The threads were not uploaded, so nothing is forgotten and they are
+    // still there for the next sign-in. What must not survive is the
+    // *rendered* thread, which would be re-persisted on the next change.
+    expect(PgChatSync.forget).toHaveBeenCalledWith(null);
+    expect(order).toContain("closeThread");
     effect.dispose();
   });
 
   it("drops the previous account's conflicts", async () => {
-    vi.spyOn(PgChatSync, "handOver").mockResolvedValue(undefined);
-    vi.spyOn(PgAssistant, "closeThread").mockImplementation(() => undefined);
+    serverSignsOut({ ok: true });
     PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
 
     const effect = session();

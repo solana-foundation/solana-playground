@@ -82,6 +82,17 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
     }
   };
 
+  // A failed sign-out keeps the session, so the chip still reads signed in;
+  // this says why the click did nothing
+  const signOut = async () => {
+    setAuthError(null);
+    try {
+      await PgSession.signOut();
+    } catch (e) {
+      setAuthError((e as Error).message);
+    }
+  };
+
   return (
     <Wrapper>
       <ChipButton
@@ -137,7 +148,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
                     <ConfirmSignOutButton
                       type="button"
                       onClick={() => {
-                        void PgSession.signOut();
+                        void signOut();
                         closeProfile();
                       }}
                     >

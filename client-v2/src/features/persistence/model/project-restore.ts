@@ -497,15 +497,18 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  * reaches the server that should not; what was left is that they are visible.
  *
  * Decided per project, and only where the account demonstrably holds the same
- * content -- the same trade `PgChatSync.handOver` makes one directory over,
- * and it has to be the same one for the same reason. Sign-out completes with
- * no network at all: `PgSession.signOut` swallows the request's failure by
- * design, because a UI still claiming you are signed in is worse than a cookie
- * that outlives it. So "the server has this" is a question that can genuinely
- * be answered "no", and deleting on the strength of a push that never happened
- * is exactly how work disappears. The cost of being wrong in this direction is
- * that the next user of the browser sees a project that is not theirs; the
- * cost of being wrong the other way is somebody's afternoon.
+ * content -- the same trade `PgChatSync.forget` makes one directory over,
+ * and it has to be the same one for the same reason. The flush before the
+ * sign-out request can fail while the sign-out itself succeeds, so "the server
+ * has this" is a question that can genuinely be answered "no", and deleting on
+ * the strength of a push that never happened is exactly how work disappears.
+ * The cost of being wrong in this direction is that the next user of the
+ * browser sees a project that is not theirs; the cost of being wrong the
+ * other way is somebody's afternoon.
+ *
+ * Runs only after the server has ended the session, so it pushes nothing:
+ * the open workspace is flushed beforehand, by the session effect, while the
+ * request is still authenticated.
  *
  * Every removal runs inside `whileSigningOut`, because each one reaches the
  * `project-sync` effect as an ordinary `onDidDeleteWorkspace` -- the same
@@ -526,16 +529,6 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  */
 export const releaseLocalProjects = async (): Promise<string[]> =>
   PgProjectSync.whileSigningOut(async () => {
-    // The editor's push is debounced by seconds, so the workspace in front of
-    // the user is the one most likely to hold something the server has not
-    // seen. Best effort: if this fails, that project simply fails `isClean`
-    // below and is kept, which is the outcome we want anyway.
-    try {
-      await PgProjectSync.pushCurrent();
-    } catch (e) {
-      report("flush before sign-out", e);
-    }
-
     // Copied, because `deleteWorkspace` mutates the explorer's own list and
     // iterating it while it shrinks skips every other entry
     const names = [...(PgExplorer.allWorkspaceNames ?? [])];

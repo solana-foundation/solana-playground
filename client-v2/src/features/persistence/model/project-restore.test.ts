@@ -654,10 +654,6 @@ describe("releasing local projects at sign-out", () => {
     PgProjectSync.reset();
     storedFiles().clear();
     await signedIn();
-    // Sign-out flushes the open workspace first. Nothing here is testing that
-    // request, and letting it reach the network would make every case below
-    // depend on it.
-    vi.spyOn(PgProjectSync, "pushCurrent").mockResolvedValue("ok");
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -692,9 +688,8 @@ describe("releasing local projects at sign-out", () => {
   });
 
   it("keeps a project holding work that never uploaded", async () => {
-    // Sign-out completes with no network -- `PgSession.signOut` swallows the
-    // request's failure on purpose -- so this is reachable by signing out
-    // offline, and it is the case where being wrong costs an afternoon.
+    // The flush before the sign-out request can fail while the sign-out
+    // succeeds, and this is the case where being wrong costs an afternoon.
     withLocal({ alpha: "p1" });
     withFiles("alpha", { "src/lib.rs": "written since the last push" });
     await agreed(
@@ -723,7 +718,7 @@ describe("releasing local projects at sign-out", () => {
 
   it("decides per project rather than for the set", async () => {
     // The mistake this mirrors the fix for, one directory over in
-    // `PgChatSync.handOver`: one project that cannot be handed over is no
+    // `PgChatSync.forget`: one project that cannot be handed over is no
     // reason to leave the others on a browser the account is done with.
     withLocal({ alpha: "p1", beta: "p2" });
     withFiles("alpha", { "src/lib.rs": "same" });
@@ -746,18 +741,5 @@ describe("releasing local projects at sign-out", () => {
     await releaseLocalProjects();
 
     expect(await PgSyncMark.read("p1")).not.toBeNull();
-  });
-
-  it("flushes the open workspace before deciding anything", async () => {
-    // Up to a debounce window of edits sits unpushed at any moment, and they
-    // are the difference between this project qualifying and being kept
-    withLocal({ alpha: "p1" });
-    withFiles("alpha", { "src/lib.rs": "same" });
-    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
-    stubDelete();
-
-    await releaseLocalProjects();
-
-    expect(PgProjectSync.pushCurrent).toHaveBeenCalled();
   });
 });

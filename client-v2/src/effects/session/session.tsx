@@ -1,5 +1,6 @@
 import { PgSession } from "../../features/auth";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
+import type { HandOver } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import {
@@ -153,38 +154,63 @@ export const session = (): Disposable => {
   };
 
   /**
-   * Hand everything over, then forget this account.
+   * Hand everything over, and return how to forget this account.
    *
-   * Order matters in both halves. The push has to happen while the cookie is
-   * still valid, and the teardown has to happen after it: closing the thread
-   * before `handOver` would discard messages that had not been uploaded, and
-   * leaving it open afterwards means the panel keeps rendering the previous
-   * user's transcript and writes it straight back into storage the next time
-   * anything changes -- from where the next account's sign-in dump uploads it.
+   * Two halves, and `PgSession.signOut` runs the request between them. The
+   * push has to happen while the cookie is still valid; the teardown only once
+   * the server has ended the session. Tearing down first left a sign-out that
+   * failed with the user still signed in but their conversation closed, their
+   * projects removed from the browser and sync's names and conflicts dropped.
    *
-   * `releaseLocalProjects` is the same move for code, and runs here for the
-   * same reason: it needs the session to still be readable, because a mark is
-   * keyed by the user id and `PgSyncMark.read` answers `null` without one --
-   * which would make every project look unsynced and none of them removable.
+   * Within the teardown, order matters too: closing the thread before
+   * `forget` would discard messages that had not been uploaded, and leaving it
+   * open afterwards means the panel keeps rendering the previous user's
+   * transcript and writes it straight back into storage the next time anything
+   * changes -- from where the next account's sign-in dump uploads it.
+   *
+   * `releaseLocalProjects` is the same move for code, and runs in the teardown
+   * for the same reason: it needs the session to still be readable, because a
+   * mark is keyed by the user id and `PgSyncMark.read` answers `null` without
+   * one -- which would make every project look unsynced and none of them
+   * removable. `signOut` runs the teardown before it clears the user.
    */
   const relinquish = async () => {
     // Independently, not one `try` around both: the two hand-overs answer for
     // different data, and a conversation that could not be uploaded is no
     // reason to leave the account's projects on a browser it is done with.
+    let handed: HandOver | null = null;
     try {
-      await PgChatSync.handOver();
+      handed = await PgChatSync.pushAll();
     } catch (e) {
       report("hand over conversations", e);
     }
 
+    // The editor's push is debounced by seconds, so the workspace in front of
+    // the user is the one most likely to hold something the server has not
+    // seen. Best effort: if this fails, that project fails `isClean` in
+    // `releaseLocalProjects` and is kept, which is the outcome we want anyway.
     try {
-      await releaseLocalProjects();
+      await PgProjectSync.pushCurrent();
     } catch (e) {
-      report("release local projects", e);
+      report("flush before sign-out", e);
     }
 
-    PgAssistant.closeThread();
-    PgProjectSync.forgetAccount();
+    return async () => {
+      try {
+        await PgChatSync.forget(handed);
+      } catch (e) {
+        report("forget conversations", e);
+      }
+
+      try {
+        await releaseLocalProjects();
+      } catch (e) {
+        report("release local projects", e);
+      }
+
+      PgAssistant.closeThread();
+      PgProjectSync.forgetAccount();
+    };
   };
 
   // Held from here, before anything can fire, and released the moment the

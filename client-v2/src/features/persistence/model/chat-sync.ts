@@ -350,11 +350,12 @@ export class PgChatSync {
   }
 
   /**
-   * Hand local threads over on sign-out, then forget them.
+   * Forget the threads a sign-out's `pushAll` handed over.
    *
-   * Registered with `PgSession` by the session effect rather than called from
-   * it: `features/auth` must not import `features/persistence`, because this
-   * module already imports `features/auth` and the two would be circular.
+   * Separate from the push because a sign-out spans both: the push runs while
+   * the request is still authenticated, and this only once the server has
+   * ended the session. A sign-out that fails leaves the user signed in, with
+   * every thread still on the device.
    *
    * A thread is only dropped once the server holds it, or has closed it
    * under a project it still has (`isHandedOver`). A failed push leaves
@@ -370,8 +371,7 @@ export class PgChatSync {
    * single flaky request handed the next user the entire transcript. Nothing
    * was gained for it: the failed thread is kept either way.
    */
-  static async handOver(): Promise<void> {
-    const handed = await PgChatSync.pushAll();
+  static async forget(handed: HandOver | null): Promise<void> {
     if (!handed) return;
 
     // Wholesale when everything made it, because that is the one case where
@@ -811,7 +811,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-        await PgChatSync.handOver();
+      await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([]);
       });
@@ -823,7 +823,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-        await PgChatSync.handOver();
+      await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.read(threadId)).toHaveLength(1);
       });
@@ -855,7 +855,7 @@ if (import.meta.vitest) {
         await PgChatStorage.write(second, [item(2)]);
         await PgChatStorage.write(third, [item(3)]);
 
-        await PgChatSync.handOver();
+      await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect((await PgChatStorage.threadIds())?.sort()).toEqual([second]);
         expect(await PgChatStorage.read(second)).toHaveLength(1);
@@ -879,7 +879,7 @@ if (import.meta.vitest) {
       it("does not report a thread it could not read as uploaded", async () => {
         // Same shape one level down: an unreadable thread read as an empty one,
         // and `push` reported success for a thread the server never saw -- which
-        // is what then let `handOver` delete the one file worth recovering
+      // is what then let `forget` delete the one file worth recovering
         accepted();
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
@@ -915,7 +915,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-        await PgChatSync.handOver();
+      await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([]);
       });
@@ -934,7 +934,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-        await PgChatSync.handOver();
+      await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
       });
@@ -962,7 +962,7 @@ if (import.meta.vitest) {
         await PgChatStorage.write(threadId, [item(1)]);
         await PgChatStorage.write(underDeleted, [item(2)]);
 
-        await PgChatSync.handOver();
+      await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([underDeleted]);
       });
