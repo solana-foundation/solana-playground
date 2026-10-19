@@ -16,6 +16,7 @@ import { lineOf, linesOn } from "./telemetry";
  */
 
 const DEFAULT_MODEL = "z-ai/glm-5.3-flash:US";
+const PHONE = { width: 390, height: 844 };
 const ANSWER =
   'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n';
 
@@ -255,8 +256,6 @@ test.describe("Connect a model", () => {
   });
 
   test.describe("on a phone", () => {
-    const PHONE = { width: 390, height: 844 };
-
     test("client-v2-assistant: Connecting on a phone", async ({ page }) => {
       await stubAgent(page, { configured: false, model: null }, answer);
       // The project opens from Home on a desktop-sized page; a phone
@@ -338,8 +337,6 @@ type ThreadWindow = Window & {
   };
 };
 
-const PHONE = { width: 390, height: 844 };
-
 /**
  * Waits for the store the development build puts on `window`, and for its
  * thread: nothing is written to storage before a thread is open
@@ -400,10 +397,19 @@ test.describe("The thread", () => {
     }, `let x = "${"a".repeat(200)}";`);
 
     await expect(thread(page).getByText("Here:")).toBeVisible(LONG);
-    const width = await page.evaluate(
-      () => document.documentElement.scrollWidth
+    // The scroller clips what overflows it, so the page alone cannot show a
+    // reply wider than the screen: the thread itself must not scroll sideways
+    const viewport = page.locator("[data-slot=message-scroller-viewport]");
+    expect(
+      await viewport.evaluate((el) => el.scrollWidth <= el.clientWidth)
+    ).toBe(true);
+    const block = thread(page).locator("pre").first();
+    expect(await block.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
+      true
     );
-    expect(width).toBeLessThanOrEqual(PHONE.width);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth)
+    ).toBeLessThanOrEqual(PHONE.width);
   });
 
   test("client-v2-assistant: A patch card on a phone", async ({ page }) => {
@@ -414,9 +420,13 @@ test.describe("The thread", () => {
 
     const card = page.locator("[data-slot=diff][data-status=pending]");
     await expect(card).toBeVisible(LONG);
-    await expect(card.getByText("src/lib.rs")).toBeInViewport();
-    await expect(card.getByRole("button", { name: "Apply" })).toBeInViewport();
-    await expect(card.getByRole("button", { name: "Reject" })).toBeInViewport();
+    await expect(card.getByText("src/lib.rs")).toBeInViewport({ ratio: 1 });
+    for (const name of ["Apply", "Reject"]) {
+      const button = card.getByRole("button", { name });
+      await expect(button).toBeInViewport({ ratio: 1 });
+      // A thumb's target, 44 px high
+      expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    }
     // Code reads in the code font: every `data-slot` element gets the text
     // font from the base layer, so a line must ask for its own
     const font = await card
@@ -445,6 +455,14 @@ test.describe("The thread", () => {
       store.setStatus("running");
     });
     await expect(thread(page).getByText("Message 29")).toBeVisible(LONG);
+
+    // At the end, the thread follows the answer as it grows
+    await page.evaluate(() => {
+      const store = (window as ThreadWindow).__pgAssistant!;
+      const id = (window as unknown as { __replyId: string }).__replyId;
+      for (let i = 0; i < 40; i++) store.appendToAssistantMessage(id, "first ");
+    });
+    await expect(thread(page).getByText(/first first/)).toBeInViewport(LONG);
 
     const viewport = page.locator("[data-slot=message-scroller-viewport]");
     await viewport.hover();
@@ -494,6 +512,7 @@ test.describe("The thread", () => {
       card.getByText("not applied -- the session ended before you answered")
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
   });
 
   test("client-v2-assistant: Answering an approval is reported once", async ({
