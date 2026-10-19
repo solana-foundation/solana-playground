@@ -541,7 +541,7 @@
       "name": "console-drawer",
       "type": "registry:ui",
       "title": "Console drawer",
-      "description": "A frosted strip under the stage and a well that opens by height, so the terminal stays mounted. ⌘J.",
+      "description": "A frosted strip under the stage and a well that opens by height, so the terminal stays mounted. \u2318J.",
       "registryDependencies": [
         "@playground/playground-tokens"
       ],
