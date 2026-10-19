@@ -49,7 +49,6 @@ const { DEV_SERVER_ROOT_HEADER } = require("./scripts/dev-server-owner.mjs");
 const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
-const TerserPlugin = require("terser-webpack-plugin");
 const { esbuildMinifyOptions } = require("./scripts/esbuild-minify.mjs");
 
 /** CRA's in-build type check and lint, by plugin class name */
@@ -439,7 +438,7 @@ module.exports = {
         );
       }
       jsMinimizer.options.minimizer = {
-        implementation: TerserPlugin.esbuildMinify,
+        implementation: jsMinimizer.constructor.esbuildMinify, // CRA's own copy, not whichever one hoisting resolves
         options: esbuildMinifyOptions(),
       };
       // Workers are threads in this process, outside `--max-old-space-size`
