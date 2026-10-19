@@ -4097,28 +4097,28 @@
     qrcode "^1.5.4"
 
 "@solana-playground/anchor-cli@../wasm/anchor-cli/pkg":
-  version "0.0.0-stub"
+  version "0.29.0"
 
 "@solana-playground/playnet@../wasm/pkgs/playnet":
   version "0.1.0"
 
 "@solana-playground/rust-analyzer@../wasm/rust-analyzer/pkg":
-  version "0.0.0-stub"
+  version "0.0.100"
 
 "@solana-playground/rustfmt@../wasm/pkgs/rustfmt":
   version "0.99.4"
 
 "@solana-playground/seahorse-compile@../wasm/seahorse-compile/pkg":
-  version "0.0.0-stub"
+  version "0.2.0"
 
 "@solana-playground/solana-cli@../wasm/solana-cli/pkg":
-  version "0.0.0-stub"
+  version "1.11.0"
 
 "@solana-playground/spl-token-cli@../wasm/spl-token-cli/pkg":
-  version "0.0.0-stub"
+  version "2.0.15"
 
 "@solana-playground/sugar-cli@../wasm/sugar-cli/pkg":
-  version "0.0.0-stub"
+  version "1.1.0-alpha"
 
 "@solana/buffer-layout-utils@^0.2.0":
   version "0.2.0"
