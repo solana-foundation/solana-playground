@@ -730,16 +730,18 @@ Remove the type error.
 ### M-5. chunks declare nothing at the top level
 
 ```sh
-yarn --cwd client-v2 build-fast
-node client-v2/scripts/check-chunk-scope.mjs client-v2/build/static/js
+node --test client-v2/scripts/chunk-scope.test.mjs
 ```
+
+`yarn --cwd client-v2 test-api` runs the same test, in CI too. It needs no build: it minifies a small chunk fixture
+with the options in `client-v2/scripts/esbuild-minify.mjs`, through `TerserPlugin.esbuildMinify`. It checks the
+minifier options, not the real build output.
 
 Expect:
 
-- [ ] the script prints how many chunks it read and exits 0. CI runs the same check after M-2's ("Check chunks declare
-      nothing at the top level" in `client-v2.yml`).
-- [ ] with `format: "iife"` removed from the esbuild minimizer options in `client-v2/craco.config.js`, the same two
-      commands exit 1 and name each chunk with its first top-level name. Chunks load as classic scripts, so their
+- [ ] the test passes.
+- [ ] with `format: "iife"` removed from `esbuildMinifyOptions` in `client-v2/scripts/esbuild-minify.mjs`, the test
+      fails and names the identifier the chunk declares at the top level. Chunks load as classic scripts, so their
       top-level helpers are globals and a later chunk's same-named helper overwrites them. Restore the option.
 
 ## 8. Parallel runs

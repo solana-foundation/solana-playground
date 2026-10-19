@@ -177,10 +177,6 @@ jobs:
             }
           done
 
-      # Top-level helpers in a chunk become globals, and a later chunk's same-named helper overwrites them.
-      - name: Check chunks declare nothing at the top level
-        run: node scripts/check-chunk-scope.mjs
-
   # The browser suite (`client-v2/e2e/`, Playwright) in its own job, so
   # `checks` stays short and a browser failure reads as one. No Postgres and
   # no secret: every spec stubs the account endpoints with `page.route`, and
