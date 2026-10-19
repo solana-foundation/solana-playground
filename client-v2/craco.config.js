@@ -444,6 +444,19 @@ module.exports = {
       // Workers are threads in this process, outside `--max-old-space-size`
       jsMinimizer.options.parallel = 2;
 
+      // CRA's CSS minimizer, without cssnano's postcss-calc: it cannot parse
+      // a `calc()` inside a `var()` fallback, which the design system's
+      // `scroll-fade-*` utilities emit, and CI fails the build on its warning
+      const cssMinimizer = webpackConfig.optimization.minimizer.find(
+        (plugin) => plugin.constructor.name === "CssMinimizerPlugin"
+      );
+      if (!cssMinimizer) {
+        throw new Error("craco: expected CRA's CssMinimizerPlugin");
+      }
+      cssMinimizer.options.minimizer.options = {
+        preset: ["default", { calc: false }],
+      };
+
       // Ignore useless warnings
       webpackConfig.ignoreWarnings = [
         /Failed to parse source map/,
