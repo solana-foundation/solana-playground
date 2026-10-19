@@ -6,11 +6,11 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | Section | Covers |
 | --- | --- |
 | [Prerequisites](#0-prerequisites) | macOS and Docker set-up, toolchains, branches |
-| [Builds](#1-builds) | wasm, client, client-v2, server, compose images |
+| [Builds](#1-builds) | wasm, client, client-v2, server, compose images, real wasm packages |
 | [Client dev servers](#2-client-dev-servers-without-a-server) | client and client-v2 start with no build server running |
 | [Full suite with compose](#3-full-suite-with-docker-compose) | client, server, and database together; client-server requests |
 | [Static assets](#4-static-assets-default-rs-files-and-templates) | rust-analyzer `.rs` files in local, Vercel, and Docker builds; templates, tutorials |
-| [Release gate](#5-release-gate-unstable-stays-out-of-production) | unstable stays out of production |
+| [Release gate](#5-release-gate-unstable-and-stubs-stay-out-of-production) | unstable and the wasm stubs stay out of production |
 | [Optional: unstable server](#6-optional-unstable-server) | the server's unstable functionality, tested on purpose |
 | [Parallel runs](#8-parallel-runs) | groups of cases run at once, on rotated ports |
 | [client-v2 production build](#7-client-v2-production-build) | memory, the esbuild minifier, browser floor, type checks outside the build |
@@ -64,6 +64,8 @@ Expect: `x86_64`.
 - [ ] Node and yarn versions match `client/.nvmrc` and the `packageManager` field of `client/package.json`.
 - [ ] `rustup` is installed. The wasm toolchain comes from `wasm/rust-toolchain.toml`.
 - [ ] `git submodule update --init` has populated `client/public` (the assets submodule).
+- [ ] client-v2's wasm packages are real (B-7). `USE_WASM_STUBS=true` is the one exception, for UI-only work: the
+      stubs fail C-6 and S-3.
 
 ### P-3. Branches
 
@@ -139,15 +141,11 @@ Expect: every command exits 0; `git status --porcelain` prints nothing (generate
 Mirrors the `checks` job in [client-v2.yml](../.github/workflows/client-v2.yml) and the `build` job in
 [reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml).
 
-Precondition: B-1, or `wasm/stub-packages.sh` as CI runs it. The stubs skip the Rust build but disable Rust
-intellisense and the `solana`, `anchor`, `spl-token`, and `sugar` terminal commands, so S-3 needs B-1.
-
-A checkout that started from the stubs keeps them after B-1: yarn 1 decides whether to copy a `file:` dependency from
-the lockfile, not from the folder's content. Install with `--check-files` after B-1, and check that
-`client-v2/node_modules/@solana-playground/rust-analyzer` holds `rust_analyzer_wasm_bg.wasm`, not only `index.js`.
+Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) as CI runs it. The stubs skip
+the Rust build but disable Rust intellisense and the `solana`, `anchor`, `spl-token`, and `sugar` terminal commands, so
+S-3 and C-6 need B-7.
 
 ```sh
-yarn --cwd client-v2 install --frozen-lockfile
 yarn --cwd client-v2 run check
 yarn --cwd client-v2 build-fast
 grep -q '\.flex{display:flex}' client-v2/build/static/css/main.*.css && echo tailwind ok
@@ -180,6 +178,21 @@ docker compose --profile dev build
 Expect: the `client`, `server`, and `wasm` images build for `linux/amd64`. Verify with
 `docker image inspect <image> --format '{{.Architecture}}'`, which prints `amd64`.
 
+### B-7. client-v2: local packages are real
+
+`yarn setup` builds `wasm/*/pkg` into the cargo target folder shared by every worktree, deletes the installed copies
+under `client-v2/node_modules/@solana-playground`, and installs again, so a checkout that held stubs takes the real
+packages.
+
+```sh
+yarn --cwd client-v2 setup
+grep -l '0.0.0-stub' wasm/*/pkg/package.json client-v2/node_modules/@solana-playground/*/package.json
+grep -rl 'local dev stub' client-v2/node_modules/@solana-playground
+```
+
+Expect: `setup` exits 0; both `grep` lines print nothing. With a seeded or warm target folder, `setup` took 148 s on
+2026-10-19 (`39628e59`); a cold one takes about an hour.
+
 ## 2. Client dev servers without a server
 
 Goal: the client starts and stays usable when no build server is reachable. Only the actions that call the server fail.
@@ -199,8 +212,8 @@ curl -sI http://localhost:3000
 Expect:
 
 - [ ] the page loads at `http://localhost:3000` with no console errors on load.
-- [ ] the IDE renders: file explorer, editor, and terminal. Typing `help` in the terminal lists the commands, which
-      proves the wasm packages loaded.
+- [ ] the IDE renders: file explorer, editor, and terminal. Typing `help` in the terminal lists the commands. The list
+      prints with the stubs too, so it proves the terminal works, not the wasm packages; C-6 runs the packages.
 - [ ] the network tab shows no failed request on load (no 4xx, 5xx, or HTML served for a non-HTML file), apart from
       `crates/core.rs`, `alloc.rs` and `std.rs`: upstream's client does not generate them (client-v2 does, see S-1).
 - [ ] response headers include `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Opener-Policy: same-origin`.
@@ -226,7 +239,7 @@ Expect: an error page or message, not a blank screen.
 
 ### C-4. client-v2 starts
 
-Precondition: `master`; nothing listens on port 8080.
+Precondition: `master`; B-7; nothing listens on port 8080.
 
 client-v2 defaults its server endpoint to the remote Foundation server, not to `localhost`. To test the "no server"
 case, point it at the local port:
@@ -240,6 +253,8 @@ Expect:
 
 - [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the IDE, the terminal `help`, and the network
       tab pass.
+- [ ] C-6 passes. `yarn dev` stops before it starts when `node_modules` holds stubs and `USE_WASM_STUBS=true` is
+      unset.
 - [ ] `/api/health` returns `200` (it is served by the client-v2 dev server, not the build server).
 - [ ] the COEP and COOP headers from C-1 are present.
 - [ ] S-10 passes against this server.
@@ -247,6 +262,23 @@ Expect:
 ### C-5. client-v2: actions that need the server fail cleanly
 
 Same steps and expectations as C-2, run against the C-4 session.
+
+### C-6. the CLIs run in the client
+
+Precondition: a C-1 or C-4 session on the real packages. For client-v2,
+[wasm-clis.e2e.spec.ts](../client-v2/e2e/wasm-clis.e2e.spec.ts) runs these steps:
+`PORT=<slot port> yarn --cwd client-v2 test-e2e --grep @real-wasm`, and the manual workflow
+[client-v2-real-wasm.yml](../.github/workflows/client-v2-real-wasm.yml) runs it on GitHub. `client-v2.yml` runs on the
+stubs and excludes the tag.
+
+Steps: connect the Playground Wallet, then run in the terminal `solana config get`, `spl-token --help`,
+`anchor --help`, and `sugar --help`.
+
+Expect:
+
+- [ ] `solana config get` prints an `RPC URL:` line.
+- [ ] each `--help` prints its CLI's usage and subcommands.
+- [ ] no output contains `local dev stub`, the error every stub throws.
 
 ## 3. Full suite with Docker Compose
 
@@ -338,7 +370,7 @@ Expect:
 
 - [ ] the client answers on `http://localhost:3000` (`PG_CLIENT_V2_PORT` overrides the port) with no server running.
 - [ ] the `exec` prints nothing and exits 127: the image ships the generated crate files, not the Rust toolchain.
-- [ ] S-1, S-2, and S-10 pass against this container.
+- [ ] S-1, S-2, S-10, and C-6 pass against this container.
 
 ### D-9. the server builds a program, without a client
 
@@ -429,7 +461,7 @@ proc-macro dependencies, which `versions.json` does not list.
 
 ### S-3. rust-analyzer in the editor
 
-Precondition: real wasm packages (B-1), not the stubs.
+Precondition: real wasm packages (B-1 for the upstream client, B-7 for client-v2), not the stubs.
 
 Steps: create an Anchor project and open `src/lib.rs`, then:
 
@@ -495,7 +527,7 @@ Expect:
       `generate-packages` prints lines that match the same `grep`.
 - [ ] no line contains `not found`: `generate-crates.mjs` fails the build on a missing supported crate.
 - [ ] both `curl`s print Rust source and TOML, not `<!doctype html>`.
-- [ ] S-3 passes on the preview (open it once with `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`).
+- [ ] S-3 and C-6 pass on the preview (open it once with `?x-vercel-protection-bypass=<secret>&x-vercel-set-bypass-cookie=true`).
 
 A miss on the default crates adds about 2 minutes to the build; a hit adds none. The supported crates add about
 20–30 seconds to every build.
@@ -581,9 +613,10 @@ done
 Expect: `200` and a content type other than `text/html` for every path. `/packages/versions.json` is generated by
 `yarn generate`; an HTML response for it means the generate step did not run.
 
-## 5. Release gate: unstable stays out of production
+## 5. Release gate: unstable and stubs stay out of production
 
-The server's unstable functionality must not reach production until it is tested on its own. Run these before every
+The server's unstable functionality must not reach production until it is tested on its own, and the wasm stubs must
+never reach it (R-4). Run these before every
 production deploy of the server or the clients. A failure blocks the deploy.
 
 ### R-1. production server image builds without unstable
@@ -615,6 +648,29 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
       this, so B-3 covers it.
 - [ ] upstream client: a production build sends Build and Deploy to the stable routes (`PgServer` in
       `client/src/utils/server.ts`); D-2 covers it.
+
+### R-4. the deployment carries no stub
+
+A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` commands throw. The Vercel build already
+fails on a bundle built from a stub (`node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
+[vercel.json](../client-v2/vercel.json)); this case checks what was deployed. For a protected preview, add
+`-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` to each `curl` (S-6).
+
+```sh
+base=<deployment URL>
+curl -s "$base/asset-manifest.json" | jq -r '.files[] | select(endswith(".js"))' > <run folder>/chunks.txt
+while read -r f; do curl -s -o "<run folder>/$(basename "$f")" "$base$f"; done < <run folder>/chunks.txt
+grep -l 'local dev stub' <run folder>/*.js
+grep -l 'solana_cli_wasm_bg' <run folder>/*.js
+grep -o '"[0-9a-f]\{20\}"' <run folder>/<the chunk the previous grep listed>
+curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base/<that hash>.module.wasm"
+```
+
+Expect:
+
+- [ ] the first `grep` prints nothing; the second lists one chunk, which names one hash.
+- [ ] the last `curl` prints `200 application/wasm` and a size of megabytes. On 2026-10-19,
+      `solana-playground-teal.vercel.app` served chunk `790` and `/cb0f9cf8e4161ad3396e.module.wasm`, 3,058,467 bytes.
 
 ## 6. Optional: unstable server
 
@@ -795,7 +851,7 @@ different port is a different origin.
 | upstream prod | D-2, then D-3 | `prod` | 2 |
 | v2 stack | D-6 | `v2` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |
-| local, no Docker | C-1, C-2, C-4, C-5, S-9 | none | `PORT` per dev server, from slot 5 |
+| local, no Docker | C-1, C-2, C-4, C-5, C-6, S-9 | none | `PORT` per dev server, from slot 5 |
 | remote | S-6, R-2 | none | none |
 
 ### Slots

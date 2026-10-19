@@ -6,35 +6,48 @@ This is the main application of Solana Playground.
 
 `wasm/*/pkg` and `public/` are both gitignored, so a fresh clone or a new
 worktree has never built them. `yarn install` cannot resolve the local `file:`
-dependencies until `wasm/*/pkg` exists, which leaves two paths.
+dependencies until `wasm/*/pkg` exists.
 
-**UI work (seconds).** Write placeholder WASM packages, no Rust toolchain needed:
-
-```sh
-bash ../wasm/stub-packages.sh
-yarn install
-yarn start
-```
-
-You lose Rust intellisense and the `solana`, `anchor`, `spl-token` and `sugar`
-terminal commands plus Seahorse builds. The UI, Monaco, rustfmt, Playnet, the
-wallet, and Rust program builds via the build server all keep working.
-
-**Full setup (~1h).** Compile the WASM packages from Rust, then install and
-generate:
+**Fresh clone or new worktree.** Compile the WASM packages from Rust, then
+install and generate:
 
 ```sh
 yarn setup
 yarn start
 ```
 
-`yarn setup` rebuilds `wasm/*/pkg` unconditionally, so running it after
-`stub-packages.sh` replaces the stubs with the real packages.
+`yarn setup` (`scripts/setup-wasm.sh`) builds `wasm/*/pkg` with
+`../wasm/build.sh` into one cargo target folder that every worktree shares,
+`~/.cache/solana-playground/wasm-target` unless `CARGO_TARGET_DIR` names
+another. When that folder does not exist yet, it starts as a copy of the main
+checkout's `wasm/target` (an APFS clone on macOS), so only a machine that has
+never built the packages runs the cold build, which takes about an hour. It then deletes the six
+installed copies under `node_modules/@solana-playground` and installs with
+`--check-files`, because yarn 1 copies a local `file:` package again only when
+its folder is missing.
+
+**Stubs, by request only.** `USE_WASM_STUBS=true` (the exact string `true`)
+writes placeholder packages with `../wasm/stub-packages.sh` instead of
+compiling them. The scripts with the `:with-stubs` suffix set it themselves:
+
+```sh
+yarn setup:with-stubs
+yarn dev:with-stubs
+yarn test-e2e:with-stubs
+```
+
+The stubs lose Rust intellisense, the `solana`, `anchor`, `spl-token` and
+`sugar` terminal commands, and Seahorse builds. `yarn dev` and `yarn test-e2e`
+stop with the names of the stubbed packages when they find stubs in
+`node_modules` and `USE_WASM_STUBS=true` is not set. A deployment refuses the
+variable, and the Vercel build fails on a bundle built from a stub
+(`node scripts/wasm-stubs.mjs check-build build`). `yarn setup` replaces the
+stubs with the real packages.
 
 **Production build.** `yarn build` is the whole build in one command: it
-compiles `wasm/*/pkg` from Rust, reinstalls with `--check-files` so
-`node_modules` takes the new packages (yarn copies the local `file:` packages,
-and a plain install skips them when the lockfile is unchanged), copies
+compiles and installs `wasm/*/pkg` as `yarn setup` does (`scripts/setup-wasm.sh`,
+which deletes the installed copies first so `node_modules` takes the new
+packages), copies
 `public/` from the assets submodule, generates the crate, package and tutorial
 data, and bundles the app into `build/`. A first run takes about an hour;
 cargo reuses its output after that.

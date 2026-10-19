@@ -68,14 +68,15 @@ Node is pinned by `.nvmrc`; package manager is yarn 1.x.
 All commands run from `client-v2/`.
 
 ```sh
-../wasm/stub-packages.sh   # REQUIRED before first install (see below)
-yarn install --frozen-lockfile
-yarn dev                   # generate-fast + craco start
-yarn build                 # the whole production build: wasm/build.sh, install, build:bundle (~1h first run)
+yarn setup                 # REQUIRED first: real wasm/*/pkg, install, generate (see below)
+yarn setup:with-stubs      # the same with wasm stubs: USE_WASM_STUBS=true, opt-in only
+yarn dev                   # generate-fast + craco start; refuses unrequested stubs
+yarn dev:with-stubs        # yarn dev with USE_WASM_STUBS=true
+yarn build                 # the whole production build: setup-wasm.sh, build:bundle (~1h on a cold target)
 yarn build:bundle          # generate + craco build + source-map upload, over whatever wasm/*/pkg holds; Vercel runs this
 yarn test                  # test-types + test-unit + build:bundle
 yarn test-types            # tsc --noEmit
-yarn test-e2e              # playwright
+yarn test-e2e              # playwright; refuses unrequested stubs (test-e2e:with-stubs)
 yarn test-api              # node --test, for api/ and **/server/*.mjs
 yarn check-format          # prettier; CI enforces this
 yarn lint                  # eslint over src/, api/, e2e/; CI enforces this
@@ -283,12 +284,23 @@ changes. Asked to build something in the client, look there first.
   `client-v2/scripts/vercel-install.sh` installs it from what those pins lock
   (`client-v2/docs/deploy-client-vercel.md`, "wasm-bindgen"). A bump changes
   the pin and the lockfile together.
-- **`wasm/stub-packages.sh` is not optional.** Six of the eight local
-  `wasm/*/pkg` deps compile from Rust and take about an hour. `yarn install`
-  refuses to run while those directories are missing. None is on the UI or test
-  path, so the stubs are correct for everything except a real WASM build
-  (`wasm/build.sh`). Rust intellisense and the `solana`/`anchor`/`spl-token`/
-  `sugar` terminal commands are stubbed out and throw a clear message.
+- **The wasm packages are real unless `USE_WASM_STUBS=true` says
+  otherwise.** Six of the eight local `wasm/*/pkg` deps compile from Rust, and
+  `yarn install` refuses to run while those directories are missing.
+  `yarn setup` (`client-v2/scripts/setup-wasm.sh`) builds them into one cargo
+  target folder shared by every worktree (`~/.cache/solana-playground/wasm-target`,
+  first cloned from the main checkout's `wasm/target`), so a warm build takes
+  minutes, not the hour of a cold one. The stubs (`wasm/stub-packages.sh`) are
+  written only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
+  `client-v2.yml` set; they make Rust intellisense and the `solana`/`anchor`/
+  `spl-token`/`sugar` terminal commands throw. `yarn dev` and `yarn test-e2e`
+  refuse stubs nobody asked for, `vercel-install.sh` refuses the variable, and the
+  Vercel build fails on a bundle that carries a stub. yarn 1 copies a `file:`
+  package again only when its folder is missing, so `setup-wasm.sh` and
+  `vercel-install.sh` delete the installed copies first; `--check-files` alone
+  keeps the old copy. The variable's name lives in `client-v2/scripts/wasm-stubs.sh`
+  and `client-v2/scripts/wasm-stubs.mjs`. `client-v2-real-wasm.yml` (manual) runs
+  the `@real-wasm` browser specs on the real packages.
 - **`client-v2/public/` is gitignored and generated**, not authored.
   `scripts/update-static.mjs` copies it out of the `client/public` git submodule
   and dates tutorials from that submodule's history — so the submodule needs
