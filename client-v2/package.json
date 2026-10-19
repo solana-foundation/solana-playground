@@ -161,6 +161,7 @@
     "db-status": "dbmate status",
     "db-new": "dbmate new",
     "test-e2e": "playwright test",
+    "test-build": "node --test \"scripts/*.build-test.mjs\"",
     "db-dump": "./scripts/db-dump.sh"
   },
   "eslintConfig": {
