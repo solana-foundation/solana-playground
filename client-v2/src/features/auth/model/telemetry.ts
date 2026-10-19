@@ -15,7 +15,7 @@ type AuthEvents = {
   auth_signed_in: NoParams;
   /** The sign-in ended without a session; `reason` says at which step. */
   auth_sign_in_failed: { reason: SignInFailure };
-  /** The user signed out. */
+  /** The server accepted the user's sign-out; a failed one tracks nothing. */
   auth_signed_out: NoParams;
 };
 

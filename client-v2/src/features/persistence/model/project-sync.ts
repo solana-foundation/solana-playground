@@ -1,4 +1,5 @@
 import { uuid } from "../../../shared/lib/ids";
+import { timeoutSignal } from "../../../shared/lib/timeout-signal";
 import { DELETED_REASON } from "./deleted.mjs";
 import { report } from "./diagnostics";
 import {
@@ -12,7 +13,7 @@ import {
 import { diffFiles, hashFiles, sameUserFiles, snapshotOf } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
-import { LOCKED_REQUEST_MS, timeoutSignal, withSyncLock } from "./sync-lock";
+import { LOCKED_REQUEST_MS, withSyncLock } from "./sync-lock";
 import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
@@ -1619,9 +1620,8 @@ export class PgProjectSync {
   /**
    * Run the sign-out teardown with this tab's own deletes disowned.
    *
-   * A counter rather than a boolean: sign-out hands over conversations and
-   * projects independently, and a nested or repeated call must not clear the
-   * flag while an outer one is still running.
+   * A counter rather than a boolean: a nested or repeated release must not
+   * clear the flag while an outer one is still running.
    */
   static async whileSigningOut<T>(fn: () => Promise<T>): Promise<T> {
     PgProjectSync._signingOut++;
@@ -1765,8 +1765,13 @@ export class PgProjectSync {
     for (const cb of PgProjectSync._conflictListeners) cb();
   }
 
+  /** Not while a sign-out tears down: the cookie is gone, see `PgSession.isEnding` */
   private static async _ready() {
-    return !!PgSession.get() && (await PgSyncClient.available());
+    return (
+      !!PgSession.get() &&
+      !PgSession.isEnding &&
+      (await PgSyncClient.available())
+    );
   }
 }
 

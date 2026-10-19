@@ -497,7 +497,7 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  * reaches the server that should not; what was left is that they are visible.
  *
  * Decided per project, and only where the account demonstrably holds the same
- * content -- the same trade `PgChatSync.forget` makes one directory over,
+ * content -- the same trade `PgChatSync.forget` makes for conversations,
  * and it has to be the same one for the same reason. The flush before the
  * sign-out request can fail while the sign-out itself succeeds, so "the server
  * has this" is a question that can genuinely be answered "no", and deleting on

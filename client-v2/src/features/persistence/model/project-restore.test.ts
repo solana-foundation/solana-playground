@@ -717,9 +717,9 @@ describe("releasing local projects at sign-out", () => {
   });
 
   it("decides per project rather than for the set", async () => {
-    // The mistake this mirrors the fix for, one directory over in
-    // `PgChatSync.forget`: one project that cannot be handed over is no
-    // reason to leave the others on a browser the account is done with.
+    // The mistake this mirrors the fix for, in `PgChatSync.forget`: one
+    // project that cannot be handed over is no reason to leave the others on
+    // a browser the account is done with.
     withLocal({ alpha: "p1", beta: "p2" });
     withFiles("alpha", { "src/lib.rs": "same" });
     withFiles("beta", { "src/lib.rs": "never uploaded" });

@@ -2,6 +2,7 @@ import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
 import { PgChatStorage, withoutTruncationNotice } from "./chat-storage";
 import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
 import { report } from "./diagnostics";
+import { sha256 } from "./snapshot";
 import { PgSyncClient } from "./sync-client";
 import { PgThreadIndex } from "./thread-index";
 import { PgSession } from "../../auth";
@@ -10,14 +11,22 @@ import type { ChatItem } from "../../../views/sidebar/assistant/store";
 /**
  * What a hand-over managed.
  *
- * `handedOver` is the ids this device may drop: the server holds them, or
- * has closed them under a project it still has. `complete` says whether that was
- * all of them, which is the only thing that licenses dropping the directory
- * wholesale.
+ * `handedOver` is the threads this device may drop: the server holds them, or
+ * has closed them under a project it still has. Each carries a hash of the
+ * copy read before its push, because a sign-out drops them only after its
+ * request: a thread written to in between holds something the server never
+ * took. `complete` says whether that was all of them, which is the only thing
+ * that licenses dropping the directory wholesale.
  */
 export interface HandOver {
-  handedOver: string[];
+  handedOver: HandedThread[];
   complete: boolean;
+}
+
+/** A thread the server took, and the hash of the copy it was pushed from */
+interface HandedThread {
+  id: string;
+  hash: string;
 }
 
 /**
@@ -300,8 +309,8 @@ export class PgChatSync {
   }
 
   /**
-   * Push every local thread -- the sign-in dump, and the last thing that runs
-   * before sign-out clears local storage.
+   * Push every local thread: the sign-in dump, and a sign-out's upload half,
+   * whose result goes to `forget` once the server has ended the session.
    *
    * @returns which threads this device may drop -- the server holds them, or
    * has closed them under a live project -- or `null` when this device
@@ -337,15 +346,20 @@ export class PgChatSync {
     // over: it will never take it again, and keeping the file for the next
     // user of this browser protects nothing. One under a deleted project
     // stays, like the project it belongs to -- see `isHandedOver`.
+    //
+    // Hashed before the push reads it, so a write landing in between leaves
+    // the stored copy newer than the hash, and `forget` keeps it.
     const outcomes = await Promise.all(
-      threadIds.map(async (id) => ({
-        id,
-        handedOver: isHandedOver(await PgChatSync.push(id)),
-      }))
+      threadIds.map(async (id) => {
+        const hash = await PgChatSync._hashOf(id);
+        const handedOver = isHandedOver(await PgChatSync.push(id));
+        return hash !== null && handedOver ? { id, hash } : null;
+      })
     );
+    const handedOver = outcomes.filter((o): o is HandedThread => o !== null);
     return {
-      handedOver: outcomes.filter((o) => o.handedOver).map((o) => o.id),
-      complete: outcomes.every((o) => o.handedOver),
+      handedOver,
+      complete: handedOver.length === threadIds.length,
     };
   }
 
@@ -370,15 +384,35 @@ export class PgChatSync {
    * account demonstrably already held, which had nothing left to lose -- so a
    * single flaky request handed the next user the entire transcript. Nothing
    * was gained for it: the failed thread is kept either way.
+   *
+   * And only while it still holds what was pushed. The sign-out request runs
+   * between the push and this, with the panel still open: a reply finishing
+   * or a message sent in that window was written after the push, and dropping
+   * the thread deleted it unsent.
    */
   static async forget(handed: HandOver | null): Promise<void> {
     if (!handed) return;
 
-    // Wholesale when everything made it, because that is the one case where
-    // dropping the directory itself is provably safe -- and it takes with it
-    // anything `threadIds` does not enumerate, which a file-by-file delete
-    // would leave behind for the next account to inherit.
-    if (handed.complete) {
+    const unchanged = (
+      await Promise.all(
+        handed.handedOver.map(async ({ id, hash }) =>
+          (await PgChatSync._hashOf(id)) === hash ? id : null
+        )
+      )
+    ).filter((id): id is string => id !== null);
+
+    // Wholesale when everything made it and nothing has been written since,
+    // because that is the one case where dropping the directory itself is
+    // provably safe -- and it takes with it anything `threadIds` does not
+    // enumerate, which a file-by-file delete would leave behind for the next
+    // account to inherit. A thread that appeared since was never pushed.
+    const stored = await PgChatStorage.threadIds();
+    const untouched =
+      handed.complete &&
+      unchanged.length === handed.handedOver.length &&
+      stored !== null &&
+      stored.every((id) => unchanged.includes(id));
+    if (untouched) {
       await PgChatStorage.clear();
       // The directory went with it, but the index also caches that migration
       // has run -- and for the next user of this browser it has not.
@@ -390,11 +424,22 @@ export class PgChatSync {
     // the ones just removed. A stale entry costs an empty thread on the next
     // open, which `PgChatStorage.read` answers with `[]` -- not the wrong
     // account's messages, which is what this is protecting.
-    await Promise.all(handed.handedOver.map((id) => PgChatStorage.remove(id)));
+    await Promise.all(unchanged.map((id) => PgChatStorage.remove(id)));
   }
 
+  /** A hash of the stored thread, or `null` when it cannot be read */
+  private static async _hashOf(threadId: string): Promise<string | null> {
+    const items = await PgChatStorage.read(threadId);
+    return items === null ? null : sha256(JSON.stringify(items));
+  }
+
+  /** Not while a sign-out tears down: the cookie is gone, see `PgSession.isEnding` */
   private static async _ready() {
-    return !!PgSession.get() && (await PgSyncClient.available());
+    return (
+      !!PgSession.get() &&
+      !PgSession.isEnding &&
+      (await PgSyncClient.available())
+    );
   }
 }
 
@@ -811,7 +856,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-      await PgChatSync.forget(await PgChatSync.pushAll());
+        await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([]);
       });
@@ -823,7 +868,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-      await PgChatSync.forget(await PgChatSync.pushAll());
+        await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.read(threadId)).toHaveLength(1);
       });
@@ -855,7 +900,7 @@ if (import.meta.vitest) {
         await PgChatStorage.write(second, [item(2)]);
         await PgChatStorage.write(third, [item(3)]);
 
-      await PgChatSync.forget(await PgChatSync.pushAll());
+        await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect((await PgChatStorage.threadIds())?.sort()).toEqual([second]);
         expect(await PgChatStorage.read(second)).toHaveLength(1);
@@ -879,7 +924,7 @@ if (import.meta.vitest) {
       it("does not report a thread it could not read as uploaded", async () => {
         // Same shape one level down: an unreadable thread read as an empty one,
         // and `push` reported success for a thread the server never saw -- which
-      // is what then let `forget` delete the one file worth recovering
+        // is what then let `forget` delete the one file worth recovering
         accepted();
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
@@ -915,7 +960,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-      await PgChatSync.forget(await PgChatSync.pushAll());
+        await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([]);
       });
@@ -934,7 +979,7 @@ if (import.meta.vitest) {
         await signedIn();
         await PgChatStorage.write(threadId, [item(1)]);
 
-      await PgChatSync.forget(await PgChatSync.pushAll());
+        await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.read(threadId)).toEqual([item(1)]);
       });
@@ -962,9 +1007,57 @@ if (import.meta.vitest) {
         await PgChatStorage.write(threadId, [item(1)]);
         await PgChatStorage.write(underDeleted, [item(2)]);
 
-      await PgChatSync.forget(await PgChatSync.pushAll());
+        await PgChatSync.forget(await PgChatSync.pushAll());
 
         expect(await PgChatStorage.threadIds()).toEqual([underDeleted]);
+      });
+
+      it("keeps a thread written to after its push", async () => {
+        // The sign-out request runs between the push and `forget`, with the panel
+        // still open. A reply that finished in that window was deleted unsent.
+        accepted();
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+
+        const handed = await PgChatSync.pushAll();
+        await PgChatStorage.write(threadId, [item(1), item(2)]);
+        await PgChatSync.forget(handed);
+
+        expect(await PgChatStorage.read(threadId)).toEqual([item(1), item(2)]);
+      });
+
+      it("keeps a thread that appeared after the push, and drops the rest", async () => {
+        // Nothing pushed it, so the directory may no longer be dropped wholesale
+        accepted();
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+
+        const handed = await PgChatSync.pushAll();
+        const later = uuid();
+        await PgChatStorage.write(later, [item(2)]);
+        await PgChatSync.forget(handed);
+
+        expect(await PgChatStorage.threadIds()).toEqual([later]);
+      });
+
+      it("sends nothing while a sign-out tears down", async () => {
+        // The server has ended the session by then, so every request answered
+        // 401 and was reported as a sync failure on an ordinary sign-out
+        accepted();
+        await signedIn();
+        await PgChatStorage.write(threadId, [item(1)]);
+        let outcome: PushOutcome | undefined;
+        PgSession.setOnSignOut(async () => async () => {
+          outcome = await PgChatSync.push(threadId);
+        });
+
+        await PgSession.signOut();
+
+        expect(outcome).toBe("failed");
+        expect(fetchMock).not.toHaveBeenCalledWith(
+          "/api/conversations",
+          expect.anything()
+        );
       });
     });
 

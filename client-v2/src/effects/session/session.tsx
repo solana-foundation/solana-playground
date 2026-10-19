@@ -158,26 +158,32 @@ export const session = (): Disposable => {
    *
    * Two halves, and `PgSession.signOut` runs the request between them. The
    * push has to happen while the cookie is still valid; the teardown only once
-   * the server has ended the session. Tearing down first left a sign-out that
-   * failed with the user still signed in but their conversation closed, their
-   * projects removed from the browser and sync's names and conflicts dropped.
+   * the server has ended the session. Tearing down before the request meant a
+   * sign-out the server refused -- cookie intact, user signed back in on
+   * reload -- had already closed their conversation, removed their projects
+   * from the browser and dropped sync's names and conflicts.
    *
-   * Within the teardown, order matters too: closing the thread before
-   * `forget` would discard messages that had not been uploaded, and leaving it
-   * open afterwards means the panel keeps rendering the previous user's
-   * transcript and writes it straight back into storage the next time anything
-   * changes -- from where the next account's sign-in dump uploads it.
+   * The teardown closes the thread first. Left open, the panel keeps
+   * rendering the previous user's transcript and writes it straight back into
+   * storage the next time anything changes -- from where the next account's
+   * sign-in dump uploads it. What is stored survives the close: the upload has
+   * already happened, `closeThread` persists nothing, and `forget` keeps any
+   * thread written to since. A turn still running loses its unfinished reply
+   * and any approval it was waiting on, which `closeThread` denies -- the
+   * same as a workspace switch mid-turn. It closes again last, because
+   * removing the open project switches workspace and the chat effect opens
+   * the next one's thread; that effect opens a fresh one once the user is
+   * cleared.
    *
-   * `releaseLocalProjects` is the same move for code, and runs in the teardown
-   * for the same reason: it needs the session to still be readable, because a
-   * mark is keyed by the user id and `PgSyncMark.read` answers `null` without
-   * one -- which would make every project look unsynced and none of them
-   * removable. `signOut` runs the teardown before it clears the user.
+   * `releaseLocalProjects` is `forget`'s counterpart for code. It runs before
+   * `signOut` clears the user, because a mark is keyed by the user id and
+   * `PgSyncMark.read` answers `null` without one -- which would make every
+   * project look unsynced and none of them removable.
    */
   const relinquish = async () => {
-    // Independently, not one `try` around both: the two hand-overs answer for
-    // different data, and a conversation that could not be uploaded is no
-    // reason to leave the account's projects on a browser it is done with.
+    // Independently, not one `try` around both, here and in the teardown: the
+    // conversations and the projects are separate data, and one failing is no
+    // reason to skip the other.
     let handed: HandOver | null = null;
     try {
       handed = await PgChatSync.pushAll();
@@ -196,20 +202,21 @@ export const session = (): Disposable => {
     }
 
     return async () => {
-      try {
-        await PgChatSync.forget(handed);
-      } catch (e) {
-        report("forget conversations", e);
-      }
+      const step = async (what: string, fn: () => unknown) => {
+        try {
+          await fn();
+        } catch (e) {
+          report(what, e);
+        }
+      };
 
-      try {
-        await releaseLocalProjects();
-      } catch (e) {
-        report("release local projects", e);
-      }
-
-      PgAssistant.closeThread();
-      PgProjectSync.forgetAccount();
+      await step("close thread", () => PgAssistant.closeThread());
+      // A write the panel queued before closing lands now, so `forget` sees it
+      await step("wait for chat writes", () => PgAssistant.whenPersisted());
+      await step("forget conversations", () => PgChatSync.forget(handed));
+      await step("release local projects", () => releaseLocalProjects());
+      await step("close thread", () => PgAssistant.closeThread());
+      await step("forget account", () => PgProjectSync.forgetAccount());
     };
   };
 

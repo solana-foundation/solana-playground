@@ -1224,6 +1224,20 @@ describe("PgProjectSync.pushCurrent", () => {
     expect(lastBody().files["src/lib.rs"]).toBe("fn main() {}");
   });
 
+  it("uploads nothing while a sign-out tears down", async () => {
+    // The server has ended the session by then: every upload answered 401
+    // and was reported as a sync failure on an ordinary sign-out
+    asWorkspace("tut:hello-anchor", "Hello Anchor");
+    await signedIn();
+    PgSession.setOnSignOut(async () => async () => {
+      await PgProjectSync.pushCurrent();
+    });
+
+    await PgSession.signOut();
+
+    expect(putCalls()).toEqual([]);
+  });
+
   it("names it as the user sees it, not by its id", async () => {
     // The id is all the origin device had to go on, so a tutorial arrived on
     // the second browser called "tut:hello-anchor" -- a name `PgTutorial` does
