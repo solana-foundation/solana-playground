@@ -11,7 +11,9 @@ so that a test of an internal needs no export and no test code reaches users.
 ### Requirement: A mock-free unit test lives in its module
 
 A unit test that exercises one module and mocks no module SHALL sit at the end
-of that module, in a block guarded by `import.meta.vitest`. A test that mocks a
+of that module, in a block guarded by `import.meta.vitest`, under one
+`describe` named after the module path from `src/` without extension, because
+vitest's `fullName` carries no file path. A test that mocks a
 module, renders React, spans several modules, targets a `.mjs` module, tests a
 runtime module the UI move rule never touches (`src/utils/explorer`,
 `src/commands/`), re-imports its own module after resetting the module
@@ -30,6 +32,12 @@ other tests SHALL keep a separate test file.
 - **WHEN** a test needs `vi.mock`
 - **THEN** the test is written in a separate test file, named in the rule as
   the case that stays out
+
+#### Scenario: A failing test names its module (manual)
+
+- **WHEN** a test in a block fails
+- **THEN** the reported name starts with the module path, such as
+  `shared/lib/ids > isUuid > ...`
 
 ### Requirement: An in-source block adds nothing to the module's imports
 

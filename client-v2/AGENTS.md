@@ -23,8 +23,8 @@ const toSlug = (name: string) => name.trim().toLowerCase().replace(/\s+/g, "-");
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
-  describe("toSlug", () => {
-    it("joins words with a dash", () => {
+  describe("shared/lib/slug", () => {
+    it("toSlug joins words with a dash", () => {
       expect(toSlug(" Hello World ")).toBe("hello-world");
     });
   });
@@ -42,6 +42,9 @@ Inside a block:
 
 - Take the test API from `import.meta.vitest`, `vi` included, and never the global `it`:
   `@types/mocha` declares that global without `each`, because `src/utils/js-runtime` imports mocha.
+- Put the tests under one `describe` named after the module path from `src/` without extension
+  (`shared/lib/ids`), with the block's hooks and helpers inside it: vitest's `fullName` carries no
+  file path, so the `describe` is what names the module in a failure.
 - Do not add or widen a static import of the module for a test. A value from another module is
   loaded in `beforeAll` into a `let` typed as `typeof import("./other").name`; a type is an inline
   `import("./other").Name` alias. The diff of a module that gains a block is the block alone, with

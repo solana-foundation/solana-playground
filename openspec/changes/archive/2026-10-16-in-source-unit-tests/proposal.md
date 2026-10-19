@@ -17,7 +17,9 @@ makes the block the ordinary place for a unit test, not an exception.
 - The unit suite collects in-source test blocks from `src/**/*.{ts,tsx}` in
   addition to the test files matched by `include`.
 - The 53 unit test files whose tests exercise one sibling module and mock no module move
-  into that module's block. Test bodies and test names are unchanged. Five
+  into that module's block. Test bodies and titles are unchanged; each block
+  gains one outer `describe` named after the module path from `src/`, so a
+  failure names the module. Five
   declarations change form because helpers are loaded after collection:
   `beforeEach(clearFailures)` and `afterEach(clearFailures)` in the merge
   tests become arrow functions, and three `const` fixtures in the chat-sync

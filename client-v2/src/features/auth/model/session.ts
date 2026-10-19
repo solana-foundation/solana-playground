@@ -324,326 +324,335 @@ export class PgSession {
 if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, afterEach } = import.meta.vitest;
   type Mock = import("vitest").Mock;
-  let initLogger: typeof import("../../../shared/lib/logger").initLogger;
-  let memoryProvider: typeof import("../../../shared/lib/logger").memoryProvider;
-  let resetLogger: typeof import("../../../shared/lib/logger").resetLogger;
-  beforeAll(async () => {
-    ({ initLogger, memoryProvider, resetLogger } = await import(
-      "../../../shared/lib/logger"
-    ));
-  });
-  const signedIn = (user: {
-    id: string;
-    name: string | null;
-    image?: string | null;
-    login?: string | null;
-  }) =>
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ user }),
-    }) as unknown as typeof fetch;
-
-  describe("PgSession", () => {
-    afterEach(() => {
-      (global.fetch as Mock | undefined)?.mockReset?.();
-      vi.restoreAllMocks();
-      PgSession.reset();
-      resetLogger();
+  describe("features/auth/model/session", () => {
+    let initLogger: typeof import("../../../shared/lib/logger").initLogger;
+    let memoryProvider: typeof import("../../../shared/lib/logger").memoryProvider;
+    let resetLogger: typeof import("../../../shared/lib/logger").resetLogger;
+    beforeAll(async () => {
+      ({ initLogger, memoryProvider, resetLogger } = await import(
+        "../../../shared/lib/logger"
+      ));
     });
-
-    it("is signed out before any refresh", () => {
-      expect(PgSession.get()).toBeNull();
-    });
-
-    it("reads the user from the session endpoint", async () => {
-      global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
-
-      await PgSession.refresh();
-
-      expect(PgSession.get()).toEqual({
-        id: "u1",
-        name: "Ada",
-        image: null,
-        login: null,
-      });
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/api/auth/get-session",
-        expect.objectContaining({ credentials: "include" })
-      );
-    });
-
-    it("treats an empty session body as signed out", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+    const signedIn = (user: {
+      id: string;
+      name: string | null;
+      image?: string | null;
+      login?: string | null;
+    }) =>
+      vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => null,
+        json: async () => ({ user }),
       }) as unknown as typeof fetch;
 
-      await PgSession.refresh();
+    describe("PgSession", () => {
+      afterEach(() => {
+        (global.fetch as Mock | undefined)?.mockReset?.();
+        vi.restoreAllMocks();
+        PgSession.reset();
+        resetLogger();
+      });
 
-      expect(PgSession.get()).toBeNull();
-    });
+      it("is signed out before any refresh", () => {
+        expect(PgSession.get()).toBeNull();
+      });
 
-    it.each([
-      ["a request that throws", new Error("offline"), "error", true],
-      ["a 5xx", 503, "error", true],
-      ["a 4xx", 404, "warn", false],
-    ] as const)(
-      "treats %s as signed out, and logs it",
-      async (_label, answer, level, report) => {
-        const request = vi.spyOn(globalThis, "fetch");
-        if (answer instanceof Error) request.mockRejectedValue(answer);
-        else
-          request.mockResolvedValue({ ok: false, status: answer } as Response);
-        const logged = memoryProvider();
-        initLogger({ providers: [logged] });
+      it("reads the user from the session endpoint", async () => {
+        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+
+        await PgSession.refresh();
+
+        expect(PgSession.get()).toEqual({
+          id: "u1",
+          name: "Ada",
+          image: null,
+          login: null,
+        });
+        expect(global.fetch).toHaveBeenCalledWith(
+          "/api/auth/get-session",
+          expect.objectContaining({ credentials: "include" })
+        );
+      });
+
+      it("treats an empty session body as signed out", async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => null,
+        }) as unknown as typeof fetch;
 
         await PgSession.refresh();
 
         expect(PgSession.get()).toBeNull();
-        expect(logged.entries).toEqual([
-          expect.objectContaining({ ns: "auth:session", level, report }),
-        ]);
-      }
-    );
-
-    it("notifies subscribers when the user changes", async () => {
-      global.fetch = signedIn({ id: "u1", name: null, image: null });
-      const seen: unknown[] = [];
-      const sub = PgSession.onDidChange(() => seen.push(PgSession.get()));
-
-      await PgSession.refresh();
-      sub.dispose();
-
-      expect(seen).toEqual([
-        { id: "u1", name: null, image: null, login: null },
-      ]);
-    });
-
-    it("does not notify when the user is unchanged", async () => {
-      global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
-      await PgSession.refresh();
-
-      let calls = 0;
-      const sub = PgSession.onDidChange(() => calls++);
-      await PgSession.refresh();
-      sub.dispose();
-
-      expect(calls).toBe(0);
-    });
-
-    it("signs in through a popup, not a navigation, and re-reads the session", async () => {
-      // `sign-in/social` is POST-only and answers with the authorize URL rather
-      // than redirecting, which is what lets us open a popup instead of
-      // navigating away and losing everything the page holds in memory
-      global.fetch = vi.fn().mockImplementation((url: string) =>
-        url === "/api/auth/sign-in/social"
-          ? Promise.resolve({
-              ok: true,
-              json: async () => ({ url: "https://github.com/login/oauth/x" }),
-            })
-          : Promise.resolve({
-              ok: true,
-              json: async () => ({
-                user: { id: "u1", name: "Ada", image: null, login: "ada" },
-              }),
-            })
-      ) as unknown as typeof fetch;
-
-      let opened: { url: string; broadcastName?: string } | undefined;
-      PgSession.setOpenChannel((opts) => {
-        opened = opts;
-        return {
-          receive: async () => ({ delivered: true as const, data: {} }),
-          cancel: () => {},
-        };
       });
 
-      await PgSession.signIn();
+      it.each([
+        ["a request that throws", new Error("offline"), "error", true],
+        ["a 5xx", 503, "error", true],
+        ["a 4xx", 404, "warn", false],
+      ] as const)(
+        "treats %s as signed out, and logs it",
+        async (_label, answer, level, report) => {
+          const request = vi.spyOn(globalThis, "fetch");
+          if (answer instanceof Error) request.mockRejectedValue(answer);
+          else
+            request.mockResolvedValue({
+              ok: false,
+              status: answer,
+            } as Response);
+          const logged = memoryProvider();
+          initLogger({ providers: [logged] });
 
-      expect(opened!.url).toBe("https://github.com/login/oauth/x");
-      // The fallback path for when COOP severs window.opener
-      expect(opened!.broadcastName).toBe("pg-auth-complete");
-      // Cookie is set on our origin by the callback, so the session is readable
-      expect(PgSession.get()).toEqual({
-        id: "u1",
-        name: "Ada",
-        image: null,
-        login: "ada",
-      });
-    });
+          await PgSession.refresh();
 
-    it("sends the popup to the completion route carrying a nonce", async () => {
-      let body: string | undefined;
-      global.fetch = vi
-        .fn()
-        .mockImplementation((url: string, init: RequestInit) => {
-          if (url === "/api/auth/sign-in/social") {
-            body = init.body as string;
-            return Promise.resolve({
-              ok: true,
-              json: async () => ({ url: "https://x/" }),
-            });
-          }
-          return Promise.resolve({
-            ok: true,
-            json: async () => ({ user: { id: "u1" } }),
-          });
-        }) as unknown as typeof fetch;
-      PgSession.setOpenChannel(() => ({
-        receive: async () => ({ delivered: true as const, data: {} }),
-        cancel: () => {},
-      }));
-
-      await PgSession.signIn();
-
-      const sent = JSON.parse(body!);
-      expect(sent.provider).toBe("github");
-      expect(sent.callbackURL).toMatch(
-        /^\/api\/auth-complete\?nonce=[0-9a-f]{32}$/
+          expect(PgSession.get()).toBeNull();
+          expect(logged.entries).toEqual([
+            expect.objectContaining({ ns: "auth:session", level, report }),
+          ]);
+        }
       );
-    });
 
-    it("only accepts a reply carrying this flow's nonce", async () => {
-      global.fetch = vi
-        .fn()
-        .mockImplementation((url: string, init: RequestInit) =>
+      it("notifies subscribers when the user changes", async () => {
+        global.fetch = signedIn({ id: "u1", name: null, image: null });
+        const seen: unknown[] = [];
+        const sub = PgSession.onDidChange(() => seen.push(PgSession.get()));
+
+        await PgSession.refresh();
+        sub.dispose();
+
+        expect(seen).toEqual([
+          { id: "u1", name: null, image: null, login: null },
+        ]);
+      });
+
+      it("does not notify when the user is unchanged", async () => {
+        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        await PgSession.refresh();
+
+        let calls = 0;
+        const sub = PgSession.onDidChange(() => calls++);
+        await PgSession.refresh();
+        sub.dispose();
+
+        expect(calls).toBe(0);
+      });
+
+      it("signs in through a popup, not a navigation, and re-reads the session", async () => {
+        // `sign-in/social` is POST-only and answers with the authorize URL rather
+        // than redirecting, which is what lets us open a popup instead of
+        // navigating away and losing everything the page holds in memory
+        global.fetch = vi.fn().mockImplementation((url: string) =>
           url === "/api/auth/sign-in/social"
             ? Promise.resolve({
                 ok: true,
-                json: async () => ({ url: "https://x/" }),
+                json: async () => ({ url: "https://github.com/login/oauth/x" }),
               })
             : Promise.resolve({
                 ok: true,
-                json: async () => ({ user: { id: "u1" } }),
+                json: async () => ({
+                  user: { id: "u1", name: "Ada", image: null, login: "ada" },
+                }),
               })
         ) as unknown as typeof fetch;
 
-      let accept!: (data: unknown) => boolean;
-      let nonce!: string;
-      PgSession.setOpenChannel((opts) => {
-        accept = opts.accept;
-        return {
+        let opened: { url: string; broadcastName?: string } | undefined;
+        PgSession.setOpenChannel((opts) => {
+          opened = opts;
+          return {
+            receive: async () => ({ delivered: true as const, data: {} }),
+            cancel: () => {},
+          };
+        });
+
+        await PgSession.signIn();
+
+        expect(opened!.url).toBe("https://github.com/login/oauth/x");
+        // The fallback path for when COOP severs window.opener
+        expect(opened!.broadcastName).toBe("pg-auth-complete");
+        // Cookie is set on our origin by the callback, so the session is readable
+        expect(PgSession.get()).toEqual({
+          id: "u1",
+          name: "Ada",
+          image: null,
+          login: "ada",
+        });
+      });
+
+      it("sends the popup to the completion route carrying a nonce", async () => {
+        let body: string | undefined;
+        global.fetch = vi
+          .fn()
+          .mockImplementation((url: string, init: RequestInit) => {
+            if (url === "/api/auth/sign-in/social") {
+              body = init.body as string;
+              return Promise.resolve({
+                ok: true,
+                json: async () => ({ url: "https://x/" }),
+              });
+            }
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({ user: { id: "u1" } }),
+            });
+          }) as unknown as typeof fetch;
+        PgSession.setOpenChannel(() => ({
           receive: async () => ({ delivered: true as const, data: {} }),
           cancel: () => {},
-        };
+        }));
+
+        await PgSession.signIn();
+
+        const sent = JSON.parse(body!);
+        expect(sent.provider).toBe("github");
+        expect(sent.callbackURL).toMatch(
+          /^\/api\/auth-complete\?nonce=[0-9a-f]{32}$/
+        );
       });
-      const originalFetch = global.fetch as Mock;
-      await PgSession.signIn();
-      nonce = JSON.parse(originalFetch.mock.calls[0][1].body).callbackURL.split(
-        "nonce="
-      )[1];
 
-      expect(accept({ type: "pg-auth-complete", nonce })).toBe(true);
-      expect(accept({ type: "pg-auth-complete", nonce: "forged" })).toBe(false);
-      expect(accept({ type: "something-else", nonce })).toBe(false);
-    });
+      it("only accepts a reply carrying this flow's nonce", async () => {
+        global.fetch = vi
+          .fn()
+          .mockImplementation((url: string, init: RequestInit) =>
+            url === "/api/auth/sign-in/social"
+              ? Promise.resolve({
+                  ok: true,
+                  json: async () => ({ url: "https://x/" }),
+                })
+              : Promise.resolve({
+                  ok: true,
+                  json: async () => ({ user: { id: "u1" } }),
+                })
+          ) as unknown as typeof fetch;
 
-    it("says the session could not be read when the popup finished but no user is signed in", async () => {
-      vi.spyOn(globalThis, "fetch").mockImplementation(
-        async (input) =>
-          ({
-            ok: true,
-            json: async () =>
-              input === "/api/auth/get-session" ? null : { url: "https://x/" },
-          } as Response)
-      );
-      PgSession.setOpenChannel(() => ({
-        receive: async () => ({ delivered: true as const, data: {} }),
-        cancel: () => {},
-      }));
+        let accept!: (data: unknown) => boolean;
+        let nonce!: string;
+        PgSession.setOpenChannel((opts) => {
+          accept = opts.accept;
+          return {
+            receive: async () => ({ delivered: true as const, data: {} }),
+            cancel: () => {},
+          };
+        });
+        const originalFetch = global.fetch as Mock;
+        await PgSession.signIn();
+        nonce = JSON.parse(
+          originalFetch.mock.calls[0][1].body
+        ).callbackURL.split("nonce=")[1];
 
-      await expect(PgSession.signIn()).rejects.toThrow(
-        "Signed in with GitHub, but the session could not be read. Try again."
-      );
-    });
+        expect(accept({ type: "pg-auth-complete", nonce })).toBe(true);
+        expect(accept({ type: "pg-auth-complete", nonce: "forged" })).toBe(
+          false
+        );
+        expect(accept({ type: "something-else", nonce })).toBe(false);
+      });
 
-    it("reports a blocked popup distinctly from a failed sign-in", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ url: "https://x/" }),
-      }) as unknown as typeof fetch;
-      PgSession.setOpenChannel(() => undefined);
+      it("says the session could not be read when the popup finished but no user is signed in", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          async (input) =>
+            ({
+              ok: true,
+              json: async () =>
+                input === "/api/auth/get-session"
+                  ? null
+                  : { url: "https://x/" },
+            } as Response)
+        );
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({ delivered: true as const, data: {} }),
+          cancel: () => {},
+        }));
 
-      await expect(PgSession.signIn()).rejects.toThrow(/allow popups/i);
-    });
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Signed in with GitHub, but the session could not be read. Try again."
+        );
+      });
 
-    it("surfaces a cancelled popup as a cancellation", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: true,
-        json: async () => ({ url: "https://x/" }),
-      }) as unknown as typeof fetch;
-      PgSession.setOpenChannel(() => ({
-        receive: async () => ({
-          delivered: false as const,
-          reason: "cancelled" as const,
-        }),
-        cancel: () => {},
-      }));
+      it("reports a blocked popup distinctly from a failed sign-in", async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ url: "https://x/" }),
+        }) as unknown as typeof fetch;
+        PgSession.setOpenChannel(() => undefined);
 
-      await expect(PgSession.signIn()).rejects.toThrow(/cancelled/i);
-      expect(PgSession.get()).toBeNull();
-    });
+        await expect(PgSession.signIn()).rejects.toThrow(/allow popups/i);
+      });
 
-    it("throws rather than opening a popup when sign-in cannot start", async () => {
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 503,
-        json: async () => ({ error: "Authentication is not configured" }),
-      }) as unknown as typeof fetch;
-      const open = vi.fn();
-      PgSession.setOpenChannel(open as never);
+      it("surfaces a cancelled popup as a cancellation", async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ url: "https://x/" }),
+        }) as unknown as typeof fetch;
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({
+            delivered: false as const,
+            reason: "cancelled" as const,
+          }),
+          cancel: () => {},
+        }));
 
-      await expect(PgSession.signIn()).rejects.toThrow(/sign-in/i);
-      expect(open).not.toHaveBeenCalled();
-    });
+        await expect(PgSession.signIn()).rejects.toThrow(/cancelled/i);
+        expect(PgSession.get()).toBeNull();
+      });
 
-    it("signs out and clears the user", async () => {
-      global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
-      await PgSession.refresh();
-      expect(PgSession.get()).not.toBeNull();
+      it("throws rather than opening a popup when sign-in cannot start", async () => {
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: false,
+          status: 503,
+          json: async () => ({ error: "Authentication is not configured" }),
+        }) as unknown as typeof fetch;
+        const open = vi.fn();
+        PgSession.setOpenChannel(open as never);
 
-      await PgSession.signOut();
+        await expect(PgSession.signIn()).rejects.toThrow(/sign-in/i);
+        expect(open).not.toHaveBeenCalled();
+      });
 
-      expect(PgSession.get()).toBeNull();
-      expect(global.fetch).toHaveBeenCalledWith(
-        "/api/auth/sign-out",
-        expect.objectContaining({ method: "POST" })
-      );
-    });
+      it("signs out and clears the user", async () => {
+        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        await PgSession.refresh();
+        expect(PgSession.get()).not.toBeNull();
 
-    it("clears the user even when sign-out fails on the network", async () => {
-      global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
-      await PgSession.refresh();
+        await PgSession.signOut();
 
-      global.fetch = vi
-        .fn()
-        .mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
-      await PgSession.signOut();
+        expect(PgSession.get()).toBeNull();
+        expect(global.fetch).toHaveBeenCalledWith(
+          "/api/auth/sign-out",
+          expect.objectContaining({ method: "POST" })
+        );
+      });
 
-      expect(PgSession.get()).toBeNull();
-    });
+      it("clears the user even when sign-out fails on the network", async () => {
+        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        await PgSession.refresh();
 
-    it("says so when the server refuses the sign-out", async () => {
-      global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
-      await PgSession.refresh();
-      const logged = memoryProvider();
-      initLogger({ providers: [logged] });
+        global.fetch = vi
+          .fn()
+          .mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
+        await PgSession.signOut();
 
-      global.fetch = vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-      }) as unknown as typeof fetch;
-      await PgSession.signOut();
+        expect(PgSession.get()).toBeNull();
+      });
 
-      expect(PgSession.get()).toBeNull();
-      expect(logged.entries).toEqual([
-        expect.objectContaining({
-          ns: "auth:session",
-          level: "error",
-          report: true,
-          context: { step: "request", status: 500 },
-        }),
-      ]);
+      it("says so when the server refuses the sign-out", async () => {
+        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        await PgSession.refresh();
+        const logged = memoryProvider();
+        initLogger({ providers: [logged] });
+
+        global.fetch = vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+        }) as unknown as typeof fetch;
+        await PgSession.signOut();
+
+        expect(PgSession.get()).toBeNull();
+        expect(logged.entries).toEqual([
+          expect.objectContaining({
+            ns: "auth:session",
+            level: "error",
+            report: true,
+            context: { step: "request", status: 500 },
+          }),
+        ]);
+      });
     });
   });
 }

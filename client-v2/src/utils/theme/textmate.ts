@@ -35,68 +35,70 @@ export const resolveTextMateTheme = <
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
-  const resolve = (value: string) => `#resolved(${value})`;
+  describe("utils/theme/textmate", () => {
+    const resolve = (value: string) => `#resolved(${value})`;
 
-  describe("resolveTextMateTheme", () => {
-    it("resolves every foreground and background, so no var() reaches a grammar", () => {
-      const resolved = resolveTextMateTheme(
-        {
+    describe("resolveTextMateTheme", () => {
+      it("resolves every foreground and background, so no var() reaches a grammar", () => {
+        const resolved = resolveTextMateTheme(
+          {
+            name: "Dark",
+            settings: [
+              {
+                name: "Defaults",
+                settings: {
+                  background: "var(--surface-base)",
+                  foreground: "var(--text-primary)",
+                },
+              },
+              {
+                name: "Keyword",
+                scope: ["keyword"],
+                settings: {
+                  foreground: "var(--syntax-keyword)",
+                  fontStyle: "bold",
+                },
+              },
+            ],
+          },
+          resolve
+        );
+
+        expect(resolved).toEqual({
           name: "Dark",
           settings: [
             {
               name: "Defaults",
               settings: {
-                background: "var(--surface-base)",
-                foreground: "var(--text-primary)",
+                background: "#resolved(var(--surface-base))",
+                foreground: "#resolved(var(--text-primary))",
               },
             },
             {
               name: "Keyword",
               scope: ["keyword"],
               settings: {
-                foreground: "var(--syntax-keyword)",
+                foreground: "#resolved(var(--syntax-keyword))",
                 fontStyle: "bold",
               },
             },
           ],
-        },
-        resolve
-      );
-
-      expect(resolved).toEqual({
-        name: "Dark",
-        settings: [
-          {
-            name: "Defaults",
-            settings: {
-              background: "#resolved(var(--surface-base))",
-              foreground: "#resolved(var(--text-primary))",
-            },
-          },
-          {
-            name: "Keyword",
-            scope: ["keyword"],
-            settings: {
-              foreground: "#resolved(var(--syntax-keyword))",
-              fontStyle: "bold",
-            },
-          },
-        ],
+        });
       });
-    });
 
-    it("leaves a rule without colours as it is", () => {
-      const resolved = resolveTextMateTheme(
-        {
-          name: "Light",
-          settings: [
-            { scope: "markup.italic", settings: { fontStyle: "italic" } },
-          ],
-        },
-        resolve
-      );
+      it("leaves a rule without colours as it is", () => {
+        const resolved = resolveTextMateTheme(
+          {
+            name: "Light",
+            settings: [
+              { scope: "markup.italic", settings: { fontStyle: "italic" } },
+            ],
+          },
+          resolve
+        );
 
-      expect(resolved.settings[0].settings).toEqual({ fontStyle: "italic" });
+        expect(resolved.settings[0].settings).toEqual({ fontStyle: "italic" });
+      });
     });
   });
 }
