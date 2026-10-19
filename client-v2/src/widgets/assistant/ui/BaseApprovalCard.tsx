@@ -25,6 +25,9 @@ import type {
 
 export type ApprovalItem = Extract<ChatItem, { kind: "approval" }>;
 
+/** How the user answered a card; the store takes it as `allowed` */
+export type ApprovalAnswer = "allow" | "deny";
+
 const STATUS_LABEL: Record<ApprovalStatus, string> = {
   pending: "Proposed",
   allowed: "Applied",
@@ -32,7 +35,7 @@ const STATUS_LABEL: Record<ApprovalStatus, string> = {
   unanswered: "Not answered",
 };
 
-/** What an answered card says when the tool reported no outcome of its own */
+/** What a card no longer pending says when the tool reported no outcome of its own */
 const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
   allowed: "done",
   denied: "not applied",
@@ -46,7 +49,7 @@ const ANSWER = "h-11 md:h-8";
 /**
  * A change or a command the assistant wants to make, with the user's answer.
  *
- * Draws only: `onAnswer` is called with the user's choice, and whether a card
+ * Draws only: `onAnswer` is called with the user's answer, and whether a card
  * is still open to an answer is its `status`, which the store owns.
  */
 export const BaseApprovalCard = ({
@@ -54,17 +57,14 @@ export const BaseApprovalCard = ({
   onAnswer,
 }: {
   item: ApprovalItem;
-  onAnswer: (allowed: boolean) => void;
+  onAnswer: (answer: ApprovalAnswer) => void;
 }) => {
   const { request, status } = item;
   const pending = status === "pending";
   const patch = request.type === "patch";
 
   return (
-    <Diff
-      data-status={status}
-      className={cn("shrink-0", pending && "border-primary")}
-    >
+    <Diff data-status={status} className={cn(pending && "border-primary")}>
       <DiffHeader>
         <DiffTitle>
           {patch ? request.path : `wants to run ${request.name}`}
@@ -98,7 +98,7 @@ export const BaseApprovalCard = ({
               variant="accent"
               size="sm"
               className={cn("flex-1", ANSWER)}
-              onClick={() => onAnswer(true)}
+              onClick={() => onAnswer("allow")}
             >
               {patch ? "Apply" : "Allow"}
             </BrandButton>
@@ -106,7 +106,7 @@ export const BaseApprovalCard = ({
               variant="outline"
               size="sm"
               className={ANSWER}
-              onClick={() => onAnswer(false)}
+              onClick={() => onAnswer("deny")}
             >
               {patch ? "Reject" : "Deny"}
             </Button>

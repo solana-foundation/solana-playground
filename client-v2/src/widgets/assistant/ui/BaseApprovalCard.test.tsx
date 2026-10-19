@@ -37,14 +37,14 @@ describe("BaseApprovalCard", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Allow" }));
     expect(onAnswer).toHaveBeenCalledTimes(1);
-    expect(onAnswer).toHaveBeenCalledWith(true);
+    expect(onAnswer).toHaveBeenCalledWith("allow");
   });
 
   it("denies with Reject on a patch", () => {
     const onAnswer = vi.fn();
     render(<BaseApprovalCard item={patchCard("a", "b")} onAnswer={onAnswer} />);
     fireEvent.click(screen.getByRole("button", { name: "Reject" }));
-    expect(onAnswer).toHaveBeenCalledWith(false);
+    expect(onAnswer).toHaveBeenCalledWith("deny");
   });
 
   it("names the file and its counts", () => {

@@ -21,7 +21,7 @@ export type AssistantEvents = {
     kind: "patch" | "command";
     answer: "allow" | "deny";
   };
-  /** The user sent one of the empty thread's suggestions. */
+  /** The user picked one of the empty thread's suggestions, which sends it (or, with nothing connected, opens Connect a model). */
   assistant_suggestion_picked: NoParams;
   /** The user asked for a described change as a patch ("Make this change" or "Write it for me"). */
   assistant_make_change_requested: NoParams;

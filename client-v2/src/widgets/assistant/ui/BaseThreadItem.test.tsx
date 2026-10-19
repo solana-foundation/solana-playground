@@ -1,7 +1,12 @@
 // One item of the thread, drawn from the design system's message parts.
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
+import {
+  initLogger,
+  memoryProvider as memoryLog,
+  resetLogger,
+} from "../../../shared/lib/logger";
 import { BaseThreadItem } from "./BaseThreadItem";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
@@ -19,31 +24,51 @@ const reply = (text: string): ChatItem => ({
   text,
 });
 
+const user = (text: string): ChatItem => ({
+  id: "u-1",
+  createdAt: CREATED,
+  kind: "user",
+  text,
+});
+
+afterEach(() => resetLogger());
+
 describe("BaseThreadItem", () => {
   it("the user's message is a bubble on the right", () => {
     const { container } = render(
-      <BaseThreadItem
-        item={{ id: "u-1", createdAt: CREATED, kind: "user", text: "Hi" }}
-      />
+      <BaseThreadItem item={user("Hi")} onAnswer={vi.fn()} />
     );
     const bubble = container.querySelector(
       "[data-slot=message][data-align=end] [data-slot=bubble][data-variant=default]"
     );
-    expect(bubble?.textContent).toBe("Hi");
+    expect(bubble?.textContent).toBe("You: Hi");
   });
 
   it("a reply is a ghost bubble at full width", () => {
     const { container } = render(
-      <BaseThreadItem item={reply("Hello there")} />
+      <BaseThreadItem item={reply("Hello there")} onAnswer={vi.fn()} />
     );
     const bubble = container.querySelector(
       "[data-slot=bubble][data-variant=ghost]"
     );
-    expect(bubble?.textContent).toBe("Hello there");
+    expect(bubble?.textContent).toBe("Assistant: Hello there");
+  });
+
+  it("who spoke is said to a screen reader, not only shown", () => {
+    render(
+      <>
+        <BaseThreadItem item={user("Hi")} onAnswer={vi.fn()} />
+        <BaseThreadItem item={reply("Hello")} onAnswer={vi.fn()} />
+      </>
+    );
+    expect(screen.getByText("You:").className).toContain("sr-only");
+    expect(screen.getByText("Assistant:").className).toContain("sr-only");
   });
 
   it("an empty reply renders nothing", () => {
-    const { container } = render(<BaseThreadItem item={reply("")} />);
+    const { container } = render(
+      <BaseThreadItem item={reply("")} onAnswer={vi.fn()} />
+    );
     expect(container.innerHTML).toBe("");
   });
 
@@ -56,6 +81,7 @@ describe("BaseThreadItem", () => {
           kind: "tool",
           label: "Read lib.rs",
         }}
+        onAnswer={vi.fn()}
       />
     );
     expect(container.querySelector("[data-slot=marker]")?.textContent).toBe(
@@ -68,7 +94,8 @@ describe("BaseThreadItem", () => {
     render(
       <BaseThreadItem
         item={reply("Add a counter")}
-        actions={{ makeChange: { onClick, lastResort: false } }}
+        actions={{ makeChange: { onClick, mode: "next" } }}
+        onAnswer={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Make this change" }));
@@ -79,7 +106,8 @@ describe("BaseThreadItem", () => {
     render(
       <BaseThreadItem
         item={reply("A hint")}
-        actions={{ makeChange: { onClick: vi.fn(), lastResort: true } }}
+        actions={{ makeChange: { onClick: vi.fn(), mode: "lastResort" } }}
+        onAnswer={vi.fn()}
       />
     );
     expect(
@@ -90,15 +118,18 @@ describe("BaseThreadItem", () => {
     ).toBeNull();
   });
 
-  it("the verify step runs its action", () => {
+  it("the verify step is named by its stage and runs its action", () => {
     const onClick = vi.fn(() => Promise.resolve());
     render(
       <BaseThreadItem
         item={reply("Done")}
-        actions={{ verifyStep: { onClick, label: "Build" } }}
+        actions={{
+          verifyStep: { onClick, stage: "deploy", title: "Proves it" },
+        }}
+        onAnswer={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
@@ -107,31 +138,61 @@ describe("BaseThreadItem", () => {
     render(
       <BaseThreadItem
         item={reply("Still stuck?")}
-        actions={{ skipStep: { onClick } }}
+        actions={{ skipStep: { onClick, title: "Not verified" } }}
+        onAnswer={vi.fn()}
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it("error is an alert, notice a status", () => {
+  it("a skip that throws is logged, not lost", () => {
+    const logs = memoryLog();
+    initLogger({ providers: [logs] });
     render(
-      <>
-        <BaseThreadItem
-          item={{ id: "e-1", createdAt: CREATED, kind: "error", text: "Boom" }}
-        />
-        <BaseThreadItem
-          item={{
-            id: "n-1",
-            createdAt: CREATED,
-            kind: "notice",
-            text: "Stopped.",
-          }}
-        />
-      </>
+      <BaseThreadItem
+        item={reply("Still stuck?")}
+        actions={{
+          skipStep: {
+            onClick: () => {
+              throw new Error("lesson listener failed");
+            },
+            title: "Not verified",
+          },
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
+    expect(
+      logs.entries.some((e) => e.ns === "ui:button" && e.level === "error")
+    ).toBe(true);
+  });
+
+  it("an error is an alert", () => {
+    render(
+      <BaseThreadItem
+        item={{ id: "e-1", createdAt: CREATED, kind: "error", text: "Boom" }}
+        onAnswer={vi.fn()}
+      />
     );
     expect(screen.getByRole("alert").textContent).toBe("Boom");
+  });
+
+  it("a notice is a status, not an alert", () => {
+    render(
+      <BaseThreadItem
+        item={{
+          id: "n-1",
+          createdAt: CREATED,
+          kind: "notice",
+          text: "Stopped.",
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
     expect(screen.getByRole("status").textContent).toBe("Stopped.");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("an approval answers with its own id", () => {
@@ -149,6 +210,6 @@ describe("BaseThreadItem", () => {
       />
     );
     fireEvent.click(screen.getByRole("button", { name: "Deny" }));
-    expect(onAnswer).toHaveBeenCalledWith("card-1", false);
+    expect(onAnswer).toHaveBeenCalledWith("card-1", "deny");
   });
 });

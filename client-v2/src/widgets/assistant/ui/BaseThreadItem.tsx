@@ -10,33 +10,53 @@ import { Message, MessageContent, MessageFooter } from "@/shared/ui/message";
 import Markdown from "../../../components/Markdown";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { BaseApprovalCard } from "./BaseApprovalCard";
+import type { ApprovalAnswer } from "./BaseApprovalCard";
+
+/**
+ * How "Make this change" is offered: as the reply's next step, or inside a
+ * lesson as a way out, since there the same click skips the hint ladder
+ */
+export type MakeChangeMode = "next" | "lastResort";
 
 /**
  * The moves offered on a finished reply. Each is present only on the reply
- * that offers it; the thread decides which reply that is.
+ * that offers it; the thread decides which reply that is. A lesson offers
+ * Build/Deploy and Skip one at a time, never together.
  */
 export type ReplyActions = {
   /**
    * Asks the assistant to turn what it just described into a patch, which
-   * still arrives as an approval card. `lastResort` inside a lesson, where
-   * the same click skips the hint ladder.
+   * still arrives as an approval card
    */
-  makeChange?: { onClick: () => void; lastResort: boolean };
+  makeChange?: { onClick: () => void; mode: MakeChangeMode };
   /** Runs the action that can prove the current lesson step */
   verifyStep?: {
     onClick: () => void | Promise<unknown>;
-    label: string;
-    title?: string;
+    stage: "build" | "deploy";
+    title: string;
   };
   /** The lesson's escape valve, recorded as a skip */
-  skipStep?: { onClick: () => void; title?: string };
+  skipStep?: { onClick: () => void; title: string };
 };
 
-const MAKE_CHANGE_TITLE = {
-  next: "Ask the assistant to write this change, for you to review",
-  lastResort:
-    "Skip the rest of the hints and have the assistant write it, for you to review",
+const MAKE_CHANGE: Record<
+  MakeChangeMode,
+  { label: string; title: string; variant: "outline" | "link" }
+> = {
+  next: {
+    label: "Make this change",
+    title: "Ask the assistant to write this change, for you to review",
+    variant: "outline",
+  },
+  lastResort: {
+    label: "Write it for me",
+    title:
+      "Skip the rest of the hints and have the assistant write it, for you to review",
+    variant: "link",
+  },
 };
+
+const VERIFY_LABEL = { build: "Build", deploy: "Deploy" } as const;
 
 /** One item of the conversation, drawn from props only */
 export const BaseThreadItem = ({
@@ -46,7 +66,7 @@ export const BaseThreadItem = ({
 }: {
   item: ChatItem;
   actions?: ReplyActions;
-  onAnswer?: (id: string, allowed: boolean) => void;
+  onAnswer: (id: string, answer: ApprovalAnswer) => void;
 }) => {
   switch (item.kind) {
     case "user":
@@ -55,6 +75,9 @@ export const BaseThreadItem = ({
           <MessageContent>
             <Bubble variant="default" align="end">
               <BubbleContent className="whitespace-pre-wrap">
+                {/* Alignment and colour say who spoke; a screen reader
+                    reading the log needs it said */}
+                <span className="sr-only">You: </span>
                 {item.text}
               </BubbleContent>
             </Bubble>
@@ -70,6 +93,7 @@ export const BaseThreadItem = ({
           <MessageContent>
             <Bubble variant="ghost" className="w-full">
               <BubbleContent className="w-full">
+                <span className="sr-only">Assistant: </span>
                 <Markdown codeFontOnly>{item.text}</Markdown>
               </BubbleContent>
             </Bubble>
@@ -108,7 +132,7 @@ export const BaseThreadItem = ({
       return (
         <BaseApprovalCard
           item={item}
-          onAnswer={(allowed) => onAnswer?.(item.id, allowed)}
+          onAnswer={(answer) => onAnswer(item.id, answer)}
         />
       );
   }
@@ -117,21 +141,18 @@ export const BaseThreadItem = ({
 const ReplyFooter = ({ actions }: { actions: ReplyActions }) => {
   const { makeChange, verifyStep, skipStep } = actions;
   if (!makeChange && !verifyStep && !skipStep) return null;
+  const change = makeChange && MAKE_CHANGE[makeChange.mode];
 
   return (
     <MessageFooter className="flex-wrap gap-2 px-0">
-      {makeChange && (
+      {makeChange && change && (
         <Button
           size="sm"
-          variant={makeChange.lastResort ? "link" : "outline"}
-          title={
-            makeChange.lastResort
-              ? MAKE_CHANGE_TITLE.lastResort
-              : MAKE_CHANGE_TITLE.next
-          }
+          variant={change.variant}
+          title={change.title}
           onClick={makeChange.onClick}
         >
-          {makeChange.lastResort ? "Write it for me" : "Make this change"}
+          {change.label}
         </Button>
       )}
       {verifyStep && (
@@ -141,7 +162,7 @@ const ReplyFooter = ({ actions }: { actions: ReplyActions }) => {
           onClick={verifyStep.onClick}
           onError={reportButtonFailure}
         >
-          {verifyStep.label}
+          {VERIFY_LABEL[verifyStep.stage]}
         </AsyncButton>
       )}
       {skipStep && (
@@ -149,7 +170,15 @@ const ReplyFooter = ({ actions }: { actions: ReplyActions }) => {
           size="sm"
           variant="link"
           title={skipStep.title}
-          onClick={skipStep.onClick}
+          onClick={() => {
+            // A plain button has no `onError`; a throw from the lesson would
+            // otherwise reach no logger
+            try {
+              skipStep.onClick();
+            } catch (error) {
+              reportButtonFailure(error);
+            }
+          }}
         >
           Skip this step
         </Button>

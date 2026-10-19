@@ -14,13 +14,15 @@ import { Spinner } from "@/shared/ui/spinner";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { BaseThreadItem } from "./BaseThreadItem";
 import type { ReplyActions } from "./BaseThreadItem";
+import type { ApprovalAnswer } from "./BaseApprovalCard";
 
 /**
  * The conversation, drawn from props only.
  *
  * The scroller follows new content while the reader is at the end and stays
- * put once they scroll up, offering "Scroll to end" instead; it never pulls a
- * reader back down mid-reply.
+ * put once they scroll up by wheel, touch or keys, offering "Scroll to end"
+ * instead. The log "Conversation" is the scroller's content; there is no
+ * scroll anchor, so a send made while scrolled up does not move the thread.
  */
 export const BaseThread = ({
   items,
@@ -32,7 +34,7 @@ export const BaseThread = ({
   onAnswer,
 }: {
   items: readonly ChatItem[];
-  /** The turn is running and nothing has streamed into its reply yet */
+  /** The turn is running and the last item is not a reply with text: before the first token and while tools run */
   working: boolean;
   /** The open project's name, or `null` when there is none */
   project: string | null;
@@ -40,7 +42,7 @@ export const BaseThread = ({
   onSuggestion: (text: string) => void;
   /** The moves offered on a reply, for the one reply that offers them */
   actionsFor: (id: string) => ReplyActions | undefined;
-  onAnswer: (id: string, allowed: boolean) => void;
+  onAnswer: (id: string, answer: ApprovalAnswer) => void;
 }) => (
   <MessageScrollerProvider autoScroll>
     <MessageScroller className="flex-1">

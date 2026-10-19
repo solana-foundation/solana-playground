@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
 import { useRenderOnChange } from "../../../hooks/useRenderOnChange";
 import { PgCommand } from "../../../utils/command";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
@@ -21,9 +20,8 @@ import type { LessonState } from "../../../views/flow/lessons";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
 import { BaseThread } from "./BaseThread";
+import type { ApprovalAnswer } from "./BaseApprovalCard";
 import type { ReplyActions } from "./BaseThreadItem";
-
-const log = createLogger("assistant:thread");
 
 const SUGGESTIONS = [
   "What does this program do?",
@@ -69,13 +67,9 @@ export const Thread = ({
   const { busy } = turn;
   const lesson = describeLesson(lessonState);
 
-  // A send the turn refuses or fails is the turn's to show in the thread;
-  // what reaches here is a failure it did not catch
-  const send = (text: string) => {
-    turn.send(text).catch((error: unknown) => {
-      log.error(error, { report: true });
-    });
-  };
+  // `useTurn`'s send settles on its own: a failed turn lands in the thread,
+  // and a send that fails before its turn starts goes to `reportButtonFailure`
+  const send = (text: string) => void turn.send(text);
 
   // Offer "Make this change" on the reply the assistant just finished, and
   // only there: an older message describes code that has since moved on, and a
@@ -115,7 +109,7 @@ export const Thread = ({
     onFinishedReply && !stepAttempted && stage && turnAppliedApproval(items)
       ? lastItem.id
       : null;
-  // The chat's skip card is the same edge as the rail's pinned valve,
+  // "Skip this step" is the same edge as the rail's pinned valve,
   // so it is offered under the same precondition and nowhere else
   const skippableId =
     onFinishedReply && stepAttempted && PgLesson.canPass() ? lastItem.id : null;
@@ -124,29 +118,24 @@ export const Thread = ({
     const actions: ReplyActions = {};
     if (id === changeableId) {
       actions.makeChange = {
-        // Inside a lesson the same click skips the hint ladder, so it is
-        // offered as a way out rather than as the obvious next step
-        lastResort: !!lesson,
+        mode: lesson ? "lastResort" : "next",
         onClick: () => {
           assistantTelemetry.track("assistant_make_change_requested", {});
           send(MAKE_CHANGE);
         },
       };
     }
-    if (id === verifiableId && stage) {
+    // Both lesson moves are offered only on a finished reply inside a lesson
+    if (lesson && stage && id === verifiableId) {
       actions.verifyStep = {
-        label: stage === "deploy" ? "Deploy" : "Build",
-        title: lesson
-          ? `${lesson.verifiedBy} — this is what proves it, and the only thing that can.`
-          : undefined,
+        stage,
+        title: `${lesson.verifiedBy} — this is what proves it, and the only thing that can.`,
         onClick: () => PgCommand[stage].execute(),
       };
     }
-    if (id === skippableId) {
+    if (lesson && id === skippableId) {
       actions.skipStep = {
-        title: lesson
-          ? `This step is still not verified — ${lesson.verifiedBy}. Skipping records that you moved past it unproven; you can come back with the arrows.`
-          : undefined,
+        title: `This step is still not verified — ${lesson.verifiedBy}. Skipping records that you moved past it unproven; you can come back with the arrows.`,
         onClick: () => PgLesson.pass(),
       };
     }
@@ -155,14 +144,14 @@ export const Thread = ({
 
   // Read from the store, not from what was rendered: a second tap lands
   // before the re-render, and only a card still pending is an answer
-  const onAnswer = (id: string, allowed: boolean) => {
+  const onAnswer = (id: string, answer: ApprovalAnswer) => {
     const card = PgAssistant.items.find((item) => item.id === id);
     if (card?.kind !== "approval" || card.status !== "pending") return;
     assistantTelemetry.track("assistant_approval_answered", {
       kind: card.request.type,
-      answer: allowed ? "allow" : "deny",
+      answer,
     });
-    PgAssistant.resolveApproval(id, allowed);
+    PgAssistant.resolveApproval(id, answer === "allow");
   };
 
   // Cover the silent gaps: before the first token and while tools run.
