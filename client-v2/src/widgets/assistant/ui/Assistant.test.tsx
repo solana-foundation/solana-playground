@@ -120,7 +120,6 @@ describe("Assistant", () => {
     setup();
     expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
     expect(screen.getByText("thread").dataset.project).toBe("none");
-    explorer.name = "hello-anchor";
   });
 
   it("hands the thread the project's own name", () => {

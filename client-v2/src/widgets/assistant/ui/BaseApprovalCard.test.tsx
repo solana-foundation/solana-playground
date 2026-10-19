@@ -76,6 +76,13 @@ describe("BaseApprovalCard", () => {
     expect(screen.getByText("Compiles the program")).toBeTruthy();
   });
 
+  it("a command's lines are phrasing content inside the pre", () => {
+    const { container } = render(
+      <BaseApprovalCard item={commandCard("pending")} onAnswer={vi.fn()} />
+    );
+    expect(container.querySelectorAll("pre div")).toHaveLength(0);
+  });
+
   it("an unanswered card says the session ended", () => {
     render(
       <BaseApprovalCard

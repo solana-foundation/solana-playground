@@ -82,12 +82,13 @@ export const BaseApprovalCard = ({
         {patch ? (
           <PatchLines request={request} />
         ) : (
-          <div className="px-3">
-            <div className="text-warning">$ {request.name}</div>
-            <div className="pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
+          // A pre holds phrasing content only, so its lines are block spans
+          <span className="block px-3">
+            <code className="block text-warning">$ {request.name}</code>
+            <span className="block pt-1.5 font-sans text-xs whitespace-normal text-muted-foreground">
               {request.effect}
-            </div>
-          </div>
+            </span>
+          </span>
         )}
       </DiffContent>
 
