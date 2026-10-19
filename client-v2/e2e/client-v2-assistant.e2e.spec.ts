@@ -11,7 +11,8 @@ import { lineOf, linesOn } from "./telemetry";
 
 /**
  * The assistant's composer: the model it names, sending without a key,
- * Send turning to Stop. Every test stubs `/api/agent`, so none depends on the
+ * Send turning to Stop; and its thread at phone width, while reading back,
+ * across a reload, and when an approval is answered. Every test stubs `/api/agent`, so none depends on the
  * dev server's own default backend.
  */
 

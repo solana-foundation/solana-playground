@@ -1058,7 +1058,12 @@ widgets/assistant
   this task adds them to `design-system/registry.json` and installs them with
   `yarn ds-add`, with `@shadcn/react` (MessageScroller's primitive, React 19)
   from npm. `attachment` is not installed: a stored message carries no files,
-  and the stored shape does not change here.
+  and the stored shape does not change here. Two parts were fixed in the
+  design system on the way: the unused `tinted` bubble mixes `--primary`
+  into `--background` with `color-mix` instead of `oklch(from …)`, which
+  `check-colors` rejects as a colour literal, and `DiffLine` sets the code
+  font itself, because the base layer gives every `data-slot` element the
+  text font.
 - **What does not change.** The stored transcript (`ChatItem`), how an
   approval is answered (`resolveApproval`), the outcome lines, and a restored
   card that was never answered, which reads "not applied -- the session ended
