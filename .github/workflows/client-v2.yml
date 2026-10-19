@@ -28,6 +28,10 @@ jobs:
     timeout-minutes: 15
     env:
       CI: "true"
+      # Six of the eight `wasm/*/pkg` packages compile from Rust in about an
+      # hour; none is on these checks' path, so the job opts in to the stubs.
+      # The real packages are checked by `client-v2-real-wasm.yml`.
+      USE_WASM_STUBS: "true"
       # The API suite's integration cases skip themselves without this, so
       # without it they would pass by not running.
       #
@@ -74,15 +78,10 @@ jobs:
           cache: "yarn"
           cache-dependency-path: "client-v2/yarn.lock"
 
-      # Six of the eight local `wasm/*/pkg` deps are compiled from Rust
-      # (about an hour). `yarn install` refuses to run while the
-      # directories are missing, so stand them in; none is on the UI or
-      # test path.
-      - name: Stub the unbuilt WASM packages
-        run: ../wasm/stub-packages.sh
-
-      - name: Install
-        run: yarn install --frozen-lockfile
+      # `yarn setup:with-stubs` without its `generate`, which compiles crates
+      # with cargo; the cheaper `generate-fast` follows.
+      - name: Stub the WASM packages and install
+        run: bash scripts/setup-wasm.sh
 
       # Same cheap chain as `yarn dev`: static assets, export barrels,
       # package and tutorial data, assistant context, so type-check and tests
@@ -181,6 +180,10 @@ jobs:
     # Playwright's `globalTimeout` (playwright.config.mts) is what bounds the
     # tests, and a shard hung there still prints its summary.
     timeout-minutes: 30
+    # The specs tagged `@real-wasm` run the CLIs and are excluded below; they
+    # run in `client-v2-real-wasm.yml`.
+    env:
+      USE_WASM_STUBS: "true"
 
     strategy:
       # A red shard leaves the others running, so one run reports every
@@ -211,11 +214,8 @@ jobs:
           cache: "yarn"
           cache-dependency-path: "client-v2/yarn.lock"
 
-      - name: Stub the unbuilt WASM packages
-        run: ../wasm/stub-packages.sh
-
-      - name: Install
-        run: yarn install --frozen-lockfile
+      - name: Stub the WASM packages and install
+        run: bash scripts/setup-wasm.sh
 
       # The browser binary is cached by Playwright version, so only a bump
       # re-downloads it. The runner's system libraries are not cached: on a
@@ -251,8 +251,10 @@ jobs:
 
       # `yarn dev` runs `generate-fast` itself before `craco start`, and the
       # config starts it (`webServer`), so there is no separate generate step.
+      # `--grep-invert`, not `test.skip`: a skip outside `e2e/known-skips.txt`
+      # fails `e2e-report`.
       - name: Browser tests
-        run: yarn test-e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+        run: yarn test-e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }} --grep-invert @real-wasm
 
       # Traces, screenshots and the per-test error context of what failed.
       # Open a trace with `yarn playwright show-trace <file>`. `always()`,
