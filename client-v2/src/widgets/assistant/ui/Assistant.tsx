@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
-import Chat from "../../../views/sidebar/assistant/Component/Chat";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
 import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -10,6 +9,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
 import { openConnectDialog } from "./ConnectDialog";
+import { Thread } from "./Thread";
 import { BaseAssistantHead } from "./BaseAssistantHead";
 import type { ForgetKey } from "./BaseAssistantHead";
 
@@ -128,7 +128,7 @@ export function Assistant({ widen, onHide }: AssistantProps) {
       />
       {view === "chat" && (
         <>
-          <Chat turn={turn} />
+          <Thread turn={turn} project={title === NO_PROJECT ? null : title} />
           <AssistantComposer turn={turn} />
         </>
       )}

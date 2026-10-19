@@ -10,8 +10,8 @@ import type { Turn } from "../model/use-turn";
 // `useTurn` runs, so what is under test is that the panel holds it above
 // both views. The thread and Sources stand in by name; the composer only
 // shows and edits what is in it.
-vi.mock("../../../views/sidebar/assistant/Component/Chat", () => ({
-  default: () => <div>thread</div>,
+vi.mock("./Thread", () => ({
+  Thread: () => <div>thread</div>,
 }));
 vi.mock("../../../views/sidebar/assistant/Component/Grounding", () => ({
   default: () => <div>sources</div>,

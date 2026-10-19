@@ -7,8 +7,8 @@ import { PgAssistant } from "../../../views/sidebar/assistant/store";
 
 // The thread, Sources and the composer stand in by name: what is under test
 // is which of them the panel shows, not what they draw.
-vi.mock("../../../views/sidebar/assistant/Component/Chat", () => ({
-  default: () => <div>thread</div>,
+vi.mock("./Thread", () => ({
+  Thread: () => <div>thread</div>,
 }));
 // Connect a model's footer link reaches the utils barrel, which needs the
 // build's globals; the panel's dialog here is a stand-in
