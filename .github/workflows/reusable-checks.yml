@@ -8,10 +8,11 @@ on:
     inputs:
       # The `build` job: `yarn setup` (the WASM compile), then type check,
       # unit tests and production build of upstream's `client/`, 20+ minutes.
-      # ci.yml turns it off, so PRs and untagged pushes to master never check
-      # `client/`, which this fork does not edit. The WASM still compiles for
-      # every preview, in vercel-install.sh on a cache miss. cicd.yml's deploy
-      # gate, on a tagged push to master, keeps it.
+      # ci.yml turns the `build` job off, so PRs and untagged pushes to master
+      # never check `client/`, which this fork does not edit. cicd.yml runs the
+      # `build` job on a tagged push to master and on a manual dispatch. The
+      # WASM still compiles for a preview, in vercel-install.sh, when the wasm
+      # packages miss both the Build Cache and the Remote Cache.
       build:
         type: boolean
         default: true

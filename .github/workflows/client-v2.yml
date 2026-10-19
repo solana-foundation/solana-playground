@@ -1,9 +1,9 @@
 name: client-v2
 
-# The fork's frontend checks. Upstream's ci.yml checks only formatting and
-# clippy on master, not `client/`'s build or tests; this one guards
-# `client-v2/` on master and new-face and never touches the Rust workspaces.
-# new-face's copy carries the same branch list, so merging it changes neither.
+# The fork's frontend checks. ci.yml checks formatting and clippy, not
+# `client/`'s build or tests; this one guards `client-v2/` and never touches
+# the Rust workspaces. Keep the branch list identical on master and new-face,
+# so a merge in either direction leaves it unchanged.
 on:
   push:
     branches: ["master", "new-face"]

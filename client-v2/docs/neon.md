@@ -32,7 +32,7 @@ extends it to every other `preview/*` branch whose git branch has no open PR: th
 hand-deployed previews. It never touches `main` (the default branch) or a protected branch.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
-`master`.
+`master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`.
 
 ## Configuration
 

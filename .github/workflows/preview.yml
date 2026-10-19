@@ -1,9 +1,10 @@
 name: preview
 
-# A preview deployment of client-v2, with its own Neon database, for a PR that
-# carries the `preview` label -- and only for one. The Neon project caps its
-# branch count, so the Vercel integration's branch-per-deployment option is
-# off (see client-v2/docs/neon.md) and this workflow owns the branch instead:
+# A preview deployment of client-v2, with its own Neon database, for a PR into
+# master that carries the `preview` label -- and only for one. The Neon
+# project caps its branch count, so the Vercel integration's
+# branch-per-deployment option is off (see client-v2/docs/neon.md) and this
+# workflow owns the branch instead:
 #
 # - labelled, opened/reopened or pushed to while labelled: create (or reuse)
 #   `preview/pr-<number>` from `main`, migrate it, build, deploy with it

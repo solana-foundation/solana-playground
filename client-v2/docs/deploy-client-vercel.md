@@ -78,6 +78,8 @@ runs against the newer schema; revisit this once one is not.
 | Production Branch | `master` |
 | Ignored Build Step | Automatic |
 
+The Production Branch row was confirmed on 2026-10-19.
+
 ## How long a function may run
 
 `vercel.json` sets `functions."api/agent.mjs".maxDuration = 300`. That
