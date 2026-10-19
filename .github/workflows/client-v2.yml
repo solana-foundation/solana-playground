@@ -1,13 +1,14 @@
 name: client-v2
 
-# The fork's frontend checks. Upstream's ci.yml checks only formatting and
-# clippy on master-2.0, not `client/`'s build or tests; this one guards
-# `client-v2/` on master-2.0 and never touches the Rust workspaces.
+# The fork's frontend checks. ci.yml checks formatting and clippy, not
+# `client/`'s build or tests; this one guards `client-v2/` and never touches
+# the Rust workspaces. Keep the branch list identical on master and new-face,
+# so a merge in either direction leaves it unchanged.
 on:
   push:
-    branches: ["master-2.0"]
+    branches: ["master", "new-face"]
   pull_request:
-    branches: ["master-2.0"]
+    branches: ["master", "new-face"]
 
   workflow_dispatch:
 
@@ -282,3 +283,24 @@ jobs:
           path: client-v2/test-results/
           retention-days: 7
           if-no-files-found: warn
+
+  # The one status the default branch's ruleset requires (context
+  # `client-v2`), so a job added to or renamed in this workflow needs no
+  # ruleset edit: list it in `needs` and this job passes only when it
+  # succeeded. `always()` because a job whose `needs` failed is skipped, and
+  # GitHub reads a skipped required check as passing.
+  client-v2:
+    name: client-v2
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [checks, e2e]
+    if: always()
+    steps:
+      - name: Every job succeeded
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "Results: $RESULTS"
+          for result in $RESULTS; do
+            [ "$result" = success ] || exit 1
+          done

@@ -9,16 +9,28 @@ This file records only what the code and git history do not make obvious.
 `solana-foundation/solana-playground`, forked from
 `solana-playground/solana-playground`.
 
-`master-2.0` is the integration branch. `ci.yml` checks formatting and clippy
-for `client/`, `server/` and `wasm/`, but not `client/`'s build or tests;
-`client-v2.yml` guards `client-v2/`; `preview.yml` deploys a
-labelled PR's preview. All three run on `master-2.0` only. Feature branches
-come off `master-2.0` and PRs go against `master-2.0`. Foundation `master`
-is merged into it.
+`solana-foundation/solana-playground` `master` is the reference. Work lands
+there through PRs, and upstream `solana-playground/solana-playground` reaches
+it as squashed sync commits, each a chunk of upstream functionality, named
+`chore(upstream): sync to <sha> (<range>)`. `hoodieshq/solana-playground`
+forks `solana-foundation/solana-playground`; `master` is the default branch
+of both.
 
-`master` is still the repository's default branch, so scheduled workflows
-(`preview-sweep.yml`) run from its copy only, and `cicd.yml` deploys App
-Engine from a tagged commit pushed to it.
+The integration branches are `master` and `new-face`. Feature branches come off `master` and PRs go against `master`;
+redesign branches (section 5, "Screens", of the OpenSpec change
+`ui-migration`) come off `new-face` and PRs go against `new-face`.
+
+`ci.yml` checks formatting for `client/`, `server/` and `wasm/` and clippy
+for `server/` and `wasm/`, but not `client/`'s build or tests;
+`client-v2.yml` guards `client-v2/`; `preview.yml` deploys a labelled PR's
+preview. All three run on `master`; `client-v2.yml` also runs on `new-face`.
+
+GitHub runs scheduled workflows (`preview-sweep.yml`) only from the default
+branch. `cicd.yml` deploys App Engine from a tagged commit pushed to
+`master`. A push to `master` also deploys `client-v2` to Vercel production,
+so run `migrate-production-db` first when migrations are pending:
+"migrate first, then merge to `master`"
+([deploy-client-vercel.md, "Conversation and project sync"](client-v2/docs/deploy-client-vercel.md#conversation-and-project-sync)).
 
 Greptile reviews only PRs into `master` on the foundation repository, as
 `greptile.json` configures. When adding a file of review rules, add it to `customContext.files` in
