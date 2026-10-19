@@ -1,7 +1,7 @@
 import { CirclePlayIcon } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
-import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
+import { Marker, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,
   MessageScrollerButton,
