@@ -77,8 +77,9 @@ carries a key, a prompt or a reply.
 - `assistant_approval_answered {kind, answer}`: a user answered an approval
   card; `kind` is `patch` or `command`, `answer` is `allow` or `deny`. Once
   per card.
-- `assistant_suggestion_picked`: a user sent one of the empty thread's
-  suggestions.
+- `assistant_suggestion_picked`: a user picked one of the empty thread's
+  suggestions, which sends it, or opens Connect a model when nothing is
+  connected.
 - `assistant_make_change_requested`: a user asked for a described change as
   a patch ("Make this change" or "Write it for me").
 

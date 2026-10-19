@@ -652,7 +652,7 @@
       "name": "message-scroller",
       "type": "registry:ui",
       "title": "Message scroller",
-      "description": "The conversation's scrolling list: follows the end while you are there, and offers a way back when you are not.",
+      "description": "The conversation's scrolling list: with autoScroll it follows the end while you are there, and offers a way back when you are not.",
       "registryDependencies": [
         "@playground/playground-tokens",
         "@playground/button"
@@ -673,7 +673,7 @@
       "name": "bubble",
       "type": "registry:ui",
       "title": "Bubble",
-      "description": "A message's body: yours in the accent on the right, the assistant's on the surface or bare.",
+      "description": "A message's body, in one of seven variants (default, secondary, muted, tinted, outline, ghost, destructive), on the end side with align=\"end\".",
       "registryDependencies": [
         "@playground/playground-tokens"
       ],

@@ -1032,10 +1032,11 @@ catalogue ("Message and bubble", "Diff", "Marker") is the design.
 
 ```
 widgets/assistant
-├─ Thread / BaseThread   MessageScroller; its viewport is the log "Conversation"
+├─ Thread / BaseThread   MessageScroller; its content is the log "Conversation"
 │  ├─ empty    icon, "Ask about <project>", one line, suggestions as pills
-│  ├─ user     Message align end, Bubble default (the accent)
-│  ├─ reply    Message, Bubble ghost at full width, no avatar; Markdown;
+│  ├─ user     Message align end, Bubble default (the accent), "You:" for a screen reader
+│  ├─ reply    Message, Bubble ghost at full width, no avatar, "Assistant:"
+│  │           for a screen reader; Markdown;
 │  │           MessageFooter: Make this change | Build/Deploy | Skip this step
 │  ├─ tool     Marker with a tick
 │  ├─ error, notice   Callout, as today
@@ -1065,14 +1066,23 @@ widgets/assistant
 - **Small screens.** Below `md` the card's actions are one row of 44 px
   targets and a diff scrolls inside `min(15rem, 40dvh)`, so a pending card's
   question and its answer fit above the keyboard. The scroller follows new
-  content only while the reader is at the end and offers "Scroll to end"
-  otherwise; it never pulls a reader back down mid-reply.
+  content only while the reader is at the end; once they scroll up by wheel,
+  touch or keys it stays put and offers "Scroll to end". There is no scroll
+  anchor, so a send made while scrolled up does not move the thread.
 - **What survives.** The log "Conversation", "Assistant is working", "Make
   this change", "Write it for me", "Skip this step", Apply, Reject, Allow,
-  Deny, and the status words (Proposed, Applied, Declined, Not answered).
+  Deny, and the status words, now in sentence case (Proposed, Applied,
+  Declined, Not answered).
+- **What changes.** The "YOU" and "ASSISTANT" headers become the bubbles'
+  sides, with the speaker kept for a screen reader; the diff loses its
+  line-number gutter, which the design system's `DiffLine` does not draw; the
+  suggestions become the prototype's three, and "What's our current status
+  and roadmap?" goes.
 - **Telemetry.** Prefix `assistant`: `assistant_approval_answered {kind:
   patch | command, answer: allow | deny}`, `assistant_suggestion_picked`,
-  `assistant_make_change_requested`. Logs under `assistant:thread`.
+  `assistant_make_change_requested`. The thread logs nothing of its own: a
+  send that fails before its turn starts is `useTurn`'s, through
+  `reportButtonFailure`, and a failed "Skip this step" goes there too.
 
 ## The project list (5.14)
 
