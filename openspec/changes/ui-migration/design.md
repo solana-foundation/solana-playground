@@ -1023,6 +1023,57 @@ widgets/assistant
   the one current when the dialog opened. Logs under `assistant:composer` and
   `assistant:connect`. Decided with Slava 2026-10-16.
 
+## The assistant thread (5.18)
+
+Decided with Slava on 2026-10-19 (HOO-1794). The thread above the composer
+moves onto the design system at every width. The prototype draws no thread of
+its own (its `#app` still runs today's styled one), so the design system's
+catalogue ("Message and bubble", "Diff", "Marker") is the design.
+
+```
+widgets/assistant
+├─ Thread / BaseThread   MessageScroller; its viewport is the log "Conversation"
+│  ├─ empty    icon, "Ask about <project>", one line, suggestions as pills
+│  ├─ user     Message align end, Bubble default (the accent)
+│  ├─ reply    Message, Bubble ghost at full width, no avatar; Markdown;
+│  │           MessageFooter: Make this change | Build/Deploy | Skip this step
+│  ├─ tool     Marker with a tick
+│  ├─ error, notice   Callout, as today
+│  ├─ working  Marker with a Spinner, status "Assistant is working"
+│  └─ BaseApprovalCard   Diff parts: header (path and DiffStat, or "wants to
+│                        run <name>"; a status Badge), content (the diff's
+│                        lines, or `$ <name>` and its effect), footer
+│                        (Apply/Reject, Allow/Deny, or the outcome)
+└─ (AssistantComposer, 5.17)
+```
+
+- **Where the code goes.** `Thread` connects `PgAssistant`, the lesson and
+  `turn.send`; `BaseThread`, `BaseThreadItem` and `BaseApprovalCard` take
+  props only. `views/sidebar/assistant/Component/Chat.tsx` and `ChatItem.tsx`
+  are deleted, with their tests moved. The store and `diff.ts` stay where
+  they are.
+- **Installed parts.** `message`, `message-scroller`, `bubble` and `marker`
+  exist in `design-system/src/components/ui` but were never registry items;
+  this task adds them to `design-system/registry.json` and installs them with
+  `yarn ds-add`, with `@shadcn/react` (MessageScroller's primitive, React 19)
+  from npm. `attachment` is not installed: a stored message carries no files,
+  and the stored shape does not change here.
+- **What does not change.** The stored transcript (`ChatItem`), how an
+  approval is answered (`resolveApproval`), the outcome lines, and a restored
+  card that was never answered, which reads "not applied -- the session ended
+  before you answered" (HOO-1737, HOO-1820).
+- **Small screens.** Below `md` the card's actions are one row of 44 px
+  targets and a diff scrolls inside `min(15rem, 40dvh)`, so a pending card's
+  question and its answer fit above the keyboard. The scroller follows new
+  content only while the reader is at the end and offers "Scroll to end"
+  otherwise; it never pulls a reader back down mid-reply.
+- **What survives.** The log "Conversation", "Assistant is working", "Make
+  this change", "Write it for me", "Skip this step", Apply, Reject, Allow,
+  Deny, and the status words (Proposed, Applied, Declined, Not answered).
+- **Telemetry.** Prefix `assistant`: `assistant_approval_answered {kind:
+  patch | command, answer: allow | deny}`, `assistant_suggestion_picked`,
+  `assistant_make_change_requested`. Logs under `assistant:thread`.
+
 ## The project list (5.14)
 
 Decided with Slava on 2026-10-16 (HOO-2069). The prototype's "Projects"

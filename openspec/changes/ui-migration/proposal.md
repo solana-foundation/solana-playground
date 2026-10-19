@@ -59,7 +59,9 @@ existing code moves.
 - The assistant (`widgets/assistant`, 5.17) adds `assistant_model_picked`,
   `assistant_effort_changed`, `assistant_connect_opened`,
   `assistant_turn_stopped` and `assistant_default_probe_failed` (prefix
-  `assistant`), described in the `client-v2-assistant` spec.
+  `assistant`), described in the `client-v2-assistant` spec. Its thread
+  (5.18) adds `assistant_approval_answered`, `assistant_suggestion_picked`
+  and `assistant_make_change_requested`.
 
 ## Capabilities
 
@@ -86,7 +88,8 @@ existing code moves.
   diagnostics with the faulty line marked, the latest deployment's program id
   to copy, and the stage's action at the foot on a phone.
 - `client-v2-assistant`: how the assistant's composer names the model it
-  talks to, how a turn is sent and stopped, and how a model is connected.
+  talks to, how a turn is sent and stopped, how a model is connected, and
+  how the thread reads and answers approvals at every width.
 
 ### Modified Capabilities
 
