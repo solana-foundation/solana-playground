@@ -727,6 +727,21 @@ Expect:
 
 Remove the type error.
 
+### M-5. chunks declare nothing at the top level
+
+```sh
+yarn --cwd client-v2 build-fast
+node client-v2/scripts/check-chunk-scope.mjs client-v2/build/static/js
+```
+
+Expect:
+
+- [ ] the script prints how many chunks it read and exits 0. CI runs the same check after M-2's ("Check chunks declare
+      nothing at the top level" in `client-v2.yml`).
+- [ ] with `format: "iife"` removed from the esbuild minimizer options in `client-v2/craco.config.js`, the same two
+      commands exit 1 and name each chunk with its first top-level name. Chunks load as classic scripts, so their
+      top-level helpers are globals and a later chunk's same-named helper overwrites them. Restore the option.
+
 ## 8. Parallel runs
 
 Precondition: `compose.yaml` from branch `chore/compose-parallel-runs`. It names every built image, so a run under
