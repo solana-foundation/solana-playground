@@ -541,7 +541,7 @@
       "name": "console-drawer",
       "type": "registry:ui",
       "title": "Console drawer",
-      "description": "A frosted strip under the stage and a well that opens by height, so the terminal stays mounted. \u2318J.",
+      "description": "A frosted strip under the stage and a well that opens by height, so the terminal stays mounted. ⌘J.",
       "registryDependencies": [
         "@playground/playground-tokens"
       ],
@@ -627,6 +627,85 @@
       ],
       "dependencies": [
         "class-variance-authority",
+        "cn"
+      ]
+    },
+    {
+      "name": "message",
+      "type": "registry:ui",
+      "title": "Message",
+      "description": "One message in the assistant's conversation: who sent it, its content, a header and a footer.",
+      "registryDependencies": [
+        "@playground/playground-tokens"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/message.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn"
+      ]
+    },
+    {
+      "name": "message-scroller",
+      "type": "registry:ui",
+      "title": "Message scroller",
+      "description": "The conversation's scrolling list: follows the end while you are there, and offers a way back when you are not.",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/button"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/message-scroller.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "@shadcn/react",
+        "lucide-react",
+        "cn"
+      ]
+    },
+    {
+      "name": "bubble",
+      "type": "registry:ui",
+      "title": "Bubble",
+      "description": "A message's body: yours in the accent on the right, the assistant's on the surface or bare.",
+      "registryDependencies": [
+        "@playground/playground-tokens"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/bubble.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "radix-ui",
+        "cn"
+      ]
+    },
+    {
+      "name": "marker",
+      "type": "registry:ui",
+      "title": "Marker",
+      "description": "A line in the conversation that is not a message: a day, a tool the assistant used.",
+      "registryDependencies": [
+        "@playground/playground-tokens"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/marker.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "radix-ui",
         "cn"
       ]
     },
