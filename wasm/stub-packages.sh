@@ -14,10 +14,9 @@
 # What still works: the whole UI, Monaco, rustfmt, Playnet (local validator),
 # wallet, and Rust program builds via the build server.
 #
-# Usage: ./wasm/stub-packages.sh   (run from anywhere; resolves its own location)
+# Usage: yarn --cwd client-v2 setup:with-stubs, which runs this under USE_WASM_STUBS=true and installs.
 #
-# To switch back to the real thing later: rm -rf wasm/{anchor-cli,rust-analyzer,
-# seahorse-compile,solana-cli,spl-token-cli,sugar-cli}/pkg && ./wasm/build.sh
+# To switch back to the real packages: yarn --cwd client-v2 setup
 #
 set -euo pipefail
 
@@ -118,4 +117,4 @@ DTS
 echo "  stubbed rust-analyzer"
 
 echo
-echo "Done. Next: cd client-v2 && yarn install"
+echo "Done."
