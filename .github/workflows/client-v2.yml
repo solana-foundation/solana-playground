@@ -80,9 +80,8 @@ jobs:
         run: yarn install --frozen-lockfile
 
       # Same cheap chain as `yarn dev`: static assets, export barrels,
-      # package and tutorial data, assistant context. The build step runs
-      # it again internally; it is here so type-check and tests see the
-      # generated files too.
+      # package and tutorial data, assistant context, so type-check and tests
+      # see the generated files. The `build` job regenerates them in `build-fast`.
       - name: Generate
         run: yarn generate-fast
 
@@ -153,7 +152,7 @@ jobs:
       - name: API tests
         run: yarn test-api
 
-  # The production build and the checks on what it emits, as their own check.
+  # The production build and the checks on what it emits; the `client-v2` job fails when it does.
   build:
     uses: ./.github/workflows/reusable-client-v2-build.yml
 
@@ -273,7 +272,7 @@ jobs:
     name: client-v2
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [checks, e2e]
+    needs: [checks, build, e2e]
     if: always()
     steps:
       - name: Every job succeeded

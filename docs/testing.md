@@ -732,23 +732,20 @@ Remove the type error.
 ### M-5. chunks declare nothing at the top level
 
 ```sh
-node --test client-v2/scripts/chunk-scope.test.mjs
 yarn --cwd client-v2 build-fast
 yarn --cwd client-v2 test-build
 ```
 
-`chunk-scope.test.mjs` runs in `test-api` and needs no build: it minifies a small chunk fixture with the options in
-`client-v2/scripts/esbuild-minify.mjs`, through `TerserPlugin.esbuildMinify`. `test-build` runs
-`chunk-scope.build-test.mjs` over `client-v2/build/static/js`, the chunks that ship; CI runs it after the production
-build, in `reusable-client-v2-build.yml`.
+`test-build` runs `chunk-scope.build-test.mjs` over `client-v2/build/static/js`, the chunks that ship; CI runs it
+after the production build, in `reusable-client-v2-build.yml`. `top-level-declaration.test.mjs`, in `test-api`, covers
+the parser it uses.
 
 Expect:
 
-- [ ] both tests pass.
-- [ ] with `format: "iife"` removed from `esbuildMinifyOptions` in `client-v2/scripts/esbuild-minify.mjs`, both tests
-      fail and name the identifier a chunk declares at the top level (the build test after a rebuild). Chunks load as
-      classic scripts, so their top-level helpers are globals and a later chunk's same-named helper overwrites them.
-      Restore the option.
+- [ ] `test-build` passes.
+- [ ] with `format: "iife"` removed from `esbuildMinifyOptions` in `client-v2/scripts/esbuild-minify.mjs`, a rebuild
+      and `test-build` fail and name the identifier a chunk declares at the top level. Chunks load as classic scripts,
+      so their top-level helpers are globals and a later chunk's same-named helper overwrites them. Restore the option.
 - [ ] `test-build` without a `client-v2/build/` fails instead of passing.
 
 ## 8. Parallel runs

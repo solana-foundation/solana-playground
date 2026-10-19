@@ -1,9 +1,6 @@
 name: client-v2 build
 
-# The production build of `client-v2/` and the checks on what it emits.
-# Build configuration is not unit-tested (client-v2/CLAUDE.md): each step
-# below asserts something the configuration must produce, so a craco,
-# webpack or minifier change that breaks it fails here instead of shipping.
+# Asserts what the build configuration must emit, so a craco, webpack or minifier change that breaks it fails here.
 on:
   workflow_call:
 
@@ -23,8 +20,7 @@ jobs:
         working-directory: client-v2
 
     steps:
-      # `generate-fast` copies `client-v2/public` out of the `client/public`
-      # submodule and dates tutorials from its history.
+      # `build-fast` copies `client-v2/public` out of the `client/public` submodule and dates tutorials from its history.
       - uses: actions/checkout@v6
         with:
           submodules: true

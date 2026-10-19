@@ -189,7 +189,7 @@ export const addOnDidChange = (
     // https://github.com/mishoo/UglifyJS/issues/3263
     //
     // The solution is to keep class and function names in production builds:
-    // the minifier runs with esbuild's `keepNames` (see `craco.config.js`).
+    // the minifier runs with esbuild's `keepNames` (see `esbuildMinifyOptions` in `scripts/esbuild-minify.mjs`).
     return (
       "ondidchange" +
       sClass.name +

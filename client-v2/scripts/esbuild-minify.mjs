@@ -1,4 +1,3 @@
-// The esbuild minifier options craco.config.js hands to TerserPlugin, here so chunk-scope.test.mjs minifies with them
 import path from "node:path";
 import browserslist from "browserslist";
 

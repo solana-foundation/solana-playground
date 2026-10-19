@@ -1,4 +1,4 @@
-// Runs after a production build (`yarn test-build`): it guards what ships, which chunk-scope.test.mjs cannot see
+// Chunks load as classic scripts: a top-level declaration becomes a global that a later chunk overwrites
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";

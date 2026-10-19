@@ -105,7 +105,6 @@
     "postcss-preset-env": "^7.0.1",
     "shadcn": "^4.21.0",
     "tailwindcss": "^4.3.3",
-    "terser-webpack-plugin": "^5.2.5",
     "tsx": "^4.20.5",
     "vite": "^8.3.2",
     "vitest": "^5.0.3"
