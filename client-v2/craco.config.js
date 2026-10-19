@@ -277,6 +277,8 @@ module.exports = {
         process: false,
         path: false,
         zlib: false,
+        // asn1.js 4 (via browserify-sign) tries `vm` inside a try/catch and falls back without it
+        vm: false,
       };
 
       // Webpack treats `node:` as a URI scheme and rejects it before
