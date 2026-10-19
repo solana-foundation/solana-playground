@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# shellcheck source=wasm-stubs.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/wasm-stubs.sh"
+
 # Vercel install hook for the client.
 #
 # Order matters: client/package.json has file-deps like "../wasm/anchor-cli/pkg"
@@ -18,8 +21,6 @@ RUST_VERSION=$(awk '/channel/{gsub(/"/, ""); print $3 }' ../wasm/rust-toolchain.
 WASM_CACHE="$PWD/node_modules/.cache/wasm-pkg"
 INSTALL_MARK="node_modules/.cache/install-key"
 
-# all_packages in wasm/build.sh, which does not export it; the loop in build_wasm_packages builds one package per PATH.
-WASM_PACKAGES=(anchor-cli rust-analyzer seahorse-compile solana-cli spl-token-cli sugar-cli)
 # One wasm-bindgen per version the packages resolve, kept with the rest of the Rust state.
 WASM_BINDGEN_ROOT="$RUST_ROOT/wasm-bindgen"
 
@@ -207,7 +208,8 @@ build_wasm_packages() {
   # One package at a time, its wasm-bindgen first on PATH: wasm-pack takes a matching binary from PATH; otherwise
   # it downloads a prebuilt tarball and, when that fails, runs an unlocked `cargo install` that the pinned toolchain cannot build.
   local package version
-  for package in "${WASM_PACKAGES[@]}"; do
+  # WASM_PACKAGES is declared in wasm-stubs.sh.
+  for package in $WASM_PACKAGES; do
     # Its own line: set -e ignores a failure inside a command substitution used as an argument.
     version=$(wasm_bindgen_version "$package")
     install_wasm_bindgen "$version"
@@ -297,13 +299,19 @@ install_node_modules() {
     echo ">>> node_modules: Build Cache copy has another install key, clearing all but .cache before yarn install"
     find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -exec rm -rf {} +
   fi
-  yarn install --frozen-lockfile
+  # A stub or an older build in node_modules would survive otherwise; --check-files makes yarn notice the removed folders.
+  remove_installed_wasm_packages "$PWD"
+  yarn install --frozen-lockfile --check-files
   mkdir -p "$(dirname "$INSTALL_MARK")"
   printf '%s' "$key" >"$INSTALL_MARK"
 }
 
 main() {
   local wasm_key
+  if wasm_stubs_requested; then
+    echo ">>> USE_WASM_STUBS=true: a deployment never ships wasm stubs; unset it" >&2
+    exit 1
+  fi
   wasm_key=$(wasm_source_key)
   report_remote_credentials
   restore_wasm_packages "$wasm_key"
@@ -311,4 +319,7 @@ main() {
   install_node_modules "$wasm_key"
 }
 
-main "$@"
+# Sourced, it only defines the functions: client-v2-real-wasm.yml builds with build_wasm_packages alone.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  main "$@"
+fi

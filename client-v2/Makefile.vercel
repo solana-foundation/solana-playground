@@ -134,16 +134,19 @@ deploy-client-to-vercel-production: vercel-link-production ## Build locally + de
 # plain `pull` ran since. Server-side variables need none of this -- the
 # deployment picks those up from the project when it is created.
 FAST_BUILD_CONFIG := .vercel/vercel.noinstall.json
-WASM_BUILT_PACKAGES := anchor-cli rust-analyzer seahorse-compile solana-cli spl-token-cli sugar-cli
 
 deploy-client-to-vercel-prod-fast: ## Rebuild without the wasm/install step and deploy to PRODUCTION (needs a prior full build)
 	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
 	@test -d $(CLIENT_DIR)/node_modules || { echo "no $(CLIENT_DIR)/node_modules — run a full build first" >&2; exit 1; }
-	@for pkg in $(WASM_BUILT_PACKAGES); do \
-		manifest=wasm/$$pkg/pkg/package.json; \
-		test -f "$$manifest" || { echo "wasm/$$pkg/pkg is missing — run a full build first" >&2; exit 1; }; \
-		if grep -q '0.0.0-stub' "$$manifest"; then echo "wasm/$$pkg/pkg is a stub — production needs ./wasm/build.sh" >&2; exit 1; fi; \
-	done
+	@# node_modules too: yarn keeps a stub installed there after wasm/*/pkg turns real.
+	@. $(CLIENT_DIR)/scripts/wasm-stubs.sh; \
+		if wasm_stubs_requested; then echo "USE_WASM_STUBS=true: production never ships wasm stubs, unset it" >&2; exit 1; fi; \
+		for pkg in $$WASM_PACKAGES; do \
+			for manifest in wasm/$$pkg/pkg/package.json $(CLIENT_DIR)/node_modules/@solana-playground/$$pkg/package.json; do \
+				test -f "$$manifest" || { echo "$$manifest is missing: run a full build first" >&2; exit 1; }; \
+				if is_wasm_stub_manifest "$$manifest"; then echo "$$manifest is a stub: production needs 'yarn setup'" >&2; exit 1; fi; \
+			done; \
+		done
 	@jq '.installCommand = "true"' $(CLIENT_DIR)/vercel.json > $(FAST_BUILD_CONFIG)
 	@jq --arg dir '$(CLIENT_DIR)' '.settings.rootDirectory = $$dir' \
 		.vercel/project.json > .vercel/project.json.next
