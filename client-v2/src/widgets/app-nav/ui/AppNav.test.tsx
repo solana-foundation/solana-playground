@@ -66,7 +66,7 @@ afterEach(() => {
   resetLogger();
 });
 
-const draw = () =>
+const draw = (homeShown?: boolean) =>
   render(
     <TooltipProvider>
       <SidebarProvider>
@@ -77,6 +77,7 @@ const draw = () =>
           projects={null}
           footer={null}
           railFooter={null}
+          homeShown={homeShown}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -113,4 +114,17 @@ it("reports a modal that fails to open", async () => {
   await waitFor(() => expect(logged.entries).toHaveLength(1));
   expect(logged.entries[0].report).toBe(true);
   expect(logged.entries[0].error).toBe(failure);
+});
+
+it("reports Home but opens no gallery while Home is the page shown", () => {
+  draw(true);
+  fireEvent.click(screen.getByRole("button", { name: "Home" }));
+  expect(opened()).toEqual([{ item: "home" }]);
+  expect(view.setModal).not.toHaveBeenCalled();
+});
+
+it("still opens the gallery from the other items while Home is shown", () => {
+  draw(true);
+  fireEvent.click(screen.getByRole("button", { name: "Programs" }));
+  expect(view.setModal).toHaveBeenCalledTimes(1);
 });

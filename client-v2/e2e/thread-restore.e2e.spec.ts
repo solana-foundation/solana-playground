@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { isUuid } from "../src/shared/lib/ids";
 import type { Page } from "@playwright/test";
+import { home, homeRegion, startProject } from "./fixtures";
 
 /**
  * A stored thread actually reaches the panel after a reload.
@@ -95,11 +96,7 @@ test("a project conversation is restored after a reload", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/");
 
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill("alpha");
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
+  await startProject(page, "alpha", LONG);
 
   await remember(page);
   await stillRemembers(page);
@@ -109,12 +106,9 @@ test("a tutorial conversation is restored after a reload", async ({ page }) => {
   test.setTimeout(240_000);
   await page.goto("/");
 
-  await expect(page.getByText("What do you want to build?")).toBeVisible(LONG);
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-  await page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..")
-    .getByRole("button", { name: "Open" })
+  await expect(home(page)).toBeVisible(LONG);
+  await homeRegion(page)
+    .getByRole("button", { name: "Open Hello Anchor" })
     .click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
 

@@ -1,0 +1,136 @@
+import { useRenderOnChange } from "@/hooks";
+import { createLogger } from "@/shared/lib/logger";
+import { PgExplorer, PgFramework, PgTutorial, PgView } from "@/utils";
+import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
+import { homeTelemetry } from "../model/telemetry";
+import { useProgramCount } from "../model/use-program-count";
+import { toastActionFailed } from "./action-failed-toast";
+import BasePhoneHome from "./BasePhoneHome";
+import type { PhoneQuickstart, QuickstartTarget } from "./BasePhoneHome";
+
+export interface PhoneHomeProps {
+  onAsk: () => void;
+}
+
+const log = createLogger("home:actions");
+
+const newFramework = () =>
+  PgFramework.all.find((f) => f.name === "Anchor") ?? PgFramework.all[0];
+
+/** `anchor-project`, or `anchor-project-2` and on when the name is taken */
+const freeProjectName = (framework: string) => {
+  const taken = PgExplorer.allWorkspaceNames ?? [];
+  const base = `${framework.toLowerCase()}-project`;
+  let name = base;
+  for (let n = 2; taken.includes(name); n++) name = `${base}-${n}`;
+  return name;
+};
+
+/**
+ * Open what a quick start names. Its target was read when Home drew it, so
+ * one gone since (a project deleted in another tab) throws rather than
+ * passing for an open.
+ */
+const openQuickstart = async (target: QuickstartTarget) => {
+  switch (target.id) {
+    case "continue": {
+      if (!PgExplorer.allWorkspaceNames?.includes(target.workspace)) {
+        throw new Error(`${target.workspace} no longer exists.`);
+      }
+      await PgExplorer.switchWorkspace(target.workspace);
+      return;
+    }
+    case "new": {
+      const framework = PgFramework.get(target.framework);
+      if (!framework) {
+        throw new Error(`${target.framework} is not available.`);
+      }
+      const { files } = await framework.getDefaultFiles();
+      await PgExplorer.createWorkspace(freeProjectName(target.framework), {
+        files,
+        defaultOpenFile: framework.defaultOpenFile,
+      });
+      return;
+    }
+    case "tutorial": {
+      if (!PgTutorial.all.some((t) => t.name === target.name)) {
+        throw new Error(`${target.name} is not available.`);
+      }
+      await PgTutorial.open(target.name);
+      return;
+    }
+  }
+};
+
+const PhoneHome = ({ onAsk }: PhoneHomeProps) => {
+  useRenderOnChange(PgExplorer.onDidSwitchWorkspace);
+  useRenderOnChange(PgExplorer.onDidInit);
+  const programCount = useProgramCount();
+
+  const framework = newFramework();
+  const tutorial = PgTutorial.all.find((t) => t.level === "Beginner");
+  const current = PgExplorer.currentWorkspaceName;
+
+  const quickstarts: PhoneQuickstart[] = [];
+  if (current) {
+    quickstarts.push({
+      id: "continue",
+      workspace: current,
+      title: `Continue ${current}`,
+      description: "Your last project",
+    });
+  }
+  if (framework) {
+    quickstarts.push({
+      id: "new",
+      framework: framework.name,
+      title: `New ${framework.name} project`,
+      description: "A working starter you shape with the assistant",
+    });
+  }
+  if (tutorial) {
+    quickstarts.push({
+      id: "tutorial",
+      name: tutorial.name,
+      title: tutorial.name,
+      description: "Beginner tutorial",
+    });
+  }
+
+  return (
+    <BasePhoneHome
+      quickstarts={quickstarts}
+      tutorialCount={PgTutorial.all.length}
+      programCount={programCount}
+      onQuickstart={async (quickstart) => {
+        try {
+          await openQuickstart(quickstart);
+        } catch (e) {
+          // Logged once here and told by a toast, so the button's own
+          // `onError` never sees it
+          log.error(e, {
+            report: true,
+            context: { quickstart: quickstart.id },
+          });
+          toastActionFailed(e);
+          return;
+        }
+        homeTelemetry.track("home_quickstart_opened", { id: quickstart.id });
+      }}
+      onBrowse={() => {
+        // The promise settles when the modal closes; only a failure to open
+        // it is news, for the team and for the user who tapped
+        PgView.setModal(NewWorkspaceModal).catch((e: unknown) => {
+          log.error(e, { report: true, context: { action: "browse" } });
+          toastActionFailed(e);
+        });
+      }}
+      onAsk={() => {
+        homeTelemetry.track("home_composer_opened", {});
+        onAsk();
+      }}
+    />
+  );
+};
+
+export default PhoneHome;

@@ -7,7 +7,10 @@ import { navTelemetry } from "../model/telemetry";
 import BaseAppNav from "./BaseAppNav";
 import type { BaseAppNavProps } from "./BaseAppNav";
 
-export type AppNavProps = Omit<BaseAppNavProps, "onOpen">;
+export type AppNavProps = Omit<BaseAppNavProps, "onOpen"> & {
+  /** Home is the page shown, so picking Home has nowhere further to go */
+  homeShown?: boolean;
+};
 
 const log = createLogger("app-nav:open");
 
@@ -19,10 +22,16 @@ const TAB: Record<NavItem, GalleryTab> = {
   programs: "programs",
 };
 
-/** Until Home, Tutorials and Programs have pages, each item opens the gallery */
-const AppNav = (props: AppNavProps) => {
+/**
+ * New project, Tutorials and Programs open the gallery on their tab. Home has
+ * a page now, but the navigation cannot bring it back once a project is open:
+ * while Home shows (`homeShown`) its item does nothing, and while a project
+ * is open it opens the gallery as the others do.
+ */
+const AppNav = ({ homeShown, ...props }: AppNavProps) => {
   const open = (item: NavItem) => {
     navTelemetry.track("nav_item_opened", { item });
+    if (item === "home" && homeShown) return;
     // The promise settles when the modal closes; only a failure to open it
     // is news
     PgView.setModal<unknown, { initialTab: GalleryTab }>(NewWorkspaceModal, {

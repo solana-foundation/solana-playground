@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OutletContent, useOutletNode } from "@/shared/lib/outlet";
 
@@ -67,6 +67,7 @@ const Harness = (choice: Choice) => {
     stageNode,
     consoleNode,
     consoleOpen: choice.consoleOpen ?? false,
+    home: choice.home,
   };
   return (
     <>
@@ -303,4 +304,62 @@ it("closes the menu back to the work page", async () => {
   renderPager({ page: "menu", onGo });
   await userEvent.click(screen.getByRole("button", { name: "Close the menu" }));
   expect(onGo).toHaveBeenLastCalledWith("work");
+});
+
+describe("with Home", () => {
+  const home = { content: <div>home slot</div> };
+
+  it("shows Home on the work page under Menu and the title, and has no preview page", () => {
+    renderPager({ home, title: "Home" });
+    const work = screen.getByRole("region", { name: "Work" });
+    expect(within(work).getByText("home slot")).toBeTruthy();
+    const bar = within(work).getByTestId("phone-bar");
+    expect(within(bar).getByRole("button", { name: "Menu" })).toBeTruthy();
+    expect(within(bar).getByText("Home")).toBeTruthy();
+    expect(within(bar).queryByRole("radiogroup", { name: "Show" })).toBeNull();
+    expect(
+      within(bar).queryByRole("button", { name: "Preview the build" })
+    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
+    expect(screen.getAllByTestId("phone-bar")).toHaveLength(2);
+    expect(within(work).queryByText("assistant slot")).toBeNull();
+    expect(screen.queryByTestId("stage-probe")).toBeNull();
+    expect(screen.queryByTestId("console-probe")).toBeNull();
+  });
+
+  it("keeps the menu and the work page at their indices", () => {
+    renderPager({ home, page: "work" });
+    expect(screen.getByTestId("phone-pager").scrollLeft).toBe(
+      PHONE_PAGES.indexOf("work") * 390
+    );
+  });
+
+  it("renders no Files Sheet", () => {
+    renderPager({ home, filesOpen: true });
+    expect(screen.queryByRole("dialog", { name: "Files" })).toBeNull();
+    expect(screen.queryByText("files slot")).toBeNull();
+  });
+
+  it("never settles a swipe on the missing preview page", () => {
+    vi.useFakeTimers();
+    const onSwipe = vi.fn();
+    renderPager({ home, page: "work", onSwipe });
+    const pager = screen.getByTestId("phone-pager");
+    pager.scrollLeft = 780;
+    fireEvent.scroll(pager);
+    vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+    expect(onSwipe).not.toHaveBeenCalled();
+    pager.scrollLeft = 0;
+    fireEvent.scroll(pager);
+    vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+    expect(onSwipe).toHaveBeenCalledWith("menu");
+  });
+
+  it("shows the work page when it is handed the preview", () => {
+    renderPager({ home, page: "preview" });
+    expect(screen.getByTestId("phone-pager").scrollLeft).toBe(390);
+    expect(
+      screen.getByRole("region", { name: "Work" }).hasAttribute("inert")
+    ).toBe(false);
+  });
 });

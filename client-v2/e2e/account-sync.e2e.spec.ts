@@ -6,6 +6,8 @@ import type { Page, Route } from "@playwright/test";
 import {
   applyWrite,
   currentProject,
+  home,
+  homeRegion,
   json,
   LONG,
   makeLocalProject,
@@ -117,9 +119,9 @@ test("a signed-in browser takes on the whole account", async ({ page }) => {
   // conversation at all.
   await expect.poll(() => threadIdIsUuid(page), LONG).toBe(true);
 
-  // The gallery greets an empty browser, and this one only looked empty while
-  // the account was still answering
-  await expect(page.locator("[data-gallery-modal]")).toHaveCount(0, LONG);
+  // Home greets an empty browser, and this one only looked empty while the
+  // account was still answering
+  await expect(home(page)).toBeHidden(LONG);
 
   // Every project the account has, not just the one that happens to be open
   await expect(projectRow(page, "From The Laptop")).toBeVisible(LONG);
@@ -831,11 +833,9 @@ test("a started tutorial hands over its keypair and progress", async ({
   test.setTimeout(240_000);
 
   await page.goto("/");
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-  await page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..")
-    .getByRole("button", { name: "Open" })
+  await expect(home(page)).toBeVisible(LONG);
+  await homeRegion(page)
+    .getByRole("button", { name: "Open Hello Anchor" })
     .click();
   await page.getByRole("button", { name: "START", exact: true }).click();
   // The thread id is the conversation's own, not the workspace's: a project

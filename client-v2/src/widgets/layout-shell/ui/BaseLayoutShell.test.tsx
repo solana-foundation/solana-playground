@@ -136,6 +136,9 @@ interface PropsChoice {
   stage?: ReactNode;
   console?: ReactNode;
   assistant?: BaseLayoutShellProps["assistant"];
+  /** Home in place of the assistant and the work */
+  home?: ReactNode;
+  homeAssistantOpen?: boolean;
 }
 
 /**
@@ -190,6 +193,16 @@ const props = (
     stage: choice.stage ?? <main>stage slot</main>,
     console: choice.console ?? <div className="xterm">console slot</div>,
     assistant: choice.assistant ?? (() => <section>assistant slot</section>),
+    home:
+      choice.home === undefined
+        ? undefined
+        : {
+            content: choice.home,
+            assistant: {
+              open: choice.homeAssistantOpen ?? false,
+              onOpenChange: vi.fn(),
+            },
+          },
     phone: {
       page: "work",
       onSwipe: vi.fn(),
@@ -1160,5 +1173,164 @@ describe("widening the assistant", () => {
     act(() => seen.last!.setWide(true));
     expect(panel.resize).not.toHaveBeenCalled();
     expect(seen.last!.wide).toBe(false);
+  });
+
+  it("should not offer Widen under Home, where the assistant is its Sheet", () => {
+    const { assistant: panel } = handles();
+    const { seen, assistant } = slot();
+    render(
+      <BaseLayoutShell
+        {...props("wide", {
+          assistant,
+          home: <div>home</div>,
+          homeAssistantOpen: true,
+        })}
+      />
+    );
+    expect(seen.last!.canWiden).toBe(false);
+    act(() => seen.last!.setWide(true));
+    expect(panel.resize).not.toHaveBeenCalled();
+    expect(seen.last!.wide).toBe(false);
+  });
+});
+
+describe("with Home", () => {
+  /** Counts its mounts: under Home the stage and the console never mount */
+  const Mounts = ({
+    testId,
+    onMount,
+  }: {
+    testId: string;
+    onMount: () => void;
+  }) => {
+    useEffect(() => {
+      onMount();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return <div data-testid={testId} />;
+  };
+  const withHome = (
+    testViewport: TestViewport,
+    choice: { homeAssistantOpen?: boolean } = {}
+  ) => {
+    const mounts = { stage: vi.fn(), console: vi.fn() };
+    const rendered = render(
+      <BaseLayoutShell
+        {...props(testViewport, {
+          home: <div>home slot</div>,
+          homeAssistantOpen: choice.homeAssistantOpen,
+          stage: <Mounts testId="stage-probe" onMount={mounts.stage} />,
+          console: <Mounts testId="console-probe" onMount={mounts.console} />,
+        })}
+      />
+    );
+    return { mounts, rendered };
+  };
+  const expectNoWork = (mounts: {
+    stage: ReturnType<typeof vi.fn>;
+    console: ReturnType<typeof vi.fn>;
+  }) => {
+    expect(screen.queryByTestId("stage-probe")).toBeNull();
+    expect(screen.queryByTestId("console-probe")).toBeNull();
+    expect(mounts.stage).not.toHaveBeenCalled();
+    expect(mounts.console).not.toHaveBeenCalled();
+  };
+
+  it.each(["wide", "compact", "phone"] as const)(
+    "mounts the stage and the console once when Home leaves (%s)",
+    (viewport) => {
+      const { mounts, rendered } = withHome(viewport);
+      rendered.rerender(
+        <BaseLayoutShell
+          {...props(viewport, {
+            stage: <Mounts testId="stage-probe" onMount={mounts.stage} />,
+            console: <Mounts testId="console-probe" onMount={mounts.console} />,
+          })}
+        />
+      );
+      expect(screen.getByTestId("stage-probe")).toBeTruthy();
+      expect(screen.getByTestId("console-probe")).toBeTruthy();
+      expect(screen.queryByText("home slot")).toBeNull();
+      expect(mounts.stage).toHaveBeenCalledTimes(1);
+      expect(mounts.console).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("lays out the work group without Home, as the frame's id says", () => {
+    render(<BaseLayoutShell {...props("wide")} />);
+    expect(document.getElementById("layout-horizontal")).not.toBeNull();
+  });
+
+  it("shows Home beside the navigation on a wide screen, under the column bar, with no stage, tabs, console or columns", () => {
+    const { mounts } = withHome("wide");
+    expect(screen.getByText("home slot")).toBeTruthy();
+    expect(screen.getByText("nav slot")).toBeTruthy();
+    expectNoWork(mounts);
+    expect(document.getElementById("layout-horizontal")).toBeNull();
+    expect(screen.queryByText("assistant slot")).toBeNull();
+    expect(screen.queryByText("files slot")).toBeNull();
+    expect(screen.queryByText("stage tabs")).toBeNull();
+    const bar = screen.getByText("stage bar");
+    expect(
+      bar.compareDocumentPosition(screen.getByText("home slot")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("shows Home under the column bar between 720 and 1023 px, with no assistant Sheet of the work's", () => {
+    const { mounts } = withHome("compact");
+    expect(screen.getByText("home slot")).toBeTruthy();
+    expect(screen.getByText("nav slot")).toBeTruthy();
+    expect(screen.getByText("stage bar")).toBeTruthy();
+    expect(screen.queryByText("stage tabs")).toBeNull();
+    expectNoWork(mounts);
+    expect(document.getElementById("layout-horizontal")).toBeNull();
+    expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
+  });
+
+  it("keeps the project panel's opener between 720 and 767 px, its Sheet holding no files", () => {
+    const restore = narrowWindow();
+    try {
+      withHome("sheet");
+      fireEvent.click(
+        screen.getByRole("button", { name: "Expand project panel" })
+      );
+      const sheet = document.querySelector(
+        '[data-slot="sidebar"][data-mobile="true"]'
+      )!;
+      expect(within(sheet as HTMLElement).getByText("nav slot")).toBeTruthy();
+      expect(screen.queryByText("files slot")).toBeNull();
+    } finally {
+      restore();
+    }
+  });
+
+  it.each(["wide", "compact", "phone"] as const)(
+    "opens the assistant as a right Sheet on %s",
+    (viewport) => {
+      withHome(viewport, { homeAssistantOpen: true });
+      const dialog = screen.getByRole("dialog", { name: "Assistant" });
+      expect(within(dialog).getByText("assistant slot")).toBeTruthy();
+    }
+  );
+
+  it("keeps the assistant Sheet closed until it is asked for", () => {
+    withHome("wide");
+    expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
+  });
+
+  it("puts Home on the pager's work page on a phone, with no preview page", () => {
+    const { mounts } = withHome("phone");
+    const work = screen.getByRole("region", { name: "Work" });
+    expect(within(work).getByText("home slot")).toBeTruthy();
+    const bar = within(work).getByTestId("phone-bar");
+    expect(within(bar).getByRole("button", { name: "Menu" })).toBeTruthy();
+    expect(within(bar).queryByRole("radiogroup", { name: "Show" })).toBeNull();
+    expect(
+      within(bar).queryByRole("button", { name: "Preview the build" })
+    ).toBeNull();
+    expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
+    expect(screen.getByRole("region", { name: "Navigation" })).toBeTruthy();
+    expectNoWork(mounts);
   });
 });

@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Request } from "@playwright/test";
-import { json, seedWorkspace } from "./fixtures";
+import { json, seedWorkspace, startProject } from "./fixtures";
 
 /**
  * The panel comes back usable after a reload, without being asked twice.
@@ -71,11 +71,7 @@ test("the default backend reconnects itself after a reload", async ({
   await stubDefault(page);
   await page.goto("/");
 
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill("alpha");
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
+  await startProject(page, "alpha", LONG);
 
   await expect(composer(page)).toBeVisible(LONG);
   await sendFirstMessage(page);
@@ -95,11 +91,7 @@ test("disconnecting is not undone by the next reload", async ({ page }) => {
   await stubDefault(page);
   await page.goto("/");
 
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill("beta");
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
+  await startProject(page, "beta", LONG);
 
   await expect(composer(page)).toBeVisible(LONG);
   await sendFirstMessage(page);

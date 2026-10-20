@@ -5,31 +5,46 @@ import { isUuid } from "../src/shared/lib/ids";
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
 
+/** Home, which a start with no project shows in place of the work */
+export const home = (page: Page) =>
+  page.getByRole("heading", { name: "Where should we begin?" });
+
+/** Home's region, which keeps a query off the navigation's items of the same name */
+export const homeRegion = (page: Page) =>
+  page.getByRole("region", { name: "Home" });
+
+/**
+ * Makes a project from Home's New project tile, through the same
+ * start-from-scratch row the gallery holds.
+ *
+ * Scoped to Home's region: the navigation has a "New project" item of the
+ * same name.
+ */
+export const startProject = async (page: Page, name: string, timeout = {}) => {
+  await expect(home(page)).toBeVisible(timeout);
+  const region = homeRegion(page);
+  await region.getByRole("button", { name: /^New project/ }).click();
+  await region.getByLabel("Project name").fill(name);
+  await region.getByRole("button", { name: /^Start/ }).click();
+  await expect(home(page)).toBeHidden(timeout);
+};
+
 /**
  * A browser with one project already created.
  *
- * On a fresh profile the Flow canvas has no workspace, so it opens the
- * "What do you want to build?" gallery over everything and that modal
- * intercepts pointer events -- any test that clicks the canvas needs a
- * project first.
+ * A fresh profile shows Home, not the work, so any test that clicks the
+ * canvas needs a project first.
  *
- * Seeds through the gallery's own "Start from scratch" row rather than
- * writing to `indexedDB`: the explorer's on-disk layout is an internal
- * detail, and the default framework files are bundled, so this needs no
- * network.
+ * Seeds through Home's own "New project" tile rather than writing to
+ * `indexedDB`: the explorer's on-disk layout is an internal detail, and the
+ * default framework files are bundled, so this needs no network.
  */
 export const seedWorkspace = async (page: Page, name = "e2e-project") => {
   await page.goto("/");
+  await startProject(page, name);
 
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible();
-
-  await gallery.getByLabel("Project name").fill(name);
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-
-  // `PgExplorer.createWorkspace` closes the modal, then the explorer
-  // re-initializes -- wait for the tree, not just the modal.
-  await expect(gallery).toBeHidden();
+  // `PgExplorer.createWorkspace` hands the work over, then the explorer
+  // re-initializes -- wait for the tree, not just Home going away.
   await expect(page.locator("#root-dir")).toBeVisible();
 };
 
@@ -191,11 +206,7 @@ export const workspaceIdOf = (page: Page, name: string) =>
  */
 export const makeLocalProject = async (page: Page, name: string) => {
   await page.goto("/");
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill(name);
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
+  await startProject(page, name, LONG);
 
   let id: string | null = null;
   await expect
@@ -238,10 +249,10 @@ export const openGallery = async (page: Page) => {
 };
 
 /**
- * Starts another project from the gallery, opened from the navigation; the
- * gallery opens by itself only on a fresh profile
+ * Starts another project from the gallery, opened from the navigation, while
+ * a project is open; a fresh profile starts from Home instead (`startProject`)
  */
-export const startProject = async (page: Page, name: string) => {
+export const startAnotherProject = async (page: Page, name: string) => {
   await openGallery(page);
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible(LONG);

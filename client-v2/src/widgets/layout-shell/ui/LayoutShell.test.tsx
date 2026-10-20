@@ -91,6 +91,7 @@ import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
 import { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import LayoutShell from "./LayoutShell";
+import type { LayoutShellProps } from "./LayoutShell";
 
 const listeners = new Set<() => void>();
 let width = 1440;
@@ -167,58 +168,61 @@ const theme = {
   font: { code: { family: "monospace", size: { medium: "13px" } } },
 } as unknown as DefaultTheme;
 
-const shell = () =>
-  render(
-    <ThemeProvider theme={theme}>
-      <TooltipProvider>
-        <LayoutShell
-          nav={({ collapsed, toggle, closeSheet }) => (
-            <>
-              <button type="button" onClick={toggle}>
-                {collapsed ? "Expand navigation" : "Collapse navigation"}
-              </button>
-              {/* Stands for the cluster row, which opens settings */}
-              <button type="button" onClick={closeSheet}>
-                Open settings
-              </button>
-            </>
-          )}
-          stageTabs={<div>stage tabs</div>}
-          files={({ collapsed, toggle }) => (
-            // Stands for a control inside the column; the stage bar carries
-            // "Collapse project panel" / "Expand project panel"
-            <button type="button" aria-expanded={!collapsed} onClick={toggle}>
-              Files column control
+/** The shell's tree, for `render` and for a `rerender` that adds or drops Home */
+const shellTree = (home?: LayoutShellProps["home"]) => (
+  <ThemeProvider theme={theme}>
+    <TooltipProvider>
+      <LayoutShell
+        nav={({ collapsed, toggle, closeSheet }) => (
+          <>
+            <button type="button" onClick={toggle}>
+              {collapsed ? "Expand navigation" : "Collapse navigation"}
             </button>
-          )}
-          stage={<main>stage</main>}
-          console={({ open, toggle }) => (
-            <button
-              type="button"
-              aria-label="Console"
-              aria-expanded={open}
-              onClick={toggle}
-            />
-          )}
-          assistant={({ open, toggle, wide, setWide }) => (
-            <>
-              {/* The head's Hide; folded, the assistant shows nothing, and the
-                stage bar carries "Expand assistant", for the panel and the Sheet alike */}
-              {open && (
-                <button type="button" onClick={toggle}>
-                  Collapse assistant
-                </button>
-              )}
-              <span>assistant body</span>
-              <button type="button" onClick={() => setWide(!wide)}>
-                {wide ? "Narrow the assistant" : "Widen the assistant"}
+            {/* Stands for the cluster row, which opens settings */}
+            <button type="button" onClick={closeSheet}>
+              Open settings
+            </button>
+          </>
+        )}
+        stageTabs={<div>stage tabs</div>}
+        files={({ collapsed, toggle }) => (
+          // Stands for a control inside the column; the stage bar carries
+          // "Collapse project panel" / "Expand project panel"
+          <button type="button" aria-expanded={!collapsed} onClick={toggle}>
+            Files column control
+          </button>
+        )}
+        stage={<main>stage</main>}
+        console={({ open, toggle }) => (
+          <button
+            type="button"
+            aria-label="Console"
+            aria-expanded={open}
+            onClick={toggle}
+          />
+        )}
+        assistant={({ open, toggle, wide, setWide }) => (
+          <>
+            {/* The head's Hide; folded, the assistant shows nothing, and the
+              stage bar carries "Expand assistant", for the panel and the Sheet alike */}
+            {open && (
+              <button type="button" onClick={toggle}>
+                Collapse assistant
               </button>
-            </>
-          )}
-        />
-      </TooltipProvider>
-    </ThemeProvider>
-  );
+            )}
+            <span>assistant body</span>
+            <button type="button" onClick={() => setWide(!wide)}>
+              {wide ? "Narrow the assistant" : "Widen the assistant"}
+            </button>
+          </>
+        )}
+        home={home}
+      />
+    </TooltipProvider>
+  </ThemeProvider>
+);
+
+const shell = (home?: LayoutShellProps["home"]) => render(shellTree(home));
 
 it("should report the width class once per load", () => {
   shell();
@@ -1508,4 +1512,161 @@ describe("layout_assistant_widened", () => {
     );
     expect(widened()).toEqual([]);
   });
+});
+
+describe("with Home", () => {
+  const home: LayoutShellProps["home"] = ({ openAssistant }) => (
+    <button type="button" onClick={openAssistant}>
+      ask
+    </button>
+  );
+  const saved = () => {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
+    return localStorage.getItem(LAYOUT_STORAGE_KEY);
+  };
+
+  it("opens no console on a deploy, saving nothing", () => {
+    // Folded, so a deploy would have something to open
+    localStorage.setItem(
+      LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        v: DRAGGED.v,
+        open: { nav: true, files: true, assistant: true, console: false },
+        h: DRAGGED.h,
+        w: DRAGGED.w,
+        vert: DRAGGED.vert,
+      })
+    );
+    const before = localStorage.getItem(LAYOUT_STORAGE_KEY);
+    shell(home);
+    act(() => deploy.starts.forEach((cb) => cb(null)));
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+    expect(toggled()).toEqual([]);
+  });
+
+  it("leaves the saved layout as it was across Home and after it", () => {
+    const before = saved();
+    const { rerender } = shell(home);
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+    rerender(shellTree());
+    expect(screen.getByText("stage")).toBeTruthy();
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+    expect(toggled()).toEqual([]);
+  });
+
+  it("opens the assistant Sheet from Home and closes it, saving nothing", () => {
+    const before = saved();
+    shell(home);
+    expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "ask" }));
+    expect(screen.getByRole("dialog", { name: "Assistant" })).toBeTruthy();
+    fireEvent.keyDown(document.querySelector('[data-slot="sheet-content"]')!, {
+      key: "Escape",
+    });
+    expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: true, via: "button" },
+      { panel: "assistant", open: false, via: "key" },
+    ]);
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+  });
+
+  it.each([
+    ["wide", 1440],
+    ["compact", 800],
+    ["phone", 390],
+  ] as const)(
+    "leaves the layout alone on Ctrl+J, Cmd+E and Ctrl+R (%s)",
+    (_, at) => {
+      const before = saved();
+      resizeTo(at);
+      shell(home);
+      press({ key: "j", ctrlKey: true });
+      press({ key: "e", metaKey: true });
+      press({ key: "r", ctrlKey: true });
+      expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+      expect(toggled()).toEqual([]);
+      expect(
+        sent.events.filter((event) =>
+          ["layout_page_shown", "layout_work_view"].includes(event.name)
+        )
+      ).toEqual([]);
+      expect(screen.queryByRole("dialog")).toBeNull();
+    }
+  );
+
+  it("opens the assistant Sheet when the product asks, saving nothing", () => {
+    const before = saved();
+    shell(home);
+    act(() => PgAssistant.requestPrompt("fix this"));
+    expect(screen.getByRole("dialog", { name: "Assistant" })).toBeTruthy();
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: true, via: "auto" },
+    ]);
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+  });
+
+  it("titles the phone's work page Home and stays there when the stage changes", () => {
+    resizeTo(390);
+    shell(home);
+    const work = screen.getByRole("region", { name: "Work" });
+    expect(within(work).getByTestId("phone-bar").textContent).toContain("Home");
+    act(() => PgFlow.setStage("build"));
+    expect(
+      sent.events.filter((event) => event.name === "layout_page_shown")
+    ).toEqual([]);
+    expect(work.hasAttribute("inert")).toBe(false);
+  });
+
+  it("opens the assistant Sheet from Home on a phone", () => {
+    resizeTo(390);
+    shell(home);
+    fireEvent.click(screen.getByRole("button", { name: "ask" }));
+    expect(screen.getByRole("dialog", { name: "Assistant" })).toBeTruthy();
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: true, via: "button" },
+    ]);
+  });
+
+  it("draws the column bar over Home, titled Home, with no files toggle", () => {
+    explorer.name = "Counter";
+    shell(home);
+    const bar = document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    expect(within(bar).getByText("Home")).toBeTruthy();
+    expect(within(bar).queryByText("Counter")).toBeNull();
+    expect(
+      within(bar).queryByRole("button", { name: /project panel/ })
+    ).toBeNull();
+    expect(screen.queryByText("stage tabs")).toBeNull();
+  });
+
+  it.each([
+    ["wide", 1440],
+    ["compact", 900],
+  ] as const)(
+    "opens the assistant Sheet from the bar's toggle under Home (%s)",
+    (_, at) => {
+      const before = saved();
+      resizeTo(at);
+      shell(home);
+      const bar = document.querySelector<HTMLElement>(
+        '[data-slot="stage-bar"]'
+      )!;
+      fireEvent.click(
+        within(bar).getByRole("button", { name: "Expand assistant" })
+      );
+      expect(screen.getByRole("dialog", { name: "Assistant" })).toBeTruthy();
+      // The open Sheet is modal, so the bar behind it is hidden from the tree
+      expect(
+        within(bar).getByRole("button", {
+          name: "Hide the assistant",
+          hidden: true,
+        })
+      ).toBeTruthy();
+      expect(toggled()).toEqual([
+        { panel: "assistant", open: true, via: "button" },
+      ]);
+      expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+    }
+  );
 });

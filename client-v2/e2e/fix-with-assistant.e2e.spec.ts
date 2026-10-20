@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { json } from "./fixtures";
+import { json, startProject } from "./fixtures";
 
 /**
  * "Fix with assistant" pressed before any backend is connected.
@@ -32,11 +32,7 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
     json(route, { configured: false, model: null })
   );
   await page.goto("/");
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill("fix-prompt");
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
+  await startProject(page, "fix-prompt", LONG);
 
   await page.evaluate(
     (text) => (window as AssistantWindow).__pgAssistant!.requestPrompt(text),

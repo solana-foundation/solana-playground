@@ -1,6 +1,8 @@
 import { expect, test } from "./fixtures";
 import {
   currentProject,
+  home,
+  homeRegion,
   openGallery,
   projectRow,
   seedWorkspace,
@@ -110,7 +112,7 @@ const readConfig = (page: Page) =>
 /**
  * Add a project to a profile that already has one.
  *
- * `seedWorkspace` goes through the gallery that only greets an empty profile,
+ * `seedWorkspace` goes through Home, which only greets an empty profile,
  * so a second project has to be reached through the navigation.
  */
 const addWorkspace = async (page: Page, name: string) => {
@@ -243,28 +245,26 @@ test("every project in a migrated config still opens", async ({ page }) => {
  *
  * A tutorial workspace is named after the tutorial, and `PgTutorial.start()`
  * is what calls `PgExplorer.createWorkspace()` -- opening the card alone only
- * reaches upstream's About screen.
+ * reaches upstream's About screen. An empty profile opens it from Home; a
+ * profile with a project, through the gallery the navigation opens.
  */
-const startTutorial = async (page: Page) => {
-  const gallery = page.getByText("What do you want to build?");
-
-  // On an empty profile the gallery opens by itself, but not instantly -- so
-  // wait for it rather than sampling visibility, which races the first render
-  const openedItself = await gallery
-    .waitFor({ state: "visible", timeout: 20_000 })
-    .then(() => true)
-    .catch(() => false);
-
-  if (!openedItself) {
+const startTutorial = async (page: Page, from: "home" | "navigation") => {
+  if (from === "home") {
+    await expect(home(page)).toBeVisible({ timeout: 20_000 });
+    await homeRegion(page)
+      .getByRole("button", { name: "Open Hello Anchor" })
+      .click();
+  } else {
+    const gallery = page.getByText("What do you want to build?");
     await openGallery(page);
     await expect(gallery).toBeVisible();
-  }
 
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
+    await page.getByRole("tab", { name: /tutorials/i }).click();
+    const card = page
+      .getByText("Hello Anchor", { exact: true })
+      .locator("xpath=../..");
+    await card.getByRole("button", { name: "Open" }).click();
+  }
 
   // `exact` matters: the assistant panel has its own "Start" button, and
   // Playwright's default name match is a case-insensitive substring
@@ -277,7 +277,7 @@ test("a migrated tutorial gets a derived id, not a random one", async ({
 }) => {
   test.setTimeout(120_000);
   await page.goto("/");
-  await startTutorial(page);
+  await startTutorial(page, "home");
 
   await rewriteConfig(page, {
     allNames: ["Hello Anchor"],
@@ -301,7 +301,7 @@ test("a migrated mix of project and tutorial ids each keep their kind", async ({
 }) => {
   test.setTimeout(120_000);
   await seedWorkspace(page, "alpha");
-  await startTutorial(page);
+  await startTutorial(page, "navigation");
 
   await rewriteConfig(page, {
     allNames: ["alpha", "Hello Anchor"],

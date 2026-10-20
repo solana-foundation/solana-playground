@@ -1,5 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import { expect, json, LONG, test } from "./fixtures";
+import { expect, json, LONG, startProject, test } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
 
 /**
@@ -44,11 +44,7 @@ const answer = (route: Route) =>
 
 const openProject = async (page: Page, name: string) => {
   await page.goto("/");
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible(LONG);
-  await gallery.getByLabel("Project name").fill(name);
-  await gallery.getByRole("button", { name: /^Start/ }).click();
-  await expect(gallery).toBeHidden(LONG);
+  await startProject(page, name, LONG);
   await expect(input(page)).toBeVisible(LONG);
 };
 
@@ -252,7 +248,7 @@ test.describe("Connect a model", () => {
 
     test("client-v2-assistant: Connecting on a phone", async ({ page }) => {
       await stubAgent(page, { configured: false, model: null }, answer);
-      // The project opens from the gallery on a desktop-sized page; a phone
+      // The project opens from Home on a desktop-sized page; a phone
       // shows the assistant on the pager's Work page, through Show: Chat
       await page.setViewportSize({ width: 1280, height: 800 });
       await openProject(page, "connect-phone");

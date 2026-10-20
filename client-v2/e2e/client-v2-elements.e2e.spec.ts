@@ -4,8 +4,7 @@ import { test } from "./fixtures";
 test("client-v2-elements: An unknown page is an alert", async ({
   seededPage: page,
 }) => {
-  // With no workspace the "What do you want to build?" dialog opens over the
-  // page and hides the alert from the accessibility tree
+  // The unknown page is the alert, not the project the fixture made
   await page.goto("/no-such-page");
   await expect(page.getByRole("alert")).toContainText("URL path not found");
 });

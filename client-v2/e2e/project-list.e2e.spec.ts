@@ -7,7 +7,7 @@ import {
   projectMenu,
   projectRow,
   seedWorkspace,
-  startProject,
+  startAnotherProject,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -22,7 +22,7 @@ import { lineOf, linesOn } from "./telemetry";
 /** Two projects, "alpha" then "beta"; beta is open */
 const twoProjects = async (page: Page) => {
   await seedWorkspace(page, "alpha");
-  await startProject(page, "beta");
+  await startAnotherProject(page, "beta");
 };
 
 const projectNames = (page: Page) =>

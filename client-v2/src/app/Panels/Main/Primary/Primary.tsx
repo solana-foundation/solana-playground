@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styled, { css, keyframes } from "styled-components";
 
 import ErrorBoundary, {
@@ -37,6 +37,12 @@ const Primary = () => {
     el,
     setElWithTransition
   );
+
+  // Declared after `useGetAndSetStatic`, so its listeners are in place when
+  // the `setMainPrimary` calls this releases send `set`
+  useEffect(() => {
+    PgView.announceMainPrimaryMount();
+  }, []);
 
   return (
     <Wrapper>

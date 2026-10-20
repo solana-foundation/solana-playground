@@ -1,0 +1,29 @@
+import type { ReactNode } from "react";
+
+import type { Viewport } from "@/shared/lib/hooks/use-viewport";
+import type { StartView } from "../model/start-view";
+import Home from "./Home";
+import PhoneHome from "./PhoneHome";
+
+/** What the layout shell's `home` takes: Home, given the assistant's opener */
+export type HomeSlot = (panel: { openAssistant: () => void }) => ReactNode;
+
+/**
+ * Home for the layout shell, by the start view: none once the work shows,
+ * an empty place while the start is pending (so the editor does not mount
+ * before the explorer has answered), then the phone's or the desktop's Home.
+ */
+export const homeSlot = (
+  start: StartView,
+  viewport: Viewport
+): HomeSlot | undefined => {
+  if (start === "work") return undefined;
+  return ({ openAssistant }) => {
+    if (start === "pending") return null;
+    if (viewport === "phone") return <PhoneHome onAsk={openAssistant} />;
+    return <Home onAsk={openAssistant} />;
+  };
+};
+
+/** Whether Home is on screen; pending is not, though it holds Home's place */
+export const isHomeShown = (start: StartView) => start === "home";

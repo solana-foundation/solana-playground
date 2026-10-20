@@ -4,6 +4,7 @@ export const EVENT_PREFIXES = {
   "app-nav": "nav",
   assistant: "assistant",
   feedback: "feedback",
+  home: "home",
   "layout-shell": "layout",
   observability: "obs",
   overlays: "overlay",

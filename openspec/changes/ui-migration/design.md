@@ -386,11 +386,12 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
   draws it, not the files column alone.
 - **The navigation is a widget, `widgets/app-nav`**: `BaseAppNav` built from
   the installed `Sidebar*` parts and `lucide-react` icons, slots for the
-  switcher and the footer; `AppNav` connected. Until Home (5.8) and the
-  Tutorials and Programs pages (5.9) exist, every item opens the existing gallery
-  (`NewWorkspaceModal`): Home and New project on its default tab, Tutorials
-  and Programs on theirs, through a new `initialTab` prop. _Rejected:_
-  hiding Home until 5.8; disabled items saying "soon".
+  switcher and the footer; `AppNav` connected. Until the
+  Tutorials and Programs pages (5.9) exist, those items open the existing
+  gallery (`NewWorkspaceModal`) on their tab, through a new `initialTab` prop,
+  and New project opens it on its default tab. Home's item opens the gallery
+  only while a project is open; see "Home (5.8)". _Rejected:_ hiding Home
+  until 5.8; disabled items saying "soon".
 - **Keys.** ⌘B folds the navigation (the stock Sidebar's own key), ⌘E the
   files column, Ctrl+R the assistant, Ctrl+J the console. The files toggle
   keeps "Collapse project panel" / "Expand project panel" and the rail's "New
@@ -1181,6 +1182,87 @@ Kept: "Cluster: <name>" on the rail's dot, "Change cluster, currently
 settings trigger attribute that lets a second click close the settings. The
 account controls, the row and the rail's button alike, are named
 "Account: <login>" or "Account, signed out"; tests match `/^Account/`.
+
+## Home (5.8)
+
+Decided with Slava on 2026-10-15 (HOO-2063). A visitor who starts with no
+project lands on Home instead of the gallery modal.
+
+- **When.** On `/` with no project, once the explorer has answered. The route
+  initialises the explorer inside the editor's mount, which Home does not
+  have, so `useStartView` (`widgets/home`) initialises it itself on `/`
+  before it decides; `init` runs its calls one after another, so the route's
+  own call later is harmless. An `init` that leaves no project list is
+  reported and opens the work.
+  Until the answer the shell shows neither Home nor the work. Home leaves,
+  for the rest of the page load, once a project is open: one created or
+  switched to, or a tutorial route. The account's projects arriving by sync
+  leave Home only when the session opens one (`importWorkspace` opens none;
+  the session then switches to the newest), because a work column with
+  projects but none open threw "Current workspace not found". Any route
+  other than `/` never shows Home.
+- **Home replaces the work, it does not cover it.** With `home` set,
+  `LayoutShell` keeps the navigation and renders Home where the assistant
+  and the work columns go; the stage and console outlets are not rendered,
+  so `Write`, and with it upstream's `Primary`, never mounts under Home. The
+  route's `setMainPrimary` waits for the work to mount without polling: it
+  asks a mounted `Primary` once, and otherwise waits for the mount `Primary`
+  announces (`PgView.announceMainPrimaryMount`), one listener of each kind
+  per call. A getter that answers with an error rejects rather than being
+  retried. While Home shows, several routes' `setMainPrimary` calls can be
+  waiting (strict mode runs `/` twice, then a tutorial route); only the
+  newest call sets the view (`mainPrimaryCalls` in `PgView`, an idea ported
+  from the redesign reference), else the start route's Default could
+  overwrite a tutorial opened from Home. _Rejected:_ Home over the mounted
+  columns, cheaper but not a screen of its own; polling `get` every 100 ms,
+  which left a listener behind on every attempt.
+- **The column bar (with 5.25).** 5.25 says nothing of Home, so Home's
+  column gets the work column's bar: the same 44 px `BaseStageBar` with its
+  1 px line, over Home, with no stage tabs under it (no stage shows). It
+  reads "Home", as the phone's bar does, has no files toggle (no files
+  column under Home), and its assistant toggle opens and closes Home's
+  Sheet, at every width; its hint names no key, since Ctrl+R does nothing
+  under Home. The frame is flush and divided as 5.25 draws it.
+- **Keys.** While Home shows, Ctrl+R, Ctrl+J, ⌘E and a deploy's auto-open of
+  the console do nothing (no saved layout changes for columns not on
+  screen); ⌘B still folds the navigation, which is on screen.
+- **Not in this task** (HOO-2118): coming back to Home from an open project,
+  and Home after the last project is deleted. A route hands `Primary` its
+  content once, `PgRouter.navigate` to the current path does nothing, so a
+  remounted `Write` stays blank. Until HOO-2118, Home in the navigation opens
+  the gallery while a project is open, as in 5.2.
+- **From 720 px.** "Where should we begin?", the composer, three tiles and
+  four tutorial cards, built from `composer`, `action-card`, `tag` and
+  `button`. New project unfolds `StartFromScratch` under the tiles; Follow a
+  tutorial, Open a program and "All N" open the gallery on their tab until
+  5.9 gives them pages.
+- **Below 720 (`LAYOUT_BREAKPOINTS.phone`).** The pager keeps its menu page;
+  the work page's bar holds "Menu" and the title "Home", with no Chat | Code
+  and no Preview, and there is no preview page. The page holds the question,
+  the quick starts (Continue the last project when there is one, New Anchor
+  project, a beginner tutorial), a row naming the tutorials and programs with
+  Browse, which opens the gallery, and the composer at its foot. Home shows
+  only with no project open, so Continue never appears yet; `BasePhoneHome`
+  and `PhoneHome` handle it already, for HOO-2118.
+- **The composer** opens the assistant in a right Sheet at every width,
+  since Home stands where the assistant column would be. What the assistant
+  does with no project is a later stage's question. The Sheet holds 5.17's
+  assistant widget, never offered Widen there (`canWiden` is false while
+  Home shows: there is no panel to widen); Home's own composer stays a
+  button that opens it, not 5.17's connected composer.
+- **Widget `widgets/home`**: `BaseHome` and `Home`, `BasePhoneHome` and
+  `PhoneHome`. Telemetry prefix `home`: `home_shown` when Home is shown,
+  `home_tile_opened {tile: new-project | tutorials | programs}`,
+  `home_tutorial_opened`, `home_quickstart_opened {id: continue | new |
+  tutorial}`, `home_composer_opened`. A tutorial, a quick start or the
+  gallery that fails to open logs under `home:actions` with `report: true`
+  and tells the user (on the tutorial's card, or a `home-action-failed`
+  toast). The program count that cannot be read keeps its ellipsis and is
+  logged under `home:programs` only, without `report`.
+
+Kept: the gallery's `[data-gallery-modal]`, "Project name" and "Start", which
+`StartFromScratch` brings to Home unchanged; e2e fixtures that seeded a
+project through the gallery seed it through Home's New project.
 
 ## Risks / Trade-offs
 

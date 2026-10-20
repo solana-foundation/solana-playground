@@ -111,8 +111,9 @@ regression against 5.1 has misread this rule.
       editor editable on a phone, replacing 5.1's read-only editor (HOO-2062;
       after 5.2; design.md, "The phone (5.7)"; plan:
       [plans/5.7-phone-pages.md](plans/5.7-phone-pages.md))
-- [ ] 5.8 Home replaces the gallery popup on start, desktop and phone
-      (HOO-2063; after 5.2)
+- [x] 5.8 Home replaces the gallery popup on start, desktop and phone
+      (HOO-2063; after 5.2 and 5.7; design.md, "Home (5.8)"; plan:
+      [plans/5.8-home.md](plans/5.8-home.md))
 - [ ] 5.9 Tutorials and Programs pages, opened from the navigation
       (HOO-2064; after 5.2)
 - [x] 5.10 Workspace: the Write stage, editor tabs, console drawer and

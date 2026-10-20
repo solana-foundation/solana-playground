@@ -125,3 +125,31 @@ it("is the 44 px column bar with a bottom line", () => {
   expect(bar.className).toMatch(/\bh-11\b/);
   expect(bar.className).toMatch(/\bborder-b\b/);
 });
+
+it("names Ctrl+R in the assistant's hint, and no key when told none", async () => {
+  const { unmount } = draw({
+    title: null,
+    files: null,
+    assistant: { open: false, onToggle: vi.fn() },
+  });
+  await userEvent.tab();
+  expect((await screen.findByRole("tooltip")).textContent).toBe(
+    "Expand assistant (Ctrl+R)"
+  );
+  unmount();
+
+  render(
+    <TooltipProvider>
+      <BaseStageBar
+        title="Home"
+        files={null}
+        assistant={{ open: false, onToggle: vi.fn() }}
+        assistantKey={null}
+      />
+    </TooltipProvider>
+  );
+  await userEvent.tab();
+  expect((await screen.findByRole("tooltip")).textContent).toBe(
+    "Expand assistant"
+  );
+});

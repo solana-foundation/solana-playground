@@ -44,9 +44,21 @@ export interface PhonePagerSlots {
   stageNode: HTMLDivElement;
   consoleNode: HTMLDivElement;
   sheetFont?: CSSProperties;
+  /**
+   * Home, in place of the work: the work page shows it under "Menu" and the
+   * title, with no Chat | Code and no Preview, and there is no preview page
+   * and no Files Sheet. The stage and the console are not placed. Given
+   * means Home shows; `content` is null while the start is being decided.
+   */
+  home?: { content: ReactNode };
 }
 
 export type BasePhonePagerProps = PhonePagerState & PhonePagerSlots;
+
+/** The pages under Home: `PHONE_PAGES` without the preview, indices kept */
+const HOME_PAGES: readonly PhonePage[] = PHONE_PAGES.filter(
+  (page) => page !== "preview"
+);
 
 /** Where a page of the pager starts, as `scrollLeft` */
 const alignTo = (el: HTMLElement, index: number) => {
@@ -87,11 +99,16 @@ const FilePicker = ({
  * Three pages side by side, swiped between: the navigation, the work (Chat or
  * Code) and the preview. Holds no page state: the page and the view are the caller's.
  * The stage and the console are the outlets' nodes, so they are not remounted
- * by moving between pages or by crossing `LAYOUT_BREAKPOINTS.phone`.
+ * by moving between pages or by crossing `LAYOUT_BREAKPOINTS.phone`. With
+ * `home` there are two pages, the navigation and Home.
  */
 const BasePhonePager = (props: BasePhonePagerProps) => {
   const ref = useRef<HTMLDivElement>(null);
-  const index = PHONE_PAGES.indexOf(props.page);
+  const homeShown = props.home !== undefined;
+  const pages = homeShown ? HOME_PAGES : PHONE_PAGES;
+  // A page Home has no section for (the preview) shows Work, where Home is
+  const page = pages.includes(props.page) ? props.page : "work";
+  const index = pages.indexOf(page);
   // Smooth by CSS (`scroll-smooth`). The scroll this causes settles on the
   // page given, so the settle finds the page already current and `onSwipe`
   // is not called for it.
@@ -126,8 +143,9 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     settle.current = window.setTimeout(() => {
       const el = ref.current;
       if (!el || el.clientWidth === 0 || touching.current) return;
-      const at = PHONE_PAGES[Math.round(el.scrollLeft / el.clientWidth)];
-      if (at && at !== props.page) props.onSwipe(at);
+      // Under Home a scroll past the last page has no page to settle on
+      const at = pages[Math.round(el.scrollLeft / el.clientWidth)];
+      if (at && at !== page) props.onSwipe(at);
     }, SWIPE_SETTLE_MS);
   };
   // Native listeners, not React props: the stage and the console are portaled
@@ -164,7 +182,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     >
       <section
         aria-label="Navigation"
-        inert={props.page !== "menu"}
+        inert={page !== "menu"}
         className="flex h-full w-full shrink-0 snap-start flex-col"
       >
         <PhoneBar>
@@ -183,7 +201,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
       </section>
       <section
         aria-label="Work"
-        inert={props.page !== "work"}
+        inert={page !== "work"}
         className="flex h-full w-full shrink-0 snap-start flex-col"
       >
         <PhoneBar>
@@ -198,95 +216,113 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
           <span className="min-w-0 flex-1 truncate font-semibold">
             {props.title}
           </span>
-          <Segmented
-            aria-label="Show"
-            value={props.view}
-            onValueChange={(v) => {
-              if (isWorkView(v)) props.onView(v);
-            }}
-          >
-            <SegmentedItem value="chat">Chat</SegmentedItem>
-            <SegmentedItem value="code">Code</SegmentedItem>
-          </Segmented>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Preview the build"
-            onClick={() => props.onGo("preview")}
-          >
-            <Play />
-          </Button>
+          {!homeShown && (
+            <>
+              <Segmented
+                aria-label="Show"
+                value={props.view}
+                onValueChange={(v) => {
+                  if (isWorkView(v)) props.onView(v);
+                }}
+              >
+                <SegmentedItem value="chat">Chat</SegmentedItem>
+                <SegmentedItem value="code">Code</SegmentedItem>
+              </Segmented>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Preview the build"
+                onClick={() => props.onGo("preview")}
+              >
+                <Play />
+              </Button>
+            </>
+          )}
         </PhoneBar>
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            props.view !== "chat" && "hidden"
-          )}
-        >
-          {props.assistant}
-        </div>
-        <div
-          className={cn(
-            "flex min-h-0 flex-1 flex-col",
-            props.view !== "code" && "hidden"
-          )}
-        >
-          <FilePicker
-            file={props.file}
-            onOpen={() => props.onFilesOpenChange(true)}
-          />
-          {props.stageOn === "work" && (
-            <Outlet
-              node={props.stageNode}
-              className="flex min-h-0 flex-1 flex-col"
-            />
-          )}
-        </div>
-      </section>
-      <section
-        aria-label="Preview"
-        inert={props.page !== "preview"}
-        className="flex h-full w-full shrink-0 snap-start flex-col"
-      >
-        <PhoneBar>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Back to the code"
-            onClick={() => props.onGo("work")}
-          >
-            <ChevronLeft />
-          </Button>
-          <div className="min-w-0 flex-1 overflow-x-auto">{props.stageBar}</div>
-        </PhoneBar>
-        {props.stageOn === "preview" && (
-          <Outlet
-            node={props.stageNode}
-            className="flex min-h-0 flex-1 flex-col"
-          />
+        {homeShown ? (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            {props.home?.content}
+          </div>
+        ) : (
+          <>
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col",
+                props.view !== "chat" && "hidden"
+              )}
+            >
+              {props.assistant}
+            </div>
+            <div
+              className={cn(
+                "flex min-h-0 flex-1 flex-col",
+                props.view !== "code" && "hidden"
+              )}
+            >
+              <FilePicker
+                file={props.file}
+                onOpen={() => props.onFilesOpenChange(true)}
+              />
+              {props.stageOn === "work" && (
+                <Outlet
+                  node={props.stageNode}
+                  className="flex min-h-0 flex-1 flex-col"
+                />
+              )}
+            </div>
+          </>
         )}
-        <Outlet
-          node={props.consoleNode}
-          // Closed, the console is its bar: the body stays mounted (the
-          // terminal keeps its buffer) and is clipped, as on wide
-          className={cn(
-            "flex min-h-0 flex-col",
-            props.consoleOpen ? "h-2/5" : "overflow-hidden"
-          )}
-          style={props.consoleOpen ? undefined : { height: BOTTOM_BAR_PX }}
-        />
       </section>
-      <Sheet open={props.filesOpen} onOpenChange={props.onFilesOpenChange}>
-        <SheetContent
-          side="left"
-          aria-describedby={undefined}
-          className="w-full p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-full"
-          style={props.sheetFont}
-        >
-          <SheetTitle className="px-4 pt-4">Files</SheetTitle>
-          {props.files}
-        </SheetContent>
-      </Sheet>
+      {!homeShown && (
+        <>
+          <section
+            aria-label="Preview"
+            inert={page !== "preview"}
+            className="flex h-full w-full shrink-0 snap-start flex-col"
+          >
+            <PhoneBar>
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Back to the code"
+                onClick={() => props.onGo("work")}
+              >
+                <ChevronLeft />
+              </Button>
+              <div className="min-w-0 flex-1 overflow-x-auto">
+                {props.stageBar}
+              </div>
+            </PhoneBar>
+            {props.stageOn === "preview" && (
+              <Outlet
+                node={props.stageNode}
+                className="flex min-h-0 flex-1 flex-col"
+              />
+            )}
+            <Outlet
+              node={props.consoleNode}
+              // Closed, the console is its bar: the body stays mounted (the
+              // terminal keeps its buffer) and is clipped, as on wide
+              className={cn(
+                "flex min-h-0 flex-col",
+                props.consoleOpen ? "h-2/5" : "overflow-hidden"
+              )}
+              style={props.consoleOpen ? undefined : { height: BOTTOM_BAR_PX }}
+            />
+          </section>
+          <Sheet open={props.filesOpen} onOpenChange={props.onFilesOpenChange}>
+            <SheetContent
+              side="left"
+              aria-describedby={undefined}
+              className="w-full p-0 data-[side=left]:w-full data-[side=left]:sm:max-w-full"
+              style={props.sheetFont}
+            >
+              <SheetTitle className="px-4 pt-4">Files</SheetTitle>
+              {props.files}
+            </SheetContent>
+          </Sheet>
+        </>
+      )}
     </div>
   );
 };

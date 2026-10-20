@@ -89,6 +89,51 @@ const defaultState: ViewState = {
 
 const recursive = true;
 
+/**
+ * How many `setMainPrimary` calls were made; the last one is the newest. Only
+ * "is this the newest call" matters, never the value, so tests must not reset it
+ */
+let mainPrimaryCalls = 0;
+
+/**
+ * Resolve once a primary main view is mounted: at once when the mounted one
+ * answers `get`, or when one announces its mount
+ * (`PgView.announceMainPrimaryMount`). One listener of each kind per call,
+ * removed when it settles, so a long wait under Home piles nothing up.
+ * Rejects when the mounted view's getter answers with an error, which a
+ * mount would never cure.
+ */
+const waitForMainPrimary = () => {
+  const { send, receive } = PgCommon.getSendAndReceiveEventNames(
+    PgCommon.getStaticStateEventNames(PgView.events.MAIN_PRIMARY_STATIC).get
+  );
+  const mount = PgView.events.MAIN_PRIMARY_MOUNT;
+
+  return new Promise<void>((resolve, reject) => {
+    const stop = () => {
+      document.removeEventListener(receive, onAnswer);
+      document.removeEventListener(mount, onMount);
+    };
+    const onAnswer = (ev: Event) => {
+      stop();
+      const { error } = (ev as CustomEvent<{ error?: string }>).detail ?? {};
+      if (error) {
+        reject(new Error(`The main view could not be read: ${error}`));
+      } else {
+        resolve();
+      }
+    };
+    const onMount = () => {
+      stop();
+      resolve();
+    };
+
+    document.addEventListener(receive, onAnswer);
+    document.addEventListener(mount, onMount);
+    PgCommon.createAndDispatchCustomEvent(send);
+  });
+};
+
 const derive = () => ({
   /** Current sidebar page */
   currentSidebarPage: createDerivable({
@@ -107,6 +152,7 @@ class _PgView {
   /** All view event names */
   static readonly events = {
     MAIN_PRIMARY_STATIC: "viewmainprimarystatic",
+    MAIN_PRIMARY_MOUNT: "viewmainprimarymount",
     MAIN_SECONDARY_HEIGHT_SET: "viewmainsecondaryheightset",
     MAIN_SECONDARY_PROGRESS_SET: "viewmainsecondaryprogressset",
     MODAL_SET: "viewmodalset",
@@ -161,18 +207,35 @@ class _PgView {
   /**
    * Set the primary main view (next to the sidebar and above the terminal).
    *
+   * Waits until a main view is mounted (`waitForMainPrimary`), without
+   * polling. A newer call supersedes one still waiting, whose setter then
+   * never runs. Rejects when the mounted view answers with an error.
+   *
    * @param setEl element to set the main view to
    */
   static async setMainPrimary(setEl: SetState<SyncOrAsync<Elementable>>) {
-    await PgCommon.tryUntilSuccess(async () => {
-      const eventNames = PgCommon.getStaticStateEventNames(
-        PgView.events.MAIN_PRIMARY_STATIC
-      );
-      const result = await PgCommon.sendAndReceiveCustomEvent(eventNames.get);
-      if (result === undefined) throw new Error();
+    // Calls from routes left while Home kept the main view unmounted are all
+    // released by the same mount. Their setters would run side by side in
+    // `Primary`, and whichever finished last would show, so the "/" route's
+    // view could land over the tutorial opened from Home. Only the newest
+    // call may set the view.
+    const call = ++mainPrimaryCalls;
+    await waitForMainPrimary();
+    if (call !== mainPrimaryCalls) return;
 
-      PgCommon.createAndDispatchCustomEvent(eventNames.set, setEl);
-    }, 100);
+    PgCommon.createAndDispatchCustomEvent(
+      PgCommon.getStaticStateEventNames(PgView.events.MAIN_PRIMARY_STATIC).set,
+      setEl
+    );
+  }
+
+  /**
+   * Announce that the primary main view has mounted and listens for `set`.
+   * `Primary` calls it once its listeners are in place; every
+   * `setMainPrimary` waiting for a mount goes on from here.
+   */
+  static announceMainPrimaryMount() {
+    PgCommon.createAndDispatchCustomEvent(PgView.events.MAIN_PRIMARY_MOUNT);
   }
 
   /**

@@ -23,6 +23,11 @@ export interface BaseStageBarProps {
   files: BarToggle | null;
   /** The assistant's toggle: the panel's on a wide window, the Sheet's below */
   assistant: BarToggle;
+  /**
+   * The key the assistant's hint names, Ctrl+R unless given; null names
+   * none, as under Home, where the shell's keys do nothing
+   */
+  assistantKey?: string | null;
 }
 
 /** An icon button with its label as the tooltip, as the assistant's head draws them */
@@ -77,10 +82,19 @@ const FilesToggle = ({ files }: { files: BarToggle }) => {
  * named apart from the head's "Collapse assistant", so each name stays one
  * button.
  */
-const BaseStageBar = ({ title, files, assistant }: BaseStageBarProps) => {
+const BaseStageBar = ({
+  title,
+  files,
+  assistant,
+  assistantKey = "Ctrl+R",
+}: BaseStageBarProps) => {
   const assistantLabel = assistant.open
     ? "Hide the assistant"
     : "Expand assistant";
+  const assistantHint =
+    assistantKey === null
+      ? assistantLabel
+      : `${assistantLabel} (${assistantKey})`;
   return (
     <div
       data-slot="stage-bar"
@@ -95,7 +109,7 @@ const BaseStageBar = ({ title, files, assistant }: BaseStageBarProps) => {
       {files && <FilesToggle files={files} />}
       <BarButton
         label={assistantLabel}
-        hint={`${assistantLabel} (Ctrl+R)`}
+        hint={assistantHint}
         onClick={assistant.onToggle}
       >
         <MessageSquare aria-hidden="true" />

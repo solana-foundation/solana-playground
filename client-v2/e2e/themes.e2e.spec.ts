@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-import { HELP_TAIL, test } from "./fixtures";
+import { HELP_TAIL, home, test } from "./fixtures";
 
 /** The computed style property of the first element matching `selector` */
 const computed = (
@@ -97,7 +97,7 @@ test.describe("client-v2-themes", () => {
   test("client-v2-themes: A saved Dracula theme", async ({
     seededPage: page,
   }) => {
-    // A returning user: a project open, so no gallery covers the notice, and
+    // A returning user: a project open, so Home does not cover the notice, and
     // the removed theme still in storage from before the token bridge
     await page.evaluate(() => localStorage.setItem("theme", "Dracula"));
     await page.reload();
@@ -107,7 +107,7 @@ test.describe("client-v2-themes", () => {
       "The Dracula theme was removed. Playground now uses Dark; Light is in Settings."
     );
     await expect(notice).toBeVisible();
-    await expect(page.locator("[data-gallery-modal]")).toBeHidden();
+    await expect(home(page)).toBeHidden();
 
     await page.reload();
     await expect.poll(() => isDark(page)).toBe(true);

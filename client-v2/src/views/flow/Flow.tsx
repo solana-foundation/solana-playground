@@ -29,13 +29,14 @@ import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Wallet from "@/components/Wallet";
 import { useKeybind } from "@/hooks";
-import { PgExplorer, PgView } from "@/utils";
+import { PgView } from "@/utils";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { Assistant } from "@/widgets/assistant";
+import { homeSlot, isHomeShown, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
-import type { Disposable } from "@/utils/types";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -100,50 +101,8 @@ const FlowFrame = () => {
     settingsOpen,
   ]);
 
-  // Whether the empty-workspace gallery has already been opened once for
-  // this mount of `Flow`.
-  const openedGalleryOnInit = useRef(false);
-  /** Watches for the account's projects to land under an auto-opened gallery */
-  const imported = useRef<Disposable | null>(null);
-
-  useEffect(() => {
-    // `PgExplorer` initializes asynchronously (`routes/common.tsx`), so
-    // `allWorkspaceNames` may still be `undefined` on the first render --
-    // only decide once it has actually settled, otherwise every cold start
-    // would flash the gallery before we know whether there are projects.
-    //
-    // `PgExplorer.init()` reruns on every route navigation, so `onDidInit`
-    // fires more than once for the lifetime of `Flow`. Open the gallery at
-    // most once: dispose the subscription right after it fires so later
-    // navigations (e.g. into and out of a tutorial) never stack a second
-    // modal on top of one the user already interacted with.
-    const openIfEmpty = () => {
-      if (openedGalleryOnInit.current) return;
-      if (PgExplorer.allWorkspaceNames?.length === 0) {
-        openedGalleryOnInit.current = true;
-        sub.dispose();
-        openGallery();
-        // "You have no projects" is a guess until the account has answered.
-        // A browser signed in to an account with work on it is empty only for
-        // as long as the sync takes, and the gallery was landing on top of
-        // projects that arrived a moment later. Waiting for the sync instead
-        // would delay the gallery for everyone who genuinely is new, so it
-        // opens on time and stands down if it turns out to be wrong.
-        imported.current = PgExplorer.onDidCreateWorkspace(() => {
-          if (PgExplorer.allWorkspaceNames?.length) {
-            imported.current?.dispose();
-            PgView.closeModal();
-          }
-        });
-      }
-    };
-    const sub = PgExplorer.onDidInit(openIfEmpty);
-    if (PgExplorer.allWorkspaceNames) openIfEmpty();
-    return () => {
-      sub.dispose();
-      imported.current?.dispose();
-    };
-  }, []);
+  const start = useStartView();
+  const viewport = useViewport();
 
   const described = describeStep(lesson);
 
@@ -177,10 +136,12 @@ const FlowFrame = () => {
         <SyncBanner />
       </BannerSlot>
       <LayoutShell
+        home={homeSlot(start, viewport)}
         nav={({ collapsed, toggle, closeSheet }) => {
           closeNavSheet.current = closeSheet;
           return (
             <AppNav
+              homeShown={isHomeShown(start)}
               collapsed={collapsed}
               onToggle={toggle}
               logo={<Logomark aria-hidden="true" />}

@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, home, homeRegion, startProject, test } from "./fixtures";
 
 import { openGallery } from "./fixtures";
 
@@ -16,19 +16,15 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 
   await page.goto("/");
 
-  // The gallery opens by itself when there are no workspaces, as a dialog
-  // named by its title.
+  // Make a real project the active workspace first -- D16 only shows up
+  // when a project is already active, not on the very first, empty-state
+  // open (Home's New project tile unfolds `StartFromScratch`).
+  await startProject(page, "d16-project");
+
+  // The gallery as a dialog named by its title, for the steps below.
   const gallery = page.getByRole("dialog", {
     name: "What do you want to build?",
   });
-  await expect(gallery).toBeVisible();
-
-  // Make a real project the active workspace first -- D16 only shows up
-  // when a project is already active, not on the very first, empty-state
-  // open (`views/flow/gallery/StartFromScratch.tsx`: default framework,
-  // default name, "Start").
-  await page.getByRole("button", { name: "Start →" }).click();
-  await expect(gallery).toHaveCount(0);
 
   // Reopen the gallery from the navigation now that a project is active
   await openGallery(page);
@@ -74,21 +70,13 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   );
   await page.goto("/");
 
-  // Same anchor as the test above: the gallery dialog, by its title.
-  const gallery = page.getByRole("dialog", {
-    name: "What do you want to build?",
-  });
-  await expect(gallery).toBeVisible();
-
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-
-  // Only the "Open" button inside a tutorial card has a click handler;
-  // the title text itself does not (`views/flow/gallery/TutorialsTab.tsx`).
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
-  await expect(gallery).toHaveCount(0);
+  // Home's tutorial cards: only the "Open <name>" button has a click handler;
+  // the title text itself does not.
+  await expect(home(page)).toBeVisible();
+  await homeRegion(page)
+    .getByRole("button", { name: "Open Hello Anchor" })
+    .click();
+  await expect(home(page)).toBeHidden();
 
   // Open lands on upstream's own About/Start screen for a lesson tutorial
   // that has never been started -- Start is what creates the workspace

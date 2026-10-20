@@ -298,15 +298,80 @@ entries are measured by `features/feedback`.
 
 ### Requirement: The navigation opens the gallery
 
-Until Home and the Tutorials and Programs pages exist, the navigation's
-items SHALL open the gallery: Home and New project on its default tab,
-Tutorials on its tutorials tab (`gallery-tab-tutorials`), Programs on its
-programs tab (`gallery-tab-programs`).
+Until the Tutorials and Programs pages exist, the navigation's items SHALL
+open the gallery: New project on its default tab, Tutorials on its
+tutorials tab (`gallery-tab-tutorials`), Programs on its programs tab
+(`gallery-tab-programs`). Home SHALL open the gallery on its default tab
+while a project is open, and leave Home in place while Home shows.
 
 #### Scenario: Programs from the navigation
 
 - **WHEN** a user clicks Programs in the navigation
 - **THEN** the gallery opens with its programs tab selected
+
+### Requirement: A start with no project opens on Home
+
+A page load on `/` with no project SHALL show Home in place of the
+assistant and the work, with the navigation beside it (on a phone, its menu
+page), and SHALL NOT open the gallery. Home SHALL hold the question "Where
+should we begin?" and a composer that opens the assistant. From 720 px it
+SHALL hold three tiles, New project, Follow a tutorial and Open a program,
+and four tutorial cards; New project SHALL unfold the start-from-scratch
+row under the tiles, and the other two SHALL open the gallery on their tab.
+Below 720 px it SHALL hold quick starts for a new Anchor project and a
+beginner tutorial, a Browse row that opens the gallery, and the composer at
+its foot. Home SHALL give way to the work, for the rest of the page load,
+once a project is created or opened or a tutorial opens. The editor SHALL
+NOT mount while Home shows.
+
+#### Scenario: An empty install
+
+- **WHEN** a user with no project opens `/` on a 1280 px wide window
+- **THEN** Home shows "Where should we begin?", the composer, the three
+  tiles and four tutorial cards, no gallery opens, and no editor is mounted
+
+#### Scenario: New project from Home
+
+- **WHEN** a user on Home clicks New project, names the project and starts
+  it
+- **THEN** Home gives way to the work, with the new project's files in the
+  files column and its default file in the editor
+
+#### Scenario: A tutorial from Home
+
+- **WHEN** a user on Home opens a tutorial card
+- **THEN** the tutorial opens in the work, with its step in the stage
+
+#### Scenario: Tiles that open the gallery
+
+- **WHEN** a user on Home clicks Open a program
+- **THEN** the gallery opens with its programs tab selected
+
+#### Scenario: Home on a phone
+
+- **WHEN** a user with no project opens `/` on a 390 px wide screen
+- **THEN** the work page shows "Home" in its bar, the question, the quick
+  starts for a new Anchor project and a beginner tutorial, the Browse row
+  and the composer, and "New Anchor project" opens a new project on the code
+
+#### Scenario: The composer on Home
+
+- **WHEN** a user on Home on a 1280 px wide window clicks the composer
+- **THEN** the assistant opens
+
+### Requirement: Home is measured
+
+Home SHALL send `home_shown` when it shows; `home_tile_opened` with `tile`
+(`new-project`, `tutorials` or `programs`) when a user opens a tile;
+`home_tutorial_opened` when a user opens a tutorial card;
+`home_quickstart_opened` with `id` (`continue`, `new` or `tutorial`) when a
+user picks a quick start on a phone; and `home_composer_opened` when a user
+opens the assistant from its composer.
+
+#### Scenario: Opening a tile
+
+- **WHEN** a user on Home clicks Follow a tutorial
+- **THEN** `home_tile_opened` is sent with `tile` `tutorials`
 
 ### Requirement: The navigation is measured
 

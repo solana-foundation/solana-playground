@@ -60,6 +60,18 @@ export interface LayoutShellProps {
   assistant: (
     panel: { open: boolean; toggle: () => void } & AssistantWide
   ) => ReactNode;
+  /**
+   * Home, in place of the assistant and the work: the navigation stays, the
+   * stage, its tabs and the console are not rendered, the column bar over
+   * Home reads "Home" with no files toggle, and the phone's work page shows
+   * Home under the title "Home". `openAssistant`, like the bar's assistant
+   * toggle, opens the assistant as a right Sheet, at every width; it is the
+   * visit's and never saved. While
+   * Home shows, the shell's keys (Ctrl+R, Ctrl+J, ⌘E) do nothing, and nor
+   * does a deploy's opening of the console: they would change a saved layout
+   * or a stage the screen does not show.
+   */
+  home?: (panel: { openAssistant: () => void }) => ReactNode;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -83,6 +95,7 @@ const LayoutShell = ({
   stage,
   console,
   assistant,
+  home,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -107,6 +120,13 @@ const LayoutShell = ({
   pageRef.current = page;
   const viewRef = useRef(view);
   viewRef.current = view;
+  // Read by the keys and the subscriptions, which outlive renders
+  const homeShown = home !== undefined;
+  const homeNow = useRef(homeShown);
+  homeNow.current = homeShown;
+  // The assistant's Sheet while Home shows: the visit's, never saved
+  const [homeSheetOpen, setHomeSheetOpen] = useState(false);
+  const homeSheetNow = useRef(false);
   useExplorer();
   // The project's name shows in the stage bar and the phone's bar; a rename
   // opens no file, so `useExplorer`'s events miss it
@@ -178,6 +198,23 @@ const LayoutShell = ({
     });
   };
 
+  const setHomeSheet = (open: boolean, via: ToggleSource) => {
+    if (homeSheetNow.current === open) return;
+    homeSheetNow.current = open;
+    setHomeSheetOpen(open);
+    layoutTelemetry.track("layout_panel_toggled", {
+      panel: "assistant",
+      open,
+      via,
+    });
+  };
+  useEffect(() => {
+    // Gone with Home, not closed by anyone: nothing to report
+    if (homeShown) return;
+    homeSheetNow.current = false;
+    setHomeSheetOpen(false);
+  }, [homeShown]);
+
   const showPage = (next: PhonePage, via: PageSource) => {
     if (pageRef.current === next) return;
     pageRef.current = next;
@@ -221,7 +258,8 @@ const LayoutShell = ({
       // Tracked at every width, not only on a phone: the Preview a phone opens
       // on is the last non-write stage shown anywhere
       if (flow.stage !== "write") lastPreview.current = flow.stage;
-      if (!phone) return;
+      // Home has no preview page to move to
+      if (!phone || homeNow.current) return;
       const next = pageForStage(flow.stage, pageRef.current);
       if (next) showPage(next, "auto");
     });
@@ -243,9 +281,12 @@ const LayoutShell = ({
   }, [phone]);
 
   const wideOrSheet = viewport === "wide" ? state.open.assistant : sheetOpen;
-  const assistantShown = phone ? view === "chat" : wideOrSheet;
+  const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
+  const assistantShown = homeShown ? homeSheetOpen : pagerOrFrame;
   const setAssistant = (open: boolean, via: ToggleSource) => {
-    if (phone) {
+    // Under Home the assistant is its Sheet at every width
+    if (homeNow.current) setHomeSheet(open, via);
+    else if (phone) {
       // A key keeps its own source; a drag never reaches a phone
       const source: PageSource =
         via === "key" || via === "auto" ? via : "button";
@@ -256,8 +297,12 @@ const LayoutShell = ({
     } else if (viewport === "wide") setOpen("assistant", { open, via });
     else setSheet(open, via);
   };
-  /** The console opening on its own: the visit's on a phone, else saved */
+  /**
+   * The console opening on its own: the visit's on a phone, else saved. Not
+   * under Home, which shows no console to open.
+   */
   const openConsole = () => {
+    if (homeNow.current) return;
     if (phone) setPhoneConsoleOpen(true, "auto");
     else setOpen("console", { open: true, via: "auto" });
   };
@@ -266,6 +311,7 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+R",
     () => {
+      if (homeNow.current) return;
       if (phone) {
         // The view is shown on Work: bring it into view first
         showPage("work", "key");
@@ -277,6 +323,7 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+J",
     () => {
+      if (homeNow.current) return;
       if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");
       else setOpen("console", { open: !state.open.console, via: "key" });
     },
@@ -299,6 +346,8 @@ const LayoutShell = ({
     "Ctrl+E",
     {
       handle: (ev) => {
+        // Before `preventDefault`: under Home the key is not the shell's
+        if (homeNow.current) return;
         if (
           PgCommon.getOS() === "MacOS" &&
           ev.ctrlKey &&
@@ -439,6 +488,12 @@ const LayoutShell = ({
     [closeSheetAuto]
   );
 
+  // The bar names the project while the assistant is out of view, since its
+  // head cannot; under Home it names Home, as the phone's bar does
+  let barTitle: string | null = null;
+  if (homeShown) barTitle = "Home";
+  else if (!assistantShown) barTitle = PgExplorer.currentWorkspaceName ?? null;
+
   return (
     <BaseLayoutShell
       viewport={viewport}
@@ -504,7 +559,7 @@ const LayoutShell = ({
         onGo: (next) => showPage(next, "button"),
         view,
         onView: (next) => showView(next, "button"),
-        title: PgExplorer.currentWorkspaceName ?? "",
+        title: homeShown ? "Home" : PgExplorer.currentWorkspaceName ?? "",
         file,
         filesOpen,
         onFilesOpenChange: (open) => setPhoneFiles(open, lastInput.current),
@@ -513,13 +568,10 @@ const LayoutShell = ({
       }}
       stageBar={
         <BaseStageBar
-          // While the assistant is out of view (hidden, or its Sheet closed),
-          // its head cannot name the project, so the bar does
-          title={
-            assistantShown ? null : PgExplorer.currentWorkspaceName ?? null
-          }
+          title={barTitle}
+          // Under Home there is no files column to toggle
           files={
-            isMobile
+            isMobile || homeShown
               ? null
               : {
                   open: state.open.files,
@@ -530,12 +582,14 @@ const LayoutShell = ({
                     }),
                 }
           }
-          // The panel's toggle on a wide window; below it, what opens the
-          // Sheet: the frame has no other opener for it
+          // The panel's toggle on a wide window; below it, and at every width
+          // under Home, what opens the Sheet
           assistant={{
             open: assistantShown,
             onToggle: () => setAssistant(!assistantShown, "button"),
           }}
+          // Under Home Ctrl+R does nothing, so the hint names no key
+          assistantKey={homeShown ? null : "Ctrl+R"}
         />
       }
       stageTabs={stageTabs}
@@ -563,6 +617,16 @@ const LayoutShell = ({
           },
           canWiden,
         })
+      }
+      home={
+        home && {
+          content: home({ openAssistant: () => setHomeSheet(true, "button") }),
+          assistant: {
+            open: homeSheetOpen,
+            // Closed by Escape or a tap on its overlay
+            onOpenChange: (open) => setHomeSheet(open, lastInput.current),
+          },
+        }
       }
     />
   );

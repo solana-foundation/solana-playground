@@ -169,10 +169,15 @@ Done:
   navigation and Files share one Sheet. Below 720 px the app is three swiped
   pages: the navigation, Work (Chat or Code, with Files in a Sheet) and
   Preview (the Build, Deploy or Interact stage over the console); there the assistant is the Chat view
-  of Work, not a Sheet. The editor edits at every width. A New Workspace
-  gallery starts a project from 34 upstream programs or 16 tutorials. The
-  cluster row, the account menu's Settings or Cmd+, open a settings overlay
-  embedding the existing settings registry.
+  of Work, not a Sheet. The editor edits at every width. A start with no
+  project opens Home ("Where should we begin?"), not a popup. From 720 px
+  Home has a composer, New project, Follow a tutorial and Open a program
+  tiles, and four tutorial cards; below 720 px it has quick starts (a new
+  Anchor project, a beginner tutorial), a Browse button that opens the
+  gallery, and the composer. The New Workspace gallery starts a project from
+  34 upstream programs or 16 tutorials. The cluster row,
+  the account menu's Settings or Cmd+, open a settings overlay embedding the
+  existing settings registry.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
 - Conversations and project code are persisted. Threads are keyed by project
