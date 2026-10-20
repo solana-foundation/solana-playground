@@ -217,7 +217,7 @@ async function getRegistry() {
   const registryPath = path.join(cargoHome, "registry", "src");
   const registries = await fs.readdir(registryPath);
   const cratesIoRegistry = registries.find((registry) => {
-    return registry.startsWith("index.crates.io");
+    return /^index\.crates\.io-[0-9a-f]+$/.test(registry);
   });
   if (!cratesIoRegistry) throw new Error("crates.io registry not found");
 

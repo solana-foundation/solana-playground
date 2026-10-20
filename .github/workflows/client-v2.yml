@@ -13,6 +13,9 @@ on:
 
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 concurrency:
   group: client-v2-${{ github.ref }}
   cancel-in-progress: true
