@@ -211,17 +211,21 @@ jobs:
       # Except where that name means something else: `pr-<n>` would be another
       # PR's live preview, and `preview/master` is the production dry run's
       # (deploy-client-vercel.md). Both deletes are attempted, so one failure
-      # does not leave the other branch behind.
+      # does not leave the other branch behind; `failed` names the ones left,
+      # for the failure report.
       - name: Delete the Neon branches
+        id: delete
         run: |
-          failed=0
-          bash .github/scripts/neon.sh delete "$BRANCH" || failed=1
+          failed=""
+          bash .github/scripts/neon.sh delete "$BRANCH" || failed="\`$BRANCH\`"
           if [[ "$HEAD_REF" =~ ^(pr-[0-9]+|master)$ ]]; then
             echo "keeping preview/$HEAD_REF: not this PR's to delete"
           else
-            bash .github/scripts/neon.sh delete "preview/$HEAD_REF" || failed=1
+            bash .github/scripts/neon.sh delete "preview/$HEAD_REF" ||
+              failed="${failed:+$failed and }\`preview/$HEAD_REF\`"
           fi
-          [ "$failed" -eq 0 ]
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          [ -z "$failed" ]
 
       # `--edit-only`: a PR that never had a preview gets no comment. Runs only
       # on success, so a failed delete gets the failure report instead.
@@ -229,10 +233,15 @@ jobs:
         run: |
           bash .github/scripts/preview-comment.sh --edit-only "$PR" "Preview database \`$BRANCH\` deleted. The last deployment still loads but has no database; add the \`$PREVIEW_LABEL\` label again to redeploy."
 
-      # Not on cancel: the run that cancelled this one writes the comment.
+      # Not on cancel: the run that cancelled this one writes the comment. The
+      # scheduled sweep deletes only `preview/pr-<n>`, so the report sends the
+      # reader to a re-run or to a manual `all-preview` sweep. An empty `FAILED`
+      # means a step other than the deletes failed.
       - name: Report the failure on the PR
         if: failure()
+        env:
+          FAILED: ${{ steps.delete.outputs.failed }}
         run: |
           bash .github/scripts/preview-comment.sh --edit-only "$PR" "**Preview teardown failed**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
 
-          The Neon branch \`$BRANCH\` may still exist; preview-sweep.yml deletes it on its next run."
+          Not deleted: ${FAILED:-unknown, the run failed before or after the deletes}. Re-run the failed job, or run preview-sweep.yml by hand with scope \`all-preview\` and \`dry_run\` off."
