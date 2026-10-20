@@ -49,6 +49,53 @@ describe("installGlobalHandlers", () => {
 
     expect(logged.entries[0].error?.message).toBe("Script error.");
   });
+
+  const NOTICE =
+    "ResizeObserver loop completed with undelivered notifications.";
+
+  it("should not log the browser's ResizeObserver loop notice", () => {
+    globalThis.dispatchEvent(new ErrorEvent("error", { message: NOTICE }));
+
+    expect(logged.entries).toEqual([]);
+  });
+
+  it("should not log the notice when the browser reports its error as null", () => {
+    globalThis.dispatchEvent(
+      new ErrorEvent("error", { message: NOTICE, error: null })
+    );
+
+    expect(logged.entries).toEqual([]);
+  });
+
+  for (const message of [
+    "ResizeObserver loop limit exceeded",
+    "ResizeObserver loop completed with undelivered notifications",
+  ]) {
+    it(`should log another ResizeObserver error: ${message}`, () => {
+      globalThis.dispatchEvent(new ErrorEvent("error", { message }));
+
+      expect(logged.entries).toEqual([
+        expect.objectContaining({
+          ns: "logger:global",
+          level: "panic",
+          unhandled: true,
+        }),
+      ]);
+      expect(logged.entries[0].error?.message).toBe(message);
+    });
+  }
+
+  it("should log an error thrown with the notice's text", () => {
+    const error = new Error(NOTICE);
+
+    globalThis.dispatchEvent(
+      new ErrorEvent("error", { message: NOTICE, error })
+    );
+
+    expect(logged.entries).toEqual([
+      expect.objectContaining({ level: "panic", error }),
+    ]);
+  });
 });
 
 describe("LoggerErrorBoundary", () => {

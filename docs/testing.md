@@ -21,14 +21,17 @@ Case IDs are stable: refer to a case by ID, not by position.
 Every case states its success result under "Expect": what must be observed, not only that a command exits 0. Cases that
 test a failure on purpose (C-2, C-3, C-5, M-4, G-2 to G-5) say so in their title or steps.
 
-Console messages that are expected and fail no case:
+**Expected console messages.** These fail no case; C-1 and C-4 allow only the rows whose "Where" matches the run:
 
 | Message | Where | Why |
 | --- | --- | --- |
 | A COEP error for the preview toolbar | Vercel previews | The toolbar's frame lacks the headers the page's COEP requires |
 | A failed request for `manifest.json` | Vercel previews behind protection | The browser fetches the manifest without the bypass cookie |
-| A `503` for `/api/auth/get-session` | client-v2 with no database (C-4, D-8) | The account endpoints need Postgres |
-| `ResizeObserver loop completed with undelivered notifications` | client-v2 | Reported by the browser for the panel layout; harmless |
+| A `503` for `/api/auth/get-session` | client-v2 with no database or no sign-in configured locally (C-4, D-8) | The account endpoints need Postgres and the OAuth app |
+| `ENOENT` for `/<project>/.workspace`, once, right after a project is created | client-v2 | The workspace folder is read before its first write (HOO-2150); it also shows in runs where everything else passes |
+
+The browser's `ResizeObserver loop completed with undelivered notifications.` is not in the table: client-v2's global
+error handler drops it (HOO-2125). A `logger:global` error with that text means the filter regressed, and C-4 fails.
 
 ## 0. Prerequisites
 
@@ -198,7 +201,8 @@ curl -sI http://localhost:3000
 
 Expect:
 
-- [ ] the page loads at `http://localhost:3000` with no console errors on load.
+- [ ] the page loads at `http://localhost:3000` with no console errors on load, apart from the "Expected console
+      messages" whose "Where" matches the run.
 - [ ] the IDE renders: file explorer, editor, and terminal. Typing `help` in the terminal lists the commands, which
       proves the wasm packages loaded.
 - [ ] the network tab shows no failed request on load (no 4xx, 5xx, or HTML served for a non-HTML file), apart from
@@ -238,8 +242,8 @@ curl -s http://localhost:3000/api/health
 
 Expect:
 
-- [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the IDE, the terminal `help`, and the network
-      tab pass.
+- [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the console, the IDE, the terminal `help`, and
+      the network tab pass.
 - [ ] `/api/health` returns `200` (it is served by the client-v2 dev server, not the build server).
 - [ ] the COEP and COOP headers from C-1 are present.
 - [ ] S-10 passes against this server.
