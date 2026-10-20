@@ -1319,7 +1319,6 @@ if (import.meta.vitest) {
 
   describe("utils/common", () => {
     const mockFetch = vi.fn();
-    global.fetch = mockFetch as unknown as typeof fetch;
 
     const respond = (over: {
       ok?: boolean;
@@ -1333,7 +1332,10 @@ if (import.meta.vitest) {
       });
     };
 
-    beforeEach(() => mockFetch.mockReset());
+    beforeEach(() => {
+      mockFetch.mockReset();
+      vi.spyOn(globalThis, "fetch").mockImplementation(mockFetch);
+    });
 
     describe("fetchText", () => {
       it("returns the body of an ok response", async () => {

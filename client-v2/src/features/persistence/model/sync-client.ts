@@ -78,11 +78,7 @@ if (import.meta.vitest) {
     beforeEach(() => {
       PgSyncClient.reset();
       fetchMock = vi.fn();
-      Object.defineProperty(globalThis, "fetch", {
-        value: fetchMock,
-        configurable: true,
-        writable: true,
-      });
+      vi.spyOn(globalThis, "fetch").mockImplementation(fetchMock);
     });
 
     describe("PgSyncClient.available", () => {
