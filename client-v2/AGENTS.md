@@ -65,7 +65,8 @@ The text `import.meta.vitest` makes a file a test file (`includeSource` in `vite
 Write it only where a block follows, never in a comment of a module without tests: `yarn test-unit`
 fails such a file with "No test suite found". A block runs only when its file is the entry:
 `yarn test-unit src/shared/lib/ids.ts` runs that module's tests, and the deleted `*.test.ts` path
-finds nothing. webpack drops the block on its own; CI greps the bundle for three test titles ("Check
-in-source tests stay out of the bundle" in `client-v2.yml`).
+finds nothing. webpack drops the block on its own; `scripts/in-source-tests.build-test.mjs` checks the
+built chunks for every block's test titles, and `scripts/in-source-collection.test.mjs` checks that
+vitest collects every block.
 
 See [Vitest in-source testing](https://vitest.dev/guide/in-source).

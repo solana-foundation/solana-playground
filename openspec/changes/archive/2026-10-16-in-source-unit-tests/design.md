@@ -92,21 +92,26 @@ needed. The local `it` is vitest's and has `each`; the global `it` is mocha's
   block, those hooks would apply to the session tests too. It can move later
   as a second `describe` whose hooks sit inside it.
 
-### Three test titles guard the bundle
+### Two tests guard the blocks
 
-The CI step greps `build/static/js/*.js` for three test titles, one each from
-`shared/lib/ids.ts`, `features/persistence/model/project-id.ts`, and
-`widgets/layout-shell/model/layout-state.ts`, and first requires each title in
-a non-test file under `src/` that holds the guard text, so a title that moves
-back into a `*.test.ts` file, which is never bundled, fails the step instead
-of emptying it. Titles rather than `describe(` or `it(`: `js-runtime.ts`
-bundles mocha, so the function names are in the bundle legitimately. `fs` and
-`path` are stubbed to empty modules by craco's `resolve.fallback`, so a block
-that reaches the bundle does not fail the build; only the title grep catches
-it. A second guard, the CI step "Check in-source tests are collected", runs
-`vitest list` on `shared/lib/ids.ts` after the unit tests and fails when a
-title from its block is missing: a dropped `includeSource` would otherwise
-remove 53 modules' tests and keep the suite green.
+`scripts/in-source-tests.build-test.mjs` runs under `yarn test-build` after
+the production build. It finds every non-test `.ts`/`.tsx` under `src/` whose
+text holds the guard, collects the double-quoted `it` titles after the guard
+(`scripts/in-source-titles.mjs`), and fails, naming the chunk, the title, and
+the module, when a title of 24 characters or more is in a file under
+`build/static/js`. Titles rather than `describe(` or `it(`: `js-runtime.ts`
+bundles mocha, so the function names are in the bundle legitimately; the
+length floor keeps a short title from matching product copy. A floor on the
+number of titles collected fails the test when the parser stops matching
+rather than passing on an empty list. `fs` and `path` are stubbed to empty
+modules by craco's `resolve.fallback`, so a block that reaches the bundle does
+not fail the build; only this test catches it.
+
+`scripts/in-source-collection.test.mjs` runs under `yarn test-api`. It
+compares the same set of guard-holding modules with the non-test files
+`vitest list --json` reports and fails naming a module vitest does not list,
+which a dropped or narrowed `includeSource` would otherwise remove from the
+suite while keeping it green, or a listed module without the guard.
 
 ### The marker string is reserved
 

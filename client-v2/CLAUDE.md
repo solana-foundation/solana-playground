@@ -277,10 +277,11 @@ check's job (HOO-1859); the rest hold by review.
   styled component with a utility; change the styled rule, or move the
   component by the UI move rule.
 - **Build configuration is not unit-tested.** Guard the outcome instead: CI
-  greps the built CSS (or bundle) for what the configuration must produce:
-  Tailwind's `.flex` rule, the `_Pg*` class names, and no in-source test
-  title. A test that asserts the shape of `craco.config.js` passes while the
-  build is wrong.
+  greps the built CSS (or bundle) for what the configuration must produce,
+  Tailwind's `.flex` rule and the `_Pg*` class names, and the build tests
+  (`yarn test-build`) read `build/`: `scripts/in-source-tests.build-test.mjs`
+  fails when a chunk holds an in-source test title. A test that asserts the
+  shape of `craco.config.js` passes while the build is wrong.
 
 ## Before a PR
 

@@ -75,9 +75,10 @@ module that carries a block, because a match without tests fails the run.
 
 #### Scenario: CI proves a block is collected (manual)
 
-- **WHEN** CI has run the unit tests
-- **THEN** a CI step lists the tests of `src/shared/lib/ids.ts` and fails the
-  run when a title from that module's block is missing from the list
+- **WHEN** CI runs the API tests
+- **THEN** the collection test compares the modules that hold a block with the
+  non-test files vitest lists, and fails the run naming a module vitest does
+  not list or a listed module without the guard
 
 #### Scenario: The deleted test file's path (manual)
 

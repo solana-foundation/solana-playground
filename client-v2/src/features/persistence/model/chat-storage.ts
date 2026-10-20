@@ -240,7 +240,7 @@ export class PgChatStorage {
 }
 
 if (import.meta.vitest) {
-  const { describe, it, expect, beforeEach } = import.meta.vitest;
+  const { describe, it, expect, vi, beforeEach } = import.meta.vitest;
 
   describe("features/persistence/model/chat-storage", () => {
     /** The mock's own store, for corrupting a file or asserting on one */

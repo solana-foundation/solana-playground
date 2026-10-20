@@ -308,7 +308,7 @@ export class PgSyncMark {
 }
 
 if (import.meta.vitest) {
-  const { describe, it, expect, beforeEach } = import.meta.vitest;
+  const { describe, it, expect, vi, beforeEach } = import.meta.vitest;
 
   describe("features/persistence/model/sync-mark", () => {
     const storedFiles = () =>
