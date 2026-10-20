@@ -168,9 +168,10 @@ export const session = (): Disposable => {
    * storage the next time anything changes -- from where the next account's
    * sign-in dump uploads it. What is stored survives the close: the upload has
    * already happened, `closeThread` persists nothing, and `forget` keeps any
-   * thread written to since. A turn still running loses its unfinished reply
-   * and any approval it was waiting on, which `closeThread` denies -- the
-   * same as a workspace switch mid-turn. It closes again last, because
+   * thread written to since. A turn still running is stopped by the close,
+   * the same as on a workspace switch mid-turn: its unfinished reply and any
+   * approval it was waiting on are dropped, and nothing it writes afterwards
+   * reaches the thread opened next. It closes again last, because
    * removing the open project switches workspace and the chat effect opens
    * the next one's thread; that effect opens a fresh one once the user is
    * cleared.

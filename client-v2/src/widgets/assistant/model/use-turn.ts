@@ -298,6 +298,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     setInput("");
     const controller = new AbortController();
     turn.current = controller;
+    PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
 
     try {
@@ -306,7 +307,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
       } else if (isAbort(e)) {
-        // Stopping is the user's own doing, and `stop` already said so
+        // Stopping is the user's own doing, and `stop` already said so; a
+        // thread closing under the turn stopped it on the way out
         log.debug("the stopped turn unwound");
       } else {
         // Stopped, but the turn ended on something other than the abort: not
@@ -315,15 +317,17 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       }
     } finally {
       if (turn.current === controller) turn.current = null;
+      const finished = PgAssistant.endTurn(controller);
       PgAssistant.setStatus("idle");
       focus();
 
       // End of turn is the natural commit point: the exchange is complete and
       // the user is reading rather than typing. Deliberately not awaited --
       // a slow or failed upload must not hold up the panel, and the local
-      // copy is already written either way.
+      // copy is already written either way. Not for a turn whose thread
+      // closed: the thread open now holds nothing of it.
       const threadId = PgAssistant.threadId;
-      if (threadId) {
+      if (finished && threadId) {
         void pushThread(threadId).catch((e) => report("push turn", e));
       }
     }

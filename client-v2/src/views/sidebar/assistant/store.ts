@@ -524,6 +524,54 @@ export class PgAssistant {
     PgAssistant._emit();
   }
 
+  /**
+   * Bind a turn to the open thread, so that leaving the thread stops it.
+   *
+   * The panel owns the turn, but the thread can close under it from outside:
+   * sign-out's teardown and a workspace switch both call `closeThread`. Left
+   * running, the turn kept calling the backend and its tool rows, notices and
+   * errors landed in whichever thread opened next -- under sign-out, the
+   * previous user's turn in the next session's conversation.
+   *
+   * @param controller aborts the turn's request; the store aborts it when the
+   * thread closes
+   */
+  static beginTurn(controller: AbortController) {
+    PgAssistant._turn = { controller, cut: false };
+  }
+
+  /**
+   * @param controller the one passed to `beginTurn`
+   * @returns whether the turn ended in the thread it started in. `false` when
+   * leaving that thread cut it off, and its end is no one's to commit.
+   */
+  static endTurn(controller: AbortController) {
+    const turn = PgAssistant._turn;
+    if (turn?.controller !== controller) return false;
+    PgAssistant._turn = null;
+    return !turn.cut;
+  }
+
+  /**
+   * Stop the turn writing to the thread being left.
+   *
+   * Aborting stops the request, but a provider unwinds on its own schedule: a
+   * tool already running reports, and the stream's last chunk may already be
+   * read. Those writes are dropped (`_turnCut`) until the turn ends, which no
+   * new turn can overlap: the panel offers none while one is running.
+   */
+  private static _cutTurn() {
+    const turn = PgAssistant._turn;
+    if (!turn || turn.cut) return;
+    turn.cut = true;
+    turn.controller.abort();
+  }
+
+  /** Whether what is written now comes from a turn whose thread has closed */
+  private static get _turnCut() {
+    return !!PgAssistant._turn?.cut;
+  }
+
   static addUserMessage(text: string) {
     PgAssistant._items.push({
       kind: "user",
@@ -594,6 +642,8 @@ export class PgAssistant {
   /** Start an assistant message and return its id so text can stream into it */
   static startAssistantMessage() {
     const id = makeId();
+    // An id all the same: the provider streams into it, and finds nothing
+    if (PgAssistant._turnCut) return id;
     // Stamped here because this is the only moment the panel knows what is
     // answering. A thread records the backend it was created with; a reply
     // records the one that wrote it, and the two differ as soon as the user
@@ -631,6 +681,7 @@ export class PgAssistant {
   }
 
   static addToolCall(label: string) {
+    if (PgAssistant._turnCut) return;
     PgAssistant._items.push({
       kind: "tool",
       id: makeId(),
@@ -641,6 +692,7 @@ export class PgAssistant {
   }
 
   static addNotice(text: string) {
+    if (PgAssistant._turnCut) return;
     PgAssistant._items.push({
       kind: "notice",
       id: makeId(),
@@ -651,6 +703,7 @@ export class PgAssistant {
   }
 
   static addError(text: string) {
+    if (PgAssistant._turnCut) return;
     PgAssistant._items.push({
       kind: "error",
       id: makeId(),
@@ -672,11 +725,15 @@ export class PgAssistant {
    * turn's tool calls concurrently: with two gated tools, both outcomes landed
    * on the second card and the first got none.
    *
+   * A turn whose thread has closed is refused without a card: nobody is left
+   * to answer it, and the tool must not run.
+   *
    * @param request what needs approving
    * @returns the card's id, and whether the user allowed it
    */
   static requestApproval(request: ApprovalRequest): Promise<ApprovalAnswer> {
     const id = makeId();
+    if (PgAssistant._turnCut) return Promise.resolve({ id, allowed: false });
     PgAssistant._items.push({
       kind: "approval",
       id,
@@ -782,6 +839,9 @@ export class PgAssistant {
    * For when there is no workspace to key a conversation on -- the panel still
    * renders and still works, it just has nowhere to persist to, so it must not
    * keep writing into whichever thread happened to be open last.
+   *
+   * A turn still running stops with it (`beginTurn`), and nothing it writes
+   * afterwards lands anywhere.
    */
   static closeThread() {
     // Nothing open is nothing to close. Clearing anyway would throw away
@@ -790,6 +850,7 @@ export class PgAssistant {
     // late enough for that to be an ordinary sequence, not a rare one.
     if (PgAssistant._threadId === null) return;
 
+    PgAssistant._cutTurn();
     PgAssistant._denyPending();
     PgAssistant._threadId = null;
     // A read still out for the closed thread is stale from here on, even if
@@ -852,6 +913,11 @@ export class PgAssistant {
     // conditional -- see `effects/chat-thread`, which closes the old thread
     // before resolving the new one so the gap has no owner.
     const orphans = PgAssistant._threadId === null ? PgAssistant._items : [];
+    // Switching straight to another thread leaves this one, as `closeThread`
+    // does. Re-reading the same one does not: the turn carries on in it.
+    if (PgAssistant._threadId !== null && PgAssistant._threadId !== threadId) {
+      PgAssistant._cutTurn();
+    }
 
     PgAssistant._denyPending();
     PgAssistant._threadId = threadId;
@@ -1025,6 +1091,12 @@ export class PgAssistant {
   private static _localServers: readonly McpServerEntry[] =
     LOCAL_MCP_SERVERS.map((server) => ({ ...server }));
   private static _mcpTools: Readonly<Record<string, readonly McpTool[]>> = {};
+  /**
+   * The turn in flight, if `beginTurn` registered one. `cut` once its thread
+   * has closed, until the turn ends.
+   */
+  private static _turn: { controller: AbortController; cut: boolean } | null =
+    null;
   private static readonly _pending = new Map<
     string,
     (allowed: boolean) => void
@@ -2285,6 +2357,53 @@ if (import.meta.vitest) {
 
         await PgAssistant.loadThread("t1", true);
         expect(PgAssistant.items).toHaveLength(1);
+      });
+    });
+
+    /** A turn is bound to the thread it started in, and stops when that closes */
+    describe("PgAssistant turns", () => {
+      let turn: AbortController;
+
+      beforeEach(async () => {
+        (PgFs as unknown as { __files: Map<string, string> }).__files.clear();
+        PgAssistant.closeThread();
+        PgAssistant.clear();
+        await PgAssistant.loadThread("t1");
+        turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+      });
+
+      afterEach(() => {
+        PgAssistant.endTurn(turn);
+        PgAssistant.closeThread();
+      });
+
+      it("stops when the open thread is switched for another", async () => {
+        await PgAssistant.loadThread("t2");
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(true);
+        expect(PgAssistant.items).toEqual([]);
+        expect(PgAssistant.endTurn(turn)).toBe(false);
+      });
+
+      it("carries on when the same thread is re-read after a pull", async () => {
+        await PgAssistant.loadThread("t1", true);
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(false);
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["tool"]);
+        expect(PgAssistant.endTurn(turn)).toBe(true);
+      });
+
+      it("writes again once the stopped turn has ended", async () => {
+        PgAssistant.closeThread();
+        PgAssistant.endTurn(turn);
+        await PgAssistant.loadThread("t2");
+
+        PgAssistant.addNotice("Stopped.");
+
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["notice"]);
       });
     });
 
