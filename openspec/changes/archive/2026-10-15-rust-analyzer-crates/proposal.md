@@ -27,7 +27,7 @@ Locally at `b1bf2cf`, generated default crates make `Vec::` complete
 
 - A script generates the default crates with `syn-file-expand-cli` 0.2.0 from
   the toolchain in
-  [`wasm/rust-analyzer/rust-toolchain.toml`](../../../wasm/rust-analyzer/rust-toolchain.toml),
+  [`wasm/rust-analyzer/rust-toolchain.toml`](../../../../wasm/rust-analyzer/rust-toolchain.toml),
   the one the Rust Analyzer wasm is built with (Rust 1.68.0-nightly). User
   programs compile with Rust 1.68.0 (design.md, "The toolchain comes from
   `wasm/rust-analyzer/rust-toolchain.toml`"). Upstream pairs the same analyzer
@@ -55,17 +55,17 @@ None.
 
 ## Impact
 
-- [`client-v2/scripts/`](../../../client-v2/scripts/): `generate-default-crates.mjs`;
+- [`client-v2/scripts/`](../../../../client-v2/scripts/): `generate-default-crates.mjs`;
   `generate-crates.mjs` gains the fetch, the failure on a missing crate, and a
   key that skips unchanged inputs. `vercel-install.sh` caches the default
   crates as it does the wasm packages.
-- [`client-v2/package.json`](../../../client-v2/package.json): `generate` runs
+- [`client-v2/package.json`](../../../../client-v2/package.json): `generate` runs
   `generate-default-crates`.
-- [`client-v2/Dockerfile`](../../../client-v2/Dockerfile),
-  [`compose.yaml`](../../../compose.yaml),
-  [`.dockerignore`](../../../.dockerignore): the image bakes every crate file;
+- [`client-v2/Dockerfile`](../../../../client-v2/Dockerfile),
+  [`compose.yaml`](../../../../compose.yaml),
+  [`.dockerignore`](../../../../.dockerignore): the image bakes every crate file;
   the `client-v2-standalone` profile.
-- [`client-v2/docs/deploy-client-vercel.md`](../../../client-v2/docs/deploy-client-vercel.md):
+- [`client-v2/docs/deploy-client-vercel.md`](../../../../client-v2/docs/deploy-client-vercel.md):
   the build cache section.
 - Users: the editor resolves the standard library and the supported crates.
   The default crates add 13.3 MB to the first editor load, 0.99 MB at brotli

@@ -1,27 +1,39 @@
 name: preview
 
-# A preview deployment of client-v2, with its own Neon database, for a PR into
-# master that carries the `preview` label -- and only for one. The Neon
-# project caps its branch count, so the Vercel integration's
-# branch-per-deployment option is off (see client-v2/docs/neon.md) and this
-# workflow owns the branch instead:
+# A preview deployment of client-v2, with its own Neon database, for a PR that
+# carries the `preview` label, and only for that PR. The Neon project caps its
+# branch count, so the Vercel integration's branch-per-deployment option is
+# off (see client-v2/docs/neon.md) and this workflow owns the branch instead:
 #
 # - labelled, opened/reopened or pushed to while labelled: create (or reuse)
 #   `preview/pr-<number>` from `main`, migrate it, build, deploy with it
 #   as DATABASE_URL, and post the URL on the PR;
 # - label removed, or PR closed or merged: delete the branch.
 #
-# What this misses (a cancelled teardown, a failed delete) is swept by
-# preview-sweep.yml, which GitHub runs on its schedule from the default branch,
-# master.
+# Previews follow the label on a PR into any branch of the repository the
+# PREVIEW_REPOSITORY variable names. A labelled PR on another repository or
+# from a fork gets skipped preview checks and no comment.
+#
+# PREVIEW_REPOSITORY holds a repository name, not a boolean, so set at
+# organisation level it still enables one repository, not all of them. The
+# `deploy` and `teardown` jobs run only where PREVIEW_REPOSITORY names this
+# repository and the NEON_PROJECT_ID variable is set. Enabling previews on a
+# repository also needs the NEON_API_KEY secret there; `deploy` needs the
+# VERCEL_TOKEN secret and the VERCEL_ORG_ID and VERCEL_PROJECT_ID variables
+# too, while `teardown` and preview-sweep.yml need only the Neon ones
+# (client-v2/docs/neon.md, "Configuration").
+#
+# What this misses is a teardown that fails or is cancelled.
+# preview-sweep.yml's daily run deletes `preview/pr-<number>` once its PR is
+# closed or unlabelled; a manual run with scope `all-preview` deletes
+# `preview/<head branch>` once its PR is closed.
 #
 # The label name is spelled out in the `if:`s below because job conditions
-# cannot read `env`; keep the three, and PREVIEW_LABEL in preview-sweep.yml,
+# cannot read `env`; keep every one, and PREVIEW_LABEL in preview-sweep.yml,
 # in step with PREVIEW_LABEL. A sweep with the old name keeps no preview alive
 # and deletes every one.
 on:
   pull_request:
-    branches: ["master"]
     types: [opened, reopened, synchronize, labeled, unlabeled, closed]
 
 permissions: {}
@@ -42,8 +54,16 @@ env:
 jobs:
   deploy:
     name: deploy preview branch
-    # A fork's PR gets no secrets. Unrelated label changes do not redeploy.
+    # A fork's PR gets no secrets, and Dependabot gets only Dependabot
+    # secrets. A Dependabot PR never deploys, even labelled by a human: the
+    # run would build its code with the deploy secrets. Unrelated label
+    # changes do not redeploy.
+    # Runs only where PREVIEW_REPOSITORY names this repository and
+    # NEON_PROJECT_ID is set (see the header).
     if: >-
+      vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY &&
+      github.actor != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       contains(github.event.pull_request.labels.*.name, 'preview') &&
       (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) ||
@@ -168,7 +188,12 @@ jobs:
 
   teardown:
     name: drop preview database
+    # Runs only where PREVIEW_REPOSITORY names this repository and
+    # NEON_PROJECT_ID is set (see the header). Not for a run Dependabot
+    # triggers: it gets no NEON_API_KEY.
     if: >-
+      vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY &&
+      github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'closed' ||
        (github.event.action == 'unlabeled' && github.event.label.name == 'preview'))
@@ -176,7 +201,10 @@ jobs:
       group: preview-${{ github.event.pull_request.number }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Above the deletes' worst case, four neon.sh `api()` calls of about 7
+    # minutes each: a slow Neon then fails the step rather than timing out,
+    # which cancels the job and skips the failure report.
+    timeout-minutes: 40
     permissions:
       contents: read
       pull-requests: write
@@ -196,17 +224,58 @@ jobs:
       # deploy-client-to-vercel-preview`) still gives, so it is cleaned up too.
       # Except where that name means something else: `pr-<n>` would be another
       # PR's live preview, and `preview/master` is the production dry run's
-      # (deploy-client-vercel.md).
+      # branch (deploy-client-vercel.md). Each delete runs even if the other
+      # fails; `failed` names the branches left, for the failure report.
       - name: Delete the Neon branches
+        id: delete
         run: |
-          bash .github/scripts/neon.sh delete "$BRANCH"
-          if [[ "$HEAD_REF" =~ ^(pr-[0-9]+|master|master-2\.0)$ ]]; then
+          failed=""
+          bash .github/scripts/neon.sh delete "$BRANCH" || failed="\`$BRANCH\`"
+          if [[ "$HEAD_REF" =~ ^(pr-[0-9]+|master)$ ]]; then
             echo "keeping preview/$HEAD_REF: not this PR's to delete"
           else
-            bash .github/scripts/neon.sh delete "preview/$HEAD_REF"
+            bash .github/scripts/neon.sh delete "preview/$HEAD_REF" ||
+              failed="${failed:+$failed and }\`preview/$HEAD_REF\`"
           fi
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          [ -z "$failed" ]
 
-      # `--edit-only`: a PR that never had a preview gets no comment.
+      # `--edit-only`: a PR that never had a preview gets no comment. Runs only
+      # on success, so a failed delete gets the failure report instead.
       - name: Update the PR comment
         run: |
           bash .github/scripts/preview-comment.sh --edit-only "$PR" "Preview database \`$BRANCH\` deleted. The last deployment still loads but has no database; add the \`$PREVIEW_LABEL\` label again to redeploy."
+
+      # Not on cancel: a newer run for the same PR cancels this one through
+      # the concurrency group and writes the comment itself, which a report
+      # on cancel would overwrite. Without `--edit-only`: a PR with no preview
+      # comment still gets the report.
+      - name: Report the failure on the PR
+        if: failure()
+        env:
+          DELETE_OUTCOME: ${{ steps.delete.outcome }}
+          FAILED: ${{ steps.delete.outputs.failed }}
+        run: |
+          remedy="Re-run the failed job. Once the PR is closed, a manual preview-sweep.yml run with scope \`all-preview\` and \`dry_run\` unticked (\"List what would be deleted, delete nothing\") also deletes \`preview/<head branch>\`; the daily sweep deletes \`$BRANCH\` on its own."
+          case "$DELETE_OUTCOME" in
+            success) detail="The Neon branches were deleted; a later step failed." ;;
+            failure) detail="Not deleted: ${FAILED:-unknown}. $remedy" ;;
+            *) detail="The run failed before the deletes, so nothing was deleted. $remedy" ;;
+          esac
+          bash .github/scripts/preview-comment.sh "$PR" "**Preview teardown failed**: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          $detail"
+
+  # Without this job a half-configured repository skips `deploy` silently.
+  configuration:
+    name: check preview configuration
+    if: >-
+      vars.NEON_PROJECT_ID != '' && github.repository != vars.PREVIEW_REPOSITORY &&
+      contains(github.event.pull_request.labels.*.name, 'preview') &&
+      (contains(fromJSON('["opened", "reopened", "synchronize"]'), github.event.action) ||
+       (github.event.action == 'labeled' && github.event.label.name == 'preview'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - run: echo "::warning::Previews are half-configured; NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/neon.md, \"Configuration\")."

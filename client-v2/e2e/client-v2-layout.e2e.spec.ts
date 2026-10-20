@@ -356,7 +356,13 @@ test.describe("on a phone", () => {
     await input.click();
     await input.fill("renamed.rs");
     await page.keyboard.press("Enter");
-    await expect(page.getByText("renamed.rs", { exact: true })).toBeVisible();
+    // The closing Sheet's tree also shows the name until it unmounts, so a
+    // page-wide match finds two elements; the tab strip shows it once
+    const tabs = page.locator("#tabs");
+    await expect(
+      tabs.getByRole("button", { name: "renamed.rs" })
+    ).toBeVisible();
+    await expect(tabs.getByRole("button", { name: "lib.rs" })).toHaveCount(0);
   });
 });
 

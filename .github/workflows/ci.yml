@@ -1,12 +1,13 @@
 name: CI
 
-# Validation gate for pushes to master and pull requests into it.
+# Runs on pushes to master and on every pull request: a pull_request run
+# reads this file from the PR's merge commit, so a PR whose merge commit
+# lacks it runs nothing.
 # Deployment is handled separately by cicd.yml.
 on:
   push:
     branches: ["master"]
   pull_request:
-    branches: ["master"]
 
   workflow_dispatch:
 

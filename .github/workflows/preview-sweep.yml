@@ -10,7 +10,9 @@ name: preview-sweep
 # branch -- those the Vercel integration created per git branch before its
 # option was turned off, and those `make deploy-client-to-vercel-preview` cuts
 # per local branch -- unless an open PR still has that head branch. Neither
-# scope touches `main` (the default branch) or a protected one.
+# scope touches `main` (the default branch), a protected one, or
+# `preview/master`, the production dry run's branch
+# (deploy-client-vercel.md), which preview.yml's teardown keeps too.
 on:
   schedule:
     - cron: "17 4 * * *"
@@ -39,6 +41,9 @@ concurrency:
 jobs:
   sweep:
     name: sweep preview branches
+    # Runs only where PREVIEW_REPOSITORY names this repository and
+    # NEON_PROJECT_ID is set (see preview.yml's header).
+    if: vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -80,6 +85,10 @@ jobs:
           while read -r name age; do
             if [[ "$name" =~ ^preview/pr-[0-9]+$ ]]; then
               keep=$keep_managed
+            elif [ "$name" = preview/master ]; then
+              echo "keep $name (the production dry run's branch)"
+              kept=$((kept + 1))
+              continue
             elif [[ "$name" == preview/* ]]; then
               if [ "$SCOPE" != all-preview ]; then
                 echo "skip $name (not managed; run with scope all-preview to include it)"
@@ -108,3 +117,13 @@ jobs:
           verb=$([ "$DRY_RUN" = true ] && echo "Would delete" || echo "Deleted")
           echo "$verb $deleted preview branches, kept $kept, failed $failed; $(wc -l < branches.txt) unprotected branches in the project before the sweep." | tee -a "$GITHUB_STEP_SUMMARY"
           [ "$failed" -eq 0 ]
+
+  # Without this job a half-configured repository skips `sweep` silently.
+  configuration:
+    name: check preview configuration
+    if: vars.NEON_PROJECT_ID != '' && github.repository != vars.PREVIEW_REPOSITORY
+    runs-on: ubuntu-latest
+    timeout-minutes: 1
+    permissions: {}
+    steps:
+      - run: echo "::warning::Previews are half-configured; NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/neon.md, \"Configuration\")."

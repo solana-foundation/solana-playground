@@ -2,13 +2,14 @@ name: client-v2
 
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
 # `client/`'s build or tests; this one guards `client-v2/` and never touches
-# the Rust workspaces. Keep the branch list identical on master and new-face,
-# so a merge in either direction leaves it unchanged.
+# the Rust workspaces. Keep the push branch list identical on master and
+# new-face, so a merge in either direction leaves it unchanged. A
+# pull_request run reads this file from the PR's merge commit (CLAUDE.md,
+# "This is a fork").
 on:
   push:
     branches: ["master", "new-face"]
   pull_request:
-    branches: ["master", "new-face"]
 
   workflow_dispatch:
 
@@ -263,11 +264,11 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  # The one status the default branch's ruleset requires (context
-  # `client-v2`), so a job added to or renamed in this workflow needs no
-  # ruleset edit: list it in `needs` and this job passes only when it
-  # succeeded. `always()` because a job whose `needs` failed is skipped, and
-  # GitHub reads a skipped required check as passing.
+  # The status context the default branch's ruleset names (`client-v2`), so
+  # a job added to or renamed in this workflow needs no ruleset edit: list it
+  # in `needs` and this job passes only when it succeeded. `always()` because
+  # a job whose `needs` failed is skipped, and GitHub reads a skipped required
+  # check as passing. An empty `needs` fails rather than passes.
   client-v2:
     name: client-v2
     runs-on: ubuntu-latest
@@ -280,6 +281,7 @@ jobs:
           RESULTS: ${{ join(needs.*.result, ' ') }}
         run: |
           echo "Results: $RESULTS"
+          [ -n "$RESULTS" ] || exit 1
           for result in $RESULTS; do
             [ "$result" = success ] || exit 1
           done

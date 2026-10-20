@@ -4,7 +4,7 @@
 
 The default assistant backend (`/api/agent`) spends the deployment's paid key,
 so only a signed-in user on our origin may use it. This change amends
-[`assistant-own-key-storage`](../archive/2026-10-15-assistant-own-key-storage/)
+[`assistant-own-key-storage`](../2026-10-15-assistant-own-key-storage/)
 (`openspec/changes/archive/2026-10-15-assistant-own-key-storage/`, HOO-1748),
 whose proposal says the default backend's remembered choice "keeps working as
 before". That no longer holds: a remembered default reconnects only for a
