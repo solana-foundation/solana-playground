@@ -105,7 +105,8 @@ export async function whoseServer({
  * script and shorten the wait past the child's own.
  *
  * @param {{ port: number, root: string, timeoutMs?: number, script?: string,
- *   graceMs?: number }} options
+ *   graceMs?: number, fromQueue?: boolean }} options
+ *   `fromQueue`: the port came with the run's queue slot (`decideDevServer`)
  * @returns {PortOwner}
  * @throws {DevServerRefusal} when the child times out, fails or prints no JSON
  */
@@ -115,6 +116,7 @@ export function whoseServerSync({
   timeoutMs = DEFAULT_PROBE_TIMEOUT_MS,
   script = fileURLToPath(import.meta.url),
   graceMs = 5_000,
+  fromQueue = false,
 }) {
   const child = spawnSync(
     process.execPath,
@@ -124,7 +126,14 @@ export function whoseServerSync({
     { encoding: "utf8", timeout: timeoutMs + graceMs }
   );
   if (child.error?.code === "ETIMEDOUT") {
-    throw new DevServerRefusal(silentServerMessage({ port, timeoutMs }));
+    throw new DevServerRefusal(
+      silentServerMessage({
+        port,
+        timeoutMs,
+        pid: portHolderPid(port),
+        fromQueue,
+      })
+    );
   }
   const failure = (why) =>
     new DevServerRefusal(
@@ -143,6 +152,44 @@ export function whoseServerSync({
   }
 }
 
+/**
+ * The pid listening on `port`, or null when nothing is or `lsof` cannot say.
+ * Only for the refusal message: it lets the reader stop a leftover server
+ * without hunting for it.
+ *
+ * @param {number} port
+ * @returns {number | null}
+ */
+export function portHolderPid(port) {
+  const lsof = spawnSync(
+    "lsof",
+    ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-t"],
+    { encoding: "utf8", timeout: 5_000 }
+  );
+  const pid = Number.parseInt(lsof.stdout ?? "", 10);
+  return Number.isInteger(pid) ? pid : null;
+}
+
+const byPid = (pid) => (pid == null ? "" : ` (pid ${pid})`);
+
+// `fromQueue`: the port came with this run's queue slot. Nothing else may run
+// on it while the slot is ours, so whatever does is left over from a run that
+// was killed before it stopped its dev server; picking another port would
+// only leave the leftover to block the next run.
+const portRemedy = ({ pid, fromQueue }) =>
+  fromQueue
+    ? [
+        "This is the e2e queue's port and this run holds its slot, so that",
+        `server is left over from an earlier run. Stop it${
+          pid == null ? "" : ` (kill ${pid})`
+        } and run again.`,
+      ]
+    : [
+        "If it is a dev server left over from an earlier run, stop it; otherwise",
+        "run on a port of your own, outside 139xx, which the e2e queue hands out:",
+        "  PORT=<free port> yarn test-e2e e2e/<spec>.e2e.spec.ts",
+      ];
+
 const unknownHolder = (detail) => {
   const why = detail === undefined ? "" : `: ${detail}`;
   return (
@@ -155,36 +202,40 @@ const unknownHolder = (detail) => {
  * The fail-fast message for a port held by something that is not this
  * worktree's dev server.
  *
- * @param {{ port: number, root: string | null, detail?: string }} options
+ * @param {{ port: number, root: string | null, detail?: string,
+ *   pid?: number | null, fromQueue?: boolean }} options
  *   `root` is the other worktree's, when the server named it; `detail` is the
- *   network error, when the server dropped the connection
+ *   network error, when the server dropped the connection; `pid` is the
+ *   process listening, when it is known; `fromQueue` as in `decideDevServer`
  * @returns {string}
  */
-export function foreignServerMessage({ port, root, detail }) {
+export function foreignServerMessage({ port, root, detail, pid, fromQueue }) {
   const holder =
     root === null
       ? unknownHolder(detail)
       : `the client-v2 dev server of another worktree: ${root}`;
   return [
-    `Port ${port} is held by ${holder}.`,
-    "The e2e run will not reuse it. Pick a free port from your slot",
-    "(13000 + 10k, docs/testing.md section 8) and run:",
-    `  PORT=<free port> yarn test-e2e`,
+    `Port ${port} is held${byPid(pid)} by ${holder}.`,
+    "The e2e run will not reuse it.",
+    ...portRemedy({ pid, fromQueue }),
   ].join("\n");
 }
 
 /**
  * The fail-fast message for a port whose server did not answer in time.
  *
- * @param {{ port: number, timeoutMs: number }} options
+ * @param {{ port: number, timeoutMs: number, pid?: number | null,
+ *   fromQueue?: boolean }} options
  * @returns {string}
  */
-export function silentServerMessage({ port, timeoutMs }) {
+export function silentServerMessage({ port, timeoutMs, pid, fromQueue }) {
   return [
-    `The server on port ${port} did not answer within ${timeoutMs / 1000} s`,
+    `The server on port ${port}${byPid(pid)} did not answer within ${
+      timeoutMs / 1000
+    } s`,
     "(busy compiling, or hung), so the e2e run cannot tell whose it is.",
-    "Retry once it is idle, or pick a free port and run:",
-    `  PORT=<free port> yarn test-e2e`,
+    "Retry once it is idle.",
+    ...portRemedy({ pid, fromQueue }),
   ].join("\n");
 }
 
@@ -192,21 +243,31 @@ export function silentServerMessage({ port, timeoutMs }) {
  * What the e2e run does with the port: "start" when nothing is there (the
  * runner starts the dev server), "reuse" for this worktree's own server.
  *
- * @param {{ port: number, root: string, timeoutMs?: number }} options
+ * @param {{ port: number, root: string, timeoutMs?: number,
+ *   fromQueue?: boolean }} options
+ *   `fromQueue`: the port came with this run's queue slot, so anything else on
+ *   it is a leftover, and the refusal says to stop it rather than move away
  * @returns {"start" | "reuse"}
  * @throws {DevServerRefusal} for any other server, or one that is silent
  */
-export function decideDevServer({ port, root, timeoutMs }) {
-  const owner = whoseServerSync({ port, root, timeoutMs });
+export function decideDevServer({ port, root, timeoutMs, fromQueue = false }) {
+  const owner = whoseServerSync({ port, root, timeoutMs, fromQueue });
   if (owner.kind === "free") return "start";
   if (owner.kind === "ours") return "reuse";
+  const pid = portHolderPid(port);
   if (owner.kind === "silent") {
     throw new DevServerRefusal(
-      silentServerMessage({ port, timeoutMs: owner.timeoutMs })
+      silentServerMessage({ port, timeoutMs: owner.timeoutMs, pid, fromQueue })
     );
   }
   throw new DevServerRefusal(
-    foreignServerMessage({ port, root: owner.root, detail: owner.detail })
+    foreignServerMessage({
+      port,
+      root: owner.root,
+      detail: owner.detail,
+      pid,
+      fromQueue,
+    })
   );
 }
 
