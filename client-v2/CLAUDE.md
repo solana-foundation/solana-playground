@@ -300,7 +300,7 @@ check's job (HOO-1859); the rest hold by review.
   that solves a problem the repository does not have is closed, not fixed.
 - **Archiving is a human's call, asked before the sx review.** If the
   PR ticks the change's last task, ask whether to close the change before
-  running `/sx:review-pr` and opening the PR. On a yes,
+  the first `/sx:review-pr` run and before opening the PR. On a yes,
   confirm every task is ticked, delete `tasks.md`, run `/opsx:archive` and
   commit the deletion and the archive in this PR; on a no, the PR
   description says `OpenSpec: <change> stays open (<who answered>, <date>)`.
@@ -308,13 +308,17 @@ check's job (HOO-1859); the rest hold by review.
 - **The author runs the sx review.** `/sx:review-pr full`, then
   `/sx:review-pr`, on every PR and before `gh pr create`; the skill comes
   from the `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills).
-  `full` runs the pr-review-toolkit agents (silent failures, type design,
-  test coverage, comments); the default run checks this repository's rules,
-  the OpenSpec change and Solana guidance. Human reviewers read the diff and
-  click through the preview, so the author's run is the review gate (agreed
-  on the 16 Oct 2026 call). Fix every critical finding, and the important
-  ones that are needed, in the same PR. A review gap outside the PR becomes
-  a Linear issue, closed later through agent rules or tooling.
+  `full` hands the review to the pr-review-toolkit plugin, which must be
+  installed too; the default run checks the plugin's built-in rules and this
+  repository's, plus the governing OpenSpec change and the Solana guidance
+  where they apply. Human reviewers read the diff and click through the
+  preview; they do not re-run the review, so the author's run is the gate.
+  Fix every critical finding in the same PR, and every important one the PR
+  needs; an important you defer gets a `TODO` at the site naming why or the
+  follow-up, so the next run reads it as acknowledged. A finding outside the
+  PR's scope goes to its existing Linear issue, or a new one when none fits;
+  a gap the review keeps missing becomes a Linear issue too, closed later
+  through agent rules or tooling.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,

@@ -53,8 +53,9 @@ operations:
       - Before the PR, run yarn lint, yarn check-format, yarn test-types and
         the unit tests in client-v2; CI runs the same
       - Run /sx:review-pr full, then /sx:review-pr, before gh pr create; fix
-        the critical findings and the needed important ones in the same PR,
-        and file a Linear issue for a gap outside it
+        every critical finding and the important ones the PR needs in the same
+        PR (a deferred important gets a TODO at the site saying why), and send
+        a finding outside the PR to its Linear issue, or a new one
       - Never edit client/ or server/
       - A slice the task touches emits the events its spec describes; when
         the spec describes none and the slice has user actions, stop and
