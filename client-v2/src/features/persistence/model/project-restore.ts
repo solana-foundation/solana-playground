@@ -320,6 +320,17 @@ const passUnlocked = async (): Promise<SyncResult> => {
  * its first upload already exists server-side with a null snapshot. There is
  * nothing there to lose, so this device's copy simply goes up.
  *
+ * Neither happens to a project another account left on this browser under an
+ * id this one also has, which a tutorial's can be. The merge writes this
+ * account's mark before its own upload, so the push's check would never see
+ * it, and the previous user's files would reach this account.
+ *
+ * Skipping it leaves a known gap: the account's own copy is never brought
+ * down while the leftover holds the id, so the user goes on seeing the other
+ * account's files, and their edits to them do not sync. Reaching it takes two
+ * GitHub accounts signing in on one browser, so it is reported under its own
+ * message (`hiding-account-copy`) rather than handled.
+ *
  * @returns the conflict actually raised, or `null` when it settled itself
  */
 const settleDivergence = async (
@@ -327,6 +338,11 @@ const settleDivergence = async (
   local: string,
   result: SyncResult
 ): Promise<Conflict | null> => {
+  if (await PgSyncMark.belongsToAnotherAccount(projectId)) {
+    PgProjectSync.reportDisowned(projectId, "hiding-account-copy");
+    return null;
+  }
+
   const full = await PgProjectSync.fetch(projectId);
 
   if (!full || !isUsableSnapshot(full.snapshot)) {
@@ -470,7 +486,7 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
     // delete elsewhere -- `settleDeletes`'s -- and a create-only upload of it
     // a refusal against the tombstone
     if (await PgSyncMark.exists(id)) continue;
-    if (await PgSyncMark.ownedByAnother(id)) continue;
+    if (await PgSyncMark.belongsToAnotherAccount(id)) continue;
     if (!(await PgWorkspaceRegistry.has(name, id))) continue;
 
     try {

@@ -1,6 +1,7 @@
 import { reconcile, releaseLocalProjects } from "./project-restore";
 import { PgProjectSync } from "./project-sync";
 import { hashFiles } from "./snapshot";
+import { PgSyncClaim } from "./sync-claim";
 import { PgSyncMark } from "./sync-mark";
 import * as tabReload from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
@@ -488,6 +489,69 @@ describe("reconcile", () => {
 
     expect(push).not.toHaveBeenCalled();
     expect(result.pushed).toEqual([]);
+  });
+
+  /** `tut:hello`, synced by `u1` and left on this browser, now opened by `u2` */
+  const leftTutorial = async () => {
+    withLocal({ alpha: "tut:hello" });
+    withFiles("alpha", { "src/lib.rs": "u1's progress" });
+    await PgSyncMark.write("tut:hello", {
+      files: { "src/lib.rs": "whatever" },
+      name: "alpha",
+      updatedAt: "t1",
+      dirty: false,
+    });
+    await PgSession.refreshWith({
+      id: "u2",
+      name: null,
+      image: null,
+      login: null,
+    });
+  };
+
+  it("does not merge another account's tutorial into this account's copy", async () => {
+    // A tutorial's id is the same in every account. The merge writes this
+    // account's mark before its own upload, so the push's own check never saw
+    // the project, and the previous user's files reached this account.
+    await leftTutorial();
+    const merge = vi.spyOn(PgProjectSync, "mergeWithServer");
+    const push = vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
+    serverHas([project("tut:hello", "alpha", "t9")]);
+
+    const result = await reconcile();
+
+    expect(merge).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it("reports the account's copy hidden behind it, once, under its own message", async () => {
+    // A known gap: the account's own copy is never brought down while the
+    // leftover holds the id. Its own message is what makes it findable in
+    // error tracking; once, because reconcile runs on every switch and refocus.
+    await leftTutorial();
+    vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
+    serverHas([project("tut:hello", "alpha", "t9")]);
+    clearFailures();
+
+    await reconcile();
+    await reconcile();
+
+    expect(getFailures().map((f) => f.what)).toEqual([
+      "sync tut:hello: another account's leftover hides this account's copy (known gap, issue #98)",
+    ]);
+  });
+
+  it("hands over a tutorial this account started here, under the other's id", async () => {
+    // Started after the other account's copy was released, so this browser
+    // still holds that account's mark for the id
+    await leftTutorial();
+    await PgSyncClaim.claim("tut:hello");
+    const push = vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
+    serverHas([]);
+
+    expect((await reconcile()).pushed).toEqual(["alpha"]);
+    expect(push).toHaveBeenCalled();
   });
 
   it("still hands over a project nobody has ever synced", async () => {

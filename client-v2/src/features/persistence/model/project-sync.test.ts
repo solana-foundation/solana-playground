@@ -1,8 +1,10 @@
 import type { Mock } from "vitest";
 import { PgProjectSync } from "./project-sync";
+import { clearFailures, getFailures } from "./diagnostics";
 import { PgEditorModels } from "./editor-models";
 import { hashFiles } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
+import { PgSyncClaim } from "./sync-claim";
 import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
@@ -1344,6 +1346,99 @@ describe("PgProjectSync.pushCurrent", () => {
 
     expect(await PgProjectSync.pushCurrent()).toBe("skipped");
     expect(putCalls()).toHaveLength(0);
+  });
+});
+
+describe("a project another account left in this browser", () => {
+  const okPush = { ok: true, json: async () => ({ updatedAt: "t1" }) };
+  const files = { "src/lib.rs": "fn main() {}" };
+
+  beforeEach(() => {
+    reset();
+    clearFailures();
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (url) =>
+        (url === "/api/sync" ? okProbe : okPush) as unknown as Response
+    );
+  });
+
+  afterEach(() => vi.restoreAllMocks());
+
+  /** A mark for `projectId` under account `userId`, as that account's sync leaves it */
+  const syncedBy = async (userId: string, projectId: string) => {
+    await PgSession.refreshWith({
+      id: userId,
+      name: null,
+      image: null,
+      login: null,
+    });
+    await agreedOn(projectId, "Alpha", files);
+  };
+
+  const skipsFor = (projectId: string) =>
+    getFailures().filter((f) => f.what.includes(projectId));
+
+  it("is not uploaded into the account signed in after it", async () => {
+    // Workspaces are not account-scoped and outlive a sign-out. Only
+    // reconcile checked who a project belonged to, so editing the previous
+    // user's leftover project uploaded it into the next user's account.
+    await syncedBy("u2", "p1");
+    await signedIn();
+
+    expect(await PgProjectSync.push("p1", { files }, "Alpha")).toBe("skipped");
+    expect(putCalls()).toEqual([]);
+    expect(skipsFor("p1")).toHaveLength(1);
+  });
+
+  it("is reported once, not on every push", async () => {
+    // The editor pushes every few seconds while the user types
+    await syncedBy("u2", "p1");
+    await signedIn();
+
+    await PgProjectSync.push("p1", { files }, "Alpha");
+    await PgProjectSync.push("p1", { files }, "Alpha");
+
+    expect(skipsFor("p1")).toHaveLength(1);
+  });
+
+  it("still uploads a project both accounts have synced", async () => {
+    // A tutorial's id is derived from its name, so two accounts share it
+    await syncedBy("u2", "tut:hello");
+    await syncedBy("u1", "tut:hello");
+
+    expect(
+      await PgProjectSync.push(
+        "tut:hello",
+        { files: { "src/lib.rs": "changed" } },
+        "Alpha"
+      )
+    ).toBe("ok");
+    expect(putCalls()).toHaveLength(1);
+  });
+
+  it("still uploads a project nobody has synced", async () => {
+    // Made here, never uploaded by anyone: whoever signs in may take it
+    await signedIn();
+
+    expect(await PgProjectSync.push("p2", { files }, "Beta")).toBe("ok");
+    expect(putCalls()).toHaveLength(1);
+  });
+
+  it("still uploads a tutorial this account started after the other left", async () => {
+    // A tutorial's id is derived from its name, and sign-out leaves the
+    // previous account's mark behind on purpose. Without the claim, a
+    // tutorial this account started here read as the other's leftover and
+    // never went up.
+    await syncedBy("u2", "tut:hello");
+    await signedIn();
+    await PgSyncClaim.claim("tut:hello");
+
+    expect(await PgProjectSync.push("tut:hello", { files }, "Alpha")).toBe(
+      "ok"
+    );
+    expect(putCalls()).toHaveLength(1);
+    // The mark says whose it is from here on
+    expect(await PgSyncClaim.has("tut:hello")).toBe(false);
   });
 });
 

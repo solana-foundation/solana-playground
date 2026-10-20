@@ -31,6 +31,26 @@ import type { Disposable } from "../../../utils/types";
 
 type PushResult = "ok" | "conflict" | "skipped";
 
+/**
+ * Why sync left a project alone as another account's.
+ *
+ * - `not-uploaded`: a push or a reconcile met the previous user's leftover
+ *   project and did not upload it. Expected on a shared browser.
+ * - `hiding-account-copy`: the account signed in holds a project under the
+ *   same id, a tutorial's, and the leftover is in its way: the user sees the
+ *   other account's files, their edits do not sync, and nothing on screen
+ *   says why. A known gap, left unfixed because it needs two GitHub accounts
+ *   on one browser; reported under its own message so it is visible in
+ *   error tracking if it does happen.
+ */
+export type Disowned = "not-uploaded" | "hiding-account-copy";
+
+const DISOWNED_REPORTS: Record<Disowned, string> = {
+  "not-uploaded": "another account's project on this browser, not uploaded",
+  "hiding-account-copy":
+    "another account's leftover hides this account's copy (known gap, issue #98)",
+};
+
 /** A project as `/api/projects` lists it */
 export interface ServerProject {
   id: string;
@@ -519,6 +539,15 @@ export class PgProjectSync {
     if (!opts.immediate) await PgProjectSync._gate;
 
     const mark = await PgSyncMark.read(projectId);
+
+    // Only reconcile used to ask whose a project was, and the editor's push
+    // uploaded the previous user's leftover project into the account signed
+    // in now. Asked only without a mark: one of this account's own settles it.
+    if (!mark && (await PgSyncMark.belongsToAnotherAccount(projectId))) {
+      PgProjectSync.reportDisowned(projectId, "not-uploaded");
+      return "skipped";
+    }
+
     const hashes = await hashFiles(snapshot);
     const localName = name ?? PgProjectSync._names.get(projectId) ?? projectId;
     // A stand-in sync gave the workspace here -- see `SyncMark.localName` --
@@ -1684,14 +1713,29 @@ export class PgProjectSync {
     PgProjectSync._merging.clear();
     PgProjectSync._tails.clear();
     PgProjectSync._generations.clear();
+    PgProjectSync._disowned.clear();
     // Every hold at once: a reset is the one place that is allowed to
     PgProjectSync._holds = 0;
     PgProjectSync._openGate();
   }
 
+  /**
+   * Report a project left alone as another account's
+   * (`PgSyncMark.belongsToAnotherAccount`), once per project and case per
+   * account: the editor's push meets it every few seconds while the user
+   * types, and reconcile on every switch and refocus.
+   */
+  static reportDisowned(projectId: string, why: Disowned) {
+    const key = `${why}:${projectId}`;
+    if (PgProjectSync._disowned.has(key)) return;
+    PgProjectSync._disowned.add(key);
+    report(`sync ${projectId}: ${DISOWNED_REPORTS[why]}`, null);
+  }
+
   /** Sign-out: the account's state goes, the listeners stay */
   static forgetAccount() {
     PgProjectSync._names.clear();
+    PgProjectSync._disowned.clear();
     const had = PgProjectSync._conflicts.size;
     PgProjectSync._conflicts.clear();
     if (had) PgProjectSync._emit();
@@ -1711,6 +1755,8 @@ export class PgProjectSync {
   private static readonly _tails = new Map<string, Promise<void>>();
   /** Rewrites of each project's local files -- see `generationOf` */
   private static readonly _generations = new Map<string, number>();
+  /** `<case>:<projectId>` already reported -- see `reportDisowned` */
+  private static readonly _disowned = new Set<string>();
 
   private static _openGate() {
     PgProjectSync._release?.();
