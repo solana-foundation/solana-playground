@@ -16,7 +16,7 @@
     "noEmit": true,
     "jsx": "react-jsx",
     "experimentalDecorators": true,
-    "types": ["vitest/globals", "node"],
+    "types": ["vitest/globals", "node", "vitest/importMeta"],
     "paths": {
       "@/*": ["./src/*"]
     }

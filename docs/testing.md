@@ -157,7 +157,9 @@ yarn --cwd client-v2 test-build
 
 Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
 `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
-minification", and "Build tests" in `reusable-client-v2-build.yml` require. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+minification", and "Build tests" in `reusable-client-v2-build.yml` require. `run check` covers the in-source
+collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle check
+(`scripts/in-source-tests.build-test.mjs`). Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 
@@ -666,7 +668,7 @@ Expect: one image per directory in `server/templates/`.
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
 not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
-`openspec/specs/client-v2-build/spec.md`; M-1 to M-4 walk its manual scenarios.
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-6 walk its manual scenarios.
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine
@@ -747,6 +749,26 @@ Expect:
       and `test-build` fail and name the identifier a chunk declares at the top level. Chunks load as classic scripts,
       so their top-level helpers are globals and a later chunk's same-named helper overwrites them. Restore the option.
 - [ ] `test-build` without a `client-v2/build/` fails instead of passing.
+
+### M-6. in-source tests stay out of the bundle
+
+```sh
+yarn --cwd client-v2 build-fast
+yarn --cwd client-v2 test-build
+```
+
+Expect:
+
+- [ ] `test-build` passes: `scripts/in-source-tests.build-test.mjs` collects every `it` title from the in-source
+      blocks under `client-v2/src` (`client-v2/AGENTS.md`, "Tests: a module's unit tests live in the module") and
+      finds none of them in `client-v2/build/static/js`. webpack drops the block on its own, with no setting of ours,
+      which is why the outcome is checked.
+- [ ] a planted leak makes it fail naming the chunk and the title: add a static
+      `import "../../test-utils/stored-values";` to a module with a block, or copy a block's title into a production
+      string, rebuild, and run `test-build` again; the failure reads `<chunk> holds "<title>" from <module>`. Revert the
+      plant.
+- [ ] with `yarn --cwd client-v2 dev` running, the served `static/js/bundle.js` holds none of that module's test
+      titles either.
 
 ## 8. Parallel runs
 

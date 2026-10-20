@@ -19,3 +19,28 @@ export const checkSignedIn = () => {
     throw new Error("Sign in with GitHub to request devnet SOL.");
   }
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect, afterEach } = import.meta.vitest;
+
+  describe("features/auth/index", () => {
+    describe("checkSignedIn", () => {
+      afterEach(() => PgSession.reset());
+
+      it("throws for a signed-out user, so the airdrop command stops", () => {
+        expect(() => checkSignedIn()).toThrow(/sign in with github/i);
+      });
+
+      it("passes once a session exists", async () => {
+        await PgSession.refreshWith({
+          id: "u1",
+          name: "Ada",
+          image: null,
+          login: "ada",
+        });
+
+        expect(() => checkSignedIn()).not.toThrow();
+      });
+    });
+  });
+}

@@ -138,7 +138,7 @@
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --ext .ts,.tsx,.mjs src api e2e",
+    "lint": "eslint --ext .ts,.tsx,.mjs,.mts src api e2e",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
     "check": "yarn test-types && yarn check-format && yarn check-md && yarn lint && yarn check-colors && yarn spec:validate && yarn spec:coverage && yarn test-unit && yarn test-api",
@@ -279,7 +279,7 @@
       {
         "files": [
           "src/shared/lib/ids.ts",
-          "src/shared/lib/ids.test.ts"
+          "src/shared/lib/ids.test.mts"
         ],
         "rules": {
           "no-restricted-imports": "off",
@@ -290,11 +290,56 @@
         "files": [
           "**/*.test.ts",
           "**/*.test.tsx",
+          "**/*.test.mts",
           "**/*.test.mjs",
           "e2e/**"
         ],
         "rules": {
           "import/first": "off"
+        }
+      },
+      {
+        "files": [
+          "**/*.mts"
+        ],
+        "parser": "@typescript-eslint/parser",
+        "plugins": [
+          "@typescript-eslint"
+        ],
+        "rules": {
+          "default-case": "off",
+          "no-dupe-class-members": "off",
+          "no-undef": "off",
+          "no-array-constructor": "off",
+          "no-redeclare": "off",
+          "@typescript-eslint/no-redeclare": "warn",
+          "no-use-before-define": "off",
+          "@typescript-eslint/no-use-before-define": [
+            "warn",
+            {
+              "functions": false,
+              "classes": false,
+              "variables": false,
+              "typedefs": false
+            }
+          ],
+          "no-unused-expressions": "off",
+          "@typescript-eslint/no-unused-expressions": [
+            "error",
+            {
+              "allowShortCircuit": true,
+              "allowTernary": true,
+              "allowTaggedTemplates": true
+            }
+          ],
+          "no-unused-vars": "off",
+          "@typescript-eslint/no-unused-vars": [
+            "warn",
+            {
+              "args": "none",
+              "ignoreRestSiblings": true
+            }
+          ]
         }
       }
     ]

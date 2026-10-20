@@ -8,6 +8,6 @@ import type { LineLook } from "./merge-file";
  * decoration's class name to letters, digits, `-` and `_`, which turns
  * `bg-error/12` into the solid `bg-error`. So each look has a plain name,
  * and `index.css` gives it `mergeHunkVariants`' classes with `@apply`;
- * `hunk-class.test.ts` fails if the two stop matching.
+ * `hunk-class.test.mts` fails if the two stop matching.
  */
 export const hunkLineClass = (look: LineLook) => `pg-merge-hunk-${look}`;
