@@ -356,7 +356,11 @@ test.describe("on a phone", () => {
     await input.click();
     await input.fill("renamed.rs");
     await page.keyboard.press("Enter");
-    await expect(page.getByText("renamed.rs", { exact: true })).toBeVisible();
+    // The open file's tab, not any text: the closing Sheet's tree also shows
+    // the new name until it unmounts, which made a page-wide match ambiguous
+    await expect(
+      page.getByTestId("stage").getByRole("button", { name: "renamed.rs" })
+    ).toBeVisible();
   });
 });
 
