@@ -27,6 +27,24 @@ const onlyLineOf = async (page: Page, lines: string[], name: string) => {
   return all[0];
 };
 
+/**
+ * Starts Hello Anchor's first lesson on a fresh profile, where the gallery
+ * opens by itself, as `workspace-migration.e2e.spec.ts`'s helper does
+ */
+const startTutorial = async (page: Page) => {
+  const gallery = page.locator("[data-gallery-modal]");
+  await expect(gallery).toBeVisible({ timeout: 20_000 });
+  await gallery.getByRole("tab", { name: /tutorials/i }).click();
+  // The card's title has no click handler; its "Open" button does
+  const card = page
+    .getByText("Hello Anchor", { exact: true })
+    .locator("xpath=../..");
+  await card.getByRole("button", { name: "Open" }).click();
+  // `exact`: the assistant has a "Start" button of its own
+  await page.getByRole("button", { name: "START", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();
+};
+
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
 const consoleHandle = (page: Page) =>
   page.getByRole("button", { name: "Console" });
@@ -310,6 +328,90 @@ test("client-v2-layout: Folding the project panel", async ({
   await page.getByRole("button", { name: "Expand project panel" }).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
   await expect(files.locator("#root-dir")).toBeVisible();
+});
+
+test("client-v2-layout: The files column keeps its tree", async ({
+  seededPage: page,
+}) => {
+  // Short enough that the tree, with its folders open, scrolls
+  await page.setViewportSize({ width: 1280, height: 280 });
+  const files = filesPanel(page);
+  const body = page.locator("#flow-left-tabpanel");
+  const folder = (path: string) =>
+    page.locator(`#root-dir .folder[data-path="${path}"]`);
+
+  // The current file, selected before a folder click selects that folder
+  const current = await page
+    .locator("#root-dir .file.selected")
+    .getAttribute("data-path");
+  expect(current).toBeTruthy();
+
+  // Every folder the current file does not sit in starts closed
+  const closed = page.locator("#root-dir .folder:not(.open)");
+  await expect(closed.first()).toBeVisible();
+  const opened = await closed.evaluateAll((els) =>
+    els.map((el) => el.getAttribute("data-path") ?? "")
+  );
+  expect(opened.length).toBeGreaterThan(0);
+  for (const path of opened) await folder(path).click();
+  for (const path of opened) await expect(folder(path)).toHaveClass(/\bopen\b/);
+
+  const scrolled = await body.evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+    return el.scrollTop;
+  });
+  expect(scrolled).toBeGreaterThan(0);
+  const hideAndShow = {
+    // The folder clicks above took the focus out of the editor, which keeps
+    // ⌘E for itself
+    "⌘E": async () => {
+      await page.keyboard.press("ControlOrMeta+e");
+      await expect(files).toHaveCount(0);
+      await page.keyboard.press("ControlOrMeta+e");
+    },
+    "the stage bar": async () => {
+      await page
+        .getByRole("button", { name: "Collapse project panel" })
+        .click();
+      await expect(files).toHaveCount(0);
+      await page.getByRole("button", { name: "Expand project panel" }).click();
+    },
+  };
+  for (const [via, toggle] of Object.entries(hideAndShow)) {
+    await test.step(via, async () => {
+      await toggle();
+      await expect(files.locator("#root-dir")).toBeVisible();
+      for (const path of opened) {
+        await expect(folder(path)).toHaveClass(/\bopen\b/);
+      }
+      await expect(
+        page.locator(`#root-dir [data-path="${current}"]`)
+      ).toHaveClass(/\bselected\b/);
+      await expect
+        .poll(() => body.evaluate((el) => el.scrollTop))
+        .toBe(scrolled);
+    });
+  }
+});
+
+test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
+  // Opening a tutorial boots the dev server's tutorial chunk and imports it
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await startTutorial(page);
+
+  const filesTab = page.getByRole("tab", { name: "Files" });
+  await filesTab.click();
+  await expect(filesTab).toHaveAttribute("aria-selected", "true");
+
+  await page.getByRole("button", { name: "Collapse project panel" }).click();
+  await expect(filesPanel(page)).toHaveCount(0);
+  await page.getByRole("button", { name: "Expand project panel" }).click();
+
+  await expect(page.getByRole("tab", { name: "Files" })).toHaveAttribute(
+    "aria-selected",
+    "true"
+  );
 });
 
 test("client-v2-layout: Folding the navigation", async ({

@@ -1100,7 +1100,17 @@ SidebarProvider (no padding)
   from the assistant's took both on one drag (found in review, 2026-10-16).
   It comes back from the stage bar or ⌘E, at the width it last had. The
   hidden assistant keeps its 0 px panel and an unseen handle, from which a
-  drag still opens it. The navigation's rail is unchanged.
+  drag still opens it. The navigation's rail is unchanged. Hidden, the
+  column unmounts, so what it holds is remembered and put back when it
+  comes back (5.26): the open folders, by path, in `useHandleItemState`;
+  the scroll and the lesson's tab in `LeftPanel`. The memory lasts for the
+  page, is kept per project (`currentWorkspaceId`) and is overwritten by the
+  next hide; another project's is ignored. The tree's memory also brings a
+  lesson's folders back from its Steps tab, which unmounts the tree the same
+  way. The column is not kept mounted out
+  of view: the tree's keybinds (Alt+N, F2, Delete) are global and
+  `PgExplorer` finds elements through `document`, so a hidden live tree
+  would act on keys and miss updates.
 - **What survives a reload** is unchanged: `v: 2`, same key and shape. It
   keeps sizes for open panels only (`withoutFoldedSizes`), so the old folded
   widths were never stored, and an open panel's size means the same on the

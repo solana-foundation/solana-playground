@@ -37,7 +37,8 @@ import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const Folders = () => {
-  useHandleItemState();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  useHandleItemState(wrapperRef);
 
   const ctxMenu = useExplorerContextMenu();
   const { createItem } = useCreateItem();
@@ -51,7 +52,6 @@ const Folders = () => {
     []
   );
 
-  const wrapperRef = useRef<HTMLDivElement>(null);
   useResetCtxSelected(wrapperRef);
 
   // No need to memoize here

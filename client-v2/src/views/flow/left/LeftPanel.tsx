@@ -1,20 +1,15 @@
 import type { FC } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
 import Eyebrow from "./Eyebrow";
 import StepRail from "../lessons/StepRail";
-import {
-  cursorStep,
-  foldRecord,
-  INITIAL_LESSON_STATE,
-  PgLesson,
-} from "../lessons";
+import { cursorStep, foldRecord, PgLesson } from "../lessons";
 import Explorer from "../../sidebar/explorer/Component";
 import { useCreateItem } from "../../sidebar/explorer/Component/useCreateItem";
 import { BOTTOM_BAR_HEIGHT } from "../tokens";
-
-type Tab = "steps" | "files";
+import { keepColumn, keptColumn, type Tab } from "./kept-column";
+import { PgExplorer } from "../../../utils";
 
 interface LeftPanelProps {
   /**
@@ -33,10 +28,51 @@ interface LeftPanelProps {
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
 }) => {
-  const [lesson, setLesson] = useState(INITIAL_LESSON_STATE);
+  // From the first commit, not from the subscription's first call: a commit
+  // without the lesson draws the tree, and the scroll put back below would
+  // land on it rather than on the step rail
+  const [lesson, setLesson] = useState(() => PgLesson.state);
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
 
-  const [tab, setTab] = useState<Tab>("steps");
+  const [tab, setTab] = useState<Tab>(
+    () => keptColumn(PgExplorer.currentWorkspaceId)?.tab ?? "steps"
+  );
+
+  // Hidden, the column unmounts (design.md, "Frame chrome (5.25)"), so its
+  // tab and scroll are kept for the next mount (`kept-column.ts`). Both are
+  // tracked as they change, for a body already out of the document, where
+  // its scroll reads 0.
+  const kept = useRef({ tab, scrollTop: 0 });
+  useLayoutEffect(() => {
+    kept.current.tab = tab;
+  }, [tab]);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  // A layout effect: the tree, a child, has reopened its folders by now
+  // (`useHandleItemState`), so the scroll lands where it was rather than on
+  // a shut tree too short for it
+  useLayoutEffect(() => {
+    // The one object `onScroll` and the tab effect write to
+    const memory = kept.current;
+    const body = bodyRef.current;
+    const restored = keptColumn(PgExplorer.currentWorkspaceId);
+    if (body && restored) {
+      body.scrollTop = restored.scrollTop;
+      memory.scrollTop = body.scrollTop;
+    }
+    return () => {
+      // Read now, not at mount: a lesson mounts the column before the
+      // explorer has opened its project
+      const workspace = PgExplorer.currentWorkspaceId;
+      if (!workspace) return;
+      // Read from the body while it is still in the document: `scroll`
+      // arrives a frame late, so ⌘E right after a scroll would otherwise
+      // keep the scroll before it
+      const scrollTop = body?.isConnected ? body.scrollTop : memory.scrollTop;
+      keepColumn({ workspace, tab: memory.tab, scrollTop });
+    };
+    // Defensive: the frame unmounts a hidden column rather than passing
+    // `collapsed`, but a `collapsed` column draws no body either
+  }, [collapsed]);
   // The same upstream hook `ExplorerButtons.tsx` calls for its own hidden
   // "New file" icon button (`NewItemButton` -> `useCreateItem`) -- no
   // upstream edit, no programmatic `.click()` of a hidden button.
@@ -77,6 +113,10 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
           </Tabs>
         )}
         <Body
+          ref={bodyRef}
+          onScroll={(e) => {
+            kept.current.scrollTop = e.currentTarget.scrollTop;
+          }}
           id="flow-left-tabpanel"
           role={inLesson ? "tabpanel" : undefined}
           aria-labelledby={inLesson ? `flow-left-tab-${tab}` : undefined}

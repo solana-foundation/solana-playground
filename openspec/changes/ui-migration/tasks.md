@@ -153,3 +153,6 @@ regression against 5.1 has misread this rule.
       a hidden assistant or files column takes no width (HOO-2122; after 5.2,
       5.10 and 5.17; design.md, "Frame chrome (5.25)"; plan:
       [plans/5.25-frame-chrome.md](plans/5.25-frame-chrome.md))
+- [x] 5.26 The files column keeps its open folders, scroll and lesson tab
+      while hidden (HOO-2124; after 5.25; plan:
+      [plans/5.26-files-column-keeps-its-state.md](plans/5.26-files-column-keeps-its-state.md))

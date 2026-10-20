@@ -1,10 +1,37 @@
-import { useEffect } from "react";
+import { RefObject, useEffect, useLayoutEffect } from "react";
 import { useTheme } from "styled-components";
 import { PgCommon, PgExplorer } from "../../../../utils";
+import { keepTree, keptFolders, reopenFolders } from "./kept-tree";
 
-/** Manage the item state when the current workspace or file changes. */
-export const useHandleItemState = () => {
+/**
+ * Manage the item state when the current workspace or file changes, and
+ * across an unmount of the tree.
+ *
+ * @param rootRef the tree's root element (`#root-dir`)
+ */
+export const useHandleItemState = (
+  rootRef: RefObject<HTMLDivElement | null>
+) => {
   const theme = useTheme();
+
+  // The folders open when the tree last unmounted are opened again. A layout
+  // effect, so they are open before the column restores its scroll
+  // (`LeftPanel`, a parent, runs its layout effects after this one) and
+  // before the first paint shows them shut.
+  useLayoutEffect(() => {
+    // Captured now, the element this mount drew: what the cleanup keeps
+    const root = rootRef.current;
+    reopenFolders(
+      keptFolders(PgExplorer.currentWorkspaceId),
+      (path) => PgExplorer.getElFromPath(path),
+      (el) => PgExplorer.openFolder(el)
+    );
+    return () => {
+      // Read now, not at mount, as `LeftPanel` does: the project may have
+      // opened after the tree mounted
+      if (root) keepTree(PgExplorer.currentWorkspaceId, root);
+    };
+  }, [rootRef]);
 
   useEffect(() => {
     const switchWorkspace = PgExplorer.onDidSwitchWorkspace(() => {
