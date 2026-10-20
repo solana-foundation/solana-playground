@@ -20,6 +20,7 @@ export const getSrc = (url: string): string | undefined => {
     return;
   }
 
+  // Parsed hostname, not url.includes(): js/incomplete-url-substring-sanitization
   const match = Object.entries(PLATFORM_ICONS).find(
     ([domain]) => hostname === domain || hostname.endsWith("." + domain)
   );

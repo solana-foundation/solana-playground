@@ -196,6 +196,7 @@ const getSrc = (url: string) => {
 
   let src = "";
 
+  // Parsed hostname, not url.includes(): js/incomplete-url-substring-sanitization
   if (/(^|\.)youtube\.com$/.test(hostname)) src = "youtube.png";
   else if (/(^|\.)dev\.to$/.test(hostname)) src = "devto.png";
 
