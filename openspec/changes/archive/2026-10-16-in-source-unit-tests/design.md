@@ -92,6 +92,38 @@ needed. The local `it` is vitest's and has `each`; the global `it` is mocha's
   block, those hooks would apply to the session tests too. It can move later
   as a second `describe` whose hooks sit inside it.
 
+### Modules the Playwright suite imports
+
+Playwright 1.62 transpiles a `.ts` file as CommonJS unless `fileIsModule`
+says otherwise: `.mts` and `.mjs` are ESM, `.cts` is CommonJS, and any other
+file follows the nearest `package.json` `type`, which `client-v2/package.json`
+does not set. In CommonJS output `import.meta` is a syntax error, so a
+block-carrying module that an `e2e/` file loads, directly or through the
+imports of its imports, fails the e2e job at load. Two leaf modules are
+imported there, `shared/lib/ids` and
+`features/persistence/ui/merge-editor/hunk-class`: they carry no block, their
+tests live in `<name>.test.mts` beside them, the extension marking the
+exception, and `vitest.config.ts`, the `lint` script, and the ESLint overrides
+accept `.mts`. The suite also needs one constant,
+`REMEMBERED_BACKEND_KEY`, from
+`views/sidebar/assistant/model/remembered-backend`, which imports the logger
+barrel and so would load three block-carrying modules; the constant lives in
+the leaf `remembered-backend-key.ts`, which the suite imports and the module
+re-exports, so the module keeps its block and its other importers are
+unchanged. `scripts/in-source-e2e-imports.test.mjs` (`yarn test-api`)
+walks every module under `src/` that an `e2e/**/*.ts` file loads, directly or
+through the imports of its imports (`import type` is erased before Playwright
+runs the file and is skipped), and fails when one holds the guard, so the next
+such import fails in seconds rather than in the e2e job.
+
+- Alternative: a `src/package.json` with `type: module`, so Playwright
+  compiles `src` as ESM. Rejected: `yarn run tsx src/settings` then runs `src`
+  as real ESM at build time and fails on `import { Terminal } from "xterm"`,
+  which has no named ESM exports.
+- Alternative: `.test.mts` files for `remembered-backend` and the three
+  logger modules it loads. Rejected: the exception would follow the logger
+  barrel's import graph rather than the suite's own needs.
+
 ### Two tests guard the blocks
 
 `scripts/in-source-tests.build-test.mjs` runs under `yarn test-build` after

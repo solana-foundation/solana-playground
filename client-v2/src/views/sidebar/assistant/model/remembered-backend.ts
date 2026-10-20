@@ -1,6 +1,9 @@
 import { createLogger } from "@/shared/lib/logger";
 import type { Connection } from "../store";
+import { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
 import { PROVIDERS, type ProviderId } from "./types";
+
+export { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
 
 /**
  * Which backend to reconnect to on the next load.
@@ -20,7 +23,6 @@ import { PROVIDERS, type ProviderId } from "./types";
  * site data blocked, and the panel has to open either way. A failure is
  * logged by what was attempted, never with the value.
  */
-export const REMEMBERED_BACKEND_KEY = "assistant.backend";
 const CONNECTION_KEY = "assistant.connection";
 
 const DEFAULT_ID: ProviderId = "default";

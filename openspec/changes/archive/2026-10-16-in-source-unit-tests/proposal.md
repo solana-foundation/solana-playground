@@ -16,7 +16,7 @@ makes the block the ordinary place for a unit test, not an exception.
 
 - The unit suite collects in-source test blocks from `src/**/*.{ts,tsx}` in
   addition to the test files matched by `include`.
-- The 53 unit test files whose tests exercise one sibling module and mock no module move
+- The 51 unit test files whose tests exercise one sibling module and mock no module move
   into that module's block. Test bodies and titles are unchanged; each block
   gains one outer `describe` named after the module path from `src/`, so a
   failure names the module. Five
@@ -26,23 +26,39 @@ makes the block the ordinary place for a unit test, not an exception.
   tests (`mockFiles` in two `describe` bodies, `accountThread`) become `let`
   bindings assigned in a `beforeAll` (design.md, "Helpers load in
   `beforeAll`").
+- Two modules that `e2e/` imports keep their tests in `<name>.test.mts`
+  files instead of a block: `shared/lib/ids` and
+  `features/persistence/ui/merge-editor/hunk-class`. Playwright compiles a
+  `.ts` under a CommonJS package as CommonJS, where `import.meta` is a syntax
+  error, so a block in a module the browser suite loads, directly or through
+  the imports of its imports, fails the e2e job at load (design.md, "Modules
+  the Playwright suite imports"). The `.mts` extension marks the exception.
+  A module the suite needs only a constant from exposes it through a leaf
+  instead of losing its block: `views/sidebar/assistant/model/remembered-backend`
+  keeps its block and re-exports `REMEMBERED_BACKEND_KEY` from
+  `remembered-backend-key.ts`, which the suite imports.
+  `scripts/in-source-e2e-imports.test.mjs` fails `yarn test-api` when an
+  `e2e/` file loads a module with a block.
 - Tests that stay files: every test that uses `vi.mock`, every React component
   and hook test, the integration tests, `setupTests.test.ts`, the tests of
   `.mjs` modules under `features/api/server/`, the tests of the runtime modules
-  `utils/explorer` and `commands/deploy`, `constants/__tests__/connection.test.ts`
-  (it re-imports its module after `vi.resetModules()`), and
-  `features/auth/model/telemetry.test.ts` (a second file for `session.ts` with
-  file-scope hooks).
+  `utils/explorer` and `commands/deploy`, the tests of modules `e2e/` imports,
+  `constants/__tests__/connection.test.ts` (it re-imports its module after
+  `vi.resetModules()`), and `features/auth/model/telemetry.test.ts` (a second
+  file for `session.ts` with file-scope hooks).
 - `client-v2/AGENTS.md` gains the rule: which tests live in-source, which stay
   files, the block pattern, and what a block must not do. The rule supersedes
   the one drafted on the `docs/in-source-unit-tests` branch, which assumed a
   `DefinePlugin` entry and moved no existing test.
-- CI checks the production bundle after `yarn build-fast`: three test titles
-  that exist only inside blocks must be present in `src/` and absent from
-  `build/static/js`. A block that reaches the bundle fails the run; a renamed
-  title fails the run instead of emptying the check.
+- The build tests check the production bundle after `yarn build-fast`:
+  `scripts/in-source-tests.build-test.mjs` collects every block's test titles
+  and fails when one is in `build/static/js`;
+  `scripts/in-source-collection.test.mjs` fails `yarn test-api` when vitest
+  does not list a module that holds a block.
 - `tsconfig.json` types `import.meta.vitest` through `vitest/importMeta`. The
-  ESLint exemption for `src/shared/lib/ids.test.ts` goes with the file.
+  ESLint exemption for `src/shared/lib/ids.test.ts` follows the file to
+  `src/shared/lib/ids.test.mts`; `vitest.config.ts`, the `lint` script, and
+  the ESLint overrides accept `.mts` test files.
 - `client-v2/CLAUDE.md`, the root `CLAUDE.md`, `client-v2/README.md`, and
   `docs/testing.md` describe the in-source layout and the CI check.
 - No slice under `features/` or `widgets/` changes behaviour. No telemetry
@@ -65,15 +81,18 @@ makes the block the ordinary place for a unit test, not an exception.
 
 - `client-v2/vitest.config.ts`, `client-v2/tsconfig.json`,
   `client-v2/package.json` (`eslintConfig`): the setup.
-- 53 modules under `client-v2/src` gain an appended block; the 53 test files
-  are deleted. The modules' import lists are unchanged.
-- `.github/workflows/client-v2.yml`: the bundle check.
+- 51 modules under `client-v2/src` gain an appended block; 51 test files are
+  deleted and two are renamed to `.test.mts`. The modules' import lists are
+  unchanged, except that `remembered-backend.ts` takes its storage key from
+  the new leaf `remembered-backend-key.ts`.
+- `client-v2/scripts/`: the three node tests and their helper.
 - `client-v2/AGENTS.md`, `client-v2/CLAUDE.md`, `CLAUDE.md`,
   `client-v2/README.md`, `docs/testing.md`.
 - Users: nothing visible. The production bundle is checked to carry no test
   code, and the dead block leaves no residue after minification.
 - Developers: a failing test in a module is re-run with the module's path,
-  `yarn test-unit src/shared/lib/ids.ts`; the old test path finds nothing.
+  `yarn test-unit src/features/persistence/model/project-id.ts`; the old test
+  path finds nothing.
   `it.each` type-checks inside a block, because `it` is destructured from
   `import.meta.vitest` and not read from the global that `@types/mocha`
   declares (HOO-1914 reports the global).

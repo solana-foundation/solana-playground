@@ -37,8 +37,8 @@ export default defineConfig({
     // CRA's `testMatch`, so the same files are collected: not `e2e/`
     // (Playwright), not `*.test.mjs` (`node --test`).
     include: [
-      "src/**/__tests__/**/*.{js,jsx,ts,tsx}",
-      "src/**/*.{spec,test}.{js,jsx,ts,tsx}",
+      "src/**/__tests__/**/*.{js,jsx,ts,tsx,mts}",
+      "src/**/*.{spec,test}.{js,jsx,ts,tsx,mts}",
     ],
     // Textual match: the guard's text anywhere in a src file makes it a test file (AGENTS.md, "Tests: a module's unit tests live in the module")
     includeSource: ["src/**/*.{ts,tsx}"],

@@ -9,7 +9,7 @@ import { blockFiles, blockTitles } from "./in-source-titles.mjs";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const CHUNKS = path.join(ROOT, "build", "static", "js");
-// 595 double-quoted titles at the time of writing (table-driven and template-literal titles are not counted);
+// 586 double-quoted titles at the time of writing (table-driven and template-literal titles are not counted);
 // a parser that stopped matching would collect far fewer, a normal day never
 const MIN_TITLES = 500;
 // A short title ("does not repeat") can match product copy; a longer one matches only a shipped test

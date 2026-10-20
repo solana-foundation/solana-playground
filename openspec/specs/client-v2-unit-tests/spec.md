@@ -17,7 +17,9 @@ vitest's `fullName` carries no file path. A test that mocks a
 module, renders React, spans several modules, targets a `.mjs` module, tests a
 runtime module the UI move rule never touches (`src/utils/explorer`,
 `src/commands/`), re-imports its own module after resetting the module
-registry, or is a second
+registry, is imported by the browser suite under `e2e/` (Playwright compiles
+the module as CommonJS, where `import.meta` is a syntax error; its tests live
+in a `<name>.test.mts` file), or is a second
 test file of a module whose file-scope hooks must not apply to the module's
 other tests SHALL keep a separate test file.
 
@@ -37,7 +39,15 @@ other tests SHALL keep a separate test file.
 
 - **WHEN** a test in a block fails
 - **THEN** the reported name starts with the module path, such as
-  `shared/lib/ids > isUuid > ...`
+  `features/persistence/model/project-id > tutorialProjectId > ...`
+
+#### Scenario: A module the browser suite imports (manual)
+
+- **WHEN** a file under `e2e/` loads a module under `src/`, directly or through
+  the imports of its imports
+- **THEN** that module carries no block, its tests live in `<name>.test.mts`
+  beside it, and `yarn test-api` fails naming the spec, the import, and the
+  module when the imported module holds a block
 
 ### Requirement: An in-source block adds nothing to the module's imports
 
@@ -70,7 +80,7 @@ module that carries a block, because a match without tests fails the run.
 
 #### Scenario: One module's tests (manual)
 
-- **WHEN** `yarn test-unit src/shared/lib/ids.ts` runs
+- **WHEN** `yarn test-unit src/features/persistence/model/project-id.ts` runs
 - **THEN** the tests in that module's block run, and no other test runs
 
 #### Scenario: CI proves a block is collected (manual)

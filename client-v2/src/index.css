@@ -36,8 +36,7 @@
  * (`changed`), in Monaco, which keeps only plain class
  * names on a decoration (`hunkLineClass` in features/persistence). Each is
  * `mergeHunkVariants`' look for that state, so the editors and the ribbons
- * change colour together; the in-source tests of `hunk-class.ts` check they
- * still match.
+ * change colour together; `hunk-class.test.mts` checks they still match.
  */
 .pg-merge-hunk-conflict {
   @apply bg-error/12 shadow-[inset_2px_0_0_var(--color-error)];

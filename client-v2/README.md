@@ -80,7 +80,8 @@ which compares `node_modules` with `yarn.lock`, shadows the script.
 `test-unit` runs the test files that `include` in `vitest.config.ts` matches
 and the in-source test blocks of the modules ([`AGENTS.md`](AGENTS.md)); a
 module's block alone runs
-with its path, `yarn test-unit src/shared/lib/ids.ts`. Run `check` before a
+with its path, `yarn test-unit src/features/persistence/model/project-id.ts`.
+Run `check` before a
 push, or make git do it:
 
 ```sh

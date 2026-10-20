@@ -35,7 +35,9 @@ A test keeps its own `*.test.ts` file when it calls `vi.mock`, renders React
 (`@testing-library/react`, `createRoot`), drives several modules together, tests a `.mjs` module
 (`node --test`), tests a runtime module the UI move rule never touches (`src/utils/explorer`,
 `src/commands/`), re-imports its module after `vi.resetModules()` (the block would run again
-mid-test), or is a second test file for a module and its file-scope hooks must not apply to the
+mid-test), tests a module the Playwright suite (`e2e/`) imports (Playwright compiles it as CommonJS,
+where `import.meta` is a syntax error; its tests live in `<name>.test.mts`, the extension marking the
+exception), or is a second test file for a module and its file-scope hooks must not apply to the
 first.
 
 Inside a block:
@@ -43,7 +45,7 @@ Inside a block:
 - Take the test API from `import.meta.vitest`, `vi` included, and never the global `it`:
   `@types/mocha` declares that global without `each`, because `src/utils/js-runtime` imports mocha.
 - Put the tests under one `describe` named after the module path from `src/` without extension
-  (`shared/lib/ids`), with the block's hooks and helpers inside it: vitest's `fullName` carries no
+  (`features/persistence/model/project-id`), with the block's hooks and helpers inside it: vitest's `fullName` carries no
   file path, so the `describe` is what names the module in a failure.
 - Do not add or widen a static import of the module for a test. A value from another module is
   loaded in `beforeAll` into a `let` typed as `typeof import("./other").name`; a type is an inline
@@ -64,8 +66,8 @@ Inside a block:
 The text `import.meta.vitest` makes a file a test file (`includeSource` in `vitest.config.ts`).
 Write it only where a block follows, never in a comment of a module without tests: `yarn test-unit`
 fails such a file with "No test suite found". A block runs only when its file is the entry:
-`yarn test-unit src/shared/lib/ids.ts` runs that module's tests, and the deleted `*.test.ts` path
-finds nothing. webpack drops the block on its own; `scripts/in-source-tests.build-test.mjs` checks the
+`yarn test-unit src/features/persistence/model/project-id.ts` runs that module's tests, and the
+deleted `*.test.ts` path finds nothing. webpack drops the block on its own; `scripts/in-source-tests.build-test.mjs` checks the
 built chunks for every block's test titles, and `scripts/in-source-collection.test.mjs` checks that
 vitest collects every block.
 
