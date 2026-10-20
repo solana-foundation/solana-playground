@@ -30,8 +30,8 @@ every PR: a `pull_request` run reads the workflow from the PR's merge
 commit, and no `pull_request` workflow runs while the PR has a merge
 conflict. `preview.yml` deploys a labelled PR's preview and
 `preview-sweep.yml` cleans up after it on a schedule; both run only in the
-repository their `github.repository` check names. GitHub runs scheduled
-workflows only from the default branch.
+repository the `PREVIEW_REPOSITORY` variable names, once `NEON_PROJECT_ID`
+is set there. GitHub runs scheduled workflows only from the default branch.
 
 `cicd.yml` deploys App Engine from a tagged commit on `master`. A push to
 `master` also deploys `client-v2` to Vercel production, so run

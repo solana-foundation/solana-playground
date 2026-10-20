@@ -10,9 +10,9 @@ name: preview
 #   as DATABASE_URL, and post the URL on the PR;
 # - label removed, or PR closed or merged: delete the branch.
 #
-# Previews follow the label on a PR into any branch of
-# hoodieshq/solana-playground. A labelled PR on another repository or from a
-# fork gets skipped preview checks and no comment. What this misses (a
+# Previews follow the label on a PR into any branch of the repository the
+# PREVIEW_REPOSITORY variable names. A labelled PR on another repository or
+# from a fork gets skipped preview checks and no comment. What this misses (a
 # cancelled teardown, a failed delete, a close by Dependabot) is swept by
 # preview-sweep.yml.
 #
@@ -46,11 +46,13 @@ jobs:
     # secrets. A Dependabot PR never deploys, even labelled by a human: the
     # run would build its code with the deploy secrets. Unrelated label
     # changes do not redeploy.
-    # Once only the preview repository sets NEON_PROJECT_ID, the repository
-    # check can become `vars.NEON_PROJECT_ID != ''`, so a repository without
-    # Neon skips by configuration, not by name.
+    # Previews run only in the repository the PREVIEW_REPOSITORY variable
+    # names, and only once NEON_PROJECT_ID is set there; every other
+    # repository skips them. To enable previews on another repository, such
+    # as solana-foundation/solana-playground, set both variables there with
+    # its Neon and Vercel secrets (client-v2/docs/neon.md, "Configuration").
     if: >-
-      github.repository == 'hoodieshq/solana-playground' &&
+      vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY &&
       github.actor != 'dependabot[bot]' &&
       github.event.pull_request.user.login != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
@@ -177,11 +179,13 @@ jobs:
 
   teardown:
     name: drop preview database
-    # Once only the preview repository sets NEON_PROJECT_ID, the repository
-    # check can become `vars.NEON_PROJECT_ID != ''`, so a repository without
-    # Neon skips by configuration, not by name.
+    # Previews run only in the repository the PREVIEW_REPOSITORY variable
+    # names, and only once NEON_PROJECT_ID is set there; every other
+    # repository skips them. To enable previews on another repository, such
+    # as solana-foundation/solana-playground, set both variables there with
+    # its Neon and Vercel secrets (client-v2/docs/neon.md, "Configuration").
     if: >-
-      github.repository == 'hoodieshq/solana-playground' &&
+      vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY &&
       github.actor != 'dependabot[bot]' &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.action == 'closed' ||

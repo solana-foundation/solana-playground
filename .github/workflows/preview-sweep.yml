@@ -41,10 +41,12 @@ concurrency:
 jobs:
   sweep:
     name: sweep preview branches
-    # Once only the preview repository sets NEON_PROJECT_ID, this can become
-    # `vars.NEON_PROJECT_ID != ''`, so a repository without Neon skips by
-    # configuration, not by name.
-    if: github.repository == 'hoodieshq/solana-playground'
+    # Previews run only in the repository the PREVIEW_REPOSITORY variable
+    # names, and only once NEON_PROJECT_ID is set there; every other
+    # repository skips them. To enable previews on another repository, such
+    # as solana-foundation/solana-playground, set both variables there with
+    # its Neon and Vercel secrets (client-v2/docs/neon.md, "Configuration").
+    if: vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

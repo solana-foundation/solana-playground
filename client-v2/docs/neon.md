@@ -35,16 +35,17 @@ production dry run's branch, which the teardown keeps too.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
 `master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`. Both preview workflows run only
-in the repository their `github.repository` check names, the one that holds the Neon and Vercel credentials; every other
-repository skips them, `solana-foundation/solana-playground` included. A labelled PR on another repository or from a
-fork gets skipped preview checks and no comment.
+in the repository that the `PREVIEW_REPOSITORY` variable names and that has `NEON_PROJECT_ID` set, the one that holds
+the Neon and Vercel credentials; every other repository skips them, `solana-foundation/solana-playground` included
+until both variables are set there. A labelled PR on another repository or from a fork gets skipped preview checks and
+no comment.
 
 ## Configuration
 
 The `gh` commands in this section take the repository that runs the preview workflows from `REPO`, set once in the shell:
 
 ```sh
-REPO=<owner>/<name>   # the repository named in the `github.repository` check of preview.yml and preview-sweep.yml
+REPO=<owner>/<name>   # the repository that the PREVIEW_REPOSITORY variable names
 ```
 
 | Name | Where to get it |
@@ -57,11 +58,14 @@ Both go in two places:
 - **`client-v2/.env`**, for the `Makefile.vercel` targets. Make does not read `.env` the way dbmate does, so
   `Makefile.vercel` reads these two names out of it. A value already exported in the shell wins.
 - **GitHub**, under the same names, for the [preview workflows](#previews-from-a-pr-label): the key as a
-  repository secret, the project ID as a repository variable, since it grants nothing on its own:
+  repository secret, the project ID as a repository variable, since it grants nothing on its own. Beside them,
+  GitHub alone takes `PREVIEW_REPOSITORY`, a repository variable whose value is the `<owner>/<name>` of the
+  repository that runs the previews (`REPO`); the preview workflows run only where it equals `github.repository`:
 
   ```sh
   gh secret set NEON_API_KEY --repo "$REPO"
   gh variable set NEON_PROJECT_ID --repo "$REPO"
+  gh variable set PREVIEW_REPOSITORY --repo "$REPO" --body "$REPO"
   ```
 
 The app never reads either, so neither is set in the Vercel dashboard.
