@@ -1,8 +1,8 @@
 name: Checks
 
 # Reusable workflow shared by ci.yml (PR and master-push validation) and
-# cicd.yml (master deploy gate). Single source of truth for
-# format/clippy/build steps so the two trigger workflows can't drift apart.
+# cicd.yml (master deploy gate). Holds the format, clippy, and build steps
+# once, so ci.yml and cicd.yml run the same checks.
 on:
   workflow_call:
     inputs:

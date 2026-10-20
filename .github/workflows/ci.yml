@@ -1,8 +1,8 @@
 name: CI
 
-# Validation gate for pushes to master and for every pull request whose base
-# carries this file, since a pull_request run reads the workflow from the PR's
-# merge ref; internal PRs into feature branches are checked too.
+# Runs on pushes to master and on every pull request, whatever its base: a
+# pull_request run reads this file from the PR's merge commit, so a base
+# without it runs nothing.
 # Deployment is handled separately by cicd.yml.
 on:
   push:

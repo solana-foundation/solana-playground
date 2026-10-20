@@ -10,7 +10,9 @@ name: preview-sweep
 # branch -- those the Vercel integration created per git branch before its
 # option was turned off, and those `make deploy-client-to-vercel-preview` cuts
 # per local branch -- unless an open PR still has that head branch. Neither
-# scope touches `main` (the default branch) or a protected one.
+# scope touches `main` (the default branch), a protected one, or
+# `preview/master`, the production dry run's (deploy-client-vercel.md), which
+# preview.yml's teardown keeps too.
 on:
   schedule:
     - cron: "17 4 * * *"
@@ -39,8 +41,9 @@ concurrency:
 jobs:
   sweep:
     name: sweep preview branches
-    # Temporary: replace with `vars.NEON_PROJECT_ID != ''`, so a repository
-    # without Neon skips by configuration, not by name.
+    # Once only the preview repository sets NEON_PROJECT_ID, this can become
+    # `vars.NEON_PROJECT_ID != ''`, so a repository without Neon skips by
+    # configuration, not by name.
     if: github.repository == 'hoodieshq/solana-playground'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -83,6 +86,8 @@ jobs:
           while read -r name age; do
             if [[ "$name" =~ ^preview/pr-[0-9]+$ ]]; then
               keep=$keep_managed
+            elif [ "$name" = preview/master ]; then
+              continue
             elif [[ "$name" == preview/* ]]; then
               if [ "$SCOPE" != all-preview ]; then
                 echo "skip $name (not managed; run with scope all-preview to include it)"

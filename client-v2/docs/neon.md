@@ -1,7 +1,7 @@
 # Neon preview databases
 
-A PR into any branch labelled `preview` gets a preview deployment with its own Neon branch, `preview/pr-<number>`, cut from
-`main`, the project's default branch. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses
+A PR labelled `preview`, whatever its base branch, in the repository the preview workflows name, gets a preview
+deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the project's default branch. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses
 the project's default branch through the project-level `DATABASE_URL`; see
 [Deploy the client to Vercel](deploy-client-vercel.md).
 
@@ -17,8 +17,9 @@ branch, before the Ignored Build Step cancels the build. So that option is off, 
 | `preview` label added, or a labelled PR opened, reopened or pushed to | Create or reuse `preview/pr-<n>`, apply pending migrations to it, `vercel build` on the runner, deploy the prebuilt output with the branch's pooled URL as `DATABASE_URL`, and post the URL in one PR comment that later runs edit |
 | `preview` label removed, or PR closed or merged | Delete `preview/pr-<n>`, and `preview/<head-branch>` if an older path left one |
 
-A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks get no secrets
-and are skipped. The build runs on the runner, as `deploy-client-to-vercel-preview` does, so the project's Ignored
+A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs
+Dependabot triggers get no deploy secrets and are skipped, and a Dependabot PR never gets a preview, even
+labelled by a person. The build runs on the runner, as `deploy-client-to-vercel-preview` does, so the project's Ignored
 Build Step (which cancels every preview build) does not apply, and `vercel-install.sh` takes the wasm packages
 from Remote Cache with the runner's `VERCEL_TOKEN`.
 
@@ -29,16 +30,18 @@ integration's project-level ones, if still set for Preview, are unused.
 cancelled or failed. Daily, it deletes every `preview/pr-<n>` older than its `MIN_AGE_MINUTES` whose PR is no
 longer open and labelled. Run by hand (Actions → preview-sweep → Run workflow) it defaults to a dry run, and scope `all-preview`
 extends it to every other `preview/*` branch whose git branch has no open PR: the integration's leftovers and
-hand-deployed previews. It never touches `main` (the default branch) or a protected branch.
+hand-deployed previews. It never touches `main` (the default branch), a protected branch, or `preview/master`, the
+production dry run's branch, which the teardown keeps too.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
 `master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`. Both preview workflows run only
-in the repository their `github.repository` check names, the one that holds the Neon and Vercel credentials; every
-other copy of the repository skips them.
+in the repository their `github.repository` check names, the one that holds the Neon and Vercel credentials; every other
+repository skips them, `solana-foundation/solana-playground` included. A labelled PR on another repository or from a
+fork gets skipped preview checks and no comment.
 
 ## Configuration
 
-The `gh` commands below take the repository that runs the preview workflows from `REPO`, set once in the shell:
+The `gh` commands in this section take the repository that runs the preview workflows from `REPO`, set once in the shell:
 
 ```sh
 REPO=<owner>/<name>   # the repository named in the `github.repository` check of preview.yml and preview-sweep.yml

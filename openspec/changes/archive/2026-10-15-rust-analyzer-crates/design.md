@@ -5,14 +5,14 @@
 Read at
 [`b1bf2cf`](https://github.com/hoodieshq/solana-playground/commit/b1bf2cfc374b39c6bf016e638baa9b4ffc913490):
 
-- [`rust-analyzer.ts`](../../../client-v2/src/components/Editor/Monaco/languages/rust/rust-analyzer/rust-analyzer.ts)
+- [`rust-analyzer.ts`](../../../../client-v2/src/components/Editor/Monaco/languages/rust/rust-analyzer/rust-analyzer.ts)
   fetches the default crates on every editor start (`loadDefaultCrates`) and a
   `.rs` plus `.toml` per dependency (`loadDependency`). `PgCommon.fetchText`
   throws on a non-OK response.
-- [`craco.config.js`](../../../client-v2/craco.config.js) lists
+- [`craco.config.js`](../../../../client-v2/craco.config.js) lists
   `public/crates` at compile time (`defineFromPublicDir`), so the files must
   exist before `craco build`.
-- [`generate-crates.mjs`](../../../client-v2/scripts/generate-crates.mjs) runs
+- [`generate-crates.mjs`](../../../../client-v2/scripts/generate-crates.mjs) runs
   in `yarn generate` and expands each supported crate from
   `$CARGO_HOME/registry/src/index.crates.io-*`. `vercel-install.sh` exports its
   `CARGO_HOME` only to itself, so `yarn build` reads `~/.cargo`.
@@ -75,7 +75,7 @@ its own `--root` under the cargo home, so neither shadows the other on `PATH`.
 
 The default crates must match the analyzer that reads them, so the generator
 installs the `channel` of
-[`wasm/rust-analyzer/rust-toolchain.toml`](../../../wasm/rust-analyzer/rust-toolchain.toml)
+[`wasm/rust-analyzer/rust-toolchain.toml`](../../../../wasm/rust-analyzer/rust-toolchain.toml)
 with `rust-src`: `nightly-2022-12-12`, Rust 1.68.0-nightly. User programs
 compile with Rust 1.68.0: Solana 1.17.34's `cargo-build-sbf`
 [pins platform-tools v1.37](https://github.com/anza-xyz/agave/blob/77daab497df191ef485a7ad36ed291c1874596e5/sdk/cargo-build-sbf/src/main.rs),

@@ -129,7 +129,8 @@ export default defineConfig({
   // sequentially takes longer than everything that follows it.
   expect: { timeout: 20_000 },
   fullyParallel: false,
-  // A committed `test.only` would run one test and drop the rest from the report.
+  // A committed `.only` runs just the focused tests; the rest never reach the
+  // report, so the known-skips check cannot flag them.
   forbidOnly: !!process.env.CI,
   workers,
   // One retry in CI, none locally. The runner is three times slower than a

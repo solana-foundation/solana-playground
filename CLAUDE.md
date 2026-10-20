@@ -25,11 +25,13 @@ OpenSpec change `ui-migration`) come off `new-face` and PRs go against
 for `server/` and `wasm/`, but not `client/`'s build or tests;
 `client-v2.yml` guards `client-v2/`, with its production build and the
 checks on what that build emits in `reusable-client-v2-build.yml`. Both run
-on pushes to `master` and on every PR whose base branch carries them.
-`preview.yml` deploys a labelled PR's preview, on
-`hoodieshq/solana-playground` only, and `preview-sweep.yml` cleans up after
-it on a schedule. GitHub runs scheduled workflows only from the default
-branch.
+on pushes to `master` (`client-v2.yml` also on pushes to `new-face`) and on
+every PR: a `pull_request` run reads the workflow from the PR's merge
+commit, and no `pull_request` workflow runs while the PR has a merge
+conflict. `preview.yml` deploys a labelled PR's preview and
+`preview-sweep.yml` cleans up after it on a schedule; both run only in the
+repository their `github.repository` check names. GitHub runs scheduled
+workflows only from the default branch.
 
 `cicd.yml` deploys App Engine from a tagged commit on `master`. A push to
 `master` also deploys `client-v2` to Vercel production, so run

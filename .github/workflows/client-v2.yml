@@ -2,12 +2,12 @@ name: client-v2
 
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
 # `client/`'s build or tests; this one guards `client-v2/` on pushes to
-# master and on every pull request whose base carries this file (a
-# pull_request run reads the workflow from the PR's merge ref), and never
-# touches the Rust workspaces.
+# master and new-face and on pull requests into any base, and never touches
+# the Rust workspaces. A pull_request run reads this file from the PR's merge
+# commit, so no pull_request workflow runs while the PR has a merge conflict.
 on:
   push:
-    branches: ["master"]
+    branches: ["master", "new-face"]
   pull_request:
 
   workflow_dispatch:
