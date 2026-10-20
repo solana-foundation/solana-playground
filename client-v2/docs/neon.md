@@ -1,9 +1,9 @@
 # Neon preview databases
 
-A PR labelled `preview`, whatever its base branch, in the repository the preview workflows name, gets a preview
-deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the project's default branch. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses
-the project's default branch through the project-level `DATABASE_URL`; see
-[Deploy the client to Vercel](deploy-client-vercel.md).
+A PR labelled `preview`, whatever its base branch, in the repository the `PREVIEW_REPOSITORY` variable names, gets a
+preview deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the project's default branch. A
+preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses the project's default branch
+through the project-level `DATABASE_URL`; see [Deploy the client to Vercel](deploy-client-vercel.md).
 
 ## Previews from a PR label
 
@@ -17,11 +17,11 @@ branch, before the Ignored Build Step cancels the build. So that option is off, 
 | `preview` label added, or a labelled PR opened, reopened or pushed to | Create or reuse `preview/pr-<n>`, apply pending migrations to it, `vercel build` on the runner, deploy the prebuilt output with the branch's pooled URL as `DATABASE_URL`, and post the URL in one PR comment that later runs edit |
 | `preview` label removed, or PR closed or merged | Delete `preview/pr-<n>`, and `preview/<head-branch>` if an older path left one |
 
-A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs
+A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs that
 Dependabot triggers get no deploy secrets and are skipped, and a Dependabot PR never gets a preview, even
-labelled by a person. The build runs on the runner, as `deploy-client-to-vercel-preview` does, so the project's Ignored
-Build Step (which cancels every preview build) does not apply, and `vercel-install.sh` takes the wasm packages
-from Remote Cache with the runner's `VERCEL_TOKEN`.
+labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, so the project's
+Ignored Build Step (which cancels every preview build) does not apply, and `vercel-install.sh` takes the wasm
+packages from Remote Cache with the runner's `VERCEL_TOKEN`.
 
 The deployment gets only `DATABASE_URL` from the workflow. The app reads no other `DATABASE_*` variable, so the
 integration's project-level ones, if still set for Preview, are unused.
@@ -34,18 +34,18 @@ hand-deployed previews. It never touches `main` (the default branch), a protecte
 production dry run's branch, which the teardown keeps too.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
-`master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`. Both preview workflows run only
-in the repository that the `PREVIEW_REPOSITORY` variable names and that has `NEON_PROJECT_ID` set, the one that holds
-the Neon and Vercel credentials; every other repository skips them, `solana-foundation/solana-playground` included
-until both variables are set there. A labelled PR on another repository or from a fork gets skipped preview checks and
-no comment.
+`master`, so a change to `preview-sweep.yml` takes effect only once it is on `master`. Both preview workflows run
+only in the repository that the `PREVIEW_REPOSITORY` variable names and that has `NEON_PROJECT_ID` set, the one
+that holds the Neon and Vercel credentials; every other repository skips them. A labelled PR on another repository
+or from a fork gets skipped preview checks and no comment.
 
 ## Configuration
 
-The `gh` commands in this section take the repository that runs the preview workflows from `REPO`, set once in the shell:
+The `gh` commands in this section take the repository that runs the preview workflows from `REPO`, set once in the
+shell:
 
 ```sh
-REPO=<owner>/<name>   # the repository that the PREVIEW_REPOSITORY variable names
+REPO=<owner>/<name>   # the repository whose PRs get previews
 ```
 
 | Name | Where to get it |
@@ -58,9 +58,11 @@ Both go in two places:
 - **`client-v2/.env`**, for the `Makefile.vercel` targets. Make does not read `.env` the way dbmate does, so
   `Makefile.vercel` reads these two names out of it. A value already exported in the shell wins.
 - **GitHub**, under the same names, for the [preview workflows](#previews-from-a-pr-label): the key as a
-  repository secret, the project ID as a repository variable, since it grants nothing on its own. Beside them,
-  GitHub alone takes `PREVIEW_REPOSITORY`, a repository variable whose value is the `<owner>/<name>` of the
-  repository that runs the previews (`REPO`); the preview workflows run only where it equals `github.repository`:
+  repository secret, the project ID as a repository variable, since it grants nothing on its own. Only GitHub
+  needs `PREVIEW_REPOSITORY` (`client-v2/.env` does not), a repository variable whose value is `REPO`; the preview
+  workflows run only where it equals `github.repository`. It holds a repository name, not a boolean, because a
+  variable set at organisation level reaches every repository it is shared with: set there, it still enables one
+  repository. At organisation level, share it with that repository alone, or set it per repository:
 
   ```sh
   gh secret set NEON_API_KEY --repo "$REPO"
@@ -68,7 +70,7 @@ Both go in two places:
   gh variable set PREVIEW_REPOSITORY --repo "$REPO" --body "$REPO"
   ```
 
-The app never reads either, so neither is set in the Vercel dashboard.
+The app reads neither `NEON_API_KEY` nor `NEON_PROJECT_ID`, so neither is set in the Vercel dashboard.
 
 `preview.yml` also deploys, so GitHub needs the Vercel side too, and the label:
 

@@ -4,7 +4,7 @@
 
 Defines how the assistant panel keeps, reuses and forgets the API key a user
 supplies for a backend that needs one, where that key may and may not go, and
-when the keyless default backend is available without a key (sign-in).
+that the keyless default backend needs a signed-in user.
 
 ## Requirements
 

@@ -356,11 +356,13 @@ test.describe("on a phone", () => {
     await input.click();
     await input.fill("renamed.rs");
     await page.keyboard.press("Enter");
-    // The open file's tab, not any text: the closing Sheet's tree also shows
-    // the new name until it unmounts, which made a page-wide match ambiguous
+    // The closing Sheet's tree also shows the name until it unmounts, so a
+    // page-wide match finds two elements; the tab strip shows it once
+    const tabs = page.locator("#tabs");
     await expect(
-      page.getByTestId("stage").getByRole("button", { name: "renamed.rs" })
+      tabs.getByRole("button", { name: "renamed.rs" })
     ).toBeVisible();
+    await expect(tabs.getByRole("button", { name: "lib.rs" })).toHaveCount(0);
   });
 });
 
