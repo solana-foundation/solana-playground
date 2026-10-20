@@ -49,57 +49,7 @@ const { DEV_SERVER_ROOT_HEADER } = require("./scripts/dev-server-owner.mjs");
 const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
-const browserslist = require("browserslist");
-const TerserPlugin = require("terser-webpack-plugin");
-
-/** browserslist family -> esbuild engine */
-const ESBUILD_ENGINES = {
-  chrome: "chrome",
-  edge: "edge",
-  firefox: "firefox",
-  opera: "opera",
-  safari: "safari",
-  ios_saf: "ios",
-};
-
-/** -1, 0, or 1, comparing dotted versions segment by segment */
-const compareVersions = (a, b) => {
-  const [x, y] = [a, b].map((v) => v.split(".").map(Number));
-  for (let i = 0; i < Math.max(x.length, y.length); i++) {
-    const d = (x[i] ?? 0) - (y[i] ?? 0);
-    if (d) return Math.sign(d);
-  }
-  return 0;
-};
-
-/**
- * The production `browserslist` floor as esbuild targets: the lowest version
- * per engine. Throws on a family with no esbuild engine: that browser would be
- * missing from the target and could get syntax it cannot parse.
- */
-const esbuildTarget = () => {
-  const lowest = new Map();
-  const entries = browserslist(undefined, {
-    path: __dirname,
-    env: "production",
-  });
-  for (const entry of entries) {
-    const [family, range] = entry.split(" ");
-    const engine = ESBUILD_ENGINES[family];
-    if (!engine) {
-      throw new Error(
-        `craco: browserslist family "${family}" has no esbuild engine; ` +
-          "map it in ESBUILD_ENGINES or drop it from the production list"
-      );
-    }
-    const version = range.split("-")[0];
-    const known = lowest.get(engine);
-    if (!known || compareVersions(version, known) < 0) {
-      lowest.set(engine, version);
-    }
-  }
-  return [...lowest].map(([engine, version]) => engine + version);
-};
+const { esbuildMinifyOptions } = require("./scripts/esbuild-minify.mjs");
 
 /** CRA's in-build type check and lint, by plugin class name */
 const BUILD_ONLY_CHECKS = [
@@ -277,6 +227,7 @@ module.exports = {
         process: false,
         path: false,
         zlib: false,
+        vm: false, // parse-asn1's asn1.js 4 requires `vm` in a try/catch: unresolved it warns, stubbed it falls back
       };
 
       // Webpack treats `node:` as a URI scheme and rejects it before
@@ -487,10 +438,8 @@ module.exports = {
         );
       }
       jsMinimizer.options.minimizer = {
-        implementation: TerserPlugin.esbuildMinify,
-        // Decorators name change events after `_Pg*` classes, and esbuild
-        // keeps names only all or none
-        options: { keepNames: true, target: esbuildTarget() },
+        implementation: jsMinimizer.constructor.esbuildMinify, // CRA's own copy, not whichever one hoisting resolves
+        options: esbuildMinifyOptions(),
       };
       // Workers are threads in this process, outside `--max-old-space-size`
       jsMinimizer.options.parallel = 2;

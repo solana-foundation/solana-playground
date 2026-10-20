@@ -80,7 +80,10 @@
   "resolutions": {
     "@solana/buffer-layout": "^4.0.0",
     "styled-components": "^5",
-    "typescript": "5.0.4"
+    "typescript": "5.0.4",
+    "elliptic": "^6.6.1",
+    "crypto-js": "^4.2.0",
+    "axios": "^0.32.0"
   },
   "engines": {
     "node": "^22.20.0"

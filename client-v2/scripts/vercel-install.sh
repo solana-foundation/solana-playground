@@ -292,6 +292,11 @@ install_node_modules() {
     echo ">>> node_modules: current copy in Build Cache, skipping yarn install"
     return
   fi
+  # Over a restored tree from another install key the build failed on @noble/hashes/sha3 and a clean install built; .cache alone is what the wasm and crate restores create
+  if [ -d node_modules ] && [ -n "$(find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -print -quit)" ]; then
+    echo ">>> node_modules: Build Cache copy has another install key, clearing all but .cache before yarn install"
+    find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -exec rm -rf {} +
+  fi
   yarn install --frozen-lockfile
   mkdir -p "$(dirname "$INSTALL_MARK")"
   printf '%s' "$key" >"$INSTALL_MARK"
