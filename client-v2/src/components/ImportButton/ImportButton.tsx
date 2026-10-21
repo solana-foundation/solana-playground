@@ -44,7 +44,7 @@ const ImportButton: FC<PropsWithChildren<ImportButtonProps>> = ({
     } catch (error) {
       // The picker has no other way to say it failed, and the file name
       // below would claim it was imported
-      reportButtonFailure(error);
+      reportButtonFailure("import the file")(error);
       setImportText("");
       // so the same file, once corrected, fires a change again
       ev.target.value = "";

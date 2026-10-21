@@ -101,15 +101,17 @@ describe("useTurn", () => {
     vi.spyOn(PgAssistant, "addUserMessage").mockImplementation(() => {
       throw failure;
     });
-    const report = vi
+    const report = vi.fn();
+    const reportFor = vi
       .spyOn(reportModule, "reportButtonFailure")
-      .mockReturnValue(undefined);
+      .mockReturnValue(report);
     const { result } = renderHook(() => useTestTurn());
     act(() => result.current.setInput("hello"));
 
     await act(() => result.current.send("hello"));
 
     expect(report).toHaveBeenCalledWith(failure);
+    expect(reportFor).toHaveBeenCalledWith("send your message");
     expect(result.current.input).toBe("hello");
     expect(result.current.busy).toBe(false);
     expect(provider.send).not.toHaveBeenCalled();
@@ -368,14 +370,16 @@ describe("useTurn", () => {
     vi.spyOn(PgAssistant, "addUserMessage").mockImplementation(() => {
       throw failure;
     });
-    const report = vi
+    const report = vi.fn();
+    const reportFor = vi
       .spyOn(reportModule, "reportButtonFailure")
-      .mockReturnValue(undefined);
+      .mockReturnValue(report);
     const { result } = renderHook(() => useTestTurn());
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
+    expect(reportFor).toHaveBeenCalledWith("send the prompt");
     expect(result.current.input).toBe("Explain this error");
   });
 
@@ -524,14 +528,16 @@ describe("useTurn's failures and races", () => {
     vi.spyOn(PgAssistant, "connect").mockImplementation(() => {
       throw failure;
     });
-    const report = vi
+    const report = vi.fn();
+    const reportFor = vi
       .spyOn(reportModule, "reportButtonFailure")
-      .mockReturnValue(undefined);
+      .mockReturnValue(report);
     const { result } = renderHook(() => useTestTurn());
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
+    expect(reportFor).toHaveBeenCalledWith("send the prompt");
     expect(result.current.input).toBe("Explain this error");
   });
 
@@ -541,14 +547,16 @@ describe("useTurn's failures and races", () => {
     open.mockImplementationOnce(() => {
       throw failure;
     });
-    const report = vi
+    const report = vi.fn();
+    const reportFor = vi
       .spyOn(reportModule, "reportButtonFailure")
-      .mockReturnValue(undefined);
+      .mockReturnValue(report);
     const { result } = renderHook(() => useTestTurn());
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
+    expect(reportFor).toHaveBeenCalledWith("send the prompt");
     expect(result.current.input).toBe("Explain this error");
   });
 

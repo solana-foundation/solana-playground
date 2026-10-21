@@ -150,7 +150,11 @@ describe("WorkspaceButton", () => {
     let close!: () => void;
     const modal = new Promise<void>((resolve) => (close = resolve));
     render(
-      <WorkspaceButton onClick={() => modal} title="Create">
+      <WorkspaceButton
+        onClick={() => modal}
+        title="Create"
+        failureAction="create a project"
+      >
         <svg data-testid="icon" />
       </WorkspaceButton>
     );
@@ -173,6 +177,7 @@ describe("WorkspaceButton", () => {
       <WorkspaceButton
         onClick={() => PgView.setModal(() => null)}
         title="Create"
+        failureAction="create a project"
       >
         <svg data-testid="icon" />
       </WorkspaceButton>

@@ -86,7 +86,7 @@ const ChatItem: FC<
               size="sm"
               title={verifyStepTitle || undefined}
               onClick={onVerifyStep}
-              onError={reportButtonFailure}
+              onError={reportButtonFailure("check the step")}
               className="mt-2 self-start"
             >
               {verifyStepLabel}

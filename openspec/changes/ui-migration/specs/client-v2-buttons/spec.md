@@ -45,17 +45,31 @@ SHALL NOT say "Copied".
 #### Scenario: A refused clipboard is not reported as copied
 
 - **WHEN** the browser refuses to write to the clipboard
-- **THEN** the button does not say "Copied" and the failure is logged
+- **THEN** the button does not say "Copied", a toast says "Could not copy.", and the failure is logged
 
-### Requirement: A failing click is logged, not swallowed
+### Requirement: A failing click tells the user once
 
-A click whose action fails SHALL be logged under `ui:button`, not marked for
-reporting (a user-caused or already-shown failure must not reach error
-tracking), and the button SHALL stay usable.
+A click whose action fails SHALL tell the user what did not happen, in one
+sentence naming the action ("Could not copy."), never the raw error. A failure
+the action already showed (a terminal command printed it to the open console)
+SHALL NOT be shown again; one printed into a folded console SHALL still be
+told. Every failure SHALL still be logged under
+`ui:button`, not marked for reporting (a user-caused or already-shown failure
+must not reach error tracking), and the button SHALL stay usable.
 
 #### Scenario: A rejected action is logged (manual)
 
 - **WHEN** a button's action rejects
-- **THEN** the failure is logged under `ui:button`, not marked for reporting, and the button is enabled again
+- **THEN** the failure is logged under `ui:button`, not marked for reporting, a toast says what did not happen, and the button is enabled again
 
-Covered by unit tests, not e2e, because no click in the product can be made to reject without a stand-in handler: `report-button-failure.test.ts`, `shared-ui-buttons.test.tsx`, `SyncBanner.test.tsx`, `ImportButton.test.tsx` and `Chat.test.tsx`.
+Covered by unit tests, not e2e, because the toast and the button's re-enabling together need an action that rejects on demand: `report-button-failure.test.tsx`, `terminal-process.test.ts`, `shared-ui-buttons.test.tsx`, `SyncBanner.test.tsx`, `ImportButton.test.tsx` and `use-turn.test.tsx`. The e2e tests for real failed clicks are the refused clipboard above and the two failed builds below.
+
+#### Scenario: A failure the terminal printed is shown once
+
+- **WHEN** a build started from the Build button fails while the console is open
+- **THEN** the console shows the error and no toast appears
+
+#### Scenario: A failure printed to a folded console is still told
+
+- **WHEN** a build started from the Build button fails while the console is folded
+- **THEN** a toast says "Could not build."

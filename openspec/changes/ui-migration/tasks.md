@@ -156,3 +156,6 @@ regression against 5.1 has misread this rule.
 - [x] 5.26 The files column keeps its open folders, scroll and lesson tab
       while hidden (HOO-2124; after 5.25; plan:
       [plans/5.26-files-column-keeps-its-state.md](plans/5.26-files-column-keeps-its-state.md))
+- [x] 5.27 Failed clicks tell the user: a toast says what did not happen,
+      once (HOO-2100; after 5.4 and 5.6; design.md, "Failed clicks (5.27)";
+      plan: [plans/5.27-failed-clicks.md](plans/5.27-failed-clicks.md))

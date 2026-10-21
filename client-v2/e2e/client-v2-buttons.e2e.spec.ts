@@ -11,6 +11,9 @@ type AssistantWindow = Window & {
 
 const CODE = "anchor build\nanchor deploy";
 
+/** Longer than a toast takes to appear once it is raised */
+const TOAST_RENDER_MS = 1000;
+
 /**
  * A ring brand button at rest, on the page itself rather than in a dialog:
  * the Build stage's Continue to Deploy, after a build the stub answers.
@@ -135,6 +138,61 @@ test.describe("client-v2-buttons", () => {
       .poll(() => logged.some((l) => l.includes("[ui:button]")))
       .toBe(true);
     expect(await copy.getAttribute("aria-label")).toBe("Copy");
+    // The user hears what did not happen, never the raw refusal
+    await expect(page.getByText("Could not copy.")).toBeVisible();
+    await expect(page.getByText("denied")).toHaveCount(0);
+  });
+
+  test("client-v2-buttons: A failure the terminal printed is shown once", async ({
+    seededPage: page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.route("**/build", (route) =>
+      route.fulfill({ status: 500, body: "boom" })
+    );
+    const logged: string[] = [];
+    page.on("console", (message) => logged.push(message.text()));
+
+    const drawer = page.getByRole("button", { name: "Console", exact: true });
+    if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+      await drawer.click();
+    }
+    await page.locator("#flow-stage-tab-build").click();
+    await page.getByRole("button", { name: "Build", exact: true }).click();
+
+    // The console says it; a toast would say it a second time. The button's
+    // onError logs before it would raise the toast, so the count is taken
+    // once that log is in and the toast has had time to render. It is read
+    // once: a retrying matcher passes falsely, either before a toast mounts
+    // or after it has dismissed itself
+    await expect(page.locator(".xterm-rows").first()).toContainText(
+      /Process error: .*Server request failed/
+    );
+    await expect
+      .poll(() => logged.some((l) => l.includes("[ui:button]")))
+      .toBe(true);
+    await page.waitForTimeout(TOAST_RENDER_MS);
+    expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
+  });
+
+  test("client-v2-buttons: A failure printed to a folded console is still told", async ({
+    seededPage: page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.route("**/build", (route) =>
+      route.fulfill({ status: 500, body: "boom" })
+    );
+
+    const drawer = page.getByRole("button", { name: "Console", exact: true });
+    if ((await drawer.getAttribute("aria-expanded")) === "true") {
+      await drawer.click();
+    }
+    await expect(drawer).toHaveAttribute("aria-expanded", "false");
+    await page.locator("#flow-stage-tab-build").click();
+    await page.getByRole("button", { name: "Build", exact: true }).click();
+
+    // The terminal printed it where the user cannot see it
+    await expect(page.getByText("Could not build.")).toBeVisible();
   });
 
   test("client-v2-buttons: Build cannot be started twice", async ({

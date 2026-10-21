@@ -1,8 +1,9 @@
 // The resolve view loads Monaco, which jsdom cannot run; it is not opened
 vi.mock("../ui/ConflictResolver", () => ({ ConflictResolver: () => null }));
 // The banner binds its onError at render, before a test could spy on it
+const report = vi.hoisted(() => vi.fn());
 vi.mock("@/shared/lib/report-button-failure", () => ({
-  reportButtonFailure: vi.fn(),
+  reportButtonFailure: vi.fn(() => report),
 }));
 
 import { act } from "react";
@@ -104,7 +105,8 @@ describe("SyncBanner telemetry", () => {
     );
     await act(async () => found!.click());
 
-    expect(reportButtonFailure).toHaveBeenCalledWith(failure);
+    expect(reportButtonFailure).toHaveBeenCalledWith("apply your choice");
+    expect(report).toHaveBeenCalledWith(failure);
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
     expect(found!.disabled).toBe(false);
   });

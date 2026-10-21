@@ -59,34 +59,52 @@ const WorkspaceButtons = () => {
 
   return (
     <ButtonsWrapper>
-      <WorkspaceButton onClick={handleCreate} title="Create">
+      <WorkspaceButton
+        onClick={handleCreate}
+        title="Create"
+        failureAction="create a project"
+      >
         <Plus />
       </WorkspaceButton>
 
-      <WorkspaceButton onClick={handleRename} title="Rename">
+      <WorkspaceButton
+        onClick={handleRename}
+        title="Rename"
+        failureAction="rename the project"
+      >
         <Edit />
       </WorkspaceButton>
 
       <WorkspaceButton
         onClick={handleDelete}
         title="Delete"
+        failureAction="delete the project"
         className="hover:text-destructive"
       >
         <Trash />
       </WorkspaceButton>
 
-      <WorkspaceButton onClick={handleGithub} title="Import from Github">
+      <WorkspaceButton
+        onClick={handleGithub}
+        title="Import from Github"
+        failureAction="open the GitHub import"
+      >
         <Github />
       </WorkspaceButton>
 
       <WorkspaceButton
         onClick={handleFsImport}
         title="Import from local file system"
+        failureAction="open the file import"
       >
         <ImportFile />
       </WorkspaceButton>
 
-      <WorkspaceButton onClick={handleFsExport} title="Export">
+      <WorkspaceButton
+        onClick={handleFsExport}
+        title="Export"
+        failureAction="export the project"
+      >
         <ExportFile />
       </WorkspaceButton>
     </ButtonsWrapper>
@@ -100,16 +118,23 @@ export const WorkspaceButton = (
   props: Omit<
     React.ComponentProps<typeof AsyncButton>,
     "onError" | "variant" | "size" | "loadingText"
-  > & { title: string }
-) => (
-  <AsyncButton
-    variant="ghost"
-    size="icon-sm"
-    onError={reportButtonFailure}
-    loadingText={<span className="sr-only">{props.title}</span>}
-    {...props}
-  />
-);
+  > & {
+    title: string;
+    /** What did not happen when the click fails, completing "Could not …" */
+    failureAction: string;
+  }
+) => {
+  const { failureAction, ...rest } = props;
+  return (
+    <AsyncButton
+      variant="ghost"
+      size="icon-sm"
+      onError={reportButtonFailure(failureAction)}
+      loadingText={<span className="sr-only">{props.title}</span>}
+      {...rest}
+    />
+  );
+};
 
 const log = createLogger("explorer:workspaces");
 
@@ -219,7 +244,7 @@ const TemporaryWarning = () => {
       <AsyncButton
         variant="outline"
         onClick={handleImport}
-        onError={reportButtonFailure}
+        onError={reportButtonFailure("import the project")}
         className="w-full"
       >
         <ImportWorkspace data-icon="inline-start" />

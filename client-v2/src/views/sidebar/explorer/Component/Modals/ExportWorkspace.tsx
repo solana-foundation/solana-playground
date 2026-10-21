@@ -68,9 +68,9 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
     try {
       await PgFramework.exportWorkspace({ name });
     } catch (e) {
-      // Nothing downloaded: the user hears it and the team hears why. The
-      // button's `onError` (`reportButtonFailure`) only logs, unreported,
-      // and would leave the dialog open as if the click had done nothing
+      // Nothing downloaded: the user hears it and the team hears why. Not
+      // rethrown: the button's `onError` (`reportButtonFailure`) logs
+      // unreported, and its toast would say it a second time
       log.error(e, { report: true, context: { step: "export" } });
       PgView.setToast(() => <span>Could not export {label}.</span>, {
         options: { name: "export-failed" },
@@ -108,7 +108,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
           <AsyncButton
             type="button"
             onClick={convertAndExport}
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("export the project")}
           >
             Convert and export
             <ExportFile data-icon="inline-end" />
@@ -117,7 +117,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
             type="button"
             variant="outline"
             onClick={exportWithoutChanges}
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("export the project")}
           >
             Export without changes
             <ExportFile data-icon="inline-end" />

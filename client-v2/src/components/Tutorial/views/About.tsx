@@ -60,7 +60,7 @@ export const About: FC<
             <GeneratedTopRightWrapper>
               <AsyncButton
                 onClick={start}
-                onError={reportButtonFailure}
+                onError={reportButtonFailure("start the tutorial")}
                 variant={isFinished ? "ghost" : "secondary"}
                 className={isFinished ? "text-success" : undefined}
               >

@@ -30,7 +30,7 @@ export const Remove = () => (
         type="button"
         variant="outline"
         onClick={() => PgWallet.export()}
-        onError={reportButtonFailure}
+        onError={reportButtonFailure("save the keypair")}
       >
         Save keypair
       </AsyncButton>

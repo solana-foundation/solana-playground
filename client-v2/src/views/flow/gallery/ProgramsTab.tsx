@@ -90,7 +90,7 @@ const ProgramsTab: FC<React.PropsWithChildren<ProgramsTabProps>> = ({
           <AsyncButton
             type="button"
             variant="outline"
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("import the program")}
             onClick={async () => {
               setError(null);
               setProgress({ repo: p.repo, loaded: 0, total: null });

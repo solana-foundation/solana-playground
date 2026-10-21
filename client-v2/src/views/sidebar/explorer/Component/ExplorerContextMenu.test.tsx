@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { PgExplorer } from "../../../../utils";
 
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
@@ -9,6 +10,11 @@ import { ExplorerContextMenu } from "./ExplorerContextMenu";
 vi.mock("../../../../utils", () => ({
   PgExplorer: { removeCtxSelectedEl: vi.fn() },
   PgView: { ids: { ROOT_DIR: "root-dir" } },
+}));
+
+const report = vi.hoisted(() => vi.fn());
+vi.mock("@/shared/lib/report-button-failure", () => ({
+  reportButtonFailure: vi.fn(() => report),
 }));
 
 // The icons are styled-components that read the app theme; they are not what
@@ -34,12 +40,12 @@ const makeProps = (handleMenu: () => boolean) => ({
   ctxNewItem: vi.fn(),
   renameItem: vi.fn(),
   deleteItem: vi.fn(),
-  runBuild: vi.fn(),
-  runDeploy: vi.fn(),
-  runClient: vi.fn(),
-  runClientFolder: vi.fn(),
-  runTest: vi.fn(),
-  runTestFolder: vi.fn(),
+  runBuild: vi.fn().mockResolvedValue(undefined),
+  runDeploy: vi.fn().mockResolvedValue(undefined),
+  runClient: vi.fn().mockResolvedValue(undefined),
+  runClientFolder: vi.fn().mockResolvedValue(undefined),
+  runTest: vi.fn().mockResolvedValue(undefined),
+  runTestFolder: vi.fn().mockResolvedValue(undefined),
   handleMenu,
 });
 
@@ -269,5 +275,19 @@ describe("ExplorerContextMenu", () => {
     } finally {
       root.remove();
     }
+  });
+
+  it("tells the user when a run it started fails", async () => {
+    const failure = new Error("test failed");
+    const props = makeProps(() => true);
+    props.itemData = { isFolder: false, isTest: true } as never;
+    props.runTest.mockRejectedValue(failure);
+    renderMenu(props);
+
+    fireEvent.contextMenu(screen.getByTestId("target"));
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Test$/ }));
+
+    await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
+    expect(reportButtonFailure).toHaveBeenCalledWith("run the test");
   });
 });

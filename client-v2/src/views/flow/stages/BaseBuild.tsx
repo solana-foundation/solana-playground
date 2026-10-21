@@ -109,7 +109,7 @@ const BuildButton = ({
     loading={p.building}
     loadingText="Building..."
     onClick={p.onBuild}
-    onError={reportButtonFailure}
+    onError={reportButtonFailure("build")}
   >
     {label}
   </AsyncButton>
@@ -179,7 +179,7 @@ const Succeeded = (p: BaseBuildProps) => (
         <AsyncButton
           variant="outline"
           onClick={p.onExport}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("export the project")}
         >
           Export project
         </AsyncButton>

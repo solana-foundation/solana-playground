@@ -130,7 +130,7 @@ const DeployResult = ({
           value={latest.programId}
           label="Copy the program id"
           className="ml-auto"
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("copy the program id")}
         />
       </div>
       <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5 text-caption">

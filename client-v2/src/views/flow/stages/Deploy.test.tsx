@@ -49,7 +49,8 @@ vi.mock("../state/deploy-history", () => ({
 }));
 vi.mock("./IdlActions", () => ({ default: () => null }));
 vi.mock("@/shared/lib/report-button-failure", () => ({
-  reportButtonFailure: mocks.report,
+  reportButtonFailure: (action: string) =>
+    action === "deploy" ? mocks.report : vi.fn(),
 }));
 
 import { TooltipProvider } from "@/shared/ui/tooltip";

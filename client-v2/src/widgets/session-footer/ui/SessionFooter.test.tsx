@@ -11,6 +11,7 @@ import {
 } from "vitest";
 
 import { PgSession } from "@/features/auth";
+import { PgView } from "@/utils/view";
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import {
@@ -219,10 +220,11 @@ it("keeps the dialog busy while signing out, so it cannot run twice", async () =
   );
 });
 
-it("logs, and reports, a sign-out that fails", async () => {
+it("logs, reports and tells a sign-out that fails, and keeps the dialog", async () => {
   await signInAsTester();
   const logged = logMemory();
   initLogger({ providers: [logged] });
+  const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
   const failure = new Error("flush threw");
   vi.spyOn(PgSession, "signOut").mockRejectedValue(failure);
   draw("footer");
@@ -232,16 +234,18 @@ it("logs, and reports, a sign-out that fails", async () => {
     await screen.findByRole("button", { name: "Sign out" })
   );
 
-  await waitFor(() =>
-    expect(logged.entries).toEqual([
-      expect.objectContaining({
-        ns: "session-footer:account",
-        level: "error",
-        error: failure,
-        report: true,
-      }),
-    ])
-  );
+  await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+  expect(logged.entries).toEqual([
+    expect.objectContaining({
+      ns: "session-footer:account",
+      level: "error",
+      error: failure,
+      report: true,
+    }),
+    expect.objectContaining({ ns: "ui:button", error: failure }),
+  ]);
+  // Still signed in: the user can try again
+  expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
 });
 
 it("shows a signed-in user, not a sign-in that failed before the session arrived", async () => {

@@ -105,8 +105,10 @@ or from `ui.shadcn.com`: the stock shadcn parts are registry items too, and
 Buttons come from `shared/ui`: `Button`, `BrandButton` (the one call to
 action of a view), `AsyncButton` (an action that waits on a promise) and
 `CopyButton`. Every `AsyncButton` and `CopyButton` passes
-`onError={reportButtonFailure}`. A file input behind a button is
-`components/ImportButton`.
+`onError={reportButtonFailure("<what did not happen>")}`, which logs the
+failure and toasts "Could not <what did not happen>." unless the terminal has
+already printed it; a plain click path whose promise can reject catches into
+the same handler. A file input behind a button is `components/ImportButton`.
 
 One exception: the design system's components named after product parts
 (the catalogue lists them: composer, console drawer, step rail and the rest)

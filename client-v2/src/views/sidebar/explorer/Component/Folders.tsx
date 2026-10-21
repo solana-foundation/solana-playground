@@ -82,6 +82,7 @@ const Folders = () => {
                 <>
                   <SectionButton
                     onClick={ctxMenu.runBuild}
+                    failureAction="build"
                     disabled={ctxMenu.buildLoading}
                     icon={<Wrench />}
                   >
@@ -89,6 +90,7 @@ const Folders = () => {
                   </SectionButton>
                   <SectionButton
                     onClick={ctxMenu.runDeploy}
+                    failureAction="deploy"
                     disabled={ctxMenu.deployState !== "ready"}
                     icon={<Rocket />}
                   >
@@ -96,7 +98,11 @@ const Folders = () => {
                   </SectionButton>
                 </>
               ) : (
-                <SectionButton onClick={ctxMenu.addProgram} icon={<Plus />}>
+                <SectionButton
+                  onClick={ctxMenu.addProgram}
+                  failureAction="add a program"
+                  icon={<Plus />}
+                >
                   Add
                 </SectionButton>
               )}
@@ -114,13 +120,18 @@ const Folders = () => {
               {folders.includes(PgExplorer.PATHS.CLIENT_DIRNAME) ? (
                 <SectionButton
                   onClick={ctxMenu.runClientFolder}
+                  failureAction="run the client"
                   icon={<Triangle rotate="90deg" />}
                   title="Run All (in client dir)"
                 >
                   Run
                 </SectionButton>
               ) : (
-                <SectionButton onClick={ctxMenu.addClient} icon={<Plus />}>
+                <SectionButton
+                  onClick={ctxMenu.addClient}
+                  failureAction="add a client"
+                  icon={<Plus />}
+                >
                   Add client
                 </SectionButton>
               )}
@@ -128,13 +139,18 @@ const Folders = () => {
               {folders.includes(PgExplorer.PATHS.TESTS_DIRNAME) ? (
                 <SectionButton
                   onClick={ctxMenu.runTestFolder}
+                  failureAction="run the tests"
                   icon={<TestTube />}
                   title="Test All (in tests dir)"
                 >
                   Test
                 </SectionButton>
               ) : (
-                <SectionButton onClick={ctxMenu.addTests} icon={<Plus />}>
+                <SectionButton
+                  onClick={ctxMenu.addTests}
+                  failureAction="add tests"
+                  icon={<Plus />}
+                >
                   Add tests
                 </SectionButton>
               )}
@@ -242,10 +258,13 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
 interface SectionButtonProps
   extends Omit<ComponentPropsWithoutRef<typeof AsyncButton>, "onError"> {
   icon: ReactElement<{ "data-icon"?: string }>;
+  /** What did not happen when the click fails, completing "Could not …" */
+  failureAction: string;
 }
 
 const SectionButton: FC<SectionButtonProps> = ({
   icon,
+  failureAction,
   children,
   className,
   ...props
@@ -254,7 +273,7 @@ const SectionButton: FC<SectionButtonProps> = ({
     variant="ghost"
     size="xs"
     className={cn("text-muted-foreground hover:text-foreground", className)}
-    onError={reportButtonFailure}
+    onError={reportButtonFailure(failureAction)}
     {...props}
   >
     {/* Each icon spreads its props onto its <svg>, which is how the data-icon

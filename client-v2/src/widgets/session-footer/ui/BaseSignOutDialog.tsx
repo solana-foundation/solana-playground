@@ -40,7 +40,7 @@ const BaseSignOutDialog = ({
         <AsyncButton
           variant="destructive"
           onClick={onConfirm}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("sign out")}
         >
           Sign out
         </AsyncButton>

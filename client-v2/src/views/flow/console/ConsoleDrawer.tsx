@@ -45,6 +45,13 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
     };
   }, []);
 
+  // What `PgTerminal.process` needs to know whether a failure it printed
+  // was seen
+  useEffect(() => {
+    PgTerminal.setConsoleOpen(open);
+    return () => PgTerminal.setConsoleOpen(false);
+  }, [open]);
+
   const clear = () => {
     PgTerminal.clear().catch((error: unknown) =>
       log.error(error, { report: true, context: { action: "clear" } })

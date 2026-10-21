@@ -187,7 +187,7 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
             {...searchBarProps}
           />
           <CopyButtonWrapper>
-            <CopyButton value={value} onError={reportButtonFailure} />
+            <CopyButton value={value} onError={reportButtonFailure("copy")} />
           </CopyButtonWrapper>
         </InputWithCopyButtonWrapper>
       </Row>

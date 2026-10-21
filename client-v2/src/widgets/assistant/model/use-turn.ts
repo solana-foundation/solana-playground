@@ -276,7 +276,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // store throwing on the new message) would be an unhandled rejection with
   // nothing on screen
   const send = async (text: string) => {
-    await start(text).catch(reportButtonFailure);
+    await start(text).catch(reportButtonFailure("send your message"));
   };
   // Bridges `onDidRequestPrompt`, which subscribes once, to this render's `start`
   const startRef = useRef(start);
@@ -322,7 +322,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         },
         (e) => {
           place(text);
-          reportButtonFailure(e);
+          reportButtonFailure("send the prompt")(e);
         }
       );
     };
@@ -352,7 +352,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
           .catch((e: unknown) => {
             // A prompt the user did not type, and cannot retype, is kept
             place(request.text);
-            reportButtonFailure(e);
+            reportButtonFailure("send the prompt")(e);
           });
       },
       { sends: true }

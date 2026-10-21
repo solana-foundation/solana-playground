@@ -98,7 +98,8 @@ const SendExpanded = () => {
       switch (document.activeElement) {
         case recipientInputRef.current:
         case amountInputRef.current:
-          return send();
+          // The button's `onError` does not see a send started by a key
+          return send().catch(reportButtonFailure("send SOL"));
       }
     },
     // Make `Enter` usable elsewhere (e.g. editor new line)
@@ -130,7 +131,7 @@ const SendExpanded = () => {
       />
       <AsyncButton
         onClick={send}
-        onError={reportButtonFailure}
+        onError={reportButtonFailure("send SOL")}
         disabled={disabled}
         loadingText="Sending..."
         variant="ghost"

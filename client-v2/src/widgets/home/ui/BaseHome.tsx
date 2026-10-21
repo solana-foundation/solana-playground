@@ -172,7 +172,7 @@ const BaseHome = ({
                 variant="outline"
                 aria-label={`Open ${t.name}`}
                 onClick={() => onTutorial(t.name)}
-                onError={reportButtonFailure}
+                onError={reportButtonFailure("open the tutorial")}
               >
                 Open
               </AsyncButton>

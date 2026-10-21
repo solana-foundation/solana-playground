@@ -128,6 +128,9 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
     signingOut.current ??= PgSession.signOut()
       .catch((error: unknown) => {
         log.error(error, { report: true, context: { item: "sign-out" } });
+        // Rethrown so the dialog's button tells the user and the dialog
+        // stays: they are still signed in
+        throw error;
       })
       .finally(() => {
         signingOut.current = null;

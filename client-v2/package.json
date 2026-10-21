@@ -183,6 +183,10 @@
             {
               "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
               "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
+              "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
             }
           ]
         }
@@ -272,6 +276,10 @@
             {
               "selector": "Literal[regex.pattern=/\\{8\\}\\\\?-/]",
               "message": "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex."
+            },
+            {
+              "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
+              "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
             }
           ]
         }

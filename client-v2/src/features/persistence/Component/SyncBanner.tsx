@@ -234,7 +234,7 @@ const SyncBanner = () => {
                 size="sm"
                 disabled={busy}
                 onClick={() => answer(action.resolution)}
-                onError={reportButtonFailure}
+                onError={reportButtonFailure("apply your choice")}
               >
                 {action.label}
               </AsyncButton>

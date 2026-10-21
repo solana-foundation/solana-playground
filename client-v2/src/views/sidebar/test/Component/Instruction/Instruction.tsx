@@ -216,7 +216,7 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
           <AsyncButton
             className="px-6"
             onClick={handleTest}
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("run the test")}
             disabled={!wallet || disabled}
           >
             Test

@@ -163,7 +163,7 @@ export const BaseFeedbackForm = ({
             <AsyncButton
               type="submit"
               loading={sending}
-              onError={reportButtonFailure}
+              onError={reportButtonFailure("send your feedback")}
               className={brandButtonVariants({ variant: "accent" })}
             >
               Submit

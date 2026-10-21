@@ -60,7 +60,7 @@ const TutorialsTab: FC<React.PropsWithChildren<TutorialsTabProps>> = ({
           <AsyncButton
             type="button"
             variant="outline"
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("open the tutorial")}
             onClick={async () => {
               setError(null);
               try {

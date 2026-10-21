@@ -20,7 +20,7 @@ const NoWorkspace = () => {
       <AsyncButton
         variant="outline"
         onClick={createWorkspace}
-        onError={reportButtonFailure}
+        onError={reportButtonFailure("create a project")}
         className="w-full"
       >
         <Plus data-icon="inline-start" />

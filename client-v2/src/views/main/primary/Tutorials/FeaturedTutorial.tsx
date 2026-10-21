@@ -37,7 +37,7 @@ const FeaturedTutorial: FC<React.PropsWithChildren<FeaturedTutorialProps>> = ({
 
         <AsyncButton
           onClick={() => PgTutorial.open(tutorial.name)}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("open the tutorial")}
           variant="secondary"
         >
           START LEARNING

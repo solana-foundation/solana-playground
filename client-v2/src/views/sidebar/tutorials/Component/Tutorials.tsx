@@ -4,6 +4,7 @@ import styled, { css, keyframes } from "styled-components";
 import FilterGroups from "../../../../components/FilterGroups";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgTutorial, TutorialFullData, PgTheme } from "../../../../utils";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type { Filter } from "../../../../hooks";
 
 interface TutorialsProps {
@@ -89,7 +90,11 @@ const TutorialGroup: FC<React.PropsWithChildren<TutorialGroupProps>> = ({
       {tutorials.map((t) => (
         <TutorialWrapper
           key={t.name}
-          onClick={() => PgTutorial.open(t.name)}
+          onClick={() =>
+            PgTutorial.open(t.name).catch(
+              reportButtonFailure("open the tutorial")
+            )
+          }
           progress={
             t.metadata
               ? t.metadata.completed

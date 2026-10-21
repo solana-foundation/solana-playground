@@ -71,7 +71,7 @@ const BasePhoneHome = ({
           type="button"
           variant="outline"
           onClick={() => onQuickstart(q)}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("open the quick start")}
           className="h-auto min-h-16 w-full justify-start gap-3 rounded-2xl bg-surface-panel px-3 py-2 text-left"
         >
           <span

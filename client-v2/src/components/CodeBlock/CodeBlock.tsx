@@ -22,7 +22,7 @@ const CodeBlock = ({ lang, children: code, ...props }: CodeBlockProps) => {
   return (
     <Wrapper ref={wrapperRef} {...props}>
       <CopyButtonWrapper ref={copyButtonWrapperRef}>
-        <CopyButton value={code} onError={reportButtonFailure} />
+        <CopyButton value={code} onError={reportButtonFailure("copy")} />
       </CopyButtonWrapper>
 
       <Code lang={lang}>{code}</Code>

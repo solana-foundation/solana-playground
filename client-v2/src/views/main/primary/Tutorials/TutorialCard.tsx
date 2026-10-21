@@ -5,6 +5,7 @@ import Card from "../../../../components/Card";
 import Img from "../../../../components/Img";
 import { DetailTag } from "@/entities/tutorial";
 import { PgTheme, PgTutorial, TutorialFullData } from "../../../../utils";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 type TutorialCardProps = TutorialFullData;
 
@@ -17,7 +18,11 @@ const TutorialCard: FC<React.PropsWithChildren<TutorialCardProps>> = ({
   pageCount,
   metadata,
 }) => (
-  <Wrapper onClick={() => PgTutorial.open(name)}>
+  <Wrapper
+    onClick={() =>
+      PgTutorial.open(name).catch(reportButtonFailure("open the tutorial"))
+    }
+  >
     <ImgWrapper
       progress={
         metadata

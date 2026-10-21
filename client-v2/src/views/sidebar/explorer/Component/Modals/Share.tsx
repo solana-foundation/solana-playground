@@ -104,7 +104,7 @@ const SuccessPage: FC<React.PropsWithChildren<SuccessPageProps>> = ({
           <CopyButton
             type="button"
             value={shareLink}
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("copy")}
           />
         </SuccessInputWrapper>
         <SuccessLinkWrapper>

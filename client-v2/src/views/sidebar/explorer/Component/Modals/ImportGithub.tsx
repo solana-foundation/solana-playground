@@ -146,10 +146,16 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => (
         type="button"
         variant="outline"
         onClick={async () => {
-          await PgGithub.import(framework.githubExample.url);
+          try {
+            await PgGithub.import(framework.githubExample.url);
+          } catch (e) {
+            // Closing the program selection is a choice, not a failure
+            if (e instanceof ImportCancelledError) return;
+            throw e;
+          }
           PgView.closeModal();
         }}
-        onError={reportButtonFailure}
+        onError={reportButtonFailure("import the program")}
       >
         Import
         <ImportWorkspace data-icon="inline-end" />

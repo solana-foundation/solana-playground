@@ -3,7 +3,8 @@ import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import Input from "../../Input";
-import { Button } from "@/shared/ui/button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet, PgWeb3 } from "../../../utils";
@@ -48,13 +49,14 @@ export const Add = () => {
             Saving the keypair will allow you to recover the wallet.
           </CalloutDescription>
         </Callout>
-        <Button
+        <AsyncButton
           type="button"
           variant="outline"
           onClick={() => PgWallet.export({ name, keypair })}
+          onError={reportButtonFailure("save the keypair")}
         >
           Save keypair
-        </Button>
+        </AsyncButton>
       </MainContent>
     </ModalFrame>
   );

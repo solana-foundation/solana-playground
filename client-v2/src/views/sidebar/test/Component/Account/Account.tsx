@@ -92,7 +92,7 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
         <AsyncButton
           variant="outline"
           onClick={fetchOne}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("fetch the account")}
           disabled={!wallet || fetchAllLoading || !address || addressError}
         >
           Fetch
@@ -100,7 +100,7 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
         <AsyncButton
           variant="outline"
           onClick={fetchAll}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("fetch the accounts")}
           disabled={!wallet || fetchOneLoading}
         >
           Fetch All

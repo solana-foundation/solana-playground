@@ -32,7 +32,7 @@ vi.mock("../../../shared/lib/logger", () => ({
 // exist only in a booted app, and the drawer's imports pull it in. This
 // stubs only what the drawer calls: every other `Pg*` export is undefined.
 vi.mock("@/utils", () => ({
-  PgTerminal: { clear: vi.fn() },
+  PgTerminal: { clear: vi.fn(), setConsoleOpen: vi.fn() },
 }));
 
 /** The flow's state and its one listener, which a test drives by hand */
@@ -94,6 +94,17 @@ it("should report itself expanded when open", () => {
   render(<ConsoleDrawer open={true} onToggle={vi.fn()} />);
   const handle = screen.getByRole("button", { name: "Console" });
   expect(handle.getAttribute("aria-expanded")).toBe("true");
+});
+
+it("should tell the terminal whether it can be seen", () => {
+  const { rerender, unmount } = render(
+    <ConsoleDrawer open={false} onToggle={vi.fn()} />
+  );
+  expect(vi.mocked(PgTerminal.setConsoleOpen).mock.lastCall).toEqual([false]);
+  rerender(<ConsoleDrawer open={true} onToggle={vi.fn()} />);
+  expect(vi.mocked(PgTerminal.setConsoleOpen).mock.lastCall).toEqual([true]);
+  unmount();
+  expect(vi.mocked(PgTerminal.setConsoleOpen).mock.lastCall).toEqual([false]);
 });
 
 it("should clear the terminal from the Clear button", () => {

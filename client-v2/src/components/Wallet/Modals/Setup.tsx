@@ -80,7 +80,7 @@ export const Setup = () => {
             type="button"
             variant="outline"
             onClick={handleExport}
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("save the keypair")}
           >
             Save keypair
           </AsyncButton>
@@ -88,7 +88,7 @@ export const Setup = () => {
             type="button"
             variant="outline"
             onClick={handleImport}
-            onError={reportButtonFailure}
+            onError={reportButtonFailure("import the keypair")}
           >
             Import keypair
           </AsyncButton>

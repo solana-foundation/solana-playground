@@ -22,6 +22,16 @@ import {
 } from "../../../../components/Icons";
 import { PgExplorer, PgView } from "../../../../utils";
 import type { useExplorerContextMenu } from "./useExplorerContextMenu";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
+/**
+ * Radix drops the promise an `onSelect` returns, so a run that fails would
+ * be an unhandled rejection with nothing on screen; catch it into the same
+ * handler the explorer's run buttons use.
+ */
+const telling = (run: () => Promise<unknown>, action: string) => () => {
+  run().catch(reportButtonFailure(action));
+};
 
 type ExplorerContextMenuProps = Pick<
   ReturnType<typeof useExplorerContextMenu>,
@@ -119,36 +129,38 @@ export const ExplorerContextMenu: FC<
         </ContextMenuItem>
         {itemData.isProgramFolder && (
           <>
-            <ContextMenuItem onSelect={runBuild}>
+            <ContextMenuItem onSelect={telling(runBuild, "build")}>
               <Wrench />
               <MenuItemText>Build</MenuItemText>
             </ContextMenuItem>
-            <ContextMenuItem onSelect={runDeploy}>
+            <ContextMenuItem onSelect={telling(runDeploy, "deploy")}>
               <Rocket />
               <MenuItemText>Deploy</MenuItemText>
             </ContextMenuItem>
           </>
         )}
         {itemData.isClient && (
-          <ContextMenuItem onSelect={runClient}>
+          <ContextMenuItem onSelect={telling(runClient, "run the client")}>
             <Triangle rotate="90deg" />
             <MenuItemText>Run</MenuItemText>
           </ContextMenuItem>
         )}
         {itemData.isClientFolder && (
-          <ContextMenuItem onSelect={runClientFolder}>
+          <ContextMenuItem
+            onSelect={telling(runClientFolder, "run the client")}
+          >
             <RunAll />
             <MenuItemText>Run All</MenuItemText>
           </ContextMenuItem>
         )}
         {itemData.isTest && (
-          <ContextMenuItem onSelect={runTest}>
+          <ContextMenuItem onSelect={telling(runTest, "run the test")}>
             <TestTube />
             <MenuItemText>Test</MenuItemText>
           </ContextMenuItem>
         )}
         {itemData.isTestFolder && (
-          <ContextMenuItem onSelect={runTestFolder}>
+          <ContextMenuItem onSelect={telling(runTestFolder, "run the tests")}>
             <TestPaper />
             <MenuItemText>Test All</MenuItemText>
           </ContextMenuItem>

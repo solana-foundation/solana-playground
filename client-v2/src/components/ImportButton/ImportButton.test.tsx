@@ -50,9 +50,10 @@ describe("ImportButton", () => {
       .fn()
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(failure);
-    const report = vi
+    const report = vi.fn();
+    const reportFor = vi
       .spyOn(reportModule, "reportButtonFailure")
-      .mockReturnValue(undefined);
+      .mockReturnValue(report);
     const { container } = renderImport(onImport);
     const input = fileInput(container);
 
@@ -61,12 +62,13 @@ describe("ImportButton", () => {
     fireEvent.change(input, { target: { files: [jsonFile("second.json")] } });
 
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
+    expect(reportFor).toHaveBeenCalledWith("import the file");
     expect(screen.queryByText("first.json")).toBeNull();
     expect(screen.queryByText("second.json")).toBeNull();
   });
 
   it("lets the same file be picked again after a failed import", async () => {
-    vi.spyOn(reportModule, "reportButtonFailure").mockReturnValue(undefined);
+    vi.spyOn(reportModule, "reportButtonFailure").mockReturnValue(vi.fn());
     const { container } = renderImport(
       vi.fn().mockRejectedValue(new Error("bad idl"))
     );
