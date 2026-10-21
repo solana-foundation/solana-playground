@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
+  REAL_WASM_MARKERS,
   WASM_STUB_MARKER,
   WASM_STUB_VERSION,
   bundleProblems,
@@ -28,27 +34,68 @@ test("stubbedPackages names only the stubs", () => {
   );
 });
 
+const chunkOf = (marker) => ({
+  path: `${marker}.js`,
+  text: `import './${marker}.js'`,
+});
+const stubChunk = { path: "stub.js", text: `is a ${WASM_STUB_MARKER}. Run` };
+
 for (const [label, files, expected] of [
   [
-    "passes a bundle with the real solana-cli",
-    [{ path: "a.js", text: "import './solana_cli_wasm_bg.js'" }],
+    "passes a bundle with every real package",
+    REAL_WASM_MARKERS.map(chunkOf),
     0,
   ],
   [
     "rejects a bundle that carries a stub",
-    [
-      { path: "a.js", text: "import './solana_cli_wasm_bg.js'" },
-      { path: "b.js", text: `is a ${WASM_STUB_MARKER}. Run` },
-    ],
+    REAL_WASM_MARKERS.map(chunkOf).concat(stubChunk),
     1,
   ],
   [
-    "rejects a bundle without the real solana-cli",
-    [{ path: "a.js", text: "console.log(1)" }],
+    "rejects a bundle without one real package",
+    REAL_WASM_MARKERS.filter((m) => m !== "rust_analyzer_wasm_bg").map(chunkOf),
     1,
   ],
 ]) {
   test(`bundleProblems ${label}`, () => {
     assert.equal(bundleProblems(files).length, expected);
+  });
+}
+
+const script = fileURLToPath(new URL("./wasm-stubs.mjs", import.meta.url));
+
+// A client folder whose only installed wasm package is a stub; the guard reads node_modules from its cwd.
+const stubbedClient = () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "wasm-stubs-"));
+  const pkg = path.join(
+    dir,
+    "node_modules",
+    "@solana-playground",
+    "solana-cli"
+  );
+  fs.mkdirSync(pkg, { recursive: true });
+  fs.writeFileSync(
+    path.join(pkg, "package.json"),
+    JSON.stringify({ version: WASM_STUB_VERSION })
+  );
+  return dir;
+};
+
+for (const [label, env, expected] of [
+  ["refuses stubs nobody asked for", { PATH: process.env.PATH }, 1],
+  [
+    "allows stubs under USE_WASM_STUBS=true",
+    { PATH: process.env.PATH, USE_WASM_STUBS: "true" },
+    0,
+  ],
+]) {
+  test(`guard ${label}`, (t) => {
+    const cwd = stubbedClient();
+    t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
+    const run = spawnSync(process.execPath, [script, "guard", "dev"], {
+      cwd,
+      env,
+    });
+    assert.equal(run.status, expected, run.stderr.toString());
   });
 }

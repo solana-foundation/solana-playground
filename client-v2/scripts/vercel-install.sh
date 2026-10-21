@@ -299,9 +299,7 @@ install_node_modules() {
     echo ">>> node_modules: Build Cache copy has another install key, clearing all but .cache before yarn install"
     find node_modules -mindepth 1 -maxdepth 1 ! -name .cache -exec rm -rf {} +
   fi
-  # A stub or an older build in node_modules would survive otherwise; --check-files makes yarn notice the removed folders.
-  remove_installed_wasm_packages "$PWD"
-  yarn install --frozen-lockfile --check-files
+  yarn install --frozen-lockfile
   mkdir -p "$(dirname "$INSTALL_MARK")"
   printf '%s' "$key" >"$INSTALL_MARK"
 }
@@ -319,7 +317,7 @@ main() {
   install_node_modules "$wasm_key"
 }
 
-# Sourced, it only defines the functions: client-v2-reusable.yml keys and builds with wasm_source_key and build_wasm_packages.
+# Sourced, it sets the Rust environment and defines the functions without running main: client-v2-reusable.yml keys and builds with wasm_source_key and build_wasm_packages.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   main "$@"
 fi

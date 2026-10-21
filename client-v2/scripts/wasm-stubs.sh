@@ -23,10 +23,3 @@ is_wasm_stub_manifest() {
 holds_wasm_stub() {
   is_wasm_stub_manifest "$1/package.json" || grep -qs "$WASM_STUB_MARKER" "$1/index.js"
 }
-
-# $1: the client directory. yarn 1 re-copies a file: package only when its folder is missing, whatever changed in wasm/*/pkg.
-remove_installed_wasm_packages() {
-  for _wasm_package in $WASM_PACKAGES; do
-    rm -rf "$1/node_modules/@solana-playground/$_wasm_package"
-  done
-}

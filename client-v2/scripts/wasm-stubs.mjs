@@ -10,8 +10,15 @@ export const WASM_STUB_VERSION = "0.0.0-stub";
 /** Text every stub CLI throws, and so text a bundle built from a stub carries. */
 export const WASM_STUB_MARKER = "local dev stub";
 
-/** A module the real solana-cli package ships; a bundle without it did not bundle the real package. */
-export const REAL_WASM_MARKER = "solana_cli_wasm_bg";
+/** The wasm-bindgen module each real package ships; no stub has one, and the rust-analyzer stub carries no {@link WASM_STUB_MARKER}. */
+export const REAL_WASM_MARKERS = [
+  "anchor_cli_wasm_bg",
+  "rust_analyzer_wasm_bg",
+  "seahorse_compile_wasm_bg",
+  "solana_cli_wasm_bg",
+  "spl_token_cli_wasm_bg",
+  "sugar_cli_wasm_bg",
+];
 
 // No import.meta: the e2e spec imports this module, and Playwright compiles it to CommonJS. yarn runs the CLI in client-v2.
 const CLIENT_DIR = process.cwd();
@@ -35,7 +42,7 @@ export const stubbedPackages = (packages) =>
     .map(({ name }) => name);
 
 /**
- * Why a built bundle cannot ship: a file that carries a stub, or no file that carries the real solana-cli.
+ * Why a built bundle cannot ship: a file that carries a stub, or a real package no file carries.
  *
  * @param {{ path: string, text: string }[]} files the bundle's JavaScript
  * @returns {string[]} one line per problem, empty when the bundle is real
@@ -44,8 +51,10 @@ export const bundleProblems = (files) => {
   const problems = files
     .filter(({ text }) => text.includes(WASM_STUB_MARKER))
     .map((file) => `${file.path} contains "${WASM_STUB_MARKER}"`);
-  if (!files.some(({ text }) => text.includes(REAL_WASM_MARKER))) {
-    problems.push(`no file contains "${REAL_WASM_MARKER}"`);
+  for (const marker of REAL_WASM_MARKERS) {
+    if (!files.some(({ text }) => text.includes(marker))) {
+      problems.push(`no file contains "${marker}"`);
+    }
   }
   return problems;
 };
@@ -77,7 +86,7 @@ const readBundle = (dir) =>
       text: fs.readFileSync(path.join(dir, file), "utf8"),
     }));
 
-// Exit codes and messages for `yarn dev` and `yarn test-e2e`, which must not run on stubs nobody asked for.
+// Exit codes and messages for the scripts that serve or test the app, which must not run on stubs nobody asked for.
 const guard = (script) => {
   const stubs = stubbedPackages(readInstalledPackages());
   if (stubs.length === 0) return 0;
@@ -91,7 +100,7 @@ const guard = (script) => {
     `yarn ${script}: node_modules/@solana-playground holds stubs for ${stubs.join(
       ", "
     )}.\n` +
-      `Run \`yarn setup\` for the real packages, or \`yarn ${script}:with-stubs\` to run on the stubs.`
+      `Run \`yarn setup\` for the real packages, or \`${USE_WASM_STUBS}=true yarn ${script}\` to run on the stubs.`
   );
   return 1;
 };
@@ -101,7 +110,7 @@ const checkBuild = (dir) => {
   for (const problem of problems) console.error(`wasm packages: ${problem}`);
   if (problems.length > 0) {
     console.error(
-      `wasm packages: ${dir} was built from stubs; it must not be deployed`
+      `wasm packages: ${dir} lacks a real wasm package; it must not be deployed`
     );
     return 1;
   }
