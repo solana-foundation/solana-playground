@@ -35,7 +35,7 @@ Linear: [HOO-](https://linear.app/solana-fndn/issue/HOO-)
 <!-- The rules are in client-v2/CLAUDE.md; tick what applies, delete the rest. -->
 
 - [ ] `check` script green locally ("Before a PR")
-- [ ] Review agents run; findings fixed here ("Before a PR")
+- [ ] `/sx:review-pr full`, then `/sx:review-pr`, run; critical and needed important findings fixed here, the rest in Linear ("Before a PR")
 - [ ] Task ticked in `tasks.md`; if it was the last, asked whether to close the change ("Specs and changes" 4-5)
 - [ ] Ids, `aria-label`s, test ids unchanged across any move ("What survives every move")
 - [ ] One migration, this PR's own ("What review keeps finding")
