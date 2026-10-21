@@ -4,6 +4,8 @@ import {
   currentProject,
   expect,
   HELP_TAIL,
+  home,
+  homeRegion,
   json,
   leaveEditor,
   projectRow,
@@ -28,18 +30,14 @@ const onlyLineOf = async (page: Page, lines: string[], name: string) => {
 };
 
 /**
- * Starts Hello Anchor's first lesson on a fresh profile, where the gallery
- * opens by itself, as `workspace-migration.e2e.spec.ts`'s helper does
+ * Starts Hello Anchor's first lesson on a fresh profile, which opens on Home,
+ * from Home's tutorial card
  */
 const startTutorial = async (page: Page) => {
-  const gallery = page.locator("[data-gallery-modal]");
-  await expect(gallery).toBeVisible({ timeout: 20_000 });
-  await gallery.getByRole("tab", { name: /tutorials/i }).click();
-  // The card's title has no click handler; its "Open" button does
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
+  await expect(home(page)).toBeVisible({ timeout: 20_000 });
+  await homeRegion(page)
+    .getByRole("button", { name: "Open Hello Anchor" })
+    .click();
   // `exact`: the assistant has a "Start" button of its own
   await page.getByRole("button", { name: "START", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();

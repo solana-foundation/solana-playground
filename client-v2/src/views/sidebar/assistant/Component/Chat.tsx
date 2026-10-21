@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Empty, EmptyDescription } from "@/shared/ui/empty";
 import ChatItem from "./ChatItem";
 import { ThreeDots } from "../../../../components/Loading/ThreeDots";
 import {
   PgAssistant,
+  THREAD_NOT_SAVED,
   turnAppliedApproval,
   turnProducedApproval,
 } from "../store";
@@ -125,6 +127,13 @@ const Chat = ({ turn }: { turn: Turn }) => {
   return (
     <Wrapper>
       <Messages role="log" aria-label="Conversation">
+        {/* From state, not a stored item: it must survive a render reset
+            (`clear`) and must never be saved or synced with the thread */}
+        {PgAssistant.unsaved && (
+          <Callout role="status">
+            <CalloutDescription>{THREAD_NOT_SAVED}</CalloutDescription>
+          </Callout>
+        )}
         {items.length === 0 ? (
           <Empty className="items-stretch justify-start gap-2 p-0 text-left">
             <EmptyDescription className="pb-1 tracking-widest">
