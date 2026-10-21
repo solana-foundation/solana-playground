@@ -21,6 +21,8 @@ export type { ComposerContextChip } from "./ui/BaseAssistantComposer";
 export { AssistantComposer } from "./ui/AssistantComposer";
 export { BaseAssistantHead } from "./ui/BaseAssistantHead";
 export type { BaseAssistantHeadProps } from "./ui/BaseAssistantHead";
+export { BaseThread } from "./ui/BaseThread";
+export { Thread } from "./ui/Thread";
 export { Assistant } from "./ui/Assistant";
 export { openConnectDialog } from "./ui/ConnectDialog";
 export type { AssistantProps, AssistantWiden } from "./ui/Assistant";

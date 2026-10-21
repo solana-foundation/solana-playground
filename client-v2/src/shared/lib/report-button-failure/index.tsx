@@ -51,7 +51,7 @@ export const wasFailureShown = (error: unknown): boolean => {
 /**
  * Where a failed click goes: the `onError` of `AsyncButton` and
  * `CopyButton`, and the catch of a click path that is not one of them (such
- * as `ImportButton` and Chat's send).
+ * as `ImportButton` and `useTurn`'s send).
  *
  * The returned handler logs the failure under `ui:button`, not marked for
  * reporting (which failures reach error tracking is decided in HOO-1800),

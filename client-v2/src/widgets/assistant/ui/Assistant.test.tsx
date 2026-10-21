@@ -7,8 +7,10 @@ import { PgAssistant } from "../../../views/sidebar/assistant/store";
 
 // The thread, Sources and the composer stand in by name: what is under test
 // is which of them the panel shows, not what they draw.
-vi.mock("../../../views/sidebar/assistant/Component/Chat", () => ({
-  default: () => <div>thread</div>,
+vi.mock("./Thread", () => ({
+  Thread: ({ project }: { project: string | null }) => (
+    <div data-project={project ?? "none"}>thread</div>
+  ),
 }));
 // Connect a model's footer link reaches the utils barrel, which needs the
 // build's globals; the panel's dialog here is a stand-in
@@ -111,6 +113,18 @@ describe("Assistant", () => {
     expect(screen.getByRole("heading", { name: "hello-anchor" })).toBeTruthy();
     expect(screen.getByText("thread")).toBeTruthy();
     expect(screen.getByText("composer")).toBeTruthy();
+  });
+
+  it("tells the thread there is no project before one opens", () => {
+    explorer.name = undefined;
+    setup();
+    expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
+    expect(screen.getByText("thread").dataset.project).toBe("none");
+  });
+
+  it("hands the thread the project's own name", () => {
+    setup();
+    expect(screen.getByText("thread").dataset.project).toBe("hello-anchor");
   });
 
   it("asks the gateway for its tools once, on mount", () => {

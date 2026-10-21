@@ -137,8 +137,9 @@ regression against 5.1 has misread this rule.
 - [x] 5.17 Assistant: the composer and Connect a model (HOO-2067; after 5.2;
       design.md, "The composer and Connect a model (5.17)"; plan:
       [plans/5.17-composer-connect.md](plans/5.17-composer-connect.md))
-- [ ] 5.18 Assistant: the thread, messages, diffs and approvals (HOO-1794;
-      after 5.17)
+- [x] 5.18 Assistant: the thread, messages, diffs and approvals (HOO-1794;
+      after 5.17; design.md, "The assistant thread (5.18)"; plan:
+      [plans/5.18-assistant-thread.md](plans/5.18-assistant-thread.md))
 - [x] 5.19 Lessons: objective band, step rail, Steps and Files, the reader
       (HOO-2076; after 5.2 and 5.10; design.md, "Lessons (5.19)"; plan:
       [plans/5.19-lessons.md](plans/5.19-lessons.md))

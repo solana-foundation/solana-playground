@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
-import Chat from "../../../views/sidebar/assistant/Component/Chat";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
 import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -10,6 +9,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
 import { openConnectDialog } from "./ConnectDialog";
+import { Thread } from "./Thread";
 import { BaseAssistantHead } from "./BaseAssistantHead";
 import type { ForgetKey } from "./BaseAssistantHead";
 
@@ -29,9 +29,12 @@ const forgetKeyOf = (busy: boolean): ForgetKey => {
 /** What a heading shows while no project is open yet */
 const NO_PROJECT = "Assistant";
 
-/** The open project's name, kept live through a switch or a rename */
+/**
+ * The open project's name, or `null` before one is open, kept live through a
+ * switch or a rename
+ */
 const useProjectName = () => {
-  const read = () => PgExplorer.currentWorkspaceName ?? NO_PROJECT;
+  const read = () => PgExplorer.currentWorkspaceName ?? null;
   const [name, setName] = useState(read);
   useEffect(() => {
     const update = () => setName(read());
@@ -75,7 +78,7 @@ export function Assistant({ widen, onHide }: AssistantProps) {
   // Here, above both views, so a turn and a prompt waiting in the composer
   // outlive a visit to Sources; the thread and the composer share this one
   const turn = useTurn({ open: openConnectDialog });
-  const title = useProjectName();
+  const project = useProjectName();
 
   // What a pick from More opened takes focus once the menu has closed
   // (`BaseAssistantHead`'s `focusPicked`): Back in Sources; Connect a model
@@ -111,7 +114,7 @@ export function Assistant({ widen, onHide }: AssistantProps) {
   return (
     <div className="flex h-full max-h-full min-h-0 flex-1 flex-col">
       <BaseAssistantHead
-        title={title}
+        title={project ?? NO_PROJECT}
         onSources={() => {
           setView("sources");
           sourcesPicked.current = true;
@@ -128,7 +131,7 @@ export function Assistant({ widen, onHide }: AssistantProps) {
       />
       {view === "chat" && (
         <>
-          <Chat turn={turn} />
+          <Thread turn={turn} project={project} />
           <AssistantComposer turn={turn} />
         </>
       )}

@@ -3,7 +3,8 @@
 ## Purpose
 
 How the assistant's composer names the model it talks to, how a turn is
-sent and stopped, and how a model is connected.
+sent and stopped, how a model is connected, and how the thread reads and
+answers approvals at every width.
 
 ## ADDED Requirements
 
@@ -73,12 +74,65 @@ carries a key, a prompt or a reply.
   `configured`). A 404 means the deployment serves no `/api/agent`, which is
   expected off a full deployment: it is logged as a warning, not reported,
   and sends no event.
+- `assistant_approval_answered {kind, answer}`: a user answered an approval
+  card; `kind` is `patch` or `command`, `answer` is `allow` or `deny`. Once
+  per card.
+- `assistant_suggestion_picked`: a user picked one of the empty thread's
+  suggestions, which sends it, or opens Connect a model when nothing is
+  connected.
+- `assistant_make_change_requested`: a user asked for a described change as
+  a patch ("Make this change" or "Write it for me").
 
 #### Scenario: Stopping a turn is reported once
 
 - **WHEN** a user sends a message and presses Stop twice while the answer
   streams
 - **THEN** `assistant_turn_stopped` is sent once
+
+#### Scenario: Answering an approval is reported once
+
+- **WHEN** a user presses Apply on a patch card and presses it again
+- **THEN** `assistant_approval_answered` is sent once, with `kind` `patch`
+  and `answer` `allow`
+
+### Requirement: The thread reads at every width
+
+The thread SHALL fit the panel it is in, from a 390 px phone up, and an
+approval card SHALL keep its question and its answer in reach.
+
+#### Scenario: A reply with code on a phone
+
+- **WHEN** an answer holding a long line of code arrives at 390 px wide
+- **THEN** the page does not scroll sideways; the code scrolls inside its
+  block
+
+#### Scenario: A patch card on a phone
+
+- **WHEN** a patch longer than the screen is proposed at 390 px wide
+- **THEN** Apply and Reject are on screen with the card's file name, and the
+  diff scrolls inside the card
+
+### Requirement: The thread does not pull a reader down
+
+While an answer streams, the thread SHALL follow it only while the reader is
+at its end, and SHALL offer a way back to the end otherwise.
+
+#### Scenario: Reading back during an answer
+
+- **WHEN** a user scrolls up while an answer streams
+- **THEN** the thread stays where the user scrolled, and "Scroll to end"
+  takes them back to the answer
+
+### Requirement: A restored approval stays unanswered
+
+A card that was pending when the session ended SHALL come back answered by
+no one, and SHALL offer no way to apply it.
+
+#### Scenario: Reloading with a card pending
+
+- **WHEN** a user reloads while a patch card waits for an answer
+- **THEN** the card reads "Not answered" and says the session ended before
+  the user answered, with no Apply or Reject
 
 ### Requirement: Connect a model fits the screen
 
