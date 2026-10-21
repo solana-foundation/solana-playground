@@ -29,6 +29,21 @@ export const keptColumn = (
     ? { tab: kept.tab, scrollTop: kept.scrollTop }
     : null;
 
+/**
+ * Sets the tab the column opens on for `workspace`, keeping the kept scroll
+ * when the memory is that project's (0 otherwise); nothing without a
+ * project. The objective band's "Show the steps" uses it on the phone, where
+ * the Files sheet mounts the column fresh and reads its tab from here.
+ */
+export const keepTab = (workspace: string | undefined, tab: Tab) => {
+  if (!workspace) return;
+  keepColumn({
+    workspace,
+    tab,
+    scrollTop: keptColumn(workspace)?.scrollTop ?? 0,
+  });
+};
+
 /** Drops the memory; for tests */
 export const forgetColumn = () => {
   kept = null;

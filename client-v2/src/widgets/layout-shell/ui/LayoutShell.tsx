@@ -49,7 +49,13 @@ export interface LayoutShellProps {
    * `LAYOUT_BREAKPOINTS.left`, where it sits open under the navigation.
    */
   files: (panel: { collapsed: boolean; toggle: () => void }) => ReactNode;
-  stage: ReactNode;
+  /**
+   * The stage. `openFiles` opens the phone's Files sheet, for a control in the
+   * stage that points at the files column (the lesson band's "Show the steps"),
+   * below `LAYOUT_BREAKPOINTS.phone`, and is a no-op otherwise: its only
+   * caller, the compact band, shows only below that breakpoint.
+   */
+  stage: (panel: { openFiles: () => void }) => ReactNode;
   console: (panel: { open: boolean; toggle: () => void }) => ReactNode;
   /**
    * The assistant, in its panel or, below `LAYOUT_BREAKPOINTS.compact`, its
@@ -593,7 +599,11 @@ const LayoutShell = ({
         />
       }
       stageTabs={stageTabs}
-      stage={stage}
+      stage={stage({
+        openFiles: () => {
+          if (phone) setPhoneFiles(true, "button");
+        },
+      })}
       console={console({
         open: phone ? phoneConsole : state.open.console,
         toggle: () => {

@@ -40,7 +40,7 @@ const startTutorial = async (page: Page) => {
     .click();
   // `exact`: the assistant has a "Start" button of its own
   await page.getByRole("button", { name: "START", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
@@ -398,16 +398,16 @@ test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
   await page.goto("/");
   await startTutorial(page);
 
-  const filesTab = page.getByRole("tab", { name: "Files" });
+  const filesTab = page.getByRole("radio", { name: "Files" });
   await filesTab.click();
-  await expect(filesTab).toHaveAttribute("aria-selected", "true");
+  await expect(filesTab).toHaveAttribute("aria-checked", "true");
 
   await page.getByRole("button", { name: "Collapse project panel" }).click();
   await expect(filesPanel(page)).toHaveCount(0);
   await page.getByRole("button", { name: "Expand project panel" }).click();
 
-  await expect(page.getByRole("tab", { name: "Files" })).toHaveAttribute(
-    "aria-selected",
+  await expect(page.getByRole("radio", { name: "Files" })).toHaveAttribute(
+    "aria-checked",
     "true"
   );
 });
