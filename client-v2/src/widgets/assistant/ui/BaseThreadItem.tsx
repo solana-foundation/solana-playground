@@ -160,7 +160,7 @@ const ReplyFooter = ({ actions }: { actions: ReplyActions }) => {
           size="sm"
           title={verifyStep.title}
           onClick={verifyStep.onClick}
-          onError={reportButtonFailure}
+          onError={reportButtonFailure("check the step")}
         >
           {VERIFY_LABEL[verifyStep.stage]}
         </AsyncButton>
@@ -176,7 +176,7 @@ const ReplyFooter = ({ actions }: { actions: ReplyActions }) => {
             try {
               skipStep.onClick();
             } catch (error) {
-              reportButtonFailure(error);
+              reportButtonFailure("skip the step")(error);
             }
           }}
         >

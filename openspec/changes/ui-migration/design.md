@@ -1071,7 +1071,9 @@ widgets/assistant
 - **What does not change.** The stored transcript (`ChatItem`), how an
   approval is answered (`resolveApproval`), the outcome lines, and a restored
   card that was never answered, which reads "not applied -- the session ended
-  before you answered" (HOO-1737, HOO-1820).
+  before you answered" (HOO-1737, HOO-1820), and the notice that heads the
+  log while the open thread could not be read (`PgAssistant.unsaved`,
+  HOO-2109), drawn from state and never stored.
 - **Small screens.** Below `md` the card's actions are one row of 44 px
   targets and a diff scrolls inside `min(15rem, 40dvh)`, so a pending card's
   question and its answer fit above the keyboard. The scroller follows new

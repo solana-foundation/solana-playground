@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { BaseThread } from "./BaseThread";
+import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
 vi.mock("../../../components/Markdown", () => ({
@@ -16,6 +17,7 @@ const renderThread = (
   items: readonly ChatItem[],
   overrides: {
     working?: boolean;
+    unsaved?: boolean;
     project?: string | null;
     onSuggestion?: (text: string) => void;
   } = {}
@@ -24,6 +26,7 @@ const renderThread = (
     <BaseThread
       items={items}
       working={overrides.working ?? false}
+      unsaved={overrides.unsaved ?? false}
       project={overrides.project === undefined ? "Counter" : overrides.project}
       suggestions={SUGGESTIONS}
       onSuggestion={overrides.onSuggestion ?? vi.fn()}
@@ -50,6 +53,20 @@ describe("BaseThread", () => {
     expect(
       screen.getByRole("heading", { name: "Ask the assistant", level: 3 })
     ).toBeTruthy();
+  });
+
+  it("an unreadable thread says nothing typed here is saved", () => {
+    renderThread([], { unsaved: true });
+    const notice = screen.getByRole("status");
+    expect(notice.textContent).toBe(THREAD_NOT_SAVED);
+    expect(
+      screen.getByRole("log", { name: "Conversation" }).contains(notice)
+    ).toBe(true);
+  });
+
+  it("a readable thread says nothing about saving", () => {
+    renderThread([]);
+    expect(screen.queryByText(THREAD_NOT_SAVED)).toBeNull();
   });
 
   it("a suggestion sends itself", () => {

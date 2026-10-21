@@ -1,5 +1,7 @@
 // One item of the thread, drawn from the design system's message parts.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { createElement } from "react";
+import type { FC } from "react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -7,6 +9,9 @@ import {
   memoryProvider as memoryLog,
   resetLogger,
 } from "../../../shared/lib/logger";
+import { BUTTON_FAILED_TOAST } from "../../../shared/lib/report-button-failure";
+import { PgView } from "../../../utils/view";
+import type { ToastChildProps } from "../../../utils/view";
 import { BaseThreadItem } from "./BaseThreadItem";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
@@ -16,6 +21,14 @@ vi.mock("../../../components/Markdown", () => ({
 }));
 
 const CREATED = "2026-10-19T00:00:00.000Z";
+
+/** What the failed-click toast says, from the last `setToast` call */
+const toastText = (setToast: ReturnType<typeof vi.spyOn>) => {
+  const [elementable] = setToast.mock.calls.at(-1)!;
+  const Toast = elementable as FC<ToastChildProps>;
+  return render(createElement(Toast, { id: BUTTON_FAILED_TOAST })).container
+    .textContent;
+};
 
 const reply = (text: string): ChatItem => ({
   id: "reply-1",
@@ -31,7 +44,10 @@ const user = (text: string): ChatItem => ({
   text,
 });
 
-afterEach(() => resetLogger());
+afterEach(() => {
+  resetLogger();
+  vi.restoreAllMocks();
+});
 
 describe("BaseThreadItem", () => {
   it("the user's message is a bubble on the right", () => {
@@ -167,6 +183,46 @@ describe("BaseThreadItem", () => {
     expect(
       logs.entries.some((e) => e.ns === "ui:button" && e.level === "error")
     ).toBe(true);
+  });
+
+  it("a skip that throws tells the user the step was not skipped", () => {
+    const setToast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
+    render(
+      <BaseThreadItem
+        item={reply("Still stuck?")}
+        actions={{
+          skipStep: {
+            onClick: () => {
+              throw new Error("lesson listener failed");
+            },
+            title: "Not verified",
+          },
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Skip this step" }));
+    expect(toastText(setToast)).toBe("Could not skip the step.");
+  });
+
+  it("a verify step that fails tells the user the step was not checked", async () => {
+    const setToast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
+    render(
+      <BaseThreadItem
+        item={reply("Done")}
+        actions={{
+          verifyStep: {
+            onClick: () => Promise.reject(new Error("build server down")),
+            stage: "build",
+            title: "Proves it",
+          },
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    await waitFor(() => expect(setToast).toHaveBeenCalled());
+    expect(toastText(setToast)).toBe("Could not check the step.");
   });
 
   it("an error is an alert", () => {

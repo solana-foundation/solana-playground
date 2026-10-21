@@ -8,7 +8,10 @@ import {
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "../../../shared/lib/telemetry";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import {
+  PgAssistant,
+  THREAD_NOT_SAVED,
+} from "../../../views/sidebar/assistant/store";
 import type { Turn } from "../model/use-turn";
 import { Thread } from "./Thread";
 
@@ -103,6 +106,14 @@ afterEach(() => {
   resetTelemetry();
   vi.clearAllMocks();
   vi.restoreAllMocks();
+});
+
+describe("Thread, an unreadable thread", () => {
+  it("says nothing typed here is saved", () => {
+    vi.spyOn(PgAssistant, "unsaved", "get").mockReturnValue(true);
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(screen.getByRole("status").textContent).toBe(THREAD_NOT_SAVED);
+  });
 });
 
 describe("Thread, approvals", () => {

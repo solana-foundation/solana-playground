@@ -1,6 +1,7 @@
 import { CirclePlayIcon } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Marker, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,
@@ -11,6 +12,7 @@ import {
   MessageScrollerViewport,
 } from "@/shared/ui/message-scroller";
 import { Spinner } from "@/shared/ui/spinner";
+import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { BaseThreadItem } from "./BaseThreadItem";
 import type { ReplyActions } from "./BaseThreadItem";
@@ -27,6 +29,7 @@ import type { ApprovalAnswer } from "./BaseApprovalCard";
 export const BaseThread = ({
   items,
   working,
+  unsaved,
   project,
   suggestions,
   onSuggestion,
@@ -36,6 +39,8 @@ export const BaseThread = ({
   items: readonly ChatItem[];
   /** The turn is running and the last item is not a reply with text: before the first token and while tools run */
   working: boolean;
+  /** The open thread could not be read, so nothing typed into it is saved */
+  unsaved: boolean;
   /** The open project's name, or `null` when there is none */
   project: string | null;
   suggestions: readonly string[];
@@ -51,6 +56,11 @@ export const BaseThread = ({
           aria-label="Conversation"
           className="gap-4 px-3 py-4"
         >
+          {unsaved && (
+            <Callout role="status">
+              <CalloutDescription>{THREAD_NOT_SAVED}</CalloutDescription>
+            </Callout>
+          )}
           {items.length === 0 ? (
             <EmptyThread
               project={project}

@@ -163,6 +163,9 @@ export const Thread = ({
     <BaseThread
       items={items}
       working={working}
+      // From state, not a stored item: it must survive a render reset
+      // (`clear`) and must never be saved or synced with the thread
+      unsaved={PgAssistant.unsaved}
       project={project}
       suggestions={SUGGESTIONS}
       onSuggestion={(text) => {
