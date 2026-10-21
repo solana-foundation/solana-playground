@@ -1,5 +1,12 @@
 import type { Page, Route } from "@playwright/test";
-import { expect, json, LONG, startProject, test } from "./fixtures";
+import {
+  expect,
+  json,
+  LONG,
+  startProject,
+  stubSession,
+  test,
+} from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
 
 /**
@@ -49,6 +56,7 @@ const openProject = async (page: Page, name: string) => {
 };
 
 test("client-v2-assistant: The hosted default", async ({ page }) => {
+  await stubSession(page);
   await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, answer);
   await openProject(page, "hosted-default");
 
@@ -85,6 +93,7 @@ test("client-v2-assistant: The first message on the hosted default", async ({
   page,
 }) => {
   let turns = 0;
+  await stubSession(page);
   await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) => {
     turns += 1;
     return answer(route);
@@ -130,6 +139,7 @@ test("client-v2-assistant: Stopping an answer", async ({ page }) => {
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
+  await stubSession(page);
   await stubAgent(
     page,
     { configured: true, model: DEFAULT_MODEL },
@@ -166,6 +176,7 @@ test("client-v2-assistant: Stopping a turn is reported once", async ({
   const held = new Promise<void>((resolve) => {
     release = resolve;
   });
+  await stubSession(page);
   await stubAgent(
     page,
     { configured: true, model: DEFAULT_MODEL },

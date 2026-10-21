@@ -40,7 +40,6 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
   );
   await expect(page.getByText(HINT)).toBeVisible(LONG);
 
-  // TODO: open "Bring your own key" first; with a default backend configured the alternatives start collapsed
   await page.getByRole("radio", { name: "OpenAI-compatible" }).click();
   await page.locator("#assistant-base-url").fill("http://mock-llm.test/v1");
   await page.locator("#assistant-model").fill("mock-model");

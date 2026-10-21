@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { Page, Request } from "@playwright/test";
-import { json, seedWorkspace, startProject } from "./fixtures";
+import { json, seedWorkspace, startProject, stubSession } from "./fixtures";
 
 /**
  * The panel comes back usable after a reload, without being asked twice.
@@ -30,13 +30,10 @@ type AssistantWindow = Window & {
 
 /**
  * The panel offers the default backend only to a signed-in user, because
- * `/api/agent` refuses anyone else. Neither test sends a turn, so the
+ * `/api/agent` refuses anyone else. Their turns go to `stubDefault`, so the
  * browser's view of the session is all they need.
  */
-const signIn = (page: Page) =>
-  page.route("**/api/auth/get-session", (r) =>
-    json(r, { user: { id: "u1", name: "Tester", image: null, login: "t" } })
-  );
+const signIn = (page: Page) => stubSession(page);
 
 const isConnected = (page: Page) =>
   page.evaluate(() => !!(window as AssistantWindow).__pgAssistant?.isConnected);

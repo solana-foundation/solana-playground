@@ -887,6 +887,30 @@ widgets/assistant
   - none configured: the model button reads "Connect a model", and Send
     opens the dialog with the typed prompt kept in the composer.
   The thread restored before a backend is picked stays on screen above it.
+- **The default backend needs a session.** Master's sign-in gate for the
+  default backend (472ed30f6, the archived `default-backend-sign-in`) was
+  built on the inline picker this task removed; landing new-face on master
+  (HOO-2205) reconciled the two:
+  - the form keeps the gate: signed out, the default is tagged "sign-in
+    needed", reads "Sign in with GitHub to use it, or bring your own key
+    below.", and the dialog's action is **Sign in with GitHub**, a failure
+    shown in the form;
+  - `useTurn` treats the default without a session (`PgAssistant.needsSignIn`)
+    as nothing connected: a send opens Connect a model with the prompt kept,
+    the first send connects the default only for a signed-in user, and the
+    remembered default reconnects only once signed in, tried again when a
+    user arrives. A send waits for the page's own session read
+    (`PgSession.whenRead`) and never reads again: a read that found a session
+    from another tab would reach the session effect as a sign-in and open the
+    account's latest project under the prompt;
+  - picking the default in the composer's model menu while signed out opens
+    Connect a model on it rather than connecting;
+  - on session end nothing opens; the next send asks. The store keeps
+    `needsSignIn` and drops master's `keepBackend` refusal and its
+    session-end `pickBackend`: both served the inline picker, and a refused
+    `keepBackend` left the dialog's mark set, so it never opened again.
+  _Rejected:_ opening the dialog at once when the session ends. Decided with
+  Slava 2026-10-21.
 - **The model is the real one.** The default backend's model comes from
   `GET /api/agent` (`model`, which it already returns), shown through a
   small table of display names (`z-ai/glm-5.3-flash:US` is "GLM 5.3 Flash");

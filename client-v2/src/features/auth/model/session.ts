@@ -48,7 +48,7 @@ export interface SessionUser {
   login: string | null;
 }
 
-/** Where a sign-in started, when its listeners must tell it apart from the header's */
+/** Where a sign-in started, when its listeners must tell it apart from the account footer's */
 export type SignInOrigin = "assistant";
 
 /**
@@ -86,7 +86,27 @@ export class PgSession {
    * Never throws: a failed read leaves the user signed out, since nobody can be
    * proved signed in, and is logged (reported when it threw or answered 5xx).
    */
-  static async refresh() {
+  static refresh(): Promise<void> {
+    const read = PgSession._read().finally(() => {
+      if (PgSession._reading === read) PgSession._reading = undefined;
+    });
+    PgSession._reading = read;
+    return read;
+  }
+
+  /**
+   * Settles once the session has been read: at once after any read, on the
+   * read in flight if there is one, or on a first read started here. It never
+   * reads again, so a caller deciding on `get()` waits for the page's own read
+   * without turning a later sign-in elsewhere into a change seen here, which
+   * the session effect would take for a sign-in of its own.
+   */
+  static whenRead(): Promise<void> {
+    if (PgSession._hasRead) return Promise.resolve();
+    return PgSession._reading ?? PgSession.refresh();
+  }
+
+  private static async _read() {
     let next: SessionUser | null = null;
 
     try {
@@ -118,6 +138,7 @@ export class PgSession {
       log.error(error, { report: true, context: { step: "refresh" } });
     }
 
+    PgSession._hasRead = true;
     PgSession._set(next);
   }
 
@@ -315,6 +336,7 @@ export class PgSession {
 
   /** Test seam: set the user without a network round trip */
   static async refreshWith(user: SessionUser | null) {
+    PgSession._hasRead = true;
     PgSession._set(user);
   }
 
@@ -333,6 +355,8 @@ export class PgSession {
     PgSession._signingInFrom = null;
     PgSession._pending = undefined;
     PgSession._signInState = IDLE;
+    PgSession._hasRead = false;
+    PgSession._reading = undefined;
   }
 
   private static _user: SessionUser | null = null;
@@ -341,6 +365,9 @@ export class PgSession {
   private static readonly _listeners = new Set<() => void>();
 
   private static _pending: Promise<void> | undefined;
+  /** A session read has answered, so `get()` is what the server said */
+  private static _hasRead = false;
+  private static _reading: Promise<void> | undefined;
   private static _signInState: SignInState = IDLE;
 
   private static _channel: PopupChannel | undefined;
@@ -401,6 +428,43 @@ if (import.meta.vitest) {
         vi.restoreAllMocks();
         PgSession.reset();
         resetLogger();
+      });
+
+      it("waits on the read in flight instead of reading again", async () => {
+        let answer!: (user: unknown) => void;
+        const request = vi.spyOn(globalThis, "fetch").mockReturnValue(
+          new Promise<Response>(
+            (resolve) =>
+              (answer = (user) =>
+                resolve({
+                  ok: true,
+                  json: async () => ({ user }),
+                } as Response))
+          )
+        );
+        const read = PgSession.refresh();
+        let settled = false;
+        const waited = PgSession.whenRead().then(() => (settled = true));
+        await Promise.resolve();
+        expect(settled).toBe(false);
+
+        answer({ id: "u1", name: null, image: null });
+        await Promise.all([read, waited]);
+
+        expect(PgSession.get()?.id).toBe("u1");
+        expect(request).toHaveBeenCalledTimes(1);
+      });
+
+      it("reads once when nothing has read the session yet", async () => {
+        const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+          ok: true,
+          json: async () => ({ user: null }),
+        } as Response);
+
+        await PgSession.whenRead();
+        await PgSession.whenRead();
+
+        expect(request).toHaveBeenCalledTimes(1);
       });
 
       it("is signed out before any refresh", () => {

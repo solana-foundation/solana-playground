@@ -3,6 +3,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
+import { PgSession } from "../../../features/auth";
 import { report, toReplayMessages } from "../../../features/persistence";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import {
@@ -83,12 +84,35 @@ export interface Turn {
 }
 
 /**
- * Connect the deployment's default when it has one; `null` when it has none,
- * or while Connect a model is open, for the caller to ask the user.
+ * The connection a turn can run on: none for the default backend while nobody
+ * is signed in, since `/api/agent` refuses every turn then. Connect a model is
+ * where that user signs in.
+ */
+const usableConnection = () =>
+  PgAssistant.needsSignIn ? null : PgAssistant.connection;
+
+/**
+ * Whether someone is signed in, once the page's session read has answered: a
+ * send can come before it. Never a read of its own: one that found a session
+ * started in another tab would reach the session effect as a sign-in, and it
+ * would open the account's latest project under the prompt being sent.
+ */
+const isSignedIn = async () => {
+  await PgSession.whenRead();
+  return !!PgSession.get();
+};
+
+/**
+ * Connect the deployment's default when it has one and someone is signed in;
+ * `null` otherwise, or while Connect a model is open, for the caller to ask
+ * the user.
  */
 const connectDefault = async (): Promise<Connection | null> => {
-  const backend = await probeDefaultBackend();
-  if (backend.state !== "present") return null;
+  const [backend, signedIn] = await Promise.all([
+    probeDefaultBackend(),
+    isSignedIn(),
+  ]);
+  if (backend.state !== "present" || !signedIn) return null;
   // Another caller may have connected while the probe was out; and a user
   // choosing in Connect a model is not overruled by a send behind the dialog
   if (!PgAssistant.connection && !PgAssistant.isPickingBackend) {
@@ -100,6 +124,8 @@ const connectDefault = async (): Promise<Connection | null> => {
 export const useTurn = ({ open }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
+  // A session ending or starting changes whether the default can take a turn
+  useEffect(() => PgSession.onDidChange(render).dispose, []);
 
   const [input, setInput] = useState("");
   const [focusRequest, focus] = useReducer((n: number) => n + 1, 0);
@@ -129,7 +155,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   const phase = phaseOf();
   const busy = phase !== "idle";
 
-  const connection = PgAssistant.connection;
+  const connection = usableConnection();
   // Connecting answers the hint; a later disconnect must not bring it back
   useEffect(() => {
     if (connection) setPromptWaiting(false);
@@ -144,10 +170,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * before the probe can answer, and the default's reconnect then finds a
    * connection and stands down: a kept key wins over a remembered default.
    *
-   * Then the keyless default, only if the user picked it before and only once
-   * the probe confirms this deployment still serves it. `probeDefaultBackend`
-   * is shared with the composer and Connect a model, so the page asks once
-   * (again only after a failure).
+   * Then the keyless default, only if the user picked it before, only once
+   * the probe confirms this deployment still serves it, and only for a
+   * signed-in user: tried again when a user arrives, since the session is
+   * read after this mounts and a sign-in can come later.
+   *
+   * `probeDefaultBackend` is shared with the composer and Connect a model, so
+   * the page asks once (again only after a failure).
    *
    * Neither overrules a live connection or a choice in progress in Connect a
    * model. A Forget key stays forgotten because `forgetBackend` drops what
@@ -160,23 +189,34 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     }
 
     let live = true;
-    probeDefaultBackend()
-      .then((backend) => {
-        if (!live || backend.state !== "present") return;
-        if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
-        if (!isDefaultBackendRemembered()) return;
-        PgAssistant.connect(DEFAULT_CONNECTION);
-      })
-      .catch((error: unknown) => {
-        // Nothing on screen asked for it: the panel opens unconnected, and
-        // the first send connects or asks
-        connectLog.error(error, {
-          report: true,
-          context: { reconnect: "default" },
+    const reconnectDefault = () =>
+      probeDefaultBackend()
+        .then((backend) => {
+          if (!live || backend.state !== "present") return;
+          if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
+          if (!isDefaultBackendRemembered() || !PgSession.get()) return;
+          PgAssistant.connect(DEFAULT_CONNECTION);
+        })
+        .catch((error: unknown) => {
+          // Nothing on screen asked for it: the panel opens unconnected, and
+          // the first send connects or asks
+          connectLog.error(error, {
+            report: true,
+            context: { reconnect: "default" },
+          });
         });
-      });
+    void reconnectDefault();
+    // `onDidChange` fires for every step of a sign-in too; only a user
+    // arriving can make the default reconnect
+    let signedIn = !!PgSession.get();
+    const session = PgSession.onDidChange(() => {
+      const now = !!PgSession.get();
+      if (now && !signedIn) void reconnectDefault();
+      signedIn = now;
+    });
     return () => {
       live = false;
+      session.dispose();
     };
   }, []);
 
@@ -202,8 +242,10 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
 
     // Only a send with nothing connected waits, so a connected one has started
     // its turn by the time it first yields
-    let current = PgAssistant.connection;
-    if (!current) {
+    let current = usableConnection();
+    // Nothing connected: try the default. Connected to the default with no
+    // session falls through to Connect a model, which offers sign-in
+    if (!current && !PgAssistant.connection) {
       starting.current = true;
       try {
         current = await connectDefault();
@@ -328,17 +370,21 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     };
     return PgAssistant.onDidRequestPrompt(
       (request) => {
-        if (PgAssistant.isConnected) {
+        if (usableConnection()) {
           run(request);
           return;
         }
-        probeDefaultBackend()
-          .then((backend) => {
+        Promise.all([probeDefaultBackend(), isSignedIn()])
+          .then(([backend, signedIn]) => {
             // Connected while the probe was out, or the default can be; not
-            // behind an open Connect a model, where the user is choosing
+            // behind an open Connect a model, where the user is choosing, and
+            // not for a user the default would refuse
             const canConnectDefault =
-              backend.state === "present" && !PgAssistant.isPickingBackend;
-            if (PgAssistant.isConnected || canConnectDefault) {
+              backend.state === "present" &&
+              signedIn &&
+              !PgAssistant.connection &&
+              !PgAssistant.isPickingBackend;
+            if (usableConnection() || canConnectDefault) {
               if (!PgAssistant.isConnected) {
                 PgAssistant.connect(DEFAULT_CONNECTION);
               }

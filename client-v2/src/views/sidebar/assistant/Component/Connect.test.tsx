@@ -12,6 +12,8 @@ import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import Connect from "./Connect";
+import { PgSession } from "../../../../features/auth";
+import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 import type { ConnectAction, ConnectProps } from "./Connect";
 import { PROVIDERS } from "../model/types";
 import { PgAssistant, type Connection } from "../store";
@@ -54,6 +56,19 @@ const renderConnect = (props: Omit<ConnectProps, "frame">) =>
     </ThemeProvider>
   );
 
+/**
+ * A real known-step failure ("Allow popups for this site to sign in."): the
+ * popup is blocked. Made once per test, before the spy replaces `signIn`.
+ */
+const blockedPopup = async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    ok: true,
+    json: async () => ({ url: "https://github.example/authorize" }),
+  } as Response);
+  PgSession.setOpenChannel(() => undefined);
+  return PgSession.signIn().catch((error: unknown) => error);
+};
+
 const checked = () =>
   screen
     .getAllByRole("radio")
@@ -63,10 +78,139 @@ describe("Connect", () => {
   beforeEach(() => {
     action = null;
     PgAssistant.disconnect();
+    // The default backend answers only a signed-in user
+    void PgSession.refreshWith({
+      id: "u1",
+      name: null,
+      image: null,
+      login: null,
+    });
   });
   afterEach(() => {
     PgAssistant.disconnect();
+    PgSession.reset();
     vi.restoreAllMocks();
+  });
+
+  it("offers a signed-in user the default with Start", () => {
+    renderConnect({ defaultBackend: "present" });
+
+    expect(screen.getByText("no key needed")).toBeTruthy();
+    expect(screen.queryByText("sign-in needed")).toBeNull();
+    expect(action?.text).toBe("Start");
+  });
+
+  describe("signed out", () => {
+    beforeEach(() => PgSession.refreshWith(null));
+
+    it("offers sign-in for the default instead of Start", () => {
+      renderConnect({ defaultBackend: "present" });
+
+      expect(
+        screen.getByText(
+          "Sign in with GitHub to use it, or bring your own key below."
+        )
+      ).toBeTruthy();
+      // The tag would otherwise call the backend ready to use
+      expect(screen.getByText("sign-in needed")).toBeTruthy();
+      expect(screen.queryByText("no key needed")).toBeNull();
+      expect(action).toMatchObject({
+        text: "Sign in with GitHub",
+        ready: true,
+      });
+    });
+
+    it("signs in from the assistant when the action is pressed", async () => {
+      const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue();
+      renderConnect({ defaultBackend: "present" });
+
+      await act(async () => action!.connect());
+
+      expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+      expect(PgAssistant.connection).toBeNull();
+    });
+
+    it("shows why a sign-in failed", async () => {
+      const failure = await blockedPopup();
+      vi.spyOn(PgSession, "signIn").mockRejectedValue(failure);
+      renderConnect({ defaultBackend: "present" });
+
+      await act(async () => action!.connect());
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Allow popups for this site to sign in."
+      );
+    });
+
+    it("reports a sign-in that failed for a reason it does not know", async () => {
+      const logged = memoryProvider();
+      initLogger({ providers: [logged] });
+      vi.spyOn(PgSession, "signIn").mockRejectedValue(
+        new TypeError("Failed to fetch")
+      );
+      renderConnect({ defaultBackend: "present" });
+
+      await act(async () => action!.connect());
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Sign-in failed. Try again."
+      );
+      expect(logged.entries).toEqual([
+        expect.objectContaining({ level: "error", report: true }),
+      ]);
+      resetLogger();
+    });
+
+    it("holds the action while the sign-in runs", async () => {
+      vi.spyOn(PgSession, "signInState").mockReturnValue({ status: "pending" });
+      renderConnect({ defaultBackend: "present" });
+
+      expect(action).toMatchObject({
+        text: "Sign in with GitHub",
+        ready: false,
+      });
+    });
+
+    it("clears the failure when the next sign-in starts", async () => {
+      const failure = await blockedPopup();
+      vi.spyOn(PgSession, "signIn")
+        .mockRejectedValueOnce(failure)
+        .mockReturnValueOnce(new Promise(() => {}));
+      renderConnect({ defaultBackend: "present" });
+      await act(async () => action!.connect());
+      await screen.findByRole("alert");
+
+      await act(async () => action!.connect());
+
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("offers Start once the user signs in", async () => {
+      renderConnect({ defaultBackend: "present" });
+      expect(action?.text).toBe("Sign in with GitHub");
+
+      await act(() =>
+        PgSession.refreshWith({
+          id: "u1",
+          name: null,
+          image: null,
+          login: null,
+        })
+      );
+
+      expect(action?.text).toBe("Start");
+      expect(screen.getByText("no key needed")).toBeTruthy();
+      expect(screen.queryByText("sign-in needed")).toBeNull();
+    });
+
+    it("connects a key-based backend as before", () => {
+      renderConnect({
+        defaultBackend: "present",
+        preset: { provider: "openai" },
+      });
+
+      expect(action?.text).toBe("Connect");
+    });
   });
 
   it("offers no default the deployment does not serve, and falls back to a key", () => {

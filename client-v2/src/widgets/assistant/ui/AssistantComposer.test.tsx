@@ -15,6 +15,7 @@ import {
 } from "../../../shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
+import { PgSession } from "../../../features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { ModalHost } from "../../overlays";
 import type { Connection } from "../../../views/sidebar/assistant/store";
@@ -133,6 +134,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   PgAssistant.disconnect();
+  PgSession.reset();
   resetTelemetry();
   resetLogger();
   vi.restoreAllMocks();
@@ -190,6 +192,12 @@ describe("AssistantComposer, connected", () => {
   });
 
   it("connects the default from a keyed backend and clears the thread", async () => {
+    await PgSession.refreshWith({
+      id: "u1",
+      name: null,
+      image: null,
+      login: null,
+    });
     render(<Harness />);
     const user = await openMenu(/Opus 5.5/);
     await user.click(
@@ -201,6 +209,25 @@ describe("AssistantComposer, connected", () => {
     expect(tracked()).toEqual([
       ["assistant_model_picked", { provider: "default", via: "menu" }],
     ]);
+  });
+
+  it("opens Connect a model on the default instead of connecting it, signed out", async () => {
+    await PgSession.refreshWith(null);
+    const open = vi.spyOn(PgView, "setModal");
+    render(<Harness />);
+    const user = await openMenu(/Opus 5.5/);
+    await user.click(
+      screen.getByRole("menuitemradio", { name: /GLM 5.3 Flash/ })
+    );
+
+    expect(PgAssistant.connection?.id).toBe("anthropic");
+    expect(PgAssistant.items.length).toBe(1);
+    expect(open).toHaveBeenCalledWith(expect.anything(), {
+      preset: { provider: "default" },
+    });
+    expect(tracked()).toEqual([["assistant_connect_opened", { via: "model" }]]);
+    // `closeModal` answers every pending `setModal` (HOO-2091)
+    await act(async () => PgView.closeModal(null));
   });
 
   it("tracks nothing when the effort picked is the one set", async () => {

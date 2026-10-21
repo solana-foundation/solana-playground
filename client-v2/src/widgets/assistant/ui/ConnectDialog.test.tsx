@@ -22,6 +22,7 @@ import {
   memoryProvider as memoryLog,
   resetLogger,
 } from "../../../shared/lib/logger";
+import { PgSession } from "../../../features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { ModalFrame, ModalHost } from "../../overlays";
 import type { DefaultBackend } from "../model/default-backend";
@@ -99,6 +100,7 @@ afterEach(async () => {
   // here would be answered by the next test's connection
   await act(async () => PgView.closeModal(null));
   PgAssistant.disconnect();
+  PgSession.reset();
   resetTelemetry();
   resetLogger();
   vi.restoreAllMocks();
@@ -187,6 +189,13 @@ describe("ConnectDialog", () => {
 
   it("gives focus to the submit when the form has no field", async () => {
     backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+    // Start, the submit looked for here, shows only for a signed-in user
+    await PgSession.refreshWith({
+      id: "u1",
+      name: null,
+      image: null,
+      login: null,
+    });
     renderHost();
 
     act(() => openConnectDialog("menu"));
@@ -194,6 +203,17 @@ describe("ConnectDialog", () => {
     // The keyless default has no field: Enter must start, not close
     const start = screen.getByRole("button", { name: "Start" });
     await waitFor(() => expect(document.activeElement).toBe(start));
+  });
+
+  it("offers sign-in as the submit for the default while signed out", async () => {
+    backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+    renderHost();
+
+    act(() => openConnectDialog("menu"));
+
+    const signIn = screen.getByRole("button", { name: "Sign in with GitHub" });
+    await waitFor(() => expect(document.activeElement).toBe(signIn));
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   });
 
   it("connects once on Enter in the key field", async () => {

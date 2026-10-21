@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+import { PgSession } from "../../../features/auth";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
@@ -125,6 +126,12 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
   const pick = (option: ModelOption) => {
     if (option.provider === "default") {
       if (connection?.id === "default") return;
+      // The default answers only a signed-in user: Connect a model, opened on
+      // it, offers the sign-in and leaves the current backend until then
+      if (!PgSession.get()) {
+        turn.openConnect("model", { provider: "default" });
+        return;
+      }
       // From a keyed backend this is a change of backend, and starts a new
       // conversation as connecting always has
       PgAssistant.connect(DEFAULT_CONNECTION);

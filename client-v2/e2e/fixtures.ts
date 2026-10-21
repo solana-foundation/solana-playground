@@ -119,6 +119,17 @@ export const json = (r: Route, body: unknown) =>
     body: JSON.stringify(body),
   });
 
+/** The user the session stubs sign in as */
+export const TEST_USER = { id: "u1", name: "Tester", image: null, login: "t" };
+
+/**
+ * What the browser reads as its session: `TEST_USER`, or nobody for `null`.
+ * The default backend answers only a signed-in user, so a test that sends to
+ * it signs in first; its turns go to the test's own `/api/agent` stub.
+ */
+export const stubSession = (page: Page, user: unknown = TEST_USER) =>
+  page.route("**/api/auth/get-session", (r) => json(r, { user }));
+
 /**
  * Wait until the browser has stopped uploading.
  *

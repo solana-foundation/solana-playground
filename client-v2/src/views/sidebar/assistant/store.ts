@@ -366,19 +366,17 @@ export class PgAssistant {
     PgAssistant._emit();
   }
 
-  /** Whether the connection is the default backend while nobody is signed in */
+  /**
+   * Whether the connection is the default backend while nobody is signed in.
+   * `/api/agent` refuses every turn then, so `useTurn` treats it as nothing
+   * connected and a send opens Connect a model, which offers sign-in.
+   */
   static get needsSignIn() {
     return isDefaultBackend(PgAssistant._connection?.id) && !PgSession.get();
   }
 
-  /**
-   * Mark Connect a model closed without changing anything.
-   *
-   * Refused while `needsSignIn`: every turn would get the 401 refusal, and a
-   * refresh of an already null session fires no change to reopen the picker.
-   */
+  /** Mark Connect a model closed without changing anything */
   static keepBackend() {
-    if (PgAssistant.needsSignIn) return;
     PgAssistant._pickingBackend = false;
     PgAssistant._emit();
   }
@@ -1145,12 +1143,6 @@ export class PgAssistant {
   }
 }
 
-// The default backend needs a session, and only the picker offers sign-in;
-// the connection stays remembered so signing in again reconnects it
-PgSession.onDidChange(() => {
-  if (PgAssistant.needsSignIn) PgAssistant.pickBackend();
-});
-
 // A handle on the panel's state for the browser console, and for the e2e tests
 // that cover thread persistence -- sending a message for real would need a
 // configured backend and a live model call, which is not what those assert.
@@ -1704,73 +1696,52 @@ if (import.meta.vitest) {
       const signedIn = (name: string | null) =>
         PgSession.refreshWith({ id: "u1", name, image: null, login: null });
 
-      // Not `PgSession.reset()`: it drops every listener, the store's included.
-      // Disconnecting first, so ending the session here cannot reach the store.
-      const signedOutAndDisconnected = async () => {
+      const signedOutAndDisconnected = () => {
         PgAssistant.disconnect();
         localStorage.clear();
         sessionStorage.clear();
-        await PgSession.refreshWith(null);
+        PgSession.reset();
       };
 
       beforeEach(signedOutAndDisconnected);
       afterEach(signedOutAndDisconnected);
 
-      it("returns a default-backend user to the picker when the session ends", async () => {
+      it("needs sign-in for the default backend once the session ends", async () => {
         await signedIn(null);
         PgAssistant.connect({ id: "default", apiKey: "" });
+        expect(PgAssistant.needsSignIn).toBe(false);
 
         await PgSession.refreshWith(null);
 
-        expect(PgAssistant.isPickingBackend).toBe(true);
+        expect(PgAssistant.needsSignIn).toBe(true);
+        // Nothing opens on its own: the next send asks (`useTurn`)
+        expect(PgAssistant.isPickingBackend).toBe(false);
       });
 
-      it("leaves a key-based backend alone when the session ends", async () => {
+      it("never needs sign-in for a key-based backend", async () => {
         await signedIn(null);
         PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
 
         await PgSession.refreshWith(null);
 
-        expect(PgAssistant.isPickingBackend).toBe(false);
+        expect(PgAssistant.needsSignIn).toBe(false);
+        // Signing out leaves the backend and its key where they were
+        expect(PgAssistant.connection).toMatchObject({
+          id: "openai",
+          apiKey: "sk-test",
+        });
       });
 
-      it("stays in chat when a signed-in user's profile refreshes", async () => {
-        await signedIn(null);
-        PgAssistant.connect({ id: "default", apiKey: "" });
-
-        // A changed field notifies listeners although the user is still signed in
-        await signedIn("Ada");
-
-        expect(PgAssistant.isPickingBackend).toBe(false);
-      });
-
-      it("keeps the picker open while the default backend has no session", async () => {
+      it("closes Connect a model even while the default backend has no session", async () => {
         await signedIn(null);
         PgAssistant.connect({ id: "default", apiKey: "" });
         await PgSession.refreshWith(null);
-
-        PgAssistant.keepBackend();
-
-        expect(PgAssistant.isPickingBackend).toBe(true);
-      });
-
-      it("closes the picker for the default backend once signed in again", async () => {
-        await signedIn(null);
-        PgAssistant.connect({ id: "default", apiKey: "" });
-        await PgSession.refreshWith(null);
-        await signedIn(null);
-
-        PgAssistant.keepBackend();
-
-        expect(PgAssistant.isPickingBackend).toBe(false);
-      });
-
-      it("closes the picker for a key-based backend with no session", async () => {
-        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
         PgAssistant.pickBackend();
 
         PgAssistant.keepBackend();
 
+        // The dialog's cleanup ends the mark this way, and `openConnectDialog`
+        // opens nothing while it is set
         expect(PgAssistant.isPickingBackend).toBe(false);
       });
     });

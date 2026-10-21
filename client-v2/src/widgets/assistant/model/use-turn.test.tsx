@@ -12,6 +12,7 @@ import {
   resetTelemetry,
 } from "../../../shared/lib/telemetry";
 import * as reportModule from "../../../shared/lib/report-button-failure";
+import { PgSession } from "../../../features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
@@ -56,7 +57,12 @@ const untilAborted = (_: string, signal?: AbortSignal) =>
     signal?.addEventListener("abort", () => reject(new Error("aborted")));
   });
 
+const USER = { id: "u1", name: null, image: null, login: null };
+
 beforeEach(() => {
+  // The default backend answers only a signed-in user; a test about the
+  // signed-out case ends the session itself
+  void PgSession.refreshWith(USER);
   open.mockClear();
   events = memoryTelemetry();
   initTelemetry({ providers: [events] });
@@ -76,6 +82,7 @@ beforeEach(() => {
 
 afterEach(() => {
   PgAssistant.disconnect();
+  PgSession.reset();
   resetTelemetry();
   vi.restoreAllMocks();
 });
@@ -487,6 +494,136 @@ describe("useTurn", () => {
     act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
     expect(result.current.promptWaiting).toBe(false);
     expect(result.current.input).toBe("Explain this error");
+  });
+});
+
+describe("useTurn without a session", () => {
+  beforeEach(() => PgSession.refreshWith(null));
+
+  it("opens Connect and keeps the text for a send the default cannot take", async () => {
+    defaultBackend(true);
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection).toBeNull();
+    expect(open).toHaveBeenCalledWith("send", undefined);
+    expect(result.current.input).toBe("hi");
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("waits for the page's session read before a send decides", async () => {
+    PgSession.reset();
+    let answer!: () => void;
+    const reads = vi.fn();
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      if (!String(input).includes("/api/auth/get-session")) {
+        return {
+          ok: true,
+          json: async () => ({ configured: true, model: null }),
+        } as Response;
+      }
+      reads();
+      await new Promise<void>((resolve) => (answer = resolve));
+      return { ok: true, json: async () => ({ user: USER }) } as Response;
+    });
+    // The page's own read, still out when the first send comes
+    const read = PgSession.refresh();
+    const { result } = renderHook(() => useTestTurn());
+
+    const sent = act(() => result.current.send("hi"));
+    await waitFor(() => expect(reads).toHaveBeenCalled());
+    answer();
+    await Promise.all([read, sent]);
+
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(PgAssistant.connection?.id).toBe("default");
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("does not read the session again once a read found nobody", async () => {
+    defaultBackend(true);
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    const reads = vi
+      .mocked(globalThis.fetch)
+      .mock.calls.filter(([input]) =>
+        String(input).includes("/api/auth/get-session")
+      );
+    expect(reads).toHaveLength(0);
+    expect(open).toHaveBeenCalledWith("send", undefined);
+  });
+
+  it("opens Connect for a send on the default once the session has ended", async () => {
+    await PgSession.refreshWith(USER);
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    const { result } = renderHook(() => useTestTurn());
+    await act(() => PgSession.refreshWith(null));
+
+    await act(() => result.current.send("hi"));
+
+    expect(open).toHaveBeenCalledWith("send", undefined);
+    expect(result.current.input).toBe("hi");
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps a requested prompt waiting while the default has no session", async () => {
+    defaultBackend(true);
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => PgAssistant.requestPrompt("Explain this error"));
+
+    await waitFor(() => expect(result.current.promptWaiting).toBe(true));
+    expect(result.current.input).toBe("Explain this error");
+    expect(open).toHaveBeenCalledWith("send", undefined);
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("sends on a key-based backend", async () => {
+    PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(provider.send).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("sends a requested prompt on a key-based backend", async () => {
+    PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+    renderHook(() => useTestTurn());
+
+    act(() => PgAssistant.requestPrompt("Explain this error", { send: true }));
+
+    await waitFor(() => expect(provider.send).toHaveBeenCalledTimes(1));
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it("reconnects nothing for a panel that is gone", async () => {
+    defaultBackend(true);
+    rememberBackend({ id: "default", apiKey: "" });
+    const { unmount } = renderHook(() => useTestTurn());
+    await act(async () => {});
+    unmount();
+
+    await act(() => PgSession.refreshWith(USER));
+
+    expect(PgAssistant.connection).toBeNull();
+  });
+
+  it("reconnects a remembered default only once signed in", async () => {
+    defaultBackend(true);
+    rememberBackend({ id: "default", apiKey: "" });
+
+    renderHook(() => useTestTurn());
+    await act(async () => {});
+    expect(PgAssistant.connection).toBeNull();
+
+    await act(() => PgSession.refreshWith(USER));
+
+    await waitFor(() => expect(PgAssistant.connection?.id).toBe("default"));
   });
 });
 

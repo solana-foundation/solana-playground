@@ -21,7 +21,22 @@ const makeRes = () => ({
   },
 });
 
-const AGENT_VARS = ["AGENT_API_KEY", "AGENT_MODEL"];
+/** What sign-in needs: the default backend is served only where it can sign a user in */
+const SIGN_IN = {
+  DATABASE_URL: "postgres://test@localhost/test",
+  GITHUB_CLIENT_ID: "test-client-id",
+  GITHUB_CLIENT_SECRET: "test-client-secret",
+  AUTH_SECRET: "test-auth-secret",
+};
+
+const AGENT_VARS = [
+  "AGENT_API_KEY",
+  "AGENT_MODEL",
+  "AUTH_OAUTH_PROXY_URL",
+  ...Object.keys(SIGN_IN),
+];
+
+const configureSignIn = () => Object.assign(process.env, SIGN_IN);
 
 describe("GET /api/agent", () => {
   /** What `yarn test-api` loaded from `.env`, put back after each case */
@@ -53,7 +68,14 @@ describe("GET /api/agent", () => {
     assert.deepEqual(await get(), { configured: false, model: null });
   });
 
+  it("answers configured: false with a key but no sign-in", async () => {
+    process.env.AGENT_API_KEY = "sk-agent-test-key";
+
+    assert.deepEqual(await get(), { configured: false, model: null });
+  });
+
   it("answers configured: true and the model id with a key, never the key", async () => {
+    configureSignIn();
     process.env.AGENT_API_KEY = "sk-agent-test-key";
     process.env.AGENT_MODEL = "vendor/model-x";
 
@@ -64,6 +86,7 @@ describe("GET /api/agent", () => {
   });
 
   it("names the default model when none is set", async () => {
+    configureSignIn();
     process.env.AGENT_API_KEY = "sk-agent-test-key";
 
     const body = await get();

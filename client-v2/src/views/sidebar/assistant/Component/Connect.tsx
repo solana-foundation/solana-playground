@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 import styled, { css } from "styled-components";
 
+import { createLogger } from "@/shared/lib/logger";
 import { cn } from "cn";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
@@ -15,8 +16,11 @@ import {
   SelectValue,
 } from "@/shared/ui/select";
 import Link from "../../../../components/Link";
+import { isSignInFailure, PgSession } from "../../../../features/auth";
+import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
 import { PgAssistant } from "../store";
 import {
+  isDefaultBackend,
   PROVIDERS,
   type Effort,
   type ProviderId,
@@ -51,6 +55,8 @@ const CAPABILITIES = [
   },
 ];
 
+const log = createLogger("assistant:connect");
+
 const DEFAULT_PROVIDER = PROVIDERS.find((p) => p.id === "default")!;
 /** Everything behind the accordion: each of these needs a key of your own */
 const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
@@ -59,8 +65,11 @@ const FIELD_LABEL = "text-xs tracking-[0.1em] text-muted-foreground";
 
 /** The backend, and maybe the model, Connect a model opens on */
 export interface ConnectPreset {
-  /** A key-based backend: the default needs no form opened on it */
-  provider: Exclude<ProviderId, "default">;
+  /**
+   * A key-based backend, or the default only for a signed-out user: the
+   * form is where they sign in for it
+   */
+  provider: ProviderId;
   /** A model of the backend's own list, or its endpoint's model id */
   model?: string;
 }
@@ -71,10 +80,14 @@ export interface ConnectPreset {
  * the screen.
  */
 export interface ConnectAction {
-  /** "Switch" over a connection, "Connect" for a key, "Start" without one */
-  text: "Start" | "Switch" | "Connect";
+  /**
+   * "Switch" over a connection, "Connect" for a key, "Start" without one, and
+   * "Sign in with GitHub" for the default backend while nobody is signed in
+   */
+  text: "Start" | "Switch" | "Connect" | "Sign in with GitHub";
   /** Every field the backend needs is filled in */
   ready: boolean;
+  /** Connects, or for "Sign in with GitHub" starts the sign-in */
   connect(): void;
 }
 
@@ -125,6 +138,9 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   // Reopened over a live connection: seed the fields with it so changing just
   // the model id does not mean retyping the key
   const current = PgAssistant.connection;
+  // `/api/agent` spends the deployment's key only for a signed-in caller
+  useRenderOnChange(PgSession.onDidChange);
+  const signedIn = !!PgSession.get();
   const startId = preset?.provider ?? current?.id ?? "default";
   const initial = PROVIDERS.find((p) => p.id === startId)!;
   /** Opened on the backend already connected: its own key and choices */
@@ -132,6 +148,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
   const [providerId, setProviderId] = useState<ProviderId>(startId);
   const [expanded, setExpanded] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
   /**
    * The pick in flight came from a pointer. Radix checks a radio as the arrow
    * keys reach it, so a pick is also every step of a keyboard walk -- and
@@ -194,6 +211,11 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   const endpointReady =
     !provider.endpoint ||
     (!!endpoint?.baseUrl.trim() && !!endpoint?.model.trim());
+  /** Served here, but `/api/agent` refuses this user's turns until they sign in */
+  const needsSignInFor = (p: ProviderInfo) =>
+    isDefaultBackend(p.id) && defaultBackend === "present" && !signedIn;
+  /** The action signs in instead of connecting */
+  const needsSignIn = needsSignInFor(provider);
   const ready = keyReady && endpointReady && !isUnavailable(provider);
 
   const trimmedEndpoint = endpoint
@@ -209,10 +231,34 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
   const connect = () => PgAssistant.connect(next);
 
+  const signIn = () => {
+    setSignInError(null);
+    PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
+      if (isSignInFailure(error)) {
+        // Not reported: a blocked popup or a cancelled sign-in is expected,
+        // and its message says what to do
+        log.info("sign-in from Connect a model failed", {
+          context: { error: String(error) },
+        });
+        setSignInError((error as Error).message);
+        return;
+      }
+      log.error(error, { report: true, context: { from: "assistant" } });
+      setSignInError("Sign-in failed. Try again.");
+    });
+  };
+
   let actionText: ConnectAction["text"] = "Start";
   if (current) actionText = "Switch";
   else if (provider.needsKey) actionText = "Connect";
-  const action: ConnectAction = { text: actionText, ready, connect };
+  const action: ConnectAction = needsSignIn
+    ? {
+        text: "Sign in with GitHub",
+        // A second press while the popup is open would only join it
+        ready: PgSession.signInState().status !== "pending",
+        connect: signIn,
+      }
+    : { text: actionText, ready, connect };
 
   // Nothing selectable is on screen while the default is ruled out, so the
   // alternatives stay open and the toggle that could hide them goes away
@@ -225,10 +271,15 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
   const defaultDescription = (p: ProviderInfo) => {
     if (pending) return "Checking this deployment for a default backend…";
-    return defaultBackend === "present"
+    if (defaultBackend !== "present") {
+      return (
+        "Not configured on this deployment — pick a backend below and supply " +
+        "your own key."
+      );
+    }
+    return signedIn
       ? p.description
-      : "Not configured on this deployment — pick a backend below and supply " +
-          "your own key.";
+      : "Sign in with GitHub to use it, or bring your own key below.";
   };
 
   /**
@@ -256,7 +307,10 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
           )}
         >
           {p.name}
-          {!p.needsKey && !isUnavailable(p) && <NoKey>no key needed</NoKey>}
+          {needsSignInFor(p) && <SignInNeeded>sign-in needed</SignInNeeded>}
+          {!p.needsKey && !isUnavailable(p) && !needsSignInFor(p) && (
+            <NoKey>no key needed</NoKey>
+          )}
         </span>
         {!compact && (
           <span className="pt-[0.1875rem] text-xs leading-normal text-muted-foreground">
@@ -459,6 +513,11 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         </>
       )}
 
+      {/* Gone once the sign-in is no longer what the action does */}
+      {needsSignIn && signInError && (
+        <SignInError role="alert">{signInError}</SignInError>
+      )}
+
       {switching && (
         <Note>
           Switching starts a new conversation. The current one cannot be
@@ -539,6 +598,22 @@ const NoKey = styled.span`
   ${({ theme }) => css`
     color: ${theme.colors.state.success.color};
     font-size: ${theme.font.code.size.xsmall};
+  `}
+`;
+
+const SignInNeeded = styled.span`
+  ${({ theme }) => css`
+    color: ${theme.colors.state.warning.color};
+    font-size: ${theme.font.code.size.xsmall};
+  `}
+`;
+
+const SignInError = styled.div`
+  ${({ theme }) => css`
+    padding-top: 0.5rem;
+    color: ${theme.colors.state.error.color};
+    font-size: ${theme.font.code.size.xsmall};
+    line-height: 1.6;
   `}
 `;
 
