@@ -184,9 +184,9 @@ Expect: the `client`, `server`, and `wasm` images build for `linux/amd64`. Verif
 
 ### B-7. client-v2: local packages are real
 
-`yarn setup` builds `wasm/*/pkg` into the cargo target folder shared by every worktree, deletes the installed copies
-under `client-v2/node_modules/@solana-playground`, and installs again, so a checkout that held stubs takes the real
-packages.
+`yarn setup` builds `wasm/*/pkg` into the checkout's own `wasm/target` and `wasm/rust-analyzer/target` (a linked
+worktree first copies missing ones from the main checkout), clears `client-v2/node_modules` except `.cache`, and
+installs again, so a checkout that held stubs takes the real packages.
 
 ```sh
 yarn --cwd client-v2 setup
@@ -194,8 +194,9 @@ grep -l '0.0.0-stub' wasm/*/pkg/package.json client-v2/node_modules/@solana-play
 grep -rl 'local dev stub' client-v2/node_modules/@solana-playground
 ```
 
-Expect: `setup` exits 0; both `grep` lines print nothing. With a seeded or warm target folder, `setup` took 148 s on
-2026-10-19 (`39628e59`); a cold one takes about an hour.
+Expect: `setup` exits 0; both `grep` lines print nothing. On a warm target folder, `setup` took 148 s on 2026-10-19
+(`39628e59`, measured with the target folder shared between worktrees); a freshly seeded worktree, which also
+recompiles its own crates, is unmeasured. A cold one takes about an hour.
 
 ## 2. Client dev servers without a server
 
@@ -271,8 +272,9 @@ Same steps and expectations as C-2, run against the C-4 session.
 
 Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [wasm-clis.e2e.spec.ts](../client-v2/e2e/wasm-clis.e2e.spec.ts) runs these steps:
-`PORT=<slot port> yarn --cwd client-v2 test-e2e --grep @real-wasm`. The `e2e` job of `client-v2.yml` runs it on
-GitHub; `client-v2-with-stubs.yml` excludes the tag.
+`PORT=<slot port> yarn --cwd client-v2 test-e2e --grep @real-wasm`. On GitHub, the `e2e` job of
+[client-v2-reusable.yml](../.github/workflows/client-v2-reusable.yml) runs it when `client-v2.yml` calls that workflow;
+`client-v2-with-stubs.yml` excludes the tag.
 
 Steps: connect the Playground Wallet, then run in the terminal `solana config get`, `spl-token --help`,
 `anchor --help`, and `sugar --help`.
@@ -654,9 +656,11 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
 
 ### R-4. the deployment carries no stub
 
-A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` commands throw. The Vercel build already
-fails on a bundle built from a stub (`node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
-[vercel.json](../client-v2/vercel.json)); this case checks what was deployed. For a protected preview, add
+A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` commands throw, and leaves Rust
+intellisense empty. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
+any of the six packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
+[vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
+[reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml); this case checks what was deployed. For a protected preview, add
 `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` to each `curl` (S-6).
 
 ```sh
@@ -664,6 +668,7 @@ base=<deployment URL>
 curl -s "$base/asset-manifest.json" | jq -r '.files[] | select(endswith(".js"))' > <run folder>/chunks.txt
 while read -r f; do curl -s -o "<run folder>/$(basename "$f")" "$base$f"; done < <run folder>/chunks.txt
 grep -l 'local dev stub' <run folder>/*.js
+grep -o -h -e anchor_cli_wasm_bg -e rust_analyzer_wasm_bg -e seahorse_compile_wasm_bg -e solana_cli_wasm_bg -e spl_token_cli_wasm_bg -e sugar_cli_wasm_bg <run folder>/*.js | sort -u
 grep -l 'solana_cli_wasm_bg' <run folder>/*.js
 grep -o '"[0-9a-f]\{20\}"' <run folder>/<the chunk the previous grep listed>
 curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base/<that hash>.module.wasm"
@@ -671,7 +676,8 @@ curl -s -o /dev/null -w '%{http_code} %{content_type} %{size_download}\n' "$base
 
 Expect:
 
-- [ ] the first `grep` prints nothing; the second lists one chunk, which names one hash.
+- [ ] the first `grep` prints nothing; the second prints all six names; the third lists one chunk, which names one
+      hash.
 - [ ] the last `curl` prints `200 application/wasm` and a size of megabytes. On 2026-10-19,
       `solana-playground-teal.vercel.app` served chunk `790` and `/cb0f9cf8e4161ad3396e.module.wasm`, 3,058,467 bytes.
 

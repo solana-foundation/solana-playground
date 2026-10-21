@@ -288,18 +288,25 @@ changes. Asked to build something in the client, look there first.
 - **The wasm packages are real unless `USE_WASM_STUBS=true` says
   otherwise.** Six of the eight local `wasm/*/pkg` deps compile from Rust, and
   `yarn install` refuses to run while those directories are missing.
-  `yarn setup` (`client-v2/scripts/setup-wasm.sh`) builds them into one cargo
-  target folder shared by every worktree (`~/.cache/solana-playground/wasm-target`,
-  first cloned from the main checkout's `wasm/target`), so a warm build takes
-  minutes, not the hour of a cold one. The stubs (`wasm/stub-packages.sh`) are
+  `yarn setup` (`client-v2/scripts/setup-wasm.sh`) builds them into the
+  checkout's own `wasm/target` and `wasm/rust-analyzer/target` (rust-analyzer is
+  its own workspace). Never share one target folder between worktrees: cargo
+  names a path `cdylib` without a hash and judges freshness by mtime, so one
+  worktree packages another's `.wasm`. A linked worktree's missing target folder
+  is first copied from the main checkout's (an APFS clone on macOS, skipped when
+  `CARGO_TARGET_DIR` is set), so a warm build takes minutes, not the hour of a
+  cold one. The stubs (`wasm/stub-packages.sh`) are
   written only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
   the manual `client-v2-with-stubs.yml` set; they make Rust intellisense and the `solana`/`anchor`/
-  `spl-token`/`sugar` terminal commands throw. `yarn dev` and `yarn test-e2e`
-  refuse stubs nobody asked for, `vercel-install.sh` refuses the variable, and the
-  Vercel build fails on a bundle that carries a stub. yarn 1 copies a `file:`
-  package again only when its folder is missing, so `setup-wasm.sh` and
-  `vercel-install.sh` delete the installed copies first; `--check-files` alone
-  keeps the old copy. The variable's name lives in `client-v2/scripts/wasm-stubs.sh`
+  `spl-token`/`sugar` terminal commands throw. `yarn start`, `yarn dev`,
+  `yarn dev-cra` (which `vercel dev` runs) and `yarn test-e2e` refuse stubs
+  nobody asked for, `vercel-install.sh` refuses the variable, and the
+  Vercel build fails on a bundle that carries a stub or lacks any of the six
+  real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`). yarn 1 copies a `file:`
+  package again only when its folder is missing, so `setup-wasm.sh` clears
+  `node_modules` (all but `.cache`) before it installs; `--check-files` alone
+  keeps the old copy, and an install over an old tree also kept a stale hoisting
+  that failed webpack on `@noble/hashes/sha3`. The variable's name lives in `client-v2/scripts/wasm-stubs.sh`
   and `client-v2/scripts/wasm-stubs.mjs`. `client-v2.yml` runs on the real
   packages: the `wasm` job of `client-v2-reusable.yml` builds them once, cached
   under Vercel's `wasm_source_key`, and the other jobs download them.

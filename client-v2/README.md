@@ -17,14 +17,17 @@ yarn start
 ```
 
 `yarn setup` (`scripts/setup-wasm.sh`) builds `wasm/*/pkg` with
-`../wasm/build.sh` into one cargo target folder that every worktree shares,
-`~/.cache/solana-playground/wasm-target` unless `CARGO_TARGET_DIR` names
-another. When that folder does not exist yet, it starts as a copy of the main
-checkout's `wasm/target` (an APFS clone on macOS), so only a machine that has
-never built the packages runs the cold build, which takes about an hour. It then deletes the six
-installed copies under `node_modules/@solana-playground` and installs with
-`--check-files`, because yarn 1 copies a local `file:` package again only when
-its folder is missing.
+`../wasm/build.sh` into the checkout's own cargo target folders, `wasm/target`
+and `wasm/rust-analyzer/target`. A folder shared between worktrees is unsafe:
+cargo names a path `cdylib` without a hash and judges freshness by mtime, so
+one worktree could package another's `.wasm`. In a linked worktree, a target
+folder that does not exist yet starts as a copy of the main checkout's (an
+APFS clone on macOS), so only a checkout with nothing to copy from runs the
+cold build, which takes about an hour; the worktree's own crates still compile
+once. A `CARGO_TARGET_DIR` set by the user turns the copy off. It then clears
+`node_modules` (all but `.cache`) and installs, because yarn 1 copies a local
+`file:` package again only when its folder is missing, and an install over an
+old tree can keep a hoisting the lockfile no longer describes.
 
 **Stubs, by request only.** `USE_WASM_STUBS=true` (the exact string `true`)
 writes placeholder packages with `../wasm/stub-packages.sh` instead of
@@ -37,17 +40,18 @@ yarn test-e2e:with-stubs
 ```
 
 The stubs lose Rust intellisense, the `solana`, `anchor`, `spl-token` and
-`sugar` terminal commands, and Seahorse builds. `yarn dev` and `yarn test-e2e`
-stop with the names of the stubbed packages when they find stubs in
-`node_modules` and `USE_WASM_STUBS=true` is not set. A deployment refuses the
+`sugar` terminal commands, and Seahorse builds. `yarn start`, `yarn dev`,
+`yarn dev-cra` (and so `yarn dev-vercel`), and `yarn test-e2e` stop with the
+names of the stubbed packages when they find stubs in `node_modules` and
+`USE_WASM_STUBS=true` is not set. `yarn test-e2e:with-stubs` leaves out the
+`@real-wasm` specs, which run the CLIs. A deployment refuses the
 variable, and the Vercel build fails on a bundle built from a stub
 (`node scripts/wasm-stubs.mjs check-build build`). `yarn setup` replaces the
 stubs with the real packages.
 
 **Production build.** `yarn build` is the whole build in one command: it
 compiles and installs `wasm/*/pkg` as `yarn setup` does (`scripts/setup-wasm.sh`,
-which deletes the installed copies first so `node_modules` takes the new
-packages), copies
+which clears `node_modules` first so it takes the new packages), copies
 `public/` from the assets submodule, generates the crate, package and tutorial
 data, and bundles the app into `build/`. A first run takes about an hour;
 cargo reuses its output after that.

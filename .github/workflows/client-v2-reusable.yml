@@ -172,7 +172,7 @@ jobs:
       # A fresh runner has no `node_modules`, so nothing stale can survive.
       - name: Install
         if: ${{ !inputs.use-wasm-stubs }}
-        run: yarn install --frozen-lockfile --check-files
+        run: yarn install --frozen-lockfile
 
       # Same cheap chain as `yarn dev`: static assets, export barrels,
       # package and tutorial data, assistant context, so type-check and tests
@@ -303,7 +303,7 @@ jobs:
 
       - name: Install
         if: ${{ !inputs.use-wasm-stubs }}
-        run: yarn install --frozen-lockfile --check-files
+        run: yarn install --frozen-lockfile
 
       # The browser binary is cached by Playwright version, so only a bump
       # re-downloads it. The runner's system libraries are not cached: on a

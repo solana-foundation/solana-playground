@@ -56,7 +56,7 @@ jobs:
       # A fresh runner has no `node_modules`, so nothing stale can survive.
       - name: Install
         if: ${{ !inputs.use-wasm-stubs }}
-        run: yarn install --frozen-lockfile --check-files
+        run: yarn install --frozen-lockfile
 
       - name: Production build
         run: yarn build-fast

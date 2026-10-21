@@ -125,10 +125,10 @@
   "scripts": {
     "setup": "bash scripts/setup-wasm.sh && yarn generate",
     "setup:with-stubs": "USE_WASM_STUBS=true yarn setup",
-    "start": "yarn generate && craco start",
+    "start": "node scripts/wasm-stubs.mjs guard start && yarn generate && craco start",
     "dev": "node scripts/wasm-stubs.mjs guard dev && yarn generate-fast && craco start",
     "dev:with-stubs": "USE_WASM_STUBS=true yarn dev",
-    "dev-cra": "BROWSER=none craco start",
+    "dev-cra": "node scripts/wasm-stubs.mjs guard dev-cra && BROWSER=none craco start",
     "dev-vercel": "yarn generate-fast && npx vercel dev --cwd .. --listen ${VERCEL_DEV_PORT:-3000}",
     "build": "bash scripts/setup-wasm.sh && yarn build:bundle",
     "build:bundle": "yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
@@ -162,7 +162,7 @@
     "db-status": "dbmate status",
     "db-new": "dbmate new",
     "test-e2e": "node scripts/wasm-stubs.mjs guard test-e2e && playwright test",
-    "test-e2e:with-stubs": "USE_WASM_STUBS=true yarn test-e2e",
+    "test-e2e:with-stubs": "USE_WASM_STUBS=true yarn test-e2e --grep-invert @real-wasm",
     "test-build": "node --test \"scripts/*.build-test.mjs\"",
     "db-dump": "./scripts/db-dump.sh"
   },

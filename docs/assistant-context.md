@@ -132,9 +132,9 @@ Done:
   actually works, with file paths, and was checked by running it, not by reading
   alone.
 - Local development unblocked: the client would not install until six Rust→WASM
-  packages were compiled (~1 hour). `yarn setup` builds them into one cargo
-  target folder that every worktree shares, so a setup after the first takes
-  minutes. CI builds them once per change to `wasm/`. They are behind lazy
+  packages were compiled (~1 hour). `yarn setup` builds them into the
+  checkout's own cargo target folders, and a new worktree starts from a copy of
+  the main checkout's, so a setup after the first takes minutes. CI builds them once per change to `wasm/`. They are behind lazy
   imports and none are on the UI boot path, so `wasm/stub-packages.sh` can stand
   them in under `USE_WASM_STUBS=true`, for UI-only work and the manual stub
   workflow; a deployment refuses the stubs.

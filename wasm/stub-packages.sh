@@ -30,7 +30,7 @@ write_pkg() { # write_pkg <dir> <npm-name>
 {
   "name": "$2",
   "version": "0.0.0-stub",
-  "description": "Local UI-dev stub. Real package: ./wasm/build.sh $1",
+  "description": "Local UI-dev stub. Real package: yarn --cwd client-v2 setup",
   "module": "index.js",
   "main": "index.js",
   "types": "index.d.ts",
@@ -45,8 +45,8 @@ stub_cli() { # stub_cli <dir> <exported-fn>
   cat > "$wasm_dir/$1/pkg/index.js" <<JS
 const notBuilt = () => {
   throw new Error(
-    "\`$1\` is a local dev stub. Run \`./wasm/build.sh $1\` to build the real " +
-      "WASM package if you need this command."
+    "\`$1\` is a local dev stub. Run \`yarn --cwd client-v2 setup\` to build and " +
+      "install the real WASM packages if you need this command."
   );
 };
 
