@@ -97,20 +97,11 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // branch (`LessonRoute` picking the wrong surface after Start). The
   // assertion right after this block is the one that does: see its own
   // comment.
-  await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();
-  // "Step 1 of 4" is on the page twice on entry -- the band's eyebrow and
-  // the open reader's -- and the band renders first in DOM order. `exact`
-  // keeps out the assistant composer's "step 1 of 4" context chip, which
-  // sits earlier in the DOM and a default (case-insensitive, substring)
-  // match would take first.
-  const eyebrow = page.getByText("Step 1 of 4", { exact: true }).first();
-  await expect(eyebrow).toBeVisible();
-
-  // The objective text is rendered more than once -- in the band, in the
-  // step rail's own row for the current step, in the reader's bar -- so
-  // scope to the band's own text block (its eyebrow's parent) to keep
-  // this a single-element locator.
-  const band = eyebrow.locator("..");
+  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
+  // The band is the design system's objective band; scope to it so the
+  // objective is one element (the rail and the reader repeat the text).
+  const band = page.locator('[data-slot="objective-band"]');
+  await expect(band.getByText("Step 1 of 4", { exact: true })).toBeVisible();
   await expect(
     band.getByText("Define the hello instruction and log a message")
   ).toBeVisible();

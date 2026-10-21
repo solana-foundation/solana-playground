@@ -69,7 +69,9 @@ test.describe("on a desktop window", () => {
     await expect(home(page)).toBeHidden();
 
     await page.getByRole("button", { name: "START", exact: true }).click();
-    await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();
+    // The lesson panel's Steps | Files switch is a Segmented: its items are
+    // radios (5.19)
+    await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
   });
 
   test("client-v2-layout: Tiles that open the gallery", async ({ page }) => {

@@ -22,6 +22,9 @@ import { PgFlow } from "../state/stage";
 import type { FlowState } from "../state/stage";
 import { PgExplorer, PgProgramInfo, PgTutorial, PgView } from "../../../utils";
 import type { Disposable } from "../../../utils";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("lessons:store");
 
 export interface LessonState {
   /** `null` whenever the active workspace is not a lesson with a path */
@@ -384,7 +387,7 @@ export class PgLesson {
           loadFailed = true;
         }
       } catch (e) {
-        console.error("lesson load failed", e);
+        log.error(e, { report: true });
         loadFailed = true;
       }
       PgLesson._dispatch({
@@ -463,10 +466,10 @@ export class PgLesson {
       await storage.setItem("lesson", record);
     } catch (e) {
       // The in-memory record is still correct for this session; a reload
-      // loses its tail. Every failure goes to the console, and the learner
-      // is told once -- a toast on every step would cost more than the
-      // steps it reports.
-      console.warn("Lesson progress could not be saved:", e);
+      // loses its tail. Every failure is reported to the team, and the
+      // learner is told once -- a toast on every step would cost more than
+      // the steps it reports.
+      log.error(e, { report: true });
       if (!PgLesson._toldSaveFailed) {
         PgLesson._toldSaveFailed = true;
         const { default: SaveFailedToast } = await import("./SaveFailedToast");

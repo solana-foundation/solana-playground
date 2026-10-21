@@ -2,6 +2,8 @@ import type { FC } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Button } from "@/shared/ui/button";
+import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import Eyebrow from "./Eyebrow";
 import StepRail from "../lessons/StepRail";
 import { cursorStep, foldRecord, PgLesson } from "../lessons";
@@ -10,6 +12,10 @@ import { useCreateItem } from "../../sidebar/explorer/Component/useCreateItem";
 import { BOTTOM_BAR_HEIGHT } from "../tokens";
 import { keepColumn, keptColumn, type Tab } from "./kept-column";
 import { PgExplorer } from "../../../utils";
+
+/** Narrows the Segmented's plain string to a tab */
+export const isLessonTab = (value: string): value is Tab =>
+  value === "steps" || value === "files";
 
 interface LeftPanelProps {
   /**
@@ -96,21 +102,22 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
     <Wrapper>
       <>
         {inLesson && (
-          <Tabs role="tablist">
-            {(["steps", "files"] as const).map((t) => (
-              <TabButton
-                key={t}
-                id={`flow-left-tab-${t}`}
-                role="tab"
-                aria-selected={tab === t}
-                aria-controls="flow-left-tabpanel"
-                $active={tab === t}
-                onClick={() => setTab(t)}
-              >
-                {t === "steps" ? "Steps" : "Files"}
-              </TabButton>
-            ))}
-          </Tabs>
+          <div className="flex items-center gap-2 border-b border-border px-2 py-1.5">
+            <Segmented
+              aria-label="Lesson panel"
+              value={tab}
+              onValueChange={(v) => {
+                if (isLessonTab(v)) setTab(v);
+              }}
+            >
+              <SegmentedItem id="flow-left-tab-steps" value="steps">
+                Steps
+              </SegmentedItem>
+              <SegmentedItem id="flow-left-tab-files" value="files">
+                Files
+              </SegmentedItem>
+            </Segmented>
+          </div>
         )}
         <Body
           ref={bodyRef}
@@ -118,8 +125,6 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
             kept.current.scrollTop = e.currentTarget.scrollTop;
           }}
           id="flow-left-tabpanel"
-          role={inLesson ? "tabpanel" : undefined}
-          aria-labelledby={inLesson ? `flow-left-tab-${tab}` : undefined}
         >
           {showSteps ? (
             <StepRail state={lesson} />
@@ -135,13 +140,17 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
         {/* Pinned below the rail for the same reason as the files footer:
               a way out that scrolls away is not a way out. */}
         {showSteps && frontierStep && (
-          <SkipFooter
-            type="button"
-            title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
-            onClick={() => PgLesson.pass()}
-          >
-            Skip this step
-          </SkipFooter>
+          <div className="flex shrink-0 justify-center border-t border-border py-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
+              onClick={() => PgLesson.pass()}
+            >
+              Skip this step
+            </Button>
+          </div>
         )}
         {!showSteps && (
           <Footer type="button" onClick={createItem}>
@@ -172,37 +181,6 @@ const Wrapper = styled.aside`
     flex-direction: column;
     background: ${theme.colors.default.bgPrimary};
     overflow: hidden;
-  `}
-`;
-
-const Tabs = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: stretch;
-    border-bottom: 1px solid ${theme.colors.default.border};
-  `}
-`;
-
-const TabButton = styled.button<{ $active: boolean }>`
-  ${({ theme, $active }) => css`
-    flex: 1;
-    padding: 0.625rem;
-    border: none;
-    border-bottom: 2px solid
-      ${$active ? theme.colors.default.primary : "transparent"};
-    background: transparent;
-    color: ${$active
-      ? theme.colors.default.textPrimary
-      : theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.other.size.small};
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    cursor: pointer;
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: -2px;
-    }
   `}
 `;
 
@@ -242,16 +220,6 @@ const Footer = styled.button`
       outline: 2px solid ${theme.colors.default.primary};
       outline-offset: -2px;
     }
-  `}
-`;
-
-// The files footer's shape, dimmed further: skipping is the way out of a
-// step, never the way through it
-const SkipFooter = styled(Footer)`
-  ${({ theme }) => css`
-    justify-content: center;
-    font-size: ${theme.font.other.size.small};
-    text-decoration: underline;
   `}
 `;
 

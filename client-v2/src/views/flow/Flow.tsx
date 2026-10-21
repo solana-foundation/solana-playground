@@ -6,6 +6,7 @@ import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import Logomark from "./header/Logomark";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
+import { keepTab } from "./left/kept-column";
 import ObjectiveBand from "./lessons/ObjectiveBand";
 import Reader from "./lessons/Reader";
 // The barrel registers every lesson path as a side effect, so importing
@@ -29,7 +30,7 @@ import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Wallet from "@/components/Wallet";
 import { useKeybind } from "@/hooks";
-import { PgView } from "@/utils";
+import { PgExplorer, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { Assistant, openConnectDialog } from "@/widgets/assistant";
@@ -65,6 +66,8 @@ const FlowFrame = () => {
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   const [reading, setReading] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const viewport = useViewport();
+  const phone = viewport === "phone";
   const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
 
   useEffect(() => {
@@ -112,7 +115,6 @@ const FlowFrame = () => {
   ]);
 
   const start = useStartView();
-  const viewport = useViewport();
 
   const described = describeStep(lesson);
 
@@ -179,13 +181,27 @@ const FlowFrame = () => {
         }}
         stageTabs={<StageBar />}
         files={({ collapsed }) => <LeftPanel collapsed={collapsed} />}
-        stage={
+        stage={({ openFiles }) => (
           <Center>
             <ObjectiveBand
               state={lesson}
               flow={state}
               onRead={read}
               onOpenGallery={openGallery}
+              compact={
+                phone
+                  ? {
+                      // Below `LAYOUT_BREAKPOINTS.phone`, where the band is
+                      // compact, the Files sheet mounts the column fresh, and
+                      // it reads its tab from the per-project memory
+                      // (`kept-column.ts`)
+                      onOpenSteps: () => {
+                        keepTab(PgExplorer.currentWorkspaceId, "steps");
+                        openFiles();
+                      },
+                    }
+                  : undefined
+              }
             />
             <Stage>
               <StageRouter stage={state.stage} />
@@ -209,7 +225,7 @@ const FlowFrame = () => {
               )}
             </Stage>
           </Center>
-        }
+        )}
         console={({ open, toggle }) => (
           <ConsoleDrawer open={open} onToggle={toggle} />
         )}

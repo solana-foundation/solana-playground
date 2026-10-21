@@ -269,7 +269,7 @@ const startTutorial = async (page: Page, from: "home" | "navigation") => {
   // `exact` matters: the assistant panel has its own "Start" button, and
   // Playwright's default name match is a case-insensitive substring
   await page.getByRole("button", { name: "START", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();
+  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
 test("a migrated tutorial gets a derived id, not a random one", async ({

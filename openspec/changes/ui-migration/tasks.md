@@ -139,8 +139,9 @@ regression against 5.1 has misread this rule.
       [plans/5.17-composer-connect.md](plans/5.17-composer-connect.md))
 - [ ] 5.18 Assistant: the thread, messages, diffs and approvals (HOO-1794;
       after 5.17)
-- [ ] 5.19 Lessons: objective band, step rail, Steps and Files, the reader
-      (HOO-2076; after 5.2 and 5.10)
+- [x] 5.19 Lessons: objective band, step rail, Steps and Files, the reader
+      (HOO-2076; after 5.2 and 5.10; design.md, "Lessons (5.19)"; plan:
+      [plans/5.19-lessons.md](plans/5.19-lessons.md))
 - [ ] 5.20 Details: Settings as a full page (HOO-2071; after 5.5 and 5.6)
 - [ ] 5.21 Details: the tutorial page, its empty and error states
       (HOO-2072; after 5.2)
