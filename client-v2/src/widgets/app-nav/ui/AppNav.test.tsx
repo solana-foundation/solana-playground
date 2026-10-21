@@ -77,6 +77,7 @@ const draw = (homeShown?: boolean) =>
           projects={null}
           footer={null}
           railFooter={null}
+          setup={null}
           homeShown={homeShown}
         />
       </SidebarProvider>

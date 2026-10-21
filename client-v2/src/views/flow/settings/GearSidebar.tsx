@@ -47,6 +47,8 @@ interface GearSidebarProps {
   open: boolean;
   onClose: () => void;
   focus?: SettingsFocus;
+  /** Any network pick, the current one included (the Get set up checklist) */
+  onChooseNetwork?: () => void;
 }
 
 // `string`, not `Endpoint`: platform endpoints are build-time URLs, not enum
@@ -64,8 +66,13 @@ const NETWORKS: ReadonlyArray<{ label: string; endpoint: string }> = [
 export const BaseNetworkChoice: FC<{
   endpoint: string;
   onPick: (endpoint: string) => void;
+  /**
+   * Any pick, the network already chosen included, which `Segmented` does
+   * not report: "Choose a network" counts it
+   */
+  onChoose?: (endpoint: string) => void;
   groupRef?: React.Ref<HTMLDivElement>;
-}> = ({ endpoint, onPick, groupRef }) => {
+}> = ({ endpoint, onPick, onChoose, groupRef }) => {
   const listed = NETWORKS.some((n) => n.endpoint === endpoint);
   return (
     <Segmented
@@ -73,13 +80,19 @@ export const BaseNetworkChoice: FC<{
       variant="chips"
       aria-label="Network"
       value={listed ? endpoint : ""}
-      onValueChange={onPick}
+      onValueChange={(e) => {
+        onPick(e);
+        onChoose?.(e);
+      }}
     >
       {NETWORKS.map((n) => (
         <SegmentedItem
           key={n.endpoint}
           value={n.endpoint}
           className="font-mono"
+          onClick={() => {
+            if (n.endpoint === endpoint) onChoose?.(n.endpoint);
+          }}
         >
           {n.label}
         </SegmentedItem>
@@ -97,6 +110,7 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
   open,
   onClose,
   focus = "panel",
+  onChooseNetwork,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null);
   const chipsRef = useRef<HTMLDivElement>(null);
@@ -205,6 +219,7 @@ const GearSidebar: FC<React.PropsWithChildren<GearSidebarProps>> = ({
           groupRef={chipsRef}
           endpoint={endpoint}
           onPick={(e) => (PgSettings.connection.endpoint = e)}
+          onChoose={onChooseNetwork}
         />
       </Section>
 

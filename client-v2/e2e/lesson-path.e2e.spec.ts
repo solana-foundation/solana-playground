@@ -199,8 +199,10 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // stays offered either way.
   await expect(page.getByText("Before you can deploy:")).toBeVisible();
   await expect(page.getByRole("button", { name: "build first" })).toBeVisible();
+  // `exact`: the navigation's Get set up checklist has a "Connect a wallet"
+  // step too
   await expect(
-    page.getByRole("button", { name: "connect a wallet" })
+    page.getByRole("button", { name: "connect a wallet", exact: true })
   ).toBeVisible();
   // ...and says nothing about the cluster, because the profile is already
   // on devnet. Blaming a cluster that is right -- or one the client has

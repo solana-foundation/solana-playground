@@ -22,4 +22,5 @@ export { AssistantComposer } from "./ui/AssistantComposer";
 export { BaseAssistantHead } from "./ui/BaseAssistantHead";
 export type { BaseAssistantHeadProps } from "./ui/BaseAssistantHead";
 export { Assistant } from "./ui/Assistant";
+export { openConnectDialog } from "./ui/ConnectDialog";
 export type { AssistantProps, AssistantWiden } from "./ui/Assistant";

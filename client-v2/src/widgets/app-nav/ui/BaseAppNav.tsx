@@ -33,6 +33,8 @@ export interface BaseAppNavProps {
   footer: ReactNode;
   /** The footer's few icons the 52 px rail has room for, in its place */
   railFooter: ReactNode;
+  /** The Get set up checklist, at the foot of the content; not on the rail */
+  setup: ReactNode;
   onOpen: (item: NavItem) => void;
 }
 
@@ -43,6 +45,7 @@ const BaseAppNav = ({
   projects,
   footer,
   railFooter,
+  setup,
   onOpen,
 }: BaseAppNavProps) => (
   <>
@@ -74,6 +77,7 @@ const BaseAppNav = ({
         })}
       </SidebarMenu>
       {!collapsed && projects}
+      {!collapsed && <div className="mt-auto">{setup}</div>}
     </SidebarContent>
     {/* Swapped, not hidden, on the rail: what the full footer holds keeps
         its state above it (`FeedbackHost`, `PgSession`), as it must anyway

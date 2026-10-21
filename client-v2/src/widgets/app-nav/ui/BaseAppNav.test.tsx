@@ -35,6 +35,7 @@ const draw = (collapsed: boolean, onOpen = vi.fn(), onToggle = vi.fn()) => {
           projects={<span>projects</span>}
           footer={<span>footer</span>}
           railFooter={<span>rail footer</span>}
+          setup={<span>setup</span>}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -62,6 +63,7 @@ it("shows the logo, project list and footer when open, not the rail's", () => {
   expect(screen.getByText("projects")).toBeTruthy();
   expect(screen.getByText("footer")).toBeTruthy();
   expect(screen.getByText("logo")).toBeTruthy();
+  expect(screen.getByText("setup")).toBeTruthy();
   expect(screen.queryByText("rail footer")).toBeNull();
 });
 
@@ -70,6 +72,7 @@ it("swaps the logo, project list and footer for the rail's footer when collapsed
   expect(screen.queryByText("logo")).toBeNull();
   expect(screen.queryByText("projects")).toBeNull();
   expect(screen.queryByText("footer")).toBeNull();
+  expect(screen.queryByText("setup")).toBeNull();
   expect(screen.getByText("rail footer")).toBeTruthy();
   for (const label of ["Home", "New project", "Tutorials", "Programs"]) {
     expect(screen.getByRole("button", { name: label })).toBeTruthy();

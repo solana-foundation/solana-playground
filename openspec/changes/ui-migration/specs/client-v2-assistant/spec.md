@@ -63,8 +63,9 @@ carries a key, a prompt or a reply.
 - `assistant_effort_changed {effort}`: a user picked another effort;
   `effort` is `low`, `medium`, `high`, `xhigh` or `max`.
 - `assistant_connect_opened {via}`: Connect a model opened; `via` is `menu`
-  (More), `model` (the model button or a model of another backend) or `send`
-  (a Send with nothing to send to).
+  (More), `model` (the model button or a model of another backend), `send`
+  (a Send with nothing to send to) or `setup` (the Get set up checklist's
+  "Connect the assistant").
 - `assistant_turn_stopped`: a user stopped a turn; once per turn.
 - `assistant_default_probe_failed {reason}`: asking the deployment for its
   default backend failed; `reason` is `network`, `status` (an answer that is

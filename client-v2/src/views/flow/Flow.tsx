@@ -32,11 +32,12 @@ import { useKeybind } from "@/hooks";
 import { PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
-import { Assistant } from "@/widgets/assistant";
+import { Assistant, openConnectDialog } from "@/widgets/assistant";
 import { homeSlot, isHomeShown, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
+import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -90,6 +91,15 @@ const FlowFrame = () => {
       if (!settingsOpen) closeSheet();
       setSettingsFocus(focus);
       setSettingsOpen((open) => !open);
+    };
+  // Opens, never toggles: the checklist's "Choose a network" must not shut
+  // settings that are already open
+  const openSettings =
+    (closeSheet: () => void) =>
+    (focus: SettingsFocus = "panel") => {
+      closeSheet();
+      setSettingsFocus(focus);
+      setSettingsOpen(true);
     };
 
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘, on a Mac and Ctrl+,
@@ -158,6 +168,12 @@ const FlowFrame = () => {
                   onToggleSettings={toggleSettings(closeSheet)}
                 />
               }
+              setup={
+                <SetupList
+                  onConnectAssistant={() => openConnectDialog("setup")}
+                  onChooseNetwork={() => openSettings(closeSheet)("network")}
+                />
+              }
             />
           );
         }}
@@ -212,6 +228,7 @@ const FlowFrame = () => {
         open={settingsOpen}
         focus={settingsFocus}
         onClose={() => setSettingsOpen(false)}
+        onChooseNetwork={markNetworkChosen}
       />
 
       <Wallet />

@@ -309,6 +309,57 @@ entries are measured by `features/feedback`.
   cluster, currently <name>, down", and the menu's first item opens the
   settings on the cluster
 
+### Requirement: The Get set up checklist
+
+From 768 px wide, and on a phone's menu page, the navigation SHALL show
+"Get set up · <n> of 4" above the session footer, with four steps in order:
+"Connect the assistant", "Choose a network", "Sign in with GitHub" and
+"Connect a wallet". A step SHALL be done while a model is connected, once
+the user has picked a network in the settings (the network already chosen
+included), while signed in, and while a wallet is connected, respectively.
+A done step SHALL show a tick and its value (the cluster's name, the login,
+the wallet's shortened address); a step to do SHALL run its action when
+clicked: open Connect a model, open the settings on the network, start the
+GitHub sign-in, connect the wallet. The title SHALL fold the list.
+"Dismiss the checklist" SHALL hide it for good on the device, and so SHALL
+all four steps being done at once. The rail SHALL show no checklist.
+
+The checklist SHALL send `setup_item_picked` with `item` (`assistant`,
+`network`, `github` or `wallet`) each time a user clicks a step to do,
+`setup_dismissed` with `done` (how many steps were done) when it is
+dismissed, and `setup_completed` the first time all four steps are done
+together on the device.
+
+#### Scenario: Counting the steps
+
+- **WHEN** a signed-out user with a wallet connected and no model connected
+  opens the product
+- **THEN** the navigation shows "Get set up · 1 of 4", with "Connect a
+  wallet" ticked and the wallet's shortened address beside it
+
+#### Scenario: Choosing a network
+
+- **WHEN** a user clicks "Choose a network" in the checklist and picks the
+  network already selected in the settings
+- **THEN** the settings open on the network, and after the pick the step is
+  ticked and the count goes up by one
+
+#### Scenario: A step opens its action
+
+- **WHEN** a user clicks "Connect the assistant" in the checklist
+- **THEN** Connect a model opens
+
+#### Scenario: Dismissing the checklist
+
+- **WHEN** a user clicks "Dismiss the checklist", then reloads
+- **THEN** the checklist is gone, and stays gone after the reload
+
+#### Scenario: Finishing the checklist
+
+- **WHEN** the last of the four steps is done, and the user later opens the
+  product in a new tab where no model is connected
+- **THEN** the checklist is gone, and does not come back in the new tab
+
 ### Requirement: The navigation opens the gallery
 
 Until the Tutorials and Programs pages exist, the navigation's items SHALL

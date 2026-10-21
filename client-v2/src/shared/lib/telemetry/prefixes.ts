@@ -10,6 +10,7 @@ export const EVENT_PREFIXES = {
   overlays: "overlay",
   persistence: "sync",
   "session-footer": "session",
+  "setup-list": "setup",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];
