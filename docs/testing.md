@@ -84,6 +84,7 @@ scenario adds a service or a profile to that file; it never adds a second compos
 | B-6, D-1, D-4, D-5, D-9 | `dev` |
 | D-2, D-3 | `prod` |
 | D-6 | `v2` |
+| D-7 | `v2-prod` |
 | D-8, S-7 | `client-v2-standalone` |
 
 The profiles for the upstream client (`client/`) stay in `compose.yaml` beside the client-v2 ones. A change for
@@ -96,18 +97,24 @@ client-v2 adds profiles; it does not rename or remove these:
 | `client-standalone` | client without a server |
 | `server-standalone` | server without a database |
 
+The `v2` and `v2-prod` profiles run the `server-standalone` service too, and neither runs `server` or `db` (MongoDB).
+
 - [ ] `docker compose config --profiles` lists all four.
 - [ ] `docker compose --profile client-standalone config --services` includes `client-standalone` and no client-v2
       service.
 
-### P-5. Docker builds run from a real checkout
+### P-5. Docker builds and git worktrees
 
-The client Dockerfiles run `git submodule update --init client/public`, and `update-static.mjs` calls `git`. In a git
-worktree, `.git` is a file that points to a path on the host (`gitdir: …/.git/worktrees/<name>`), which does not exist
-in the image, so the build fails with `fatal: not a git repository`.
+In a git worktree, `.git` is a file that points to a path on the host (`gitdir: …/.git/worktrees/<name>`), which does
+not exist in an image, so git inside the image fails with `fatal: not a git repository`.
 
-- [ ] Build images from the primary checkout or from a clone (`git clone --branch <branch> <worktree> <dir>`), never
-      from a worktree under `.worktrees/`.
+- The upstream `client/Dockerfile` runs `git submodule update --init client/public`: build its images (the `dev`,
+  `prod`, and `client-standalone` profiles) from the primary checkout or from a clone
+  (`git clone --branch <branch> <worktree> <dir>`), never from a worktree under `.worktrees/`.
+- `client-v2/Dockerfile` reads no git data of the checkout. It clones the assets repository at the commit in
+  `client-v2/scripts/assets-commit.txt` and sets `ASSETS_DIR` for `update-static.mjs`, so the client-v2 profiles build
+  from a worktree too. `scripts/assets-commit.test.mjs` (`yarn test-api`) fails when that file differs from the
+  `client/public` submodule entry.
 
 ## 1. Builds
 
@@ -288,12 +295,12 @@ Expect:
 
 ## 3. Full suite with Docker Compose
 
-Precondition: P-1 done; port 3000 and 8080 free.
+Precondition: P-1 done; port 3000 and 8080 free, and 5432 for the `v2` and `v2-prod` profiles.
 
 This section tests the stable server routes only; the unstable ones are [optional](#6-optional-unstable-server). The upstream client sends Build and
 Deploy to `/unstable/*` in any build that is not a production build (`PgServer` in `client/src/utils/server.ts`), and
 the compose server has no such routes, so its build and deploy cases run on the `prod` profile. client-v2 keeps the
-`experimental.unstable` setting off by default, so the `v2` profile tests the stable routes.
+`experimental.unstable` setting off by default, so the `v2` and `v2-prod` profiles test the stable routes.
 
 ### D-1. stack starts
 
@@ -355,13 +362,42 @@ Precondition: `master`.
 
 ```sh
 docker compose --profile v2 up --build
+docker compose --profile v2 ps -a --format '{{.Service}} {{.State}} {{.ExitCode}}'
+docker compose --profile v2 logs | grep -c 'local dev stub'
 ```
 
 Steps: in Settings, check that `experimental.unstable` is off and set the server to Local (client-v2 defaults to the
 remote Foundation server).
 
-Expect: `client-v2` and `postgres` run; the D-2 to D-4 steps pass against the client-v2 UI, and no request path
-contains `/unstable/`.
+Expect:
+
+- [ ] `wasm` and `migrate` exit 0; `postgres`, `server-standalone`, and `client-v2` stay running; no `db` or `server`
+      service exists.
+- [ ] the `grep -c` prints `0`: the `yarn start` guard found the real packages.
+- [ ] `curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/sync` prints a status other than `404`.
+- [ ] the D-2 and D-3 steps pass against the client-v2 UI, and no request path contains `/unstable/`. D-4 does not
+      apply: sharing needs MongoDB, which this profile does not run.
+
+### D-7. client-v2 production stack
+
+```sh
+docker compose --profile v2-prod up --build -d
+docker compose --profile v2-prod logs client-v2-prod | grep 'wasm packages:'
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/
+curl -s -o /dev/null -w '%{http_code}\n' http://localhost:3000/api/auth/get-session
+curl -sI http://localhost:3000/ | grep -i '^cross-origin'
+docker compose --profile v2-prod down
+```
+
+Expect:
+
+- [ ] the services of D-6 run, with `client-v2-prod` in place of `client-v2`.
+- [ ] the log prints `wasm packages: /home/solpg/client-v2/build carries the real packages` before
+      `serve-build: ... on http://localhost:3000`. A bundle that fails the check exits the container instead.
+- [ ] `/` prints `200`; `/api/auth/get-session` prints a status other than `404`, so `api/*.mjs` is served and not the
+      SPA fallback.
+- [ ] the headers include `Cross-Origin-Embedder-Policy: require-corp` and `Cross-Origin-Opener-Policy: same-origin`,
+      as `vercel.json` sets them.
 
 ### D-8. client-v2 standalone container
 
@@ -859,7 +895,7 @@ different port is a different origin.
 | --- | --- | --- | --- |
 | upstream dev | D-1, D-4, D-5, D-9, C-3 | `dev` | 1 |
 | upstream prod | D-2, then D-3 | `prod` | 2 |
-| v2 stack | D-6 | `v2` | 3 |
+| v2 stack | D-6, then D-7 | `v2`, then `v2-prod` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |
 | local, no Docker | C-1, C-2, C-4, C-5, C-6, S-9 | none | `PORT` per dev server, from slot 5 |
 | remote | S-6, R-2 | none | none |
@@ -899,7 +935,7 @@ queue.
 ### Limits
 
 - [ ] Every group runs from its own clone: B-1 to B-4, the C cases, and S-9 write to `node_modules`, `public/`,
-      `target/`, and `public/crates`. A worktree does not work for Docker builds (P-5).
+      `target/`, and `public/crates`. A worktree does not work for the upstream client's Docker builds (P-5).
 - [ ] Images are shared by name, so all groups test the commit B-6 built. Testing two commits at once needs two
       separate image builds, one after the other.
 - [ ] Run serially what shares global state: U-1 to U-3 (globally named `program-*` images) and D-3 (one funded

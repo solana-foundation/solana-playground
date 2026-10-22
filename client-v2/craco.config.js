@@ -46,6 +46,7 @@ class GoogleTagPlugin {
 }
 
 const { DEV_SERVER_ROOT_HEADER } = require("./scripts/dev-server-owner.mjs");
+const { serveApiRoute } = require("./scripts/api-route.mjs");
 const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
@@ -481,79 +482,6 @@ module.exports = {
   },
 };
 
-/** Answer as the platform would, not as the SPA fallback would */
-const sendJson = (res, status, body) => {
-  res.statusCode = status;
-  res.setHeader("content-type", "application/json");
-  res.end(JSON.stringify(body));
-};
-
-/**
- * Map an `/api` sub-path to the module that serves it.
- *
- * Only the first segment selects the module, so `api/auth.mjs` serves every
- * `/api/auth/...` path -- which on the platform takes a `vercel.json` rewrite,
- * because no `api/` file name spans segments (see `api-routing.test.mjs`).
- * Every segment is still constrained rather than sanitised, because the value
- * reaches `import()`.
- *
- * @param {string} url the path below `/api`, query string included
- * @returns {{name: string} | null} the module to import, or `null` for 404
- */
-const resolveApiRoute = (url) => {
-  const segments = url.split("?")[0].split("/").filter(Boolean);
-  if (!segments.length) return null;
-  if (
-    !segments.every(
-      (s) => /^[A-Za-z0-9._-]+$/.test(s) && s !== ".." && s !== "."
-    )
-  ) {
-    return null;
-  }
-
-  const [name] = segments;
-  return /^[a-z0-9-]+$/.test(name) ? { name } : null;
-};
-
-/**
- * Dispatch `/api/<name>` to `api/<name>.mjs`, matching how the deployed
- * function is invoked.
- *
- * Never calls `next()`: falling through would hand an unknown `/api` path to
- * the history fallback, which answers `200 text/html` with `index.html` and
- * shows up in a client as `Unexpected token '<'`. A 404 is both the truth and
- * what the deployment does.
- *
- * @param {import("http").IncomingMessage & {url: string}} req
- * @param {import("http").ServerResponse} res
- */
-const serveApiRoute = async (req, res) => {
-  // Mounted on `/api`, so `req.url` is the remainder.
-  //
-  // NOTE: the `import()` below caches, and nothing here invalidates it. Editing
-  // an `api/*.mjs` route, or a `.mjs` one of them imports (the per-feature
-  // `config.mjs` files), does NOT hot-reload the way `src` does -- the server
-  // keeps serving the module it first loaded, and a newly added export shows up
-  // as "does not provide an export named X". Restart the dev server after such
-  // an edit.
-  const route = resolveApiRoute(req.url);
-  if (!route) {
-    return sendJson(res, 404, { error: `No API route at /api${req.url}` });
-  }
-
-  try {
-    const mod = await import(`./api/${route.name}.mjs`);
-    await mod.default(req, res);
-  } catch (e) {
-    if (e.code === "ERR_MODULE_NOT_FOUND") {
-      return sendJson(res, 404, {
-        error: `No API route at /api/${route.name}`,
-      });
-    }
-    sendJson(res, 500, { error: e.message });
-  }
-};
-
 /** Real asset-repo dates captured by `make update-static`; see that script */
 const TUTORIAL_TIMESTAMPS = (() => {
   const file = path.join("public", "tutorial-timestamps.json");
@@ -586,7 +514,3 @@ const defineFromPublicDir = (dirName, cb) => {
 
   return JSON.stringify(cb(fs.readdirSync(publicPath), publicPath));
 };
-
-// Exported for tests only. The craco config itself is the default export
-// above; this is the one pure function in the file worth covering directly.
-module.exports.resolveApiRoute = resolveApiRoute;

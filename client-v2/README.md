@@ -115,7 +115,8 @@ verdict is the one CI sees whatever version is installed globally.
 
 `public/` is mirrored from the `client/public` submodule, and `yarn start` /
 `yarn build` refresh it automatically. Run `make update-static` by hand only
-after bumping that submodule to change asset content.
+after bumping that submodule to change asset content; the bump also updates
+`scripts/assets-commit.txt` (see [Docker](#docker)).
 
 Worktrees are supported: the mirror is always copied from the _primary_
 checkout, so a worktree never initialises a submodule of its own. (A submodule's
@@ -124,16 +125,47 @@ detaches it in the first — which is why `public/` is not a submodule here.)
 
 ## Docker
 
-Run client-v2 together with the build server via [Docker Compose](https://github.com/docker/compose):
+Run client-v2 with everything it talks to via [Docker Compose](https://github.com/docker/compose).
+`compose.yaml` is a local development layout, not a production one.
 
 ```sh
-docker compose -f ../compose.yaml --profile v2 up --build
+docker compose -f ../compose.yaml --profile v2 up --build       # dev server, `yarn start`
+docker compose -f ../compose.yaml --profile v2-prod up --build  # production bundle
 ```
 
-The client is served on `http://localhost:3000` (override with
-`PG_CLIENT_V2_PORT`) and the build server on `http://localhost:8080`.
+Both profiles start the same services:
 
-For a production build served statically, use the `v2-prod` profile instead.
+| Service             | What it does                                                                 |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `wasm`              | Builds the real `wasm/*/pkg` packages (`wasm/build.sh`); the client image copies them in. Never stubs. |
+| `postgres`          | Conversation and project sync, on host port `PG_POSTGRES_PORT` (5432).       |
+| `migrate`           | Runs dbmate over `db/migrations` once Postgres is healthy, then exits.       |
+| `server-standalone` | The Rust build server on `http://localhost:8080` (`PG_PORT`), without MongoDB, which only its share routes use. |
+| `client-v2` / `client-v2-prod` | The client on `http://localhost:3000` (`PG_CLIENT_V2_PORT`), started once `wasm` and `migrate` have exited 0. |
+
+`client-v2-prod` runs `yarn build:bundle`, refuses to serve a bundle that
+`node scripts/wasm-stubs.mjs check-build build` rejects, and then serves
+`build/` and `api/*.mjs` with `scripts/serve-build.mjs`, following
+`vercel.json`'s headers and rewrites. `client-v2` serves `api/*.mjs` from the
+dev server, through the same dispatcher (`scripts/api-route.mjs`).
+
+The compose file sets `DATABASE_URL` (the compose Postgres), `SYNC_ENABLED`,
+`AUTH_BASE_URL` and `REACT_APP_SERVER_URL` itself; those values win over
+`.env`. Everything else, such as the GitHub OAuth app, `AUTH_SECRET` and the
+model keys, comes from `client-v2/.env` when it exists (names in
+`.env.example`). The file reaches the containers through `env_file`; it is
+kept out of the image.
+
+The client image builds from the primary checkout and from a linked worktree
+alike: it reads no git data of the checkout. It clones the assets repository
+at the commit in `scripts/assets-commit.txt` and points `update-static.mjs` at
+the clone through `ASSETS_DIR`. After bumping the `client/public` submodule,
+update that file from the repository root (`yarn test-api` fails until it
+matches):
+
+```sh
+git ls-tree HEAD client/public | awk '{print $3}' > client-v2/scripts/assets-commit.txt
+```
 
 The `dev`, `prod` and `client-standalone` profiles build the upstream `client/`,
 not this one. See the [root README](../README.md#run-with-docker).
