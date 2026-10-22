@@ -165,6 +165,27 @@
       ]
     },
     {
+      "name": "command",
+      "type": "registry:ui",
+      "title": "Command",
+      "description": "Stock shadcn command (cmdk): a list that searches and acts from the keyboard.",
+      "registryDependencies": [
+        "@playground/dialog",
+        "@playground/input-group"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/command.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cmdk",
+        "cn",
+        "lucide-react"
+      ]
+    },
+    {
       "name": "label",
       "type": "registry:ui",
       "title": "Label",

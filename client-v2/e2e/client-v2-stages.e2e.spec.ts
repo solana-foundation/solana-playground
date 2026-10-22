@@ -11,16 +11,34 @@ import {
 
 /**
  * The scenarios of `client-v2-stages`: what the Build, Deploy and Interact
- * stages show, and where their action sits on a phone.
+ * stages show, and where their action sits on a phone; and the
+ * `client-v2-search-field` scenarios, which reuse this file's Interact setup.
  */
 
 const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
 
-/** The smallest Anchor IDL: one instruction, nothing to fill */
+/**
+ * A small Anchor IDL: the `u64` argument is what "Random fills an instruction
+ * value" picks for, the `counter` account gives the form a field with "From
+ * seed" for the screenshots, and the `Counter` type is the Accounts section
+ * "An address that is not a public key" types into
+ */
 const IDL = {
   version: "0.1.0",
   name: "e2e_project",
-  instructions: [{ name: "initialize", accounts: [], args: [] }],
+  instructions: [
+    {
+      name: "initialize",
+      accounts: [{ name: "counter", isMut: true, isSigner: false }],
+      args: [{ name: "amount", type: "u64" }],
+    },
+  ],
+  accounts: [
+    {
+      name: "Counter",
+      type: { kind: "struct", fields: [{ name: "count", type: "u64" }] },
+    },
+  ],
 };
 
 /**
@@ -285,5 +303,39 @@ test.describe("client-v2-stages on a phone", () => {
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth)
     ).toBeLessThanOrEqual(390);
+  });
+});
+
+/** The search field, where the Interact stage's values are picked */
+test.describe("client-v2-search-field", () => {
+  test("client-v2-search-field: Random fills an instruction value", async ({
+    seededPage: page,
+  }) => {
+    await stubProgramAccount(page, DEPLOYED_ACCOUNT);
+    const panel = await buildThenInteract(page);
+    await panel.getByRole("button", { name: "initialize" }).click();
+
+    // Reached by its id: `updateRefs` (InstructionInput) finds dependent
+    // inputs by it, so SearchBar must keep it
+    const amount = panel.locator("#initializeargsamount");
+    await amount.click();
+    await page
+      .locator('[data-slot="command"]')
+      .getByRole("option", { name: "Random" })
+      .click();
+    await expect(amount).toHaveValue(/^\d+$/);
+  });
+
+  test("client-v2-search-field: An address that is not a public key", async ({
+    seededPage: page,
+  }) => {
+    await stubProgramAccount(page, DEPLOYED_ACCOUNT);
+    const panel = await buildThenInteract(page);
+    await panel.getByRole("button", { name: "Counter" }).click();
+
+    // Account's address field offers nothing to pick, so it is a textbox
+    const address = panel.getByRole("textbox").last();
+    await address.fill("not-a-key");
+    await expect(address).toHaveAttribute("aria-invalid", "true");
   });
 });

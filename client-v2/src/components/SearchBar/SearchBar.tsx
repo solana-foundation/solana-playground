@@ -4,18 +4,35 @@ import {
   ReactNode,
   SetStateAction,
   useEffect,
+  useId,
   useRef,
   useState,
   type JSX,
 } from "react";
-import styled, { css } from "styled-components";
+import { ArrowLeft, Search, X } from "lucide-react";
 
 import { Button } from "@/shared/ui/button";
-import Input, { InputProps } from "../Input";
-import { Close, PointedArrow, Search } from "../Icons";
-import { SpinnerWithBg } from "../Loading";
+import {
+  Command,
+  CommandEmpty,
+  CommandItem,
+  CommandList,
+} from "@/shared/ui/command";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from "@/shared/ui/input-group";
+import { Popover, PopoverAnchor, PopoverContent } from "@/shared/ui/popover";
+import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { Spinner } from "@/shared/ui/spinner";
+import type { InputProps } from "../Input";
 import { useKeybind, useOnClickOutside } from "../../hooks";
-import { Arrayable, Getable, PgCommon, PgTheme } from "../../utils";
+import { Arrayable, Getable, PgCommon } from "../../utils";
+
+const log = createLogger("components:search-bar");
 
 export interface SearchBarProps extends InputProps {
   items?: Item[] | null;
@@ -23,9 +40,9 @@ export interface SearchBarProps extends InputProps {
   showSearchOnMount?: boolean;
   labelToSelectOnPaste?: string;
   restoreIfNotSelected?: boolean;
+  /** Which side of the field the search icon sits on */
   searchButton?: {
     position?: "left" | "right";
-    width?: string;
   };
   onSearch?: (ev: { input: InputProps["value"]; item: NormalizedItem }) => void;
   filter?: (args: {
@@ -78,10 +95,13 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
   setSelectedItems: _setSelectedItems,
   onClick,
   onPaste,
+  onChange,
+  error,
+  setError,
+  validator,
   ...props
 }) => {
   const searchButtonPosition = searchButton?.position ?? "left";
-  const searchButtonWidth = searchButton?.width ?? "2rem";
 
   const inputRef = useRef<HTMLInputElement>(null);
   const lastValue = useRef(props.value);
@@ -91,7 +111,7 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
 
     // Last value should only be updated when `setInputValue` function runs and
     // not when `onChange` callback runs because we want to restore to the last
-    // valid value when the user clicks outside of the search bar.
+    // value SearchBar set (a pick or a clear) when the user leaves the field.
     lastValue.current = value;
 
     if (opts?.focus) input.focus();
@@ -105,6 +125,26 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
         ? item.value(currentValue)
         : currentValue
       : item.label;
+  };
+
+  // What the validator last said. A caller that passes `setError` holds the
+  // error itself and its `error` alone is shown, so it can also clear it; the
+  // legacy `Input` behaved the same way.
+  const [validationError, setValidationError] = useState<InputError>(null);
+  const shownError = setError ? error : validationError || error;
+
+  /** Whether the validator accepts `value`; one that throws rejects it */
+  const isValid = (value: string) => {
+    try {
+      return validator?.(value);
+    } catch (e) {
+      // A throw is the validator's way of saying "invalid, and here is why";
+      // the why is shown by `onChange`, the list only needs the answer
+      log.debug("The validator rejected a value by throwing", {
+        context: { message: e instanceof Error ? e.message : String(e) },
+      });
+      return false;
+    }
   };
 
   const [isVisible, setIsVisible] = useState(showSearchOnMount);
@@ -172,11 +212,11 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
         )
       : normalizedItems.filter((item) => {
           if (item.onlyShowIfValid) {
-            return props.validator?.(getItemValue(item));
+            return isValid(getItemValue(item));
           }
 
-          // Show all optinos if the input is valid
-          if (props.validator?.(props.value)) return true;
+          // Show all options if the input is valid
+          if (isValid(props.value)) return true;
 
           if (typeof item.matches === "function") {
             return item.matches(props.value);
@@ -208,8 +248,8 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
           closeButton: item.closeButton,
         });
         isInSubSearch = true;
-      } catch (e: any) {
-        console.log("Failed to get items:", e.message);
+      } catch (e) {
+        reportButtonFailure(`load ${item.label}`)(e);
         return;
       } finally {
         setLoading(false);
@@ -246,10 +286,16 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
       selectedItemRef.current?.scrollIntoView({ block: "center" });
     } else reset();
   };
+  /** `searchCommon` from a click or a key, its failure told to the user */
+  const pick = (item: Item) => {
+    searchCommon(item).catch(
+      reportButtonFailure(`pick ${normalizeItem(item).label}`)
+    );
+  };
   const searchTopResult = () => {
     if (filteredItems && keyboardSelectionIndex !== null) {
       const selectedItem = filteredItems.at(keyboardSelectionIndex);
-      if (selectedItem) searchCommon(selectedItem);
+      if (selectedItem) pick(selectedItem);
     } else setIsVisible(true);
   };
   useKeybind("Enter", {
@@ -267,8 +313,8 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
   // Handle the keyboard selection index
   useEffect(() => {
     if (!filteredItems) {
-      // No `filteredItems` means dropdown is not visible so the keyboard
-      // selection should not exist
+      // No `filteredItems` means no item list is shown (closed, or a custom
+      // page), so there is nothing to select
       setKeyboardSelectionIndex(null);
     } else if (keyboardSelectionIndex === null) {
       // If the selection index was set to `null`, it means the dropdown has
@@ -321,129 +367,229 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
     [filteredItems?.length]
   );
 
-  // Close on outside click
-  useOnClickOutside(wrapperRef, reset, isVisible && !itemState.closeButton);
+  // Close on outside click. The list renders in a portal, outside the
+  // wrapper, so a press in this field's own list is not outside.
+  const listId = useId();
+  useOnClickOutside(
+    wrapperRef,
+    reset,
+    isVisible && !itemState.closeButton,
+    `[data-search-bar-list="${listId}"]`
+  );
+
+  const isOpen = !!(filteredItems || itemState.Component);
+  // The list renders in a portal on `body`, so it would outlive a field the
+  // layout takes away while keeping it mounted: off the page under Home, or
+  // `inert` under a page such as Tutorials. Close it when that happens.
+  useEffect(() => {
+    const input = inputRef.current;
+    if (!isOpen || !input) return;
+
+    const closeIfGone = () => {
+      if (!input.isConnected || input.closest("[inert]")) reset();
+    };
+    const visibility = new IntersectionObserver(([entry]) => {
+      if (entry && !entry.isIntersecting) reset();
+    });
+    visibility.observe(input);
+    const inertness = new MutationObserver(closeIfGone);
+    inertness.observe(document.body, {
+      attributes: true,
+      attributeFilter: ["inert"],
+      subtree: true,
+    });
+    return () => {
+      visibility.disconnect();
+      inertness.disconnect();
+    };
+    // `reset` is rebuilt every render; the observers only need the open state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  const highlighted =
+    keyboardSelectionIndex === null
+      ? ""
+      : filteredItems?.at(keyboardSelectionIndex)?.label ?? "";
 
   return (
-    <Wrapper ref={wrapperRef}>
-      <SearchInputWrapper width={searchButtonWidth}>
-        <SearchInput
-          ref={inputRef}
-          position={searchButtonPosition}
-          autoFocus={showSearchOnMount}
-          onClick={(ev) => {
-            onClick?.(ev);
-            setIsVisible(true);
-          }}
-          onPaste={(ev) => {
-            onPaste?.(ev);
+    <div ref={wrapperRef} className="w-full">
+      {typeof shownError === "string" && shownError && (
+        <p className="mb-2 text-xs text-destructive">{shownError}</p>
+      )}
 
-            // Default to the pasted text if the label to select is not specified
-            const clipboardText = ev.clipboardData.getData("text");
+      <Popover open={isOpen}>
+        <PopoverAnchor>
+          <InputGroup>
+            <InputGroupAddon
+              align={
+                searchButtonPosition === "left" ? "inline-start" : "inline-end"
+              }
+            >
+              <InputGroupButton
+                size="icon-xs"
+                aria-label="Search"
+                onClick={searchTopResult}
+              >
+                <Search />
+              </InputGroupButton>
+            </InputGroupAddon>
 
-            // Intentionally use `itemState.items` instead of `filteredItems`
-            //`normalizedItems` because they could be in an invalid state
-            // when the paste events, e.g. `normalizedItems` values only
-            // exist when `isVisible` is truthy.
-            const item = itemState.items?.find((item) => {
-              const { label } = normalizeItem(item);
-              return label === labelToSelectOnPaste || label === clipboardText;
-            });
-            if (item) {
-              // `item.value` can be an empty string because it's not updated as
-              // soon as `onPaste` executes.
-              if (typeof item === "object") item.value ||= clipboardText;
+            <InputGroupInput
+              ref={inputRef}
+              // A field with nothing to pick (Account's address) is a textbox
+              role={items === undefined ? undefined : "combobox"}
+              aria-expanded={items === undefined ? undefined : isOpen}
+              aria-autocomplete={items === undefined ? undefined : "list"}
+              aria-invalid={shownError ? true : undefined}
+              autoComplete="off"
+              autoFocus={showSearchOnMount}
+              onClick={(ev) => {
+                onClick?.(ev);
+                setIsVisible(true);
+              }}
+              onChange={(ev) => {
+                let err: InputError = null;
+                if (validator) {
+                  try {
+                    if (validator(ev.target.value) === false) err = true;
+                  } catch (e) {
+                    // The message is the error the field shows
+                    err = (e instanceof Error && e.message) || true;
+                  }
+                }
+                setValidationError(err);
+                setError?.(err);
 
-              // Include a timeout otherwise the pasted text is appended to the
-              // value we set instead of overriding it
-              setTimeout(() => searchCommon(item));
-            }
-          }}
-          {...props}
-        />
+                onChange?.(ev);
+              }}
+              onPaste={(ev) => {
+                onPaste?.(ev);
 
-        {props.value && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Clear search"
-            className={`absolute inset-y-0 my-auto ${INPUT_CLOSE_BUTTON_SIDE[searchButtonPosition]}`}
-            onClick={() => {
-              setInputValue("", { focus: true });
-              setSelectedItems({ completed: [], pending: [] });
-              setIsVisible(true);
-            }}
-          >
-            <Close />
-          </Button>
-        )}
+                // Default to the pasted text if the label to select is not specified
+                const clipboardText = ev.clipboardData.getData("text");
 
-        <Button
-          variant="ghost"
-          aria-label="Search"
-          className={`absolute h-full w-(--search-button-width) px-0 ${SEARCH_BUTTON_SIDE[searchButtonPosition]}`}
-          onClick={searchTopResult}
+                // Search `itemState.items`, not `filteredItems` or
+                // `normalizedItems`: those are empty while the list is closed
+                // (`isVisible` false), and a paste can come before it opens.
+                const item = itemState.items?.find((item) => {
+                  const { label } = normalizeItem(item);
+                  return (
+                    label === labelToSelectOnPaste || label === clipboardText
+                  );
+                });
+                if (item) {
+                  // `item.value` can be an empty string because it's not updated as
+                  // soon as `onPaste` executes.
+                  if (typeof item === "object") item.value ||= clipboardText;
+
+                  // Include a timeout otherwise the pasted text is appended to the
+                  // value we set instead of overriding it
+                  setTimeout(() => pick(item));
+                }
+              }}
+              {...props}
+            />
+
+            {props.value && (
+              <InputGroupAddon align="inline-end">
+                <InputGroupButton
+                  size="icon-xs"
+                  aria-label="Clear search"
+                  onClick={() => {
+                    setInputValue("", { focus: true });
+                    setSelectedItems({ completed: [], pending: [] });
+                    setIsVisible(true);
+                  }}
+                >
+                  <X />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
+          </InputGroup>
+        </PopoverAnchor>
+
+        <PopoverContent
+          data-search-bar-list={listId}
+          align="start"
+          // A custom page (FromSeed's) can be taller than the room left
+          className="relative max-h-(--radix-popover-content-available-height) w-(--radix-popover-trigger-width) gap-0 overflow-y-auto p-1"
+          // Focus stays in the field: typing filters, and the arrow keys and
+          // Enter act from there through `useKeybind`
+          onOpenAutoFocus={(ev) => ev.preventDefault()}
+          onCloseAutoFocus={(ev) => ev.preventDefault()}
+          // The open state is SearchBar's (`isOpen`): Escape and a press
+          // outside go through `reset` (`useKeybind`, `useOnClickOutside`),
+          // which also restores the last value, so Radix's own dismissal is off
+          onEscapeKeyDown={(ev) => ev.preventDefault()}
+          onInteractOutside={(ev) => ev.preventDefault()}
         >
-          <Search />
-        </Button>
-      </SearchInputWrapper>
+          {itemState.isInSubSearch && (
+            <div className="flex items-center justify-between pb-1">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Back"
+                onClick={() => {
+                  setItemState({ items, isInSubSearch: false });
+                  setSelectedItems((items) => ({ ...items, pending: [] }));
+                  inputRef.current?.focus();
+                }}
+              >
+                <ArrowLeft />
+              </Button>
 
-      {(filteredItems || itemState.Component) && (
-        <DropdownWrapper isCustomComponent={!!itemState.Component}>
-          {
-            <SpinnerWithBg loading={loading}>
-              {itemState.isInSubSearch && (
-                <SubSearchTopWrapper>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label="Back"
-                    className="[&_svg:not([class*='size-'])]:size-5"
-                    onClick={() => {
-                      setItemState({ items, isInSubSearch: false });
-                      setSelectedItems((items) => ({ ...items, pending: [] }));
-                      inputRef.current?.focus();
-                    }}
-                  >
-                    <PointedArrow rotate="180deg" />
-                  </Button>
-
-                  {itemState.closeButton && (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Close"
-                      onClick={reset}
-                    >
-                      <Close />
-                    </Button>
-                  )}
-                </SubSearchTopWrapper>
+              {itemState.closeButton && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Close"
+                  onClick={reset}
+                >
+                  <X />
+                </Button>
               )}
+            </div>
+          )}
 
-              {itemState.Component ? (
-                <itemState.Component search={searchCommon} />
-              ) : filteredItems?.length ? (
-                filteredItems.map((item, i) => (
-                  <DropdownItem
+          {itemState.Component ? (
+            <itemState.Component search={pick} />
+          ) : (
+            <Command
+              shouldFilter={false}
+              value={highlighted}
+              onValueChange={(label) => {
+                const index = filteredItems
+                  ? filteredItems.findIndex((item) => item.label === label)
+                  : -1;
+                if (index !== -1) setKeyboardSelectionIndex(index);
+              }}
+              className="rounded-md! p-0"
+            >
+              <CommandList className="max-h-60">
+                <CommandEmpty className="py-2">No match</CommandEmpty>
+                {filteredItems?.map((item) => (
+                  <CommandItem
                     key={item.label}
                     ref={item.isSelected ? selectedItemRef : null}
-                    onClick={() => searchCommon(item)}
-                    onMouseEnter={() => setKeyboardSelectionIndex(i)}
-                    isSelected={item.isSelected}
-                    isKeyboardSelected={keyboardSelectionIndex === i}
+                    value={item.label}
+                    data-checked={item.isSelected}
+                    onSelect={() => pick(item)}
                   >
                     {item.element ?? item.label}
-                  </DropdownItem>
-                ))
-              ) : (
-                <NoMatch>No match</NoMatch>
-              )}
-            </SpinnerWithBg>
-          }
-        </DropdownWrapper>
-      )}
-    </Wrapper>
+                  </CommandItem>
+                ))}
+              </CommandList>
+            </Command>
+          )}
+
+          {loading && (
+            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-popover/80">
+              <Spinner />
+            </div>
+          )}
+        </PopoverContent>
+      </Popover>
+    </div>
   );
 };
 
@@ -451,98 +597,6 @@ const normalizeItem = (item: Item): NormalizedItem => {
   return typeof item === "object" ? item : { label: item };
 };
 
-type SearchButtonProps = NonNullable<SearchBarProps["searchButton"]>;
-type SearchButtonPosition = Pick<SearchButtonProps, "position">;
-type SearchButtonPositionWidth = Pick<SearchButtonProps, "width">;
-
-const Wrapper = styled.div``;
-
-const SearchInputWrapper = styled.div<SearchButtonPositionWidth>`
-  display: flex;
-  position: relative;
-
-  --search-button-width: ${({ width }) => width};
-`;
-
-const SearchInput = styled(Input)<SearchButtonPosition>`
-  ${({ theme, position }) => css`
-    padding: ${theme.components.input.padding};
-    ${position === "left"
-      ? `padding-left: var(--search-button-width);
-    padding-right: var(--search-button-width);`
-      : `padding-right: calc(2 * var(--search-button-width))`}
-  `}
-`;
-
-/* Both maps are keyed by the search button's position, not by where the
-   button they place sits: with the search button on the left, the clear
-   button goes to the right edge. Written out so Tailwind sees the classes. */
-const INPUT_CLOSE_BUTTON_SIDE = {
-  left: "right-1",
-  right: "right-[calc(var(--search-button-width)+0.25rem)]",
-} as const;
-
-const SEARCH_BUTTON_SIDE = {
-  left: "left-0 rounded-r-none",
-  right: "right-0 rounded-l-none",
-} as const;
-
-const DropdownWrapper = styled.div<{ isCustomComponent: boolean }>`
-  ${({ isCustomComponent, theme }) => css`
-    flex: 1;
-    padding: 0.5rem 0;
-    background: ${theme.components.input.bg};
-    border-radius: ${theme.default.borderRadius};
-    outline: 1px solid ${PgTheme.alpha(theme.colors.default.primary, "medium")};
-    user-select: none;
-
-    ${!isCustomComponent &&
-    `
-      max-height: 15rem;
-      overflow: auto;
-      ${PgTheme.getScrollbarCSS({ width: "0.25rem" })};
-    `};
-  `}
-`;
-
-const SubSearchTopWrapper = styled.div`
-  ${({ theme }) => css`
-    position: sticky;
-    top: -0.5rem;
-    padding: 0.25rem 0.5rem;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: ${theme.components.input.bg};
-  `}
-`;
-
-const DropdownItem = styled.div<{
-  isSelected: boolean;
-  isKeyboardSelected: boolean;
-}>`
-  ${({ isSelected, isKeyboardSelected, theme }) => css`
-    padding: 0.5rem 1rem;
-    color: ${theme.colors.default.textSecondary};
-    font-weight: bold;
-    transition: all ${theme.default.transition.type}
-      ${theme.default.transition.duration.short};
-
-    &:hover {
-      background: ${theme.colors.state.hover.bg};
-      color: ${theme.colors.default.textPrimary};
-      cursor: pointer;
-    }
-
-    ${isKeyboardSelected &&
-    `background: ${theme.colors.state.hover.bg}; color: ${theme.colors.default.textPrimary}`};
-    ${isSelected && `color: ${theme.colors.default.primary} !important`};
-  `}
-`;
-
-const NoMatch = styled.div`
-  padding: 0.5rem;
-  text-align: center;
-`;
+type InputError = InputProps["error"];
 
 export default SearchBar;

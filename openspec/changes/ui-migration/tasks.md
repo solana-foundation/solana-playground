@@ -174,3 +174,7 @@ regression against 5.1 has misread this rule.
       undo history and the console (HOO-2118; after 5.8; design.md, "Home
       from an open project (5.28)"; plan:
       [plans/5.28-home-from-an-open-project.md](plans/5.28-home-from-an-open-project.md))
+- [x] 5.29 SearchBar from the design system: an input group with a Command
+      list in a Popover, for the Interact instruction inputs, FromSeed and
+      Account (HOO-2207; after 5.12, before 5.24; its own change:
+      `searchbar-command`)
