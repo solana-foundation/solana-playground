@@ -1,10 +1,8 @@
 import { FC } from "react";
-import styled, { css } from "styled-components";
 
 import Link from "../Link";
 import { DetailTag } from "@/entities/tutorial";
 import { Arrayable, TutorialDetailKey } from "../../utils";
-import { useDifferentBackground } from "../../hooks";
 
 interface TutorialDetailsProps {
   details: ClickableTutorialDetailProps[];
@@ -12,70 +10,30 @@ interface TutorialDetailsProps {
 
 const TutorialDetails: FC<React.PropsWithChildren<TutorialDetailsProps>> = ({
   details,
-}) => {
-  const ref = useDifferentBackground();
+}) => (
+  <div className="flex flex-wrap justify-between gap-x-8 gap-y-5 rounded-card border border-border bg-surface-panel p-5">
+    {details.map(
+      ({ kind, data }) =>
+        data && (
+          <div key={kind} className="flex flex-col gap-2.5">
+            <span className="font-act text-caption tracking-wide text-foreground uppercase">
+              {kind}
+            </span>
 
-  return (
-    <TutorialDetailsWrapper ref={ref}>
-      {details.map(({ kind, data }) => {
-        return (
-          data && (
-            <TutorialDetailSection key={kind}>
-              <TutorialDetailName>{kind}</TutorialDetailName>
-
-              <TutorialDetailWrapper>
-                {Array.isArray(data) ? (
-                  data.map((data) => (
-                    <ClickableTutorialDetail
-                      key={data}
-                      kind={kind}
-                      data={data}
-                    />
-                  ))
-                ) : (
-                  <ClickableTutorialDetail kind={kind} data={data} />
-                )}
-              </TutorialDetailWrapper>
-            </TutorialDetailSection>
-          )
-        );
-      })}
-    </TutorialDetailsWrapper>
-  );
-};
-
-const TutorialDetailsWrapper = styled.div`
-  ${({ theme }) => css`
-    padding: 1rem;
-    display: flex;
-    flex-wrap: wrap;
-    justify-content: space-between;
-    column-gap: 2rem;
-    row-gap: 1rem;
-    border-radius: ${theme.default.borderRadius};
-  `}
-`;
-
-const TutorialDetailSection = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const TutorialDetailName = styled.span`
-  ${({ theme }) => css`
-    font-weight: bold;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    font-size: ${theme.font.other.size.small};
-  `}
-`;
-
-const TutorialDetailWrapper = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-`;
+            <div className="flex flex-wrap gap-2">
+              {Array.isArray(data) ? (
+                data.map((data) => (
+                  <ClickableTutorialDetail key={data} kind={kind} data={data} />
+                ))
+              ) : (
+                <ClickableTutorialDetail kind={kind} data={data} />
+              )}
+            </div>
+          </div>
+        )
+    )}
+  </div>
+);
 
 interface ClickableTutorialDetailProps {
   kind: TutorialDetailKey;

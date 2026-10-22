@@ -1,167 +1,109 @@
 import { FC, Fragment } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import styled, { css } from "styled-components";
+import { ArrowLeftIcon } from "lucide-react";
 
-import { AsyncButton } from "@/shared/ui/async-button";
+import {
+  BaseStartButton,
+  type BaseStartButtonProps,
+} from "@/entities/tutorial";
 import { Button } from "@/shared/ui/button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Link from "../../Link";
 import Markdown from "../../Markdown";
 import TutorialDetails from "../TutorialDetails";
-import { PointedArrow, Triangle } from "../../Icons";
-import { Emoji } from "../../../constants";
-import { PgTheme, PgTutorial } from "../../../utils";
+import { PgTutorial } from "../../../utils";
 import type { TutorialAboutComponentProps } from "../types";
 
 export const About: FC<
   React.PropsWithChildren<TutorialAboutComponentProps>
 > = ({ about, isStarted, start }) => {
   const tutorial = PgTutorial.current!;
-  const isFinished = PgTutorial.completed;
+  const progress = progressOf(PgTutorial.completed, isStarted);
+  const onError = reportButtonFailure("start the tutorial");
 
   return (
-    <Wrapper>
-      <GoBackButtonWrapper>
+    <div className="size-full overflow-auto">
+      <div className="flex h-11 items-center px-2">
         <Button asChild variant="ghost">
           <RouterLink to="/tutorials">
-            <PointedArrow data-icon="inline-start" rotate="180deg" />
+            <ArrowLeftIcon data-icon="inline-start" />
             Go back to tutorials
           </RouterLink>
         </Button>
-      </GoBackButtonWrapper>
+      </div>
 
-      <TutorialAboutPage>
-        <GeneratedWrapper>
-          <GeneratedTopWrapper>
-            <GeneratedTopLeftWrapper>
-              <TutorialName>{tutorial.name}</TutorialName>
-              <TutorialAuthorsWrapper>
-                <TutorialAuthorsByText>by </TutorialAuthorsByText>
-                {tutorial.authors.length !== 0 &&
-                  tutorial.authors.map((author, i) => (
-                    <Fragment key={i}>
-                      {i !== 0 && (
-                        <TutorialAuthorSeperator>, </TutorialAuthorSeperator>
-                      )}
-                      {author.link ? (
-                        <TutorialAuthorLink href={author.link}>
-                          {author.name}
-                        </TutorialAuthorLink>
-                      ) : (
-                        <TutorialAuthorWithoutLink>
-                          {author.name}
-                        </TutorialAuthorWithoutLink>
-                      )}
-                    </Fragment>
-                  ))}
-              </TutorialAuthorsWrapper>
-            </GeneratedTopLeftWrapper>
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 pt-8 pb-12 max-md:px-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h1 className="font-heading text-[clamp(2rem,3.2vw,3rem)] leading-[1.05] font-headline tracking-tight wrap-break-word text-foreground">
+              {tutorial.name}
+            </h1>
+            {tutorial.authors.length !== 0 && (
+              <p className="mt-2 text-control font-read text-muted-foreground">
+                by{" "}
+                {tutorial.authors.map((author, i) => (
+                  <Fragment key={i}>
+                    {i !== 0 && ", "}
+                    {author.link ? (
+                      <Link href={author.link}>{author.name}</Link>
+                    ) : (
+                      <span>{author.name}</span>
+                    )}
+                  </Fragment>
+                ))}
+              </p>
+            )}
+          </div>
 
-            <GeneratedTopRightWrapper>
-              <AsyncButton
-                onClick={start}
-                onError={reportButtonFailure("start the tutorial")}
-                variant={isFinished ? "ghost" : "secondary"}
-                className={isFinished ? "text-success" : undefined}
-              >
-                {isFinished ? (
-                  <span data-icon="inline-start">{Emoji.CHECKMARK}</span>
-                ) : (
-                  <Triangle data-icon="inline-start" rotate="90deg" />
-                )}
-                {isFinished ? "COMPLETED" : isStarted ? "CONTINUE" : "START"}
-              </AsyncButton>
-            </GeneratedTopRightWrapper>
-          </GeneratedTopWrapper>
+          <BaseStartButton
+            progress={progress}
+            onStart={start}
+            onError={onError}
+            className="max-md:hidden"
+          />
+        </div>
 
-          <GeneratedBottomWrapper>
-            <TutorialDescription>{tutorial.description}</TutorialDescription>
+        <p className="max-w-prose text-body font-read text-muted-foreground">
+          {tutorial.description}
+        </p>
 
-            <TutorialDetails
-              details={[
-                { kind: "level", data: tutorial.level },
-                { kind: "framework", data: tutorial.framework },
-                { kind: "languages", data: tutorial.languages },
-                // TODO: Enable once there are more tutorials with various categories
-                // { kind: "categories", data: tutorial.categories },
-              ]}
-            />
-          </GeneratedBottomWrapper>
-        </GeneratedWrapper>
+        <TutorialDetails
+          details={[
+            { kind: "level", data: tutorial.level },
+            { kind: "framework", data: tutorial.framework },
+            { kind: "languages", data: tutorial.languages },
+            // TODO: Enable once there are more tutorials with various categories
+            // { kind: "categories", data: tutorial.categories },
+          ]}
+        />
 
-        <CustomWrapper>
+        <div>
           {typeof about === "string" ? (
             <Markdown linkable>{about}</Markdown>
           ) : (
             about
           )}
-        </CustomWrapper>
-      </TutorialAboutPage>
-    </Wrapper>
+        </div>
+      </div>
+
+      {/* On a phone the action pins to the foot, as the prototype draws it */}
+      <div className="sticky bottom-0 bg-gradient-to-t from-background from-60% px-4 pt-5 pb-4 md:hidden">
+        <BaseStartButton
+          progress={progress}
+          onStart={start}
+          onError={onError}
+          className="w-full"
+        />
+      </div>
+    </div>
   );
 };
 
-const Wrapper = styled.div`
-  height: 100%;
-  width: 100%;
-  overflow: auto;
-`;
-
-const GoBackButtonWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  height: ${({ theme }) => theme.components.tabs.tab.default.height};
-  padding-left: 1rem;
-`;
-
-const TutorialAboutPage = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tutorial.aboutPage)};
-  `}
-`;
-
-const GeneratedWrapper = styled.div`
-  padding: 1.5rem 0;
-`;
-
-const GeneratedTopWrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const GeneratedTopLeftWrapper = styled.div``;
-
-const TutorialName = styled.h1``;
-
-const TutorialAuthorsWrapper = styled.div`
-  ${({ theme }) => css`
-    margin-top: 0.5rem;
-    font-size: ${theme.font.other.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;
-
-const TutorialAuthorsByText = styled.span``;
-
-const TutorialAuthorSeperator = styled.span``;
-
-const TutorialAuthorLink = styled(Link)``;
-
-const TutorialAuthorWithoutLink = styled.span``;
-
-const GeneratedTopRightWrapper = styled.div``;
-
-const GeneratedBottomWrapper = styled.div`
-  margin-top: 1.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const TutorialDescription = styled.p`
-  color: ${({ theme }) => theme.colors.default.textSecondary};
-  line-height: 1.5;
-`;
-
-const CustomWrapper = styled.div``;
+const progressOf = (
+  isFinished: boolean | null,
+  isStarted: boolean
+): BaseStartButtonProps["progress"] => {
+  if (isFinished) return "completed";
+  if (isStarted) return "started";
+  return "new";
+};

@@ -8,7 +8,6 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 // `@types/mocha` also declares a global `it`, without `each`
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
@@ -27,21 +26,6 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-
-/**
- * A theme that answers every key: the banner reads deep theme keys for its
- * styles, none of which matters here, and the real theme's module needs the
- * utils barrel.
- */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
 
 describe("SyncBanner telemetry", () => {
   let container: HTMLDivElement;
@@ -66,13 +50,7 @@ describe("SyncBanner telemetry", () => {
     vi.spyOn(PgProjectSync, "resolve").mockResolvedValue(true);
     container = document.body.appendChild(document.createElement("div"));
     root = createRoot(container);
-    await act(async () =>
-      root.render(
-        <ThemeProvider theme={anyTheme}>
-          <SyncBanner />
-        </ThemeProvider>
-      )
-    );
+    await act(async () => root.render(<SyncBanner />));
   });
 
   afterEach(() => {
@@ -127,13 +105,7 @@ describe("SyncBanner wording", () => {
     // The banner reads the conflict as it mounts, so each question is a mount
     act(() => root.unmount());
     root = createRoot(container);
-    await act(async () =>
-      root.render(
-        <ThemeProvider theme={anyTheme}>
-          <SyncBanner />
-        </ThemeProvider>
-      )
-    );
+    await act(async () => root.render(<SyncBanner />));
     return container.querySelector('[role="alert"] p')!.textContent;
   };
 

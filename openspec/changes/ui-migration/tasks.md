@@ -149,8 +149,9 @@ regression against 5.1 has misread this rule.
 - [x] 5.20 Details: Settings as a full page (HOO-2071; after 5.5 and 5.6;
       design.md, "Settings as a full page (5.20)"; plan:
       [plans/5.20-settings-page.md](plans/5.20-settings-page.md))
-- [ ] 5.21 Details: the tutorial page, its empty and error states
-      (HOO-2072; after 5.2)
+- [x] 5.21 Details: the tutorial page, its empty and error states
+      (HOO-2072; after 5.2; plan:
+      [plans/5.21-tutorial-empty-error.md](plans/5.21-tutorial-empty-error.md))
 - [ ] 5.22 Details: the tablet layout (HOO-2073; after the designer's
       HOO-2056)
 - [ ] 5.23 Details: the wallet (HOO-2074; after the designer's HOO-2057)

@@ -613,7 +613,8 @@ here. One PR, stacked on 5.6's.
 The brand buttons: the Build stage's four ("Continue to Deploy" twice and
 "Fix with assistant" twice; its Build, Retry build and Rebuild are
 `AsyncButton`s), Deploy, the assistant's "Allow", Connect and Start from
-scratch.
+scratch. 5.21 adds the tutorial page's START and CONTINUE, after the
+prototype; its COMPLETED stays a ghost `AsyncButton`.
 
 **Waiting is opted into.** The legacy `Button` disabled itself and spun on
 every click (icon buttons excepted), awaiting the handler's result.
