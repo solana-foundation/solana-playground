@@ -2,13 +2,12 @@ import { useEffect, useRef } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { PgView } from "@/utils/view";
-import Connect from "../../../views/sidebar/assistant/Component/Connect";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import type { Connection } from "../../../views/sidebar/assistant/store";
-import { ModalFrame, useModalId } from "../../overlays";
-import { useDefaultBackend } from "../model/default-backend";
-import { assistantTelemetry } from "../model/telemetry";
-import type { ConnectOpener, ConnectPreset } from "../model/use-turn";
+import { assistantTelemetry, useDefaultBackend } from "@/widgets/assistant";
+import type { ConnectOpener, ConnectPreset } from "@/widgets/assistant";
+import { ModalFrame, useModalId } from "@/widgets/overlays";
+import Connect from "@/views/sidebar/assistant/Component/Connect";
+import { PgAssistant } from "@/views/sidebar/assistant/store";
+import type { Connection } from "@/views/sidebar/assistant/store";
 
 const log = createLogger("assistant:connect");
 

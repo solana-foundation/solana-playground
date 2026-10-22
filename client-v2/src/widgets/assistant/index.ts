@@ -11,6 +11,7 @@ export { BaseModelMenu } from "./ui/BaseModelMenu";
 export { BaseEffortMenu, EFFORT_LABELS } from "./ui/BaseEffortMenu";
 export { useTurn } from "./model/use-turn";
 export type {
+  ConnectOpener,
   ConnectPreset,
   ConnectVia,
   Turn,
@@ -24,5 +25,4 @@ export type { BaseAssistantHeadProps } from "./ui/BaseAssistantHead";
 export { BaseThread } from "./ui/BaseThread";
 export { Thread } from "./ui/Thread";
 export { Assistant } from "./ui/Assistant";
-export { openConnectDialog } from "./ui/ConnectDialog";
 export type { AssistantProps, AssistantWiden } from "./ui/Assistant";

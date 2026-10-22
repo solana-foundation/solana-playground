@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -21,8 +22,8 @@ vi.mock("../../../views/sidebar/assistant/Component/Grounding", () => ({
 vi.mock("./AssistantComposer", () => ({
   AssistantComposer: () => <div>composer</div>,
 }));
-// Connect a model is a dialog of `PgView`'s stack, which takes focus as it
-// opens; `dialog.shows` is off for one that never appears
+// Connect a model is a dialog, which takes focus as it opens; `dialog.shows`
+// is off for one that never appears
 const dialog = vi.hoisted(() => ({ shows: true }));
 const turn = vi.hoisted(() => ({ busy: false, openConnect: vi.fn() }));
 vi.mock("../model/use-turn", () => ({ useTurn: () => turn }));
@@ -49,16 +50,28 @@ vi.mock("../../../utils/explorer/explorer", () => {
   };
 });
 
-import { PgView } from "@/utils/view";
-import { ModalFrame, ModalHost } from "../../overlays";
+import { Modal, ModalContent, ModalTitle } from "@/shared/ui/modal";
 import { Assistant } from "./Assistant";
 
-/** Stands in for Connect a model: a dialog with a field */
-const FakeConnect = () => (
-  <ModalFrame name="connect-model" title="Connect a model">
-    <input aria-label="Dialog field" />
-  </ModalFrame>
-);
+/** Opens or closes `FakeConnect`, once it has mounted */
+let showConnect: (show: boolean) => void = () => {};
+
+/**
+ * Stands in for Connect a model: a dialog with a field. The real one is
+ * `ModalHost`'s, from `widgets/overlays`, which a widget may not import.
+ */
+const FakeConnect = () => {
+  const [open, setOpen] = useState(false);
+  showConnect = setOpen;
+  return (
+    <Modal open={open} onOpenChange={setOpen}>
+      <ModalContent aria-describedby={undefined}>
+        <ModalTitle>Connect a model</ModalTitle>
+        <input aria-label="Dialog field" />
+      </ModalContent>
+    </Modal>
+  );
+};
 
 class NoopResizeObserver {
   observe() {}
@@ -71,7 +84,7 @@ beforeEach(() => {
   explorer.listeners.clear();
   turn.openConnect.mockReset();
   turn.openConnect.mockImplementation(() => {
-    if (dialog.shows) void PgView.setModal(FakeConnect);
+    if (dialog.shows) showConnect(true);
   });
   turn.busy = false;
   dialog.shows = true;
@@ -80,11 +93,7 @@ beforeEach(() => {
   vi.stubGlobal("ResizeObserver", NoopResizeObserver);
 });
 afterEach(() => {
-  // `PgView`'s stack outlives the host: a dialog left open here would show
-  // in the next test's
-  act(() => {
-    for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
-  });
+  showConnect = () => {};
   PgAssistant.disconnect();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -96,10 +105,11 @@ const setup = () => {
   // The app's one `TooltipProvider` sits in `App`
   render(
     <TooltipProvider>
-      <ModalHost />
+      <FakeConnect />
       <Assistant
         widen={{ wide: false, setWide, canWiden: true }}
         onHide={onHide}
+        openConnect={turn.openConnect}
       />
     </TooltipProvider>
   );

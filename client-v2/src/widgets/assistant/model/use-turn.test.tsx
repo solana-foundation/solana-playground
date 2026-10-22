@@ -35,8 +35,8 @@ vi.mock("../../../effects/chat-thread/push-thread", () => ({
 }));
 
 /**
- * Stands in for the widget's `openConnectDialog`: marks Connect a model
- * open, unless it is already, and draws nothing
+ * Stands in for `openConnectDialog`, the opener the app hands in: marks
+ * Connect a model open, unless it is already, and draws nothing
  */
 const open = vi.fn<ConnectOpener>(() => {
   if (!PgAssistant.isPickingBackend) PgAssistant.pickBackend();

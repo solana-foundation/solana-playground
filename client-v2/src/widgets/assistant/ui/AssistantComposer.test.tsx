@@ -1,5 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -14,15 +13,12 @@ import {
   resetTelemetry,
 } from "../../../shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import { PgView } from "@/utils/view";
 import { PgSession } from "../../../features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { ModalHost } from "../../overlays";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import type { DefaultBackend } from "../model/default-backend";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
-import { openConnectDialog } from "./ConnectDialog";
 
 // The probe is the deployment's; a test says what it answered
 let backend: DefaultBackend;
@@ -69,26 +65,6 @@ vi.mock("../../../views/flow/lessons", () => ({
   PgLesson: { onDidChange: () => ({ dispose: () => {} }) },
 }));
 
-/**
- * A theme that answers every key: Connect a model's form reads deep theme
- * keys for its styles, and the real theme needs the utils barrel
- */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
-
-class NoopResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-
 let events: ReturnType<typeof memoryTelemetry>;
 let logs: ReturnType<typeof memoryLog>;
 
@@ -98,9 +74,15 @@ const anthropic: Connection = {
   settings: { model: "claude-opus-5-5", effort: "medium" },
 };
 
+/**
+ * Stands in for Connect a model, which the app hands the panel: what the
+ * dialog opens on is `ConnectDialog`'s to test
+ */
+const openConnect = vi.fn();
+
 /** The composer with the turn held by its parent, as the widget holds it */
 function Harness() {
-  const turn = useTurn({ open: openConnectDialog });
+  const turn = useTurn({ open: openConnect });
   return (
     <TooltipProvider>
       <AssistantComposer turn={turn} />
@@ -133,10 +115,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  // A dialog a test opened would otherwise show in the next test's host
-  act(() => {
-    while (PgView.getOpenModals().length) PgView.closeTopModal();
-  });
+  openConnect.mockReset();
   PgAssistant.disconnect();
   PgSession.reset();
   resetTelemetry();
@@ -157,8 +136,7 @@ describe("AssistantComposer, connected", () => {
     ]);
   });
 
-  it("opens Connect for a model of a backend that is not connected", async () => {
-    const pick = vi.spyOn(PgAssistant, "pickBackend");
+  it("opens Connect a model on the backend of the model picked, not connected", async () => {
     render(<Harness />);
     const user = await openMenu(/Opus 5.5/);
     const other = screen
@@ -167,32 +145,14 @@ describe("AssistantComposer, connected", () => {
     expect(other).toBeTruthy();
     await user.click(other!);
 
-    expect(pick).toHaveBeenCalledTimes(1);
-    expect(tracked()).toEqual([["assistant_connect_opened", { via: "model" }]]);
+    expect(openConnect).toHaveBeenCalledTimes(1);
+    expect(openConnect).toHaveBeenCalledWith("model", {
+      provider: "gemini",
+      model: "gemini-3.6-flash",
+    });
+    expect(tracked()).toEqual([]);
     expect(PgAssistant.connection).toEqual(anthropic);
     expect(PgAssistant.items.length).toBe(1);
-  });
-
-  it("opens Connect a model on the backend of the model picked", async () => {
-    vi.stubGlobal("ResizeObserver", NoopResizeObserver);
-    render(
-      <ThemeProvider theme={anyTheme}>
-        <ModalHost />
-        <Harness />
-      </ThemeProvider>
-    );
-    const user = await openMenu(/Opus 5.5/);
-    const other = screen
-      .getAllByRole("menuitemradio")
-      .find((item) => /Gemini/.test(item.textContent ?? ""));
-    await user.click(other!);
-
-    const dialog = await screen.findByRole("dialog", {
-      name: "Connect a model",
-    });
-    const gemini = within(dialog).getByRole("radio", { name: /Gemini/ });
-    expect(gemini.getAttribute("aria-checked")).toBe("true");
-    await act(async () => PgView.closeTopModal());
   });
 
   it("connects the default from a keyed backend and clears the thread", async () => {
@@ -217,7 +177,6 @@ describe("AssistantComposer, connected", () => {
 
   it("opens Connect a model on the default instead of connecting it, signed out", async () => {
     await PgSession.refreshWith(null);
-    const open = vi.spyOn(PgView, "setModal");
     render(<Harness />);
     const user = await openMenu(/Opus 5.5/);
     await user.click(
@@ -226,10 +185,8 @@ describe("AssistantComposer, connected", () => {
 
     expect(PgAssistant.connection?.id).toBe("anthropic");
     expect(PgAssistant.items.length).toBe(1);
-    expect(open).toHaveBeenCalledWith(expect.anything(), {
-      preset: { provider: "default" },
-    });
-    expect(tracked()).toEqual([["assistant_connect_opened", { via: "model" }]]);
+    expect(openConnect).toHaveBeenCalledWith("model", { provider: "default" });
+    expect(tracked()).toEqual([]);
   });
 
   it("tracks nothing when the effort picked is the one set", async () => {

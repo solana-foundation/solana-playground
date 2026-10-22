@@ -7,8 +7,8 @@ import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { useTurn } from "../model/use-turn";
+import type { ConnectOpener } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
-import { openConnectDialog } from "./ConnectDialog";
 import { Thread } from "./Thread";
 import { BaseAssistantHead } from "./BaseAssistantHead";
 import type { ForgetKey } from "./BaseAssistantHead";
@@ -66,18 +66,23 @@ export interface AssistantProps {
   widen: AssistantWiden;
   /** Folds the panel, or closes the Sheet */
   onHide(): void;
+  /**
+   * Opens Connect a model. The dialog's frame belongs to `widgets/overlays`,
+   * which a widget may not import, so the app hands the opener in.
+   */
+  openConnect: ConnectOpener;
 }
 
 /**
  * The assistant, connected: its head, then the conversation over the composer,
  * or Sources and tools in their place.
  */
-export function Assistant({ widen, onHide }: AssistantProps) {
+export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   const { wide, setWide, canWiden } = widen;
   const [view, setView] = useState<View>("chat");
   // Here, above both views, so a turn and a prompt waiting in the composer
   // outlive a visit to Sources; the thread and the composer share this one
-  const turn = useTurn({ open: openConnectDialog });
+  const turn = useTurn({ open: openConnect });
   const project = useProjectName();
 
   // What a pick from More opened takes focus once the menu has closed

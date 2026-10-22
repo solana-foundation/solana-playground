@@ -31,6 +31,7 @@ import {
   type SettingsRequest,
 } from "@/shared/lib/settings-request";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
+import { openConnectDialog } from "@/app/ConnectDialog";
 import Wallet from "@/components/Wallet";
 import { useKeybind } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
@@ -40,7 +41,7 @@ import { PgExplorer, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
-import { Assistant, openConnectDialog } from "@/widgets/assistant";
+import { Assistant } from "@/widgets/assistant";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
@@ -365,7 +366,13 @@ const FlowFrame = () => {
                 shell says it can widen. Hidden, the column takes no width and
                 the stage bar carries "Expand assistant" (design.md, "Frame
                 chrome (5.25)") */}
-              {open && <Assistant widen={widen} onHide={toggle} />}
+              {open && (
+                <Assistant
+                  widen={widen}
+                  onHide={toggle}
+                  openConnect={openConnectDialog}
+                />
+              )}
             </Right>
           )}
         />

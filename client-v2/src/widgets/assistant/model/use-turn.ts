@@ -45,7 +45,7 @@ export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
 
 /**
  * Opens Connect a model and marks it open (`PgAssistant.pickBackend`), or
- * does nothing while it is open already. The panel hands in the widget's
+ * does nothing while it is open already. The app hands the panel
  * `openConnectDialog`; this module only decides when to call it.
  */
 export type ConnectOpener = (via: ConnectVia, preset?: ConnectPreset) => void;

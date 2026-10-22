@@ -15,23 +15,23 @@ import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import { MODAL_HOST_WAIT, PgView } from "@/utils/view";
 import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
-import { PgSession } from "../../../features/auth";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { ModalFrame, ModalHost } from "../../overlays";
-import type { DefaultBackend } from "../model/default-backend";
-import { useTurn } from "../model/use-turn";
+} from "@/shared/lib/logger";
+import { PgSession } from "@/features/auth";
+import { useTurn } from "@/widgets/assistant";
+import type { DefaultBackend } from "@/widgets/assistant";
+import { ModalFrame, ModalHost } from "@/widgets/overlays";
+import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { openConnectDialog } from "./ConnectDialog";
 
 // The form's footer link reaches the utils barrel, which needs the build's
 // globals; what it draws is not under test
-vi.mock("../../../components/Link", () => ({
+vi.mock("@/components/Link", () => ({
   default: (props: { children: React.ReactNode }) => (
     <span>{props.children}</span>
   ),
@@ -39,15 +39,24 @@ vi.mock("../../../components/Link", () => ({
 
 // The probe is the deployment's; a test says what it answered
 let backend: DefaultBackend;
-vi.mock("../model/default-backend", () => ({
+vi.mock("@/widgets/assistant/model/default-backend", () => ({
   useDefaultBackend: () => backend,
   probeDefaultBackend: () => Promise.resolve(backend),
 }));
 // A turn is never run here; the real providers stream from the network
-vi.mock("../../../views/sidebar/assistant/model", () => ({
+vi.mock("@/views/sidebar/assistant/model", () => ({
   createProvider: vi.fn(),
 }));
-vi.mock("../../../effects/chat-thread/push-thread", () => ({
+// The widget's public API, narrowed to what the dialog and the turn use: the
+// rest of it (the panel, the thread) reaches the build's generated globals
+vi.mock("@/widgets/assistant", async () => ({
+  assistantTelemetry: (await import("@/widgets/assistant/model/telemetry"))
+    .assistantTelemetry,
+  useDefaultBackend: (await import("@/widgets/assistant/model/default-backend"))
+    .useDefaultBackend,
+  useTurn: (await import("@/widgets/assistant/model/use-turn")).useTurn,
+}));
+vi.mock("@/effects/chat-thread/push-thread", () => ({
   pushThread: vi.fn(() => Promise.resolve()),
 }));
 
