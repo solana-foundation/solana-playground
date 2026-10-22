@@ -472,7 +472,9 @@ if (import.meta.vitest) {
       });
 
       it("reads the user from the session endpoint", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
 
         await PgSession.refresh();
 
@@ -489,10 +491,12 @@ if (import.meta.vitest) {
       });
 
       it("treats an empty session body as signed out", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => null,
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => null,
+          }) as unknown as typeof fetch
+        );
 
         await PgSession.refresh();
 
@@ -526,7 +530,9 @@ if (import.meta.vitest) {
       );
 
       it("notifies subscribers when the user changes", async () => {
-        global.fetch = signedIn({ id: "u1", name: null, image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: null, image: null })
+        );
         const seen: unknown[] = [];
         const sub = PgSession.onDidChange(() => seen.push(PgSession.get()));
 
@@ -539,7 +545,9 @@ if (import.meta.vitest) {
       });
 
       it("does not notify when the user is unchanged", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
         await PgSession.refresh();
 
         let calls = 0;
@@ -554,19 +562,23 @@ if (import.meta.vitest) {
         // `sign-in/social` is POST-only and answers with the authorize URL rather
         // than redirecting, which is what lets us open a popup instead of
         // navigating away and losing everything the page holds in memory
-        global.fetch = vi.fn().mockImplementation((url: string) =>
-          url === "/api/auth/sign-in/social"
-            ? Promise.resolve({
-                ok: true,
-                json: async () => ({ url: "https://github.com/login/oauth/x" }),
-              })
-            : Promise.resolve({
-                ok: true,
-                json: async () => ({
-                  user: { id: "u1", name: "Ada", image: null, login: "ada" },
-                }),
-              })
-        ) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string) =>
+            url === "/api/auth/sign-in/social"
+              ? Promise.resolve({
+                  ok: true,
+                  json: async () => ({
+                    url: "https://github.com/login/oauth/x",
+                  }),
+                })
+              : Promise.resolve({
+                  ok: true,
+                  json: async () => ({
+                    user: { id: "u1", name: "Ada", image: null, login: "ada" },
+                  }),
+                })
+          ) as unknown as typeof fetch
+        );
 
         let opened: { url: string; broadcastName?: string } | undefined;
         PgSession.setOpenChannel((opts) => {
@@ -593,9 +605,8 @@ if (import.meta.vitest) {
 
       it("sends the popup to the completion route carrying a nonce", async () => {
         let body: string | undefined;
-        global.fetch = vi
-          .fn()
-          .mockImplementation((url: string, init: RequestInit) => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string, init: RequestInit) => {
             if (url === "/api/auth/sign-in/social") {
               body = init.body as string;
               return Promise.resolve({
@@ -607,7 +618,8 @@ if (import.meta.vitest) {
               ok: true,
               json: async () => ({ user: { id: "u1" } }),
             });
-          }) as unknown as typeof fetch;
+          }) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => ({
           receive: async () => ({ delivered: true as const, data: {} }),
           cancel: () => {},
@@ -623,9 +635,8 @@ if (import.meta.vitest) {
       });
 
       it("only accepts a reply carrying this flow's nonce", async () => {
-        global.fetch = vi
-          .fn()
-          .mockImplementation((url: string, init: RequestInit) =>
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string, init: RequestInit) =>
             url === "/api/auth/sign-in/social"
               ? Promise.resolve({
                   ok: true,
@@ -635,7 +646,8 @@ if (import.meta.vitest) {
                   ok: true,
                   json: async () => ({ user: { id: "u1" } }),
                 })
-          ) as unknown as typeof fetch;
+          ) as unknown as typeof fetch
+        );
 
         let accept!: (data: unknown) => boolean;
         let nonce!: string;
@@ -681,20 +693,24 @@ if (import.meta.vitest) {
       });
 
       it("reports a blocked popup distinctly from a failed sign-in", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({ url: "https://x/" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => undefined);
 
         await expect(PgSession.signIn()).rejects.toThrow(/allow popups/i);
       });
 
       it("surfaces a cancelled popup as a cancellation", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({ url: "https://x/" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => ({
           receive: async () => ({
             delivered: false as const,
@@ -708,11 +724,13 @@ if (import.meta.vitest) {
       });
 
       it("throws rather than opening a popup when sign-in cannot start", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: false,
-          status: 503,
-          json: async () => ({ error: "Authentication is not configured" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: false,
+            status: 503,
+            json: async () => ({ error: "Authentication is not configured" }),
+          }) as unknown as typeof fetch
+        );
         const open = vi.fn();
         PgSession.setOpenChannel(open as never);
 
@@ -722,10 +740,12 @@ if (import.meta.vitest) {
 
       /** A popup that answers only when the test says, and how many were opened */
       const heldPopup = () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({ url: "https://x/" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
         let answer!: (receipt: {
           delivered: false;
           reason: "cancelled";
@@ -798,15 +818,17 @@ if (import.meta.vitest) {
 
         // The sign-in reads the session once the popup is done, and fails
         // without a user there
-        global.fetch = vi.fn((input: unknown) =>
-          Promise.resolve({
-            ok: true,
-            json: async () =>
-              input === "/api/auth/get-session"
-                ? { user: { id: "u1" } }
-                : { url: "https://x/" },
-          })
-        ) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn((input: unknown) =>
+            Promise.resolve({
+              ok: true,
+              json: async () =>
+                input === "/api/auth/get-session"
+                  ? { user: { id: "u1" } }
+                  : { url: "https://x/" },
+            })
+          ) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => ({
           receive: async () => ({ delivered: true as const, data: {} }),
           cancel: () => {},
@@ -819,7 +841,9 @@ if (import.meta.vitest) {
       });
 
       it("signs out and clears the user", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
         await PgSession.refresh();
         expect(PgSession.get()).not.toBeNull();
 
@@ -833,27 +857,35 @@ if (import.meta.vitest) {
       });
 
       it("clears the user even when sign-out fails on the network", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
         await PgSession.refresh();
 
-        global.fetch = vi
-          .fn()
-          .mockRejectedValue(new Error("offline")) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi
+            .fn()
+            .mockRejectedValue(new Error("offline")) as unknown as typeof fetch
+        );
         await PgSession.signOut();
 
         expect(PgSession.get()).toBeNull();
       });
 
       it("says so when the server refuses the sign-out", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
         await PgSession.refresh();
         const logged = memoryProvider();
         initLogger({ providers: [logged] });
 
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: false,
-          status: 500,
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: false,
+            status: 500,
+          }) as unknown as typeof fetch
+        );
         await PgSession.signOut();
 
         expect(PgSession.get()).toBeNull();

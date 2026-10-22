@@ -19,6 +19,7 @@ import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
 import { pushThread } from "../../../effects/chat-thread/push-thread";
+import { PgExplorer } from "../../../utils/explorer/explorer";
 import { resetDefaultBackendProbe } from "./default-backend";
 import { useTurn } from "./use-turn";
 import type { ConnectOpener } from "./use-turn";
@@ -642,6 +643,79 @@ const heldProbe = () => {
   );
   return (configured: boolean) => act(async () => release(configured));
 };
+
+describe("useTurn across a project switch", () => {
+  /** The open project, as the test switches it while the probe is out */
+  const inProject = (id: string) =>
+    vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue(id);
+
+  it("sends nothing to a project opened while a send waited on the probe", async () => {
+    const release = heldProbe();
+    const project = inProject("a");
+    const { result } = renderHook(() => useTestTurn());
+    // Typed into the composer, as a send from it always is
+    act(() => result.current.setInput("about project a"));
+
+    let sent!: Promise<void>;
+    act(() => {
+      sent = result.current.send("about project a");
+    });
+    project.mockReturnValue("b");
+    await release(true);
+    await act(() => sent);
+
+    expect(provider.send).not.toHaveBeenCalled();
+    expect(PgAssistant.items).toEqual([]);
+    // Left where the user can send it to the project now open, or not
+    expect(result.current.input).toBe("about project a");
+  });
+
+  it("sends no requested prompt to a project opened while it waited on the probe", async () => {
+    const release = heldProbe();
+    const project = inProject("a");
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => PgAssistant.requestPrompt("Explain this error in a"));
+    project.mockReturnValue("b");
+    await release(true);
+
+    await waitFor(() =>
+      expect(result.current.input).toBe("Explain this error in a")
+    );
+    expect(provider.send).not.toHaveBeenCalled();
+    expect(PgAssistant.items).toEqual([]);
+  });
+
+  it("starts the model afresh in the conversation of a project opened later", async () => {
+    PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+    const thread = vi
+      .spyOn(PgAssistant, "threadId", "get")
+      .mockReturnValue("thread-a");
+    const { result } = renderHook(() => useTestTurn());
+    await act(() => result.current.send("about a"));
+
+    thread.mockReturnValue("thread-b");
+    await act(() => result.current.send("about b"));
+
+    // One provider per conversation: b's must not carry a's history
+    expect(vi.mocked(createProvider)).toHaveBeenCalledTimes(2);
+  });
+
+  it("still sends when the project stays the same", async () => {
+    const release = heldProbe();
+    inProject("a");
+    const { result } = renderHook(() => useTestTurn());
+
+    let sent!: Promise<void>;
+    act(() => {
+      sent = result.current.send("about project a");
+    });
+    await release(true);
+    await act(() => sent);
+
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("useTurn's failures and races", () => {
   let logs: ReturnType<typeof memoryLog>;

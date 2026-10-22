@@ -120,7 +120,7 @@ test("client-v2-layout: Duplicating a project", async ({ page }) => {
   await menu.getByRole("menuitem", { name: "Duplicate" }).click();
 
   // The copy opens; that it leaves out alpha's `.workspace/program-info.json`
-  // is `workspace-files.test.ts`'s, against the explorer's store
+  // is checked by the tests in `workspace-files.ts`, against the explorer's store
   await expect(currentProject(page)).toHaveText("alpha copy", LONG);
   await expect(page.locator("#root-dir").getByText("lib.rs")).toBeVisible();
   await expect

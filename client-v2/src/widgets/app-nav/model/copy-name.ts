@@ -12,3 +12,22 @@ export const copyName = (name: string, taken: readonly string[]) => {
     if (!taken.includes(next)) return next;
   }
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("widgets/app-nav/model/copy-name", () => {
+    describe("copyName", () => {
+      it("names the first copy", () => {
+        expect(copyName("alpha", ["alpha"])).toBe("alpha copy");
+      });
+
+      it("numbers the next free copy", () => {
+        expect(copyName("alpha", ["alpha", "alpha copy"])).toBe("alpha copy 2");
+        expect(copyName("alpha", ["alpha", "alpha copy", "alpha copy 2"])).toBe(
+          "alpha copy 3"
+        );
+      });
+    });
+  });
+}
