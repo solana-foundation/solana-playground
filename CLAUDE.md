@@ -72,7 +72,7 @@ All commands run from `client-v2/`.
 yarn install --frozen-lockfile
 yarn dev                   # generate-fast + craco start
 yarn build                 # the whole production build: wasm/build.sh, install, build:bundle (~1h first run)
-yarn build:bundle          # generate + craco build + source-map upload, over whatever wasm/*/pkg holds; Vercel runs this
+yarn build:bundle          # lint:layers + generate + craco build + source-map upload, over whatever wasm/*/pkg holds; Vercel runs this
 yarn test                  # test-types + test-unit + build:bundle
 yarn test-types            # tsc --noEmit
 yarn test-e2e              # playwright

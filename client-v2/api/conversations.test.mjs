@@ -130,7 +130,7 @@ describe("/api/conversations", () => {
     it("maps a thread that is somebody else's to 404", async () => {
       const mod = await load();
       const { NotYours } = await import(
-        "../src/features/persistence/model/conversations.mjs"
+        "../src/features/persistence/server.mjs"
       );
 
       const { status } = mod.describeFailure(new NotYours());
@@ -144,7 +144,7 @@ describe("/api/conversations", () => {
       // so the thread would be pushed again on every turn
       const mod = await load();
       const { ThreadDeleted } = await import(
-        "../src/features/persistence/model/conversations.mjs"
+        "../src/features/persistence/server.mjs"
       );
 
       const { status, body } = mod.describeFailure(new ThreadDeleted("thread"));
@@ -159,7 +159,7 @@ describe("/api/conversations", () => {
       // project, rather than replacing it on the spot
       const mod = await load();
       const { ThreadDeleted } = await import(
-        "../src/features/persistence/model/conversations.mjs"
+        "../src/features/persistence/server.mjs"
       );
 
       const { status, body } = mod.describeFailure(

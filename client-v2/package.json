@@ -98,6 +98,8 @@
     "circular-dependency-plugin": "^5.2.2",
     "csstype": "^3.1.2",
     "esbuild": "0.25.9",
+    "eslint-import-resolver-typescript": "^3.10.1",
+    "eslint-plugin-boundaries": "7.2.0",
     "jsdom": "^29.1.1",
     "markdownlint-cli2": "0.23.3",
     "monaco-editor-webpack-plugin": "^7.0.1",
@@ -131,8 +133,8 @@
     "dev-cra": "BROWSER=none craco start",
     "dev-vercel": "yarn generate-fast && npx vercel dev --cwd .. --listen ${VERCEL_DEV_PORT:-3000}",
     "build": "bash ../wasm/build.sh && yarn install --frozen-lockfile --check-files && yarn build:bundle",
-    "build:bundle": "yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
-    "build-fast": "yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
+    "build:bundle": "yarn lint:layers && yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
+    "build-fast": "yarn lint:layers && yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
     "build-wasm": "build=\"../wasm/build.sh\" && chmod +x $build && $build --update",
     "format": "prettier --write src/ api/",
     "check-format": "prettier --check src/ api/",
@@ -141,6 +143,7 @@
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
     "lint": "eslint --ext .ts,.tsx,.mjs,.mts src api e2e",
+    "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
     "check": "yarn test-types && yarn check-format && yarn check-md && yarn lint && yarn check-colors && yarn spec:validate && yarn spec:coverage && yarn test-unit && yarn test-api",
@@ -167,7 +170,8 @@
   },
   "eslintConfig": {
     "extends": [
-      "react-app"
+      "react-app",
+      "./eslint-layers.js"
     ],
     "overrides": [
       {

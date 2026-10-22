@@ -122,8 +122,9 @@ jobs:
       - name: Check Markdown
         run: yarn check-md
 
-      # The production build lints only what webpack bundles. This step also
-      # covers tests, `api/` and `e2e/`. Only errors fail it: the review
+      # The production build lints only the five layers and `api/`
+      # (`lint:layers`, the boundary check among the rules). This step covers
+      # all of `src/`, `api/` and `e2e/`. Only errors fail it: the review
       # rules in `eslintConfig` are errors, and the legacy code still holds
       # warnings, so they print without failing.
       - name: Lint
