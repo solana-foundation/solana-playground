@@ -33,9 +33,9 @@ const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, term
  */
 const PANEL_RADIUS = "12px";
 
-/** Display font for chrome (titles, buttons, topbar); code stays monospace */
-const DISPLAY_FONT = `"Space Grotesk", -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Helvetica, Arial, sans-serif`;
+/** The design system's Stack Sans: headline for titles, text for prose and chrome; code stays monospace */
+const HEADLINE_FONT = "var(--font-headline)",
+  TEXT_FONT = "var(--font-text)";
 
 const PALETTE: ThemeParam = {
   colors: {
@@ -60,7 +60,7 @@ const PALETTE: ThemeParam = {
 
   font: {
     other: {
-      family: DISPLAY_FONT,
+      family: TEXT_FONT,
       size: {
         xsmall: "0.8125rem",
         small: "0.875rem",
@@ -132,7 +132,7 @@ const PALETTE: ThemeParam = {
       bg: BG_BASE,
       boxShadow: "none",
       borderBottom: `1px solid ${BORDER}`,
-      fontFamily: DISPLAY_FONT,
+      fontFamily: TEXT_FONT,
     },
     tooltip: {
       bg: BG_RAISED,
@@ -178,10 +178,10 @@ const PALETTE: ThemeParam = {
           overflow: "hidden",
         },
         home: {
-          // Home is a content surface - prose belongs to the display font
-          default: { bg: BG_SURFACE, fontFamily: DISPLAY_FONT },
+          // Home is a content surface - prose belongs to the text font
+          default: { bg: BG_SURFACE, fontFamily: TEXT_FONT },
           title: {
-            fontFamily: DISPLAY_FONT,
+            fontFamily: HEADLINE_FONT,
             fontSize: "2.25rem",
             fontWeight: 700,
             letterSpacing: "-0.01em",
@@ -266,7 +266,7 @@ const PALETTE: ThemeParam = {
         title: {
           // 40px panel header on the 8px rhythm
           height: "2.5rem",
-          fontFamily: DISPLAY_FONT,
+          fontFamily: HEADLINE_FONT,
           fontSize: "1rem",
           fontWeight: 500,
           letterSpacing: "0.04em",

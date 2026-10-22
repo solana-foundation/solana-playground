@@ -112,9 +112,15 @@ Work on the package as it moves in:
 - `combobox` alone is built on `@base-ui/react`. The first ticket that needs
   it decides Base UI or a Radix rebuild, so the client carries one set of
   primitives.
-- Stack Sans and Manrope load from Google Fonts in `tokens.css`; the dev
-  server sends `Cross-Origin-Embedder-Policy: require-corp`, so `client-v2`
-  hosts them beside the code fonts in `public/fonts`.
+- Stack Sans loads from Google Fonts: `client-v2/src/index.css` copies the
+  import of the system's `inject.css`, and `scripts/fonts.build-test.mjs`
+  checks the build against it. Manrope, the tokens' named fallback, loads
+  only on the system's own site (`design-system/src/index.css`), never in
+  `client-v2`. The app sends `Cross-Origin-Embedder-Policy: require-corp`,
+  which does not block the fonts: both Google Fonts hosts answer
+  `Cross-Origin-Resource-Policy: cross-origin` (checked 2026-10-22). If they
+  stop, the page falls back to system fonts and the console shows a COEP
+  error. Nothing self-hosts Stack Sans.
 
 `client-v2/components.json` maps `ui` to `@/shared/ui`, `lib` to
 `@/shared/lib`, `hooks` to `@/shared/lib/hooks`. A script reinstalls with
