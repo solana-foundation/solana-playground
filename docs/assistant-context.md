@@ -174,16 +174,20 @@ Done:
   Home has a composer, New project, Follow a tutorial and Open a program
   tiles, and four tutorial cards; below 720 px it has quick starts (a new
   Anchor project, a beginner tutorial), a Browse button that opens the
-  gallery, and the composer. The navigation's Home opens Home from an open
-  project too, and deleting the last project lands there; picking the open
-  project in the list (or Continue on a phone) goes back to it with the
-  editor, its undo history and the console as they were. The New Workspace
-  gallery starts a project from 34 upstream programs or 16 tutorials. The
-  cluster row, the account menu's Settings or Cmd+, open Settings as a page
-  of its own over the whole window: a list of sections (Network, Project,
-  Block Explorer, Build, Connection, Editor, Notification, Server, Test UI,
-  UI, Wallet, Experimental) built from the existing settings registry, and
-  "Back to app", Escape or Cmd+, to return to the work as it was.
+  Tutorials page, and the composer. The navigation's Home opens Home from an
+  open project too, and deleting the last project lands there; picking the
+  open project in the list (or Continue on a phone) goes back to it with the
+  editor, its undo history and the console as they were. Tutorials and
+  Programs in the navigation (and Home's tiles, and the `/tutorials` and
+  `/programs` links) open pages with a search field and cards, over the open
+  project, which comes back as it was; opening a card opens the tutorial or
+  imports the program. The New Workspace gallery (New project) starts a
+  project from scratch, 34 upstream programs or 16 tutorials. The cluster
+  row, the account menu's Settings or Cmd+, open Settings as a page of its
+  own over the whole window: a list of sections (Network, Project, Block
+  Explorer, Build, Connection, Editor, Notification, Server, Test UI, UI,
+  Wallet, Experimental) built from the existing settings registry, and "Back
+  to app", Escape or Cmd+, to return to the work as it was.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
 - Conversations and project code are persisted. Threads are keyed by project
@@ -245,7 +249,7 @@ Honesty rule for the demo — never present a mocked step as working.
   saves the IDL a successful build already produced; "Load IDL file" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
-- **Not view-only:** the New Workspace gallery's ecosystem program cards
+- **Not view-only:** the Programs page's and the gallery's ecosystem program cards
   import from GitHub through upstream's own mechanism (`PgGithub.import`)
   into a normal, editable project -- they open as a normal project; those
   targeting Anchor newer than the pinned 0.29 will not compile on this build

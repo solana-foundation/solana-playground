@@ -1,41 +1,32 @@
 import { useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { PgTutorial, PgView } from "@/utils";
-import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
-import type { GalleryTab } from "@/views/flow/gallery/NewWorkspaceModal";
+import { PgTutorial } from "@/utils";
 import StartFromScratch from "@/views/flow/gallery/StartFromScratch";
 import { errorMessage } from "../lib/error-message";
 import { useProgramCount } from "../model/use-program-count";
 import { homeTelemetry } from "../model/telemetry";
-import type { GalleryTile } from "../model/telemetry";
+import type { PageTile } from "../model/telemetry";
 import BaseHome from "./BaseHome";
 import type { TutorialFailure } from "./BaseHome";
 
 export interface HomeProps {
   onAsk: () => void;
+  /** Open the Tutorials or Programs page, in Home's place */
+  onOpenPage: (page: PageTile) => void;
 }
 
 const log = createLogger("home:actions");
 
-const Home = ({ onAsk }: HomeProps) => {
+const Home = ({ onAsk, onOpenPage }: HomeProps) => {
   const programCount = useProgramCount();
   const [tutorialError, setTutorialError] = useState<TutorialFailure | null>(
     null
   );
 
-  const openGallery = (initialTab: GalleryTab) => {
-    // Settles when the modal closes and never rejects: a gallery that fails
-    // to render is reported and told by `ModalHost`'s boundary
-    void PgView.setModal<unknown, { initialTab: GalleryTab }>(
-      NewWorkspaceModal,
-      { initialTab }
-    );
-  };
-
-  const openTile = (tile: GalleryTile) => {
+  const openTile = (tile: PageTile) => {
     homeTelemetry.track("home_tile_opened", { tile });
-    openGallery(tile);
+    onOpenPage(tile);
   };
 
   return (
@@ -64,7 +55,7 @@ const Home = ({ onAsk }: HomeProps) => {
         }
         homeTelemetry.track("home_tutorial_opened", {});
       }}
-      onAllTutorials={() => openGallery("tutorials")}
+      onAllTutorials={() => onOpenPage("tutorials")}
       onAsk={() => {
         homeTelemetry.track("home_composer_opened", {});
         onAsk();

@@ -38,16 +38,21 @@ const utils = vi.hoisted(() => ({
 }));
 vi.mock("@/utils", () => utils);
 vi.mock("@/hooks", () => ({ useRenderOnChange: () => {} }));
-vi.mock("@/views/flow/gallery/NewWorkspaceModal", () => ({
-  default: () => null,
-}));
-
-import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
 import PhoneHome from "./PhoneHome";
 
 const files = [["/src/lib.rs", "// anchor"]];
 let sent: ReturnType<typeof memoryProvider>;
 let logged: ReturnType<typeof memoryLogs>;
+/** 34 programs, each complete, as the listing the count is read from */
+const LISTING = Array.from({ length: 34 }, (_, i) => ({
+  name: `p${i}`,
+  description: "d",
+  repo: `https://github.com/x/p${i}`,
+  icon: "/i.png",
+  framework: "Anchor",
+  categories: [],
+}));
+
 beforeEach(() => {
   utils.PgTutorial.all = [
     { name: "Intro", level: "Intermediate" },
@@ -57,7 +62,7 @@ beforeEach(() => {
   utils.PgTutorial.open.mockReset().mockResolvedValue(undefined);
   utils.PgView.setModal.mockReset().mockResolvedValue(null);
   utils.PgView.setToast.mockReset();
-  utils.PgCommon.fetchJSON.mockReset().mockResolvedValue(new Array(34));
+  utils.PgCommon.fetchJSON.mockReset().mockResolvedValue(LISTING);
   utils.PgExplorer.currentWorkspaceName = undefined;
   utils.PgExplorer.allWorkspaceNames = [];
   utils.PgExplorer.switchWorkspace.mockReset().mockResolvedValue(undefined);
@@ -80,11 +85,15 @@ afterEach(() => {
 const draw = () => {
   const onAsk = vi.fn();
   const onContinue = vi.fn();
-  render(<PhoneHome onAsk={onAsk} onContinue={onContinue} />);
+  const onOpenPage = vi.fn();
+  render(
+    <PhoneHome onAsk={onAsk} onContinue={onContinue} onOpenPage={onOpenPage} />
+  );
   return {
     home: within(screen.getByRole("region", { name: "Home" })),
     onAsk,
     onContinue,
+    onOpenPage,
   };
 };
 const titles = (home: ReturnType<typeof draw>["home"]) =>
@@ -203,10 +212,11 @@ it("toasts the message of a failure that is not an Error", async () => {
   expect(toastText()).toBe("Could not open. quota exceeded");
 });
 
-it("opens the gallery from Browse with no tab", () => {
-  const { home } = draw();
+it("opens the Tutorials page from Browse, and no gallery", () => {
+  const { home, onOpenPage } = draw();
   fireEvent.click(home.getByRole("button", { name: "Browse" }));
-  expect(utils.PgView.setModal).toHaveBeenCalledWith(NewWorkspaceModal);
+  expect(onOpenPage).toHaveBeenCalledWith("tutorials");
+  expect(utils.PgView.setModal).not.toHaveBeenCalled();
 });
 
 it("opens the assistant from the composer and reports it", () => {

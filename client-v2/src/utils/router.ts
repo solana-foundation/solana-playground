@@ -99,16 +99,21 @@ export class PgRouter {
    * current path.
    *
    * @param path pathname to navigate to
+   * @param opts.replace replace the current history entry instead of pushing
+   * one, for a route that only forwards to another
    */
-  static async navigate(path: RoutePath = "/") {
+  static async navigate(
+    path: RoutePath = "/",
+    opts: { replace?: boolean } = {}
+  ) {
     const { pathname, search } = this.location;
     if (this.isPathsEqual(pathname + search, path)) return;
 
     await PgCommon.tryUntilSuccess(async () => {
-      const navigate: (path: string) => void =
+      const navigate: (path: string, opts: { replace?: boolean }) => void =
         await PgCommon.sendAndReceiveCustomEvent(this.events.NAVIGATE);
 
-      navigate(path);
+      navigate(path, opts);
     }, 100);
   }
 

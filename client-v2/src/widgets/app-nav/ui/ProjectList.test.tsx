@@ -148,11 +148,11 @@ afterEach(() => {
 });
 
 const onPickCurrent = vi.fn();
-const draw = () =>
+const draw = (onPicked?: () => void) =>
   render(
     <TooltipProvider>
       <SidebarProvider>
-        <ProjectList onPickCurrent={onPickCurrent} />
+        <ProjectList onPickCurrent={onPickCurrent} onPicked={onPicked} />
       </SidebarProvider>
     </TooltipProvider>
   );
@@ -303,6 +303,14 @@ describe("ProjectList", () => {
     fireEvent.click(screen.getByRole("button", { name: "beta" }));
     await waitFor(() => expect(onPickCurrent).toHaveBeenCalledTimes(1));
     expect(app.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("says a project was picked, the one already open included", () => {
+    const onPicked = vi.fn();
+    draw(onPicked);
+    fireEvent.click(screen.getByRole("button", { name: "beta" }));
+    fireEvent.click(screen.getByRole("button", { name: "alpha" }));
+    expect(onPicked).toHaveBeenCalledTimes(2);
   });
 
   it("hands export and delete to their dialogs, with the project's name", () => {

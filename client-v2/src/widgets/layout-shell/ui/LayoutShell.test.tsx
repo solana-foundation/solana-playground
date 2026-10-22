@@ -173,7 +173,8 @@ const theme = {
 /** The shell's tree, for `render` and for a `rerender` that adds or drops Home */
 const shellTree = (
   home?: LayoutShellProps["home"],
-  work: { keepWork?: boolean; stage?: ReactNode } = {}
+  work: { keepWork?: boolean; stage?: ReactNode } = {},
+  cover?: LayoutShellProps["cover"]
 ) => (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
@@ -232,12 +233,17 @@ const shellTree = (
         )}
         home={home}
         keepWork={work.keepWork}
+        cover={cover}
       />
     </TooltipProvider>
   </ThemeProvider>
 );
 
-const shell = (home?: LayoutShellProps["home"]) => render(shellTree(home));
+const shell = (
+  home?: LayoutShellProps["home"],
+  work: { keepWork?: boolean; stage?: ReactNode } = {},
+  cover?: LayoutShellProps["cover"]
+) => render(shellTree(home, work, cover));
 
 it("should report the width class once per load", () => {
   shell();
@@ -1777,4 +1783,60 @@ describe("with Home", () => {
       expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
     }
   );
+});
+
+describe("with a page over the work", () => {
+  const cover = (onClose = vi.fn()): LayoutShellProps["cover"] => ({
+    title: "Tutorials",
+    content: <div>page slot</div>,
+    onClose,
+  });
+
+  it.each([
+    ["wide", 1440],
+    ["compact", 800],
+    ["phone", 390],
+  ] as const)(
+    "leaves the layout alone on Ctrl+J, Cmd+E and Ctrl+R (%s)",
+    (_, at) => {
+      localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
+      const before = localStorage.getItem(LAYOUT_STORAGE_KEY);
+      resizeTo(at);
+      shell(undefined, {}, cover());
+      press({ key: "j", ctrlKey: true });
+      press({ key: "e", metaKey: true });
+      press({ key: "r", ctrlKey: true });
+      expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+      expect(toggled()).toEqual([]);
+    }
+  );
+
+  it("names the page in a bar of its own, with no column toggles", () => {
+    resizeTo(1440);
+    shell(undefined, {}, cover());
+    const over = within(screen.getByTestId("layout-cover"));
+    expect(over.getByText("Tutorials")).toBeTruthy();
+    expect(over.getByText("page slot")).toBeTruthy();
+    expect(
+      over.queryByRole("button", { name: /assistant|project panel/i })
+    ).toBeNull();
+  });
+
+  it("closes the page when the product asks for the assistant", () => {
+    resizeTo(1440);
+    const onClose = vi.fn();
+    shell(undefined, {}, cover(onClose));
+    act(() => PgAssistant.requestPrompt("fix this"));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("brings a phone to the work page when a page opens", () => {
+    resizeTo(390);
+    const { rerender } = shell();
+    fireEvent.click(screen.getByRole("button", { name: "Menu" }));
+    rerender(shellTree(undefined, {}, cover()));
+    expect(
+      sent.events.filter((e) => e.name === "layout_page_shown").at(-1)?.params
+    ).toEqual({ page: "work", via: "auto" });
+  });
 });

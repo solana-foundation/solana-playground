@@ -21,8 +21,11 @@ export interface BaseStageBarProps {
    * project panel"
    */
   files: BarToggle | null;
-  /** The assistant's toggle: the panel's on a wide window, the Sheet's below */
-  assistant: BarToggle;
+  /**
+   * The assistant's toggle: the panel's on a wide window, the Sheet's below;
+   * null draws none, as over a page, which covers the assistant
+   */
+  assistant: BarToggle | null;
   /**
    * The key the assistant's hint names, Ctrl+R unless given; null names
    * none, as under Home, where the shell's keys do nothing
@@ -75,6 +78,26 @@ const FilesToggle = ({ files }: { files: BarToggle }) => {
   );
 };
 
+/** The assistant's toggle, named by what a click does */
+const AssistantToggle = ({
+  assistant,
+  assistantKey,
+}: {
+  assistant: BarToggle;
+  assistantKey: string | null;
+}) => {
+  const label = assistant.open ? "Hide the assistant" : "Expand assistant";
+  return (
+    <BarButton
+      label={label}
+      hint={assistantKey === null ? label : `${label} (${assistantKey})`}
+      onClick={assistant.onToggle}
+    >
+      <MessageSquare aria-hidden="true" />
+    </BarButton>
+  );
+};
+
 /**
  * The 44 px bar over the files column and the stage (design.md, "Frame chrome
  * (5.25)"): the project's name while the assistant is hidden, then the files
@@ -88,13 +111,6 @@ const BaseStageBar = ({
   assistant,
   assistantKey = "Ctrl+R",
 }: BaseStageBarProps) => {
-  const assistantLabel = assistant.open
-    ? "Hide the assistant"
-    : "Expand assistant";
-  const assistantHint =
-    assistantKey === null
-      ? assistantLabel
-      : `${assistantLabel} (${assistantKey})`;
   return (
     <div
       data-slot="stage-bar"
@@ -107,13 +123,9 @@ const BaseStageBar = ({
         {title}
       </span>
       {files && <FilesToggle files={files} />}
-      <BarButton
-        label={assistantLabel}
-        hint={assistantHint}
-        onClick={assistant.onToggle}
-      >
-        <MessageSquare aria-hidden="true" />
-      </BarButton>
+      {assistant && (
+        <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
+      )}
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="icon-sm" asChild>

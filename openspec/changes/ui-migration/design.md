@@ -390,12 +390,12 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
   draws it, not the files column alone.
 - **The navigation is a widget, `widgets/app-nav`**: `BaseAppNav` built from
   the installed `Sidebar*` parts and `lucide-react` icons, slots for the
-  switcher and the footer; `AppNav` connected. Until the
-  Tutorials and Programs pages (5.9) exist, those items open the existing
-  gallery (`NewWorkspaceModal`) on their tab, through a new `initialTab` prop,
-  and New project opens it on its default tab. Home's item opens the gallery
-  whenever Home is not on screen; see "Home (5.8)". _Rejected:_ hiding Home
-  until 5.8; disabled items saying "soon".
+  switcher and the footer; `AppNav` connected. New project opens the
+  existing gallery (`NewWorkspaceModal`) on its default tab (the nav no
+  longer passes `initialTab`). Tutorials and Programs open
+  their pages; see "Tutorials and Programs pages (5.9)". Home's item shows
+  Home; see "Home from an open project (5.28)". _Rejected:_
+  hiding Home until 5.8; disabled items saying "soon".
 - **Keys.** ⌘B folds the navigation (the stock Sidebar's own key), ⌘E the
   files column, Ctrl+R the assistant, Ctrl+J the console. The files toggle
   keeps "Collapse project panel" / "Expand project panel" and the rail's "New
@@ -1474,14 +1474,14 @@ project lands on Home instead of the gallery modal.
 - **From 720 px.** "Where should we begin?", the composer, three tiles and
   four tutorial cards, built from `composer`, `action-card`, `tag` and
   `button`. New project unfolds `StartFromScratch` under the tiles; Follow a
-  tutorial, Open a program and "All N" open the gallery on their tab until
-  5.9 gives them pages.
+  tutorial, Open a program and "All N" open the Tutorials or Programs page
+  (5.9).
 - **Below 720 (`LAYOUT_BREAKPOINTS.phone`).** The pager keeps its menu page;
   the work page's bar holds "Menu" and the title "Home", with no Chat | Code
   and no Preview, and there is no preview page. The page holds the question,
   the quick starts (Continue the last project when there is one, New Anchor
   project, a beginner tutorial), a row naming the tutorials and programs with
-  Browse, which opens the gallery, and the composer at its foot. Home shows
+  Browse, which opens the Tutorials page (5.9), and the composer at its foot. Home shows
   only with no project open, so Continue never appears yet; `BasePhoneHome`
   and `PhoneHome` handle it already, for HOO-2118.
 - **The composer** opens the assistant in a right Sheet at every width,
@@ -1501,10 +1501,9 @@ project lands on Home instead of the gallery modal.
   `home_tutorial_opened`, `home_quickstart_opened {id: continue | new |
   tutorial}`, `home_composer_opened`. A tutorial or a quick start that fails
   to open logs under `home:actions` with `report: true` and tells the user
-  (on the tutorial's card, or a `home-action-failed` toast). A gallery that
-  fails to render is the overlays' to report and tell, as every dialog is
-  (`modal-failed`, 5.6): `setModal` never rejects, so Home has nothing to
-  catch. The program count that cannot be read keeps its ellipsis and is
+  (on the tutorial's card, or a `home-action-failed` toast). Home opens no
+  gallery since 5.9; its tiles and Browse open pages, which cannot fail to
+  open. The program count that cannot be read keeps its ellipsis and is
   logged under `home:programs` only, without `report`.
 
 Kept: the gallery's `[data-gallery-modal]`, "Project name" and "Start", which
@@ -1739,8 +1738,8 @@ going back finds the work as it was left.
   starting it. The start keeps `via: start`. Until the start is decided the
   navigation's Home does nothing, so the start's watchdog and its reports
   stay in place. Home in the navigation never
-  opens the gallery any more; New project, Tutorials and Programs still do
-  until 5.9.
+  opens the gallery any more; New project still does, and Tutorials and
+  Programs open their pages (5.9).
 - **Out of Home:** picking the open project in the navigation's list (which
   otherwise does nothing for the current project), the phone's Continue
   quick start (built in 5.8, shown now that a project can be open under
@@ -1766,6 +1765,84 @@ going back finds the work as it was left.
 - **Telemetry**, prefix `home`: `home_shown` gains `via` (`start`, `nav`,
   `last-deleted` or `back`); `home_left` with `via` (`current-project`,
   `continue`, `open` or `nav`) when the work replaces Home.
+
+## Tutorials and Programs pages (5.9)
+
+Decided with Slava on 2026-10-20 (HOO-2064). Tutorials and Programs in the
+navigation open pages, as the prototype draws them, instead of the gallery's
+tabs.
+
+- **A page is the shell's `cover` slot.** The navigation stays; the page
+  takes the place of the assistant and the work, under the same 44 px column
+  bar, which reads "Tutorials" or "Programs" and has no files or assistant
+  toggle. With
+  Home shown, the page stands where Home was, and Home returns when the page
+  closes. With a project open, the page covers the columns while the work
+  stays mounted under it, `inert`, so closing the page brings the project
+  back as it was, editor and console included. _Rejected:_ unmounting the
+  work as Home does, which leaves `Write` blank on the way back (HOO-2118);
+  a route per page, which the route's one-shot `setMainPrimary` cannot
+  leave either.
+- **One decision for the screen.** `screenOf(home, cover)`
+  (`widgets/layout-shell/model/screen`) turns the two slots into one union,
+  the work, Home, or a page over either, and `LayoutShell`,
+  `BaseLayoutShell` and `BasePhonePager` switch on it; none weighs the two
+  slots itself. The slots stay the components' props.
+- **What closes it.** What the user picks: a tutorial or a program opened
+  from the page, a tutorial's route, New project, a project picked in the
+  project list (the open one included), Home in the navigation (which over
+  the work then shows Home, and under which Home already stands), and the
+  product asking for the assistant, which is under a page over the work (over
+  Home it opens Home's Sheet above the page). A link whose replace to `/`
+  fails closes its page and says so, since nothing would stand under it.
+  Never the explorer's own events: it switches to the open project on every
+  route's init, and sync switches and creates projects in the background.
+  One Open at a time: while one runs, every card's Open waits. Under a page
+  the work keeps its keys off (`KeybindsActive`), as 5.28 does under Home,
+  and `isWorkInFrame` versus `keepWork` tells the frame from the mount. The
+  navigation marks the page's item as current while the page shows. Keys
+  that toggle columns (Ctrl+R, Ctrl+J, ⌘E) and a deploy's opening of the
+  console do nothing while a page shows, as under Home.
+- **Where the state lives.** `widgets/catalog` holds the page open
+  (`catalogPage`: `tutorials`, `programs` or none) with `open` and `close`;
+  `Flow` reads it and hands it to `LayoutShell` and `AppNav`. Home cannot
+  import another widget, so `Flow` gives Home what opens a page. The routes
+  `/tutorials` and `/programs` open their page and replace themselves with
+  `/` (a push would trap Back on the link), so old links
+  (`NotFound`, a tutorial's About) keep working; upstream's
+  `views/main/primary/Tutorials` and `Programs` go, and with them the
+  unreachable `views/sidebar/tutorials/Component`,
+  `views/sidebar/programs/Component` and `components/FilterGroups`. The
+  Programs sidebar page goes too, since no route names it; the Tutorials one
+  stays, without a `LoadingComponent`, because the tutorial route names it.
+  The listing's URL, type and checked fetch move to `entities/program`, which
+  the page, Home's count and the gallery share.
+- **What a page holds.** A search field (`input-group`, added to the
+  registry and installed) filtering by name and description (and a
+  program's categories), and a grid of `action-card`s with `tag`s: two
+  columns from 720 px, one below. A tutorial's card shows its thumbnail,
+  level and framework, and Open calls `PgTutorial.open`. A program's card
+  shows its icon, framework and categories, and Open calls `PgGithub.import`
+  with its progress on the card. Programs come from `/programs/programs.json`,
+  loading and failing as the gallery's tab did, with Retry. No match shows
+  `empty`.
+- **On a phone** the page is the pager's work page, under the bar's title,
+  one column; picking Tutorials or Programs on the menu page goes to it.
+- **The gallery stays** for New project and a finished lesson's "Browse
+  gallery"; its tabs are unchanged.
+- **Widget `widgets/catalog`**: `BaseCatalogPage` and the connected
+  `TutorialsPage` and `ProgramsPage`. Telemetry prefix `catalog`:
+  `catalog_shown {page, via: nav | home | link}` when a page shows,
+  `catalog_searched {page, empty}` once typing has rested 500 ms on a
+  non-empty query (`empty` when nothing matches), `catalog_item_opened
+  {page}` when an Open succeeds, `catalog_open_failed {page}` when it
+  fails, which also logs under `catalog:open` with `report: true` and tells
+  the user on the card. A program list that cannot be read logs under
+  `catalog:programs` with `report: true` and offers Retry. A cancelled import
+  is no failure.
+
+Kept: `nav_item_opened`, the gallery's ids (`gallery-tab-*`,
+`[data-gallery-modal]`), the nav items' names.
 
 ## Risks / Trade-offs
 

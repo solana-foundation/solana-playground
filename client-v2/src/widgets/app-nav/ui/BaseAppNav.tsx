@@ -36,6 +36,8 @@ export interface BaseAppNavProps {
   /** The Get set up checklist, at the foot of the content; not on the rail */
   setup: ReactNode;
   onOpen: (item: NavItem) => void;
+  /** The item whose page shows, marked as the current one */
+  current?: NavItem;
 }
 
 const BaseAppNav = ({
@@ -47,6 +49,7 @@ const BaseAppNav = ({
   railFooter,
   setup,
   onOpen,
+  current,
 }: BaseAppNavProps) => (
   <>
     <SidebarHeader>
@@ -68,7 +71,11 @@ const BaseAppNav = ({
           const { label, Icon } = ITEMS[item];
           return (
             <SidebarMenuItem key={item}>
-              <SidebarMenuButton tooltip={label} onClick={() => onOpen(item)}>
+              <SidebarMenuButton
+                tooltip={label}
+                isActive={item === current}
+                onClick={() => onOpen(item)}
+              >
                 <Icon />
                 <span>{label}</span>
               </SidebarMenuButton>

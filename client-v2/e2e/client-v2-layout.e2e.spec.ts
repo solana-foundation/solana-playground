@@ -1053,25 +1053,26 @@ test.describe("on a tablet", () => {
 test("client-v2-layout: Programs from the navigation", async ({
   seededPage: page,
 }) => {
-  await nav(page).getByRole("button", { name: "Programs" }).click();
-  await expect(page.locator("[data-gallery-modal]")).toBeVisible();
-  await expect(page.locator("#gallery-tab-programs")).toHaveAttribute(
-    "aria-selected",
-    "true"
-  );
-  await expect(page.locator("#gallery-tab-tutorials")).toHaveAttribute(
-    "aria-selected",
-    "false"
-  );
+  const lines = linesOn(page);
+  const item = nav(page).getByRole("button", { name: "Programs" });
+  await item.click();
+  await expect(
+    page.getByRole("searchbox", { name: "Search programs" })
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: /^Open / }).first()
+  ).toBeVisible();
+  await expect(item).toHaveAttribute("data-active", "true");
+  await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+  expect(await onlyLineOf(page, lines, "catalog_shown")).toContain("via: nav");
 });
 
 test("client-v2-layout: Picking Tutorials", async ({ seededPage: page }) => {
   const lines = linesOn(page);
   await nav(page).getByRole("button", { name: "Tutorials" }).click();
-  await expect(page.locator("#gallery-tab-tutorials")).toHaveAttribute(
-    "aria-selected",
-    "true"
-  );
+  await expect(
+    page.getByRole("searchbox", { name: "Search tutorials" })
+  ).toBeVisible();
   const line = await onlyLineOf(page, lines, "nav_item_opened");
   expect(line).toContain("item: tutorials");
 });

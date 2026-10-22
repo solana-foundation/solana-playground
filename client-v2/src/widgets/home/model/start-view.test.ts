@@ -91,6 +91,10 @@ it.each([
   ["/", ["a"], "a", "work"],
   // Listed by sync but none opened: the work would throw in the explorer
   ["/", ["a"], undefined, "home"],
+  // The links to a page go on to `/`, so they start as `/` does
+  ["/programs", [], undefined, "home"],
+  ["/tutorials", undefined, undefined, "pending"],
+  ["/programs", ["a"], "a", "work"],
 ] as const)(
   "decideStart(%s, %j, current %s) is %s",
   (path, workspaces, current, view) => {
@@ -151,6 +155,17 @@ it("leaves Home when a tutorial route opens", async () => {
   await act(async () => {});
   act(() => router.changed.forEach((cb) => cb("/tutorials/hello")));
   expect(result.current.view).toBe("work");
+});
+
+it("stays on Home while a link to a page goes on to the start route", async () => {
+  router.location.pathname = "/programs";
+  noProjects();
+  const { result } = renderHook(() => useStartView());
+  await act(async () => {});
+  expect(result.current.view).toBe("home");
+  act(() => router.changed.forEach((cb) => cb("/programs")));
+  act(() => router.changed.forEach((cb) => cb("/")));
+  expect(result.current.view).toBe("home");
 });
 
 it("falls back to the work and reports when the explorer fails", async () => {

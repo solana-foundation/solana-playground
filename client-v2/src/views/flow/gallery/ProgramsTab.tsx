@@ -17,15 +17,7 @@ import type { ImportProgress } from "../../../utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
-/** One entry of `public/programs/programs.json`. */
-export interface ProgramListing {
-  name: string;
-  description: string;
-  repo: string;
-  icon: string;
-  framework: string;
-  categories: string[];
-}
+import type { ProgramListing } from "@/entities/program";
 
 interface ProgramsTabProps {
   /** Lowercased search query from the modal's search box */

@@ -6,7 +6,6 @@ export { useCopy } from "./useCopy";
 export { useDifferentBackground } from "./useDifferentBackground";
 export { useExplorer } from "./useExplorer";
 export { useExposeStatic } from "./useExposeStatic";
-export { useFilteredSearch } from "./useFilteredSearch";
 export { useGetAndSetStatic } from "./useGetAndSetStatic";
 export { useGetStatic } from "./useGetStatic";
 export { useKeybind } from "./useKeybind";
@@ -17,5 +16,3 @@ export { useRenderOnChange } from "./useRenderOnChange";
 export { useSendAndReceiveCustomEvent } from "./useSendAndReceiveCustomEvent";
 export { useSetStatic } from "./useSetStatic";
 export { useWallet } from "./useWallet";
-
-export type { Filter } from "./useFilteredSearch";

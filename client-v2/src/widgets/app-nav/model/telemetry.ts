@@ -5,9 +5,10 @@ import type { ProjectAction } from "./project-action";
 type NavEvents = {
   /**
    * A user picked one of the navigation's items; `item` is the item picked,
-   * not the page it opened (until they have pages, New project opens the
-   * gallery, the same as Tutorials does; Home opens it whenever Home is not
-   * on screen, and while Home shows the pick is reported and nothing opens).
+   * not what it opened (Tutorials and Programs open their pages; New project
+   * closes a page that shows and opens the gallery; Home closes a page that
+   * shows, else opens the gallery whenever Home is not on screen, and opens
+   * nothing while Home itself shows).
    */
   nav_item_opened: { item: NavItem };
   /**

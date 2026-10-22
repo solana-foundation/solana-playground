@@ -39,6 +39,7 @@ import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
+import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { Assistant, openConnectDialog } from "@/widgets/assistant";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
@@ -185,6 +186,8 @@ const FlowFrame = () => {
   );
 
   const page = useStartView();
+  // The Tutorials or Programs page shown, if any (`widgets/catalog`)
+  const catalog = useCatalogPage();
 
   const described = describeStep(lesson);
 
@@ -226,8 +229,14 @@ const FlowFrame = () => {
           <SyncBanner />
         </BannerSlot>
         <LayoutShell
-          home={homeSlot(page.view, viewport, () => page.leaveHome("continue"))}
+          home={homeSlot(
+            page.view,
+            viewport,
+            () => page.leaveHome("continue"),
+            (p) => catalogPage.open(p, "home")
+          )}
           keepWork={page.workKept}
+          cover={catalogSlot(catalog)}
           nav={({ collapsed, toggle, closeSheet }) => {
             closeNavSheet.current = closeSheet;
             return (
@@ -235,14 +244,29 @@ const FlowFrame = () => {
                 // Home and the open project show in place of the work, which
                 // the navigation's Sheet (or a phone's menu page) covers
                 onHome={() => {
+                  closeSheet();
+                  // A page makes way: over Home that is all Home asks for,
+                  // over the work Home follows
+                  if (catalog) {
+                    catalogPage.close();
+                    if (page.view === "home") return;
+                  }
                   page.showHome("nav");
+                }}
+                current={catalog ?? undefined}
+                onOpenPage={(p) => {
+                  catalogPage.open(p, "nav");
+                  // The navigation's Sheet, or a phone's menu page, would
+                  // cover the page it just opened
                   closeSheet();
                 }}
+                onClosePage={catalogPage.close}
                 collapsed={collapsed}
                 onToggle={toggle}
                 logo={<Logomark aria-hidden="true" />}
                 projects={
                   <ProjectList
+                    onPicked={catalogPage.close}
                     onPickCurrent={() => {
                       page.leaveHome("current-project");
                       closeSheet();

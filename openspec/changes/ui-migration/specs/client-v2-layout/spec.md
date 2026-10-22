@@ -438,20 +438,83 @@ section, each time a user picks one in the section list.
 - **THEN** `settings_opened` is sent with `key` and `settings_closed` with
   `escape`
 
-### Requirement: The navigation opens the gallery
+### Requirement: The navigation opens the gallery and the pages
 
-Until the Tutorials and Programs pages exist, the navigation's items SHALL
-open the gallery: New project on its default tab, Tutorials on its
-tutorials tab (`gallery-tab-tutorials`), Programs on its programs tab
-(`gallery-tab-programs`). Home SHALL NOT open the gallery: it SHALL show
-Home, and leave Home in place while Home shows, except over a shared
-project, which the project list cannot name: there it SHALL go back to the
-work.
+While a page shows, Home in the navigation SHALL close it, and SHALL do
+nothing else when Home is under the page. Otherwise Home SHALL NOT open the
+gallery: it SHALL show Home, and leave Home in place while Home shows,
+except over a shared project, which the project list cannot name: there it
+SHALL go back to the work. New project SHALL open the gallery on its
+default tab. Tutorials and Programs SHALL open the Tutorials and Programs
+pages, and no gallery.
 
 #### Scenario: Programs from the navigation
 
 - **WHEN** a user clicks Programs in the navigation
-- **THEN** the gallery opens with its programs tab selected
+- **THEN** the Programs page shows, with its search field and the program
+  cards, Programs is marked current in the navigation, and no gallery opens
+
+### Requirement: Tutorials and Programs are pages
+
+The Tutorials and Programs pages SHALL take the place of the assistant and
+the work, with the navigation beside them, under a column bar that names
+the page. Each SHALL hold a search field that filters its cards by name and
+description (a program's by its categories too) and a grid of cards, two
+columns from 720 px and one below, each with an Open action. Opening a
+tutorial SHALL open it in the work; opening a program SHALL import it as a
+project and open it. A page SHALL close when one of its cards opens, when a
+tutorial's route opens, when New project, Home or a project in the project
+list is picked, when the product asks for the assistant over the work, and
+on nothing else the user did; a project open before
+the page SHALL come back as it was. The routes
+`/tutorials` and `/programs` SHALL open their page.
+
+#### Scenario: Finding a tutorial by search
+
+- **WHEN** a user opens Tutorials from the navigation, types "seahorse" in
+  its search field and opens "Hello Seahorse"
+- **THEN** only the matching cards show while the query stands, and the
+  tutorial opens in the work, with its step in the stage
+
+#### Scenario: A program opens as a project
+
+- **WHEN** a user opens Programs from the navigation and opens a program
+- **THEN** the program is imported as a project and opens in the work
+
+#### Scenario: Back to the open project
+
+- **WHEN** a user with a project open, and a file open in the editor, opens
+  Tutorials from the navigation and then picks that project in the project
+  list
+- **THEN** the page closes and the editor shows the same file
+
+#### Scenario: The pages on a phone
+
+- **WHEN** a user on a 390 px wide screen picks Tutorials on the menu page
+- **THEN** the work page shows "Tutorials" in its bar and the cards in one
+  column
+
+#### Scenario: The pages by link
+
+- **WHEN** a user opens `/programs`
+- **THEN** the Programs page shows
+
+### Requirement: The pages are measured
+
+The pages SHALL send `catalog_shown` with `page` (`tutorials` or
+`programs`) and `via` (`nav`, `home` or `link`) when a page shows;
+`catalog_searched` with `page` and `empty` once typing in the search field
+has rested for 500 ms on a non-empty query; `catalog_item_opened` with
+`page` when an Open succeeds; and `catalog_open_failed` with `page` when it
+fails. A failed Open and a program list that cannot be read SHALL be
+reported.
+
+#### Scenario: Searching tutorials
+
+- **WHEN** a user types "zzz" in the Tutorials page's search field and
+  stops typing
+- **THEN** `catalog_searched` is sent once with `page` `tutorials` and
+  `empty` true
 
 ### Requirement: A start with no project opens on Home
 
@@ -461,11 +524,11 @@ page), and SHALL NOT open the gallery. Home SHALL hold the question "Where
 should we begin?" and a composer that opens the assistant. From 720 px it
 SHALL hold three tiles, New project, Follow a tutorial and Open a program,
 and four tutorial cards; New project SHALL unfold the start-from-scratch
-row under the tiles, and the other two SHALL open the gallery on their tab.
-Below 720 px it SHALL hold quick starts for a new Anchor project and a
-beginner tutorial, a Browse row that opens the gallery, and the composer at
-its foot. Home SHALL give way to the work once a project is created or
-opened or a tutorial opens; projects listed
+row under the tiles, and the other two SHALL open the Tutorials and
+Programs pages. Below 720 px it SHALL hold quick starts for a new Anchor
+project and a beginner tutorial, a Browse row that opens the Tutorials
+page, and the composer at its foot. Home SHALL give way to the work once a
+project is created or opened or a tutorial opens; projects listed
 with none open SHALL still show Home. Until the projects are known Home's
 place SHALL show a spinner, and if they are not known within 10 s the page
 SHALL report it and open the work. The editor SHALL NOT mount while Home
@@ -489,10 +552,10 @@ shows with no project open.
 - **WHEN** a user on Home opens a tutorial card
 - **THEN** the tutorial opens in the work, with its step in the stage
 
-#### Scenario: Tiles that open the gallery
+#### Scenario: Tiles that open a page
 
 - **WHEN** a user on Home clicks Open a program
-- **THEN** the gallery opens with its programs tab selected
+- **THEN** the Programs page shows in Home's place, and no gallery opens
 
 #### Scenario: Home on a phone
 

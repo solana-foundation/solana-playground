@@ -80,6 +80,11 @@ const asError = (thrown: unknown) => {
 export type ProjectListProps = {
   /** The project already open was picked: no switch, the page shows it */
   onPickCurrent?: () => void;
+  /**
+   * A project or lesson was picked to open, the one already open included:
+   * a page over the work makes way for it
+   */
+  onPicked?: () => void;
 };
 
 /**
@@ -87,7 +92,7 @@ export type ProjectListProps = {
  * device's pins, and what each menu item does. A failed action tells the
  * user, is logged for the team, and is counted.
  */
-const ProjectList = ({ onPickCurrent }: ProjectListProps) => {
+const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const [pins, setPins] = useState(readPins);
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -187,6 +192,7 @@ const ProjectList = ({ onPickCurrent }: ProjectListProps) => {
   const perform = async (entry: ProjectEntry, action: ProjectAction) => {
     switch (action) {
       case "open":
+        onPicked?.();
         // Already open: the page may show Home over it, and goes back to it
         if (entry.name === PgExplorer.currentWorkspaceName) {
           onPickCurrent?.();

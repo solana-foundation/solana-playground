@@ -143,6 +143,8 @@ interface PropsChoice {
   homeAssistantOpen?: boolean;
   /** Keep the stage and the console mounted under Home */
   keepWork?: boolean;
+  /** A page in place of Home, or over the work */
+  cover?: ReactNode;
 }
 
 /**
@@ -208,6 +210,10 @@ const props = (
             },
           },
     keepWork: choice.keepWork,
+    cover:
+      choice.cover === undefined
+        ? undefined
+        : { bar: <header>page bar</header>, content: choice.cover },
     phone: {
       page: "work",
       onSwipe: vi.fn(),
@@ -1410,5 +1416,68 @@ describe("with Home", () => {
     expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
     expect(screen.getByRole("region", { name: "Navigation" })).toBeTruthy();
     expectNoWork(mounts);
+  });
+});
+
+describe("with a page", () => {
+  const Mounts = ({ onMount }: { onMount: () => void }) => {
+    useEffect(() => {
+      onMount();
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+    return <div data-testid="stage-probe" />;
+  };
+
+  it.each(["wide", "compact"] as const)(
+    "covers the work with the page, the work still mounted and inert under it (%s)",
+    (viewport) => {
+      const mounted = vi.fn();
+      const choice = { stage: <Mounts onMount={mounted} /> };
+      const { rerender } = render(
+        <BaseLayoutShell
+          {...props(viewport, {
+            stage: choice.stage,
+            cover: <div>page slot</div>,
+          })}
+        />
+      );
+      const page = screen.getByText("page slot");
+      expect(screen.getByText("page bar")).toBeTruthy();
+      expect(page.closest("[inert]")).toBeNull();
+      expect(
+        screen.getByTestId("stage-probe").closest("[inert]")
+      ).not.toBeNull();
+      expect(screen.getByText("stage bar").closest("[inert]")).not.toBeNull();
+
+      rerender(
+        <BaseLayoutShell {...props(viewport, { stage: choice.stage })} />
+      );
+      expect(screen.queryByText("page slot")).toBeNull();
+      expect(screen.getByTestId("stage-probe").closest("[inert]")).toBeNull();
+      expect(mounted).toHaveBeenCalledTimes(1);
+    }
+  );
+
+  it("stands in Home's place, under its own bar", () => {
+    render(
+      <BaseLayoutShell
+        {...props("wide", {
+          home: <div>home slot</div>,
+          cover: <div>page slot</div>,
+        })}
+      />
+    );
+    expect(screen.getByText("page slot")).toBeTruthy();
+    expect(screen.getByText("page bar")).toBeTruthy();
+    expect(screen.queryByText("home slot")).toBeNull();
+    expect(screen.queryByText("stage bar")).toBeNull();
+  });
+
+  it("puts the page on the pager's work page on a phone", () => {
+    render(
+      <BaseLayoutShell {...props("phone", { cover: <div>page slot</div> })} />
+    );
+    const work = screen.getByRole("region", { name: "Work" });
+    expect(within(work).getByText("page slot")).toBeTruthy();
   });
 });

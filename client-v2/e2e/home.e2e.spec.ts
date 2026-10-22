@@ -84,7 +84,8 @@ test.describe("on a desktop window", () => {
     await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
   });
 
-  test("client-v2-layout: Tiles that open the gallery", async ({ page }) => {
+  test("client-v2-layout: Tiles that open a page", async ({ page }) => {
+    const lines = linesOn(page);
     await page.goto("/");
     await expect(home(page)).toBeVisible();
 
@@ -92,11 +93,14 @@ test.describe("on a desktop window", () => {
       .getByRole("button", { name: "Open a program" })
       .click();
 
-    await expect(page.locator("[data-gallery-modal]")).toBeVisible();
-    await expect(page.locator("#gallery-tab-programs")).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
+    await expect(
+      page.getByRole("searchbox", { name: "Search programs" })
+    ).toBeVisible();
+    await expect(home(page)).toBeHidden();
+    await expect(page.locator("[data-gallery-modal]")).toHaveCount(0);
+    await expect
+      .poll(() => lineOf(lines, "catalog_shown"))
+      .toContain("via: home");
   });
 
   test("client-v2-layout: The composer on Home", async ({ page }) => {

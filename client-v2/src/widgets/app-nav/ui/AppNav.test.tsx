@@ -52,12 +52,15 @@ afterAll(() => {
 });
 
 const onHome = vi.fn();
+const pages = { open: vi.fn(), close: vi.fn() };
 let sent: ReturnType<typeof memoryProvider>;
 let logged: ReturnType<typeof memoryLogs>;
 beforeEach(() => {
   // `setModal` settles when the modal closes
   view.setModal.mockReset().mockResolvedValue(null);
   onHome.mockReset();
+  pages.open.mockReset();
+  pages.close.mockReset();
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
   logged = memoryLogs();
@@ -68,7 +71,7 @@ afterEach(() => {
   resetLogger();
 });
 
-const draw = () =>
+const draw = (current?: "tutorials" | "programs") =>
   render(
     <TooltipProvider>
       <SidebarProvider>
@@ -81,6 +84,9 @@ const draw = () =>
           railFooter={null}
           setup={null}
           onHome={onHome}
+          current={current}
+          onOpenPage={pages.open}
+          onClosePage={pages.close}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -91,22 +97,40 @@ const opened = () =>
     .filter((event) => event.name === "nav_item_opened")
     .map((event) => event.params);
 
+it("reports New project as the item picked and opens the gallery", () => {
+  draw();
+  fireEvent.click(screen.getByRole("button", { name: "New project" }));
+  expect(opened()).toEqual([{ item: "new-project" }]);
+  expect(view.setModal).toHaveBeenCalledTimes(1);
+  expect(view.setModal).toHaveBeenCalledWith(NewWorkspaceModal);
+});
+
 it.each([
-  ["New project", "new-project", "tutorials"],
-  ["Tutorials", "tutorials", "tutorials"],
-  ["Programs", "programs", "programs"],
-])(
-  "reports %s as the item picked and opens the gallery on its %s tab",
-  (label, item, initialTab) => {
-    draw();
-    fireEvent.click(screen.getByRole("button", { name: label }));
-    expect(opened()).toEqual([{ item }]);
-    expect(view.setModal).toHaveBeenCalledTimes(1);
-    expect(view.setModal).toHaveBeenCalledWith(NewWorkspaceModal, {
-      initialTab,
-    });
-  }
-);
+  ["Tutorials", "tutorials"],
+  ["Programs", "programs"],
+] as const)("opens the %s page, and no gallery", (label, item) => {
+  draw();
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  expect(opened()).toEqual([{ item }]);
+  expect(pages.open).toHaveBeenCalledWith(item);
+  expect(view.setModal).not.toHaveBeenCalled();
+});
+
+it("closes the page shown before New project opens the gallery", () => {
+  draw("tutorials");
+  fireEvent.click(screen.getByRole("button", { name: "New project" }));
+  expect(pages.close).toHaveBeenCalledTimes(1);
+  expect(view.setModal).toHaveBeenCalledTimes(1);
+});
+
+it("marks the page shown as the current item", () => {
+  draw("tutorials");
+  const item = screen.getByRole("button", { name: "Tutorials" });
+  expect(item.dataset.active).toBe("true");
+  expect(screen.getByRole("button", { name: "Programs" }).dataset.active).toBe(
+    "false"
+  );
+});
 
 it("opens Home, not the gallery, from the work", () => {
   draw();
@@ -124,8 +148,9 @@ it("hands every pick of Home to the page, which decides, and opens no gallery", 
   expect(view.setModal).not.toHaveBeenCalled();
 });
 
-it("still opens the gallery from the other items", () => {
-  draw();
-  fireEvent.click(screen.getByRole("button", { name: "Programs" }));
-  expect(view.setModal).toHaveBeenCalledTimes(1);
+it("hands Home to the page over a page too, which closes it", () => {
+  draw("programs");
+  fireEvent.click(screen.getByRole("button", { name: "Home" }));
+  expect(onHome).toHaveBeenCalledTimes(1);
+  expect(view.setModal).not.toHaveBeenCalled();
 });

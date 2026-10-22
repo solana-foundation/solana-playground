@@ -1,43 +1,54 @@
 import { PgView } from "@/utils";
 import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
-import type { GalleryTab } from "@/views/flow/gallery/NewWorkspaceModal";
 import type { NavItem } from "../model/nav-item";
 import { navTelemetry } from "../model/telemetry";
 import BaseAppNav from "./BaseAppNav";
 import type { BaseAppNavProps } from "./BaseAppNav";
 
-export type AppNavProps = Omit<BaseAppNavProps, "onOpen"> & {
+/** The items that open a page of their own */
+export type NavPage = Extract<NavItem, "tutorials" | "programs">;
+
+export type AppNavProps = Omit<BaseAppNavProps, "onOpen" | "current"> & {
   /** Home was picked; the page decides what that does where it is */
   onHome: () => void;
-};
-
-/** Which gallery tab each item opens on; New project takes the lead tab */
-const TAB: Record<Exclude<NavItem, "home">, GalleryTab> = {
-  "new-project": "tutorials",
-  tutorials: "tutorials",
-  programs: "programs",
+  /** The page shown, if any; its item is marked current */
+  current?: NavPage;
+  onOpenPage: (page: NavPage) => void;
+  onClosePage: () => void;
 };
 
 /**
- * Home goes to the page (`onHome`), which shows Home, keeps it, or over a
- * shared project goes back to the work. New project, Tutorials and Programs
- * open the gallery on their tab until they get pages of their own.
+ * Home goes to the page (`onHome`), which closes a page that shows and then
+ * shows Home, keeps it, or over a shared project goes back to the work.
+ * Tutorials and Programs open their pages. New project closes a page that
+ * shows and opens the gallery.
  */
-const AppNav = ({ onHome, ...props }: AppNavProps) => {
+const AppNav = ({
+  onHome,
+  current,
+  onOpenPage,
+  onClosePage,
+  ...props
+}: AppNavProps) => {
   const open = (item: NavItem) => {
     navTelemetry.track("nav_item_opened", { item });
     if (item === "home") {
       onHome();
       return;
     }
+    if (item === "tutorials" || item === "programs") {
+      onOpenPage(item);
+      return;
+    }
+    // The pick leaves the page whether or not a project follows: the
+    // gallery takes the user's attention from it
+    if (current) onClosePage();
     // Settles when the modal closes and never rejects: a gallery that fails
     // to render is reported and told by `ModalHost`'s boundary
-    void PgView.setModal<unknown, { initialTab: GalleryTab }>(
-      NewWorkspaceModal,
-      { initialTab: TAB[item] }
-    );
+    void PgView.setModal(NewWorkspaceModal);
   };
-  return <BaseAppNav {...props} onOpen={open} />;
+
+  return <BaseAppNav {...props} current={current} onOpen={open} />;
 };
 
 export default AppNav;

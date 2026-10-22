@@ -144,6 +144,27 @@
       ]
     },
     {
+      "name": "input-group",
+      "type": "registry:ui",
+      "title": "Input group",
+      "description": "Stock shadcn input group: an input or textarea with addons and buttons inside its border.",
+      "registryDependencies": [
+        "@playground/button",
+        "@playground/input",
+        "@playground/textarea"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/input-group.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "cn"
+      ]
+    },
+    {
       "name": "label",
       "type": "registry:ui",
       "title": "Label",

@@ -96,6 +96,12 @@ it("draws no files toggle where it is not handed, and always the documentation",
   expect(docs.getAttribute("rel")).toContain("noreferrer");
 });
 
+it("draws no assistant toggle where none is handed, as over a page", () => {
+  draw({ title: "Tutorials", files: null, assistant: null });
+  expect(screen.queryByRole("button", { name: /assistant/i })).toBeNull();
+  expect(screen.getByText("Tutorials")).toBeTruthy();
+});
+
 it("shows the project's name only when given one", () => {
   const { rerender } = draw({
     title: "Counter",

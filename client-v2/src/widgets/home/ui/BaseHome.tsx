@@ -17,7 +17,7 @@ import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { levelVariant, Tag } from "@/shared/ui/tag";
 import type { TutorialData } from "@/utils";
-import type { GalleryTile } from "../model/telemetry";
+import type { PageTile } from "../model/telemetry";
 import HomeComposer from "./HomeComposer";
 
 /** What a tutorial's card shows: the tutorial model's own fields */
@@ -39,7 +39,7 @@ export interface BaseHomeProps {
   programCount: number | null;
   /** What New project unfolds under the tiles */
   scratch: ReactNode;
-  onTile: (tile: GalleryTile) => void;
+  onTile: (tile: PageTile) => void;
   /** Reported; the unfold is this component's own state */
   onNewProject: () => void;
   onTutorial: (name: string) => Promise<void>;

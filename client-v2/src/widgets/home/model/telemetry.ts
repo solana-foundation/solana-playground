@@ -2,8 +2,8 @@ import { createTracker } from "../../../shared/lib/telemetry";
 import type { NoParams } from "../../../shared/lib/telemetry";
 
 export type HomeTile = "new-project" | "tutorials" | "programs";
-/** The tiles that open the gallery on their tab; New project unfolds instead */
-export type GalleryTile = Exclude<HomeTile, "new-project">;
+/** The tiles that open the Tutorials or Programs page; New project unfolds instead */
+export type PageTile = Exclude<HomeTile, "new-project">;
 export type HomeQuickstart = "continue" | "new" | "tutorial";
 /**
  * How Home came to show: the start, the navigation's Home, no project left

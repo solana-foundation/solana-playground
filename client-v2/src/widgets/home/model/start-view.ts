@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+import { isCatalogLinkPath } from "@/routes/catalog-paths";
 import { PgExplorer, PgRouter } from "@/utils";
 import { homeTelemetry } from "./telemetry";
 import type { HomeLeaveVia, HomeVia } from "./telemetry";
@@ -17,11 +18,17 @@ const log = createLogger("home:start");
 export const START_TIMEOUT_MS = 10_000;
 
 /**
- * Home is for a start on `/` with no project open. Any other route opens
- * straight on the work; on `/` the answer waits for the explorer. Projects
- * listed with none current is still Home: sync imports the account's
- * projects without opening them, and the work mounted then throws in the
- * explorer. `useStartView` leaves Home once one is opened.
+ * Where Home can show: `/`, and the `/tutorials` and `/programs` links, which
+ * open their page and go on to `/`
+ */
+const isStartPath = (path: string) => path === "/" || isCatalogLinkPath(path);
+
+/**
+ * Home is for a start on `/` (or a link to a page) with no project open. Any
+ * other route opens straight on the work; on those the answer waits for the
+ * explorer. Projects listed with none current is still Home: sync imports the
+ * account's projects without opening them, and the work mounted then throws
+ * in the explorer. `useStartView` leaves Home once one is opened.
  */
 export const decideStart = ({
   path,
@@ -32,7 +39,7 @@ export const decideStart = ({
   workspaces: readonly string[] | undefined;
   current: string | undefined;
 }): StartView => {
-  if (path !== "/") return "work";
+  if (!isStartPath(path)) return "work";
   if (workspaces === undefined) return "pending";
   return workspaces.length && current ? "work" : "home";
 };
@@ -213,7 +220,7 @@ export const useStartView = (): PageView => {
       // Called at once with the path Home opened on, which is no way out:
       // Home from a lesson stays on the lesson's route
       PgRouter.onDidChangePath((path) => {
-        if (path !== "/" && path !== from) leave();
+        if (!isStartPath(path) && path !== from) leave();
       }),
     ];
     return () => subs.forEach((s) => s.dispose());

@@ -5,7 +5,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import type { FC } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -28,20 +27,26 @@ const utils = vi.hoisted(() => ({
   PgCommon: { fetchJSON: vi.fn() },
 }));
 vi.mock("@/utils", () => utils);
-// The gallery and the scratch options pull in the legacy modal and the whole
-// `@/utils` barrel; Home only hands them on
-vi.mock("@/views/flow/gallery/NewWorkspaceModal", () => ({
-  default: () => null,
-}));
+// The scratch options pull in the legacy gallery and the whole `@/utils`
+// barrel; Home only hands them on
 vi.mock("@/views/flow/gallery/StartFromScratch", () => ({
   default: () => <div data-testid="scratch" />,
 }));
 
-import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
 import Home from "./Home";
 
 let sent: ReturnType<typeof memoryProvider>;
 let logged: ReturnType<typeof memoryLogs>;
+/** 34 programs, each complete, as the listing the count is read from */
+const LISTING = Array.from({ length: 34 }, (_, i) => ({
+  name: `p${i}`,
+  description: "d",
+  repo: `https://github.com/x/p${i}`,
+  icon: "/i.png",
+  framework: "Anchor",
+  categories: [],
+}));
+
 beforeEach(() => {
   utils.PgTutorial.all = [
     {
@@ -55,7 +60,7 @@ beforeEach(() => {
   utils.PgTutorial.open.mockReset().mockResolvedValue(undefined);
   utils.PgView.setModal.mockReset().mockResolvedValue(null);
   utils.PgView.setToast.mockReset();
-  utils.PgCommon.fetchJSON.mockReset().mockResolvedValue(new Array(34));
+  utils.PgCommon.fetchJSON.mockReset().mockResolvedValue(LISTING);
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
   logged = memoryLogs();
@@ -68,31 +73,33 @@ afterEach(() => {
 
 const draw = () => {
   const onAsk = vi.fn();
-  render(<Home onAsk={onAsk} />);
-  return { home: within(screen.getByRole("region", { name: "Home" })), onAsk };
+  const onOpenPage = vi.fn();
+  render(<Home onAsk={onAsk} onOpenPage={onOpenPage} />);
+  return {
+    home: within(screen.getByRole("region", { name: "Home" })),
+    onAsk,
+    onOpenPage,
+  };
 };
 const events = (name: string) =>
   sent.events.filter((e) => e.name === name).map((e) => e.params);
 
-it("opens the gallery on programs from the programs tile", async () => {
-  const { home } = draw();
+it("opens the Programs page from the programs tile, and no gallery", async () => {
+  const { home, onOpenPage } = draw();
   await home.findByText("34 real programs");
   fireEvent.click(home.getByRole("button", { name: "Open a program" }));
-  expect(utils.PgView.setModal).toHaveBeenCalledWith(NewWorkspaceModal, {
-    initialTab: "programs",
-  });
+  expect(onOpenPage).toHaveBeenCalledWith("programs");
+  expect(utils.PgView.setModal).not.toHaveBeenCalled();
   expect(events("home_tile_opened")).toEqual([{ tile: "programs" }]);
 });
 
-it("opens the gallery on tutorials from the tile and from All", async () => {
-  const { home } = draw();
+it("opens the Tutorials page from the tile and from All", async () => {
+  const { home, onOpenPage } = draw();
   await home.findByText("34 real programs");
   fireEvent.click(home.getByRole("button", { name: "Follow a tutorial" }));
   fireEvent.click(home.getByRole("button", { name: "All 1" }));
-  expect(utils.PgView.setModal).toHaveBeenCalledTimes(2);
-  for (const call of utils.PgView.setModal.mock.calls) {
-    expect(call).toEqual([NewWorkspaceModal, { initialTab: "tutorials" }]);
-  }
+  expect(onOpenPage.mock.calls).toEqual([["tutorials"], ["tutorials"]]);
+  expect(utils.PgView.setModal).not.toHaveBeenCalled();
 });
 
 it("reports New project and unfolds the scratch options", async () => {

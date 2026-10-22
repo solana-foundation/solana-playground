@@ -8,6 +8,7 @@ import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import { Sheet, SheetContent, SheetTitle } from "@/shared/ui/sheet";
+import { isCovered, isWorkInFrame, screenOf } from "../model/screen";
 import { PHONE_PAGES, isWorkView } from "../model/phone-pages";
 import type { PhonePage, StagePage, WorkView } from "../model/phone-pages";
 
@@ -51,6 +52,13 @@ export interface PhonePagerSlots {
    * means Home shows; `content` is null while the start is being decided.
    */
   home?: { content: ReactNode };
+  /**
+   * A page (Tutorials, Programs) on the work page, under "Menu" and the
+   * title, with no Chat | Code and no Preview, and no preview page. Under
+   * Home it takes Home's place; over the work, the work stays mounted and
+   * hidden under it, so closing the page shows it as it was.
+   */
+  cover?: { content: ReactNode };
 }
 
 export type BasePhonePagerProps = PhonePagerState & PhonePagerSlots;
@@ -104,9 +112,14 @@ const FilePicker = ({
  */
 const BasePhonePager = (props: BasePhonePagerProps) => {
   const ref = useRef<HTMLDivElement>(null);
-  const homeShown = props.home !== undefined;
-  const pages = homeShown ? HOME_PAGES : PHONE_PAGES;
-  // A page Home has no section for (the preview) shows Work, where Home is
+  const screen = screenOf(props.home, props.cover);
+  // Home or a page holds the work page: no Chat | Code, no preview page
+  const covered = isCovered(screen);
+  // Under Home (or a page over Home) the work's views are not placed at all
+  const workInFrame = isWorkInFrame(screen);
+  const pageShown = screen.kind === "page";
+  const pages = covered ? HOME_PAGES : PHONE_PAGES;
+  // Covered (Home or a page), the preview has no section: Work shows
   const page = pages.includes(props.page) ? props.page : "work";
   const index = pages.indexOf(page);
   // Smooth by CSS (`scroll-smooth`). The scroll this causes settles on the
@@ -143,8 +156,8 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     settle.current = window.setTimeout(() => {
       const el = ref.current;
       if (!el || el.clientWidth === 0 || touching.current) return;
-      // A scroll position read before the pages re-render (Home coming or
-      // going changes their number) may index past the list
+      // A scroll position read before the pages re-render (Home or a page
+      // coming or going changes their number) may index past the list
       const at = pages[Math.round(el.scrollLeft / el.clientWidth)];
       if (at && at !== page) props.onSwipe(at);
     }, SWIPE_SETTLE_MS);
@@ -217,7 +230,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
           <span className="min-w-0 flex-1 truncate font-semibold">
             {props.title}
           </span>
-          {!homeShown && (
+          {!covered && (
             <>
               <Segmented
                 aria-label="Show"
@@ -240,16 +253,22 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
             </>
           )}
         </PhoneBar>
-        {homeShown ? (
+        {screen.kind === "page" && (
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-            {props.home?.content}
+            {screen.cover.content}
           </div>
-        ) : (
+        )}
+        {screen.kind === "home" && (
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+            {screen.home.content}
+          </div>
+        )}
+        {workInFrame && (
           <>
             <div
               className={cn(
                 "flex min-h-0 flex-1 flex-col",
-                props.view !== "chat" && "hidden"
+                (pageShown || props.view !== "chat") && "hidden"
               )}
             >
               {props.assistant}
@@ -257,7 +276,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
             <div
               className={cn(
                 "flex min-h-0 flex-1 flex-col",
-                props.view !== "code" && "hidden"
+                (pageShown || props.view !== "code") && "hidden"
               )}
             >
               <FilePicker
@@ -274,11 +293,15 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
           </>
         )}
       </section>
-      {!homeShown && (
+      {workInFrame && (
         <>
+          {/* Hidden, not unmounted, under a page: the stage and the console
+            keep their outlets, so the terminal is not re-attached on the way
+            back */}
           <section
             aria-label="Preview"
             inert={page !== "preview"}
+            hidden={pageShown}
             className="flex h-full w-full shrink-0 snap-start flex-col"
           >
             <PhoneBar>

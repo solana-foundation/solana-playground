@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 
+import { fetchPrograms, PROGRAMS_URL } from "@/entities/program";
 import { createLogger } from "@/shared/lib/logger";
-import { PgCommon } from "@/utils";
 
 const log = createLogger("home:programs");
-
-const PROGRAMS_URL = "/programs/programs.json";
 
 /** How many programs the gallery lists; `null` while loading or when the list is missing */
 export const useProgramCount = () => {
@@ -13,11 +11,8 @@ export const useProgramCount = () => {
 
   useEffect(() => {
     let live = true;
-    PgCommon.fetchJSON(PROGRAMS_URL)
-      .then((programs: unknown) => {
-        if (!Array.isArray(programs)) {
-          throw new Error(`${PROGRAMS_URL} is not a list of programs`);
-        }
+    fetchPrograms()
+      .then((programs) => {
         if (live) setProgramCount(programs.length);
       })
       .catch((e: unknown) => {

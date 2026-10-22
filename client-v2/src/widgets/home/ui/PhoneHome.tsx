@@ -1,8 +1,8 @@
 import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
-import { PgExplorer, PgFramework, PgTutorial, PgView } from "@/utils";
-import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
+import { PgExplorer, PgFramework, PgTutorial } from "@/utils";
 import { homeTelemetry } from "../model/telemetry";
+import type { PageTile } from "../model/telemetry";
 import { useProgramCount } from "../model/use-program-count";
 import { toastActionFailed } from "./action-failed-toast";
 import BasePhoneHome from "./BasePhoneHome";
@@ -12,6 +12,8 @@ export interface PhoneHomeProps {
   onAsk: () => void;
   /** Continue was picked: go back to the project open under Home */
   onContinue: () => void;
+  /** Open the Tutorials or Programs page, in Home's place */
+  onOpenPage: (page: PageTile) => void;
 }
 
 const log = createLogger("home:actions");
@@ -71,7 +73,7 @@ const openQuickstart = async (
   }
 };
 
-const PhoneHome = ({ onAsk, onContinue }: PhoneHomeProps) => {
+const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
   useRenderOnChange(PgExplorer.onDidSwitchWorkspace);
   useRenderOnChange(PgExplorer.onDidInit);
   const programCount = useProgramCount();
@@ -126,11 +128,7 @@ const PhoneHome = ({ onAsk, onContinue }: PhoneHomeProps) => {
         }
         homeTelemetry.track("home_quickstart_opened", { id: quickstart.id });
       }}
-      onBrowse={() => {
-        // Settles when the modal closes and never rejects: a gallery that
-        // fails to render is reported and told by `ModalHost`'s boundary
-        void PgView.setModal(NewWorkspaceModal);
-      }}
+      onBrowse={() => onOpenPage("tutorials")}
       onAsk={() => {
         homeTelemetry.track("home_composer_opened", {});
         onAsk();

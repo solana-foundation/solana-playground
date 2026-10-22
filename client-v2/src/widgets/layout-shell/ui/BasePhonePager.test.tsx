@@ -68,6 +68,7 @@ const Harness = (choice: Choice) => {
     consoleNode,
     consoleOpen: choice.consoleOpen ?? false,
     home: choice.home,
+    cover: choice.cover,
   };
   return (
     <>
@@ -361,5 +362,29 @@ describe("with Home", () => {
     expect(
       screen.getByRole("region", { name: "Work" }).hasAttribute("inert")
     ).toBe(false);
+  });
+});
+
+describe("with a page over the work", () => {
+  const cover = { content: <div>page slot</div> };
+
+  it("shows the page on the work page, the work kept mounted and hidden, with no preview page", () => {
+    renderPager({ cover, title: "Tutorials" });
+    const work = screen.getByRole("region", { name: "Work" });
+    expect(within(work).getByText("page slot")).toBeTruthy();
+    const bar = within(work).getByTestId("phone-bar");
+    expect(within(bar).getByText("Tutorials")).toBeTruthy();
+    expect(within(bar).queryByRole("radiogroup", { name: "Show" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
+    expect(
+      within(work).getByText("assistant slot").closest(".hidden")
+    ).not.toBeNull();
+    expect(screen.getByTestId("stage-probe")).toBeTruthy();
+  });
+
+  it("stands in Home's place", () => {
+    renderPager({ home: { content: <div>home slot</div> }, cover });
+    expect(screen.getByText("page slot")).toBeTruthy();
+    expect(screen.queryByText("home slot")).toBeNull();
   });
 });

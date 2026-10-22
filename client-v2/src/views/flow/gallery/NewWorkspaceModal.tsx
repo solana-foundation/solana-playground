@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
-import type { ProgramListing } from "./ProgramsTab";
+import { fetchPrograms, PROGRAMS_URL } from "@/entities/program";
+import type { ProgramListing } from "@/entities/program";
 import ProgramsTab from "./ProgramsTab";
 import StartFromScratch from "./StartFromScratch";
 import TutorialsTab, { Empty } from "./TutorialsTab";
 import { Button } from "@/shared/ui/button";
 import { createLogger } from "../../../shared/lib/logger";
 import { ModalFrame } from "@/widgets/overlays";
-import { PgCommon, PgTutorial } from "../../../utils";
+import { PgTutorial } from "../../../utils";
 
 /** The gallery's two sources, one tab each */
 export type GalleryTab = "programs" | "tutorials";
@@ -19,8 +20,6 @@ type Registry =
   | { status: "failed" };
 
 const log = createLogger("gallery:programs");
-
-const PROGRAMS_URL = "/programs/programs.json";
 
 /**
  * The "What do you want to build?" gallery: the entry point for a new (or
@@ -49,8 +48,8 @@ const NewWorkspaceModal = ({
   useEffect(() => {
     let live = true;
     setRegistry({ status: "loading" });
-    PgCommon.fetchJSON(PROGRAMS_URL)
-      .then((programs: ProgramListing[]) => {
+    fetchPrograms()
+      .then((programs) => {
         if (live) setRegistry({ status: "ready", programs });
       })
       .catch((e: unknown) => {

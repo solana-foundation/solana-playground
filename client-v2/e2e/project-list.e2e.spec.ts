@@ -202,10 +202,7 @@ test("client-v2-layout: A lesson's menu", async ({ seededPage: page }) => {
     .locator('[data-slot="sidebar"]')
     .getByRole("button", { name: "Tutorials" })
     .click();
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
+  await page.getByRole("button", { name: "Open Hello Anchor" }).click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
   // A lesson is a workspace only once it is started
   await page.getByRole("button", { name: "START" }).click();

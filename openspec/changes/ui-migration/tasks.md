@@ -114,8 +114,9 @@ regression against 5.1 has misread this rule.
 - [x] 5.8 Home replaces the gallery popup on start, desktop and phone
       (HOO-2063; after 5.2 and 5.7; design.md, "Home (5.8)"; plan:
       [plans/5.8-home.md](plans/5.8-home.md))
-- [ ] 5.9 Tutorials and Programs pages, opened from the navigation
-      (HOO-2064; after 5.2)
+- [x] 5.9 Tutorials and Programs pages, opened from the navigation
+      (HOO-2064; after 5.2 and 5.8; design.md, "Tutorials and Programs pages
+      (5.9)"; plan: [plans/5.9-catalog-pages.md](plans/5.9-catalog-pages.md))
 - [x] 5.10 Workspace: the Write stage, editor tabs, console drawer and
       terminal look (HOO-2065; after 5.2; plan:
       [plans/5.10-write-stage.md](plans/5.10-write-stage.md))

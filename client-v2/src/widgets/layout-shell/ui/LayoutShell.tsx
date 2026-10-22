@@ -9,6 +9,7 @@ import { PgFlow } from "@/views/flow/state/stage";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import { homeOf, isCovered, screenOf } from "../model/screen";
 import type {
   PageSource,
   PhonePage,
@@ -79,6 +80,16 @@ export interface LayoutShellProps {
    * stage the screen does not show.
    */
   home?: (panel: { openAssistant: () => void }) => ReactNode;
+  /**
+   * A page (Tutorials, Programs) under a bar that names it, with no column
+   * toggles. Under Home it takes Home's place; over the work it covers the
+   * assistant and the work columns, which stay mounted under it. While it
+   * shows, the shell's keys and a deploy's opening of the console do
+   * nothing, as under Home. When the product asks for the assistant over
+   * the work, `onClose` is called first, since the assistant is under the
+   * page. On a phone the work page shows it, and opening it goes there.
+   */
+  cover?: { title: string; content: ReactNode; onClose: () => void };
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
 }
@@ -105,6 +116,7 @@ const LayoutShell = ({
   console,
   assistant,
   home,
+  cover,
   keepWork,
 }: LayoutShellProps) => {
   const viewport = useViewport();
@@ -130,10 +142,12 @@ const LayoutShell = ({
   pageRef.current = page;
   const viewRef = useRef(view);
   viewRef.current = view;
+  const screen = screenOf(home, cover);
+  // Home is up, on screen or under a page: the assistant is Home's Sheet then
+  const homeShown = homeOf(screen) !== undefined;
   // Read by the keys and the subscriptions, which outlive renders
-  const homeShown = home !== undefined;
-  const homeNow = useRef(homeShown);
-  homeNow.current = homeShown;
+  const screenNow = useRef(screen);
+  screenNow.current = screen;
   // The assistant's Sheet while Home shows: the visit's, never saved
   const [homeSheetOpen, setHomeSheetOpen] = useState(false);
   const homeSheetNow = useRef(false);
@@ -275,8 +289,8 @@ const LayoutShell = ({
       // Tracked at every width, not only on a phone: the Preview a phone opens
       // on is the last non-write stage shown anywhere
       if (flow.stage !== "write") lastPreview.current = flow.stage;
-      // Home has no preview page to move to
-      if (!phone || homeNow.current) return;
+      // Home and a page have no preview page to move to
+      if (!phone || isCovered(screenNow.current)) return;
       const next = pageForStage(flow.stage, pageRef.current);
       if (next) showPage(next, "auto");
     });
@@ -301,8 +315,11 @@ const LayoutShell = ({
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
   const assistantShown = homeShown ? homeSheetOpen : pagerOrFrame;
   const setAssistant = (open: boolean, via: ToggleSource) => {
+    const now = screenNow.current;
+    // A page over the work covers the assistant: it makes way first
+    if (open && now.kind === "page" && now.over === "work") now.cover.onClose();
     // Under Home the assistant is its Sheet at every width
-    if (homeNow.current) setHomeSheet(open, via);
+    if (homeOf(now) !== undefined) setHomeSheet(open, via);
     else if (phone) {
       // A key keeps its own source; a drag never reaches a phone
       const source: PageSource =
@@ -316,10 +333,10 @@ const LayoutShell = ({
   };
   /**
    * The console opening on its own: the visit's on a phone, else saved. Not
-   * under Home, which shows no console to open.
+   * under Home or a page, which show no console to open.
    */
   const openConsole = () => {
-    if (homeNow.current) return;
+    if (isCovered(screenNow.current)) return;
     if (phone) setPhoneConsoleOpen(true, "auto");
     else setOpen("console", { open: true, via: "auto" });
   };
@@ -328,7 +345,7 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+R",
     () => {
-      if (homeNow.current) return;
+      if (isCovered(screenNow.current)) return;
       if (phone) {
         // The view is shown on Work: bring it into view first
         showPage("work", "key");
@@ -340,7 +357,7 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+J",
     () => {
-      if (homeNow.current) return;
+      if (isCovered(screenNow.current)) return;
       if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");
       else setOpen("console", { open: !state.open.console, via: "key" });
     },
@@ -363,8 +380,8 @@ const LayoutShell = ({
     "Ctrl+E",
     {
       handle: (ev) => {
-        // Before `preventDefault`: under Home the key is not the shell's
-        if (homeNow.current) return;
+        // Before `preventDefault`: under Home or a page the key is not the shell's
+        if (isCovered(screenNow.current)) return;
         if (
           PgCommon.getOS() === "MacOS" &&
           ev.ctrlKey &&
@@ -512,6 +529,18 @@ const LayoutShell = ({
   // so a returning user's load does not read "Home" before the work shows
   const homeTitle = homeContent == null ? null : "Home";
 
+  // A page opened on a phone is shown at once, on the work page
+  const coverShown = screen.kind === "page";
+  useEffect(() => {
+    if (coverShown && phone) showPage("work", "auto");
+    // `showPage` reads only refs and stable setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [coverShown, phone]);
+
+  let phoneTitle = PgExplorer.currentWorkspaceName ?? "";
+  if (screen.kind === "home") phoneTitle = homeTitle ?? "";
+  if (screen.kind === "page") phoneTitle = screen.cover.title;
+
   // The bar names the project while the assistant is out of view, since its
   // head cannot; under Home it names Home, as the phone's bar does
   let barTitle: string | null = null;
@@ -521,6 +550,7 @@ const LayoutShell = ({
   return (
     <BaseLayoutShell
       viewport={viewport}
+      keepWork={keepWork}
       isMobile={isMobile}
       navOpen={navOpen}
       onNavOpenChange={onNavOpenChange}
@@ -583,9 +613,7 @@ const LayoutShell = ({
         onGo: (next) => showPage(next, "button"),
         view,
         onView: (next) => showView(next, "button"),
-        title: homeShown
-          ? homeTitle ?? ""
-          : PgExplorer.currentWorkspaceName ?? "",
+        title: phoneTitle,
         file,
         filesOpen,
         onFilesOpenChange: (open) => setPhoneFiles(open, lastInput.current),
@@ -648,7 +676,19 @@ const LayoutShell = ({
           canWiden,
         })
       }
-      keepWork={keepWork}
+      cover={
+        cover && {
+          bar: (
+            <BaseStageBar
+              title={cover.title}
+              files={null}
+              assistant={null}
+              assistantKey={null}
+            />
+          ),
+          content: cover.content,
+        }
+      }
       home={
         home && {
           content: homeContent,
