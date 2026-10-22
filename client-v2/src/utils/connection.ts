@@ -126,6 +126,8 @@ const derive = () => ({
 const recheckWhileStalled = (cb: () => void): Disposable =>
   recheckWhileBad({
     recheck: cb,
+    // `null` (the slot could not be read) is not a stall: that is a
+    // connection error, which `isConnected` polls on its own
     onDidChange: (listener) =>
       PgConnection.onDidChangeIsClusterDown((stalled) =>
         listener(stalled === true)
