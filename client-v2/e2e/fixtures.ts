@@ -14,8 +14,8 @@ export const homeRegion = (page: Page) =>
   page.getByRole("region", { name: "Home" });
 
 /**
- * Makes a project from Home's New project tile, through the same
- * start-from-scratch row the gallery holds.
+ * Makes a project from Home's New project tile, through the same Start from
+ * scratch the New project dialog holds (`features/new-project`).
  *
  * Scoped to Home's region: the navigation has a "New project" item of the
  * same name.
@@ -409,4 +409,36 @@ export const startAnotherProject = async (page: Page, name: string) => {
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden(LONG);
   await expect(currentProject(page)).toHaveText(name, LONG);
+};
+
+/** One program, whose repository the GitHub stubs below serve */
+export const PROGRAM = {
+  name: "e2e-counter",
+  description: "A counter for the catalog's e2e",
+  repo: "https://github.com/e2e/counter",
+  icon: "/favicon.ico",
+  framework: "Native",
+  categories: ["Examples"],
+};
+const LIB_RS = `use solana_program::{account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey};
+
+entrypoint!(process_instruction);
+
+pub fn process_instruction(_program_id: &Pubkey, _accounts: &[AccountInfo], _data: &[u8]) -> ProgramResult {
+    Ok(())
+}
+`;
+
+/** Serves `PROGRAM` as the whole registry, and its repository from GitHub */
+export const stubPrograms = async (page: Page) => {
+  await page.route("**/programs/programs.json", (r) => json(r, [PROGRAM]));
+  await page.route("https://api.github.com/repos/e2e/counter/**", (r) =>
+    json(r, {
+      truncated: false,
+      tree: [{ path: "src/lib.rs", type: "blob", sha: "1", url: "" }],
+    })
+  );
+  await page.route("https://raw.githubusercontent.com/e2e/counter/**", (r) =>
+    r.fulfill({ status: 200, contentType: "text/plain", body: LIB_RS })
+  );
 };

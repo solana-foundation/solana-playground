@@ -30,16 +30,8 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
   await openGallery(page);
   await expect(gallery).toBeVisible();
 
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-
-  // The tutorial card's title has no click handler of its own; only the
-  // "Open" button inside the same card does
-  // (`views/flow/gallery/TutorialsTab.tsx`). Scope to that card by walking
-  // up from the title text: `Title` -> `Body` -> `Card`.
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
+  await gallery.getByRole("radio", { name: /^Tutorials/ }).click();
+  await gallery.getByRole("button", { name: "Open Hello Anchor" }).click();
 
   // The tutorial's own editor must appear, and the app must not have
   // fallen back to the home route.

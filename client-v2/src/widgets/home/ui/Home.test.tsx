@@ -27,10 +27,9 @@ const utils = vi.hoisted(() => ({
   PgCommon: { fetchJSON: vi.fn() },
 }));
 vi.mock("@/utils", () => utils);
-// The scratch options pull in the legacy gallery and the whole `@/utils`
-// barrel; Home only hands them on
-vi.mock("@/views/flow/gallery/StartFromScratch", () => ({
-  default: () => <div data-testid="scratch" />,
+// Home only hands Start from scratch on; its own tests cover it
+vi.mock("@/features/new-project", () => ({
+  StartFromScratch: () => <div data-testid="scratch" />,
 }));
 
 import Home from "./Home";

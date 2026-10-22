@@ -1,93 +1,42 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { expect, it, vi } from "vitest";
 
-import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
-
-// The `@/utils` barrel needs a booted app; the modal uses these three
-vi.mock("../../../utils", () => ({
-  PgCommon: {
-    fetchJSON: async (url: string) => (await fetch(url)).json(),
-  },
-  PgTutorial: { all: [] },
-  PgView: { setModal: vi.fn() },
-}));
+// What `PgView.setModal` opens: the wide dialog, named for telemetry, around
+// New project
 vi.mock("@/widgets/overlays", () => ({
-  ModalFrame: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  useModalId: () => "dialog-1",
+  ModalFrame: ({
+    name,
+    title,
+    size,
+    children,
+  }: {
+    name: string;
+    title: string;
+    size: string;
+    children: React.ReactNode;
+  }) => (
+    <section aria-label={title} data-name={name} data-size={size}>
+      {children}
+    </section>
+  ),
 }));
-vi.mock("./StartFromScratch", () => ({ default: () => null }));
-vi.mock("./TutorialsTab", () => ({
-  default: () => null,
-  Empty: "p",
-}));
-vi.mock("./ProgramsTab", () => ({
-  default: ({ programs }: { programs: unknown[] | null }) => (
-    <p>{programs ? `${programs.length} programs` : "loading"}</p>
+vi.mock("@/widgets/catalog", () => ({
+  useNewProject: (_close: () => void, initialTab: string) => ({ initialTab }),
+  NewProject: ({ project }: { project: { initialTab: string } }) => (
+    <p>{`new project on ${project.initialTab}`}</p>
   ),
 }));
 
 import NewWorkspaceModal from "./NewWorkspaceModal";
 
-// A theme that answers every key: none of the styles matters here
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
+it("is the wide What do you want to build? dialog around New project", () => {
+  render(<NewWorkspaceModal initialTab="programs" />);
 
-const listing = {
-  name: "Counter",
-  description: "",
-  repo: "a/b",
-  icon: "",
-  framework: "Anchor",
-  categories: [],
-};
-
-let logged: ReturnType<typeof memoryProvider>;
-beforeEach(() => {
-  logged = memoryProvider();
-  initLogger({ providers: [logged] });
-});
-afterEach(() => {
-  resetLogger();
-  vi.restoreAllMocks();
-});
-
-const draw = () =>
-  render(
-    <ThemeProvider theme={anyTheme}>
-      <NewWorkspaceModal initialTab="programs" />
-    </ThemeProvider>
-  );
-
-it("lists the programs the registry returns", async () => {
-  vi.spyOn(globalThis, "fetch").mockResolvedValue(
-    new Response(JSON.stringify([listing]))
-  );
-  draw();
-  expect(await screen.findByText("1 programs")).toBeTruthy();
-});
-
-it("reports a failed programs fetch and offers a retry that recovers", async () => {
-  const fetchSpy = vi
-    .spyOn(globalThis, "fetch")
-    .mockRejectedValueOnce(new Error("offline"))
-    .mockResolvedValueOnce(new Response(JSON.stringify([listing])));
-  draw();
-
-  expect(await screen.findByText(/could not load the programs/i)).toBeTruthy();
-  expect(logged.entries).toHaveLength(1);
-  expect(logged.entries[0].report).toBe(true);
-  expect(screen.queryByText("0 programs")).toBeNull();
-
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-
-  await waitFor(() => expect(screen.getByText("1 programs")).toBeTruthy());
-  expect(fetchSpy).toHaveBeenCalledTimes(2);
-  expect(screen.queryByText(/could not load the programs/i)).toBeNull();
+  const dialog = screen.getByRole("region", {
+    name: "What do you want to build?",
+  });
+  expect(dialog.dataset.name).toBe("new-workspace");
+  expect(dialog.dataset.size).toBe("wide");
+  expect(dialog.textContent).toBe("new project on programs");
 });

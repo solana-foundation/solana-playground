@@ -3,5 +3,8 @@ export type { CatalogPage, CatalogVia } from "./model/telemetry";
 export { catalogPage, useCatalogPage } from "./model/catalog-page";
 export { default as TutorialsPage } from "./ui/TutorialsPage";
 export { default as ProgramsPage } from "./ui/ProgramsPage";
+export { default as NewProject } from "./ui/NewProject";
+export { useNewProject } from "./model/use-new-project";
+export type { NewProjectState } from "./model/use-new-project";
 export { catalogSlot } from "./ui/catalog-slot";
 export type { CatalogSlot } from "./ui/catalog-slot";

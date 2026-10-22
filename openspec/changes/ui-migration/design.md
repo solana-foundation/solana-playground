@@ -398,7 +398,8 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
   the installed `Sidebar*` parts and `lucide-react` icons, slots for the
   switcher and the footer; `AppNav` connected. New project opens the
   existing gallery (`NewWorkspaceModal`) on its default tab (the nav no
-  longer passes `initialTab`). Tutorials and Programs open
+  longer passes `initialTab`), which 5.13 restyles as New project (see
+  "New project (5.13)"). Tutorials and Programs open
   their pages; see "Tutorials and Programs pages (5.9)". Home's item shows
   Home; see "Home from an open project (5.28)". _Rejected:_
   hiding Home until 5.8; disabled items saying "soon".
@@ -1830,7 +1831,8 @@ tabs.
   the page, Home's count and the gallery share.
 - **What a page holds.** A search field (`input-group`, added to the
   registry and installed) filtering by name and description (and a
-  program's categories), and a grid of `action-card`s with `tag`s: two
+  program's categories), and a grid of `action-card`s (their facts as
+  plain text since 5.13, as the prototype writes them): two
   columns from 720 px, one below. A tutorial's card shows its thumbnail,
   level and framework, and Open calls `PgTutorial.open`. A program's card
   shows its icon, framework and categories, and Open calls `PgGithub.import`
@@ -1840,7 +1842,7 @@ tabs.
 - **On a phone** the page is the pager's work page, under the bar's title,
   one column; picking Tutorials or Programs on the menu page goes to it.
 - **The gallery stays** for New project and a finished lesson's "Browse
-  gallery"; its tabs are unchanged.
+  gallery"; 5.13 restyles it (see "New project (5.13)").
 - **Widget `widgets/catalog`**: `BaseCatalogPage` and the connected
   `TutorialsPage` and `ProgramsPage`. Telemetry prefix `catalog`:
   `catalog_shown {page, via: nav | home | link}` when a page shows,
@@ -1852,8 +1854,74 @@ tabs.
   `catalog:programs` with `report: true` and offers Retry. A cancelled import
   is no failure.
 
-Kept: `nav_item_opened`, the gallery's ids (`gallery-tab-*`,
-`[data-gallery-modal]`), the nav items' names.
+Kept: `nav_item_opened`, the gallery's `[data-gallery-modal]`, the nav
+items' names. (5.13 replaces the gallery's `gallery-tab-*` ids.)
+
+## New project (5.13)
+
+Decided with Slava on 2026-10-20 (HOO-2068). New project looks like the
+prototype's "What do you want to build?". The work is stacked on 5.9
+(HOO-2064), whose card grid it shares.
+
+- **What the dialog holds.** The lead line, then Start from scratch: a tile
+  with a plus, "Blank canvas", "Start from scratch", the framework as a
+  `segmented` with the gradient ring, the project name and `brand-button`
+  "Start →", in one row from `md` and stacked below it. Under it, Tutorials
+  and Programs as one boxed `segmented` with a count each (`…` while the
+  programs load, `?` when they failed) beside the catalog's search field,
+  one query for both lists; then the chosen list's cards, drawn as the 5.9
+  pages draw them, Retry included. The Segmented is a radio group, so the
+  gallery's `tab` roles and `gallery-tab-*` ids go; `[data-gallery-modal]`,
+  the dialog's name, "Project name" and "Start" stay.
+- **One look across the dialog** (HOO-2184): the selected chip keeps the
+  design system's gradient ring for the choice that matters, every focus
+  is the input's one ring, name and search fields are the design system's
+  `input` and `input-group`, the chips, name field and Start are 32 px on
+  one centre line, and a fade at the scroll area's foot says the list runs
+  on.
+- **As the prototype draws the cards** (Slava, 22 Oct, chosen over the
+  design system's level tag where the two disagreed): a card's eyebrow is
+  plain text,
+  level · framework or framework · categories, here and on the 5.9 pages,
+  not tag chips; New project's search field has no magnifier.
+- **Below `md` (768 px)** the dialog is a page of its own (the installed
+  `modal` does it), and every card is one target that ends in a chevron, on
+  the 5.9 pages too: the card's own Open hides there already.
+- **Where the code lives.** A widget may import neither another widget
+  nor `widgets/overlays`, which holds `ModalFrame`. So the dialog's content
+  is `widgets/catalog`'s `BaseNewProject` and `NewProject`, beside a
+  `BaseCatalogGrid`, `CatalogSearch` and the list hooks `useTutorialList` /
+  `useProgramList` that the pages and New project share; 5.9's
+  `useCardOpen` takes options: what a finished Open closes (the page by
+  default, the dialog here), and who hears a failure. A failure of
+  `onOpened` itself is reported, as the card title's rejected Open is.
+  `views/flow/gallery/NewWorkspaceModal` shrinks to the `ModalFrame` around
+  `NewProject` and holds its state (`useNewProject`) above the frame: a
+  dialog stacked on New project (an import's program picker) remounts what
+  sits under the frame, and the Open it belongs to must still close New
+  project when it finishes. It is still what
+  `PgView.setModal` opens, so `PgView.onDidOpenModal` still fires and still
+  closes the left Sheet. Start from scratch is one user action with its
+  own state, used by New project and by Home, so it becomes
+  `features/new-project` (`BaseStartFromScratch`, `StartFromScratch`). The
+  gallery's `TutorialsTab`, `ProgramsTab` and `StartFromScratch` go.
+  _Rejected:_ a widget `widgets/new-project`, which would import the
+  catalog; a second card grid inside the dialog.
+- **What closes it.** A project made by Start, a tutorial opened or a
+  program imported from a card. A failure stays: Start's under the name
+  field, a card's on the card, and a second Start is a retry. New project
+  closes only itself, by its dialog id (`PgView.closeModal(null, id)`,
+  HOO-2091's close by id): an Open that ends after the dialog was dismissed
+  closes nothing but tells its failure in a toast, and Start on Home closes
+  nothing.
+- **One run at a time**, as on the 5.9 pages, and across both lists and
+  Start here: while an Open or Start runs, every card and Start wait.
+- **Telemetry.** `features/new-project`, prefix `new_project`:
+  `new_project_started {framework}` when Start makes a project,
+  `new_project_start_failed {framework}` when it fails, which also logs
+  under `new-project:start` with `report: true`. `widgets/catalog` adds
+  `catalog_tab_switched {tab}` when the user picks the other list. A card's
+  Open keeps `catalog_item_opened` and `catalog_open_failed`.
 
 ## Risks / Trade-offs
 

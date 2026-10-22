@@ -14,7 +14,7 @@ const card = (id: string, open?: CardOpen): CatalogCard => ({
   title: id,
   description: `About ${id}`,
   media: `/${id}.png`,
-  tags: [{ label: "Beginner", variant: "success" }, { label: "Anchor" }],
+  tags: [{ label: "Beginner" }, { label: "Anchor" }],
   open,
 });
 const ready = (...cards: CatalogCard[]): CatalogList => ({
@@ -52,14 +52,16 @@ it("names its search field after the page and reports typing", () => {
   expect(onQuery).toHaveBeenCalledWith("anchor");
 });
 
-it("draws a card per item with its tags and an Open of its own", () => {
+it("draws a card per item with its tags as one line and an Open of its own", () => {
   draw({ list: ready(card("Hello Anchor"), card("Hello Solana")) });
 
   expect(screen.getAllByRole("button", { name: /^Open / })).toHaveLength(2);
   const own = within(cardOf("Hello Anchor"));
   expect(own.getByText("About Hello Anchor")).toBeTruthy();
-  expect(own.getByText("Beginner").dataset.variant).toBe("success");
-  expect(own.getByText("Anchor").dataset.variant).toBe("neutral");
+  // The prototype writes them as plain text, not chips
+  const eyebrow = own.getByText("Beginner · Anchor");
+  expect(eyebrow.dataset.slot).toBe("action-card-eyebrow");
+  expect(eyebrow.querySelector("[data-slot=tag]")).toBeNull();
 });
 
 it("opens the card's item from its Open", () => {
@@ -138,7 +140,7 @@ it("shows a card's own failure and progress inside that card only", () => {
   expect(solana.getByText("Fetching files")).toBeTruthy();
 });
 
-it("keys tags by position, so a repeated label draws twice", () => {
+it("writes a repeated label twice, as the listing has it", () => {
   const twice: CatalogCard = {
     id: "x",
     title: "x",
@@ -148,5 +150,5 @@ it("keys tags by position, so a repeated label draws twice", () => {
   };
   draw({ list: ready(twice) });
 
-  expect(within(cardOf("x")).getAllByText("DeFi")).toHaveLength(2);
+  expect(within(cardOf("x")).getByText("DeFi · DeFi")).toBeTruthy();
 });

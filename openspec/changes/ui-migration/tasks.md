@@ -126,7 +126,9 @@ regression against 5.1 has misread this rule.
 - [x] 5.12 Workspace: the Interact stage (HOO-1676; after 5.2; design.md,
       "The Interact stage (5.12)"; plan:
       [plans/5.12-interact-stage.md](plans/5.12-interact-stage.md))
-- [ ] 5.13 Projects: New project (HOO-2068; after 5.2)
+- [x] 5.13 Projects: New project (HOO-2068; after 5.2 and 5.9; design.md,
+      "New project (5.13)"; plan:
+      [plans/5.13-new-project.md](plans/5.13-new-project.md))
 - [x] 5.14 Projects: the project list in the navigation, with pins, rename,
       duplicate and zip (HOO-2069; after 5.2 and 5.6; design.md, "The
       project list (5.14)"; plan:

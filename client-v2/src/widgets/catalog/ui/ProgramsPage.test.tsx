@@ -64,7 +64,7 @@ it("lists the programs the registry returns", async () => {
     await screen.findByRole("button", { name: "Open drift-v2" })
   ).toBeTruthy();
   expect(utils.PgCommon.fetchJSON).toHaveBeenCalledWith(PROGRAMS_URL);
-  expect(screen.getByText("NFT").dataset.slot).toBe("tag");
+  expect(screen.getByText("Anchor · NFT")).toBeTruthy();
 });
 
 it("finds a program by its category", async () => {

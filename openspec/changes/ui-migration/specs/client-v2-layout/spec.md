@@ -516,6 +516,55 @@ reported.
 - **THEN** `catalog_searched` is sent once with `page` `tutorials` and
   `empty` true
 
+### Requirement: New project asks what to build
+
+New project SHALL open a dialog titled "What do you want to build?" that
+holds Start from scratch (a framework, a project name and Start), then
+Tutorials and Programs as one choice with a count each beside a search
+field, then the chosen list's cards as the pages draw them. Opening it SHALL
+close the left Sheet. Start SHALL make a project from the framework's
+starter and close the dialog; opening a card SHALL open its tutorial or
+import its program and close the dialog, and a failure SHALL stay on its
+card. On a phone the dialog SHALL be a page of its own, and every card,
+here and on the pages, SHALL be one target that ends in a chevron.
+
+#### Scenario: Starting an Anchor project from New project
+
+- **WHEN** a user opens New project from the navigation, keeps Anchor,
+  names the project and presses Start
+- **THEN** the dialog closes and the new project is the current one
+
+#### Scenario: Opening a program from New project
+
+- **WHEN** a user opens New project, picks Programs and opens a program
+- **THEN** the dialog closes and the program opens as a project
+
+#### Scenario: New project's controls line up and its list shows it scrolls
+
+- **WHEN** a user opens New project at 1280 px
+- **THEN** the framework chips, the name field and Start share one height
+  and centre line, and a fade at the dialog's foot shows the list runs on
+
+#### Scenario: New project on a phone is a page
+
+- **WHEN** a user on a 390 px wide screen opens New project
+- **THEN** the dialog fills the screen with no sideways scroll, and each
+  card ends in a chevron
+
+### Requirement: New project is measured
+
+New project SHALL send `new_project_started` with `framework` when Start
+makes a project, `new_project_start_failed` with `framework` when it fails,
+and `catalog_tab_switched` with `tab` when the user picks the other list. A
+failed Start SHALL be reported.
+
+#### Scenario: Starting a project is measured
+
+- **WHEN** a user picks Programs in New project, then Tutorials, then
+  presses Start with Native picked
+- **THEN** `catalog_tab_switched` is sent with `tab` `programs`, then
+  `tutorials`, and `new_project_started` with `framework` `Native`
+
 ### Requirement: A start with no project opens on Home
 
 A page load on `/` with no project SHALL show Home in place of the

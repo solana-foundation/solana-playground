@@ -255,15 +255,14 @@ const startTutorial = async (page: Page, from: "home" | "navigation") => {
       .getByRole("button", { name: "Open Hello Anchor" })
       .click();
   } else {
-    const gallery = page.getByText("What do you want to build?");
+    const gallery = page.getByRole("dialog", {
+      name: "What do you want to build?",
+    });
     await openGallery(page);
     await expect(gallery).toBeVisible();
 
-    await page.getByRole("tab", { name: /tutorials/i }).click();
-    const card = page
-      .getByText("Hello Anchor", { exact: true })
-      .locator("xpath=../..");
-    await card.getByRole("button", { name: "Open" }).click();
+    await gallery.getByRole("radio", { name: /^Tutorials/ }).click();
+    await gallery.getByRole("button", { name: "Open Hello Anchor" }).click();
   }
 
   // `exact` matters: the assistant panel has its own "Start" button, and

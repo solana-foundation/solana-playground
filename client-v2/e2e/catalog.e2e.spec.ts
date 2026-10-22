@@ -5,8 +5,8 @@ import {
   currentProject,
   expect,
   home,
-  json,
   projectRow,
+  stubPrograms,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -21,38 +21,6 @@ const search = (page: Page, label: "tutorials" | "programs") =>
 /** The tab the editor shows, by its text */
 const shownTab = (page: Page) =>
   page.locator('#tabs [role="tab"][aria-selected="true"]');
-
-/** One program, whose repository the GitHub stubs below serve */
-const PROGRAM = {
-  name: "e2e-counter",
-  description: "A counter for the catalog's e2e",
-  repo: "https://github.com/e2e/counter",
-  icon: "/favicon.ico",
-  framework: "Native",
-  categories: ["Examples"],
-};
-const LIB_RS = `use solana_program::{account_info::AccountInfo, entrypoint, entrypoint::ProgramResult, pubkey::Pubkey};
-
-entrypoint!(process_instruction);
-
-pub fn process_instruction(_program_id: &Pubkey, _accounts: &[AccountInfo], _data: &[u8]) -> ProgramResult {
-    Ok(())
-}
-`;
-
-/** Serves `PROGRAM` as the whole registry, and its repository from GitHub */
-const stubPrograms = async (page: Page) => {
-  await page.route("**/programs/programs.json", (r) => json(r, [PROGRAM]));
-  await page.route("https://api.github.com/repos/e2e/counter/**", (r) =>
-    json(r, {
-      truncated: false,
-      tree: [{ path: "src/lib.rs", type: "blob", sha: "1", url: "" }],
-    })
-  );
-  await page.route("https://raw.githubusercontent.com/e2e/counter/**", (r) =>
-    r.fulfill({ status: 200, contentType: "text/plain", body: LIB_RS })
-  );
-};
 
 test("client-v2-layout: Finding a tutorial by search", async ({
   seededPage: page,

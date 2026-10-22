@@ -1,8 +1,8 @@
 import { useState } from "react";
 
+import { StartFromScratch } from "@/features/new-project";
 import { createLogger } from "@/shared/lib/logger";
 import { PgTutorial } from "@/utils";
-import StartFromScratch from "@/views/flow/gallery/StartFromScratch";
 import { errorMessage } from "../lib/error-message";
 import { useProgramCount } from "../model/use-program-count";
 import { homeTelemetry } from "../model/telemetry";

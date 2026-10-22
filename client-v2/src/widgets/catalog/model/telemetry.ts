@@ -20,6 +20,8 @@ type CatalogEvents = {
    * cancelled import is not a failure.
    */
   catalog_open_failed: { page: CatalogPage };
+  /** In New project, the user picked the other list; `tab` is the one now shown */
+  catalog_tab_switched: { tab: CatalogPage };
 };
 
 export const catalogTelemetry = createTracker<CatalogEvents>();
