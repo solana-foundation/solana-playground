@@ -280,12 +280,18 @@ check's job (HOO-1859); the rest hold by review.
   utilities sit in `@layer utilities` and lose the cascade. Do not patch a
   styled component with a utility; change the styled rule, or move the
   component by the UI move rule.
-- **Build configuration is not unit-tested.** Guard the outcome instead: CI
-  greps the built CSS (or bundle) for what the configuration must produce,
-  Tailwind's `.flex` rule and the `_Pg*` class names, and the build tests
+- **Build configuration is not unit-tested; its outcome is.** CI greps the
+  built CSS (or bundle) for what the configuration must produce, Tailwind's
+  `.flex` rule and the `_Pg*` class names, and the build tests
   (`yarn test-build`) read `build/`: `scripts/in-source-tests.build-test.mjs`
-  fails when a chunk holds an in-source test title. A test that asserts the
-  shape of `craco.config.js` passes while the build is wrong.
+  fails when a chunk holds an in-source test title. A test that runs the real
+  build tool, with the production options, on representative input and
+  asserts on its output is allowed: `scripts/esbuild-minify.test.mjs` (run by
+  `yarn test-api`, no build needed) minifies two small chunks with
+  `esbuildMinifyOptions()` and runs them, guarding the cause of a crash only
+  the production minifier produced (`keepNames` helpers leaking into the
+  global scope). A test that asserts the shape of `craco.config.js` is not:
+  it passes while the build is wrong.
 
 ## Before a PR
 
