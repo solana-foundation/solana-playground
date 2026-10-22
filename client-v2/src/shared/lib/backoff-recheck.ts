@@ -78,6 +78,44 @@ export const createBackoffRecheck = ({
   };
 };
 
+/**
+ * Runs `recheck` on `createBackoffRecheck`'s schedule for as long as
+ * `onDidChange` last reported a bad state. Each recheck arms the next one
+ * itself: a store that dispatches only on a new value fires nothing when the
+ * state is still bad, so waiting for an event would stop after one recheck.
+ * An event reporting a good state stops it.
+ */
+export const recheckWhileBad = ({
+  recheck,
+  onDidChange,
+  minMs,
+  maxMs,
+  page,
+}: {
+  recheck: () => void;
+  onDidChange: (listener: (bad: boolean) => void) => { dispose(): void };
+  minMs: number;
+  maxMs: number;
+  page?: Page;
+}): { dispose(): void } => {
+  const backoff = createBackoffRecheck({
+    recheck: () => {
+      recheck();
+      backoff.arm();
+    },
+    minMs,
+    maxMs,
+    page,
+  });
+  const change = onDidChange((bad) => (bad ? backoff.arm() : backoff.reset()));
+  return {
+    dispose: () => {
+      change.dispose();
+      backoff.dispose();
+    },
+  };
+};
+
 if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeEach, afterEach } = import.meta
     .vitest;
@@ -166,6 +204,44 @@ if (import.meta.vitest) {
     it("ignores focus while nothing is bad", () => {
       win.dispatchEvent(new Event("focus"));
       expect(recheck).toHaveBeenCalledTimes(0);
+    });
+
+    describe("recheckWhileBad", () => {
+      let report: (bad: boolean) => void;
+      let whileBad: { dispose(): void };
+
+      beforeEach(() => {
+        whileBad = recheckWhileBad({
+          recheck,
+          onDidChange: (listener) => {
+            report = listener;
+            return { dispose: () => {} };
+          },
+          minMs: 5000,
+          maxMs: 20000,
+          page: { doc, win },
+        });
+      });
+
+      afterEach(() => whileBad.dispose());
+
+      it("keeps checking while a still-bad state fires no event", () => {
+        report(true);
+        vi.advanceTimersByTime(5000);
+        expect(recheck).toHaveBeenCalledTimes(1);
+        vi.advanceTimersByTime(10000);
+        expect(recheck).toHaveBeenCalledTimes(2);
+        vi.advanceTimersByTime(20000);
+        expect(recheck).toHaveBeenCalledTimes(3);
+      });
+
+      it("stops once the state is reported good", () => {
+        report(true);
+        vi.advanceTimersByTime(5000);
+        report(false);
+        vi.advanceTimersByTime(60000);
+        expect(recheck).toHaveBeenCalledTimes(1);
+      });
     });
   });
 }

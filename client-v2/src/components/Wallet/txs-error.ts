@@ -1,4 +1,7 @@
+import { createLogger } from "@/shared/lib/logger";
 import type { Cluster } from "../../utils";
+
+const log = createLogger("wallet:txs-error");
 
 /**
  * The endpoint as the message shows it: its origin only, since a provider's
@@ -8,7 +11,10 @@ const originOf = (endpoint: string) => {
   try {
     return new URL(endpoint).origin;
   } catch {
-    // Not a URL the browser could have fetched: nothing worth showing
+    // Not a URL the browser could have fetched: nothing worth showing, but a
+    // saved endpoint that is not a URL is worth knowing about. The endpoint
+    // itself stays out of the log, since it may carry an API key
+    log.warn("the RPC endpoint is not a URL");
     return null;
   }
 };

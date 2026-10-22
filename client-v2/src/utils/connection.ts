@@ -1,4 +1,4 @@
-import { createBackoffRecheck } from "@/shared/lib/backoff-recheck";
+import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
 import { PLATFORM_ENDPOINTS } from "../constants";
 import { PgCommon } from "./common";
 import { createDerivable, declareDecorator, derivable } from "./decorators";
@@ -123,22 +123,16 @@ const derive = () => ({
  * green when the cluster recovers, not only on a cluster change. Never while
  * the tab is hidden: an idle tab must not keep asking a public endpoint.
  */
-const recheckWhileStalled = (cb: () => void): Disposable => {
-  const recheck = createBackoffRecheck({
+const recheckWhileStalled = (cb: () => void): Disposable =>
+  recheckWhileBad({
     recheck: cb,
+    onDidChange: (listener) =>
+      PgConnection.onDidChangeIsClusterDown((stalled) =>
+        listener(stalled === true)
+      ),
     minMs: 5000,
     maxMs: 60000,
   });
-  const stalledChange = PgConnection.onDidChangeIsClusterDown((stalled) =>
-    stalled === true ? recheck.arm() : recheck.reset()
-  );
-  return {
-    dispose: () => {
-      stalledChange.dispose();
-      recheck.dispose();
-    },
-  };
-};
 
 @derivable(derive)
 class _PgConnection {
