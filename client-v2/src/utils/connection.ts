@@ -1,3 +1,4 @@
+import { createBackoffRecheck } from "@/shared/lib/backoff-recheck";
 import { PLATFORM_ENDPOINTS } from "../constants";
 import { PgCommon } from "./common";
 import { createDerivable, declareDecorator, derivable } from "./decorators";
@@ -44,6 +45,11 @@ const derive = () => ({
   isConnected: createDerivable({
     derive: _PgConnection.getIsConnected,
     onChange: (cb) => {
+      // Asked again when the connection is replaced, which is when Playnet's
+      // becomes ready. Kept apart from `disposables`, whose entries after the
+      // first are replaced on every cluster change.
+      const currentChange = PgConnection.onDidChangeCurrent(() => cb());
+
       const disposables: Disposable[] = [];
       disposables.push(
         PgConnection.onDidChangeCluster((cluster) => {
@@ -65,7 +71,7 @@ const derive = () => ({
           // TODO: Allow specifying whether the value should be compared with the
           // previous value and trigger the change event **only if** there is a
           // difference in comparison.
-          let isConnected = false;
+          let isConnected: boolean | null = false;
 
           // Initial run
           cb();
@@ -90,6 +96,7 @@ const derive = () => ({
 
       return {
         dispose: () => {
+          currentChange.dispose();
           disposables.forEach(({ dispose }) => dispose());
         },
       };
@@ -106,10 +113,32 @@ const derive = () => ({
   /** Whether the cluster is down. `null` indicates potential connection error. */
   isClusterDown: createDerivable({
     derive: _PgConnection.getIsClusterDown,
-    onChange: "cluster",
+    onChange: ["cluster", (cb) => recheckWhileStalled(cb)],
     infallible: true,
   }),
 });
+
+/**
+ * A stalled slot is read again until it moves, so the cluster's dot turns
+ * green when the cluster recovers, not only on a cluster change. Never while
+ * the tab is hidden: an idle tab must not keep asking a public endpoint.
+ */
+const recheckWhileStalled = (cb: () => void): Disposable => {
+  const recheck = createBackoffRecheck({
+    recheck: cb,
+    minMs: 5000,
+    maxMs: 60000,
+  });
+  const stalledChange = PgConnection.onDidChangeIsClusterDown((stalled) =>
+    stalled === true ? recheck.arm() : recheck.reset()
+  );
+  return {
+    dispose: () => {
+      stalledChange.dispose();
+      recheck.dispose();
+    },
+  };
+};
 
 @derivable(derive)
 class _PgConnection {
@@ -157,9 +186,15 @@ class _PgConnection {
   /**
    * Get whether there is a successful connection to the current endpoint.
    *
-   * @returns whether there is a successful connection
+   * Playnet's connection answers only once Playnet has started in the page
+   * (`isReady`); asking before that would read as not connected.
+   *
+   * @returns whether there is a successful connection, or `null` while the
+   * connection is not ready to be asked
    */
-  static async getIsConnected() {
+  static async getIsConnected(): Promise<boolean | null> {
+    if (!_PgConnection.isReady(PgConnection.current)) return null;
+
     try {
       await PgConnection.current.getSlot();
       return true;

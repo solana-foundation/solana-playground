@@ -131,6 +131,23 @@ export const clusterLabel = (
   prefix: "Cluster: " | "Change cluster, currently "
 ) => `${prefix}${cluster.name}${cluster.down ? ", down" : ""}`;
 
+/**
+ * Down when the cluster does not answer (`PgConnection.isConnected`, polled),
+ * or answers with a slot that does not move (`PgConnection.isClusterDown`,
+ * read again while it stays stalled). The slot check cannot say the first on
+ * its own: it is `null` when the cluster does not answer. An input that is
+ * unread (`undefined`) or cannot be asked yet (`null` from `isConnected`, a
+ * Playnet that has not started) says nothing; for a moment after a cluster
+ * switch, either may still describe the previous cluster.
+ */
+export const clusterIsDown = ({
+  isConnected,
+  slotStalled,
+}: {
+  isConnected: boolean | null | undefined;
+  slotStalled: boolean | null | undefined;
+}) => isConnected === false || slotStalled === true;
+
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
@@ -314,5 +331,23 @@ if (import.meta.vitest) {
         ).toBe("Change cluster, currently devnet, down");
       });
     });
+
+    it.each([
+      [false, null, true],
+      [false, undefined, true],
+      [true, true, true],
+      [undefined, true, true],
+      // Answers again after a failure that left the slot check at `null`
+      [true, null, false],
+      [true, false, false],
+      [undefined, undefined, false],
+      // Playnet before it has started: not asked yet
+      [null, null, false],
+    ] as const)(
+      "clusterIsDown({ isConnected: %s, slotStalled: %s }) is %s",
+      (isConnected, slotStalled, expected) => {
+        expect(clusterIsDown({ isConnected, slotStalled })).toBe(expected);
+      }
+    );
   });
 }

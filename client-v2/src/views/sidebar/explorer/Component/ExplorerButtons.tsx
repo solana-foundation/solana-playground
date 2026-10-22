@@ -68,7 +68,11 @@ const NewItemButton: FC<React.PropsWithChildren<ButtonProps>> = ({
       title={title}
       loadingText={<span className="sr-only">{title}</span>}
     >
-      <Img src={getExplorerIconsPath(imageName)} alt={title} />
+      <Img
+        src={getExplorerIconsPath(imageName)}
+        alt={title}
+        className="size-4"
+      />
     </AsyncButton>
   );
 };
@@ -80,7 +84,11 @@ const CollapseAllButton = () => (
     size="icon-sm"
     title="Collapse folders"
   >
-    <Img src={getExplorerIconsPath("collapse.png")} alt="Collapse folders" />
+    <Img
+      src={getExplorerIconsPath("collapse.png")}
+      alt="Collapse folders"
+      className="size-4"
+    />
   </Button>
 );
 
@@ -96,7 +104,7 @@ const GoBackButton = () => (
     <Img
       src={getExplorerIconsPath("back.png")}
       alt="Go back to your project"
-      style={{ height: "0.875rem", width: "0.875rem" }}
+      className="size-4"
     />
   </AsyncButton>
 );

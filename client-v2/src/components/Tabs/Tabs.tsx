@@ -71,7 +71,13 @@ const Wallet = () => {
         size="sm"
         className="rounded-r-none bg-background"
       >
-        <Img src="/icons/sidebar/wallet.png" alt="Wallet" />
+        {/* The picture is 400 px, and the design system's Button sizes only
+            an `svg` */}
+        <Img
+          src="/icons/sidebar/wallet.png"
+          alt="Wallet"
+          className="size-3.5"
+        />
         Wallet
       </Button>
     </WalletWrapper>
