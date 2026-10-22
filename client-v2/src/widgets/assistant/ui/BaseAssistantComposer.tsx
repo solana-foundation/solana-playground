@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -21,7 +21,8 @@ export interface ComposerContextChip {
 
 /**
  * Where the user writes to the assistant: what it will read, the words, the
- * model and effort, and Send, which turns to Stop while a turn runs.
+ * model and effort, and Send, which turns to Stop while a turn runs and is
+ * disabled while nothing can take the message (`sendBlocked`).
  *
  * The input stays editable during a turn; the design system's `Composer`
  * refuses to submit while `busy`, so typing ahead cannot start a second turn.
@@ -38,6 +39,7 @@ export function BaseAssistantComposer({
   model,
   effort,
   focusRequest = 0,
+  sendBlocked = null,
 }: {
   chips: ComposerContextChip[];
   value: string;
@@ -52,10 +54,20 @@ export function BaseAssistantComposer({
   effort: ReactNode;
   /** Focuses the input whenever it changes; `0` never does, so mounting does not steal focus */
   focusRequest?: number;
+  /**
+   * Why nothing can take a message now: Send's tooltip and the input's
+   * description. Send is `aria-disabled` and Enter does nothing while it is
+   * set, except during a turn, when Send is Stop. `null` leaves Send to the
+   * design system, which disables it only while the input is empty.
+   */
+  sendBlocked?: string | null;
 }) {
   // On the form: the installed `ComposerInput` keeps its own ref for sizing,
   // and a `ref` passed to it would replace that one
   const form = useRef<HTMLFormElement>(null);
+  const reasonId = useId();
+  // During a turn Send is Stop, which nothing blocks
+  const blocked = busy ? null : sendBlocked;
   useEffect(() => {
     if (focusRequest === 0) return;
     form.current?.querySelector("textarea")?.focus();
@@ -67,7 +79,9 @@ export function BaseAssistantComposer({
         ref={form}
         busy={busy}
         onStop={onStop}
-        onSubmit={() => onSend(value)}
+        onSubmit={() => {
+          if (blocked === null) onSend(value);
+        }}
       >
         {chips.length > 0 && (
           <ComposerContextList>
@@ -86,6 +100,8 @@ export function BaseAssistantComposer({
         )}
         <ComposerInput
           aria-label="Message the assistant"
+          // Where the user is typing, a screen reader hears why Enter does nothing
+          aria-describedby={blocked === null ? undefined : reasonId}
           value={value}
           placeholder={placeholder}
           onChange={(e) => onValueChange(e.target.value)}
@@ -93,10 +109,32 @@ export function BaseAssistantComposer({
         <ComposerToolbar>
           {model}
           {effort}
-          <ComposerSend>
-            <LogoMark className="size-4" />
-          </ComposerSend>
+          {blocked === null ? (
+            <ComposerSend>
+              <LogoMark className="size-4" />
+            </ComposerSend>
+          ) : (
+            <Tooltip>
+              {/* `aria-disabled`, not `disabled`: a disabled button takes no
+                  focus and fires no pointer events, so its tooltip would
+                  never open. The form's submit is refused above */}
+              <TooltipTrigger asChild>
+                <ComposerSend
+                  aria-disabled="true"
+                  className="aria-disabled:opacity-35 aria-disabled:hover:bg-primary"
+                >
+                  <LogoMark className="size-4" />
+                </ComposerSend>
+              </TooltipTrigger>
+              <TooltipContent>{blocked}</TooltipContent>
+            </Tooltip>
+          )}
         </ComposerToolbar>
+        {blocked !== null && (
+          <span id={reasonId} className="sr-only">
+            {blocked}
+          </span>
+        )}
       </Composer>
       <p className="px-1 text-center text-xs text-muted-foreground">
         Nothing is written to your project without your click

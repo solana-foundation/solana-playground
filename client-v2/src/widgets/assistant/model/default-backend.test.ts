@@ -68,15 +68,15 @@ describe("probeDefaultBackend", () => {
     expect(logs.entries).toEqual([]);
   });
 
-  it("is absent and reported when the request fails", async () => {
+  it("is unreachable and reported when the request fails", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
-    expect(await probeDefaultBackend()).toEqual({ state: "absent" });
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
     expectFailure("network");
   });
 
-  it("is absent and reported when the agent answers a 5xx", async () => {
+  it("is unreachable and reported when the agent answers a 5xx", async () => {
     answer({}, 503);
-    expect(await probeDefaultBackend()).toEqual({ state: "absent" });
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
     expectFailure("status");
   });
 
@@ -89,25 +89,25 @@ describe("probeDefaultBackend", () => {
     expect(events.events).toEqual([]);
   });
 
-  it("is absent and reported on a null body", async () => {
+  it("is unreachable and reported on a null body", async () => {
     answer(null);
-    expect(await probeDefaultBackend()).toEqual({ state: "absent" });
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
     expectFailure("body");
   });
 
-  it("is absent and reported on a body without configured", async () => {
+  it("is unreachable and reported on a body without configured", async () => {
     answer({ model: "x" });
-    expect(await probeDefaultBackend()).toEqual({ state: "absent" });
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
     expectFailure("body");
   });
 
-  it("is absent and reported when the body is not JSON", async () => {
+  it("is unreachable and reported when the body is not JSON", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
       status: 200,
       json: () => Promise.reject(new SyntaxError("Unexpected token <")),
     } as Response);
-    expect(await probeDefaultBackend()).toEqual({ state: "absent" });
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
     expectFailure("body");
   });
 
@@ -131,7 +131,7 @@ describe("probeDefaultBackend", () => {
         status: 200,
         json: async () => ({ configured: true, model: null }),
       } as Response);
-    expect(await probeDefaultBackend()).toEqual({ state: "absent" });
+    expect(await probeDefaultBackend()).toEqual({ state: "unreachable" });
     expect(await probeDefaultBackend()).toEqual({
       state: "present",
       model: null,
@@ -164,7 +164,7 @@ describe("useDefaultBackend", () => {
     );
   });
 
-  it("settles absent and logs when the probe rejects", async () => {
+  it("settles unreachable and logs when the probe rejects", async () => {
     // The probe answers its own failures; this is a throw past them, such as
     // a log provider that fails while reporting one
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
@@ -172,7 +172,9 @@ describe("useDefaultBackend", () => {
       throw new Error("telemetry is broken");
     });
     const { result } = renderHook(() => useDefaultBackend());
-    await waitFor(() => expect(result.current).toEqual({ state: "absent" }));
+    await waitFor(() =>
+      expect(result.current).toEqual({ state: "unreachable" })
+    );
     expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toEqual([
       // The probe's own report, then the hook's
       ["assistant:connect", "error", true],

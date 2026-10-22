@@ -339,6 +339,54 @@ describe("AssistantComposer, re-picking and busy", () => {
 });
 
 describe("AssistantComposer, nothing connected", () => {
+  const typeIn = async () => {
+    const user = userEvent.setup();
+    await user.type(
+      screen.getByRole("textbox", { name: "Message the assistant" }),
+      "hello"
+    );
+  };
+  /** Send refuses a message, natively or by `aria-disabled` */
+  const sendBlocked = () => {
+    const send = screen.getByRole("button", { name: "Send" });
+    return (
+      send.hasAttribute("disabled") ||
+      send.getAttribute("aria-disabled") === "true"
+    );
+  };
+
+  it("disables Send where the deployment serves no default", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "absent" };
+    render(<Harness />);
+    await typeIn();
+    expect(sendBlocked()).toBe(true);
+  });
+
+  it.each([
+    ["could not be reached, so a send asks again", { state: "unreachable" }],
+    ["is still being asked about", { state: "checking" }],
+    ["is served, for a signed-out user", { state: "present", model: null }],
+  ] as const)(
+    "keeps Send where the default %s",
+    async (_, answer: DefaultBackend) => {
+      PgAssistant.disconnect();
+      backend = answer;
+      render(<Harness />);
+      await typeIn();
+      expect(sendBlocked()).toBe(false);
+    }
+  );
+
+  it("enables Send once a backend is connected", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "absent" };
+    render(<Harness />);
+    await typeIn();
+    act(() => PgAssistant.connect(anthropic));
+    expect(sendBlocked()).toBe(false);
+  });
+
   it("says a requested prompt is waiting, in an info callout", async () => {
     PgAssistant.disconnect();
     render(<Harness />);
@@ -350,6 +398,18 @@ describe("AssistantComposer, nothing connected", () => {
     expect(hint.getAttribute("data-variant")).toBe("info");
     expect(hint.textContent).toBe(
       "Connect a backend, or sign in for the default one, to send this to the assistant. Your prompt is waiting in the composer."
+    );
+  });
+
+  it("names no sign-in in the waiting notice where there is no default", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "absent" };
+    render(<Harness />);
+
+    act(() => PgAssistant.requestPrompt("Explain this error"));
+
+    expect((await screen.findByRole("status")).textContent).toBe(
+      "Connect a model to send this to the assistant. Your prompt is waiting in the composer."
     );
   });
 });

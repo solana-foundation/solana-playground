@@ -12,6 +12,7 @@ interface Setup {
   placeholder?: string;
   chips?: Array<{ label: string; title: string }>;
   focusRequest?: number;
+  sendBlocked?: string | null;
 }
 
 /** The Base with its value held the way the connected composer holds it */
@@ -21,6 +22,7 @@ const setup = ({
   placeholder = "Ask about this project…",
   chips = [],
   focusRequest = 0,
+  sendBlocked = null,
 }: Setup = {}) => {
   const onSend = vi.fn();
   const onStop = vi.fn();
@@ -39,6 +41,7 @@ const setup = ({
           model={<span>model slot</span>}
           effort={<span>effort slot</span>}
           focusRequest={focusRequest}
+          sendBlocked={sendBlocked}
         />
       </TooltipProvider>
     );
@@ -99,6 +102,59 @@ describe("BaseAssistantComposer", () => {
     expect(screen.getByRole("button", { name: "Send" })).toHaveProperty(
       "disabled",
       true
+    );
+  });
+
+  it("disables Send with text in while nothing can take the message, and sends nothing", async () => {
+    const { onSend, user } = setup({
+      value: "Explain this build error",
+      sendBlocked: "Connect a model to send",
+    });
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(send.getAttribute("aria-disabled")).toBe("true");
+    await user.type(input(), "{Enter}");
+    await user.click(send);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("names why Send is disabled to the input, for a screen reader", () => {
+    setup({ sendBlocked: "Connect a model to send" });
+    const reason = input().getAttribute("aria-describedby");
+    expect(reason).toBeTruthy();
+    expect(document.getElementById(reason!)?.textContent).toBe(
+      "Connect a model to send"
+    );
+  });
+
+  it("shows Stop, and no blocked Send, during a turn", async () => {
+    const { onStop, user } = setup({
+      busy: true,
+      sendBlocked: "Connect a model to send",
+    });
+    await user.click(screen.getByRole("button", { name: "Stop" }));
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(input().hasAttribute("aria-describedby")).toBe(false);
+  });
+
+  it("says why Send is disabled, on focus", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const { user } = setup({
+      value: "hello",
+      sendBlocked: "Connect a model to send",
+    });
+    await user.click(input());
+    await user.tab();
+    const send = screen.getByRole("button", { name: "Send" });
+    expect(document.activeElement).toBe(send);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "Connect a model to send"
     );
   });
 

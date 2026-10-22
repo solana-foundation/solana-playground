@@ -11,6 +11,12 @@ const log = createLogger("assistant:connect");
 export type DefaultBackend =
   | { state: "checking" }
   | { state: "absent" }
+  /**
+   * The asking failed, so whether there is a default is not known: nothing
+   * offers it, and a send asks again rather than taking the deployment for
+   * one without
+   */
+  | { state: "unreachable" }
   | { state: "present"; model: string | null };
 
 /** Why a probe failed: the request, the status or the body */
@@ -33,7 +39,7 @@ export const resetDefaultBackendProbe = () => {
 const failed = (reason: ProbeFailure, error: unknown): Asked => {
   log.error(error, { report: true, context: { reason } });
   assistantTelemetry.track("assistant_default_probe_failed", { reason });
-  return { backend: { state: "absent" }, failed: true };
+  return { backend: { state: "unreachable" }, failed: true };
 };
 
 const answered = (backend: DefaultBackend): Asked => ({
@@ -121,7 +127,7 @@ export const useDefaultBackend = (): DefaultBackend => {
         // The probe answers its own failures, so this is a bug past them;
         // without an answer the default is not offered
         log.error(error, { report: true, context: { reason: "hook" } });
-        if (live) setBackend({ state: "absent" });
+        if (live) setBackend({ state: "unreachable" });
       }
     );
     return () => {

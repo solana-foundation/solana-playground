@@ -91,7 +91,9 @@ const ConnectDialog = ({ preset }: ConnectDialogProps) => {
     // scrolls away with the form. The form holds its state above the frame,
     // so a dialog stacked on this one does not reset what was typed.
     <Connect
-      defaultBackend={probed.state}
+      // A default the probe could not reach is not offered, as one the
+      // deployment does not serve
+      defaultBackend={probed.state === "unreachable" ? "absent" : probed.state}
       preset={preset}
       frame={({ action, form }) => (
         <ModalFrame

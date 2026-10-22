@@ -164,8 +164,9 @@ not the OS. `PgTheme.set` toggles `dark` on `<html>` next to `colorScheme`.
 - **Literals are guarded.** `scripts/check-colors.mjs` runs in
   `yarn run check` and in CI, and fails on any hex colour or colour function
   (`rgb()`, `hsl()`, `color(srgb ...)` and the like) outside the installed
-  token files, `shared/lib/css-color` and the third-party logo colours in
-  `languages/`. Named colours (`white`, `red`) are not caught: the words are
+  token files, `shared/lib/css-color`, the third-party logo colours in
+  `languages/`, and `app/favicon.svg`, which the browser draws outside the
+  page, where no token reaches (HOO-2241). Named colours (`white`, `red`) are not caught: the words are
   too common in code to tell from a colour without parsing CSS. Sidebar icons colour through a CSS mask over the
   text colour, which reaches the rail's raster icons too.
 
@@ -1031,8 +1032,11 @@ widgets/assistant
   composer for the picker:
   - the default backend configured on this deployment: the model button names
     it and the first send connects to it, then sends;
-  - none configured: the model button reads "Connect a model", and Send
-    opens the dialog with the typed prompt kept in the composer.
+  - none configured: the model button reads "Connect a model" and opens the
+    dialog, with the typed prompt kept in the composer; Send is disabled
+    ("Connect a model to send") and Enter sends nothing (HOO-2241). A probe
+    that failed is not "none configured": Send stays, and its send asks
+    again. A suggestion or an outside request still opens the dialog.
   The thread restored before a backend is picked stays on screen above it.
 - **The default backend needs a session.** Master's sign-in gate for the
   default backend (472ed30f6, the archived `default-backend-sign-in`) was

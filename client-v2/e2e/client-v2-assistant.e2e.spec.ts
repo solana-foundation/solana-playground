@@ -168,24 +168,38 @@ test("a command allowed on Home fails within seconds, with no terminal mounted",
 });
 
 test("client-v2-assistant: No default backend", async ({ page }) => {
-  await stubAgent(page, { configured: false, model: null }, answer);
+  let turns = 0;
+  await stubAgent(page, { configured: false, model: null }, (route) => {
+    turns += 1;
+    return answer(route);
+  });
   await openProject(page, "no-default");
   await expect(modelButton(page, "Connect a model")).toBeVisible(LONG);
 
+  // Nothing can take the message: Send stays disabled with text in, with the
+  // arrow where the model button has the hand
   await input(page).fill("Say hello");
-  await page.getByRole("button", { name: "Send", exact: true }).click();
+  const send = page.getByRole("button", { name: "Send", exact: true });
+  await expect(send).toBeDisabled();
+  await expect(send).toHaveCSS("cursor", "default");
+  await expect(modelButton(page, "Connect a model")).toHaveCSS(
+    "cursor",
+    "pointer"
+  );
 
-  // Connect a model is open, with its key field on screen
+  // Enter sends nothing; by the time Send's tooltip has opened, a dialog or a
+  // turn it had started would show
+  await input(page).press("Enter");
+  await send.focus();
+  await expect(page.getByRole("tooltip")).toHaveText("Connect a model to send");
   const dialog = page.getByRole("dialog", { name: "Connect a model" });
+  await expect(dialog).toBeHidden();
+  expect(turns).toBe(0);
+  await expect(input(page)).toHaveValue("Say hello");
+
+  // The model button is the way in: Connect a model, with its key field
+  await modelButton(page, "Connect a model").click();
   await expect(dialog.locator("#assistant-api-key")).toBeVisible(LONG);
-  // The prompt waits in the composer, but no notice says so once the dialog is
-  // what the user is looking at: the notice is for a prompt asked for from
-  // outside the panel, such as Fix with assistant
-  await expect(
-    page.getByText(
-      "Connect a backend, or sign in for the default one, to send this to the assistant. Your prompt is waiting in the composer."
-    )
-  ).toBeHidden();
   // The composer sits under the dialog; closed, it still holds the prompt
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();

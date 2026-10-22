@@ -178,8 +178,11 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
       {turn.promptWaiting && (
         <Callout variant="info" role="status">
           <CalloutDescription>
-            Connect a backend, or sign in for the default one, to send this to
-            the assistant. Your prompt is waiting in the composer.
+            {/* No default to sign in for: the model is the one way in */}
+            {shown.kind === "none"
+              ? "Connect a model to send this to the assistant."
+              : "Connect a backend, or sign in for the default one, to send this to the assistant."}{" "}
+            Your prompt is waiting in the composer.
           </CalloutDescription>
         </Callout>
       )}
@@ -206,6 +209,15 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         }
         effort={effort}
         focusRequest={turn.focusRequest}
+        // The deployment serves no default and nothing is connected: the model
+        // button reads "Connect a model" and is the way in, so Send waits for
+        // it. A default the probe could not reach keeps Send, whose send asks
+        // again
+        sendBlocked={
+          shown.kind === "none" && defaultBackend.state === "absent"
+            ? "Connect a model to send"
+            : null
+        }
       />
     </div>
   );

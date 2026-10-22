@@ -28,7 +28,8 @@ for a backend that takes one.
 ### Requirement: The composer works without a key
 
 On a deployment that serves a default backend, the composer SHALL send a
-message with no key and no connect step first.
+message with no key and no connect step first. With no default backend and
+nothing connected, Send SHALL be disabled until a model is connected.
 
 #### Scenario: The first message on the hosted default
 
@@ -37,9 +38,11 @@ message with no key and no connect step first.
 
 #### Scenario: No default backend
 
-- **WHEN** the deployment serves no default backend and a user sends a
-  message
-- **THEN** Connect a model opens and the message stays in the composer
+- **WHEN** the deployment serves no default backend, nothing is connected,
+  and a user types a message
+- **THEN** Send is disabled and its tooltip says to connect a model, Enter
+  sends nothing, and the model button "Connect a model" opens Connect a model
+  with the message still in the composer
 
 ### Requirement: Send turns to Stop
 

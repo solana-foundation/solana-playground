@@ -369,7 +369,7 @@
       "name": "logo",
       "type": "registry:ui",
       "title": "Logo",
-      "description": "The Playground mark beside its name. The mark takes the colour of its text.",
+      "description": "The Playground lockup (the triangle-and-circle mark with its name, drawn), and the ring mark beside its name. Both take the colour of their text.",
       "registryDependencies": [
         "@playground/playground-tokens"
       ],

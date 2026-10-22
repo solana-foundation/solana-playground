@@ -3,7 +3,6 @@ import styled, { css } from "styled-components";
 
 import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
-import Logomark from "./header/Logomark";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
 import { keepTab } from "./left/kept-column";
@@ -36,6 +35,7 @@ import Wallet from "@/components/Wallet";
 import { useKeybind } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { createLogger } from "@/shared/lib/logger";
+import { LogoLockup } from "@/shared/ui/logo";
 import { PgExplorer, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
@@ -278,7 +278,7 @@ const FlowFrame = () => {
                 closeSheet={closeSheet}
                 collapsed={collapsed}
                 onToggle={toggle}
-                logo={<Logomark aria-hidden="true" />}
+                logo={<LogoLockup aria-hidden="true" />}
                 projects={
                   <ProjectList
                     onPicked={catalogPage.close}

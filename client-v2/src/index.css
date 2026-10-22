@@ -87,6 +87,22 @@
 }
 
 /*
+ * A browser gives a button the arrow; the prototype gives buttons and links
+ * the hand, and a disabled one (`disabled` or `aria-disabled`) the arrow.
+ * Unlike the reset above, this reaches every button and link on the page,
+ * the styled-components ones too; anything that sets its own cursor (a
+ * utility, a styled component) still wins over this layer.
+ */
+@layer base {
+  :where(button, [role="button"], a[href]) {
+    cursor: pointer;
+  }
+  :where(button:disabled, button[aria-disabled="true"], [role="button"][aria-disabled="true"]) {
+    cursor: default;
+  }
+}
+
+/*
  * This file's own reset sits in `base`, below `utilities`. Unlayered CSS
  * beats every layer, so left outside it the `*` rule would silently cancel
  * `p-*` and `m-*` on every element, and the `a` rule the text colour and
