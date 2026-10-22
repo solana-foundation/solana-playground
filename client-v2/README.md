@@ -24,10 +24,13 @@ one worktree could package another's `.wasm`. In a linked worktree, a target
 folder that does not exist yet starts as a copy of the main checkout's (an
 APFS clone on macOS), so only a checkout with nothing to copy from runs the
 cold build, which takes about an hour; the worktree's own crates still compile
-once. A `CARGO_TARGET_DIR` set by the user turns the copy off. It then clears
-`node_modules` (all but `.cache`) and installs, because yarn 1 copies a local
-`file:` package again only when its folder is missing, and an install over an
-old tree can keep a hoisting the lockfile no longer describes.
+once. `setup` unsets a `CARGO_TARGET_DIR` set by the user, and fails when a
+cargo config's `build.target-dir` moves either target folder elsewhere. It then
+clears `node_modules` (all but `.cache`, less webpack's `default-<mode>` caches) and
+installs, because yarn 1 copies a local `file:` package again only when its
+folder is missing, and an install over an old tree can keep a hoisting the
+lockfile no longer describes. Webpack's cache goes because it identifies a
+package by name and version, which a rebuilt wasm package keeps.
 
 **Stubs, by request only.** `USE_WASM_STUBS=true` (the exact string `true`)
 writes placeholder packages with `../wasm/stub-packages.sh` instead of

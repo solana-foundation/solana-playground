@@ -86,6 +86,17 @@ const readBundle = (dir) =>
       text: fs.readFileSync(path.join(dir, file), "utf8"),
     }));
 
+// A `:with-stubs` script sets more than the variable (test-e2e's also leaves out the @real-wasm specs), so it is named first.
+const withStubsCommand = (script) => {
+  const manifest = path.join(CLIENT_DIR, "package.json");
+  const scripts = fs.existsSync(manifest)
+    ? JSON.parse(fs.readFileSync(manifest, "utf8")).scripts
+    : undefined;
+  return scripts?.[`${script}:with-stubs`]
+    ? `yarn ${script}:with-stubs`
+    : `${USE_WASM_STUBS}=true yarn ${script}`;
+};
+
 // Exit codes and messages for the scripts that serve or test the app, which must not run on stubs nobody asked for.
 const guard = (script) => {
   const stubs = stubbedPackages(readInstalledPackages());
@@ -96,11 +107,12 @@ const guard = (script) => {
     );
     return 0;
   }
+  const withStubs = withStubsCommand(script);
   console.error(
     `yarn ${script}: node_modules/@solana-playground holds stubs for ${stubs.join(
       ", "
     )}.\n` +
-      `Run \`yarn setup\` for the real packages, or \`${USE_WASM_STUBS}=true yarn ${script}\` to run on the stubs.`
+      `Run \`yarn setup\` for the real packages, or \`${withStubs}\` to run on the stubs.`
   );
   return 1;
 };
