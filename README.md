@@ -51,7 +51,7 @@ You can open an issue to request more crates.
 
 ```sh
 node --version
-# the version in client-v2/.nvmrc; `nvm use` there installs it
+# the version in client-v2/.nvmrc; `nvm install` there installs it
 
 yarn --version
 # 1.22.22
