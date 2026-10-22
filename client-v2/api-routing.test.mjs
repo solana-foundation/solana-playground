@@ -12,7 +12,7 @@
  * which is how the Better Auth subtree gets served.
  *
  * None of this shows up locally: the dev server dispatches on the first path
- * segment (`resolveApiRoute` in `craco.config.js`), so it serves a subtree the
+ * segment (`resolveApiRoute` in `scripts/api-route.mjs`), so it serves a subtree the
  * deployment cannot. Only the deployed rules can tell us the truth, so this
  * asserts against them rather than against a running server.
  */

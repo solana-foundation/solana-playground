@@ -25,8 +25,13 @@ COPY . .
 # The WASM image has to be built before, which is handled by the compose file
 COPY --from=solana-playground-wasm /wasm wasm
 
-# Only client/public: client-v2 has no submodule of its own, it mirrors this one
-RUN git submodule update --init client/public
+# A linked worktree's `.git` names a host path, and every git call below it fails, yarn's included
+RUN rm -rf .git
+
+# A full clone at the pinned commit: `update-static.mjs` dates tutorials from its history, at build and at runtime
+ENV ASSETS_DIR=/opt/assets
+RUN git clone --quiet --no-checkout "$(git config -f .gitmodules submodule.client/public.url)" "$ASSETS_DIR" \
+    && git -C "$ASSETS_DIR" checkout --quiet --detach "$(cat client-v2/scripts/assets-commit.txt)"
 
 # Install dependencies
 WORKDIR /home/${USER}/client-v2

@@ -1,3 +1,6 @@
+# Local development only, not a production layout: production would need
+# changes this project does not make.
+
 name: "solana-playground"
 
 # Built services name their image so another `COMPOSE_PROJECT_NAME` reuses it instead of rebuilding
@@ -29,8 +32,10 @@ x-client-v2: &client-v2
   depends_on:
     wasm:
       condition: service_completed_successfully
-    server:
+    server-standalone:
       condition: service_started
+    migrate:
+      condition: service_completed_successfully
   build:
     context: .
     dockerfile: ./client-v2/Dockerfile
@@ -39,10 +44,20 @@ x-client-v2: &client-v2
       HAS_SERVER: true
     additional_contexts:
       solana-playground-wasm: service:wasm
-      solana-playground-server: service:server
-  # The browser runs on the host, so it reaches the server through its published port
+  # Secrets the user supplies; `environment` wins over this file for the keys it sets
+  env_file:
+    - path: client-v2/.env
+      required: false
+    - path: client-v2/.env.local
+      required: false
   environment:
-    - REACT_APP_SERVER_URL=http://localhost:${PG_PORT:-8080}
+    DATABASE_URL: postgres://solpg:solpg@postgres:5432/solpg?sslmode=disable
+    SYNC_ENABLED: "true"
+    # The browser runs on the host, so it reaches both through their published ports
+    AUTH_BASE_URL: http://localhost:${PG_CLIENT_V2_PORT:-3000}
+    REACT_APP_SERVER_URL: http://localhost:${PG_PORT:-8080}
+    # The dev server listens on 3000 inside; hot reload must dial the published port
+    WDS_SOCKET_PORT: ${PG_CLIENT_V2_PORT:-3000}
   ports:
     - ${PG_CLIENT_V2_PORT:-3000}:3000
 
@@ -58,8 +73,6 @@ x-server: &server
   profiles:
     - dev
     - prod
-    - v2
-    - v2-prod
 
 services:
   client:
@@ -88,8 +101,15 @@ services:
   client-v2-prod:
     <<: *client-v2
     image: solana-playground-client-v2-prod
-    # The image carries prebuilt wasm/*/pkg and no Rust toolchain, which `yarn build` needs
-    command: ["sh", "-c", "yarn build:bundle && npx serve -s build"]
+    # The image carries prebuilt wasm/*/pkg and no Rust toolchain, which `yarn build` needs.
+    # `serve-build.mjs` serves `api/*.mjs` too, which `npx serve` cannot.
+    command:
+      - sh
+      - -c
+      - >-
+        yarn build:bundle &&
+        node scripts/wasm-stubs.mjs check-build build &&
+        exec node scripts/serve-build.mjs
     profiles:
       - v2-prod
 
@@ -130,6 +150,12 @@ services:
         HAS_SERVER: false
       additional_contexts:
         solana-playground-wasm: service:wasm
+    # `.dockerignore` keeps client-v2/.env out of the image
+    env_file:
+      - path: client-v2/.env
+        required: false
+      - path: client-v2/.env.local
+        required: false
     ports:
       - ${PG_CLIENT_V2_PORT:-3000}:3000
     tty: true
@@ -146,13 +172,20 @@ services:
       - PG_DB_URI=${PG_DB_URI:-mongodb://db:27017}
 
   # Server without DB. Publishes the same host port as `server`, so it is an
-  # alternative to it rather than a companion -- it must not inherit the
-  # shared profiles, or every profile builds and starts the server twice.
+  # alternative to it rather than a companion -- no profile may start both.
+  # client-v2 uses this one: MongoDB backs only the share routes, and the
+  # server connects to it lazily.
   server-standalone:
     <<: *server
     image: solana-playground-server-standalone
+    # Every setting has a default in server/src/config.rs
+    env_file:
+      - path: .env
+        required: false
     profiles:
       - server-standalone
+      - v2
+      - v2-prod
 
   wasm:
     image: solana-playground-wasm
@@ -177,8 +210,6 @@ services:
     profiles:
       - dev
       - prod
-      - v2
-      - v2-prod
 
   # Conversation and project sync, read only by `client-v2/api/*.mjs`. Separate
   # from `db` on purpose: that one belongs to the Rust build server and is
@@ -193,9 +224,31 @@ services:
       - ${PG_POSTGRES_PORT:-5432}:5432
     volumes:
       - postgres:/var/lib/postgresql/data
+    # Over TCP: on the first start, initdb's temporary server answers on the socket only
+    healthcheck:
+      test:
+        ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "solpg", "-d", "solpg"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
     profiles:
       - dev
       - prod
+      - v2
+      - v2-prod
+
+  # `yarn db-migrate` against the compose Postgres; the client-v2 services start once it exits 0
+  migrate:
+    image: amacneil/dbmate:2.35.1 # the version CI installs
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://solpg:solpg@postgres:5432/solpg?sslmode=disable
+    volumes:
+      - ./client-v2/db:/db:ro
+    command: ["--migrations-dir", "/db/migrations", "--no-dump-schema", "up"]
+    profiles:
       - v2
       - v2-prod
 
