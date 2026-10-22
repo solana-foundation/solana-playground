@@ -142,30 +142,6 @@ it("shows the message of a tutorial failure that is not an Error", async () => {
   expect(await home.findByText("quota exceeded")).toBeTruthy();
 });
 
-it.each([
-  ["Open a program", "programs"],
-  ["Follow a tutorial", "tutorials"],
-  ["All 1", "tutorials"],
-])(
-  "tells the user and reports when %s cannot open the gallery",
-  async (button, initialTab) => {
-    const failure = new Error("modal host missing");
-    utils.PgView.setModal.mockRejectedValueOnce(failure);
-    const { home } = draw();
-    await home.findByText("34 real programs");
-    fireEvent.click(home.getByRole("button", { name: button }));
-    await waitFor(() => expect(utils.PgView.setToast).toHaveBeenCalledTimes(1));
-    const [Toast, props] = utils.PgView.setToast.mock.calls[0] as [FC, unknown];
-    expect(props).toEqual({ options: { name: "home-action-failed" } });
-    expect(render(<Toast />).container.textContent).toBe(
-      "Could not open. modal host missing"
-    );
-    expect(logged.entries).toHaveLength(1);
-    expect(logged.entries[0].report).toBe(true);
-    expect(logged.entries[0].context).toEqual({ initialTab });
-  }
-);
-
 it("opens the assistant from the composer and reports it", async () => {
   const { home, onAsk } = draw();
   await home.findByText("34 real programs");

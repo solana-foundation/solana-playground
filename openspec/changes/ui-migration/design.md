@@ -394,7 +394,7 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
   Tutorials and Programs pages (5.9) exist, those items open the existing
   gallery (`NewWorkspaceModal`) on their tab, through a new `initialTab` prop,
   and New project opens it on its default tab. Home's item opens the gallery
-  only while a project is open; see "Home (5.8)". _Rejected:_ hiding Home
+  whenever Home is not on screen; see "Home (5.8)". _Rejected:_ hiding Home
   until 5.8; disabled items saying "soon".
 - **Keys.** ⌘B folds the navigation (the stock Sidebar's own key), ⌘E the
   files column, Ctrl+R the assistant, Ctrl+J the console. The files toggle
@@ -482,8 +482,12 @@ HOO-2071) build on it. One PR.
   `Button`'s `default` or `destructive`, or `brand`, the ring `BrandButton`,
   for a dialog whose submit is its view's one call to action (Connect a
   model, 5.17). A dialog that throws while rendering is
-  reported and closed with no answer. Each stacked dialog's own answer
-  (`closeModal` resolves every pending `setModal`) is HOO-2091.
+  reported (`overlays:modal-host`, `report: true`), told to the user by a
+  `modal-failed` toast ("Could not open. Try again."), and closed with no
+  answer. `setModal` never rejects, so `ModalHost`'s boundary is the one
+  place that can tell whoever opened the dialog (5.8). Each stacked
+  dialog's own answer (`closeModal` resolves every pending `setModal`) is
+  HOO-2091.
 - **Toasts keep `PgView.setToast` and `closeToast`.** The options become our
   own type, `{name, id?, duration?: number | "persistent"}`, instead of
   react-toastify's `ToastOptions`; `id` replaces `toastId`, `"persistent"`
@@ -1360,7 +1364,12 @@ project lands on Home instead of the gallery modal.
   before it decides; `init` runs its calls one after another, so the route's
   own call later is harmless. An `init` that leaves no project list is
   reported and opens the work.
-  Until the answer the shell shows neither Home nor the work. Home leaves,
+  Until the answer the shell shows a spinner in Home's place, neither Home
+  nor the work. An explorer that has not answered after 10 s
+  (`START_TIMEOUT_MS`; IndexedDB held by another tab's upgrade never does)
+  is reported and opens the work. Projects listed with none open is still
+  Home (`decideStart` asks for a current project, as leaving Home does).
+  Home leaves,
   for the rest of the page load, once a project is open: one created or
   switched to, or a tutorial route. The account's projects arriving by sync
   leave Home only when the session opens one (`importWorkspace` opens none;
@@ -1374,8 +1383,9 @@ project lands on Home instead of the gallery modal.
   route's `setMainPrimary` waits for the work to mount without polling: it
   asks a mounted `Primary` once, and otherwise waits for the mount `Primary`
   announces (`PgView.announceMainPrimaryMount`), one listener of each kind
-  per call. A getter that answers with an error rejects rather than being
-  retried. While Home shows, several routes' `setMainPrimary` calls can be
+  per call. A getter that answers with an error is reported
+  (`view:main-primary`, `report: true`) and leaves the view as it is, rather
+  than being retried; the routes do not await the call. While Home shows, several routes' `setMainPrimary` calls can be
   waiting (strict mode runs `/` twice, then a tutorial route); only the
   newest call sets the view (`mainPrimaryCalls` in `PgView`, an idea ported
   from the redesign reference), else the start route's Default could
@@ -1396,7 +1406,7 @@ project lands on Home instead of the gallery modal.
   and Home after the last project is deleted. A route hands `Primary` its
   content once, `PgRouter.navigate` to the current path does nothing, so a
   remounted `Write` stays blank. Until HOO-2118, Home in the navigation opens
-  the gallery while a project is open, as in 5.2.
+  the gallery whenever Home is not on screen, as in 5.2.
 - **From 720 px.** "Where should we begin?", the composer, three tiles and
   four tutorial cards, built from `composer`, `action-card`, `tag` and
   `button`. New project unfolds `StartFromScratch` under the tiles; Follow a
@@ -1415,15 +1425,22 @@ project lands on Home instead of the gallery modal.
   does with no project is a later stage's question. The Sheet holds 5.17's
   assistant widget, never offered Widen there (`canWiden` is false while
   Home shows: there is no panel to widen); Home's own composer stays a
-  button that opens it, not 5.17's connected composer.
+  button that opens it, not 5.17's connected composer. When the work takes
+  over with that Sheet open (sync's `adopt` can open a project mid-answer),
+  the work's assistant opens in its place (the column from 1024 px, its
+  Sheet below, the chat page on a phone), reported as
+  `layout_panel_toggled {via: auto}`; between 720 and 1023 px it would
+  otherwise be a closed Sheet, the conversation gone from view.
 - **Widget `widgets/home`**: `BaseHome` and `Home`, `BasePhoneHome` and
   `PhoneHome`. Telemetry prefix `home`: `home_shown` when Home is shown,
   `home_tile_opened {tile: new-project | tutorials | programs}`,
   `home_tutorial_opened`, `home_quickstart_opened {id: continue | new |
-  tutorial}`, `home_composer_opened`. A tutorial, a quick start or the
-  gallery that fails to open logs under `home:actions` with `report: true`
-  and tells the user (on the tutorial's card, or a `home-action-failed`
-  toast). The program count that cannot be read keeps its ellipsis and is
+  tutorial}`, `home_composer_opened`. A tutorial or a quick start that fails
+  to open logs under `home:actions` with `report: true` and tells the user
+  (on the tutorial's card, or a `home-action-failed` toast). A gallery that
+  fails to render is the overlays' to report and tell, as every dialog is
+  (`modal-failed`, 5.6): `setModal` never rejects, so Home has nothing to
+  catch. The program count that cannot be read keeps its ellipsis and is
   logged under `home:programs` only, without `report`.
 
 Kept: the gallery's `[data-gallery-modal]`, "Project name" and "Start", which

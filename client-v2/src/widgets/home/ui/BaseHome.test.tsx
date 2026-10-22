@@ -91,6 +91,13 @@ it("opens a tutorial by name", () => {
   expect(p.onTutorial).toHaveBeenCalledWith("Hello Anchor");
 });
 
+it("opens a tutorial from its card, where the Open button is hidden below md", () => {
+  const p = props();
+  const home = draw(p);
+  fireEvent.click(home.getByRole("button", { name: "Hello Anchor" }));
+  expect(p.onTutorial).toHaveBeenCalledWith("Hello Anchor");
+});
+
 it("opens the assistant from the composer", () => {
   const p = props();
   const home = draw(p);

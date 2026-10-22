@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 import type { Viewport } from "@/shared/lib/hooks/use-viewport";
+import { Spinner } from "@/shared/ui/spinner";
 import type { StartView } from "../model/start-view";
 import Home from "./Home";
 import PhoneHome from "./PhoneHome";
@@ -10,8 +11,9 @@ export type HomeSlot = (panel: { openAssistant: () => void }) => ReactNode;
 
 /**
  * Home for the layout shell, by the start view: none once the work shows,
- * an empty place while the start is pending (so the editor does not mount
- * before the explorer has answered), then the phone's or the desktop's Home.
+ * a spinner in Home's place while the start is pending (so the editor does
+ * not mount before the explorer has answered; `useStartView` gives up after
+ * `START_TIMEOUT_MS`), then the phone's or the desktop's Home.
  */
 export const homeSlot = (
   start: StartView,
@@ -19,7 +21,12 @@ export const homeSlot = (
 ): HomeSlot | undefined => {
   if (start === "work") return undefined;
   return ({ openAssistant }) => {
-    if (start === "pending") return null;
+    if (start === "pending")
+      return (
+        <div className="flex size-full items-center justify-center">
+          <Spinner className="size-6 text-muted-foreground" />
+        </div>
+      );
     if (viewport === "phone") return <PhoneHome onAsk={openAssistant} />;
     return <Home onAsk={openAssistant} />;
   };

@@ -1,5 +1,6 @@
 import { createElement, FC } from "react";
 
+import { createLogger } from "@/shared/lib/logger";
 import { PgCommon } from "./common";
 import {
   createDerivable,
@@ -89,9 +90,12 @@ const defaultState: ViewState = {
 
 const recursive = true;
 
+const log = createLogger("view:main-primary");
+
 /**
- * How many `setMainPrimary` calls were made; the last one is the newest. Only
- * "is this the newest call" matters, never the value, so tests must not reset it
+ * How many `setMainPrimary` calls were made; the last one is the newest. A
+ * reset while calls wait could let an older call match the counter and set
+ * the view too, so tests must not reset it
  */
 let mainPrimaryCalls = 0;
 
@@ -99,9 +103,8 @@ let mainPrimaryCalls = 0;
  * Resolve once a primary main view is mounted: at once when the mounted one
  * answers `get`, or when one announces its mount
  * (`PgView.announceMainPrimaryMount`). One listener of each kind per call,
- * removed when it settles, so a long wait under Home piles nothing up.
- * Rejects when the mounted view's getter answers with an error, which a
- * mount would never cure.
+ * removed when it settles. Rejects when the mounted view's getter answers
+ * with an error, which a mount would never cure.
  */
 const waitForMainPrimary = () => {
   const { send, receive } = PgCommon.getSendAndReceiveEventNames(
@@ -209,7 +212,9 @@ class _PgView {
    *
    * Waits until a main view is mounted (`waitForMainPrimary`), without
    * polling. A newer call supersedes one still waiting, whose setter then
-   * never runs. Rejects when the mounted view answers with an error.
+   * never runs. A mounted view that answers with an error is reported and
+   * left as it is: the routes call this without awaiting it, so a rejection
+   * would reach no one.
    *
    * @param setEl element to set the main view to
    */
@@ -220,7 +225,12 @@ class _PgView {
     // view could land over the tutorial opened from Home. Only the newest
     // call may set the view.
     const call = ++mainPrimaryCalls;
-    await waitForMainPrimary();
+    try {
+      await waitForMainPrimary();
+    } catch (e) {
+      log.error(e, { report: true });
+      return;
+    }
     if (call !== mainPrimaryCalls) return;
 
     PgCommon.createAndDispatchCustomEvent(

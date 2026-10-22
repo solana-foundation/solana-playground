@@ -1,5 +1,10 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import {
+  initLogger,
+  memoryProvider as memoryLogs,
+  resetLogger,
+} from "@/shared/lib/logger";
 import { PgCommon } from "./common";
 import { PgView } from "./view";
 
@@ -9,10 +14,19 @@ const names = PgCommon.getStaticStateEventNames(
 const { send, receive } = PgCommon.getSendAndReceiveEventNames(names.get);
 
 let cleanup: Array<() => void> = [];
+let logged: ReturnType<typeof memoryLogs>;
+beforeEach(() => {
+  logged = memoryLogs();
+  initLogger({ providers: [logged] });
+});
 afterEach(() => {
   cleanup.forEach((c) => c());
   cleanup = [];
+  resetLogger();
 });
+
+/** Let the pending `get` requests and their answers run */
+const settle = () => PgCommon.sleep(10);
 
 /**
  * Stands in for `Primary`: answers `get`, records what each `set` carried
@@ -37,13 +51,13 @@ const mountPrimary = () => {
   return received;
 };
 
-it("sets the view once when it mounts after several attempts", async () => {
+it("sets the view once when it mounts after the call", async () => {
   const done = PgView.setMainPrimary(() => null);
-  // Nothing mounted: about four attempts time out and keep waiting
-  await PgCommon.sleep(450);
+  // Nothing mounted: the call waits for the mount
+  await settle();
   const sets = mountPrimary();
   await done;
-  await PgCommon.sleep(150);
+  await settle();
   expect(sets).toHaveLength(1);
 });
 
@@ -59,14 +73,27 @@ it("sets only the newest view when several routes waited for a mount", async () 
   const older = () => null;
   const newer = () => null;
   const first = PgView.setMainPrimary(older);
-  await PgCommon.sleep(250);
+  await settle();
   const second = PgView.setMainPrimary(newer);
-  await PgCommon.sleep(250);
+  await settle();
   const sets = mountPrimary();
   await Promise.all([first, second]);
-  await PgCommon.sleep(150);
+  await settle();
   expect(sets).toHaveLength(1);
   expect(sets[0]).toBe(newer);
+});
+
+it("sets only the newest view when two routes ask while one is mounted", async () => {
+  const sets = mountPrimary();
+  const older = () => null;
+  const newer = () => null;
+  await Promise.all([
+    PgView.setMainPrimary(older),
+    PgView.setMainPrimary(newer),
+  ]);
+  // Each call's `get` is answered; let the later answer land here
+  await settle();
+  expect(sets).toEqual([newer]);
 });
 
 it("waits with one listener for the answer while nothing is mounted", async () => {
@@ -81,7 +108,7 @@ it("waits with one listener for the answer while nothing is mounted", async () =
   cleanup.push(() => spy.mockRestore());
 
   const done = PgView.setMainPrimary(() => null);
-  await PgCommon.sleep(1000);
+  await settle();
   const waiting = added.filter((type) => type === receive).length;
   const sets = mountPrimary();
   await done;
@@ -89,7 +116,7 @@ it("waits with one listener for the answer while nothing is mounted", async () =
   expect(sets).toHaveLength(1);
 });
 
-it("rejects with the getter's error instead of waiting for a mount", async () => {
+it("reports the getter's error and sets nothing instead of waiting for a mount", async () => {
   const onGet = async () => {
     await PgCommon.sleep(0);
     PgCommon.createAndDispatchCustomEvent(receive, { error: "broken view" });
@@ -97,7 +124,14 @@ it("rejects with the getter's error instead of waiting for a mount", async () =>
   document.addEventListener(send, onGet);
   cleanup.push(() => document.removeEventListener(send, onGet));
 
-  await expect(PgView.setMainPrimary(() => null)).rejects.toThrow(
-    "broken view"
-  );
+  const set = vi.fn();
+  document.addEventListener(names.set, set);
+  cleanup.push(() => document.removeEventListener(names.set, set));
+
+  await PgView.setMainPrimary(() => null);
+  expect(set).not.toHaveBeenCalled();
+  expect(logged.entries).toHaveLength(1);
+  expect(logged.entries[0].ns).toBe("view:main-primary");
+  expect(logged.entries[0].report).toBe(true);
+  expect(String(logged.entries[0].error)).toContain("broken view");
 });

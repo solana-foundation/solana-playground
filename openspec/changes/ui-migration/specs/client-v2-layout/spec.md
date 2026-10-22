@@ -366,7 +366,7 @@ Until the Tutorials and Programs pages exist, the navigation's items SHALL
 open the gallery: New project on its default tab, Tutorials on its
 tutorials tab (`gallery-tab-tutorials`), Programs on its programs tab
 (`gallery-tab-programs`). Home SHALL open the gallery on its default tab
-while a project is open, and leave Home in place while Home shows.
+whenever Home is not on screen, and leave Home in place while Home shows.
 
 #### Scenario: Programs from the navigation
 
@@ -385,8 +385,11 @@ row under the tiles, and the other two SHALL open the gallery on their tab.
 Below 720 px it SHALL hold quick starts for a new Anchor project and a
 beginner tutorial, a Browse row that opens the gallery, and the composer at
 its foot. Home SHALL give way to the work, for the rest of the page load,
-once a project is created or opened or a tutorial opens. The editor SHALL
-NOT mount while Home shows.
+once a project is created or opened or a tutorial opens; projects listed
+with none open SHALL still show Home. Until the projects are known Home's
+place SHALL show a spinner, and if they are not known within 10 s the page
+SHALL report it and open the work. The editor SHALL NOT mount while Home
+shows.
 
 #### Scenario: An empty install
 

@@ -67,8 +67,10 @@ const SIDEBAR_STYLE = {
 
 /**
  * Same variants as `shared/ui/sheet`'s own `data-[side=right]:w-3/4
- * data-[side=right]:sm:max-w-sm`: an unprefixed width loses to them. It keeps 21.75 rem (348 px): the panel's 368 px default is the prototype's
- * width at 1440, and the tablet is unchanged by 5.25.
+ * data-[side=right]:sm:max-w-sm`: an unprefixed width loses to them. It
+ * keeps 21.75 rem (348 px): the panel's 368 px default is the prototype's
+ * width at 1440, and the tablet is unchanged by 5.25. Home's assistant Sheet,
+ * at every width, keeps the same.
  */
 const ASSISTANT_SHEET_WIDTH =
   "data-[side=right]:w-[21.75rem] data-[side=right]:sm:max-w-[21.75rem]";
@@ -116,9 +118,9 @@ export type FilesStock =
  * What the assistant is handed to widen itself: the panel sized to
  * `PANEL_SIZES.assistant.max` and back, for the visit. Never saved: the
  * stored layout takes only the user's drags. `setWide` does nothing below
- * `LAYOUT_BREAKPOINTS.compact`, where the assistant is a Sheet or a page of
- * the phone pager, while Home shows, or while the panel is folded; a drag of the panel's edge
- * ends `wide`.
+ * `LAYOUT_BREAKPOINTS.compact` (a Sheet, or a page of the phone pager),
+ * while Home shows, or while the panel is folded; a drag of the panel's
+ * edge ends `wide`.
  */
 export interface AssistantWide {
   wide: boolean;
@@ -630,8 +632,8 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
 
   return (
     <>
-      {/* Not rendered under Home, so the stage's editor and the terminal
-        never mount there */}
+      {/* Not rendered under Home, so the stage's editor and the terminal never
+      mount there */}
       {!homeShown && (
         <OutletContent node={stageNode}>{props.stage}</OutletContent>
       )}
@@ -653,8 +655,8 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
           className="relative min-h-0 flex-1"
         >
           {/* The navigation and the files column are written against the stock
-            Sidebar's context (`useSidebar`), so the pager sits in a provider
-            too, though it never shows the Sidebar itself */}
+          Sidebar's context (`useSidebar`), so the pager sits in a provider too,
+          though it never shows the Sidebar itself */}
           <BasePhonePager
             {...props.phone}
             menu={props.nav({
@@ -720,13 +722,13 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
               </div>
             ) : (
               <>
-                {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is the
-            same, so a rotate across it does not remount the stage, Monaco or
-            the console's terminal; across `LAYOUT_BREAKPOINTS.phone` the
-            frame swaps for the pager and they survive as outlets. Below
-            `LAYOUT_BREAKPOINTS.compact` the group holds only the work
-            area, so it neither takes nor saves the horizontal layout:
-            crossing a breakpoint writes nothing. */}
+                {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is
+                the same, so a rotate across it does not remount the stage,
+                Monaco or the console's terminal; across
+                `LAYOUT_BREAKPOINTS.phone` the frame swaps for the pager and
+                they survive as outlets. Below `LAYOUT_BREAKPOINTS.compact` the
+                group holds only the work area, so it neither takes nor saves
+                the horizontal layout: crossing a breakpoint writes nothing. */}
                 <ResizablePanelGroup
                   orientation="horizontal"
                   id="layout-horizontal"
@@ -778,8 +780,9 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                       {assistant}
                     </ResizablePanel>
                   )}
-                  {/* Hidden, the assistant takes no width and its handle would double
-              the navigation's line; it stays a drag target, only unseen */}
+                  {/* Hidden, the assistant takes no width and its handle would
+                  double the navigation's line; it stays a drag target, only
+                  unseen */}
                   {wide && (
                     <ResizableHandle
                       className={
@@ -792,14 +795,14 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                     minSize={PANEL_SIZES.work.min}
                     className="flex min-w-0 flex-col"
                   >
-                    {/* Over the files column and the stage both, as the prototype
-                draws them: the column bar, then the stage tabs */}
+                    {/* Over the files column and the stage both, as the
+                    prototype draws them: the column bar, then the stage tabs */}
                     {props.stageBar}
                     {props.stageTabs}
-                    {/* Hidden, or below `LAYOUT_BREAKPOINTS.left` where the files
-                column is in the navigation's Sheet, the group holds only the
-                stage and, like the horizontal group below `compact`, neither
-                takes nor saves its layout */}
+                    {/* Hidden, or below `LAYOUT_BREAKPOINTS.left` where the
+                    files column is in the navigation's Sheet, the group holds
+                    only the stage and, like the horizontal group below
+                    `compact`, neither takes nor saves its layout */}
                     <ResizablePanelGroup
                       orientation="horizontal"
                       id="layout-work"

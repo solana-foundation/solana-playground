@@ -175,10 +175,11 @@ it("should not close on Escape while the submit runs, and answer once it settles
   expect(screen.queryByRole("dialog")).toBeNull();
 });
 
-it("should close a dialog that throws while rendering, report it and answer null", async () => {
+it("should close a dialog that throws while rendering, report it, tell the user and answer null", async () => {
   const logs = logMemory();
   initLogger({ providers: [logs] });
   vi.spyOn(console, "error").mockImplementation(() => {});
+  const toast = vi.spyOn(PgView, "setToast").mockImplementation(() => {});
   const Broken = (): never => {
     throw new Error("render failed");
   };
@@ -197,5 +198,7 @@ it("should close a dialog that throws while rendering, report it and answer null
   expect(
     logs.entries.map((entry) => ({ ns: entry.ns, report: entry.report }))
   ).toEqual([{ ns: "overlays:modal-host", report: true }]);
+  expect(toast).toHaveBeenCalledTimes(1);
+  expect(toast.mock.calls[0][1].options.name).toBe("modal-failed");
   resetLogger();
 });

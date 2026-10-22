@@ -1645,6 +1645,54 @@ describe("with Home", () => {
     ]);
   });
 
+  it("keeps the conversation on screen in the work's Sheet when the work takes over (900 px)", () => {
+    resizeTo(900);
+    const { rerender } = shell(home);
+    fireEvent.click(screen.getByRole("button", { name: "ask" }));
+    rerender(shellTree());
+    expect(screen.getByText("stage")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "Assistant" })).toBeTruthy();
+    expect(screen.getByText("assistant body")).toBeTruthy();
+    expect(toggled()).toEqual([
+      { panel: "assistant", open: true, via: "button" },
+      { panel: "assistant", open: true, via: "auto" },
+    ]);
+  });
+
+  it("opens the folded assistant column when the work takes over (1440 px)", () => {
+    localStorage.setItem(
+      LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        v: DRAGGED.v,
+        open: { nav: true, files: true, assistant: false, console: true },
+        h: DRAGGED.h,
+        w: DRAGGED.w,
+        vert: DRAGGED.vert,
+      })
+    );
+    const { rerender } = shell(home);
+    fireEvent.click(screen.getByRole("button", { name: "ask" }));
+    rerender(shellTree());
+    expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Collapse assistant" })
+    ).toBeTruthy();
+  });
+
+  it.each([
+    ["wide", 1440],
+    ["compact", 900],
+  ] as const)(
+    "opens nothing when the work takes over with Home's Sheet closed (%s)",
+    (_, at) => {
+      resizeTo(at);
+      const { rerender } = shell(home);
+      rerender(shellTree());
+      expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
+      expect(toggled()).toEqual([]);
+    }
+  );
+
   it("draws the column bar over Home, titled Home, with no files toggle", () => {
     explorer.name = "Counter";
     shell(home);
@@ -1655,6 +1703,22 @@ describe("with Home", () => {
       within(bar).queryByRole("button", { name: /project panel/ })
     ).toBeNull();
     expect(screen.queryByText("stage tabs")).toBeNull();
+  });
+
+  it("titles the bar nothing while the start is pending", () => {
+    explorer.name = "Counter";
+    shell(() => null);
+    const bar = document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    expect(within(bar).queryByText("Home")).toBeNull();
+  });
+
+  it("titles the phone's work page nothing while the start is pending", () => {
+    resizeTo(390);
+    shell(() => null);
+    const work = screen.getByRole("region", { name: "Work" });
+    expect(within(work).getByTestId("phone-bar").textContent).not.toContain(
+      "Home"
+    );
   });
 
   it.each([

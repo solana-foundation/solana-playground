@@ -143,7 +143,8 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     settle.current = window.setTimeout(() => {
       const el = ref.current;
       if (!el || el.clientWidth === 0 || touching.current) return;
-      // Under Home a scroll past the last page has no page to settle on
+      // A scroll position read before the pages re-render (Home coming or
+      // going changes their number) may index past the list
       const at = pages[Math.round(el.scrollLeft / el.clientWidth)];
       if (at && at !== page) props.onSwipe(at);
     }, SWIPE_SETTLE_MS);

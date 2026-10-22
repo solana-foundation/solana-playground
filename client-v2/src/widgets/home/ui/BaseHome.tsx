@@ -158,7 +158,15 @@ const BaseHome = ({
                 <Tag variant={levelVariant(t.level)}>{t.level}</Tag>
                 {t.framework ? <Tag>{t.framework}</Tag> : null}
               </ActionCardEyebrow>
-              <ActionCardTitle>{t.name}</ActionCardTitle>
+              <ActionCardTitle>
+                {/* The whole card opens the tutorial: below `md` the Open
+                    button is hidden, and Home shows from 720 px */}
+                <ActionCardLink asChild>
+                  <button type="button" onClick={() => onTutorial(t.name)}>
+                    {t.name}
+                  </button>
+                </ActionCardLink>
+              </ActionCardTitle>
               <ActionCardDescription>{t.description}</ActionCardDescription>
               {tutorialError?.name === t.name ? (
                 <p role="alert" className="text-caption text-error">

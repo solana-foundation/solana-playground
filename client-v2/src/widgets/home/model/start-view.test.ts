@@ -1,5 +1,5 @@
 import { act, renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   initLogger,
@@ -28,7 +28,7 @@ const router = vi.hoisted(() => ({
 }));
 vi.mock("@/utils", () => ({ PgExplorer: explorer, PgRouter: router }));
 
-import { decideStart, useStartView } from "./start-view";
+import { decideStart, START_TIMEOUT_MS, useStartView } from "./start-view";
 
 const sub =
   <T>(list: T[]) =>
@@ -68,13 +68,18 @@ const noProjects = () =>
   });
 
 it.each([
-  ["/tutorials/hello", [], "work"],
-  ["/", undefined, "pending"],
-  ["/", [], "home"],
-  ["/", ["a"], "work"],
-] as const)("decideStart(%s, %j) is %s", (path, workspaces, view) => {
-  expect(decideStart({ path, workspaces })).toBe(view);
-});
+  ["/tutorials/hello", [], undefined, "work"],
+  ["/", undefined, undefined, "pending"],
+  ["/", [], undefined, "home"],
+  ["/", ["a"], "a", "work"],
+  // Listed by sync but none opened: the work would throw in the explorer
+  ["/", ["a"], undefined, "home"],
+] as const)(
+  "decideStart(%s, %j, current %s) is %s",
+  (path, workspaces, current, view) => {
+    expect(decideStart({ path, workspaces, current })).toBe(view);
+  }
+);
 
 it("shows Home once the explorer says there is no project", async () => {
   explorer.init.mockImplementation(async () => {
@@ -158,6 +163,7 @@ it("falls back to the work and reports when the explorer lists nothing after ini
 
 it("opens on the work without an init when the projects are already known", () => {
   explorer.allWorkspaceNames = ["a"];
+  explorer.currentWorkspaceName = "a";
   const { result } = renderHook(() => useStartView());
   expect(result.current).toBe("work");
   expect(explorer.init).not.toHaveBeenCalled();
@@ -166,10 +172,67 @@ it("opens on the work without an init when the projects are already known", () =
 it("opens on the work when the explorer finds projects", async () => {
   explorer.init.mockImplementation(async () => {
     explorer.allWorkspaceNames = ["a"];
+    explorer.currentWorkspaceName = "a";
   });
   const { result } = renderHook(() => useStartView());
   await act(async () => {});
   expect(result.current).toBe("work");
+});
+
+it("stays on Home when the explorer finds projects but none is open", async () => {
+  explorer.init.mockImplementation(async () => {
+    explorer.allWorkspaceNames = ["Hello Anchor"];
+  });
+  const { result } = renderHook(() => useStartView());
+  await act(async () => {});
+  expect(result.current).toBe("home");
+  explorer.currentWorkspaceName = "Hello Anchor";
+  act(() => explorer.switched.forEach((cb) => cb()));
+  expect(result.current).toBe("work");
+});
+
+describe("when the explorer never answers", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    explorer.init.mockReturnValue(new Promise(() => {}));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("falls back to the work and reports once the wait runs out", () => {
+    const { result } = renderHook(() => useStartView());
+    act(() => vi.advanceTimersByTime(START_TIMEOUT_MS - 1));
+    expect(result.current).toBe("pending");
+    expect(logs.entries).toEqual([]);
+    act(() => vi.advanceTimersByTime(1));
+    expect(result.current).toBe("work");
+    expect(logs.entries).toHaveLength(1);
+    expect(logs.entries[0].ns).toBe("home:start");
+    expect(logs.entries[0].report).toBe(true);
+  });
+
+  it("stops waiting when unmounted", () => {
+    const { unmount } = renderHook(() => useStartView());
+    unmount();
+    act(() => vi.advanceTimersByTime(START_TIMEOUT_MS));
+    expect(logs.entries).toEqual([]);
+  });
+});
+
+it("does not fall back once the explorer has answered", async () => {
+  vi.useFakeTimers();
+  try {
+    noProjects();
+    const { result } = renderHook(() => useStartView());
+    await act(async () => {});
+    expect(result.current).toBe("home");
+    act(() => vi.advanceTimersByTime(START_TIMEOUT_MS));
+    expect(result.current).toBe("home");
+    expect(logs.entries).toEqual([]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 it("does nothing when unmounted before the explorer answers", async () => {

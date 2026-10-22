@@ -6,8 +6,8 @@ type NavEvents = {
   /**
    * A user picked one of the navigation's items; `item` is the item picked,
    * not the page it opened (until they have pages, New project opens the
-   * gallery, the same as Tutorials does; Home opens it only while a project is
-   * open, and while Home itself shows the pick is reported and nothing opens).
+   * gallery, the same as Tutorials does; Home opens it whenever Home is not
+   * on screen, and while Home shows the pick is reported and nothing opens).
    */
   nav_item_opened: { item: NavItem };
   /**

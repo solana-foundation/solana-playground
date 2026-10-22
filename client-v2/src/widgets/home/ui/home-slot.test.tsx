@@ -1,5 +1,6 @@
 import { isValidElement } from "react";
 import type { ReactElement } from "react";
+import { render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 // The connected Homes pull in the `@/utils` barrel; the slot only picks one
@@ -27,11 +28,10 @@ it.each(["wide", "compact", "phone"] as const)(
 );
 
 it.each(["wide", "compact", "phone"] as const)(
-  "keeps Home's place empty while the start is pending (%s)",
+  "holds Home's place with a spinner while the start is pending (%s)",
   (viewport) => {
-    const slot = homeSlot("pending", viewport);
-    expect(slot).toBeDefined();
-    expect(slot?.({ openAssistant })).toBeNull();
+    render(<>{homeSlot("pending", viewport)?.({ openAssistant })}</>);
+    expect(screen.getByRole("status", { name: "Loading" })).toBeTruthy();
   }
 );
 

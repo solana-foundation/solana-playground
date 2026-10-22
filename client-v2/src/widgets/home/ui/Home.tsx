@@ -9,7 +9,6 @@ import { errorMessage } from "../lib/error-message";
 import { useProgramCount } from "../model/use-program-count";
 import { homeTelemetry } from "../model/telemetry";
 import type { GalleryTile } from "../model/telemetry";
-import { toastActionFailed } from "./action-failed-toast";
 import BaseHome from "./BaseHome";
 import type { TutorialFailure } from "./BaseHome";
 
@@ -26,14 +25,12 @@ const Home = ({ onAsk }: HomeProps) => {
   );
 
   const openGallery = (initialTab: GalleryTab) => {
-    // The promise settles when the modal closes; only a failure to open it
-    // is news, for the team and for the user who clicked
-    PgView.setModal<unknown, { initialTab: GalleryTab }>(NewWorkspaceModal, {
-      initialTab,
-    }).catch((e: unknown) => {
-      log.error(e, { report: true, context: { initialTab } });
-      toastActionFailed(e);
-    });
+    // Settles when the modal closes and never rejects: a gallery that fails
+    // to render is reported and told by `ModalHost`'s boundary
+    void PgView.setModal<unknown, { initialTab: GalleryTab }>(
+      NewWorkspaceModal,
+      { initialTab }
+    );
   };
 
   const openTile = (tile: GalleryTile) => {

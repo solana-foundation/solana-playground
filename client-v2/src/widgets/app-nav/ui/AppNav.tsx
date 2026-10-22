@@ -1,4 +1,3 @@
-import { createLogger } from "@/shared/lib/logger";
 import { PgView } from "@/utils";
 import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
 import type { GalleryTab } from "@/views/flow/gallery/NewWorkspaceModal";
@@ -12,8 +11,6 @@ export type AppNavProps = Omit<BaseAppNavProps, "onOpen"> & {
   homeShown?: boolean;
 };
 
-const log = createLogger("app-nav:open");
-
 /** Which gallery tab each item opens on; Home and New project take the lead tab */
 const TAB: Record<NavItem, GalleryTab> = {
   home: "tutorials",
@@ -24,21 +21,21 @@ const TAB: Record<NavItem, GalleryTab> = {
 
 /**
  * New project, Tutorials and Programs open the gallery on their tab. Home has
- * a page now, but the navigation cannot bring it back once a project is open:
- * while Home shows (`homeShown`) its item does nothing, and while a project
- * is open it opens the gallery as the others do.
+ * a page now, but the navigation cannot bring it back once the work shows:
+ * while Home shows (`homeShown`) its item does nothing, and otherwise (a
+ * project open, the start still pending, or the work shown as a fallback) it
+ * opens the gallery as the others do.
  */
 const AppNav = ({ homeShown, ...props }: AppNavProps) => {
   const open = (item: NavItem) => {
     navTelemetry.track("nav_item_opened", { item });
     if (item === "home" && homeShown) return;
-    // The promise settles when the modal closes; only a failure to open it
-    // is news
-    PgView.setModal<unknown, { initialTab: GalleryTab }>(NewWorkspaceModal, {
-      initialTab: TAB[item],
-    }).catch((e: unknown) => {
-      log.error(e, { report: true, context: { item } });
-    });
+    // Settles when the modal closes and never rejects: a gallery that fails
+    // to render is reported and told by `ModalHost`'s boundary
+    void PgView.setModal<unknown, { initialTab: GalleryTab }>(
+      NewWorkspaceModal,
+      { initialTab: TAB[item] }
+    );
   };
 
   return <BaseAppNav {...props} onOpen={open} />;

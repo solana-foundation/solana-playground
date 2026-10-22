@@ -118,12 +118,9 @@ const PhoneHome = ({ onAsk }: PhoneHomeProps) => {
         homeTelemetry.track("home_quickstart_opened", { id: quickstart.id });
       }}
       onBrowse={() => {
-        // The promise settles when the modal closes; only a failure to open
-        // it is news, for the team and for the user who tapped
-        PgView.setModal(NewWorkspaceModal).catch((e: unknown) => {
-          log.error(e, { report: true, context: { action: "browse" } });
-          toastActionFailed(e);
-        });
+        // Settles when the modal closes and never rejects: a gallery that
+        // fails to render is reported and told by `ModalHost`'s boundary
+        void PgView.setModal(NewWorkspaceModal);
       }}
       onAsk={() => {
         homeTelemetry.track("home_composer_opened", {});

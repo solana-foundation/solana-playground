@@ -70,12 +70,13 @@ export interface LayoutShellProps {
    * Home, in place of the assistant and the work: the navigation stays, the
    * stage, its tabs and the console are not rendered, the column bar over
    * Home reads "Home" with no files toggle, and the phone's work page shows
-   * Home under the title "Home". `openAssistant`, like the bar's assistant
-   * toggle, opens the assistant as a right Sheet, at every width; it is the
-   * visit's and never saved. While
-   * Home shows, the shell's keys (Ctrl+R, Ctrl+J, ⌘E) do nothing, and nor
-   * does a deploy's opening of the console: they would change a saved layout
-   * or a stage the screen does not show.
+   * Home under the title "Home". A slot that renders nothing (the start is
+   * still pending) holds Home's place with no title. `openAssistant`, like
+   * the bar's assistant toggle, opens the assistant as a right Sheet, at
+   * every width; it is the visit's and never saved. While Home holds its
+   * place, the shell's keys (Ctrl+R, Ctrl+J, ⌘E) do nothing, and nor does a
+   * deploy's opening of the console: they would change a saved layout or a
+   * stage the screen does not show.
    */
   home?: (panel: { openAssistant: () => void }) => ReactNode;
 }
@@ -217,8 +218,15 @@ const LayoutShell = ({
   useEffect(() => {
     // Gone with Home, not closed by anyone: nothing to report
     if (homeShown) return;
+    const wasOpen = homeSheetNow.current;
     homeSheetNow.current = false;
     setHomeSheetOpen(false);
+    // A conversation open on Home stays on screen when the work takes over
+    // (sync's `adopt` can open a project mid-answer): the work's assistant
+    // opens in its place, which between 720 and 1023 px is a closed Sheet
+    if (wasOpen) setAssistant(true, "auto");
+    // `setAssistant` reads refs and the viewport of this render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [homeShown]);
 
   const showPage = (next: PhonePage, via: PageSource) => {
@@ -494,10 +502,17 @@ const LayoutShell = ({
     [closeSheetAuto]
   );
 
+  const homeContent = home?.({
+    openAssistant: () => setHomeSheet(true, "button"),
+  });
+  // Home's slot renders nothing while the start is pending; no title then,
+  // so a returning user's load does not read "Home" before the work shows
+  const homeTitle = homeContent == null ? null : "Home";
+
   // The bar names the project while the assistant is out of view, since its
   // head cannot; under Home it names Home, as the phone's bar does
   let barTitle: string | null = null;
-  if (homeShown) barTitle = "Home";
+  if (homeShown) barTitle = homeTitle;
   else if (!assistantShown) barTitle = PgExplorer.currentWorkspaceName ?? null;
 
   return (
@@ -565,7 +580,9 @@ const LayoutShell = ({
         onGo: (next) => showPage(next, "button"),
         view,
         onView: (next) => showView(next, "button"),
-        title: homeShown ? "Home" : PgExplorer.currentWorkspaceName ?? "",
+        title: homeShown
+          ? homeTitle ?? ""
+          : PgExplorer.currentWorkspaceName ?? "",
         file,
         filesOpen,
         onFilesOpenChange: (open) => setPhoneFiles(open, lastInput.current),
@@ -630,7 +647,7 @@ const LayoutShell = ({
       }
       home={
         home && {
-          content: home({ openAssistant: () => setHomeSheet(true, "button") }),
+          content: homeContent,
           assistant: {
             open: homeSheetOpen,
             // Closed by Escape or a tap on its overlay

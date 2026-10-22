@@ -96,7 +96,9 @@ name each dialog or toast declares (for example `rename-item`,
 - `overlay_modal_opened {name}`: a dialog opened.
 - `overlay_modal_submit_failed {name}`: a dialog's submit threw; the dialog
   stays open with the error.
-- `overlay_toast_shown {name}`: a toast was shown.
+- `overlay_toast_shown {name}`: a toast was shown. A dialog that throws
+  while rendering is closed with no answer and shown as the `modal-failed`
+  toast.
 
 #### Scenario: Events of a failing dialog
 

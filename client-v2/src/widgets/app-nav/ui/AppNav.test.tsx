@@ -107,16 +107,6 @@ it.each([
   }
 );
 
-it("reports a modal that fails to open", async () => {
-  const failure = new Error("no modal host");
-  view.setModal.mockRejectedValueOnce(failure);
-  draw();
-  fireEvent.click(screen.getByRole("button", { name: "Programs" }));
-  await waitFor(() => expect(logged.entries).toHaveLength(1));
-  expect(logged.entries[0].report).toBe(true);
-  expect(logged.entries[0].error).toBe(failure);
-});
-
 it("reports Home but opens no gallery while Home is the page shown", () => {
   draw(true);
   fireEvent.click(screen.getByRole("button", { name: "Home" }));

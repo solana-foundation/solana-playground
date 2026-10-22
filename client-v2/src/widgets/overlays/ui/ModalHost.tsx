@@ -13,8 +13,9 @@ const log = createLogger("overlays:modal-host");
 
 /**
  * Keeps a dialog that throws while rendering from taking the IDE with it:
- * the failure is reported and the dialog closes with no answer, so the code
- * awaiting it goes on.
+ * the failure is reported, the user is told, and the dialog closes with no
+ * answer, so the code awaiting it goes on. `PgView.setModal` never rejects,
+ * so this is the only place that can tell the user who opened it.
  */
 class ModalBoundary extends Component<
   { children: ReactNode },
@@ -31,6 +32,14 @@ class ModalBoundary extends Component<
       report: true,
       context: { componentStack: info.componentStack },
     });
+    PgView.setToast(
+      () => (
+        <span>
+          <strong>Could not open.</strong> Try again.
+        </span>
+      ),
+      { options: { name: "modal-failed" } }
+    );
     PgView.closeModal(null);
   }
 

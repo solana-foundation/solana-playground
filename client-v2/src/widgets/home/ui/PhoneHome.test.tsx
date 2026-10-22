@@ -198,21 +198,6 @@ it("toasts the message of a failure that is not an Error", async () => {
   expect(toastText()).toBe("Could not open. quota exceeded");
 });
 
-it("tells the user and reports when Browse cannot open the gallery", async () => {
-  const failure = new Error("modal host missing");
-  utils.PgView.setModal.mockRejectedValueOnce(failure);
-  const { home } = draw();
-  fireEvent.click(home.getByRole("button", { name: "Browse" }));
-  await waitFor(() => expect(utils.PgView.setToast).toHaveBeenCalledTimes(1));
-  expect(utils.PgView.setToast.mock.calls[0][1]).toEqual({
-    options: { name: "home-action-failed" },
-  });
-  expect(toastText()).toBe("Could not open. modal host missing");
-  expect(logged.entries).toHaveLength(1);
-  expect(logged.entries[0].ns).toBe("home:actions");
-  expect(logged.entries[0].report).toBe(true);
-});
-
 it("opens the gallery from Browse with no tab", () => {
   const { home } = draw();
   fireEvent.click(home.getByRole("button", { name: "Browse" }));
