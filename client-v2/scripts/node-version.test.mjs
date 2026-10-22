@@ -16,11 +16,10 @@ const read = (file) => readFileSync(path.join(CLIENT, file), "utf8");
 
 const version = read(".nvmrc").trim();
 
-// `ARG IMAGE=node:x`, with or without quotes of either kind.
-const IMAGE_ARG = /^ARG\s+IMAGE\s*=\s*(["']?)([^"'\s]+)\1\s*$/m;
-
 test("the Dockerfile base image is the .nvmrc Node", () => {
-  const image = read("Dockerfile").match(IMAGE_ARG)?.[2];
+  const value = read("Dockerfile").match(/^ARG IMAGE=(.+)$/m)?.[1];
+  // The default may be quoted; the quotes are not part of the tag.
+  const image = value?.replace(/["']/g, "");
   assert.equal(image, `node:${version}`);
 });
 
