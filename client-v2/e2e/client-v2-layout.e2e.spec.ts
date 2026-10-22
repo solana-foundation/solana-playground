@@ -491,7 +491,7 @@ test.describe("on a phone", () => {
     await expect(composer).toHaveValue("hello");
   });
 
-  test("client-v2-layout: Turning a phone across 720 px", async ({ page }) => {
+  test("client-v2-layout: Turning a phone across 768 px", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await seedWorkspace(page);
     // The editor focuses itself when it opens the first file; landing after
@@ -513,7 +513,7 @@ test.describe("on a phone", () => {
     await expect(lines).toContainText("// across");
     const before = await savedLayout(page);
 
-    for (const width of [390, 1024, 390, 1280]) {
+    for (const width of [390, 767, 768, 1024, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(lines).toContainText("// across");
     }
@@ -545,6 +545,56 @@ test.describe("on a phone", () => {
     await expect(
       network.getByRole("radio", { name: "Devnet" })
     ).toHaveAttribute("aria-checked", "true");
+  });
+
+  // The cluster row that opened them is on the menu page, inert once Work
+  // shows, so focus goes to the control that opens the navigation instead
+  test("client-v2-layout: Closing the settings on a phone", async ({
+    page,
+  }) => {
+    await seedThenNarrow(page);
+    await expect(
+      page.locator(".monaco-editor textarea.inputarea")
+    ).toBeFocused();
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    await page
+      .getByRole("region", { name: "Navigation" })
+      .getByRole("button", { name: /^Change cluster/ })
+      .click();
+    const settings = page.getByRole("region", { name: "Settings" });
+    await expect(settings).toBeVisible();
+
+    await settings.getByRole("button", { name: "Back to app" }).click();
+
+    await expect(
+      page.getByRole("button", { name: "Menu", exact: true })
+    ).toBeFocused();
+  });
+
+  // The gallery is a dialog over the menu page; the project it starts opens
+  // on Work, not behind the menu that started it
+  test("client-v2-layout: A project started from the phone's menu", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await seedWorkspace(page);
+    for (const width of [393, 740]) {
+      await page.setViewportSize({ width, height: 852 });
+      await page.getByRole("button", { name: "Menu", exact: true }).click();
+      await page
+        .getByRole("region", { name: "Navigation" })
+        .getByRole("button", { name: "New project", exact: true })
+        .click();
+      const gallery = page.getByRole("dialog");
+      await gallery.getByLabel("Project name").fill(`from-the-menu-${width}`);
+      await gallery.getByRole("button", { name: /^Start/ }).click();
+
+      await expect(gallery).toHaveCount(0);
+      // Whole, once the pager's scroll has settled on it
+      await expect(page.getByRole("region", { name: "Work" })).toBeInViewport({
+        ratio: 1,
+      });
+    }
   });
 
   test("client-v2-layout: Swiping between pages on a phone", async ({
@@ -588,80 +638,78 @@ test.describe("on a phone", () => {
   });
 });
 
-test("client-v2-layout: Settings on a narrow window", async ({ page }) => {
+// Below 768 px the phone's pager holds the navigation on its menu page, apart
+// from the files, as on the prototype's phone; there is no left Sheet whose
+// files column could take the navigation's height (HOO-2208)
+test("client-v2-layout: The navigation on a narrow window", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await seedWorkspace(page);
-  await page.setViewportSize({ width: 740, height: 812 });
   // The editor focuses itself when it opens the first file; landing after
-  // the Sheet closed, it would take focus from the settings
+  // the menu opened, it would bring Work back
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
-  const lines = linesOn(page);
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
-  await sheet.getByRole("button", { name: /^Change cluster/ }).click();
+  const navigation = page.getByRole("region", { name: "Navigation" });
+  for (const width of [720, 740, 767]) {
+    await page.setViewportSize({ width, height: 812 });
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    for (const name of ["Home", "New project", "Tutorials", "Programs"]) {
+      await expect(
+        navigation.getByRole("button", { name, exact: true })
+      ).toBeInViewport({ ratio: 1 });
+    }
+    await expect(projectRow(page, "e2e-project")).toBeInViewport();
+    await expect(
+      navigation.getByRole("button", { name: /^Get set up/ })
+    ).toBeInViewport();
+    if (width === 767) break;
+    await page.getByRole("button", { name: "Close the menu" }).click();
+  }
 
-  // The Sheet's overlay would cover the settings and trap focus away from
-  // them, so opening them closes it, as the product's doing
-  await expect(sheet).toHaveCount(0);
-  const settings = page.getByRole("region", { name: "Settings" });
-  const network = settings.getByRole("radiogroup", { name: "Network" });
-  await expect(network.getByRole("radio", { checked: true })).toBeFocused();
-  await expect
-    .poll(() =>
-      lines.find(
-        (line) =>
-          line.startsWith("[telemetry:event] layout_panel_toggled ") &&
-          line.includes("open: false")
-      )
-    )
-    .toContain("via: auto");
-
-  await network.getByRole("radio", { name: "Localnet" }).click();
+  await navigation
+    .getByRole("button", { name: "Tutorials", exact: true })
+    .click();
   await expect(
-    network.getByRole("radio", { name: "Localnet" })
-  ).toHaveAttribute("aria-checked", "true");
-  // Still open and in front: a second pick lands too
-  await network.getByRole("radio", { name: "Devnet" }).click();
-  await expect(network.getByRole("radio", { name: "Devnet" })).toHaveAttribute(
-    "aria-checked",
-    "true"
-  );
-  await settings.getByRole("button", { name: "Back to app" }).click();
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  await expect(
-    sheet.getByRole("button", { name: "Change cluster, currently devnet" })
+    page.getByRole("searchbox", { name: "Search tutorials" })
   ).toBeVisible();
 });
 
-test("a file can be renamed from the project Sheet", async ({ page }) => {
+// The key has no way of its own to leave the menu page, so it takes the one
+// the navigation handed over, and the settings show over Work
+test("⌘, opens the settings from the phone's menu page", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await seedWorkspace(page);
   await page.setViewportSize({ width: 740, height: 812 });
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
-  const file = sheet.getByText("lib.rs", { exact: true });
-  await file.click({ button: "right" });
-  const rename = page.getByText("Rename", { exact: true });
-  // Clicked once the menu's own fade has ended: while it plays, the menu is
-  // drawn on a layer of its own and sits on top whatever the stacking says,
-  // which is how a menu under the Sheet passed half the time
-  await rename.evaluate(async (el) => {
-    for (let e: Element | null = el; e; e = e.parentElement) {
-      await Promise.all(e.getAnimations().map((a) => a.finished));
-    }
-  });
-  await rename.click();
-  // Tapped: the modal Sheet, closing, keeps the modal's field from taking
-  // focus itself.
-  const input = page.locator('input[value="lib.rs"]');
-  await input.click();
-  await input.fill("renamed.rs");
-  await page.keyboard.press("Enter");
-  // The modal closed the Sheet; its tree stays in the page for the length
-  // of the Sheet's exit animation, holding the new name too, so the page
-  // has one copy of it only once the Sheet is gone
-  await expect(sheet).toHaveCount(0);
-  await expect(page.getByText("renamed.rs", { exact: true })).toBeVisible();
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await page.getByRole("button", { name: "Menu", exact: true }).click();
+  await expect(
+    page.getByRole("region", { name: "Navigation" })
+  ).toBeInViewport();
+
+  await page.keyboard.press("ControlOrMeta+Comma");
+
+  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+});
+
+// Focus goes back to a settings trigger only after the settings close; a page
+// that never opened them leaves focus where the browser puts it (HOO-2240)
+test("client-v2-layout: A fresh load focuses no settings trigger", async ({
+  page,
+}) => {
+  for (const width of [1440, 834]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/");
+    await expect(home(page)).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator("[data-settings-trigger]").first()).toBeVisible();
+    // Long enough for an effect that runs after the first render to land
+    await page.waitForTimeout(500);
+    expect(
+      await page.evaluate(
+        () => document.activeElement?.closest("[data-settings-trigger]") != null
+      )
+    ).toBe(false);
+    await expect(page.getByRole("tooltip")).toHaveCount(0);
+  }
 });
 
 test.describe("on a compact window", () => {
@@ -825,8 +873,8 @@ test.describe("the layout_viewport event", () => {
     expect(await widthClassAt(page, 800)).toContain("viewport: compact");
   });
 
-  test("reports compact at 740 px", async ({ page }) => {
-    expect(await widthClassAt(page, 740)).toContain("viewport: compact");
+  test("reports phone at 740 px", async ({ page }) => {
+    expect(await widthClassAt(page, 740)).toContain("viewport: phone");
   });
 
   test("reports phone at 390 px", async ({ page }) => {
@@ -1395,30 +1443,9 @@ test("client-v2-layout: A cluster that is down", async ({
   await expect(network.getByRole("radio", { checked: true })).toBeFocused();
 });
 
-// The Sheet's overlay would cover the settings and trap focus away from them,
-// so ⌘, closes it as the cluster row does
-test("⌘, closes the navigation's Sheet on a narrow window", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 740, height: 812 });
-  // The editor focuses itself when it opens the first file; landing after
-  // the Sheet closed, it would take focus from the settings
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
-  await expect(sheet).toBeVisible();
-
-  await page.keyboard.press("ControlOrMeta+Comma");
-
-  await expect(sheet).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
-});
-
-// The sign-in lives in the session, not in the footer, so the Sheet that
-// holds the footer on a narrow window can close and reopen around it
-test("a sign-in outlives the navigation's Sheet on a narrow window", async ({
+// The sign-in lives in the session, not in the footer, so the rail, which
+// swaps the full footer for its own, can fold and unfold around it
+test("a sign-in outlives the rail folding on a narrow window", async ({
   page,
 }) => {
   let release = () => {};
@@ -1429,23 +1456,24 @@ test("a sign-in outlives the navigation's Sheet on a narrow window", async ({
   });
   await page.setViewportSize({ width: 1280, height: 800 });
   await seedWorkspace(page);
-  await page.setViewportSize({ width: 740, height: 812 });
+  await page.setViewportSize({ width: 800, height: 812 });
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
-  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
-  const sheetAccount = sheet.getByRole("button", { name: /^Account/ });
+  const navigation = page.locator('[data-slot="sidebar"]');
+  const account = navigation.getByRole("button", { name: /^Account/ });
 
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  await sheetAccount.click();
+  await page.getByRole("button", { name: "Expand navigation" }).click();
+  await account.click();
   await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
-  // Closed by its overlay, right of the Sheet
-  await page.mouse.click(720, 400);
-  await expect(sheet).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Collapse navigation" }).click();
 
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  await expect(sheet.getByText("Signing in...")).toBeVisible();
-  await expect(sheet.getByRole("button", { name: "Cancel" })).toBeVisible();
+  await page.getByRole("button", { name: "Expand navigation" }).click();
+  await expect(navigation.getByText("Signing in...")).toBeVisible();
+  await expect(
+    navigation.getByRole("button", { name: "Cancel" })
+  ).toBeVisible();
   release();
-  await expect(sheetAccount).toContainText("Couldn't sign in");
+  await expect(account).toContainText("Couldn't sign in");
 });
 
 // The scenarios of "Settings are a page of their own" and "The settings page

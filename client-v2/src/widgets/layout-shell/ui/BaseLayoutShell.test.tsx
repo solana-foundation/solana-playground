@@ -122,10 +122,6 @@ const handles = () => {
 
 /** The fields a test sets itself; the rest are the defaults below */
 interface PropsChoice {
-  /** Below the stock Sidebar's line; the viewport's phone by default */
-  isMobile?: boolean;
-  closeLeftSheetOn?: BaseLayoutShellProps["closeLeftSheetOn"];
-  toggleLeftSheetOn?: BaseLayoutShellProps["toggleLeftSheetOn"];
   nav?: BaseLayoutShellProps["nav"];
   files?: BaseLayoutShellProps["files"];
   navOpen?: boolean;
@@ -147,22 +143,12 @@ interface PropsChoice {
   cover?: ReactNode;
 }
 
-/**
- * "sheet" is a window from 720 to 767 px: the stock Sidebar holds the
- * navigation as a Sheet, but the shell still lays it out as a frame
- * (`compact`). A real `phone` is the pager.
- */
-type TestViewport = BaseLayoutShellProps["viewport"] | "sheet";
-
 const props = (
-  testViewport: TestViewport,
+  viewport: BaseLayoutShellProps["viewport"],
   choice: PropsChoice = {}
 ): BaseLayoutShellProps => {
-  const viewport = testViewport === "sheet" ? "compact" : testViewport;
   return {
     viewport,
-    isMobile:
-      choice.isMobile ?? (testViewport === "sheet" || viewport === "phone"),
     navOpen: choice.navOpen ?? true,
     onNavOpenChange: vi.fn(),
     // One flag that follows the viewport: the panel on wide, the Sheet below
@@ -189,11 +175,6 @@ const props = (
     onVerticalLayout: vi.fn(),
     nav: choice.nav ?? (() => <nav>nav slot</nav>),
     files: choice.files ?? (() => <aside>files slot</aside>),
-    onLeftSheetChange: vi.fn(),
-    closeLeftSheetOn:
-      choice.closeLeftSheetOn ?? (() => ({ dispose: () => {} })),
-    toggleLeftSheetOn:
-      choice.toggleLeftSheetOn ?? (() => ({ dispose: () => {} })),
     stageBar: <header>stage bar</header>,
     stageTabs: <nav>stage tabs</nav>,
     stage: choice.stage ?? <main>stage slot</main>,
@@ -230,25 +211,6 @@ const props = (
   };
 };
 
-/** A window narrower than the stock Sidebar's 768 px, for the test's length */
-const narrowWindow = () => {
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: true,
-    media: query,
-    onchange: null,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    addListener: () => {},
-    removeListener: () => {},
-    dispatchEvent: () => false,
-  }));
-  const innerWidth = window.innerWidth;
-  window.innerWidth = 500;
-  return () => {
-    window.innerWidth = innerWidth;
-  };
-};
-
 it("should lay out the navigation, the assistant, then the work area on a wide screen", () => {
   render(<BaseLayoutShell {...props("wide")} />);
   const order = [
@@ -272,36 +234,12 @@ it("should lay out the navigation, the assistant, then the work area on a wide s
   expect(screen.queryByRole("button", { name: "Expand assistant" })).toBeNull();
 });
 
-it("should put the files column in the navigation's Sheet below 768 px", () => {
-  const restore = narrowWindow();
-  try {
-    render(<BaseLayoutShell {...props("sheet")} />);
-    // Not in the work group, and the Sheet is closed
-    expect(screen.queryByText("files slot")).toBeNull();
-    expect(screen.getByText("stage slot")).toBeTruthy();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Expand project panel" })
-    );
-    const sheet = document.querySelector(
-      '[data-slot="sidebar"][data-mobile="true"]'
-    )!;
-    const nav = within(sheet as HTMLElement).getByText("nav slot");
-    const files = within(sheet as HTMLElement).getByText("files slot");
-    expect(
-      nav.compareDocumentPosition(files) & Node.DOCUMENT_POSITION_FOLLOWING
-    ).toBeTruthy();
-  } finally {
-    restore();
-  }
-});
-
 it("should hand the navigation the stock toggle and whether it is a rail", () => {
   const nav = vi.fn(() => null);
   const shell = props("wide", { navOpen: false });
   render(
     <BaseLayoutShell
       viewport={shell.viewport}
-      isMobile={shell.isMobile}
       navOpen={shell.navOpen}
       onNavOpenChange={shell.onNavOpenChange}
       assistantState={shell.assistantState}
@@ -312,9 +250,6 @@ it("should hand the navigation the stock toggle and whether it is a rail", () =>
       onVerticalLayout={shell.onVerticalLayout}
       nav={nav}
       files={shell.files}
-      onLeftSheetChange={shell.onLeftSheetChange}
-      closeLeftSheetOn={shell.closeLeftSheetOn}
-      toggleLeftSheetOn={shell.toggleLeftSheetOn}
       stageBar={shell.stageBar}
       stageTabs={shell.stageTabs}
       stage={shell.stage}
@@ -330,44 +265,15 @@ it("should hand the navigation the stock toggle and whether it is a rail", () =>
   });
 });
 
-it("should hand the navigation the Sheet's toggle, never a rail, below 768 px", () => {
-  const restore = narrowWindow();
-  try {
-    const nav = vi.fn(() => null);
-    render(<BaseLayoutShell {...props("sheet", { nav })} />);
-    // The Sheet renders its content once it is open
-    fireEvent.click(
-      screen.getByRole("button", { name: "Expand project panel" })
-    );
-    expect(nav).toHaveBeenLastCalledWith({
-      collapsed: false,
-      isMobile: true,
-      toggle: expect.any(Function),
-    });
-  } finally {
-    restore();
-  }
-});
-
-it("should hand the files column no toggle in the work group, and the stock one in the Sheet", () => {
+it("should hand the files column no toggle in the work group, from 768 px up", () => {
   const files = vi.fn(() => null);
-  const wide = render(<BaseLayoutShell {...props("wide", { files })} />);
+  const { rerender } = render(
+    <BaseLayoutShell {...props("wide", { files })} />
+  );
   expect(files).toHaveBeenLastCalledWith({ isMobile: false });
-  wide.unmount();
-  const restore = narrowWindow();
-  try {
-    files.mockClear();
-    render(<BaseLayoutShell {...props("sheet", { files })} />);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Expand project panel" })
-    );
-    expect(files).toHaveBeenLastCalledWith({
-      isMobile: true,
-      toggle: expect.any(Function),
-    });
-  } finally {
-    restore();
-  }
+  files.mockClear();
+  rerender(<BaseLayoutShell {...props("compact", { files })} />);
+  expect(files).toHaveBeenLastCalledWith({ isMobile: false });
 });
 
 it("should keep a folded console mounted", () => {
@@ -386,11 +292,10 @@ it("should put the assistant in a closed Sheet below 1024 px, opened from the st
 });
 
 it("should show the assistant Sheet when it is open", () => {
-  const open = props("sheet");
+  const open = props("compact");
   render(
     <BaseLayoutShell
       viewport={open.viewport}
-      isMobile={open.isMobile}
       navOpen={open.navOpen}
       onNavOpenChange={open.onNavOpenChange}
       assistantState={{
@@ -404,9 +309,6 @@ it("should show the assistant Sheet when it is open", () => {
       onVerticalLayout={open.onVerticalLayout}
       nav={open.nav}
       files={open.files}
-      onLeftSheetChange={open.onLeftSheetChange}
-      closeLeftSheetOn={open.closeLeftSheetOn}
-      toggleLeftSheetOn={open.toggleLeftSheetOn}
       stageBar={open.stageBar}
       stageTabs={open.stageTabs}
       stage={open.stage}
@@ -523,7 +425,7 @@ it("should mark the sidebar expanded or collapsed from navOpen", () => {
 });
 
 it("should report the Sheet closing", () => {
-  const shell = props("sheet", { assistantSheetOpen: true });
+  const shell = props("compact", { assistantSheetOpen: true });
   render(<BaseLayoutShell {...shell} />);
   const sheet = document.querySelector('[data-slot="sheet-content"]')!;
   fireEvent.keyDown(sheet, { key: "Escape" });
@@ -671,38 +573,6 @@ it("should save a vertical layout the user dragged", () => {
   });
 });
 
-it("should close the project panel Sheet when it is asked to", () => {
-  const restore = narrowWindow();
-  try {
-    let close = () => false;
-    const dispose = vi.fn();
-    const shell = props("sheet", {
-      closeLeftSheetOn: (fn) => {
-        close = fn;
-        return { dispose };
-      },
-    });
-    render(<BaseLayoutShell {...shell} />);
-    const sheet = () =>
-      document.querySelector('[data-slot="sidebar"][data-mobile="true"]');
-    // Nothing to close yet
-    expect(close()).toBe(false);
-    fireEvent.click(
-      screen.getByRole("button", { name: "Expand project panel" })
-    );
-    expect(sheet()).not.toBeNull();
-    let closed = false;
-    act(() => {
-      closed = close();
-    });
-    expect(closed).toBe(true);
-    expect(sheet()).toBeNull();
-    expect(shell.onLeftSheetChange).toHaveBeenLastCalledWith(false);
-  } finally {
-    restore();
-  }
-});
-
 it("should not throw or report when a panel cannot yet say whether it is folded", () => {
   const logs = logMemory();
   initLogger({ providers: [logs] });
@@ -820,24 +690,6 @@ it("should report a drag that folds the files column", () => {
   expect(wide.onWorkLayout).toHaveBeenCalledTimes(1);
 });
 
-it("should neither take nor save a work layout below 768 px", () => {
-  // No `matchMedia` for the narrow window: the group follows the prop
-  render(
-    <BaseLayoutShell {...props("sheet", { work: { files: 25, center: 75 } })} />
-  );
-  const group = panelSpies.groups["layout-work"];
-  expect(group.defaultLayout).toBeUndefined();
-  expect(group.onLayoutChanged).toBeUndefined();
-  expect(screen.queryByText("files slot")).toBeNull();
-});
-
-it("should mount the files column in the work group on the render that says the window is wide", () => {
-  const { rerender } = render(<BaseLayoutShell {...props("sheet")} />);
-  expect(screen.queryByText("files slot")).toBeNull();
-  rerender(<BaseLayoutShell {...props("compact")} />);
-  expect(screen.getByText("files slot")).toBeTruthy();
-});
-
 it("should size the work area to hold an open files column beside the stage", () => {
   render(<BaseLayoutShell {...props("wide")} />);
   // What each panel is given is what the constants say
@@ -893,19 +745,6 @@ it("should settle the files column on its own, whichever group settled first", (
   expect(files.resize).toHaveBeenCalledWith(PANEL_SIZES.files.default);
 });
 
-it("should put back the files column again after a trip through the navigation's Sheet", () => {
-  // Below 768 px the column unmounts and mounts again, and settles again
-  const { files } = handles();
-  const { rerender } = render(<BaseLayoutShell {...props("compact")} />);
-  settled("layout-work", { files: 20, center: 80 }, false);
-  rerender(<BaseLayoutShell {...props("compact", { isMobile: true })} />);
-  rerender(<BaseLayoutShell {...props("compact")} />);
-  files.isCollapsed.mockReturnValue(true);
-  files.resize.mockClear();
-  settled("layout-work", { files: 2, center: 98 }, false);
-  expect(files.resize).toHaveBeenCalledWith(PANEL_SIZES.files.default);
-});
-
 it("should open a reopened files column at the width it was dragged to", () => {
   const { rerender } = render(<BaseLayoutShell {...props("wide")} />);
   // Dragged to 300 px while open
@@ -915,39 +754,6 @@ it("should open a reopened files column at the width it was dragged to", () => {
   expect(
     (panelSpies.panels["files"] as { defaultSize?: unknown }).defaultSize
   ).toBe(300);
-});
-
-it("should neither resubscribe nor need a stable function when the caller passes new ones each render", () => {
-  const restore = narrowWindow();
-  try {
-    const subscribed = vi.fn();
-    const disposed = vi.fn();
-    const registrar = () => {
-      subscribed();
-      return { dispose: disposed };
-    };
-    const { rerender } = render(
-      <BaseLayoutShell
-        {...props("sheet", {
-          closeLeftSheetOn: registrar,
-          toggleLeftSheetOn: registrar,
-        })}
-      />
-    );
-    expect(subscribed).toHaveBeenCalledTimes(2);
-    rerender(
-      <BaseLayoutShell
-        {...props("sheet", {
-          closeLeftSheetOn: () => registrar(),
-          toggleLeftSheetOn: () => registrar(),
-        })}
-      />
-    );
-    expect(subscribed).toHaveBeenCalledTimes(2);
-    expect(disposed).not.toHaveBeenCalled();
-  } finally {
-    restore();
-  }
 });
 
 it("keeps the stage and the console mounted, and the stage node the same, across widths", () => {
@@ -968,25 +774,21 @@ it("keeps the stage and the console mounted, and the stage node the same, across
   };
   const stage = <Probe onMount={stageMounts} label="the stage" />;
   const consoleSlot = <Probe onMount={consoleMounts} label="the console" />;
-  const choice = (
-    viewport: BaseLayoutShellProps["viewport"],
-    isMobile: boolean
-  ) => props(viewport, { isMobile, stage, console: consoleSlot });
-  const { rerender } = render(<BaseLayoutShell {...choice("wide", false)} />);
+  const choice = (viewport: BaseLayoutShellProps["viewport"]) =>
+    props(viewport, { stage, console: consoleSlot });
+  const { rerender } = render(<BaseLayoutShell {...choice("wide")} />);
   const stageBefore = screen.getByText("the stage");
   const consoleBefore = screen.getByText("the console");
   const steps = [
-    ["compact", false],
-    ["compact", true],
-    ["wide", true],
-    ["wide", false],
-    ["phone", true],
-    ["compact", true],
-    ["phone", true],
-    ["wide", false],
+    "compact",
+    "wide",
+    "phone",
+    "compact",
+    "phone",
+    "wide",
   ] as const;
-  for (const [viewport, isMobile] of steps) {
-    rerender(<BaseLayoutShell {...choice(viewport, isMobile)} />);
+  for (const viewport of steps) {
+    rerender(<BaseLayoutShell {...choice(viewport)} />);
     expect(screen.getByText("the stage")).toBe(stageBefore);
     expect(screen.getByText("the console")).toBe(consoleBefore);
   }
@@ -1221,7 +1023,7 @@ describe("with Home", () => {
     return <div data-testid={testId} />;
   };
   const withHome = (
-    testViewport: TestViewport,
+    testViewport: BaseLayoutShellProps["viewport"],
     choice: { homeAssistantOpen?: boolean } = {}
   ) => {
     const mounts = { stage: vi.fn(), console: vi.fn() };
@@ -1269,7 +1071,7 @@ describe("with Home", () => {
 
   describe("going to Home and back", () => {
     const shell = (
-      viewport: TestViewport,
+      viewport: BaseLayoutShellProps["viewport"],
       mounts: { stage: () => void; console: () => void },
       choice: { home?: ReactNode; keepWork?: boolean }
     ) => (
@@ -1282,7 +1084,10 @@ describe("with Home", () => {
         })}
       />
     );
-    const there = (viewport: TestViewport, keepWork: boolean) => {
+    const there = (
+      viewport: BaseLayoutShellProps["viewport"],
+      keepWork: boolean
+    ) => {
       const mounts = { stage: vi.fn(), console: vi.fn() };
       const rendered = render(shell(viewport, mounts, {}));
       rendered.rerender(
@@ -1361,7 +1166,7 @@ describe("with Home", () => {
     ).toBeTruthy();
   });
 
-  it("shows Home under the column bar between 720 and 1023 px, with no assistant Sheet of the work's", () => {
+  it("shows Home under the column bar between 768 and 1023 px, with no assistant Sheet of the work's", () => {
     const { mounts } = withHome("compact");
     expect(screen.getByText("home slot")).toBeTruthy();
     expect(screen.getByText("nav slot")).toBeTruthy();
@@ -1370,23 +1175,6 @@ describe("with Home", () => {
     expectNoWork(mounts);
     expect(document.getElementById("layout-horizontal")).toBeNull();
     expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
-  });
-
-  it("keeps the project panel's opener between 720 and 767 px, its Sheet holding no files", () => {
-    const restore = narrowWindow();
-    try {
-      withHome("sheet");
-      fireEvent.click(
-        screen.getByRole("button", { name: "Expand project panel" })
-      );
-      const sheet = document.querySelector(
-        '[data-slot="sidebar"][data-mobile="true"]'
-      )!;
-      expect(within(sheet as HTMLElement).getByText("nav slot")).toBeTruthy();
-      expect(screen.queryByText("files slot")).toBeNull();
-    } finally {
-      restore();
-    }
   });
 
   it.each(["wide", "compact", "phone"] as const)(

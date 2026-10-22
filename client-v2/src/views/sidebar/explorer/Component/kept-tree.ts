@@ -4,7 +4,7 @@ import { PgView } from "../../../../utils";
  * Which folders were open when the tree last unmounted, and in which
  * project. Whether a folder is open lives only in the DOM (`PgExplorer`
  * toggles a class), so a tree that unmounts -- the files column hidden by ⌘E
- * or the stage bar, or the navigation's Sheet closed below 768 px -- comes
+ * or the stage bar, or the phone's Files Sheet closed -- comes
  * back with every folder shut unless this puts them back (design.md, "Frame
  * chrome (5.25)"). The project is `PgExplorer.currentWorkspaceId`; the
  * memory is overwritten by the next unmount, so a switch away and back still

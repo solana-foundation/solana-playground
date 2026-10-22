@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useTheme } from "styled-components";
 
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
-import { useIsLeftSheet, useViewport } from "@/shared/lib/hooks/use-viewport";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
 import { PgFlow } from "@/views/flow/state/stage";
 import type { StageStatus } from "@/views/flow/state/stage";
@@ -26,14 +26,13 @@ import type { AssistantWide } from "./BaseLayoutShell";
 
 export interface LayoutShellProps {
   /**
-   * The navigation. `collapsed` is never true in the Sheet below
-   * `LAYOUT_BREAKPOINTS.left`, which has no rail; `toggle` folds the rail
-   * from there up and opens or closes the Sheet below it. `closeSheet` is for
-   * a control in the navigation that opens something the Sheet's modal
-   * overlay would cover (settings, from the session footer): it closes the
-   * Sheet as the product's doing, `via: "auto"`; on a phone, where the
-   * navigation is a page, it brings Work into view; otherwise it closes the
-   * Sheet if one is open.
+   * The navigation. `collapsed` is never true on a phone's menu page, which
+   * has no rail; `toggle` folds the rail from `LAYOUT_BREAKPOINTS.phone` up.
+   * `closeSheet` is for a control in the navigation that opens something
+   * over it (settings, from the session footer): on a phone, where the
+   * navigation is a page, it brings Work into view; from
+   * `LAYOUT_BREAKPOINTS.phone` up, where the navigation is a column, it does
+   * nothing.
    */
   nav: (panel: {
     collapsed: boolean;
@@ -46,8 +45,7 @@ export interface LayoutShellProps {
    */
   stageTabs: ReactNode;
   /**
-   * The files column. `collapsed` is never true in the Sheet below
-   * `LAYOUT_BREAKPOINTS.left`, where it sits open under the navigation.
+   * The files column. `collapsed` is never true in the phone's Files Sheet.
    */
   files: (panel: { collapsed: boolean; toggle: () => void }) => ReactNode;
   /**
@@ -121,7 +119,6 @@ const LayoutShell = ({
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
-  const isMobile = useIsLeftSheet();
   const theme = useTheme();
   const { state, setOpen, setHorizontal, setWork, setVertical } =
     useLayoutState();
@@ -167,17 +164,14 @@ const LayoutShell = ({
   // The stock Sidebar handles Cmd+B itself and reports only the new state, so
   // a click on one of our buttons marks itself here first
   const navVia = useRef<ToggleSource | null>(null);
-  // What toggles the navigation's Sheet below `LAYOUT_BREAKPOINTS.left`, from
-  // `toggleLeftSheetOn`; it says whether there was a Sheet to toggle
-  const sheetToggle = useRef<(() => boolean) | null>(null);
   // What a change nobody marked came from: a Sheet closed by Escape is a key,
   // one closed by a tap on its overlay a button
   const lastInput = useRef<ToggleSource>("key");
 
   useEffect(() => {
-    // A mark outlives its input only when the Sheet it toggled ended the tick
-    // as it began (two toggles in one tick) and so reported nothing; the next
-    // input drops it, in the capture phase, before its own handler marks
+    // Each input says what it was, for a Sheet that reports a change nobody
+    // marked (the assistant's, the phone's Files), and drops any mark a
+    // toggle left, in the capture phase, before its own handler marks
     const onPointer = () => {
       lastInput.current = "button";
       navVia.current = null;
@@ -240,7 +234,8 @@ const LayoutShell = ({
     setHomeSheetOpen(false);
     // A conversation open on Home stays on screen when the work takes over
     // (sync's `adopt` can open a project mid-answer): the work's assistant
-    // opens in its place, which between 720 and 1023 px is a closed Sheet
+    // opens in its place, which between `LAYOUT_BREAKPOINTS.phone` and
+    // `.compact` is a closed Sheet
     if (wasOpen) setAssistant(true, "auto");
     // `setAssistant` reads refs and the viewport of this render
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -371,11 +366,7 @@ const LayoutShell = ({
   // meaning in one, so it still folds the column. On Windows and Linux Ctrl is
   // the primary modifier and means nothing in a field, so the key works
   // everywhere there, Monaco included.
-  // On a phone the key toggles the pager's own Files Sheet. Below
-  // `LAYOUT_BREAKPOINTS.left` the files column is in the navigation's
-  // Sheet, so the key opens and closes that Sheet, which reports itself as
-  // `nav` a render later and takes the mark; the column's desktop flag, which
-  // nothing there shows, is left alone.
+  // On a phone the key toggles the pager's own Files Sheet.
   useKeybind(
     "Ctrl+E",
     {
@@ -397,11 +388,6 @@ const LayoutShell = ({
           setPhoneFiles(!filesNow.current, "key");
           return;
         }
-        navVia.current = "key";
-        if (sheetToggle.current?.()) return;
-        // A defence: the next pointer or key input clears the mark in the
-        // capture phase anyway, so no test can tell this line from its absence
-        navVia.current = null;
         setOpen("files", { open: !state.open.files, via: "key" });
       },
       opts: { noPreventDefault: true },
@@ -452,52 +438,20 @@ const LayoutShell = ({
     setRailOpen(open);
     layoutTelemetry.track("layout_panel_toggled", { panel: "nav", open, via });
   };
-  // The stock toggle. From `LAYOUT_BREAKPOINTS.left` up it calls
-  // `onNavOpenChange` before it returns, so the mark is cleared right after
-  // and cannot outlive the click. Below it it flips the Sheet, which
-  // `onLeftSheetChange` reports a render later and so takes the mark itself.
-  const toggleNav = (stockToggle: () => void, isMobile: boolean) => () => {
+  // The stock toggle. In the frame it calls `onNavOpenChange` before it
+  // returns, so the mark is cleared right after and cannot outlive the click.
+  // On a phone it moves the pager, which reports itself and reads no mark.
+  const toggleNav = (stockToggle: () => void) => () => {
     navVia.current = "button";
     try {
       stockToggle();
     } finally {
-      if (!isMobile) navVia.current = null;
+      navVia.current = null;
     }
   };
-  // The stock Sidebar's Sheet holds the navigation and the files column; it
-  // is the navigation's Sheet, so it is reported as `nav`
-  const onLeftSheetChange = (open: boolean) =>
-    layoutTelemetry.track("layout_panel_toggled", {
-      panel: "nav",
-      open,
-      via: takeNavVia(),
-    });
-
-  // Keeps the base's Sheet toggle for ⌘E; the one in place is the live one
-  const toggleLeftSheetOn = useCallback((toggle: () => boolean) => {
-    sheetToggle.current = toggle;
-    return {
-      dispose: () => {
-        if (sheetToggle.current === toggle) sheetToggle.current = null;
-      },
-    };
-  }, []);
-
-  // What closes the navigation's Sheet, from `closeLeftSheetOn`
-  const sheetClose = useRef<(() => boolean) | null>(null);
-  // A modal, or settings opened from the navigation's own footer, closes the
-  // Sheet: the Sheet is a modal dialog that traps focus and covers both. The
-  // product's doing, not the user's, so it is reported as `auto`. The mark is
-  // dropped when there was no Sheet to close, so it cannot label a later
-  // toggle.
-  const closeSheetAuto = useCallback(() => {
-    navVia.current = "auto";
-    if (!sheetClose.current?.()) navVia.current = null;
-  }, []);
   // On a phone the navigation is a page, and "closing" it goes back to Work
   const closeNav = () => {
     if (phone) showPage("work", "auto");
-    else closeSheetAuto();
   };
 
   const filePath = PgExplorer.getCurrentFile()?.path;
@@ -508,20 +462,6 @@ const LayoutShell = ({
         name: relativeFile.slice(relativeFile.lastIndexOf("/") + 1),
       }
     : null;
-  const closeLeftSheetOn = useCallback(
-    (close: () => boolean) => {
-      sheetClose.current = close;
-      const sub = PgView.onDidOpenModal(closeSheetAuto);
-      return {
-        dispose: () => {
-          sub.dispose();
-          if (sheetClose.current === close) sheetClose.current = null;
-        },
-      };
-    },
-    [closeSheetAuto]
-  );
-
   const homeContent = home?.({
     openAssistant: () => setHomeSheet(true, "button"),
   });
@@ -551,7 +491,6 @@ const LayoutShell = ({
     <BaseLayoutShell
       viewport={viewport}
       keepWork={keepWork}
-      isMobile={isMobile}
       navOpen={navOpen}
       onNavOpenChange={onNavOpenChange}
       assistantState={{
@@ -580,18 +519,18 @@ const LayoutShell = ({
       nav={(stock) =>
         nav({
           collapsed: stock.collapsed,
-          toggle: toggleNav(stock.toggle, stock.isMobile),
+          toggle: toggleNav(stock.toggle),
           closeSheet: closeNav,
         })
       }
       files={(stock) => {
-        // In the Sheet the column is always open, so a control of its own, if
-        // it draws one, closes the Sheet, as ⌘E does there (Flow's column
-        // draws none since the stage bar took its toggle)
+        // In the phone's Files Sheet the column is always open, so a control
+        // of its own, if it draws one, closes the Sheet, as ⌘E does there
+        // (Flow's column draws none since the stage bar took its toggle)
         if (stock.isMobile) {
           return files({
             collapsed: false,
-            toggle: toggleNav(stock.toggle, true),
+            toggle: toggleNav(stock.toggle),
           });
         }
         return files({
@@ -600,9 +539,6 @@ const LayoutShell = ({
             setOpen("files", { open: !state.open.files, via: "button" }),
         });
       }}
-      onLeftSheetChange={onLeftSheetChange}
-      closeLeftSheetOn={closeLeftSheetOn}
-      toggleLeftSheetOn={toggleLeftSheetOn}
       sheetFont={{
         fontFamily: theme.font.code.family,
         fontSize: theme.font.code.size.medium,
@@ -625,7 +561,7 @@ const LayoutShell = ({
           title={barTitle}
           // Under Home there is no files column to toggle
           files={
-            isMobile || homeShown
+            homeShown
               ? null
               : {
                   open: state.open.files,

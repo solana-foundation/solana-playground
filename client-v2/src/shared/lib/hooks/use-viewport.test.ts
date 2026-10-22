@@ -2,22 +2,23 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { useIsMobile } from "./use-mobile";
-import {
-  LAYOUT_BREAKPOINTS,
-  useIsLeftSheet,
-  useViewport,
-  viewportOf,
-} from "./use-viewport";
+import { LAYOUT_BREAKPOINTS, useViewport, viewportOf } from "./use-viewport";
 
-/** A `matchMedia` that answers `max-width` queries against `width` and fires `change` when it moves */
+/**
+ * A `matchMedia` that answers `max-width` and `width <` queries against
+ * `width`, fractional too, as a zoomed browser measures it, and fires `change`
+ * when it moves
+ */
 const fakeScreen = (initial: number) => {
   let width = initial;
   const listeners = new Set<() => void>();
   const matchMedia = (query: string) => {
-    const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1]);
+    const max = /max-width:\s*(\d+)px/.exec(query)?.[1];
+    const below = /width\s*<\s*(\d+)px/.exec(query)?.[1];
     return {
       get matches() {
-        return width <= max;
+        if (below !== undefined) return width < Number(below);
+        return width <= Number(max);
       },
       media: query,
       onchange: null,
@@ -48,14 +49,8 @@ afterEach(() => {
   window.innerWidth = initialInnerWidth;
 });
 
-it("should draw the lines at 1024, 768 and 720", () => {
-  expect(LAYOUT_BREAKPOINTS).toEqual({ compact: 1024, left: 768, phone: 720 });
-});
-
-it("should keep the lines in order, which viewportOf's checks rely on", () => {
-  // `viewportOf` tests phone before compact, and `left` sits between them
-  expect(LAYOUT_BREAKPOINTS.phone).toBeLessThan(LAYOUT_BREAKPOINTS.left);
-  expect(LAYOUT_BREAKPOINTS.left).toBeLessThan(LAYOUT_BREAKPOINTS.compact);
+it("should draw the lines at 1024 and 768", () => {
+  expect(LAYOUT_BREAKPOINTS).toEqual({ compact: 1024, phone: 768 });
 });
 
 it.each([
@@ -63,10 +58,13 @@ it.each([
   [1024, "wide"],
   [1023, "compact"],
   [768, "compact"],
-  [720, "compact"],
-  [719, "phone"],
+  // Zoomed, the width is fractional: below the stock Sidebar's `md:` (48rem)
+  // it is the pager's, or the frame would show with no Sidebar in it
+  [767.5, "phone"],
+  [767, "phone"],
+  [720, "phone"],
   [375, "phone"],
-])("should call %i px %s", (width, expected) => {
+])("should call %s px %s", (width, expected) => {
   screen.resize(width);
   expect(viewportOf()).toBe(expected);
 });
@@ -83,10 +81,10 @@ it("should re-render when the window crosses a line", () => {
 });
 
 it.each([
-  [LAYOUT_BREAKPOINTS.left - 1, true],
-  [LAYOUT_BREAKPOINTS.left, false],
+  [LAYOUT_BREAKPOINTS.phone - 1, true],
+  [LAYOUT_BREAKPOINTS.phone, false],
 ])(
-  "should agree with the stock Sidebar's own hook on the left panel's line (%i px)",
+  "should agree with the stock Sidebar's own hook on the phone's line, so there is no left Sheet above it (%i px)",
   (width, sheet) => {
     const innerWidth = window.innerWidth;
     window.innerWidth = width;
@@ -95,22 +93,3 @@ it.each([
     window.innerWidth = innerWidth;
   }
 );
-
-it("should say on the first render that the window is below the left panel's line, and follow it", () => {
-  screen.resize(500);
-  const rendered: boolean[] = [];
-  const { result } = renderHook(() => {
-    const sheet = useIsLeftSheet();
-    rendered.push(sheet);
-    return sheet;
-  });
-  // The stock hook's first render says false and its effect corrects it; this
-  // one is right in the render that mounts the column
-  expect(rendered[0]).toBe(true);
-
-  act(() => screen.resize(LAYOUT_BREAKPOINTS.left));
-  expect(result.current).toBe(false);
-
-  act(() => screen.resize(LAYOUT_BREAKPOINTS.left - 1));
-  expect(result.current).toBe(true);
-});

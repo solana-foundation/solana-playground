@@ -281,7 +281,7 @@ classic panels' removal: `GearSidebar` uses them.
 `shared/lib/hooks/use-viewport.ts`, because Monaco reads it too. Monaco
 announces a blocked edit as a `PgEditor` document event, so the editor does
 not import the widget. (5.7 replaced this: see "The phone (5.7)": Monaco reads no viewport and announces no
-blocked edit, the widths are 1024 and 720. The hook stays in `shared/`
+blocked edit, the widths are 1024 and 720 (768 since HOO-2208). The hook stays in `shared/`
 because several slices read it (the layout shell, the overlays' toast host,
 the navigation, the Flow views), and a widget may not import another
 widget's code.)
@@ -323,11 +323,12 @@ and a unit test holds it to `use-mobile`.
 | compact 600-1023 (5.1; 5.7 replaced this: see "The phone (5.7)") | rail from 768; the stock Sheet below 768 | right Sheet; "Expand assistant" on the right edge, Ctrl+R | edits |
 | phone <600 (5.1; 5.7 replaced this: see "The phone (5.7)") | the stock Sheet | full-width Sheet | read-only |
 
-5.7 replaces the phone row: below 720 the app is three pages and the editor
+5.7 replaces the phone row: below 720 (768 since HOO-2208) the app is three pages and the editor
 edits (see "The phone (5.7)").
 
-The stock Sidebar turns into its Sheet at 768 px (`use-mobile`), so there are
-three thresholds; that is accepted rather than editing `shared/`. On a phone
+The stock Sidebar turned into its Sheet at 768 px (`use-mobile`), so there
+were three thresholds, accepted rather than editing `shared/`. HOO-2208 moves
+`phone` to the Sidebar's 768, so there are two (see "Width" in 5.2). On a phone
 (5.1; 5.7 replaced this: see "The phone (5.7)") Monaco gets `readOnly`, and the message that editing works from 600 px is
 shown through Monaco's message controller (0.37 has no `readOnlyMessage`
 option); chat works at every width. Explorer actions are not made read-only.
@@ -406,21 +407,27 @@ folding to a strip and a rail. See "Frame chrome (5.25)".)
 - **Keys.** ⌘B folds the navigation (the stock Sidebar's own key), ⌘E the
   files column, Ctrl+R the assistant, Ctrl+J the console. The files toggle
   keeps "Collapse project panel" / "Expand project panel" and the rail's "New
-  file"; its hint reads ⌘E. From 720 to 767 ⌘E opens and closes the Sheet that
-  holds the files column (below 720, the pager's Files Sheet). On macOS Monaco keeps ⌘E (find with selection)
+  file"; its hint reads ⌘E. Below 768 ⌘E opens and closes the pager's Files
+  Sheet. On macOS Monaco keeps ⌘E (find with selection)
   while the editor has focus, so the shell's ⌘E works outside the editor
   there; on Windows and Linux Ctrl+E folds the column from the editor too.
   _Rejected:_ ⌘B staying on the files column, leaving the navigation to its
   button alone.
 - **Width.** From `LAYOUT_BREAKPOINTS.compact` (1024) every column is in
-  place. Between `left` (768) and 1024 the navigation starts as a rail on
+  place. Between `phone` (768) and 1024 the navigation starts as a rail on
   every load; ⌘B or its button unfold it for the visit, and that is not
   saved. The files column stays, and the assistant is the right Sheet, as in
-  5.1. From 720 to 767 (below 768 until 5.7, which gives the phone its own
-  structure below 720) the navigation and the files column share the stock
-  Sidebar's Sheet, opened by "Expand project panel" at the left edge, as the
-  project panel's Sheet was in 5.1; the files toggle and ⌘E open and close
-  that Sheet.
+  5.1. There is no left Sheet anywhere the frame shows: `phone` is the stock
+  Sidebar's own 768 (its `use-mobile` and its `md:` classes, installed from
+  the design system and not edited), so below it the pager shows instead,
+  with the navigation on its menu page apart from the files, as on the
+  prototype's phone (HOO-2208; Slava 2026-10-22: one value every layout rule
+  reads, until the designers settle the breakpoints). _Rejected:_ the
+  navigation and the files column sharing the stock Sidebar's Sheet from 720
+  to 767, as 5.2 first had it, which left the navigation 0 px high under the
+  files column; two left Sheets there, which the prototype does not have; the
+  prototype's 720, which needs the design system's Sidebar edited (Slava:
+  not before the breakpoints are settled).
 - **Panels.** The assistant is 280 to 560 px as in 5.1; the files column
   opens at 14.5 rem, folds to 3.25 rem and resizes from 12 rem, with no
   maximum of its own (a 30% cap fell below its own minimum on a 1024 px
@@ -476,7 +483,7 @@ HOO-2071) build on it. One PR.
   `Build`, `Deploy` and `Stepper` read `tooltip.bg` for things that are not
   tooltips; it goes with the global reset (5.24).
 - **Dialogs keep `PgView.setModal`.** The stack, the promise of an answer and
-  `onDidOpenModal` (which closes the navigation's Sheet) stay in `PgView`;
+  `onDidOpenModal` (which closes the phone's Files Sheet) stay in `PgView`;
   only the renderer changes. The 21 dialog bodies keep the old `<Modal>`
   props (`title`, `buttonProps` with `onSubmit`/`noCloseOnSubmit`) on
   `ModalFrame`, so each changes an import and gains a `name`; every dialog
@@ -711,7 +718,7 @@ and `Foldable` components are deleted, and no import of them remains. Ids,
 Decided with Slava on 2026-10-14 (HOO-2062). Below
 `LAYOUT_BREAKPOINTS.phone` the app is the prototype's three pages, and the
 editor edits on a phone; 5.1's read-only editor is gone. The value moves
-from 600 to 720 px, the prototype's, while the customer's sheet says 1024:
+from 600 to 720 px, the prototype's (768 since HOO-2208, the stock Sidebar's), while the customer's sheet says 1024:
 it is still being confirmed with the customer, so it stays the one constant
 every phone rule reads.
 
@@ -729,10 +736,10 @@ LayoutShell
                console outlet
 ```
 
-- **Widths.** Below 720 the pager. From 720 to 767 the layout is 5.2's:
-  the navigation and the files column share the stock Sidebar's Sheet, the
-  assistant is the right Sheet. The stock Sidebar still turns into its Sheet
-  at 768 by its own hook (`use-mobile`), which is installed and not edited.
+- **Widths.** Below `phone` the pager; from it to 1023 the layout is 5.2's:
+  the navigation starts as a rail and the assistant is the right Sheet.
+  `phone` was 720 here and is 768 since HOO-2208, the stock Sidebar's own
+  line, so the frame never holds the Sidebar's Sheet.
 - **The pages** are one horizontal scroll container with mandatory snap, so
   a swipe moves between them and the bars' buttons scroll to a page. Each
   page has a 60 px bar (`h-phone-bar`). A load lands on Work, showing Code.
@@ -747,9 +754,9 @@ LayoutShell
   `write`); the Menu sets none. A stage set elsewhere (the StageBar's Write tab,
   Ctrl+1..4) scrolls the pager to the page that shows it (`via: auto`), so
   no page is left without its stage.
-- **The stage and the console do not remount across 720.** They are rendered
+- **The stage and the console do not remount across `phone`.** They are rendered
   once, through `createPortal` into DOM nodes the shell owns; the frame and
-  the pager each place those nodes where they need them. Crossing 720
+  the pager each place those nodes where they need them. Crossing it
   (a rotation) keeps Monaco, the open file and the terminal's session. What
   does remount, because the pager replaces the frame's tree: the assistant
   (as it already does between its panel and its Sheet), the navigation and
@@ -761,7 +768,7 @@ LayoutShell
 - **The navigation's `closeSheet`** has no Sheet to close on the Menu page;
   there it moves to Work, so settings opened from the footer are seen.
   `FeedbackHost` stays above the frame, so a draft survives the move between
-  pages and across 720.
+  pages and across `phone`.
 - **The assistant.** Chat shows it. `PgAssistant.onDidRequestPrompt` ("Fix
   with assistant") moves to Work and shows Chat; Ctrl+R switches Chat and
   Code.
@@ -780,7 +787,8 @@ LayoutShell
   with assistant" does, or as a stage set elsewhere does, which includes
   crossing into the phone width with the stage off `write`), not on load;
   `layout_work_view {view: chat | code, via: button | key | auto}` when Work
-  switches. `layout_viewport`'s `phone` now means below 720.
+  switches. `layout_viewport`'s `phone` now means below `LAYOUT_BREAKPOINTS.phone`
+  (768 since HOO-2208).
 
 Kept: every id, `aria-label` and test id of the pieces inside the pages. The
 pager's own controls take the prototype's names: "Menu", "Close the menu",
@@ -1081,7 +1089,7 @@ widgets/assistant
   `design-system/src/components/ui/composer.tsx` and reinstalled).
 - **Connect a model is a dialog.** It opens through `PgView.setModal` in a
   `ModalFrame` (`name: "connect-model"`), as 5.6 has every dialog do, so it
-  joins the modal stack, closes the navigation's Sheet through
+  joins the modal stack, closes the phone's Files Sheet through
   `onDidOpenModal`, and reports `overlay_modal_opened`; below `md` the stock
   Modal makes it a page of its own with a sticky footer. It holds today's `Connect` form
   without its "Back to chat" and its own title, and opens from More (K),
@@ -1347,14 +1355,12 @@ SidebarProvider (no padding)
   widths were never stored, and an open panel's size means the same on the
   flush frame. Considered and dropped the same day: a `v: 3` that cleared
   sizes, which would have reset every user's widths for nothing.
-- **Width.** Wherever the frame shows (from 720 px, above the phone's
+- **Width.** Wherever the frame shows (from 768 px, above the phone's
   pager) it is flush and carries the bars. Between 768 and 1023 the behaviour is 5.2's: the
   navigation starts as a rail and the assistant is the right Sheet. Its
   "Expand assistant" moves from the right edge into the stage bar, whose
-  help link now holds that corner; same name, same Sheet. From 720 to 767
-  the files column is in the navigation's Sheet, opened by "Expand project
-  panel" at the left edge, so the bar carries no files toggle there. One
-  button per name. The phone's pager is unchanged but for the stage's card
+  help link now holds that corner; same name, same Sheet. One button per
+  name. The phone's pager is unchanged but for the stage's card
   edge, which goes as everywhere else.
 - **Telemetry.** The bars' buttons send `layout_panel_toggled` with
   `via: "button"`, as the buttons they replace did. Widen sends
@@ -1479,12 +1485,12 @@ project lands on Home instead of the gallery modal.
   once, `PgRouter.navigate` to the current path does nothing, so a remounted
   `Write` stays blank. 5.28 (HOO-2118) does both; see "Home from an open
   project (5.28)".
-- **From 720 px.** "Where should we begin?", the composer, three tiles and
+- **From 768 px.** "Where should we begin?", the composer, three tiles and
   four tutorial cards, built from `composer`, `action-card`, `tag` and
   `button`. New project unfolds `StartFromScratch` under the tiles; Follow a
   tutorial, Open a program and "All N" open the Tutorials or Programs page
   (5.9).
-- **Below 720 (`LAYOUT_BREAKPOINTS.phone`).** The pager keeps its menu page;
+- **Below 768 (`LAYOUT_BREAKPOINTS.phone`).** The pager keeps its menu page;
   the work page's bar holds "Menu" and the title "Home", with no Chat | Code
   and no Preview, and there is no preview page. The page holds the question,
   the quick starts (Continue the last project when there is one, New Anchor
@@ -1501,7 +1507,7 @@ project lands on Home instead of the gallery modal.
   over with that Sheet open (sync's `adopt` can open a project mid-answer),
   the work's assistant opens in its place (the column from 1024 px, its
   Sheet below, the chat page on a phone), reported as
-  `layout_panel_toggled {via: auto}`; between 720 and 1023 px it would
+  `layout_panel_toggled {via: auto}`; between 768 and 1023 px it would
   otherwise be a closed Sheet, the conversation gone from view.
 - **Widget `widgets/home`**: `BaseHome` and `Home`, `BasePhoneHome` and
   `PhoneHome`. Telemetry prefix `home`: `home_shown` when Home is shown,
@@ -1688,11 +1694,11 @@ they are answered. One PR.
     Escape from the topmost open layer, never from focus (a project's rename
     field would read it as a cancel), one per frame while a layer is still
     `open`, and nothing when none is (Escape would then close the
-    navigation's Sheet as a key's, not the product's). The page opens once
+    assistant's Sheet as a key's, not the product's). The page opens once
     they are closed, and the trigger of the layer focus was in stands in as
     the control to give focus back to.
   - When the control that opened the page is gone on close (a checklist step
-    the pick ticked, a footer the navigation's Sheet took with it), focus
+    the pick ticked, a footer the phone's menu page took with it), focus
     goes to the first control that opens the settings still on screen, else
     to the one that opens the navigation. The failure notice closes on
     Escape too, its own listener in place of the page's.
@@ -1707,9 +1713,8 @@ above), the trigger attribute (tests find the
 triggers by it; with nothing of the app on screen, a second click on a
 trigger is no longer the way out, "Back to app" is), "Change cluster,
 currently <name>" and "Cluster: <name>". The floating wallet is hidden with
-the shell, and the navigation's Sheet still closes as the settings open: it
-portals to `body`, outside the hidden shell, and its overlay would cover the
-page. Toasts and dialogs are not the app here: they are the page's own
+the shell, and on a phone opening the settings from the menu page brings
+Work into view first. Toasts and dialogs are not the app here: they are the page's own
 feedback (a failed export, an import dialog), so `ToastHost` and `ModalHost`
 stay outside the hidden shell, above the page.
 
@@ -1936,9 +1941,10 @@ prototype's "What do you want to build?". The work is stacked on 5.9
 - **Removing themes** is visible to users who picked one. Dark fallback,
   said once.
 - **Two sets of primitives** if Base UI stays for the combobox.
-- **The phone breakpoint** is 720 px, the prototype's (2026-10-14), while the
-  customer's sheet says 1024; it is being confirmed with them. One constant,
-  `LAYOUT_BREAKPOINTS.phone`, so the code change is one line; the spec
-  scenarios and the four 740 px tests change with it, since 1024 is above
-  `left` and the 720 to 767 px band disappears. 5.1's
+- **The phone breakpoint** is 768 px since HOO-2208, the stock Sidebar's
+  line; the prototype's is 720 and the customer's sheet says 1024, and the
+  designers are asked to settle it (hoodieshq/solana-playground#126). One
+  constant, `LAYOUT_BREAKPOINTS.phone`, which `use-viewport.test.ts` holds to
+  `use-mobile`; moving it below 768 needs the design system's Sidebar
+  changed with it. 5.1's
   read-only editor below 600 px is gone with 5.7.

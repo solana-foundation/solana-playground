@@ -1,17 +1,16 @@
 import { useSyncExternalStore } from "react";
 
 /**
- * Below `compact` the assistant is a Sheet; below `left` the navigation is
- * one, holding the files column too; below `phone` the app is three pages
- * (`BasePhonePager`).
- * `left` is not a `Viewport` class: the stock Sidebar decides it with its own
- * hook (`use-mobile.ts`, installed from the design system), and
- * `use-viewport.test.ts` holds the two to the same width.
+ * Below `compact` the assistant is a Sheet; below `phone` the app is three
+ * pages (`BasePhonePager`). `phone` is the stock Sidebar's own line
+ * (`use-mobile.ts` and its `md:` classes, installed from the design system
+ * and not edited), so there is no width where the frame shows and the
+ * Sidebar is a Sheet; `use-viewport.test.ts` holds the two together. One
+ * value until the designers settle the breakpoints (HOO-2208).
  */
 export const LAYOUT_BREAKPOINTS = {
   compact: 1024,
-  left: 768,
-  phone: 720,
+  phone: 768,
 } as const;
 
 /**
@@ -22,9 +21,11 @@ export const RAIL_WIDTH = "3.25rem";
 
 export type Viewport = "wide" | "compact" | "phone";
 
-const PHONE = `(max-width: ${LAYOUT_BREAKPOINTS.phone - 1}px)`;
-const COMPACT = `(max-width: ${LAYOUT_BREAKPOINTS.compact - 1}px)`;
-const LEFT = `(max-width: ${LAYOUT_BREAKPOINTS.left - 1}px)`;
+// Range syntax, not `max-width: <n - 1>px`: a zoomed window's width is
+// fractional, and 767.5 px must fall below the line, as it does for the stock
+// Sidebar's `md:` (`width >= 48rem`), or the frame would show with no Sidebar
+const PHONE = `(width < ${LAYOUT_BREAKPOINTS.phone}px)`;
+const COMPACT = `(width < ${LAYOUT_BREAKPOINTS.compact}px)`;
 
 /** The window's width class right now */
 export const viewportOf = (): Viewport => {
@@ -43,26 +44,3 @@ const subscribe = (onChange: () => void) => {
 /** The window's width class, re-rendering when it crosses a breakpoint */
 export const useViewport = (): Viewport =>
   useSyncExternalStore(subscribe, viewportOf);
-
-const subscribeLeft = (onChange: () => void) => {
-  const list = window.matchMedia(LEFT);
-  list.addEventListener("change", onChange);
-  return () => list.removeEventListener("change", onChange);
-};
-
-/**
- * Whether the window is below `LAYOUT_BREAKPOINTS.left`, where the navigation
- * is a Sheet. Right on the first render, unlike the stock Sidebar's
- * `useIsMobile`, which answers `false` until an effect runs: a layout that
- * moves the files column by this does not mount it in the work group and then
- * again in the Sheet on every load below `left`. Same value as that hook, held by
- * `use-viewport.test.ts`.
- */
-export const useIsLeftSheet = (): boolean =>
-  useSyncExternalStore(
-    subscribeLeft,
-    // The value the stock hook reads, not `matchMedia(...).matches`: under
-    // browser zoom the two can round a fractional width to different sides,
-    // and the files column would then be in neither the group nor the Sheet
-    () => window.innerWidth < LAYOUT_BREAKPOINTS.left
-  );

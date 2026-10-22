@@ -49,9 +49,10 @@ const FeedbackMenuContext = createContext<MenuContext | null>(null);
  * The form and its state, sending through `FeedbackProviderContext`, with the
  * menu entries (`FeedbackMenuItems`) and the send status (`useFeedbackSend`)
  * read anywhere below it. Split so the state sits above what unmounts the
- * account menu: the navigation's footer holds it, and on a narrow window that
- * footer is in a Sheet that unmounts on close, so a draft or a send kept
- * beside the menu would go with it.
+ * account menu: the navigation's footer holds it, and that footer unmounts
+ * when the rail swaps it for its own and when the window crosses
+ * `LAYOUT_BREAKPOINTS.phone`, so a draft or a send kept beside the menu would
+ * go with it.
  */
 export const FeedbackHost = ({ children }: { children: ReactNode }) => {
   const provider = useFeedbackProvider();

@@ -163,7 +163,7 @@ it("should keep clear of the rail on a wide window", () => {
   expect(offsetLeft()).toBe(`calc(${RAIL_WIDTH} + 1rem)`);
 });
 
-it("should not reserve the rail below 768 px, where the panel is a Sheet", () => {
+it("should not reserve the rail below 768 px, where the pager shows", () => {
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(700);
   render(<ToastHost />);
   // Sonner draws its list once there is a toast

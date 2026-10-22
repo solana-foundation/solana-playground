@@ -29,8 +29,8 @@ ids.
 A dialog SHALL return what its submit produced to the code that opened it, or
 nothing when it is closed. A submit that fails SHALL keep the dialog open and
 show the error inside it. Enter SHALL submit. Opening a dialog SHALL close the
-navigation's sheet on a narrow screen. On a phone a dialog SHALL be a page of
-its own, with its buttons pinned to the foot.
+phone's Files sheet. On a phone a dialog SHALL be a page of its own, with its
+buttons pinned to the foot.
 
 #### Scenario: Renaming a file through its dialog
 
@@ -47,14 +47,9 @@ its own, with its buttons pinned to the foot.
 - **WHEN** a user opens the rename dialog and presses Escape
 - **THEN** the dialog closes and the file keeps its name
 
-#### Scenario: A dialog closes the left sheet
-
-- **WHEN** the navigation is open as a sheet on a narrow screen and a dialog opens
-- **THEN** the sheet closes and the dialog has the focus
-
 #### Scenario: A dialog closes the Files sheet on a phone
 
-- **WHEN** the Files sheet is open on a screen narrower than 720 px and a dialog opens from the file tree
+- **WHEN** the Files sheet is open on a screen narrower than 768 px and a dialog opens from the file tree
 - **THEN** the sheet closes and the dialog has the focus
 
 #### Scenario: A dialog on a phone (manual)

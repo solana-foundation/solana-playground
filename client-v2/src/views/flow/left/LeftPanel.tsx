@@ -166,9 +166,8 @@ export default LeftPanel;
 
 // A column of the flush frame like Center and Right (design.md, "Frame
 // chrome (5.25)"): no card edges, the page's background.
-// Width comes from the layout shell (`PANEL_SIZES.files`, or the navigation's
-// Sheet below `LAYOUT_BREAKPOINTS.left`), so the panel fills whatever it is
-// given.
+// Width comes from the layout shell (`PANEL_SIZES.files`, or the phone's
+// Files Sheet), so the panel fills whatever it is given.
 const Wrapper = styled.aside`
   ${({ theme }) => css`
     width: 100%;

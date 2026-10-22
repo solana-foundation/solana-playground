@@ -53,6 +53,7 @@ afterAll(() => {
 
 const onHome = vi.fn();
 const pages = { open: vi.fn(), close: vi.fn() };
+const closeSheet = vi.fn();
 let sent: ReturnType<typeof memoryProvider>;
 let logged: ReturnType<typeof memoryLogs>;
 beforeEach(() => {
@@ -61,6 +62,7 @@ beforeEach(() => {
   onHome.mockReset();
   pages.open.mockReset();
   pages.close.mockReset();
+  closeSheet.mockReset();
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
   logged = memoryLogs();
@@ -87,6 +89,7 @@ const draw = (current?: "tutorials" | "programs") =>
           current={current}
           onOpenPage={pages.open}
           onClosePage={pages.close}
+          closeSheet={closeSheet}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -114,6 +117,17 @@ it.each([
   expect(opened()).toEqual([{ item }]);
   expect(pages.open).toHaveBeenCalledWith(item);
   expect(view.setModal).not.toHaveBeenCalled();
+});
+
+// On a phone the gallery would open over the menu page, and the project it
+// starts would open behind the menu
+it("leaves the navigation before New project opens the gallery", () => {
+  draw();
+  fireEvent.click(screen.getByRole("button", { name: "New project" }));
+  expect(closeSheet).toHaveBeenCalledTimes(1);
+  expect(closeSheet.mock.invocationCallOrder[0]).toBeLessThan(
+    view.setModal.mock.invocationCallOrder[0]
+  );
 });
 
 it("closes the page shown before New project opens the gallery", () => {

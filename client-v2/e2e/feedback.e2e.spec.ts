@@ -83,22 +83,23 @@ test("client-v2-feedback: A link from the menu", async ({
 });
 
 // The form is out of reach here (no Sentry on the dev server), so a draft
-// outliving the Sheet is covered by `FeedbackWidget.integration.test.tsx`
-test("the account menu opens from the navigation's Sheet on a narrow window", async ({
+// outliving the footer is covered by `FeedbackWidget.integration.test.tsx`
+test("the account menu opens from the rail on a narrow window", async ({
   page,
 }) => {
-  // The fixture waits on the project tree, which a narrow window keeps in the closed
-  // Sheet, so seed on a desktop-sized page and narrow it afterwards
+  // Seeded on a desktop-sized page, as the other narrow-window tests are, and
+  // narrowed afterwards, where the navigation starts as a rail on every load
   await page.setViewportSize({ width: 1280, height: 800 });
   await seedWorkspace(page);
-  await page.setViewportSize({ width: 740, height: 812 });
+  await page.setViewportSize({ width: 800, height: 812 });
   // The editor focuses itself when it opens the first file; landing after the
   // menu opened, it would close the menu
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
-  await page.getByRole("button", { name: "Expand project panel" }).click();
-  const sheet = page.locator('[data-slot="sidebar"][data-mobile="true"]');
 
-  await sheet.getByRole("button", { name: /^Account/ }).click();
+  await page
+    .locator('[data-slot="sidebar"]')
+    .getByRole("button", { name: /^Account/ })
+    .click();
 
   await expect(
     page.getByRole("menuitem", { name: "Report a bug" })

@@ -180,3 +180,7 @@ regression against 5.1 has misread this rule.
       list in a Popover, for the Interact instruction inputs, FromSeed and
       Account (HOO-2207; after 5.12, before 5.24; its own change:
       `searchbar-command`)
+- [x] 5.30 No left Sheet: the phone's line moves to the stock Sidebar's 768,
+      so below it the pager holds the navigation apart from the files, and
+      from 768 to 1023 the navigation starts as a rail beside the files
+      column (HOO-2208; Slava 2026-10-22)

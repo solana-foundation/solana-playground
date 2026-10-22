@@ -200,8 +200,8 @@ The modal opens from a menu item and has no trigger of its own, so
 `views/flow/Flow.tsx` wraps the whole frame in `<FeedbackHost>` and puts
 `<FeedbackTrigger />` in the navigation's footer. The state sits in the host,
 above the shell, because the footer does not stay mounted: below 768 px it is
-in the navigation's Sheet, which unmounts its content on close, and crossing
-that width swaps the Sheet for the rail. A legacy root may import a feature;
+on the phone's menu page, and crossing that width swaps the page for the
+rail. A legacy root may import a feature;
 the slice adds no UI to the legacy root itself.
 
 The trigger moved into the account menu in `ui-migration` 5.15

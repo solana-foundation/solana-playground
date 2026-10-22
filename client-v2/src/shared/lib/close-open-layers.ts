@@ -20,7 +20,7 @@ const nextFrame = () =>
  * closes on an Escape seen on the document, but only the topmost layer does,
  * and only after React renders, so one Escape is sent per frame, from that
  * layer, while a layer is still open. With none open nothing is sent: Escape
- * would then reach the next layer down, such as the navigation's Sheet.
+ * would then reach the next layer down, such as the assistant's Sheet.
  *
  * Resolves with the trigger of the layer focus was in, when there was one, as
  * the control to give focus back to: the item focus was on unmounts with it.

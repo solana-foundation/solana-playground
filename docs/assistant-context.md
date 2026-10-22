@@ -164,15 +164,14 @@ Done:
   where the editor takes the key; the column's own button always works)
   and the stage, with the terminal in a console
   drawer under the stage (Cmd+J). The assistant is a resizable panel on
-  screens 1024 px and wider and a side Sheet from 720 to 1023 px; from 768
-  to 1023 px the navigation starts as a rail; from 720 to 767 px the
-  navigation and Files share one Sheet. Below 720 px the app is three swiped
+  screens 1024 px and wider and a side Sheet from 768 to 1023 px, where the
+  navigation starts as a rail. Below 768 px the app is three swiped
   pages: the navigation, Work (Chat or Code, with Files in a Sheet) and
   Preview (the Build, Deploy or Interact stage over the console); there the assistant is the Chat view
   of Work, not a Sheet. The editor edits at every width. A start with no
-  project opens Home ("Where should we begin?"), not a popup. From 720 px
+  project opens Home ("Where should we begin?"), not a popup. From 768 px
   Home has a composer, New project, Follow a tutorial and Open a program
-  tiles, and four tutorial cards; below 720 px it has quick starts (a new
+  tiles, and four tutorial cards; below 768 px it has quick starts (a new
   Anchor project, a beginner tutorial), a Browse button that opens the
   Tutorials page, and the composer. The navigation's Home opens Home from an
   open project too, and deleting the last project lands there; picking the

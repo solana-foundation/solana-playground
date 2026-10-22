@@ -159,8 +159,8 @@ const BaseHome = ({
                 {t.framework ? <Tag>{t.framework}</Tag> : null}
               </ActionCardEyebrow>
               <ActionCardTitle>
-                {/* The whole card opens the tutorial: below `md` the Open
-                    button is hidden, and Home shows from 720 px */}
+                {/* The whole card opens the tutorial, as the catalog's cards
+                    do, so the card is one target */}
                 <ActionCardLink asChild>
                   <button type="button" onClick={() => onTutorial(t.name)}>
                     {t.name}

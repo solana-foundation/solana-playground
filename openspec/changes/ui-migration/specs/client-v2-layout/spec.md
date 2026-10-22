@@ -84,12 +84,12 @@ load, however many times React runs its effects.
 
 ### Requirement: A phone is three pages
 
-Below 720 px wide the product SHALL show three pages side by side, moved
+Below 768 px wide the product SHALL show three pages side by side, moved
 between by a swipe or by the buttons in each page's bar: the menu (the
 navigation), the work page (the assistant or the code, switched by Chat and
 Code) and the preview (the current stage over the console). A load SHALL
 land on the work page showing the code. The code editor SHALL edit at every
-width. The 720 px value SHALL be held in one place.
+width. The 768 px value SHALL be held in one place.
 
 #### Scenario: A phone
 
@@ -100,7 +100,7 @@ width. The 720 px value SHALL be held in one place.
   over the console, the code is shown again, the navigation fills the
   screen, and the assistant accepts a prompt
 
-#### Scenario: Turning a phone across 720 px
+#### Scenario: Turning a phone across 768 px
 
 - **WHEN** a user with a file open and a command run in the console widens
   the window from 390 px to 1024 px and back
@@ -171,10 +171,10 @@ as a rail on every load and the
 assistant a Sheet opened by "Expand assistant". The rail's footer SHALL hold
 the cluster's dot, coloured by whether the cluster answers and named "Cluster:
 <name>", which opens the settings on the cluster, and an "Account" button,
-which opens the account menu beside the rail. From 720 to 767 px the navigation
-and the files column SHALL share one Sheet opened by "Expand project panel",
-and opening the settings from its footer SHALL close that Sheet, whose overlay
-would otherwise cover the settings and keep focus from them.
+which opens the account menu beside the rail. There SHALL be no left Sheet:
+from 768 px the navigation is a column or a rail and the files column stays
+beside the stage, and below it the phone's menu page holds the navigation
+apart from the files.
 
 #### Scenario: A wide window
 
@@ -204,12 +204,17 @@ would otherwise cover the settings and keep focus from them.
 - **THEN** the settings open with focus on the cluster, then close, and the
   account menu opens beside the rail
 
-#### Scenario: Settings on a narrow window
+#### Scenario: A project started from the phone's menu
 
-- **WHEN** a user on a 740 px wide window opens the navigation's Sheet and
-  taps the cluster row
-- **THEN** the Sheet closes, the settings open with focus on the cluster,
-  and picking another cluster changes it
+- **WHEN** a user at 393 or 740 px wide opens "Menu", picks New project and
+  starts a project in the gallery
+- **THEN** the project opens on Work, with the menu page out of view
+
+#### Scenario: The navigation on a narrow window
+
+- **WHEN** a user opens a project on a 740 px wide window and opens "Menu"
+- **THEN** the navigation shows Home, New project, Tutorials, Programs, the
+  project list and Get set up, and Tutorials opens its page
 
 #### Scenario: Settings on a phone
 
@@ -220,13 +225,11 @@ would otherwise cover the settings and keep focus from them.
 
 ### Requirement: The frame is flush, with a bar over each column
 
-From 720 px wide the product SHALL draw its columns edge to edge on one
+From 768 px wide the product SHALL draw its columns edge to edge on one
 background, separated by 1 px lines, with no inset and no gaps. Each column
 SHALL start with a 44 px bar: the navigation's head, the assistant's head,
 and over the files column and the stage a bar with "Collapse project panel"
-/ "Expand project panel" (except from 720 to 767 px, where the files column
-is in the navigation's Sheet and its left-edge opener carries the name), the
-assistant's toggle and "Documentation". The
+/ "Expand project panel", the assistant's toggle and "Documentation". The
 stage tabs SHALL sit in a full-width row under that bar. A hidden assistant
 or files column SHALL take no width.
 
@@ -365,16 +368,18 @@ together on the device.
 The settings SHALL open as a page that takes the whole window, in place of
 the app, which SHALL stay loaded beneath it: the open file, the editor's
 content and the terminal's session SHALL be as they were when the user comes
-back. From 720 px wide the page SHALL show "Back to app" over a list of its
+back. From 768 px wide the page SHALL show "Back to app" over a list of its
 sections (Network, Project, Block Explorer, Build, Connection, Editor,
 Notification, Server, Test UI, UI, Wallet, Experimental) beside the sections
 themselves; a click on a section in the list SHALL bring that section into
-view and mark it as current. Below 720 px the page SHALL show a bar with
+view and mark it as current. Below 768 px the page SHALL show a bar with
 "Back to app" and the title, and no list. Nothing of the app SHALL be drawn
 over the page: a menu, popover or tooltip open when it opens SHALL close.
 "Back to app", Escape and ⌘, (Ctrl+, off macOS) SHALL close it and give
-focus back to the control that opened it, or, when that control is gone, to
-another that opens the settings. A setting that fails to render
+focus back to the control that opened it, or, when that control is gone or
+out of reach (on a phone page out of view), to another that opens the
+settings, else to the control that opens the navigation. A page that never
+opened the settings SHALL leave focus where the browser puts it. A setting that fails to render
 SHALL leave the app as it was, with a notice and "Back to app" in place of
 the page.
 
@@ -418,6 +423,18 @@ the page.
 - **THEN** the dialog closes and the settings page stays open
 - **WHEN** the user opens it again and presses ⌘,
 - **THEN** the settings page and the dialog both close
+
+#### Scenario: A fresh load focuses no settings trigger
+
+- **WHEN** a user loads the page at 1440 or 834 px wide and does nothing
+- **THEN** no control that opens the settings has focus and no tooltip is
+  open
+
+#### Scenario: Closing the settings on a phone
+
+- **WHEN** a user on a 390 px wide screen opens the settings from the menu
+  page's cluster row and goes back to the app
+- **THEN** Work shows, with focus on "Menu"
 
 #### Scenario: The settings page on a phone
 
@@ -570,11 +587,11 @@ failed Start SHALL be reported.
 A page load on `/` with no project SHALL show Home in place of the
 assistant and the work, with the navigation beside it (on a phone, its menu
 page), and SHALL NOT open the gallery. Home SHALL hold the question "Where
-should we begin?" and a composer that opens the assistant. From 720 px it
+should we begin?" and a composer that opens the assistant. From 768 px it
 SHALL hold three tiles, New project, Follow a tutorial and Open a program,
 and four tutorial cards; New project SHALL unfold the start-from-scratch
 row under the tiles, and the other two SHALL open the Tutorials and
-Programs pages. Below 720 px it SHALL hold quick starts for a new Anchor
+Programs pages. Below 768 px it SHALL hold quick starts for a new Anchor
 project and a beginner tutorial, a Browse row that opens the Tutorials
 page, and the composer at its foot. Home SHALL give way to the work once a
 project is created or opened or a tutorial opens; projects listed
@@ -783,8 +800,8 @@ panel (`nav`, `files`, `assistant` or `console`; the files column's earlier
 name, `left`, is not sent), whether it is open, and whether a button, a key, a
 drag of the panel's edge or the product itself did it (the product opens the
 console on a deploy and the assistant on "Fix with assistant", and closes the
-navigation's Sheet when a modal opens or the settings open from it, since the
-Sheet would keep focus from them);
+phone's Files sheet when a modal opens, since the sheet would keep focus from
+it);
 `layout_page_shown` with the page (`menu`, `work` or `preview`) and whether
 a swipe, a button, a key or the product moved it, each time a phone page comes
 into view after the load (crossing into the phone width with the stage off

@@ -151,6 +151,52 @@ it("reports a swipe once it settles on another page", () => {
   expect(onSwipe).toHaveBeenCalledWith("preview");
 });
 
+// New project's gallery opens from the menu page as the pager moves to Work:
+// the dialog cuts the smooth scroll short and the snap pulls the pages back
+it("finishes its own move that something cut short, not a swipe", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  pager.scrollLeft = 0;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).not.toHaveBeenCalled();
+  expect(pager.scrollLeft).toBe(390);
+});
+
+// A swipe's own report re-renders the pager on the page it already shows:
+// nothing moves, so nothing is left to finish
+it("reports a swipe after the last one's report, with no input in between", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "work", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  pager.scrollLeft = 780;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).toHaveBeenLastCalledWith("preview");
+  rerender(pagerElement({ page: "preview", onSwipe }));
+  pager.scrollLeft = 390;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).toHaveBeenLastCalledWith("work");
+});
+
+it("hands its move to the user at a wheel, and reports the swipe", () => {
+  vi.useFakeTimers();
+  const onSwipe = vi.fn();
+  const { rerender } = renderPager({ page: "menu", onSwipe });
+  const pager = screen.getByTestId("phone-pager");
+  rerender(pagerElement({ page: "work", onSwipe }));
+  fireEvent.wheel(pager);
+  pager.scrollLeft = 0;
+  fireEvent.scroll(pager);
+  vi.advanceTimersByTime(SWIPE_SETTLE_MS);
+  expect(onSwipe).toHaveBeenCalledWith("menu");
+});
+
 it.each([
   ["a swipe past the middle of the next page", 600, "preview"],
   ["a swipe short of the middle of the next page", 500, null],

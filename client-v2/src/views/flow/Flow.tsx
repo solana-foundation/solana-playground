@@ -61,8 +61,8 @@ import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
  * the assistant and the work go.
  *
  * The feedback form and its state sit in `FeedbackHost`, above the frame, not
- * in the footer with the account menu: below `LAYOUT_BREAKPOINTS.left` the footer
- * is in a Sheet that unmounts on close, and crossing that width swaps it for
+ * in the footer with the account menu: below `LAYOUT_BREAKPOINTS.phone` the
+ * footer is on the pager's menu page, and crossing that width swaps it for
  * the rail, so a draft or a send held in the footer would go with it.
  */
 const Flow = () => (
@@ -74,17 +74,27 @@ const Flow = () => (
 const log = createLogger("flow:settings");
 
 /**
- * Where focus goes back when the control that opened the settings is gone: a
- * checklist step that the pick ticked, a footer the navigation's Sheet took
- * with it. The first control that opens the settings still on screen, else
- * the control that opens the navigation.
+ * Whether focus can land on `el`: on screen, and not inside an `inert` part,
+ * such as a phone page out of view, where `focus()` does nothing
+ */
+const canTakeFocus = (el: HTMLElement) =>
+  el.isConnected &&
+  el.getClientRects().length > 0 &&
+  el.closest("[inert]") === null;
+
+/**
+ * Where focus goes back when the control that opened the settings is gone or
+ * out of reach: a checklist step that the pick ticked, a footer the rail
+ * swapped out, a cluster row on the phone's menu page once Work shows. The
+ * first control that opens the settings still in reach, else the control
+ * that opens the navigation.
  */
 const fallbackFocus = () =>
   [
     ...document.querySelectorAll<HTMLElement>(
       `[${SETTINGS_TRIGGER_ATTR}], [data-sidebar="trigger"]`
     ),
-  ].find((el) => el.getClientRects().length > 0);
+  ].find(canTakeFocus);
 
 /** Open, the settings page remembers where focus was, to give it back */
 type SettingsState =
@@ -113,12 +123,18 @@ const FlowFrame = () => {
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
   // Back to the control that opened them, once the shell is no longer inert,
-  // or, when that is gone, to `fallbackFocus`
+  // or, when that is gone or out of reach, to `fallbackFocus`. Only when they
+  // close: on load, with the settings never opened, focus stays where the
+  // browser puts it, not on a trigger whose tooltip opens on focus (HOO-2240)
   const refocus = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (settings.open) return;
-    if (refocus.current?.isConnected) refocus.current.focus();
-    else fallbackFocus()?.focus();
+    const closed = wasOpen.current && !settings.open;
+    wasOpen.current = settings.open;
+    if (!closed) return;
+    if (refocus.current && canTakeFocus(refocus.current)) {
+      refocus.current.focus();
+    } else fallbackFocus()?.focus();
     refocus.current = null;
   }, [settings.open]);
   const closeSettings = (via: SettingsExit) => {
@@ -132,10 +148,8 @@ const FlowFrame = () => {
   };
   // The settings page covers the app, so of the ways in only ⌘, can still be
   // used while it is open: that is the one request that closes it. Opening
-  // closes the navigation's Sheet below `LAYOUT_BREAKPOINTS.left`
-  // (`closeSheet`): the footer sits in it, and the Sheet portals to `body`,
-  // outside the hidden shell, so its overlay would cover the page and trap
-  // focus away from it.
+  // leaves the navigation (`closeSheet`): on a phone the footer sits on the
+  // menu page, and the settings show over Work.
   const toggleSettings =
     (closeSheet: () => void) =>
     ({ from, focus, returnTo }: SettingsRequest) => {
@@ -176,9 +190,9 @@ const FlowFrame = () => {
     };
 
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘, on a Mac and Ctrl+,
-  // elsewhere. The key has no Sheet of its own to close, so it takes the one
-  // the navigation last handed over: below `LAYOUT_BREAKPOINTS.left` the
-  // navigation's Sheet may be open, and its overlay would cover the settings.
+  // elsewhere. The key has no way of its own to leave the navigation, so it
+  // takes the one the navigation last handed over: on a phone the menu page
+  // may be in view.
   const closeNavSheet = useRef<() => void>(() => undefined);
   useKeybind(
     "Ctrl+,",
@@ -243,7 +257,7 @@ const FlowFrame = () => {
             return (
               <AppNav
                 // Home and the open project show in place of the work, which
-                // the navigation's Sheet (or a phone's menu page) covers
+                // a phone's menu page covers
                 onHome={() => {
                   closeSheet();
                   // A page makes way: over Home that is all Home asks for,
@@ -257,11 +271,11 @@ const FlowFrame = () => {
                 current={catalog ?? undefined}
                 onOpenPage={(p) => {
                   catalogPage.open(p, "nav");
-                  // The navigation's Sheet, or a phone's menu page, would
-                  // cover the page it just opened
+                  // A phone's menu page would cover the page it just opened
                   closeSheet();
                 }}
                 onClosePage={catalogPage.close}
+                closeSheet={closeSheet}
                 collapsed={collapsed}
                 onToggle={toggle}
                 logo={<Logomark aria-hidden="true" />}

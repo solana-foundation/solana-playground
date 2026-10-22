@@ -16,9 +16,8 @@ export interface BaseStageBarProps {
   /** The project's name, shown while the assistant is hidden; null hides it */
   title: string | null;
   /**
-   * The files column's toggle; null where the column sits in the
-   * navigation's Sheet, whose opener at the left edge carries "Expand
-   * project panel"
+   * The files column's toggle; null where there is no files column to
+   * toggle (under Home)
    */
   files: BarToggle | null;
   /**

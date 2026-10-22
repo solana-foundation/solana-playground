@@ -92,16 +92,20 @@ import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
 import { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { LAYOUT_BREAKPOINTS } from "@/shared/lib/hooks/use-viewport";
 import LayoutShell from "./LayoutShell";
 import type { LayoutShellProps } from "./LayoutShell";
 
 const listeners = new Set<() => void>();
 let width = 1440;
+/** Answers `max-width` and `width <` queries against `width` */
 const screenMedia = (query: string) => {
-  const max = Number(/max-width:\s*(\d+)px/.exec(query)?.[1]);
+  const max = /max-width:\s*(\d+)px/.exec(query)?.[1];
+  const below = /width\s*<\s*(\d+)px/.exec(query)?.[1];
   return {
     get matches() {
-      return width <= max;
+      if (below !== undefined) return width < Number(below);
+      return width <= Number(max);
     },
     media: query,
     onchange: null,
@@ -561,21 +565,6 @@ it("should say once that the layout could not be saved, not on every toggle", ()
   expect((failures[0].error?.cause as Error).name).toBe("QuotaExceededError");
 });
 
-it("should report Cmd+B as a key after a toggle that changed nothing", () => {
-  // On a narrow window the button opens the Sheet and the Sheet reports itself; the
-  // mark the button set must not outlive that
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
-  act(() => resizeTo(1440));
-  const before = toggled().length;
-  press({ key: "b", metaKey: true });
-  expect(toggled().slice(before)).toEqual([
-    { panel: "nav", open: false, via: "key" },
-  ]);
-});
-
 it("should report the assistant Sheet opening and closing, and save nothing", () => {
   resizeTo(800);
   shell();
@@ -630,117 +619,6 @@ it("should set the assistant Sheet in the theme's font and draw no stock close b
   )!;
   expect(sheet.style.fontFamily).toBe("monospace");
   expect(sheet.querySelector('[data-slot="sheet-close"]')).toBeNull();
-});
-
-it("should set the navigation Sheet in the theme's font", () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  const sheet = document.querySelector<HTMLElement>(
-    '[data-slot="sidebar"][data-mobile="true"]'
-  )!;
-  expect(
-    sheet.querySelector<HTMLElement>('[style*="font-family"]')?.style.fontFamily
-  ).toBe("monospace");
-});
-
-it("should open the navigation Sheet below 768 px and report it as the navigation", () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  const sheet = document.querySelector(
-    '[data-slot="sidebar"][data-mobile="true"]'
-  );
-  expect(sheet).not.toBeNull();
-  // The navigation and the files column share it
-  expect(sheet!.textContent).toContain("Collapse navigation");
-  expect(sheet!.textContent).toContain("Files column control");
-  expect(toggled()).toEqual([{ panel: "nav", open: true, via: "button" }]);
-  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
-});
-
-it("should report the navigation Sheet toggled by Cmd+B below 768 px as a key", () => {
-  resizeTo(740);
-  shell();
-  press({ key: "b", metaKey: true });
-  press({ key: "b", metaKey: true });
-  expect(toggled()).toEqual([
-    { panel: "nav", open: true, via: "key" },
-    { panel: "nav", open: false, via: "key" },
-  ]);
-});
-
-it("should report the navigation Sheet closed by Escape as a key and by its own button as a button", () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  fireEvent.keyDown(
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')!,
-    { key: "Escape" }
-  );
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
-  expect(toggled()).toEqual([
-    { panel: "nav", open: true, via: "button" },
-    { panel: "nav", open: false, via: "key" },
-    { panel: "nav", open: true, via: "button" },
-    { panel: "nav", open: false, via: "button" },
-  ]);
-});
-
-it("should open and close the Sheet by Cmd+E below 768 px, as the navigation", () => {
-  resizeTo(740);
-  shell();
-  const sheet = () =>
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]');
-  press({ key: "e", metaKey: true });
-  expect(sheet()).not.toBeNull();
-  press({ key: "e", metaKey: true });
-  expect(sheet()).toBeNull();
-  expect(toggled()).toEqual([
-    { panel: "nav", open: true, via: "key" },
-    { panel: "nav", open: false, via: "key" },
-  ]);
-  // The files column's desktop flag is not touched
-  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
-});
-
-it("should close the Sheet by the files column's button below 768 px", () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  fireEvent.click(screen.getByRole("button", { name: "Files column control" }));
-  expect(
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
-  ).toBeNull();
-  expect(toggled()).toEqual([
-    { panel: "nav", open: true, via: "button" },
-    { panel: "nav", open: false, via: "button" },
-  ]);
-  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
-});
-
-it("should render the navigation and the files open in the Sheet, whatever the saved desktop state", () => {
-  localStorage.setItem(
-    LAYOUT_STORAGE_KEY,
-    JSON.stringify({
-      v: 2,
-      open: { nav: false, files: false, assistant: true, console: false },
-    })
-  );
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  const sheet = document.querySelector(
-    '[data-slot="sidebar"][data-mobile="true"]'
-  )!;
-  expect(sheet.textContent).toContain("Collapse navigation");
-  // Open in the Sheet, whatever the desktop flag says
-  expect(
-    within(sheet as HTMLElement)
-      .getByRole("button", { name: "Files column control" })
-      .getAttribute("aria-expanded")
-  ).toBe("true");
 });
 
 it("should save the open state and read it back", () => {
@@ -838,59 +716,12 @@ const openModal = () => {
   });
 };
 
-it("should close the navigation Sheet when a modal opens", () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  openModal();
-  expect(
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
-  ).toBeNull();
-  expect(toggled().at(-1)).toEqual({ panel: "nav", open: false, via: "auto" });
-  // A modal with the Sheet already closed leaves no mark behind
-  openModal();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  expect(toggled().at(-1)).toEqual({
-    panel: "nav",
-    open: true,
-    via: "button",
-  });
-});
-
-it("should close the navigation Sheet for what the navigation opens over it, as auto", () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  tap(screen.getByRole("button", { name: "Open settings" }));
-  expect(
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
-  ).toBeNull();
-  expect(toggled()).toEqual([
-    { panel: "nav", open: true, via: "button" },
-    { panel: "nav", open: false, via: "auto" },
-  ]);
-});
-
 it("should leave no mark when the navigation asks to close a Sheet that is not open", () => {
-  // From 768 px up the navigation is not in a Sheet, so there is none to close
+  // From 768 px up the navigation is a column, so there is no Sheet to close
   shell();
   tap(screen.getByRole("button", { name: "Open settings" }));
   tap(screen.getByRole("button", { name: "Collapse navigation" }));
   expect(toggled()).toEqual([{ panel: "nav", open: false, via: "button" }]);
-});
-
-it("should report nothing for a modal on a desktop when the Sheet was left open on a narrow window", () => {
-  // The stock Sidebar keeps the Sheet open across 768 px, where it shows none
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  act(() => resizeTo(1440));
-  const before = toggled().length;
-  openModal();
-  expect(toggled()).toHaveLength(before);
-  // And no `auto` mark is left for the next toggle
-  press({ key: "b", metaKey: true });
-  expect(toggled().at(-1)).toEqual({ panel: "nav", open: false, via: "key" });
 });
 
 /** A text field in the page, as the assistant's composer is, for the test's length */
@@ -990,55 +821,34 @@ describe.each([
   });
 });
 
-it("should report the Sheet's next tap as a button after a desktop Cmd+E changed no Sheet", () => {
-  // The mark Cmd+E sets is dropped when there is no Sheet to toggle, so it
-  // cannot label a tap after the window narrows
+// From the phone's line up there is no left Sheet (HOO-2208): the keys fold
+// the files column and the rail as they do on a wider window
+it.each([
+  [LAYOUT_BREAKPOINTS.phone - 1, "the pager"],
+  [LAYOUT_BREAKPOINTS.phone, "the frame, with the navigation as its rail"],
+])("should show at %i px %s, and never the stock Sidebar's Sheet", (width) => {
+  resizeTo(width);
   shell();
-  press({ key: "e", metaKey: true });
-  act(() => resizeTo(740));
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  expect(toggled().at(-1)).toEqual({
-    panel: "nav",
-    open: true,
-    via: "button",
-  });
+  const phone = width < LAYOUT_BREAKPOINTS.phone;
+  expect(screen.queryByRole("button", { name: "Menu" }) !== null).toBe(phone);
+  expect(
+    screen.queryByRole("button", { name: "Expand navigation" }) !== null
+  ).toBe(!phone);
+  expect(
+    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
+  ).toBeNull();
 });
 
-it("should toggle the files column by Cmd+E again after a trip through the narrow window's Sheet", () => {
-  resizeTo(740);
+it("should fold the files column by Cmd+E and unfold the rail by Cmd+B at the phone's line", () => {
+  resizeTo(LAYOUT_BREAKPOINTS.phone);
   shell();
   press({ key: "e", metaKey: true });
-  press({ key: "e", metaKey: true });
-  act(() => resizeTo(1440));
-  press({ key: "e", metaKey: true });
+  press({ key: "b", metaKey: true });
   expect(toggled()).toEqual([
-    { panel: "nav", open: true, via: "key" },
-    { panel: "nav", open: false, via: "key" },
     { panel: "files", open: false, via: "key" },
+    { panel: "nav", open: true, via: "key" },
   ]);
   expect(filesOpen()).toBe(false);
-});
-
-it("should not label a tap on the Sheet's overlay a key because a Cmd+E left no change", async () => {
-  resizeTo(740);
-  shell();
-  tap(screen.getByRole("button", { name: "Expand project panel" }));
-  // Radix starts listening for an outside tap a tick after the Sheet opens
-  await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-  // Cmd+E closes the Sheet and a tap on the opener opens it again in the same
-  // tick: the Sheet ends as it began, reports nothing, and the key's mark
-  // would be waiting for the next change
-  act(() => {
-    press({ key: "e", metaKey: true });
-    fireEvent.click(
-      screen.getByRole("button", { name: "Expand project panel", hidden: true })
-    );
-  });
-  const before = toggled().length;
-  tap(sheetOverlay());
-  expect(toggled().slice(before)).toEqual([
-    { panel: "nav", open: false, via: "button" },
-  ]);
 });
 
 it("should report the rail's unfolding once when it is asked twice in one tick", () => {
@@ -1336,7 +1146,10 @@ describe("on a phone", () => {
       fireEvent.click(button("Back to the code"));
       expect(PgFlow.state.stage).toBe("write");
       const pager = screen.getByTestId("phone-pager");
+      // A user's swipe comes with input (a wheel here, a touch on a phone);
+      // a scroll without any is the pager's own move settling
       const swipeTo = (page: number) => {
+        fireEvent.wheel(pager);
         pager.scrollLeft = page * 390;
         fireEvent.scroll(pager);
         act(() => {
@@ -1495,12 +1308,15 @@ describe("the stage bar", () => {
     ).toBeNull();
   });
 
-  it("leaves one Expand project panel below 768 px", () => {
-    resizeTo(740);
+  it("holds the files column's one toggle at the phone's line, with no opener at the left edge", () => {
+    resizeTo(LAYOUT_BREAKPOINTS.phone);
     shell();
     expect(
-      screen.getAllByRole("button", { name: "Expand project panel" })
+      screen.getAllByRole("button", { name: "Collapse project panel" })
     ).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Expand project panel" })
+    ).toBeNull();
   });
 
   it("is not drawn on a phone", () => {
