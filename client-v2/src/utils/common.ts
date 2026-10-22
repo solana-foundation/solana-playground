@@ -985,20 +985,26 @@ export class PgCommon {
   /**
    * Dispatch a custom event and wait for receiver to resolve.
    *
+   * A receiver registered through `useSendAndReceiveCustomEvent` claims the
+   * event as it takes it. Without `noReceiver`, an unclaimed event waits for
+   * an answer that may never come: the modal hosts listen without claiming.
+   *
    * @param eventName name of the custom event
    * @param data data to send
+   * @param opts -
+   * - `noReceiver`: the failure to reject with at once when nothing claims
+   * the event, such as a call to a component that is not mounted
    * @returns the resolved data
+   * @throws a plain `{ message }` when the receiver fails, or what
+   * `noReceiver` returns, as it is, when nothing claims the event
    */
   static async sendAndReceiveCustomEvent<R, D = unknown>(
     eventName: string,
-    data?: D
+    data?: D,
+    opts?: { noReceiver?: () => unknown }
   ): Promise<R> {
     const eventNames = this.getSendAndReceiveEventNames(eventName);
 
-    // Send data
-    this.createAndDispatchCustomEvent(eventNames.send, data);
-
-    // Wait for data
     return new Promise((res, rej) => {
       const handleReceive = (
         ev: UIEvent & { detail: { data: R; error?: string } }
@@ -1019,6 +1025,17 @@ export class PgCommon {
         eventNames.receive,
         handleReceive as EventListener
       );
+
+      const unclaimed = document.dispatchEvent(
+        new CustomEvent(eventNames.send, { detail: data, cancelable: true })
+      );
+      if (unclaimed && opts?.noReceiver) {
+        document.removeEventListener(
+          eventNames.receive,
+          handleReceive as EventListener
+        );
+        rej(opts.noReceiver());
+      }
     });
   }
 
@@ -1361,6 +1378,78 @@ if (import.meta.vitest) {
         await expect(PgCommon.fetchText("/a.md")).rejects.toThrow(
           "Request failed (500): /a.md"
         );
+      });
+    });
+
+    describe("sendAndReceiveCustomEvent", () => {
+      const event = "pg-test-static-get";
+      const { send, receive } = PgCommon.getSendAndReceiveEventNames(event);
+      const noReceiver = () => new Error("nothing is listening");
+
+      /** Answer `send` the way `useSendAndReceiveCustomEvent` does */
+      const listen = (data: unknown) => {
+        const handleSend = (ev: Event) => {
+          ev.preventDefault();
+          void Promise.resolve().then(() =>
+            PgCommon.createAndDispatchCustomEvent(receive, { data })
+          );
+        };
+        document.addEventListener(send, handleSend);
+        return () => document.removeEventListener(send, handleSend);
+      };
+
+      it("rejects at once when no receiver claims the event", async () => {
+        await expect(
+          PgCommon.sendAndReceiveCustomEvent(event, undefined, { noReceiver })
+        ).rejects.toThrow("nothing is listening");
+      });
+
+      it("resolves with a claiming receiver's answer", async () => {
+        const stop = listen(42);
+        try {
+          await expect(
+            PgCommon.sendAndReceiveCustomEvent(event, undefined, {
+              noReceiver,
+            })
+          ).resolves.toBe(42);
+        } finally {
+          stop();
+        }
+      });
+
+      it("leaves no receive listener behind when it rejects", async () => {
+        const added = vi.spyOn(document, "addEventListener");
+        const removed = vi.spyOn(document, "removeEventListener");
+        try {
+          await PgCommon.sendAndReceiveCustomEvent(event, undefined, {
+            noReceiver,
+          }).catch(() => undefined);
+
+          const listener = added.mock.calls.find(([name]) => name === receive);
+          expect(listener).toBeDefined();
+          expect(removed).toHaveBeenCalledWith(receive, listener![1]);
+        } finally {
+          added.mockRestore();
+          removed.mockRestore();
+        }
+      });
+
+      // The modal hosts answer without claiming; `PgView.setModal` passes no
+      // `noReceiver`, and must still get their answer
+      it("waits for a receiver that does not claim when there is no noReceiver", async () => {
+        const handleSend = () => {
+          void Promise.resolve().then(() =>
+            PgCommon.createAndDispatchCustomEvent(receive, { data: "modal" })
+          );
+        };
+        document.addEventListener(send, handleSend);
+        try {
+          await expect(PgCommon.sendAndReceiveCustomEvent(event)).resolves.toBe(
+            "modal"
+          );
+        } finally {
+          document.removeEventListener(send, handleSend);
+        }
       });
     });
   });

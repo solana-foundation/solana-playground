@@ -1,6 +1,8 @@
 import type { Page, Route } from "@playwright/test";
 import {
   expect,
+  home,
+  homeRegion,
   json,
   LONG,
   startProject,
@@ -109,6 +111,60 @@ test("client-v2-assistant: The first message on the hosted default", async ({
   await expect(thread.getByText("Say hello")).toBeVisible(LONG);
   await expect(thread.getByText("Hello", { exact: true })).toBeVisible(LONG);
   expect(turns).toBe(1);
+});
+
+// Home mounts no terminal; a command run from its assistant used to wait on
+// the terminal forever, the approval card stuck on "running"
+test("a command allowed on Home fails within seconds, with no terminal mounted", async ({
+  page,
+}) => {
+  const calls: string[] = [];
+  await stubSession(page);
+  await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) => {
+    calls.push(route.request().postData() ?? "");
+    if (calls.length > 1) return answer(route);
+    const callBuild = {
+      choices: [
+        {
+          delta: {
+            tool_calls: [
+              {
+                index: 0,
+                id: "call_build",
+                function: { name: "build", arguments: "{}" },
+              },
+            ],
+          },
+        },
+      ],
+    };
+    const finish = { choices: [{ delta: {}, finish_reason: "tool_calls" }] };
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: `data: ${JSON.stringify(callBuild)}\n\ndata: ${JSON.stringify(
+        finish
+      )}\n\ndata: [DONE]\n\n`,
+    });
+  });
+  await page.goto("/");
+  await expect(home(page)).toBeVisible(LONG);
+  await homeRegion(page)
+    .getByRole("button", { name: "Ask the assistant" })
+    .click();
+  const sheet = page.getByRole("dialog", { name: "Assistant" });
+  await expect(sheet).toBeVisible();
+
+  await input(page).fill("Build it");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await sheet.getByRole("button", { name: "Allow" }).click({ timeout: 30_000 });
+
+  await expect(sheet.getByText("build errored")).toBeVisible({
+    timeout: 5_000,
+  });
+  await expect.poll(() => calls.length).toBe(2);
+  expect(calls[1]).toContain("The build could not run");
+  expect(calls[1]).toContain("The terminal is not open.");
 });
 
 test("client-v2-assistant: No default backend", async ({ page }) => {

@@ -48,6 +48,30 @@ export const wasFailureShown = (error: unknown): boolean => {
   return true;
 };
 
+const unavailable = new WeakMap<object, string>();
+
+/**
+ * Mark a failure as an action that cannot run where it was clicked, such as a
+ * command while no terminal is mounted. `reportButtonFailure` then says
+ * "Can't <action> here: <wayOut>." instead of "Could not <action>.", since
+ * nothing broke.
+ *
+ * @param error the failure, matched by identity
+ * @param wayOut what gets the user somewhere it can run, completing the
+ * sentence, such as "open a project to use the terminal"
+ */
+export const markUnavailableHere = (error: object, wayOut: string): void => {
+  unavailable.set(error, wayOut);
+};
+
+/**
+ * The way out `markUnavailableHere` recorded for this failure, or `null`
+ * when it is not one.
+ */
+export const unavailableHere = (error: unknown): string | null =>
+  (typeof error === "object" && error !== null && unavailable.get(error)) ||
+  null;
+
 /**
  * Where a failed click goes: the `onError` of `AsyncButton` and
  * `CopyButton`, and the catch of a click path that is not one of them (such
@@ -55,8 +79,9 @@ export const wasFailureShown = (error: unknown): boolean => {
  *
  * The returned handler logs the failure under `ui:button`, not marked for
  * reporting (which failures reach error tracking is decided in HOO-1800),
- * and tells the user "Could not <action>." in a toast. The raw error never
- * reaches the screen. A failure already shown, such as one the terminal
+ * and tells the user "Could not <action>." in a toast, or "Can't <action>
+ * here: <way out>." for a failure `markUnavailableHere` marked. The raw
+ * error never reaches the screen. A failure already shown, such as one the terminal
  * printed to an open console, is only logged: the user hears of a failure
  * once.
  *
@@ -69,7 +94,11 @@ export const reportButtonFailure =
   (error: unknown): void => {
     log.error(error);
     if (wasFailureShown(error)) return;
-    PgView.setToast(() => <span>Could not {action}.</span>, {
+    const wayOut = unavailableHere(error);
+    const text = wayOut
+      ? `Can't ${action} here: ${wayOut}.`
+      : `Could not ${action}.`;
+    PgView.setToast(() => <span>{text}</span>, {
       options: { name: BUTTON_FAILED_TOAST, id: BUTTON_FAILED_TOAST },
     });
   };

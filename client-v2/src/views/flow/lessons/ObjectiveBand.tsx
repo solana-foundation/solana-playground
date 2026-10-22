@@ -33,6 +33,7 @@ import {
   useWallet,
 } from "../../../hooks";
 import { PgCommand, PgConnection, PgProgramInfo } from "../../../utils";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 interface ObjectiveBandProps {
   state: LessonState;
@@ -148,8 +149,11 @@ const ObjectiveBand: FC<React.PropsWithChildren<ObjectiveBandProps>> = ({
 
   const prove = () => {
     const stage = verifyingStage(step.verify);
-    if (stage) PgCommand[stage].execute();
-    else PgLesson.attest();
+    if (stage) {
+      PgCommand[stage].execute().catch(reportButtonFailure("check the step"));
+    } else {
+      PgLesson.attest();
+    }
   };
 
   // Only where the proving action is offered: behind the frontier there is

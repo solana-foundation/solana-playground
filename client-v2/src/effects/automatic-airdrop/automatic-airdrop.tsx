@@ -7,7 +7,11 @@ import {
   PgSettings,
   PgTerminal,
   PgWallet,
+  isTerminalUnmounted,
 } from "../../utils";
+import { createLogger } from "../../shared/lib/logger";
+
+const log = createLogger("wallet:automatic-airdrop");
 
 export const automaticAirdrop = () => {
   return PgCommon.batchChanges(
@@ -35,7 +39,13 @@ export const automaticAirdrop = () => {
       // Execute the `airdrop` command (handles the default amount)
       try {
         await PgCommand.airdrop.execute();
-      } catch {
+      } catch (e) {
+        // Under Home no terminal is mounted to run the command in. That says
+        // nothing about the cluster: the next balance change tries again
+        if (isTerminalUnmounted(e)) {
+          log.info("no terminal mounted, airdrop deferred");
+          return;
+        }
         errorCache.add(cluster);
         PgTerminal.println(
           [

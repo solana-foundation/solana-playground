@@ -13,9 +13,15 @@ import type { Methods } from "../utils";
  *
  * ```ts
  * const classObject = await PgCommon.sendAndReceiveCustomEvent<Type>(
- *   PgCommon.getStaticEventNames(eventName).get
+ *   PgCommon.getStaticEventNames(eventName).get,
+ *   undefined,
+ *   { noReceiver: () => new Error("Not mounted") }
  * );
  * ```
+ *
+ * The receivers claim the event, so `noReceiver` fails the call at once
+ * while the component is not mounted (see `PgTerminal.get`); without it the
+ * call waits until one answers.
  *
  * @param eventName event name to derive from
  * @param classObject object to expose

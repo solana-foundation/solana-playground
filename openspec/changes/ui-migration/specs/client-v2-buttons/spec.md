@@ -56,6 +56,9 @@ SHALL NOT be shown again; one printed into a folded console SHALL still be
 told. Every failure SHALL still be logged under
 `ui:button`, not marked for reporting (a user-caused or already-shown failure
 must not reach error tracking), and the button SHALL stay usable.
+A click whose action cannot run where it was clicked (a terminal command
+while no terminal is mounted, as under Home) SHALL say so and name the way
+out instead ("Can't build here: open a project to use the terminal.").
 
 #### Scenario: A rejected action is logged (manual)
 
@@ -63,6 +66,13 @@ must not reach error tracking), and the button SHALL stay usable.
 - **THEN** the failure is logged under `ui:button`, not marked for reporting, a toast says what did not happen, and the button is enabled again
 
 Covered by unit tests, not e2e, because the toast and the button's re-enabling together need an action that rejects on demand: `report-button-failure.test.tsx`, `terminal-process.test.ts`, `shared-ui-buttons.test.tsx`, `SyncBanner.test.tsx`, `ImportButton.test.tsx` and `use-turn.test.tsx`. The e2e tests for real failed clicks are the refused clipboard above and the two failed builds below.
+
+#### Scenario: A command clicked with no terminal mounted says how to run it (manual)
+
+- **WHEN** a command is started from a click while no terminal is mounted (under Home)
+- **THEN** a toast says "Can't <action> here: open a project to use the terminal.", the failure is logged under `ui:button`, and nothing waits on the terminal
+
+The toast is covered by `report-button-failure.test.tsx` and `terminal-process.test.ts`; the e2e "a command allowed on Home fails within seconds" covers only that nothing waits on the terminal, through the assistant's build rather than a click.
 
 #### Scenario: A failure the terminal printed is shown once
 

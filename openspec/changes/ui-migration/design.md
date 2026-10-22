@@ -1584,6 +1584,10 @@ only logged (5.4), and nothing on screen said the action did not happen.
 - **A repeat replaces.** Every such toast has one `id`, so a second failure
   replaces the first instead of stacking. Its `name` is `button-failed`
   (`overlay_toast_shown {name}`).
+- **Unavailable here is not a failure** (HOO-2173). A call to the terminal
+  while none is mounted (Home) rejects at once with `TerminalUnmounted`,
+  marked by `markUnavailableHere` with its way out; the toast reads
+  "Can't <action> here: open a project to use the terminal."
 - **Logging is unchanged**: `ui:button`, not marked for reporting. What
   reaches Sentry stays HOO-1800's call.
 - **Plain `onClick` paths** whose failure reaches `global-handlers` today as

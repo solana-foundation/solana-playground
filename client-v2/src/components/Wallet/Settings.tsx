@@ -21,8 +21,13 @@ import {
   Trash,
 } from "../Icons";
 import { createLogger } from "@/shared/lib/logger";
+import {
+  markFailureShown,
+  reportButtonFailure,
+} from "@/shared/lib/report-button-failure";
 import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
 import { useAirdrop, useDarken } from "./hooks";
+import { isSignInFailure } from "../../features/auth";
 import { useCopy } from "../../hooks";
 
 const log = createLogger("wallet:settings");
@@ -100,7 +105,16 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
             <MenuItemText>Copy address</MenuItemText>
           </DropdownMenuItem>
           {airdropCondition && (
-            <DropdownMenuItem onSelect={airdrop}>
+            <DropdownMenuItem
+              onSelect={() => {
+                airdrop().catch((error: unknown) => {
+                  // A cancelled, blocked or refused sign-in is held in
+                  // `PgSession.signInState`, and the account row shows it
+                  if (isSignInFailure(error)) markFailureShown(error);
+                  reportButtonFailure("airdrop")(error);
+                });
+              }}
+            >
               <Airdrop />
               <MenuItemText>Airdrop</MenuItemText>
             </DropdownMenuItem>
@@ -150,9 +164,17 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
             <DropdownMenuItem
               key={standardWallet.name}
               variant={standardWallet.connected ? "destructive" : "default"}
-              onSelect={() =>
-                PgCommand.connect.execute(standardWallet.name.toLowerCase())
-              }
+              onSelect={() => {
+                PgCommand.connect
+                  .execute(standardWallet.name.toLowerCase())
+                  .catch(
+                    reportButtonFailure(
+                      standardWallet.connected
+                        ? `disconnect from ${standardWallet.name}`
+                        : `connect ${standardWallet.name}`
+                    )
+                  );
+              }}
             >
               <Img src={standardWallet.icon} alt={standardWallet.name} />
               <MenuItemText>

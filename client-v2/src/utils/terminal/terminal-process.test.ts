@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { wasFailureShown } from "@/shared/lib/report-button-failure";
-import { PgTerminal } from "./terminal";
+import {
+  unavailableHere,
+  wasFailureShown,
+} from "@/shared/lib/report-button-failure";
+import { isTerminalUnmounted, PgTerminal } from "./terminal";
 
 beforeEach(() => {
   PgTerminal.setConsoleOpen(true);
@@ -64,5 +67,53 @@ describe("PgTerminal.process", () => {
 
   it("leaves a success alone", async () => {
     await expect(PgTerminal.process(() => 42)).resolves.toBe(42);
+  });
+
+  // Home mounts no terminal; the call used to wait forever and leave the
+  // clicked button spinning
+  it("fails when no terminal is mounted", async () => {
+    vi.mocked(PgTerminal.get).mockRestore();
+    const cb = vi.fn();
+
+    await expect(PgTerminal.process(cb)).rejects.toSatisfy(isTerminalUnmounted);
+
+    expect(cb).not.toHaveBeenCalled();
+  });
+
+  // The button's toast names the way out rather than a failure
+  it("is unavailable here, with a way out, when no terminal is mounted", async () => {
+    vi.mocked(PgTerminal.get).mockRestore();
+
+    const failure = await PgTerminal.process(() => 42).catch((e) => e);
+
+    expect(unavailableHere(failure)).toBe("open a project to use the terminal");
+  });
+});
+
+describe("PgTerminal.run", () => {
+  it("fails when no terminal is mounted", async () => {
+    await expect(PgTerminal.run({ clear: [{ full: true }] })).rejects.toSatisfy(
+      isTerminalUnmounted
+    );
+  });
+});
+
+// Called without `await` all over the app: a terminal that is not there has
+// nothing to print or focus, and must not raise an unhandled rejection
+describe.each([
+  ["println", () => PgTerminal.println("hello")],
+  ["enable", () => PgTerminal.enable()],
+  ["focus", () => PgTerminal.focus()],
+  ["clear", () => PgTerminal.clear()],
+])("PgTerminal.%s", (_, call) => {
+  it("does nothing when no terminal is mounted", async () => {
+    await expect(call()).resolves.toBeUndefined();
+  });
+
+  it("still fails on any other error", async () => {
+    const failure = new Error("xterm threw");
+    vi.spyOn(PgTerminal, "run").mockRejectedValue(failure);
+
+    await expect(call()).rejects.toBe(failure);
   });
 });

@@ -11,6 +11,9 @@ export const useSendAndReceiveCustomEvent = <T,>(
     const eventNames = PgCommon.getSendAndReceiveEventNames(eventName);
 
     const handleSend = async (e: UIEvent & { detail: T }) => {
+      // Claim it before the first await: the sender reads the claim as soon
+      // as dispatching returns, to tell a mounted receiver from none
+      e.preventDefault();
       try {
         const data = await cb(e.detail);
         PgCommon.createAndDispatchCustomEvent(eventNames.receive, { data });

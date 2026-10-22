@@ -2,7 +2,7 @@
 // props; the base is replaced with a probe that keeps the props it was given.
 // Everything the readiness line reads is stubbed: it is not under test here.
 vi.mock("../../../utils", () => ({
-  PgCommand: {},
+  PgCommand: { build: { execute: vi.fn() } },
   PgConnection: { onDidChangeCluster: vi.fn() },
   PgExplorer: {},
   PgGlobal: {},
@@ -24,6 +24,15 @@ vi.mock("../../../features/auth", () => ({
 }));
 vi.mock("../../sidebar/assistant/store", () => ({ PgAssistant: {} }));
 
+// Each `reportButtonFailure` call: the action that did not happen, and the
+// error it got
+const told = vi.hoisted(() => [] as { action: string; error: unknown }[]);
+vi.mock("@/shared/lib/report-button-failure", () => ({
+  reportButtonFailure: (action: string) => (error: unknown) => {
+    told.push({ action, error });
+  },
+}));
+
 const { drawn } = vi.hoisted(() => ({
   drawn: [] as Record<string, unknown>[],
 }));
@@ -42,6 +51,7 @@ import type { LessonRecordEvent, StoredLesson } from "./events";
 import type { LessonState } from "./store";
 import type { LessonPath } from "./types";
 import { INITIAL_FLOW_STATE } from "../state/stage";
+import { PgCommand } from "../../../utils";
 
 const hints: [string, string, string] = ["a", "b", "c"];
 
@@ -160,5 +170,21 @@ describe("ObjectiveBand", () => {
     expect(props.kind).toBe("finished");
     expect(props.position.short).toBe("done");
     expect(props.position.progress).toBe(2 / 3);
+  });
+
+  // Under Home no terminal is mounted, so the command cannot run; the click
+  // must tell the user rather than leave an unhandled rejection
+  it("tells the user when proving the step fails", async () => {
+    const failure = new Error("The terminal is not open.");
+    vi.mocked(PgCommand.build.execute).mockRejectedValueOnce(failure);
+    told.length = 0;
+    const props = drawBand(recordOf([enter(1)]));
+    expect(props.kind).toBe("step");
+    if (props.kind !== "step") return;
+
+    props.prove!.onClick();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(told).toEqual([{ action: "check the step", error: failure }]);
   });
 });

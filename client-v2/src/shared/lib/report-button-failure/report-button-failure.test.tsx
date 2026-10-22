@@ -10,6 +10,7 @@ import type { ToastChildProps } from "@/utils/view";
 import {
   BUTTON_FAILED_TOAST,
   markFailureShown,
+  markUnavailableHere,
   reportButtonFailure,
   wasFailureShown,
 } from ".";
@@ -55,6 +56,29 @@ describe("reportButtonFailure", () => {
     });
     const { container } = renderToast();
     expect(container.textContent).toBe("Could not export the project.");
+  });
+
+  // Nothing broke: the action cannot run where it was clicked, and the toast
+  // names the way out instead of a failure
+  it("says an action cannot run here, and how to get there", () => {
+    const failure = new Error("The terminal is not open.");
+    markUnavailableHere(failure, "open a project to use the terminal");
+
+    reportButtonFailure("build")(failure);
+
+    const { container } = renderToast();
+    expect(container.textContent).toBe(
+      "Can't build here: open a project to use the terminal."
+    );
+  });
+
+  it("still says Could not for a failure not marked unavailable", () => {
+    markUnavailableHere(new Error("other"), "open a project");
+
+    reportButtonFailure("build")(new Error("build server down"));
+
+    const { container } = renderToast();
+    expect(container.textContent).toBe("Could not build.");
   });
 
   it("shows nothing for a failure already shown", () => {
