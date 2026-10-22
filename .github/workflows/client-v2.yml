@@ -170,8 +170,11 @@ jobs:
     # Measured locally at under five minutes for the suite plus a minute of
     # dev-server boot (the dated number is in D61); a 2-vCPU runner is two to
     # three times slower, so this is generous rather than tight. A genuine
-    # hang still fails, just later.
-    timeout-minutes: 30
+    # hang still fails, just later. Raised from 30 on 2026-10-23: the suite
+    # reached 23 minutes on the runner, and one retry ran it past
+    # Playwright's 25-minute `globalTimeout` (playwright.config.mts), which
+    # moved with it.
+    timeout-minutes: 40
 
     defaults:
       run:

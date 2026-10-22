@@ -187,10 +187,10 @@ export default defineConfig({
         ["json", { outputFile: "test-results/report.json" }],
       ]
     : "line",
-  // Under the job's 30-minute limit, so Playwright itself ends a hung run
+  // Under the job's 40-minute limit, so Playwright itself ends a hung run
   // and still prints its summary; a GitHub cancel keeps the traces but not
   // the line saying which test was running.
-  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
+  globalTimeout: process.env.CI ? 35 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every failed attempt keeps its trace, a flaky test's first attempt

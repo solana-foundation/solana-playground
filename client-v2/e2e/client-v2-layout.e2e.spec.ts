@@ -1460,10 +1460,15 @@ const reloadOn = async (page: Page, option: string) => {
 const clusterRow = (page: Page) =>
   nav(page).getByRole("button", { name: /^Change cluster/ });
 
-const connectWallet = async (page: Page) => {
+/** Creates the wallet from the account's menu, without waiting on its label */
+const createWallet = async (page: Page) => {
   await account(page).click();
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
+};
+
+const connectWallet = async (page: Page) => {
+  await createWallet(page);
   await expect(account(page)).toContainText(/\w{4}…\w{4}/);
 };
 
@@ -1547,10 +1552,15 @@ test("the wallet asks about the validator when localnet does not answer", async 
 }) => {
   await refuseCluster(page, "http://localhost:8899");
   await reloadOn(page, "localnet");
-  // Localnet that does not answer opens its how-to-connect dialog
+  // A wallet starts the check that opens localnet's how-to-connect dialog,
+  // and the open dialog hides the page from role queries: the account's
+  // label is read once it is closed, never in a race with it
+  await createWallet(page);
+  const howTo = page.getByRole("dialog", { name: "Connect to localnet" });
+  await expect(howTo).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
-  await connectWallet(page);
-  await page.keyboard.press("Escape");
+  await expect(howTo).toBeHidden();
+  await expect(account(page)).toContainText(/\w{4}…\w{4}/);
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
   await expect(
