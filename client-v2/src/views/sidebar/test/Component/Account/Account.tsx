@@ -1,5 +1,4 @@
 import { FC, useState } from "react";
-import styled from "styled-components";
 
 import CodeResult from "../CodeResult";
 import InputLabel from "../InputLabel";
@@ -21,12 +20,10 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 interface AccountProps {
   accountName: string;
-  index: number;
 }
 
 const Account: FC<React.PropsWithChildren<AccountProps>> = ({
   accountName,
-  index,
 }) => {
   const [address, setAddress] = useState("");
   const [addressError, setAddressError] = useState(false);
@@ -76,8 +73,8 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
   );
 
   return (
-    <Interaction name={accountName} index={index}>
-      <InputWrapper>
+    <Interaction name={accountName}>
+      <div className="my-2">
         <InputLabel name="address" type="publicKey" />
         <SearchBar
           value={address}
@@ -86,9 +83,9 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
           setError={setAddressError}
           validator={PgCommon.isPk}
         />
-      </InputWrapper>
+      </div>
 
-      <ButtonsWrapper>
+      <div className="flex flex-wrap gap-2">
         <AsyncButton
           variant="outline"
           onClick={fetchOne}
@@ -105,10 +102,10 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
         >
           Fetch All
         </AsyncButton>
-      </ButtonsWrapper>
+      </div>
 
       {(fetchedData || fetchError) && (
-        <ResultWrapper>
+        <div className="mt-4 w-full">
           <Collapsible open={resultOpen} onOpenChange={setResultOpen}>
             <CollapsibleHeading>
               <CollapsibleChevron />
@@ -121,32 +118,15 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
                     <CalloutDescription>{fetchError}</CalloutDescription>
                   </Callout>
                 ) : (
-                  <CodeResult index={index}>
-                    {PgCommon.prettyJSON(fetchedData!)}
-                  </CodeResult>
+                  <CodeResult>{PgCommon.prettyJSON(fetchedData!)}</CodeResult>
                 )}
               </SpinnerWithBg>
             </CollapsibleContent>
           </Collapsible>
-        </ResultWrapper>
+        </div>
       )}
     </Interaction>
   );
 };
-
-const InputWrapper = styled.div`
-  margin: 0.5rem 0;
-`;
-
-const ButtonsWrapper = styled.div`
-  display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
-`;
-
-const ResultWrapper = styled.div`
-  margin-top: 1rem;
-  width: 100%;
-`;
 
 export default Account;

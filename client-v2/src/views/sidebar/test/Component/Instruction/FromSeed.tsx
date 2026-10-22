@@ -1,5 +1,4 @@
 import { FC, useMemo, useRef, useState } from "react";
-import styled from "styled-components";
 
 import InputLabel from "../InputLabel";
 import InstructionInput from "./InstructionInput";
@@ -87,17 +86,17 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
   });
 
   return (
-    <Wrapper>
-      <SeedsWrapper>
+    <div className="flex flex-col gap-4 p-2">
+      <div className="flex flex-col gap-4">
         {seeds.map((seed, index) => (
-          <SeedWrapper key={index}>
-            <SeedLabelWrapper>
+          <div key={index}>
+            <div className="mb-1 flex w-full items-center justify-between">
               <InputLabel
                 name={`seed(${index + 1})`}
                 type={seed.state === "selected" ? seed.type.toString() : ""}
               />
 
-              <SeedLabelButtonsWrapper>
+              <div className="flex">
                 {seed.state === "selected" && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -139,8 +138,8 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                   </TooltipTrigger>
                   <TooltipContent>Delete seed</TooltipContent>
                 </Tooltip>
-              </SeedLabelButtonsWrapper>
-            </SeedLabelWrapper>
+              </div>
+            </div>
 
             {seed.state === "selecting" ? (
               <SeedSearchBar
@@ -166,9 +165,9 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                 searchBarProps={{ showSearchOnMount: showSelectedSeedDropdown }}
               />
             )}
-          </SeedWrapper>
+          </div>
         ))}
-      </SeedsWrapper>
+      </div>
 
       <InstructionInput
         type="publicKey"
@@ -181,7 +180,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
         {...values.programId}
       />
 
-      <SeedButtonsWrapper>
+      <div className="flex flex-col gap-2">
         <Button
           variant="outline"
           onClick={() => {
@@ -193,43 +192,10 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
         </Button>
 
         <Button onClick={generate}>Generate</Button>
-      </SeedButtonsWrapper>
-    </Wrapper>
+      </div>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  padding: 0.5rem;
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const SeedsWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const SeedWrapper = styled.div``;
-
-const SeedLabelWrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  margin-bottom: 0.25rem;
-`;
-
-const SeedLabelButtonsWrapper = styled.div`
-  display: flex;
-`;
-
-const SeedButtonsWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
 
 type SeedSearchBarProps = {
   select: (value: string) => void;
@@ -268,7 +234,7 @@ const SelectedSeed: FC<React.PropsWithChildren<SelectedSeedProps>> = ({
   index,
   searchBarProps,
 }) => (
-  <SelectedSeedWrapper>
+  <div>
     <InstructionInput
       prefix="seed"
       name={index.toString()}
@@ -277,10 +243,8 @@ const SelectedSeed: FC<React.PropsWithChildren<SelectedSeedProps>> = ({
       noLabel
       {...seed}
     />
-  </SelectedSeedWrapper>
+  </div>
 );
-
-const SelectedSeedWrapper = styled.div``;
 
 const getProgramIdItems = (): NonNullable<SearchBarProps["items"]> => [
   { label: "Custom", value: { current: true } },

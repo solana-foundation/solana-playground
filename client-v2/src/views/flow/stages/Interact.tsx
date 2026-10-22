@@ -1,10 +1,17 @@
 import { useEffect, useRef, useState } from "react";
-import styled, { css } from "styled-components";
 
-import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
+import BaseInteract from "./BaseInteract";
 import IdlActions from "./IdlActions";
+import { interactFacts, interactSurface } from "./interact-surface";
 import Test from "../../sidebar/test/Component/Test";
-import { PgExplorer, PgProgramInfo, PgWeb3 } from "../../../utils";
+import {
+  PgConnection,
+  PgExplorer,
+  PgProgramInfo,
+  PgWeb3,
+} from "../../../utils";
+import { useExplorer, useProgramInfo } from "../../../hooks";
+import { PgFlow } from "../state/stage";
 import { PgDeployHistory } from "../state/deploy-history";
 import type { DeployRecord } from "../state/deploy-history";
 
@@ -72,6 +79,10 @@ const Interact = () => {
     }
   };
 
+  const programInfo = useProgramInfo();
+  const explorer = useExplorer();
+  const surface = interactSurface(interactFacts(explorer, programInfo));
+
   const selectedIndex = history.findIndex((r) => r.id === selected);
   const selectedRecord = selectedIndex >= 0 ? history[selectedIndex] : null;
   const meta = selectedRecord
@@ -85,107 +96,28 @@ const Interact = () => {
     : "no deployments yet";
 
   return (
-    <Surface>
-      <Toolbar>
-        <HeaderText>
-          <Headline>Interact</Headline>
-          <Meta>{meta}</Meta>
-        </HeaderText>
-        <ToolbarActions>
-          <Label>
-            Deployment
-            <NativeSelect
-              size="sm"
-              className="[&_select]:font-mono [&_select]:text-xs [&_select]:tabular-nums"
-              value={selected ?? ""}
-              onChange={(ev) => pick(ev.target.value)}
-              disabled={history.length === 0}
-            >
-              {history.length === 0 && (
-                <NativeSelectOption value="">none yet</NativeSelectOption>
-              )}
-              {history.map((r, i) => (
-                <NativeSelectOption key={r.id} value={r.id}>
-                  {i === 0 ? "latest \u00b7 " : ""}
-                  {r.cluster} {"\u00b7"} {r.programId.slice(0, 6)}&hellip;{" "}
-                  {"\u00b7"} {new Date(r.at).toLocaleTimeString()}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-          </Label>
-          <IdlActions mode="button" />
-        </ToolbarActions>
-      </Toolbar>
-      <Panel>
-        <Test />
-      </Panel>
-    </Surface>
+    <BaseInteract
+      meta={meta}
+      deployments={history.map((r, i) => ({
+        id: r.id,
+        label: deploymentLabel(r, i),
+      }))}
+      selected={selected}
+      onPick={pick}
+      surface={surface}
+      cluster={PgConnection.cluster}
+      onGoTo={(stage) => PgFlow.setStage(stage)}
+      idlLoad={<IdlActions mode="button" />}
+      form={programInfo.idl && <Test idl={programInfo.idl} />}
+    />
   );
 };
 
+/** A deployment as the picker lists it: newest first, marked "latest" */
+const deploymentLabel = (r: DeployRecord, i: number) =>
+  `${i === 0 ? "latest \u00b7 " : ""}${r.cluster} \u00b7 ${r.programId.slice(
+    0,
+    6
+  )}\u2026 \u00b7 ${new Date(r.at).toLocaleTimeString()}`;
+
 export default Interact;
-
-const Surface = styled.div`
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-`;
-
-const Toolbar = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 1rem;
-    padding: 0.75rem 1.5rem;
-    border-bottom: 1px solid ${theme.colors.default.border};
-    font-family: ${theme.font.other.family};
-  `}
-`;
-
-const HeaderText = styled.div`
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-`;
-
-const Headline = styled.h2`
-  ${({ theme }) => css`
-    margin: 0;
-    font-size: ${theme.font.other.size.xlarge};
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  `}
-`;
-
-const Meta = styled.span`
-  ${({ theme }) => css`
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.other.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;
-
-const ToolbarActions = styled.div`
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 1rem;
-`;
-
-const Label = styled.label`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-size: ${theme.font.other.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;
-
-const Panel = styled.div`
-  flex: 1;
-  overflow-y: auto;
-`;

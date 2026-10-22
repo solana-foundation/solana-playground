@@ -1,5 +1,4 @@
 import { FC, useCallback, useEffect, useReducer, useState } from "react";
-import styled from "styled-components";
 
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
@@ -31,11 +30,9 @@ import { useIdl } from "../IdlProvider";
 
 interface InstructionProps {
   idlInstruction: IdlInstruction;
-  index: number;
 }
 
 const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
-  index,
   idlInstruction,
 }) => {
   const [instruction, setInstruction] = useState(() =>
@@ -148,8 +145,8 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
       instruction={instruction}
       setInstruction={setInstruction}
     >
-      <Interaction name={instruction.name} index={index}>
-        <ArgsAndAccountsWrapper>
+      <Interaction name={instruction.name}>
+        <div className="flex flex-col gap-4">
           {instruction.values.args.length > 0 && (
             <Collapsible defaultOpen>
               <CollapsibleHeading>
@@ -157,7 +154,7 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
                 Args
               </CollapsibleHeading>
               <CollapsibleContent className="mt-2">
-                <InstructionInputsWrapper>
+                <div className="flex flex-col gap-3 text-xs">
                   {instruction.values.args.map((arg) => (
                     <InstructionInput
                       key={arg.name + refreshCount}
@@ -175,7 +172,7 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
                       {...arg}
                     />
                   ))}
-                </InstructionInputsWrapper>
+                </div>
               </CollapsibleContent>
             </Collapsible>
           )}
@@ -187,7 +184,7 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
                 Accounts
               </CollapsibleHeading>
               <CollapsibleContent className="mt-2">
-                <InstructionInputsWrapper>
+                <div className="flex flex-col gap-3 text-xs">
                   {instruction.values.accounts.map((acc) => (
                     <InstructionInput
                       key={acc.name + refreshCount}
@@ -206,15 +203,14 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
                       {...acc}
                     />
                   ))}
-                </InstructionInputsWrapper>
+                </div>
               </CollapsibleContent>
             </Collapsible>
           )}
-        </ArgsAndAccountsWrapper>
+        </div>
 
-        <ButtonWrapper>
+        <div className="mt-4 flex flex-wrap gap-2">
           <AsyncButton
-            className="px-6"
             onClick={handleTest}
             onError={reportButtonFailure("run the test")}
             disabled={!wallet || disabled}
@@ -225,40 +221,18 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
           {(instruction.values.accounts.length > 0 ||
             instruction.values.args.length > 0) && (
             <>
-              <Button variant="outline" className="px-6" onClick={fillRandom}>
+              <Button variant="outline" onClick={fillRandom}>
                 Fill
               </Button>
-              <Button variant="outline" className="px-6" onClick={reset}>
+              <Button variant="outline" onClick={reset}>
                 Reset
               </Button>
             </>
           )}
-        </ButtonWrapper>
+        </div>
       </Interaction>
     </InstructionProvider>
   );
 };
-
-const ArgsAndAccountsWrapper = styled.div`
-  padding-left: 0.25rem;
-
-  & > div {
-    margin-top: 1rem;
-  }
-`;
-
-const InstructionInputsWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  font-size: ${({ theme }) => theme.font.code.size.small};
-`;
-
-const ButtonWrapper = styled.div`
-  display: flex;
-  justify-content: center;
-  margin-top: 1rem;
-  gap: 1rem;
-`;
 
 export default Instruction;

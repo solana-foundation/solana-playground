@@ -2,9 +2,10 @@
 
 ## Purpose
 
-What the Build and Deploy stages of the development loop show: a failed
-build explained line by line, the latest deployment's program id, and the
-stage's one action within reach of the thumb on a phone.
+What the Build, Deploy and Interact stages of the development loop show: a
+failed build explained line by line, the latest deployment's program id, what
+Interact still needs before it can call the program, and the stage's one
+action within reach of the thumb on a phone.
 
 ## ADDED Requirements
 
@@ -36,9 +37,25 @@ where it was deployed and the program id with a button that copies it
 - **THEN** the Deploy stage says "Deployed to devnet"
 - **AND** shows the program id with a button that copies it
 
+### Requirement: The Interact stage says what is missing
+
+Until the program can be called, the Interact stage SHALL say in one empty
+state (`data-slot="stage-empty"`) what is missing and offer the step that
+supplies it: Go to Build before a build or without a program id, Go to Deploy
+before a deployment,
+Load IDL file for an imported program without an IDL. The stage keeps
+`flow-stage-panel-interact`.
+
+#### Scenario: Interact before a deploy
+
+- **WHEN** a built project that has never been deployed opens the Interact
+  stage
+- **THEN** the stage says "Nothing to call yet"
+- **AND** offers Go to Deploy, which switches to the Deploy stage
+
 ### Requirement: A stage's action sits at the foot on a phone
 
-Below 768 px the action row of the Build and Deploy stages
+Below 768 px the action row of the Build, Deploy and Interact stages
 (`data-slot="stage-empty-actions"`) SHALL sit at the foot of the stage,
 whether the stage's content is shorter or taller than the screen.
 
@@ -52,3 +69,9 @@ whether the stage's content is shorter or taller than the screen.
 - **WHEN** the Deploy stage of a deployed project is shown on a 390 px wide
   screen
 - **THEN** the Redeploy button sits at the foot of the stage
+
+#### Scenario: The Interact action at the foot on a phone
+
+- **WHEN** the Interact stage of a project that has never been deployed is
+  shown on a 390 px wide screen
+- **THEN** the Go to Deploy button sits at the foot of the stage

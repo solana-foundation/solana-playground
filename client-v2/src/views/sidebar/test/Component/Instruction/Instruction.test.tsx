@@ -25,36 +25,21 @@ vi.mock("./InstructionInput", () => ({ default: () => null }));
 vi.mock("../IdlProvider", () => ({ useIdl: () => ({ idl: {} }) }));
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { expect, it, vi } from "vitest";
 
 import Instruction from "./Instruction";
 
-// A theme that answers every key: the styled rules read deep tokens
-const theme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_target, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : theme,
-  }
-) as unknown as DefaultTheme;
-
 it("starts with the Args and Accounts folds open", () => {
   render(
-    <ThemeProvider theme={theme}>
-      <Instruction
-        index={0}
-        idlInstruction={
-          {
-            name: "increment",
-            args: [],
-            accounts: [],
-          } as unknown as Parameters<typeof Instruction>[0]["idlInstruction"]
-        }
-      />
-    </ThemeProvider>
+    <Instruction
+      idlInstruction={
+        {
+          name: "increment",
+          args: [],
+          accounts: [],
+        } as unknown as Parameters<typeof Instruction>[0]["idlInstruction"]
+      }
+    />
   );
   // The instruction's own fold is closed, so open it to reach the two inside.
   fireEvent.click(screen.getByRole("button", { name: "increment" }));

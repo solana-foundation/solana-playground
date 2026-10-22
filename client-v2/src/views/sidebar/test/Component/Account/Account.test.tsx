@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, expect, it, vi } from "vitest";
 
 import Account from "./Account";
@@ -36,22 +35,12 @@ vi.mock("../../../../../components/SearchBar", () => ({
   ),
 }));
 
-// Interaction's styled wrapper reads these keys; no other theme use is mounted.
-const theme = {
-  colors: { default: { border: "black" } },
-  views: { sidebar: { right: { default: { otherBg: "gray", bg: "black" } } } },
-} as unknown as DefaultTheme;
-
 afterEach(() => vi.restoreAllMocks());
 
 it("opens the controlled Result fold when a fetch finishes", async () => {
   vi.spyOn(PgProgramInteraction, "fetchAllAccounts").mockResolvedValue([]);
 
-  render(
-    <ThemeProvider theme={theme}>
-      <Account accountName="counter" index={0} />
-    </ThemeProvider>
-  );
+  render(<Account accountName="counter" />);
   // Interaction's own fold is closed, so open it to reach the buttons.
   fireEvent.click(screen.getByRole("button", { name: "counter" }));
   fireEvent.click(screen.getByText("Fetch All"));
