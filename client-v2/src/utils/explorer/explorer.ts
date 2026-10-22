@@ -1828,7 +1828,10 @@ export class PgExplorer {
    * @returns the element
    */
   static getElFromPath(path: string) {
-    return document.querySelector(`[data-path='${path}']`) as
+    // A file name may hold a quote or a backslash, which would end the
+    // selector's string or escape the next character
+    const quoted = path.replace(/["\\]/g, "\\$&");
+    return (document.querySelector(`[data-path="${quoted}"]`) ?? undefined) as
       | HTMLDivElement
       | undefined;
   }

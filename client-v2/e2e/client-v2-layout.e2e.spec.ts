@@ -9,7 +9,9 @@ import {
   json,
   leaveEditor,
   projectRow,
+  runInTerminal,
   seedWorkspace,
+  stubSignedIn,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -266,11 +268,7 @@ test("client-v2-layout: An unreadable saved layout", async ({
 
 test("client-v2-layout: Folding the console", async ({ seededPage: page }) => {
   await consoleHandle(page).click();
-  // The labelled input, not the element's centre: the centre can land on the
-  // link in the welcome text, and a click on a link does not focus the terminal.
-  await page.getByLabel("Terminal input").first().click();
-  await page.keyboard.type("echo-marker");
-  await page.keyboard.press("Enter");
+  await runInTerminal(page, "echo-marker");
   await expect(page.locator(".xterm-rows")).toContainText("echo-marker");
 
   await consoleHandle(page).click();
@@ -504,9 +502,7 @@ test.describe("on a phone", () => {
     if ((await consoleHandle(page).getAttribute("aria-expanded")) !== "true") {
       await consoleHandle(page).click();
     }
-    await page.getByLabel("Terminal input").first().click();
-    await page.keyboard.type("help");
-    await page.keyboard.press("Enter");
+    await runInTerminal(page, "help");
     await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
 
     const lines = page.locator(".monaco-editor .view-lines");
@@ -1131,31 +1127,13 @@ test("a dragged files column keeps its width over a reload", async ({
     .toBeLessThan(4);
 });
 
-/**
- * Signing in for real needs a live GitHub round trip, so the account
- * endpoints are stubbed, as `account-sync.e2e.spec.ts` does, for an account
- * that holds nothing yet
- */
-const stubSignedIn = async (page: Page) => {
-  await page.route("**/api/auth/get-session", (r) =>
-    json(r, { user: { id: "u1", name: "Tester", image: null, login: "t" } })
-  );
-  await page.route("**/api/sync", (r) => json(r, { enabled: true, db: "ok" }));
-  await page.route("**/api/conversations*", (r) => json(r, { items: [] }));
-  await page.route("**/api/projects*", (r) =>
-    r.request().method() === "PUT"
-      ? json(r, { updatedAt: new Date().toISOString() })
-      : json(r, { projects: [] })
-  );
-};
-
 // The account row sits in the navigation's footer at the bottom left of the
 // window, so its menu opens upward: one opening downward would run off the
 // window
 test("the account menu opens inside the window, its Sign out on top", async ({
   page,
 }) => {
-  await stubSignedIn(page);
+  await stubSignedIn(page.context());
   await seedWorkspace(page);
 
   await account(page).click();
@@ -1326,7 +1304,7 @@ test("client-v2-layout: Signing in from the account menu", async ({
 });
 
 test("client-v2-layout: Signing out asks first", async ({ page }) => {
-  await stubSignedIn(page);
+  await stubSignedIn(page.context());
   await seedWorkspace(page);
   let signedOut = false;
   await page.route("**/api/auth/sign-out", (route) => {

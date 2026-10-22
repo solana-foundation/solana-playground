@@ -837,6 +837,12 @@ the message names the pid holding the port. On a queue port that holder can only
 that was killed (its slot was reclaimed, its server was not): stop it and run again. A hand-set `PORT` still works,
 outside 139xx, and gets the same check.
 
+A spec that fails on the runner and passes on a laptop is usually a timing race. `E2E_CPU_THROTTLE=<n>` slows each
+test's `page` `n` times through CDP, and `--repeat-each` with more `E2E_WORKERS` adds load, so the race shows locally:
+`E2E_WORKERS=4 E2E_CPU_THROTTLE=6 yarn test-e2e e2e/<spec>.e2e.spec.ts --repeat-each 10`. It reaches only specs that
+import `test` from `e2e/fixtures.ts`, and in them only the `page` fixture: a page the test opens itself runs at full
+speed.
+
 The full suite is CI's. A local run with no spec, or with a filter that names the test directory (`e2e/`, `.`), stops
 with a message; a `--grep`, `--only-changed`, `--test-list`, or `--ui` run goes ahead, and so does `--last-failed` once
 a last run's record exists (without one it runs everything). `E2E_FULL=1 yarn test-e2e` runs the full suite anyway,

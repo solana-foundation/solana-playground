@@ -582,3 +582,23 @@ describe("importing a workspace under a name already in use", () => {
     expect(PgExplorer.workspaceNameOf("p3")).toBeUndefined();
   });
 });
+
+// The tree finds an item by its path on every render while a file waits to
+// be shown (`useHandleItemState`), so a path the selector cannot hold must
+// not throw: a file name may carry a quote
+describe("PgExplorer.getElFromPath", () => {
+  afterEach(() => document.body.replaceChildren());
+
+  for (const path of [
+    "/w1/src/it's.rs",
+    '/w1/src/say "hi".rs',
+    "/w1/src/back\\slash.rs",
+  ]) {
+    it(`finds the item at ${path}`, () => {
+      const el = document.createElement("div");
+      el.setAttribute("data-path", path);
+      document.body.append(el);
+      expect(PgExplorer.getElFromPath(path)).toBe(el);
+    });
+  }
+});

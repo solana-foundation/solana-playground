@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-import { HELP_TAIL, home, test } from "./fixtures";
+import { HELP_TAIL, home, runInTerminal, test } from "./fixtures";
 
 /** The computed style property of the first element matching `selector` */
 const computed = (
@@ -46,9 +46,7 @@ const runHelp = async (page: Page) => {
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }
-  await page.getByLabel("Terminal input").first().click();
-  await page.keyboard.type("help");
-  await page.keyboard.press("Enter");
+  await runInTerminal(page, "help");
   const terminal = page.locator(".xterm-rows").first();
   await expect(terminal).toContainText(HELP_TAIL);
   return terminal;

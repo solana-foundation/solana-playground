@@ -1,5 +1,5 @@
 import { test as base, expect } from "@playwright/test";
-import type { Page, Route } from "@playwright/test";
+import type { BrowserContext, Page, Route } from "@playwright/test";
 import { isUuid } from "../src/shared/lib/ids";
 
 /** For a step that waits on the explorer, sync or a reload */
@@ -56,6 +56,27 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
  */
 export const HELP_TAIL = "Run test(s)";
 
+/**
+ * Types `command` into the terminal and runs it.
+ *
+ * The console prints its prompt a moment after it opens (`PgTerm.open`, then
+ * `PgShell.enable`), and the prompt starts a fresh input (`PgTty.read`), which
+ * erases whatever was typed before it. So the command goes in once the
+ * terminal ends in the prompt, and the click comes after that wait, so
+ * nothing can take the focus in between.
+ *
+ * The labelled input, not the element's centre: the centre can land on the
+ * link in the welcome text, and a click on a link does not focus the terminal.
+ */
+export const runInTerminal = async (page: Page, command: string) => {
+  await expect(page.locator(".xterm-rows").first()).toHaveText(/\$\s*$/);
+  const input = page.getByLabel("Terminal input").first();
+  await input.click();
+  await expect(input).toBeFocused();
+  await page.keyboard.type(command);
+  await page.keyboard.press("Enter");
+};
+
 /** What rustc prints for one type error, as the build server returns it */
 export const FAILED_BUILD_STDERR = [
   "error[E0308]: mismatched types",
@@ -84,6 +105,21 @@ export const leaveEditor = async (page: Page) => {
 };
 
 export const test = base.extend<{ seededPage: Page }>({
+  // `E2E_CPU_THROTTLE=<n>` slows the test's page `n` times, to show a race
+  // that only the runner hits (`docs/testing.md`, "Parallel runs")
+  page: async ({ page }, use) => {
+    const rate = Number(process.env.E2E_CPU_THROTTLE ?? 1);
+    if (!(Number.isFinite(rate) && rate >= 1)) {
+      throw new Error(
+        `E2E_CPU_THROTTLE must be a number of 1 or more, got "${process.env.E2E_CPU_THROTTLE}".`
+      );
+    }
+    if (rate > 1) {
+      const cdp = await page.context().newCDPSession(page);
+      await cdp.send("Emulation.setCPUThrottlingRate", { rate });
+    }
+    await use(page);
+  },
   seededPage: async ({ page }, use) => {
     await seedWorkspace(page);
     // The tree shows before the editor: Monaco is a lazy chunk, and when it
@@ -140,6 +176,97 @@ export const TEST_USER = { id: "u1", name: "Tester", image: null, login: "t" };
  */
 export const stubSession = (page: Page, user: unknown = TEST_USER) =>
   page.route("**/api/auth/get-session", (r) => json(r, { user }));
+
+/**
+ * An account that is signed in and holds what it accepts, for a test that is
+ * about something other than sync: `TEST_USER`'s session, sync enabled, no
+ * conversations, and a project store that lists and returns every upload.
+ *
+ * A store that takes an upload and then lists nothing is not an empty
+ * account: the project was uploaded and is gone, which reads as deleted on
+ * another device, and the next reconcile deletes it here too (or asks about
+ * it, if it holds edits not yet uploaded). On a loaded runner that pass lands
+ * mid-test and takes the test's project with it.
+ *
+ * The version checks are the sync specs' business, so a well-formed write is
+ * accepted whatever version it names; one the real endpoint refuses for its
+ * shape is refused here too. On the context, so a second tab signs in to the
+ * same account.
+ */
+export const stubSignedIn = async (context: BrowserContext) => {
+  // The shape `api/projects.mjs` stores and answers with
+  type Row = {
+    id: string;
+    name: string;
+    kind: "project" | "tutorial";
+    updatedAt: string;
+    snapshot: { files: Record<string, string> };
+  };
+  const refuse = (r: Route, status: number, body: unknown) =>
+    r.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
+  const rows = new Map<string, Row>();
+
+  await context.route("**/api/auth/get-session", (r) =>
+    json(r, { user: TEST_USER })
+  );
+  await context.route("**/api/sync", (r) =>
+    json(r, { enabled: true, db: "ok" })
+  );
+  await context.route("**/api/conversations*", (r) => json(r, { items: [] }));
+  await context.route("**/api/projects*", (r) => {
+    const req = r.request();
+    const id = new URL(req.url()).searchParams.get("id");
+    if (req.method() === "PUT") {
+      const body = req.postDataJSON();
+      if (
+        !body.id ||
+        !body.name ||
+        !["project", "tutorial"].includes(body.kind)
+      ) {
+        return refuse(r, 400, { error: "id, name and kind required" });
+      }
+      // A patch is made against a stored row: without one it is the
+      // conflict the real endpoint answers, not a project of the changed
+      // files alone
+      if (!body.files && !rows.has(body.id)) {
+        return refuse(r, 409, { conflict: true, updatedAt: null });
+      }
+      const updatedAt = new Date().toISOString();
+      rows.set(body.id, {
+        id: body.id,
+        name: body.name,
+        kind: body.kind,
+        updatedAt,
+        snapshot: applyWrite(rows.get(body.id)?.snapshot, body),
+      });
+      return json(r, { updatedAt });
+    }
+    if (req.method() === "DELETE") {
+      if (id) rows.delete(id);
+      return json(r, { deleted: true });
+    }
+    if (req.method() !== "GET") {
+      return refuse(r, 405, { error: "Method not allowed" });
+    }
+    if (!id) {
+      const projects = Array.from(rows.values(), (row) => ({
+        id: row.id,
+        name: row.name,
+        kind: row.kind,
+        updatedAt: row.updatedAt,
+      }));
+      return json(r, { projects });
+    }
+    const row = rows.get(id);
+    return row
+      ? json(r, { project: row })
+      : refuse(r, 404, { error: "Not found" });
+  });
+};
 
 /**
  * Wait until the browser has stopped uploading.

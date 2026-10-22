@@ -1,6 +1,6 @@
-import { RefObject, useEffect, useLayoutEffect } from "react";
+import { RefObject, useEffect, useLayoutEffect, useRef } from "react";
 import { useTheme } from "styled-components";
-import { PgCommon, PgExplorer } from "../../../../utils";
+import { PgExplorer } from "../../../../utils";
 import { keepTree, keptFolders, reopenFolders } from "./kept-tree";
 
 /**
@@ -33,40 +33,43 @@ export const useHandleItemState = (
     };
   }, [rootRef]);
 
+  // Whether the open file's folders still wait to be opened.
+  // `PgExplorer.switchWorkspace` announces the file and the switch before
+  // React draws the new project's tree, and on a loaded machine that drawing
+  // outlasts any fixed wait, so the folders open once the file is in the
+  // tree. The path is read when they open, from the explorer, so a file closed
+  // meanwhile is never shown again.
+  const reveal = useRef<"owed" | "settled">("settled");
+
+  const revealOpenFile = (opts: { keepCtxSelected: boolean }) => {
+    if (reveal.current === "settled") return;
+    const path = PgExplorer.currentFilePath;
+    if (!path) {
+      reveal.current = "settled";
+      return;
+    }
+    if (!PgExplorer.getElFromPath(path)) return;
+    reveal.current = "settled";
+    openParentsAndSelectEl(path, opts);
+  };
+
+  // Every render: the tree this component draws may be the one the file
+  // waits for. That can be renders after the open, and a context menu the
+  // user opened since is theirs, so its selection is kept.
+  useLayoutEffect(() => revealOpenFile({ keepCtxSelected: true }));
+
   useEffect(() => {
     const switchWorkspace = PgExplorer.onDidSwitchWorkspace(() => {
-      // Reset folder open/closed state
+      // Reset folder open/closed state, then open the way to the file the
+      // switch opened, which it announced first
       PgExplorer.collapseAllFolders();
+      reveal.current = "owed";
+      revealOpenFile({ keepCtxSelected: true });
     });
 
-    const openParentsAndSelectEl = (
-      path: string,
-      { keepCtxSelected }: { keepCtxSelected: boolean }
-    ) => {
-      // Open if current file's parents are not opened
-      PgExplorer.openAllParents(path);
-
-      // Change selected element
-      const newEl = PgExplorer.getElFromPath(path);
-      if (newEl) {
-        PgExplorer.setSelectedEl(newEl);
-        if (!keepCtxSelected) PgExplorer.removeCtxSelectedEl();
-      }
-    };
-
-    const switchFile = PgExplorer.onDidOpenFile(async (file) => {
-      if (!file) return;
-
-      openParentsAndSelectEl(file.path, { keepCtxSelected: false });
-
-      // Sleep before opening parents because switching workspace collapses
-      // all folders after file switching. The context selection is left
-      // alone: one made since belongs to a menu the user opened in those
-      // 300 ms, and the tree mounts again each time the project Sheet opens
-      // below 768 px, so clearing it here left that menu's Rename and Delete
-      // with nothing to act on.
-      await PgCommon.sleep(300);
-      openParentsAndSelectEl(file.path, { keepCtxSelected: true });
+    const switchFile = PgExplorer.onDidOpenFile((file) => {
+      reveal.current = file ? "owed" : "settled";
+      revealOpenFile({ keepCtxSelected: false });
     });
 
     return () => {
@@ -76,4 +79,20 @@ export const useHandleItemState = (
 
     //eslint-disable-next-line react-hooks/exhaustive-deps
   }, [theme.name]);
+};
+
+/** Opens the folders above `path` and selects its element */
+const openParentsAndSelectEl = (
+  path: string,
+  { keepCtxSelected }: { keepCtxSelected: boolean }
+) => {
+  // Open if current file's parents are not opened
+  PgExplorer.openAllParents(path);
+
+  // Change selected element
+  const newEl = PgExplorer.getElFromPath(path);
+  if (newEl) {
+    PgExplorer.setSelectedEl(newEl);
+    if (!keepCtxSelected) PgExplorer.removeCtxSelectedEl();
+  }
 };

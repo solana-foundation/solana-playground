@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { HELP_TAIL, seedWorkspace } from "./fixtures";
+import { HELP_TAIL, runInTerminal, seedWorkspace } from "./fixtures";
 
 /**
  * The editor and its neighbours, end to end. Written for the React 19 move,
@@ -110,9 +110,7 @@ test.describe.serial("the editor", () => {
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }
-    await page.getByLabel("Terminal input").first().click();
-    await page.keyboard.type("help");
-    await page.keyboard.press("Enter");
+    await runInTerminal(page, "help");
     await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
     await expect(page.locator(".xterm")).toHaveCount(1);
   });
