@@ -227,9 +227,9 @@ const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
         return;
       }
       case "export":
-        // The promise settles when the dialog closes; the dialog reports its
-        // own export's failures, so only a failure of the dialog itself
-        // lands here
+        // The promise settles when the dialog closes, with `null` if it
+        // crashed (`ModalHost` reports that); the dialog reports its own
+        // export's failures
         await PgView.setModal(<ExportWorkspace name={entry.name} />);
         return;
       case "delete":

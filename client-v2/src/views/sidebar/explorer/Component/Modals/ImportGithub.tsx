@@ -5,7 +5,7 @@ import styled, { css } from "styled-components";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
-import { ModalFrame, SubmitCancelled } from "@/widgets/overlays";
+import { ModalFrame, SubmitCancelled, useModalId } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
 import {
@@ -132,60 +132,63 @@ interface ExampleProps {
   framework: Framework;
 }
 
-const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => (
-  <ExampleWrapper>
-    <FrameworkWrapper>
-      <FrameworkImage src={framework.icon} $circle={framework.circleImage} />
-      <FrameworkName>
-        {framework.name} - {framework.githubExample.name}
-      </FrameworkName>
-    </FrameworkWrapper>
+const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
+  const id = useModalId();
+  return (
+    <ExampleWrapper>
+      <FrameworkWrapper>
+        <FrameworkImage src={framework.icon} $circle={framework.circleImage} />
+        <FrameworkName>
+          {framework.name} - {framework.githubExample.name}
+        </FrameworkName>
+      </FrameworkWrapper>
 
-    <ExampleButtonsWrapper>
-      <AsyncButton
-        type="button"
-        variant="outline"
-        onClick={async () => {
-          try {
-            await PgGithub.import(framework.githubExample.url);
-          } catch (e) {
-            // Closing the program selection is a choice, not a failure
-            if (e instanceof ImportCancelledError) return;
-            throw e;
-          }
-          PgView.closeModal();
-        }}
-        onError={reportButtonFailure("import the program")}
-      >
-        Import
-        <ImportWorkspace data-icon="inline-end" />
-      </AsyncButton>
-
-      <Button
-        type="button"
-        variant="outline"
-        onClick={() => {
-          PgRouter.navigate("/" + framework.githubExample.url);
-          PgView.closeModal();
-        }}
-      >
-        Open
-        <Eye data-icon="inline-end" />
-      </Button>
-
-      <Button asChild variant="outline">
-        <a
-          href={framework.githubExample.url}
-          target="_blank"
-          rel="noopener noreferrer"
+      <ExampleButtonsWrapper>
+        <AsyncButton
+          type="button"
+          variant="outline"
+          onClick={async () => {
+            try {
+              await PgGithub.import(framework.githubExample.url);
+            } catch (e) {
+              // Closing the program selection is a choice, not a failure
+              if (e instanceof ImportCancelledError) return;
+              throw e;
+            }
+            PgView.closeModal(null, id);
+          }}
+          onError={reportButtonFailure("import the program")}
         >
-          Open in GitHub
-          <Github data-icon="inline-end" />
-        </a>
-      </Button>
-    </ExampleButtonsWrapper>
-  </ExampleWrapper>
-);
+          Import
+          <ImportWorkspace data-icon="inline-end" />
+        </AsyncButton>
+
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            PgRouter.navigate("/" + framework.githubExample.url);
+            PgView.closeModal(null, id);
+          }}
+        >
+          Open
+          <Eye data-icon="inline-end" />
+        </Button>
+
+        <Button asChild variant="outline">
+          <a
+            href={framework.githubExample.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open in GitHub
+            <Github data-icon="inline-end" />
+          </a>
+        </Button>
+      </ExampleButtonsWrapper>
+    </ExampleWrapper>
+  );
+};
 
 const ExampleWrapper = styled.div`
   margin: 1rem 0;

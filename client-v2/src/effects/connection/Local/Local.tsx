@@ -10,17 +10,19 @@ import {
 } from "@/shared/ui/collapsible";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import Markdown from "../../../components/Markdown";
-import { ModalFrame } from "@/widgets/overlays";
+import { ModalFrame, useModalId } from "@/widgets/overlays";
 import { PgCommon, PgConnection, PgView } from "../../../utils";
 
 export const Local = () => {
-  // Close when connected
+  const id = useModalId();
+
+  // Close when connected; by id, as another dialog may sit on this one
   useEffect(() => {
     const { dispose } = PgConnection.onDidChangeIsConnected((isConnected) => {
-      if (isConnected) PgView.closeModal();
+      if (isConnected) PgView.closeModal(null, id);
     });
     return dispose;
-  }, []);
+  }, [id]);
 
   return (
     <ModalFrame name="localnet-unreachable" title="Connect to localnet">

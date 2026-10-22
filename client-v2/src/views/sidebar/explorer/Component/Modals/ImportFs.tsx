@@ -42,10 +42,8 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
 
       const pgFiles = await PgFramework.convertToPlaygroundLayout(importFiles);
 
-      // Multiple programs require selecting the program to import which closes
-      // the current modal
+      // Closed while the files were read: open it again with them
       if (!mounted.current) {
-        PgView.closeModal();
         PgView.setModal(<ImportFs name={name} files={pgFiles} />);
       } else {
         setFiles(pgFiles);
@@ -53,7 +51,6 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       }
     } catch (e: any) {
       if (!mounted.current) {
-        PgView.closeModal();
         PgView.setModal(<ImportFs name={name} importError={e.message} />);
       } else {
         setImportError(e.message);

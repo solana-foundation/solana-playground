@@ -16,13 +16,16 @@ import { Modal } from "@/shared/ui/modal";
 import { PROJECT_NAME } from "@/constants";
 import { PgView } from "@/utils/view";
 import { ModalFrame, SubmitCancelled } from "./ModalFrame";
-import { ModalLayerContext } from "./modal-layer";
+import { ModalIdContext, ModalLayerContext } from "./modal-layer";
 import { ModalPages, modalPage } from "./ModalPages";
 import type { ModalPageProps } from "./ModalPages";
 import type { ModalFrameProps } from "./ModalFrame";
 
 let sent: ReturnType<typeof memoryProvider>;
 let logs: ReturnType<typeof logMemory>;
+/** The id `ModalHost` would give the dialog around the frame */
+const DIALOG_ID = "dialog-1";
+
 let closeModal: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   sent = memoryProvider();
@@ -45,16 +48,18 @@ const events = (name: string) =>
 const renderFrame = (props: Omit<ModalFrameProps, "name">) =>
   render(
     <Modal open>
-      <ModalLayerContext.Provider value>
-        <ModalFrame
-          name="rename-item"
-          title={props.title}
-          buttonProps={props.buttonProps}
-          size={props.size}
-        >
-          <input aria-label="Name" />
-        </ModalFrame>
-      </ModalLayerContext.Provider>
+      <ModalIdContext.Provider value={DIALOG_ID}>
+        <ModalLayerContext.Provider value>
+          <ModalFrame
+            name="rename-item"
+            title={props.title}
+            buttonProps={props.buttonProps}
+            size={props.size}
+          >
+            <input aria-label="Name" />
+          </ModalFrame>
+        </ModalLayerContext.Provider>
+      </ModalIdContext.Provider>
     </Modal>
   );
 
@@ -74,7 +79,7 @@ it("should close with what the submit resolved", async () => {
   await submit("Rename");
 
   expect(closeModal).toHaveBeenCalledTimes(1);
-  expect(closeModal).toHaveBeenCalledWith(42);
+  expect(closeModal).toHaveBeenCalledWith(42, DIALOG_ID);
 });
 
 it("should stay open after a submit with noCloseOnSubmit", async () => {
@@ -148,7 +153,7 @@ it("should close with nothing when the button has no onSubmit", async () => {
   await submit("Done");
 
   expect(closeModal).toHaveBeenCalledTimes(1);
-  expect(closeModal).toHaveBeenCalledWith(null);
+  expect(closeModal).toHaveBeenCalledWith(null, DIALOG_ID);
   expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
 });
 
@@ -161,7 +166,7 @@ it("should close with null on Cancel", () => {
   fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
   expect(closeModal).toHaveBeenCalledTimes(1);
-  expect(closeModal).toHaveBeenCalledWith(null);
+  expect(closeModal).toHaveBeenCalledWith(null, DIALOG_ID);
 });
 
 it("should show the product's name for title true", () => {
@@ -226,9 +231,11 @@ it("should report a dialog of several pages as opened once", () => {
   );
   render(
     <Modal open>
-      <ModalLayerContext.Provider value>
-        <ModalPages name="share" defaultPage={modalPage(First)} />
-      </ModalLayerContext.Provider>
+      <ModalIdContext.Provider value={DIALOG_ID}>
+        <ModalLayerContext.Provider value>
+          <ModalPages name="share" defaultPage={modalPage(First)} />
+        </ModalLayerContext.Provider>
+      </ModalIdContext.Provider>
     </Modal>
   );
 
@@ -261,9 +268,11 @@ it("should send overlay_modal_opened once under StrictMode", () => {
   render(
     <StrictMode>
       <Modal open>
-        <ModalLayerContext.Provider value>
-          <ModalFrame name="rename-item" title="Rename" />
-        </ModalLayerContext.Provider>
+        <ModalIdContext.Provider value={DIALOG_ID}>
+          <ModalLayerContext.Provider value>
+            <ModalFrame name="rename-item" title="Rename" />
+          </ModalLayerContext.Provider>
+        </ModalIdContext.Provider>
       </Modal>
     </StrictMode>
   );

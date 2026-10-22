@@ -5,7 +5,7 @@ import { PgView } from "@/utils/view";
 import Connect from "../../../views/sidebar/assistant/Component/Connect";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { Connection } from "../../../views/sidebar/assistant/store";
-import { ModalFrame } from "../../overlays";
+import { ModalFrame, useModalId } from "../../overlays";
 import { useDefaultBackend } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import type { ConnectOpener, ConnectPreset } from "../model/use-turn";
@@ -36,13 +36,12 @@ interface ConnectDialogProps {
  * Closes itself with the connection on the first one made while it is open.
  *
  * `PgAssistant.isPickingBackend` says it is open for exactly as long as this
- * is mounted. Not for as long as its `setModal` is pending: `closeModal`
- * answers every pending one (HOO-2091), so a dialog stacked on this one
- * closing would end it while this is still on screen. `ModalHost` keeps a
- * lower dialog mounted, so the cleanup runs only when this one is popped.
+ * is mounted. `ModalHost` keeps a lower dialog mounted, so the cleanup runs
+ * only when this one closes, not when a dialog stacked on it does.
  */
 const ConnectDialog = ({ preset }: ConnectDialogProps) => {
   const probed = useDefaultBackend();
+  const id = useModalId();
   // Above `ModalFrame`, so a dialog stacked on this one does not reset it
   const opened = useRef(PgAssistant.connection);
   const closed = useRef(false);
@@ -58,12 +57,13 @@ const ConnectDialog = ({ preset }: ConnectDialogProps) => {
       // `connect` always stores a new object, so re-picking the backend
       // already connected counts as a connection too
       if (!connection || connection === opened.current) return;
-      // The store emits again before this unmounts; a second close would
-      // take whatever dialog is under this one with it
+      // The store emits again before this unmounts; once closed, the pick is
+      // not reported again
       if (closed.current) return;
       closed.current = true;
       try {
-        PgView.closeModal(connection);
+        // By id: a dialog stacked on this one stays
+        PgView.closeModal(connection, id);
       } catch (error) {
         // Still on screen: the next connection made in it closes it
         closed.current = false;
@@ -83,7 +83,7 @@ const ConnectDialog = ({ preset }: ConnectDialogProps) => {
       // Closed with no connection (Escape, Close, a press outside, a crash)
       if (PgAssistant.isPickingBackend) PgAssistant.keepBackend();
     };
-  }, []);
+  }, [id]);
 
   return (
     // The form is the frame's body, its action the frame's submit: a phone
@@ -127,19 +127,24 @@ const CouldNotOpen = () => (
  *
  * Marks it open at once, so the reconnects on load, a send with nothing
  * connected and a second open all stand down before the dialog has mounted;
- * from then on `ConnectDialog` holds the mark. Its answer is not read here
- * (see `ConnectDialog`).
+ * from then on `ConnectDialog` holds the mark. Once the dialog closes, the
+ * mark is cleared here too, for a dialog that never mounted to clear it (no
+ * host showed it in time, see `MODAL_HOST_WAIT`).
  */
 export const openConnectDialog: ConnectOpener = (via, preset) => {
   if (PgAssistant.isPickingBackend) return;
   assistantTelemetry.track("assistant_connect_opened", { via });
   PgAssistant.pickBackend();
 
-  PgView.setModal<unknown, ConnectDialogProps>(ConnectDialog, { preset }).catch(
+  PgView.setModal<unknown, ConnectDialogProps>(ConnectDialog, { preset }).then(
+    () => {
+      if (PgAssistant.isPickingBackend) PgAssistant.keepBackend();
+    },
+    // Only a failure to open lands here, not one after the dialog closed
     (error) => {
-      // `setModal` rejects only when the dialog host answers with an error;
-      // the user is left without the dialog, so the team must hear of it,
-      // and the user is told why nothing opened
+      // Opening a dialog does not fail today: `setModal` only rejects should
+      // `openModal` ever throw. Then the user is left without the dialog, so
+      // the team must hear of it, and the user is told why nothing opened
       log.error(error, { report: true, context: { via } });
       PgView.setToast(CouldNotOpen, {
         options: { name: "connect-model-failed" },

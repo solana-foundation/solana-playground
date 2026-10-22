@@ -138,6 +138,9 @@ beforeEach(() => {
   initTelemetry({ providers: [sent] });
 });
 afterEach(() => {
+  // `PgView`'s stack outlives every test: a dialog left open here would be
+  // closed, and reported, by its no-host wait during a later test
+  for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
   PgFlow["_dispatch"]({ type: "workspace-change" });
   vi.unstubAllGlobals();
   vi.restoreAllMocks();

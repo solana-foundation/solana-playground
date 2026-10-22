@@ -7,7 +7,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   getDefaultFiles: vi.fn(),
   createWorkspace: vi.fn(),
-  setModal: vi.fn(),
+  closeModal: vi.fn(),
 }));
 
 // The `@/utils` barrel needs a booted app; the row reads only these
@@ -23,7 +23,7 @@ vi.mock("../../../utils", () => ({
       defaultOpenFile: "src/lib.rs",
     }),
   },
-  PgView: { setModal: mocks.setModal },
+  PgView: { closeModal: mocks.closeModal },
   PgTheme: { alpha: () => "inherit" },
 }));
 vi.mock("../../../components/Img", () => ({ default: () => null }));
@@ -45,6 +45,7 @@ vi.mock("../../../components/Input", () => ({
   ),
 }));
 
+import { ModalIdContext } from "@/widgets/overlays";
 import StartFromScratch from "./StartFromScratch";
 
 /** A theme that answers every key; the styles do not matter here */
@@ -78,7 +79,9 @@ afterEach(() => {
 const draw = () =>
   render(
     <ThemeProvider theme={anyTheme}>
-      <StartFromScratch />
+      <ModalIdContext.Provider value="gallery">
+        <StartFromScratch />
+      </ModalIdContext.Provider>
     </ThemeProvider>
   );
 
@@ -101,7 +104,7 @@ it("makes one project for a double press and closes the gallery", async () => {
 
   expect(mocks.getDefaultFiles).toHaveBeenCalledTimes(1);
   expect(mocks.createWorkspace).toHaveBeenCalledTimes(1);
-  expect(mocks.setModal).toHaveBeenCalledWith(null);
+  expect(mocks.closeModal).toHaveBeenCalledWith(null, "gallery");
 });
 
 it("shows a failure that is not about the name and accepts a retry", async () => {
@@ -113,4 +116,20 @@ it("shows a failure that is not about the name and accepts a retry", async () =>
   expect(screen.getByRole("alert").textContent).toBe("offline");
   expect(start().getAttribute("aria-busy")).toBeNull();
   expect(start()).toHaveProperty("disabled", false);
+});
+
+it("makes a project from Home and closes no dialog", async () => {
+  mocks.getDefaultFiles.mockResolvedValue({ files: [] });
+  render(
+    <ThemeProvider theme={anyTheme}>
+      <StartFromScratch />
+    </ThemeProvider>
+  );
+
+  await act(async () => {
+    fireEvent.click(start());
+  });
+
+  expect(mocks.createWorkspace).toHaveBeenCalledTimes(1);
+  expect(mocks.closeModal).not.toHaveBeenCalled();
 });

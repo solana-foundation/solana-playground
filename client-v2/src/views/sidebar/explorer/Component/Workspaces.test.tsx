@@ -188,7 +188,7 @@ describe("WorkspaceButton", () => {
     const button = screen.getByRole("button", { name: /Create/ });
     expect(button.getAttribute("aria-busy")).toBe("true");
 
-    PgView.closeModal();
+    PgView.closeTopModal();
     await waitFor(() => expect(button).toHaveProperty("disabled", false));
     expect(button.getAttribute("aria-busy")).toBeNull();
     expect(screen.getByTestId("icon")).toBeTruthy();

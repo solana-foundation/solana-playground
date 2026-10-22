@@ -22,6 +22,7 @@ import {
 } from "@/shared/lib/logger";
 import { Modal } from "@/shared/ui/modal";
 import { PgView as PgViewDirect } from "@/utils/view";
+import { ModalIdContext } from "@/widgets/overlays";
 import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
 
 // The `utils` barrel needs a booted app; the modal uses a few of its parts,
@@ -78,9 +79,11 @@ const draw = () =>
   render(
     <ThemeProvider theme={anyTheme}>
       <Modal open>
-        <ModalLayerContext.Provider value>
-          <ImportGithub />
-        </ModalLayerContext.Provider>
+        <ModalIdContext.Provider value="import-github">
+          <ModalLayerContext.Provider value>
+            <ImportGithub />
+          </ModalLayerContext.Provider>
+        </ModalIdContext.Provider>
       </Modal>
     </ThemeProvider>
   );
@@ -97,7 +100,9 @@ it("closes the dialog once an example is imported", async () => {
 
   importExample();
 
-  await waitFor(() => expect(utils.PgView.closeModal).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(utils.PgView.closeModal).toHaveBeenCalledWith(null, "import-github")
+  );
   expect(toast).not.toHaveBeenCalled();
 });
 

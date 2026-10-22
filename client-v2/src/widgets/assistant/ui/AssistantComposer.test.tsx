@@ -133,6 +133,10 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  // A dialog a test opened would otherwise show in the next test's host
+  act(() => {
+    while (PgView.getOpenModals().length) PgView.closeTopModal();
+  });
   PgAssistant.disconnect();
   PgSession.reset();
   resetTelemetry();
@@ -188,7 +192,7 @@ describe("AssistantComposer, connected", () => {
     });
     const gemini = within(dialog).getByRole("radio", { name: /Gemini/ });
     expect(gemini.getAttribute("aria-checked")).toBe("true");
-    await act(async () => PgView.closeModal(null));
+    await act(async () => PgView.closeTopModal());
   });
 
   it("connects the default from a keyed backend and clears the thread", async () => {
@@ -226,8 +230,6 @@ describe("AssistantComposer, connected", () => {
       preset: { provider: "default" },
     });
     expect(tracked()).toEqual([["assistant_connect_opened", { via: "model" }]]);
-    // `closeModal` answers every pending `setModal` (HOO-2091)
-    await act(async () => PgView.closeModal(null));
   });
 
   it("tracks nothing when the effort picked is the one set", async () => {

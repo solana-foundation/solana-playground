@@ -42,6 +42,11 @@ export type BaseModalFrameProps = {
     onCancel?: () => void;
   };
   size: ModalSize;
+  /**
+   * Runs once the dialog's content unmounts; Radix would send focus to the
+   * dialog's `Trigger`, and `preventDefault()` stops it
+   */
+  onCloseAutoFocus?: (event: Event) => void;
   children?: ReactNode;
 };
 
@@ -81,6 +86,7 @@ export const BaseModalFrame = ({
   error,
   submit,
   size,
+  onCloseAutoFocus,
   children,
 }: BaseModalFrameProps) => {
   const formRef = useRef<HTMLFormElement>(null);
@@ -138,6 +144,7 @@ export const BaseModalFrame = ({
       size={size}
       aria-describedby={undefined}
       onOpenAutoFocus={handleOpenAutoFocus}
+      onCloseAutoFocus={onCloseAutoFocus}
       onPointerDownOutside={keepOpenForToast}
       onInteractOutside={keepOpenForToast}
       onKeyDown={handleKeyDown}

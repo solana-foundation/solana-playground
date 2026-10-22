@@ -16,6 +16,7 @@ import { ImportCancelledError, PgGithub, PgView } from "../../../utils";
 import type { ImportProgress } from "../../../utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { useModalId } from "@/widgets/overlays";
 
 import type { ProgramListing } from "@/entities/program";
 
@@ -37,6 +38,7 @@ const ProgramsTab: FC<React.PropsWithChildren<ProgramsTabProps>> = ({
   query,
   programs,
 }) => {
+  const id = useModalId();
   const [error, setError] = useState<{ repo: string; message: string } | null>(
     null
   );
@@ -90,7 +92,7 @@ const ProgramsTab: FC<React.PropsWithChildren<ProgramsTabProps>> = ({
                 await PgGithub.import(p.repo, (next) => {
                   setProgress({ repo: p.repo, ...next });
                 });
-                PgView.setModal(null);
+                PgView.closeModal(null, id);
               } catch (e) {
                 // Closing the program selection is a choice, not a failure
                 if (!(e instanceof ImportCancelledError)) {

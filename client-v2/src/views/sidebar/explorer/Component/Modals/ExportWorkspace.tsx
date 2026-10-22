@@ -3,7 +3,12 @@ import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import Markdown from "../../../../../components/Markdown";
-import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
+import {
+  ModalFrame,
+  ModalPages,
+  modalPage,
+  useModalId,
+} from "@/widgets/overlays";
 import type { ModalPageProps } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ExportFile } from "../../../../../components/Icons";
@@ -33,6 +38,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
   name,
 }) => {
   const label = name ?? PgExplorer.currentWorkspaceName ?? "the project";
+  const id = useModalId();
 
   const convertAndExport = async () => {
     let readme: string;
@@ -77,7 +83,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
       });
       return false;
     }
-    PgView.closeModal();
+    PgView.closeModal(null, id);
     return true;
   };
 

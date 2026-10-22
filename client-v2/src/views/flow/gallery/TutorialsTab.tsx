@@ -6,6 +6,7 @@ import Img from "../../../components/Img";
 import { PgTheme, PgTutorial, PgView } from "../../../utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { useModalId } from "@/widgets/overlays";
 
 interface TutorialsTabProps {
   /** Lowercased search query from the modal's search box */
@@ -20,6 +21,7 @@ interface TutorialsTabProps {
 const TutorialsTab: FC<React.PropsWithChildren<TutorialsTabProps>> = ({
   query,
 }) => {
+  const id = useModalId();
   const [error, setError] = useState<{ name: string; message: string } | null>(
     null
   );
@@ -65,7 +67,7 @@ const TutorialsTab: FC<React.PropsWithChildren<TutorialsTabProps>> = ({
               setError(null);
               try {
                 await PgTutorial.open(t.name);
-                PgView.setModal(null);
+                PgView.closeModal(null, id);
               } catch (e) {
                 setError({
                   name: t.name,

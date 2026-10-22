@@ -79,8 +79,12 @@ beforeEach(() => {
   vi.spyOn(PgAssistant, "initMcp").mockResolvedValue(undefined);
   vi.stubGlobal("ResizeObserver", NoopResizeObserver);
 });
-afterEach(async () => {
-  await act(async () => PgView.closeModal(null));
+afterEach(() => {
+  // `PgView`'s stack outlives the host: a dialog left open here would show
+  // in the next test's
+  act(() => {
+    for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
+  });
   PgAssistant.disconnect();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();

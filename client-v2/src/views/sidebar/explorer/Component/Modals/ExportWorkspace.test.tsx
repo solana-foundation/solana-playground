@@ -8,7 +8,10 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 import { Modal } from "@/shared/ui/modal";
-import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
+import {
+  ModalIdContext,
+  ModalLayerContext,
+} from "@/widgets/overlays/ui/modal-layer";
 
 // The `utils` barrel needs a booted app; the modal uses three of its parts,
 // and its icons' `Svg` reads `PgTheme` for styles that do not matter here
@@ -52,9 +55,11 @@ const draw = (name?: string) =>
   render(
     <ThemeProvider theme={anyTheme}>
       <Modal open>
-        <ModalLayerContext.Provider value>
-          <ExportWorkspace name={name} />
-        </ModalLayerContext.Provider>
+        <ModalIdContext.Provider value="export">
+          <ModalLayerContext.Provider value>
+            <ExportWorkspace name={name} />
+          </ModalLayerContext.Provider>
+        </ModalIdContext.Provider>
       </Modal>
     </ThemeProvider>
   );
@@ -72,7 +77,9 @@ it("exports the named project as is", async () => {
     screen.getByRole("button", { name: /export without changes/i })
   );
 
-  await waitFor(() => expect(utils.PgView.closeModal).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(utils.PgView.closeModal).toHaveBeenCalledWith(null, "export")
+  );
   expect(utils.PgFramework.exportWorkspace).toHaveBeenCalledWith({
     name: "beta",
   });
@@ -86,7 +93,9 @@ it("tells the user a conversion failed and exports as is", async () => {
 
   fireEvent.click(screen.getByRole("button", { name: /convert and export/i }));
 
-  await waitFor(() => expect(utils.PgView.closeModal).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(utils.PgView.closeModal).toHaveBeenCalledWith(null, "export")
+  );
   expect(utils.PgFramework.exportWorkspace.mock.calls).toEqual([
     [{ convert: true, name: "beta" }],
     [{ name: "beta" }],
@@ -102,7 +111,9 @@ it("does not report a project of no known framework, only notes it", async () =>
 
   fireEvent.click(screen.getByRole("button", { name: /convert and export/i }));
 
-  await waitFor(() => expect(utils.PgView.closeModal).toHaveBeenCalled());
+  await waitFor(() =>
+    expect(utils.PgView.closeModal).toHaveBeenCalledWith(null, "export")
+  );
   expect(logs.entries.filter((entry) => entry.report)).toEqual([]);
 });
 

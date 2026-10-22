@@ -123,8 +123,9 @@ const FlowFrame = () => {
   }, [settings.open]);
   const closeSettings = (via: SettingsExit) => {
     if (!settings.open) return;
-    // A dialog opened from the page (an import, a Custom value) belongs to it
-    PgView.closeModal();
+    // The page covers the app, so every open dialog (an import, a Custom
+    // value, and any opened over it) came from it and goes with it
+    for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
     settingsTelemetry.track("settings_closed", { via });
     refocus.current = settings.returnTo;
     setSettings({ open: false });

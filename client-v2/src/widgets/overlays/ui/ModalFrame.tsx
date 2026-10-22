@@ -7,7 +7,12 @@ import { PgView } from "@/utils/view";
 import { overlayTelemetry } from "../model/telemetry";
 import { BaseModalFrame } from "./BaseModalFrame";
 import type { ModalSize, SubmitStatus, SubmitVariant } from "./BaseModalFrame";
-import { useBlockDismiss, useIsTopModal, useOpenReport } from "./modal-layer";
+import {
+  useBlockDismiss,
+  useIsTopModal,
+  useModalId,
+  useOpenReport,
+} from "./modal-layer";
 
 const log = createLogger("overlays:modal-frame");
 
@@ -64,10 +69,10 @@ const messageOf = (error: unknown) => {
 };
 
 /**
- * The frame of a dialog opened with `PgView.setModal`. A submit closes the
- * dialog with what it returned; a submit that throws keeps it open and shows
- * the message. While a submit runs the dialog cannot be dismissed, so its
- * answer goes to the dialog that asked.
+ * The frame of a dialog opened with `PgView.openModal` or `setModal`. A
+ * submit closes the dialog with what it returned; a submit that throws keeps
+ * it open and shows the message. While a submit runs the dialog cannot be
+ * dismissed, so its answer goes to the dialog that asked.
  */
 export const ModalFrame = ({
   name,
@@ -80,10 +85,16 @@ export const ModalFrame = ({
   const [busy, setBusy] = useState(false);
   // `busy` lags a render behind, so two Enters in one tick both saw it false
   const submitting = useRef(false);
-  // A frame closed from elsewhere mid-submit must not close whatever dialog
-  // is on top by the time its submit settles
+  // A frame gone mid-submit (its dialog closed from elsewhere, or `ModalPages`
+  // moved on to another page) must not close its dialog when the submit
+  // settles
   const mounted = useRef(true);
   const isTop = useIsTopModal();
+  const id = useModalId();
+  // Read while the dialog is open: by the time it closes, it is off the stack
+  const opener = useRef(
+    PgView.getOpenModals().find((modal) => modal.id === id)?.opener ?? null
+  );
   const openReport = useOpenReport();
   const blockDismiss = useBlockDismiss();
 
@@ -117,7 +128,7 @@ export const ModalFrame = ({
   const submit = async () => {
     if (!buttonProps || buttonProps.disabled || submitting.current) return;
     if (!buttonProps.onSubmit) {
-      PgView.closeModal(null);
+      PgView.closeModal(null, id);
       return;
     }
     submitting.current = true;
@@ -127,7 +138,8 @@ export const ModalFrame = ({
     try {
       const data = await buttonProps.onSubmit();
       if (mounted.current && !buttonProps.noCloseOnSubmit) {
-        PgView.closeModal(data);
+        // By id: another dialog may have opened on this one meanwhile
+        PgView.closeModal(data, id);
       }
     } catch (e) {
       if (e instanceof SubmitCancelled) {
@@ -143,6 +155,16 @@ export const ModalFrame = ({
       submitting.current = false;
       if (mounted.current) setBusy(false);
     }
+  };
+
+  // Radix sends focus to the dialog's `Trigger`, and these dialogs open with
+  // none, so without this focus is lost to `<body>`. While any dialog is open
+  // (this one covered, or another opened in its place) the one on top holds
+  // focus; the opener gets it back only once none is.
+  const returnFocus = (event: Event) => {
+    event.preventDefault();
+    if (PgView.getOpenModals().length) return;
+    if (opener.current?.isConnected) opener.current.focus();
   };
 
   // Under another dialog: draw no second dialog content. Only the state held
@@ -168,11 +190,12 @@ export const ModalFrame = ({
           variant: buttonProps.variant ?? "default",
           onSubmit: submit,
           onCancel: buttonProps.onSubmit
-            ? () => PgView.closeModal(null)
+            ? () => PgView.closeModal(null, id)
             : undefined,
         }
       }
       size={size}
+      onCloseAutoFocus={returnFocus}
     >
       {children}
     </BaseModalFrame>

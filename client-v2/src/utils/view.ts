@@ -1,6 +1,7 @@
 import { createElement, FC } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+import { uuid } from "@/shared/lib/ids";
 import { PgCommon } from "./common";
 import {
   createDerivable,
@@ -16,6 +17,134 @@ import type {
   Elementable,
   Promisable,
 } from "./types";
+
+/** A dialog `PgView.openModal` opened that nothing has closed yet */
+export type OpenModal = {
+  /** What `PgView.closeModal` takes to close this dialog and no other */
+  readonly id: string;
+  readonly elementable: NonNullable<Elementable<any>>;
+  readonly props?: Record<string, any>;
+  /** What takes focus back when the modal closes, if it is still on the page */
+  readonly opener: HTMLElement | null;
+};
+
+/**
+ * The dialogs open now, bottom first. `ModalHost` draws exactly this list,
+ * and each id's caller waits in `modalAnswers`, so a close answers the caller
+ * of the dialog it removes and no other.
+ */
+let openModals: readonly OpenModal[] = [];
+const modalAnswers = new Map<string, (data: unknown) => void>();
+
+/**
+ * How long, in milliseconds, a modal may wait for a `ModalHost` to show it.
+ * One opened at start-up, before the layout has mounted its host, shows once
+ * it does; one that no host ever shows is closed with `null`, so its caller
+ * goes on, and reported, so the team hears of it.
+ */
+export const MODAL_HOST_WAIT = 5000;
+
+const modalLog = createLogger("view:modal");
+
+/** How many `ModalHost`s are mounted (`PgView.attachModalHost`) */
+let modalHosts = 0;
+/** Bumped by every host that mounts, so a wait that saw one come is over */
+let hostAttaches = 0;
+
+/** A modal's component name, for a report that says which one it was */
+const nameOf = (elementable: OpenModal["elementable"]) => {
+  const type =
+    typeof elementable === "function" ? elementable : elementable.type;
+  return typeof type === "string" ? type : type.displayName || type.name;
+};
+
+/** Close the modal `id` if no host has shown it by `MODAL_HOST_WAIT` */
+const closeIfNoHost = (id: string) => {
+  const attaches = hostAttaches;
+  setTimeout(() => {
+    // A host that came meanwhile starts a wait of its own when it goes
+    if (modalHosts > 0 || hostAttaches !== attaches) return;
+    const modal = openModals.find((modal) => modal.id === id);
+    if (!modal) return;
+    modalLog.error(
+      new Error("No ModalHost showed a modal; it closed unanswered"),
+      {
+        report: true,
+        context: { modal: nameOf(modal.elementable) },
+      }
+    );
+    PgView.closeModal(null, id);
+  }, MODAL_HOST_WAIT);
+};
+
+/**
+ * Where a context menu was last opened: a right-click, or a long press, which
+ * a touch screen fires no `contextmenu` for. Used once, by the next modal.
+ */
+let contextMenuTarget: Element | null = null;
+if (typeof document !== "undefined") {
+  const record = (ev: Event) => {
+    contextMenuTarget = ev.target instanceof Element ? ev.target : null;
+  };
+  document.addEventListener("contextmenu", record, true);
+  document.addEventListener(
+    "pointerdown",
+    (ev) => {
+      if (ev.pointerType !== "mouse") record(ev);
+    },
+    true
+  );
+}
+
+/**
+ * Who opened a modal closed in this task: one opened as soon as it answers
+ * (a confirm, then the next step) is opened from inside it, from an element
+ * about to go, and returns focus to the first one's opener instead.
+ */
+let justClosedOpener: HTMLElement | null = null;
+
+/** What can take focus */
+const FOCUS_TARGET = "button, a[href], input, select, textarea, [tabindex]";
+
+/**
+ * What a modal opened now returns focus to: what has focus, or, for an item
+ * of a menu, the trigger of the outermost menu, since menus close once an item
+ * is picked and their items go with them. A context menu's trigger names no
+ * menu: its item stands in for where the menu was opened, the editor tab or
+ * the explorer row.
+ */
+const focusOpener = (): HTMLElement | null => {
+  const target = contextMenuTarget;
+  contextMenuTarget = null;
+  const active = document.activeElement;
+  // The dialog that just closed held focus, or already took it with it
+  if (
+    justClosedOpener &&
+    (active === document.body || active?.closest('[role="dialog"]'))
+  ) {
+    return justClosedOpener;
+  }
+  if (!(active instanceof HTMLElement) || active === document.body) return null;
+  let opener = active;
+  // A submenu's trigger is an item of the menu above it
+  for (;;) {
+    const menu: HTMLElement | null = opener.closest('[role="menu"]');
+    const trigger: HTMLElement | null = menu?.id
+      ? document.querySelector(`[aria-controls=${JSON.stringify(menu.id)}]`)
+      : null;
+    if (!trigger) {
+      if (!menu || !target?.isConnected) return opener;
+      return target.closest<HTMLElement>(FOCUS_TARGET) ?? opener;
+    }
+    opener = trigger;
+  }
+};
+
+/** Replace the open modals and tell `PgView.onDidChangeModals` */
+const setOpenModals = (modals: readonly OpenModal[]) => {
+  openModals = modals;
+  PgCommon.createAndDispatchCustomEvent(PgView.events.MODALS_CHANGE, modals);
+};
 
 /** How long a toast stays, in milliseconds, when its options give no duration */
 export const DEFAULT_TOAST_DURATION = 5000;
@@ -176,7 +305,7 @@ class _PgView {
     MAIN_PRIMARY_MOUNT: "viewmainprimarymount",
     MAIN_SECONDARY_HEIGHT_SET: "viewmainsecondaryheightset",
     MAIN_SECONDARY_PROGRESS_SET: "viewmainsecondaryprogressset",
-    MODAL_SET: "viewmodalset",
+    MODALS_CHANGE: "viewmodalschange",
     TOAST_SET: "viewtoastset",
     TOAST_CLOSE: "viewtoastclose",
     NEW_ITEM_PORTAL_SET: "viewnewitemportalset",
@@ -346,20 +475,86 @@ class _PgView {
   }
 
   /**
-   * Set the current modal and wait until close.
+   * Open a modal on top of any already open.
    *
-   * @param elementable elementable to set as the modal
+   * `R` is what the caller expects back; nothing checks it against what the
+   * modal's code passes to `closeModal`.
+   *
+   * @param elementable the dialog to open on top
    * @param props component props
-   * @returns the data from `close` method of the modal
+   * @returns the modal's id, for `closeModal`, and the answer it closes with
+   */
+  static openModal<R, P extends Record<string, any> = {}>(
+    elementable: NonNullable<Elementable<P>>,
+    props?: P
+  ): { id: string; answer: Promise<R | null> } {
+    const id = uuid();
+    const answer = new Promise<R | null>((resolve) => {
+      modalAnswers.set(id, resolve as (data: unknown) => void);
+    });
+    setOpenModals([
+      ...openModals,
+      { id, elementable, props, opener: focusOpener() },
+    ]);
+    if (modalHosts === 0) closeIfNoHost(id);
+    return { id, answer };
+  }
+
+  /**
+   * Open a modal on top of any already open, and wait until it closes.
+   *
+   * @param elementable the dialog to open on top
+   * @param props component props
+   * @returns what `closeModal` was given when this modal closed
    */
   static async setModal<R, P extends Record<string, any> = {}>(
-    elementable: Elementable<P>,
+    elementable: NonNullable<Elementable<P>>,
     props?: P
   ): Promise<R | null> {
-    return await PgCommon.sendAndReceiveCustomEvent(PgView.events.MODAL_SET, {
-      elementable,
-      props,
-    });
+    return await PgView.openModal<R, P>(elementable, props).answer;
+  }
+
+  /**
+   * Say that a `ModalHost` is mounted, so modals are shown. Without one, an
+   * open modal is closed after `MODAL_HOST_WAIT`.
+   *
+   * @returns a disposable to call when the host unmounts
+   */
+  static attachModalHost(): Disposable {
+    modalHosts++;
+    hostAttaches++;
+    let attached = true;
+    return {
+      dispose: () => {
+        if (!attached) return;
+        attached = false;
+        modalHosts--;
+        if (modalHosts === 0) {
+          for (const { id } of openModals) closeIfNoHost(id);
+        }
+      },
+    };
+  }
+
+  /** The modals open now, bottom first */
+  static getOpenModals(): readonly OpenModal[] {
+    return openModals;
+  }
+
+  /**
+   * Run `cb` with the open modals whenever one opens or closes.
+   *
+   * @param cb callback to run
+   * @returns a disposable to stop listening
+   */
+  static onDidChangeModals(
+    cb: (modals: readonly OpenModal[]) => void
+  ): Disposable {
+    // The stack itself, not the event's detail: only `setOpenModals` may say
+    // what is open
+    return PgCommon.onDidChange(PgView.events.MODALS_CHANGE, () =>
+      cb(openModals)
+    );
   }
 
   /**
@@ -369,26 +564,44 @@ class _PgView {
    * @returns a disposable to stop listening
    */
   static onDidOpenModal(cb: () => void): Disposable {
-    return PgCommon.onDidChange<{ elementable: unknown } | null>(
-      PgCommon.getSendAndReceiveEventNames(PgView.events.MODAL_SET).send,
-      (detail) => {
-        if (detail?.elementable) cb();
-      }
-    );
+    let count = openModals.length;
+    return PgView.onDidChangeModals((modals) => {
+      if (modals.length > count) cb();
+      count = modals.length;
+    });
   }
 
   /**
-   * Close the current modal.
+   * Close a modal, answering only the call that opened it. A modal that is
+   * already closed is not closed again, and nobody else is answered.
    *
-   * @param data data to be resolved from the modal
+   * The id is required: code that closes "the top modal" closes another
+   * dialog's whenever one has opened on its own.
+   *
+   * @param data the answer for that call
+   * @param id the modal to close, from `openModal` or `useModalId`
    */
-  static closeModal(data?: any) {
-    PgCommon.createAndDispatchCustomEvent(
-      PgCommon.getSendAndReceiveEventNames(PgView.events.MODAL_SET).receive,
-      { data }
-    );
+  static closeModal(data: unknown, id: string) {
+    const answer = modalAnswers.get(id);
+    if (!answer) return;
 
-    PgView.setModal(null);
+    modalAnswers.delete(id);
+    justClosedOpener =
+      openModals.find((modal) => modal.id === id)?.opener ?? null;
+    setTimeout(() => (justClosedOpener = null));
+    setOpenModals(openModals.filter((modal) => modal.id !== id));
+    answer(data);
+  }
+
+  /**
+   * Close whichever modal is on top: for a dismissal that is about what the
+   * user sees (Escape, a press outside), never for a modal's own code.
+   *
+   * @param data the answer for the top modal's caller
+   */
+  static closeTopModal(data: unknown = null) {
+    const top = openModals[openModals.length - 1];
+    if (top) PgView.closeModal(data, top.id);
   }
 
   /**

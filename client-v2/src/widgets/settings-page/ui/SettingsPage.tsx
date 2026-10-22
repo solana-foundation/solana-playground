@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { cn } from "cn";
 
 import Link from "@/components/Link";
@@ -7,7 +7,6 @@ import {
   useBlockExplorer,
   useProgramInfo,
   useRenderOnChange,
-  useSetStatic,
   useWallet,
 } from "@/hooks";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -17,13 +16,7 @@ import type {
 } from "@/shared/lib/settings-request";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AsyncButton } from "@/shared/ui/async-button";
-import {
-  PgCommon,
-  PgFramework,
-  PgProgramInfo,
-  PgSettings,
-  PgView,
-} from "@/utils";
+import { PgFramework, PgProgramInfo, PgSettings, PgView } from "@/utils";
 import {
   ImportFs,
   ImportGithub,
@@ -52,6 +45,9 @@ interface SettingsPageProps {
   onChooseNetwork?: () => void;
 }
 
+const subscribeToModals = (onChange: () => void) =>
+  PgView.onDidChangeModals(onChange).dispose;
+
 /**
  * `BaseSettingsPage` on the live settings: the network chips, the project's
  * export and imports, then every group of `PgSettings.all`. Mounted only
@@ -66,15 +62,10 @@ const LiveSettingsPage = ({
   const [current, setCurrent] = useState<string>(NETWORK);
 
   // A modal opened from the page (Import from GitHub or files, a setting's
-  // Custom value) owns Escape while it is up. This follows the last
-  // `MODAL_SET`, not a stack: with a modal over a modal, closing the top one
-  // reads as none open, and the page's `defaultPrevented` check is what keeps
-  // the outer dialog's Escape from closing the page too.
-  const [modalOpen, setModalOpen] = useState(false);
-  useSetStatic(
-    PgCommon.getSendAndReceiveEventNames(PgView.events.MODAL_SET).send,
-    (detail: { elementable: unknown } | null) =>
-      setModalOpen(!!detail?.elementable)
+  // Custom value) owns Escape while any is up
+  const modalOpen = useSyncExternalStore(
+    subscribeToModals,
+    () => PgView.getOpenModals().length > 0
   );
 
   // The chips follow an endpoint picked elsewhere too, such as the

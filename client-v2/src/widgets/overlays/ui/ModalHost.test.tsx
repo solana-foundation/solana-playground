@@ -1,6 +1,12 @@
 import { useState } from "react";
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   initLogger,
@@ -12,6 +18,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { PgCommon } from "@/utils/common";
 import { PgView } from "@/utils/view";
 import { ModalFrame } from "./ModalFrame";
 import { ModalHost } from "./ModalHost";
@@ -24,7 +31,17 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   resetTelemetry();
+  // Dialogs a test leaves open would otherwise sit under the next test's
+  act(() => {
+    while (PgView.getOpenModals().length) PgView.closeTopModal();
+  });
 });
+
+const PENDING = "pending";
+
+/** What `promise` has settled to by the time queued microtasks have run */
+const settled = async (promise: Promise<unknown>) =>
+  Promise.race([promise, PgCommon.sleep(0).then(() => PENDING)]);
 
 const Info = () => (
   <ModalFrame name="info" title="Info">
@@ -105,7 +122,7 @@ it("should answer with what the submit returned", async () => {
 
 it("should show a stacked dialog and bring back the first with its text", async () => {
   render(<ModalHost />);
-  open(Outer);
+  const outer = open(Outer);
   fireEvent.change(screen.getByRole("textbox", { name: "Outer name" }), {
     target: { value: "draft" },
   });
@@ -126,6 +143,8 @@ it("should show a stacked dialog and bring back the first with its text", async 
     (screen.getByRole("textbox", { name: "Outer name" }) as HTMLInputElement)
       .value
   ).toBe("draft");
+  // Closing Info answered Info's caller only
+  await expect(settled(outer)).resolves.toBe(PENDING);
   // The first dialog stayed mounted, so it reported opening only once
   expect(
     sent.events
@@ -201,4 +220,383 @@ it("should close a dialog that throws while rendering, report it, tell the user 
   expect(toast).toHaveBeenCalledTimes(1);
   expect(toast.mock.calls[0][1].options.name).toBe("modal-failed");
   resetLogger();
+});
+
+it("should close the dialog that throws, not the one on top of it", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  let breakLower!: () => void;
+  const Fragile = () => {
+    const [broken, setBroken] = useState(false);
+    breakLower = () => setBroken(true);
+    if (broken) throw new Error("render failed");
+    return <ModalFrame name="fragile" title="Fragile" />;
+  };
+  render(<ModalHost />);
+  const lower = open(Fragile);
+  const upper = open(Info);
+
+  act(() => breakLower());
+
+  await expect(settled(lower)).resolves.toBeNull();
+  await expect(settled(upper)).resolves.toBe(PENDING);
+  expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy();
+});
+
+it("should keep the dialogs open across a remount of the host", async () => {
+  const first = render(<ModalHost />);
+  const answer = open(Info);
+
+  first.unmount();
+  render(<ModalHost />);
+
+  expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy();
+  act(() => {
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  });
+  await expect(answer).resolves.toBeNull();
+});
+
+it("should open a dialog that replaces another of its kind with fresh state", () => {
+  render(<ModalHost />);
+  open(Outer);
+  fireEvent.change(screen.getByRole("textbox", { name: "Outer name" }), {
+    target: { value: "draft" },
+  });
+
+  act(() => {
+    PgView.closeTopModal();
+    PgView.setModal(Outer);
+  });
+
+  expect(
+    (screen.getByRole("textbox", { name: "Outer name" }) as HTMLInputElement)
+      .value
+  ).toBe("");
+});
+
+it("should answer a submit that settles under another dialog to its own caller", async () => {
+  let finish!: (value: string) => void;
+  const Slow = () => (
+    <ModalFrame
+      name="slow"
+      title="Slow"
+      buttonProps={{
+        text: "Save",
+        onSubmit: () => new Promise<string>((resolve) => (finish = resolve)),
+      }}
+    />
+  );
+  render(<ModalHost />);
+  const slow = open(Slow);
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+  });
+  const info = open(Info);
+
+  await act(async () => finish("saved"));
+
+  await expect(settled(slow)).resolves.toBe("saved");
+  await expect(settled(info)).resolves.toBe(PENDING);
+  expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy();
+});
+
+describe("focus after a dialog closes", () => {
+  it("should return focus to the button that opened the dialog", async () => {
+    render(
+      <>
+        <button onClick={() => void PgView.setModal(Info)}>Open info</button>
+        <ModalHost />
+      </>
+    );
+    const opener = screen.getByRole("button", { name: "Open info" });
+    opener.focus();
+    act(() => opener.click());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
+  it("should return focus to a menu's trigger when an item of the menu opened it", async () => {
+    // A menu closes when one of its items is picked, so the item is gone by
+    // the time the dialog closes; its trigger names it through aria-controls
+    const Menu = () => {
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button aria-controls="actions-menu">Actions</button>
+          {open && (
+            <div role="menu" id="actions-menu">
+              <button
+                role="menuitem"
+                onClick={() => {
+                  void PgView.setModal(Info);
+                  setOpen(false);
+                }}
+              >
+                Show info
+              </button>
+            </div>
+          )}
+        </>
+      );
+    };
+    render(
+      <>
+        <Menu />
+        <ModalHost />
+      </>
+    );
+    const item = screen.getByRole("menuitem", { name: "Show info" });
+    item.focus();
+    act(() => item.click());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "Actions" })
+      )
+    );
+  });
+
+  it("should keep focus in the dialog below when the one on top closes", async () => {
+    render(<ModalHost />);
+    open(Outer);
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    });
+
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("dialog", { name: "Outer" })
+          .contains(document.activeElement)
+      ).toBe(true)
+    );
+  });
+
+  it("should return focus to what opened a dialog another one followed", async () => {
+    const Confirm = () => (
+      <ModalFrame
+        name="confirm"
+        title="Confirm"
+        buttonProps={{ text: "Yes", onSubmit: () => "yes" }}
+      />
+    );
+    render(
+      <>
+        <button
+          onClick={async () => {
+            if (await PgView.setModal(Confirm)) void PgView.setModal(Info);
+          }}
+        >
+          Delete
+        </button>
+        <ModalHost />
+      </>
+    );
+    const opener = screen.getByRole("button", { name: "Delete" });
+    opener.focus();
+    act(() => opener.click());
+    await act(async () => {
+      fireEvent.click(await screen.findByRole("button", { name: "Yes" }));
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+
+    await waitFor(() => expect(document.activeElement).toBe(opener));
+  });
+
+  it("should not focus the opener while another dialog has taken its place", async () => {
+    render(
+      <>
+        <button onClick={() => void PgView.setModal(Info)}>Open info</button>
+        <ModalHost />
+      </>
+    );
+    const opener = screen.getByRole("button", { name: "Open info" });
+    opener.focus();
+    act(() => opener.click());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy()
+    );
+    const focused = vi.fn();
+    opener.addEventListener("focus", focused);
+
+    act(() => {
+      PgView.closeTopModal();
+      void PgView.setModal(Outer);
+    });
+
+    await waitFor(() =>
+      expect(
+        screen
+          .getByRole("dialog", { name: "Outer" })
+          .contains(document.activeElement)
+      ).toBe(true)
+    );
+    await act(async () => {
+      await PgCommon.sleep(10);
+    });
+    expect(focused).not.toHaveBeenCalled();
+  });
+
+  it("should return focus to the trigger of a menu a submenu opened from", async () => {
+    const Menus = () => {
+      // Picking an item closes the menu and the menus above it
+      const [open, setOpen] = useState(true);
+      return (
+        <>
+          <button aria-controls="outer-menu">More</button>
+          {open && (
+            <>
+              <div role="menu" id="outer-menu">
+                <button role="menuitem" aria-controls="inner-menu">
+                  Export
+                </button>
+              </div>
+              <div role="menu" id="inner-menu">
+                <button
+                  role="menuitem"
+                  onClick={() => {
+                    void PgView.setModal(Info);
+                    setOpen(false);
+                  }}
+                >
+                  As zip
+                </button>
+              </div>
+            </>
+          )}
+        </>
+      );
+    };
+    render(
+      <>
+        <Menus />
+        <ModalHost />
+      </>
+    );
+    const item = screen.getByRole("menuitem", { name: "As zip" });
+    item.focus();
+    act(() => item.click());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy()
+    );
+
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        screen.getByRole("button", { name: "More" })
+      )
+    );
+  });
+});
+
+describe("focus after a dialog opened from a context menu", () => {
+  /** A context menu: its trigger names no menu, so the right-click is the opener */
+  const ContextMenu = ({ children }: { children: React.ReactNode }) => {
+    const [open, setOpen] = useState(false);
+    return (
+      <div onContextMenu={() => setOpen(true)}>
+        {children}
+        {open && (
+          <div role="menu">
+            <button
+              role="menuitem"
+              onClick={() => {
+                void PgView.setModal(Info);
+                setOpen(false);
+              }}
+            >
+              Delete
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const pickDeleteThenCancel = async () => {
+    const item = await screen.findByRole("menuitem", { name: "Delete" });
+    item.focus();
+    act(() => item.click());
+    await waitFor(() =>
+      expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy()
+    );
+    act(() => {
+      fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    });
+  };
+
+  it("should return focus to the explorer row the menu was opened on", async () => {
+    render(
+      <>
+        <ContextMenu>
+          {/* dnd-kit's attributes make every row a tabbable button */}
+          <div
+            className={PgView.classNames.FILE}
+            role="button"
+            tabIndex={0}
+            data-testid="row"
+          >
+            <span>lib.rs</span>
+          </div>
+        </ContextMenu>
+        <ModalHost />
+      </>
+    );
+    fireEvent.contextMenu(screen.getByText("lib.rs"));
+
+    await pickDeleteThenCancel();
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByTestId("row"))
+    );
+  });
+
+  it("should return focus to the editor tab the menu was opened on", async () => {
+    render(
+      <>
+        <ContextMenu>
+          <div role="presentation">
+            <button role="tab">
+              <span>lib.rs</span>
+            </button>
+          </div>
+        </ContextMenu>
+        <ModalHost />
+      </>
+    );
+    fireEvent.contextMenu(screen.getByText("lib.rs"));
+
+    await pickDeleteThenCancel();
+
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("tab"))
+    );
+  });
 });

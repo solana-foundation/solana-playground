@@ -6,6 +6,7 @@ import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import Img from "../../../components/Img";
 import Input from "../../../components/Input";
 import { PgExplorer, PgFramework, PgView, PgTheme } from "../../../utils";
+import { useModalIdIfAny } from "@/widgets/overlays";
 
 /**
  * The gallery's one decisive action: pick a framework, name the project,
@@ -15,6 +16,8 @@ import { PgExplorer, PgFramework, PgView, PgTheme } from "../../../utils";
  * -- just laid out as a single row instead of a full-page form.
  */
 const StartFromScratch: FC<React.PropsWithChildren<unknown>> = () => {
+  // In the gallery, the gallery closes on a new project; on Home, nothing does
+  const id = useModalIdIfAny();
   const [framework, setFramework] = useState<FrameworkName | undefined>(
     PgFramework.all[0]?.name
   );
@@ -44,7 +47,7 @@ const StartFromScratch: FC<React.PropsWithChildren<unknown>> = () => {
         files,
         defaultOpenFile,
       });
-      PgView.setModal(null);
+      if (id !== null) PgView.closeModal(null, id);
     } catch (e) {
       setCreateError(
         e instanceof Error ? e.message : "Could not create project"

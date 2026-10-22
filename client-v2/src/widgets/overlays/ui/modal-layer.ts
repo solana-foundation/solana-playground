@@ -21,6 +21,27 @@ export const useIsTopModal = () => {
 };
 
 /**
+ * The id of the dialog around a component, from `PgView`'s stack: what to
+ * pass to `PgView.closeModal` to close this dialog rather than whichever is
+ * on top. A dialog stays mounted under another, and its code (a submit that
+ * settles, an effect that hears of a connection) can close it from there.
+ */
+export const ModalIdContext = createContext<string | null>(null);
+
+export const useModalId = () => {
+  const id = useContext(ModalIdContext);
+  if (id === null) throw new Error("useModalId is used outside ModalHost");
+  return id;
+};
+
+/**
+ * The id of the dialog around a component that also renders outside one
+ * (Start from scratch sits on Home as well as in the gallery), or `null`
+ * there: outside a dialog there is nothing of its own to close.
+ */
+export const useModalIdIfAny = () => useContext(ModalIdContext);
+
+/**
  * Set by `ModalHost` for the top dialog: while its submit runs, the dialog
  * cannot be dismissed (Escape, a press outside, the header's Close), so the
  * submit's answer reaches the dialog that asked for it.
