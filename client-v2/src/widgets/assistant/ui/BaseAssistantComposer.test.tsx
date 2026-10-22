@@ -106,6 +106,16 @@ describe("BaseAssistantComposer", () => {
   });
 
   it("disables Send with text in while nothing can take the message, and sends nothing", async () => {
+    // Pointing at the blocked Send opens its tooltip, whose positioning
+    // watches the trigger's size
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
     const { onSend, user } = setup({
       value: "Explain this build error",
       sendBlocked: "Connect a model to send",
