@@ -147,11 +147,12 @@ afterEach(() => {
   resetLogger();
 });
 
+const onPickCurrent = vi.fn();
 const draw = () =>
   render(
     <TooltipProvider>
       <SidebarProvider>
-        <ProjectList />
+        <ProjectList onPickCurrent={onPickCurrent} />
       </SidebarProvider>
     </TooltipProvider>
   );
@@ -282,6 +283,7 @@ describe("ProjectList", () => {
   });
 
   it("opens a project by switching, a lesson through the tutorial", async () => {
+    onPickCurrent.mockReset();
     draw();
     fireEvent.click(screen.getByRole("button", { name: "alpha" }));
     await waitFor(() =>
@@ -292,11 +294,14 @@ describe("ProjectList", () => {
     await waitFor(() =>
       expect(app.PgTutorial.open).toHaveBeenCalledWith("Hello Anchor")
     );
+    expect(onPickCurrent).not.toHaveBeenCalled();
   });
 
-  it("does nothing to open the project already open", () => {
+  it("hands the project already open back to the page, without a switch", async () => {
+    onPickCurrent.mockReset();
     draw();
     fireEvent.click(screen.getByRole("button", { name: "beta" }));
+    await waitFor(() => expect(onPickCurrent).toHaveBeenCalledTimes(1));
     expect(app.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   });
 

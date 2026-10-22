@@ -2,6 +2,8 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { ThemeProvider } from "styled-components";
 import type { DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
+import type { ReactNode } from "react";
 
 import {
   initLogger,
@@ -169,7 +171,10 @@ const theme = {
 } as unknown as DefaultTheme;
 
 /** The shell's tree, for `render` and for a `rerender` that adds or drops Home */
-const shellTree = (home?: LayoutShellProps["home"]) => (
+const shellTree = (
+  home?: LayoutShellProps["home"],
+  work: { keepWork?: boolean; stage?: ReactNode } = {}
+) => (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
       <LayoutShell
@@ -192,14 +197,16 @@ const shellTree = (home?: LayoutShellProps["home"]) => (
             Files column control
           </button>
         )}
-        stage={({ openFiles }) => (
-          <main>
-            stage
-            <button type="button" onClick={openFiles}>
-              Show the steps
-            </button>
-          </main>
-        )}
+        stage={({ openFiles }) =>
+          work.stage ?? (
+            <main>
+              stage
+              <button type="button" onClick={openFiles}>
+                Show the steps
+              </button>
+            </main>
+          )
+        }
         console={({ open, toggle }) => (
           <button
             type="button"
@@ -224,6 +231,7 @@ const shellTree = (home?: LayoutShellProps["home"]) => (
           </>
         )}
         home={home}
+        keepWork={work.keepWork}
       />
     </TooltipProvider>
   </ThemeProvider>
@@ -1559,6 +1567,25 @@ describe("with Home", () => {
     act(() => deploy.starts.forEach((cb) => cb(null)));
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
     expect(toggled()).toEqual([]);
+  });
+
+  it("keeps the stage mounted under Home when told to keep the work", () => {
+    const stageMounts = vi.fn();
+    const Stage = () => {
+      useEffect(() => stageMounts(), []);
+      return <main>stage</main>;
+    };
+    const tree = (withHome: boolean) =>
+      shellTree(withHome ? home : undefined, {
+        keepWork: true,
+        stage: <Stage />,
+      });
+    const { rerender } = render(tree(false));
+    rerender(tree(true));
+    expect(screen.queryByText("stage")).toBeNull();
+    rerender(tree(false));
+    expect(screen.getByText("stage")).toBeTruthy();
+    expect(stageMounts).toHaveBeenCalledTimes(1);
   });
 
   it("leaves the saved layout as it was across Home and after it", () => {

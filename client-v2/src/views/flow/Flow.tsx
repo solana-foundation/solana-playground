@@ -40,7 +40,7 @@ import { PgExplorer, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { Assistant, openConnectDialog } from "@/widgets/assistant";
-import { homeSlot, isHomeShown, useStartView } from "@/widgets/home";
+import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
@@ -184,7 +184,7 @@ const FlowFrame = () => {
     [settings]
   );
 
-  const start = useStartView();
+  const page = useStartView();
 
   const described = describeStep(lesson);
 
@@ -226,16 +226,29 @@ const FlowFrame = () => {
           <SyncBanner />
         </BannerSlot>
         <LayoutShell
-          home={homeSlot(start, viewport)}
+          home={homeSlot(page.view, viewport, () => page.leaveHome("continue"))}
+          keepWork={page.workKept}
           nav={({ collapsed, toggle, closeSheet }) => {
             closeNavSheet.current = closeSheet;
             return (
               <AppNav
-                homeShown={isHomeShown(start)}
+                // Home and the open project show in place of the work, which
+                // the navigation's Sheet (or a phone's menu page) covers
+                onHome={() => {
+                  page.showHome("nav");
+                  closeSheet();
+                }}
                 collapsed={collapsed}
                 onToggle={toggle}
                 logo={<Logomark aria-hidden="true" />}
-                projects={<ProjectList />}
+                projects={
+                  <ProjectList
+                    onPickCurrent={() => {
+                      page.leaveHome("current-project");
+                      closeSheet();
+                    }}
+                  />
+                }
                 footer={
                   <SessionFooter
                     settingsOpen={settingsOpen}

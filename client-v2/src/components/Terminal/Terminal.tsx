@@ -80,8 +80,13 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
   // Handle resize
   useEffect(() => {
     const terminalEl = terminalRef.current!;
+    // Off the page (the work kept under Home, a phone page not shown) the
+    // node measures 0 and xterm throws on the columns that gives; it is
+    // fitted again when it comes back and its size changes
     const observer = new ResizeObserver(
-      PgCommon.throttle(() => term.fit(), 200)
+      PgCommon.throttle(() => {
+        if (terminalEl.isConnected) term.fit();
+      }, 200)
     );
     observer.observe(terminalEl);
     return () => observer.unobserve(terminalEl);

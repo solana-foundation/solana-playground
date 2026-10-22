@@ -79,6 +79,8 @@ export interface LayoutShellProps {
    * stage the screen does not show.
    */
   home?: (panel: { openAssistant: () => void }) => ReactNode;
+  /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
+  keepWork?: boolean;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -103,6 +105,7 @@ const LayoutShell = ({
   console,
   assistant,
   home,
+  keepWork,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -645,6 +648,7 @@ const LayoutShell = ({
           canWiden,
         })
       }
+      keepWork={keepWork}
       home={
         home && {
           content: homeContent,

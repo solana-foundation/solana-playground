@@ -99,6 +99,24 @@ const log = createLogger("view:main-primary");
  */
 let mainPrimaryCalls = 0;
 
+/** How many `setMainPrimary` calls are waiting for a main view to mount */
+let mainPrimaryWaiting = 0;
+
+/** How many main views are mounted (`announceMainPrimaryMount` / `Unmount`) */
+let mainPrimaryMounted = 0;
+
+/**
+ * The content `setMainPrimary` last handed out, and whether no main view has
+ * held it since: the one it went to unmounted, or had unmounted before the
+ * content reached it. A route calls `setMainPrimary` once, so a view that
+ * mounts again (the work, after the last project's delete unmounted it) would
+ * stay empty without it. Strict mode's second mount in development gets it
+ * once more, which only redraws the same view.
+ */
+let mainPrimaryDelivered:
+  | { setEl: SetState<SyncOrAsync<Elementable>>; unmounted: boolean }
+  | undefined;
+
 /**
  * Resolve once a primary main view is mounted: at once when the mounted one
  * answers `get`, or when one announces its mount
@@ -225,14 +243,20 @@ class _PgView {
     // view could land over the tutorial opened from Home. Only the newest
     // call may set the view.
     const call = ++mainPrimaryCalls;
+    mainPrimaryWaiting++;
     try {
       await waitForMainPrimary();
     } catch (e) {
       log.error(e, { report: true });
       return;
+    } finally {
+      mainPrimaryWaiting--;
     }
     if (call !== mainPrimaryCalls) return;
 
+    // The view that answered may have unmounted while this call resumed; the
+    // content then reaches no one, and the next view to mount takes it
+    mainPrimaryDelivered = { setEl, unmounted: mainPrimaryMounted === 0 };
     PgCommon.createAndDispatchCustomEvent(
       PgCommon.getStaticStateEventNames(PgView.events.MAIN_PRIMARY_STATIC).set,
       setEl
@@ -245,7 +269,34 @@ class _PgView {
    * `setMainPrimary` waiting for a mount goes on from here.
    */
   static announceMainPrimaryMount() {
+    mainPrimaryMounted++;
+    // Read before the event: a waiting call it releases is the content, and
+    // it delivers its own
+    const replay =
+      mainPrimaryDelivered?.unmounted && !mainPrimaryWaiting
+        ? mainPrimaryDelivered
+        : undefined;
+    if (mainPrimaryDelivered) mainPrimaryDelivered.unmounted = false;
     PgCommon.createAndDispatchCustomEvent(PgView.events.MAIN_PRIMARY_MOUNT);
+    if (replay) {
+      PgCommon.createAndDispatchCustomEvent(
+        PgCommon.getStaticStateEventNames(PgView.events.MAIN_PRIMARY_STATIC)
+          .set,
+        replay.setEl
+      );
+    }
+  }
+
+  /**
+   * Announce that the primary main view has unmounted. The next one to mount
+   * gets the content this one had, unless a newer `setMainPrimary` waits for
+   * it (`announceMainPrimaryMount`).
+   */
+  static announceMainPrimaryUnmount() {
+    mainPrimaryMounted = Math.max(0, mainPrimaryMounted - 1);
+    if (mainPrimaryDelivered && !mainPrimaryMounted) {
+      mainPrimaryDelivered.unmounted = true;
+    }
   }
 
   /**

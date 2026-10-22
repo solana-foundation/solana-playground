@@ -51,11 +51,13 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
+const onHome = vi.fn();
 let sent: ReturnType<typeof memoryProvider>;
 let logged: ReturnType<typeof memoryLogs>;
 beforeEach(() => {
   // `setModal` settles when the modal closes
   view.setModal.mockReset().mockResolvedValue(null);
+  onHome.mockReset();
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
   logged = memoryLogs();
@@ -66,7 +68,7 @@ afterEach(() => {
   resetLogger();
 });
 
-const draw = (homeShown?: boolean) =>
+const draw = () =>
   render(
     <TooltipProvider>
       <SidebarProvider>
@@ -78,7 +80,7 @@ const draw = (homeShown?: boolean) =>
           footer={null}
           railFooter={null}
           setup={null}
-          homeShown={homeShown}
+          onHome={onHome}
         />
       </SidebarProvider>
     </TooltipProvider>
@@ -90,7 +92,6 @@ const opened = () =>
     .map((event) => event.params);
 
 it.each([
-  ["Home", "home", "tutorials"],
   ["New project", "new-project", "tutorials"],
   ["Tutorials", "tutorials", "tutorials"],
   ["Programs", "programs", "programs"],
@@ -107,15 +108,24 @@ it.each([
   }
 );
 
-it("reports Home but opens no gallery while Home is the page shown", () => {
-  draw(true);
+it("opens Home, not the gallery, from the work", () => {
+  draw();
   fireEvent.click(screen.getByRole("button", { name: "Home" }));
   expect(opened()).toEqual([{ item: "home" }]);
+  expect(onHome).toHaveBeenCalledTimes(1);
   expect(view.setModal).not.toHaveBeenCalled();
 });
 
-it("still opens the gallery from the other items while Home is shown", () => {
-  draw(true);
+it("hands every pick of Home to the page, which decides, and opens no gallery", () => {
+  draw();
+  fireEvent.click(screen.getByRole("button", { name: "Home" }));
+  fireEvent.click(screen.getByRole("button", { name: "Home" }));
+  expect(onHome).toHaveBeenCalledTimes(2);
+  expect(view.setModal).not.toHaveBeenCalled();
+});
+
+it("still opens the gallery from the other items", () => {
+  draw();
   fireEvent.click(screen.getByRole("button", { name: "Programs" }));
   expect(view.setModal).toHaveBeenCalledTimes(1);
 });

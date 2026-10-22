@@ -165,3 +165,8 @@ regression against 5.1 has misread this rule.
 - [x] 5.27 Failed clicks tell the user: a toast says what did not happen,
       once (HOO-2100; after 5.4 and 5.6; design.md, "Failed clicks (5.27)";
       plan: [plans/5.27-failed-clicks.md](plans/5.27-failed-clicks.md))
+- [x] 5.28 Home from an open project: the navigation's Home and the last
+      project's delete lead to Home, and going back keeps the editor, its
+      undo history and the console (HOO-2118; after 5.8; design.md, "Home
+      from an open project (5.28)"; plan:
+      [plans/5.28-home-from-an-open-project.md](plans/5.28-home-from-an-open-project.md))

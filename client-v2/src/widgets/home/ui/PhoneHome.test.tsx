@@ -79,8 +79,13 @@ afterEach(() => {
 
 const draw = () => {
   const onAsk = vi.fn();
-  render(<PhoneHome onAsk={onAsk} />);
-  return { home: within(screen.getByRole("region", { name: "Home" })), onAsk };
+  const onContinue = vi.fn();
+  render(<PhoneHome onAsk={onAsk} onContinue={onContinue} />);
+  return {
+    home: within(screen.getByRole("region", { name: "Home" })),
+    onAsk,
+    onContinue,
+  };
 };
 const titles = (home: ReturnType<typeof draw>["home"]) =>
   within(home.getByRole("navigation", { name: "Quick start" }))
@@ -98,15 +103,14 @@ it("offers a new Anchor project and the first beginner tutorial without a projec
   ]);
 });
 
-it("puts Continue first when a project is open and switches to it", async () => {
+it("puts Continue first when a project is open and goes back to it without a switch", async () => {
   utils.PgExplorer.currentWorkspaceName = "counter";
   utils.PgExplorer.allWorkspaceNames = ["counter"];
-  const { home } = draw();
+  const { home, onContinue } = draw();
   expect(titles(home)[0]).toBe("Continue counterYour last project");
   fireEvent.click(home.getByRole("button", { name: /Continue counter/ }));
-  await waitFor(() =>
-    expect(utils.PgExplorer.switchWorkspace).toHaveBeenCalledWith("counter")
-  );
+  await waitFor(() => expect(onContinue).toHaveBeenCalledTimes(1));
+  expect(utils.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
   await waitFor(() =>
     expect(events("home_quickstart_opened")).toEqual([{ id: "continue" }])
   );
@@ -179,12 +183,13 @@ const toastText = () => {
 it("toasts a project gone since Home drew it, and does not report it opened", async () => {
   utils.PgExplorer.currentWorkspaceName = "counter";
   utils.PgExplorer.allWorkspaceNames = ["counter"];
-  const { home } = draw();
+  const { home, onContinue } = draw();
   // Deleted in another tab before the tap
   utils.PgExplorer.allWorkspaceNames = [];
   fireEvent.click(home.getByRole("button", { name: /Continue counter/ }));
   await waitFor(() => expect(utils.PgView.setToast).toHaveBeenCalledTimes(1));
   expect(utils.PgExplorer.switchWorkspace).not.toHaveBeenCalled();
+  expect(onContinue).not.toHaveBeenCalled();
   expect(logged.entries).toHaveLength(1);
   expect(logged.entries[0].report).toBe(true);
   expect(events("home_quickstart_opened")).toEqual([]);
@@ -209,4 +214,17 @@ it("opens the assistant from the composer and reports it", () => {
   fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
   expect(onAsk).toHaveBeenCalledTimes(1);
   expect(events("home_composer_opened")).toEqual([{}]);
+});
+
+it("switches to the project Continue names when another opened since Home drew it", async () => {
+  utils.PgExplorer.currentWorkspaceName = "counter";
+  utils.PgExplorer.allWorkspaceNames = ["counter", "escrow"];
+  const { home, onContinue } = draw();
+  // Another tab opened escrow before the tap
+  utils.PgExplorer.currentWorkspaceName = "escrow";
+  fireEvent.click(home.getByRole("button", { name: /Continue counter/ }));
+  await waitFor(() =>
+    expect(utils.PgExplorer.switchWorkspace).toHaveBeenCalledWith("counter")
+  );
+  expect(onContinue).not.toHaveBeenCalled();
 });

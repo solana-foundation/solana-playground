@@ -1403,11 +1403,11 @@ project lands on Home instead of the gallery modal.
 - **Keys.** While Home shows, Ctrl+R, Ctrl+J, ⌘E and a deploy's auto-open of
   the console do nothing (no saved layout changes for columns not on
   screen); ⌘B still folds the navigation, which is on screen.
-- **Not in this task** (HOO-2118): coming back to Home from an open project,
-  and Home after the last project is deleted. A route hands `Primary` its
-  content once, `PgRouter.navigate` to the current path does nothing, so a
-  remounted `Write` stays blank. Until HOO-2118, Home in the navigation opens
-  the gallery whenever Home is not on screen, as in 5.2.
+- **Not in this task**: coming back to Home from an open project, and Home
+  after the last project is deleted. A route hands `Primary` its content
+  once, `PgRouter.navigate` to the current path does nothing, so a remounted
+  `Write` stays blank. 5.28 (HOO-2118) does both; see "Home from an open
+  project (5.28)".
 - **From 720 px.** "Where should we begin?", the composer, three tiles and
   four tutorial cards, built from `composer`, `action-card`, `tag` and
   `button`. New project unfolds `StartFromScratch` under the tiles; Follow a
@@ -1638,6 +1638,71 @@ portals to `body`, outside the hidden shell, and its overlay would cover the
 page. Toasts and dialogs are not the app here: they are the page's own
 feedback (a failed export, an import dialog), so `ToastHost` and `ModalHost`
 stay outside the hidden shell, above the page.
+
+## Home from an open project (5.28)
+
+Decided with Slava on 2026-10-20 (HOO-2118). 5.8 shows Home only on a start
+with no project open; this makes it reachable from an open project, and
+going back finds the work as it was left.
+
+- **The work stays mounted while a project is open.** Home still takes the
+  assistant's and the work's place in the frame, but while a project is
+  current the stage and the console keep rendering into their outlets,
+  which Home leaves detached from the page, as the frame already does when
+  a phone rotates across `LAYOUT_BREAKPOINTS.phone`. So Monaco keeps its
+  models, and with them the undo history, the cursor and the scroll; the
+  terminal keeps its scrollback and a running process. The work unmounts
+  only when it cannot be drawn, on `/` with no project current: on a start
+  with none (5.8), and once the last one is deleted. A route other than `/`
+  draws its own page without a project (a lesson before it starts), so it
+  keeps the work and never shows Home by itself. _Rejected:_
+  unmounting under Home and remounting on the way back, which loses the
+  undo history (Monaco disposes every model on unmount) and the console
+  buffer; covering the mounted columns with Home, which 5.8 rejected.
+- **A `Primary` that mounts again gets the content back.** A route calls
+  `PgView.setMainPrimary` once; a `Primary` mounting after that call was
+  delivered (the work after the last delete, then a new project) had nobody
+  to fill it. `PgView` keeps the newest setter it delivered and hands it to
+  a `Primary` that announces its mount while no call waits, so the route's
+  view comes back without a second navigation.
+- **Home is a view, not a route.** Showing Home from a project leaves the
+  address as it is; the route's own content stays in the mounted work.
+  `useStartView` becomes the page's view state for the whole load rather
+  than a decision taken once at the start.
+- **Into Home:** the navigation's Home item (`via: nav`); the last project
+  deleted, here, by another tab or by sync (`via: last-deleted`); a
+  navigation back to `/` with no project open (`via: back`), which also
+  covers a fresh profile that deep-linked a tutorial and went Back without
+  starting it. The start keeps `via: start`. Until the start is decided the
+  navigation's Home does nothing, so the start's watchdog and its reports
+  stay in place. Home in the navigation never
+  opens the gallery any more; New project, Tutorials and Programs still do
+  until 5.9.
+- **Out of Home:** picking the open project in the navigation's list (which
+  otherwise does nothing for the current project), the phone's Continue
+  quick start (built in 5.8, shown now that a project can be open under
+  Home), and, as in 5.8, any other project created, opened or switched to,
+  or a route other than `/`. Sync re-opens the project Home shows over (a
+  merge, a reconcile on refocus); that is no way out, or a Home the user
+  asked for would vanish on its own. A replayed route view that fails is
+  reported by `Primary` (`view:main-primary`), since it is drawn in place of
+  the view, never thrown.
+- **What stays on under Home.** The kept work's own keys (a tab's Alt+W,
+  the console's Ctrl+L, a lesson reader's Escape) are off while Home shows:
+  `BaseLayoutShell` sets `KeybindsActive` (`shared/lib`) to false around
+  the outlets, and `useKeybind` registers nothing under it. The terminal
+  fits itself only while its node is on the page; off it, it measures 0 and
+  xterm throws on the columns that gives.
+- **The project Home shows over** is told by its id, not its name: sync
+  renames a project to follow another device by re-opening it under the new
+  name, which is still no way out.
+- **A shared project** (temporary: a share or GitHub link) has no row in the
+  list to go back by, so over one the navigation's Home, picked again, goes
+  back to the work (`via: nav`); over a project the list names it leaves Home
+  in place.
+- **Telemetry**, prefix `home`: `home_shown` gains `via` (`start`, `nav`,
+  `last-deleted` or `back`); `home_left` with `via` (`current-project`,
+  `continue`, `open` or `nav`) when the work replaces Home.
 
 ## Risks / Trade-offs
 

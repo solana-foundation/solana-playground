@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { createElement, useEffect, useRef } from "react";
+import { createElement, useContext, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
+
+import { KeybindsActive } from "@/shared/lib/keybinds-active";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -139,6 +141,8 @@ interface PropsChoice {
   /** Home in place of the assistant and the work */
   home?: ReactNode;
   homeAssistantOpen?: boolean;
+  /** Keep the stage and the console mounted under Home */
+  keepWork?: boolean;
 }
 
 /**
@@ -203,6 +207,7 @@ const props = (
               onOpenChange: vi.fn(),
             },
           },
+    keepWork: choice.keepWork,
     phone: {
       page: "work",
       onSwipe: vi.fn(),
@@ -1255,6 +1260,79 @@ describe("with Home", () => {
       expect(mounts.console).toHaveBeenCalledTimes(1);
     }
   );
+
+  describe("going to Home and back", () => {
+    const shell = (
+      viewport: TestViewport,
+      mounts: { stage: () => void; console: () => void },
+      choice: { home?: ReactNode; keepWork?: boolean }
+    ) => (
+      <BaseLayoutShell
+        {...props(viewport, {
+          home: choice.home,
+          keepWork: choice.keepWork,
+          stage: <Mounts testId="stage-probe" onMount={mounts.stage} />,
+          console: <Mounts testId="console-probe" onMount={mounts.console} />,
+        })}
+      />
+    );
+    const there = (viewport: TestViewport, keepWork: boolean) => {
+      const mounts = { stage: vi.fn(), console: vi.fn() };
+      const rendered = render(shell(viewport, mounts, {}));
+      rendered.rerender(
+        shell(viewport, mounts, { home: <div>home slot</div>, keepWork })
+      );
+      return { mounts, rendered };
+    };
+
+    it.each(["wide", "compact", "phone"] as const)(
+      "keeps the stage and the console mounted, off screen, with keepWork (%s)",
+      (viewport) => {
+        const { mounts, rendered } = there(viewport, true);
+        expect(screen.getByText("home slot")).toBeTruthy();
+        expect(screen.queryByTestId("stage-probe")).toBeNull();
+        expect(screen.queryByTestId("console-probe")).toBeNull();
+
+        rendered.rerender(shell(viewport, mounts, {}));
+        expect(screen.getByTestId("stage-probe")).toBeTruthy();
+        expect(screen.getByTestId("console-probe")).toBeTruthy();
+        expect(mounts.stage).toHaveBeenCalledTimes(1);
+        expect(mounts.console).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it.each(["wide", "phone"] as const)(
+      "turns the kept work's keybinds off under Home, and on again after (%s)",
+      (viewport) => {
+        const seen: boolean[] = [];
+        const Keys = () => {
+          seen.push(useContext(KeybindsActive));
+          return null;
+        };
+        const tree = (home?: ReactNode) => (
+          <BaseLayoutShell
+            {...props(viewport, { home, keepWork: true, stage: <Keys /> })}
+          />
+        );
+        const { rerender } = render(tree());
+        expect(seen.at(-1)).toBe(true);
+        rerender(tree(<div>home slot</div>));
+        expect(seen.at(-1)).toBe(false);
+        rerender(tree());
+        expect(seen.at(-1)).toBe(true);
+      }
+    );
+
+    it.each(["wide", "phone"] as const)(
+      "mounts the work afresh without keepWork (%s)",
+      (viewport) => {
+        const { mounts, rendered } = there(viewport, false);
+        rendered.rerender(shell(viewport, mounts, {}));
+        expect(mounts.stage).toHaveBeenCalledTimes(2);
+        expect(mounts.console).toHaveBeenCalledTimes(2);
+      }
+    );
+  });
 
   it("lays out the work group without Home, as the frame's id says", () => {
     render(<BaseLayoutShell {...props("wide")} />);

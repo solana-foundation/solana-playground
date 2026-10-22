@@ -443,8 +443,10 @@ section, each time a user picks one in the section list.
 Until the Tutorials and Programs pages exist, the navigation's items SHALL
 open the gallery: New project on its default tab, Tutorials on its
 tutorials tab (`gallery-tab-tutorials`), Programs on its programs tab
-(`gallery-tab-programs`). Home SHALL open the gallery on its default tab
-whenever Home is not on screen, and leave Home in place while Home shows.
+(`gallery-tab-programs`). Home SHALL NOT open the gallery: it SHALL show
+Home, and leave Home in place while Home shows, except over a shared
+project, which the project list cannot name: there it SHALL go back to the
+work.
 
 #### Scenario: Programs from the navigation
 
@@ -462,12 +464,12 @@ and four tutorial cards; New project SHALL unfold the start-from-scratch
 row under the tiles, and the other two SHALL open the gallery on their tab.
 Below 720 px it SHALL hold quick starts for a new Anchor project and a
 beginner tutorial, a Browse row that opens the gallery, and the composer at
-its foot. Home SHALL give way to the work, for the rest of the page load,
-once a project is created or opened or a tutorial opens; projects listed
+its foot. Home SHALL give way to the work once a project is created or
+opened or a tutorial opens; projects listed
 with none open SHALL still show Home. Until the projects are known Home's
 place SHALL show a spinner, and if they are not known within 10 s the page
 SHALL report it and open the work. The editor SHALL NOT mount while Home
-shows.
+shows with no project open.
 
 #### Scenario: An empty install
 
@@ -504,9 +506,47 @@ shows.
 - **WHEN** a user on Home on a 1280 px wide window clicks the composer
 - **THEN** the assistant opens
 
+### Requirement: Home is reachable from an open project
+
+The navigation's Home item SHALL show Home while a project is open, and
+deleting the last project on `/` SHALL show Home; so SHALL a navigation back
+to `/` with no project open. A route other than `/` SHALL NOT show Home by
+itself (a lesson's route goes to `/` on its own when its project is
+deleted). The navigation's Home SHALL do nothing until the start is
+decided, and a re-open of the project Home shows over (by sync) SHALL NOT
+leave Home. The address SHALL NOT change when Home shows. While a
+project is open the editor and the console SHALL stay mounted under Home,
+so that going back to the project, by picking it in the navigation's list,
+by the phone's Continue, or by opening another project and coming back,
+SHALL find the same file, cursor, scroll position, undo history and console
+output. Once no project is open on `/` the editor SHALL unmount, and the
+next project SHALL open in a filled editor.
+
+#### Scenario: Home from an open project and back
+
+- **WHEN** a user with a project open types in the editor, clicks Home in
+  the navigation, then picks the same project in the navigation's list
+- **THEN** Home shows with the address unchanged, then the editor shows the
+  same file with the cursor where it was, and undo removes the typing
+
+#### Scenario: Home from an open project on a phone
+
+- **WHEN** a user on a 390 px wide screen with a project open types in the
+  editor, opens the menu, taps Home, then taps Continue
+- **THEN** the menu gives way to Home on the work page, then the editor
+  shows the typing
+
+#### Scenario: Home after the last project is deleted
+
+- **WHEN** a user deletes their only project
+- **THEN** Home shows and no gallery opens, and New project from Home opens
+  the new project's default file in the editor
+
 ### Requirement: Home is measured
 
-Home SHALL send `home_shown` when it shows; `home_tile_opened` with `tile`
+Home SHALL send `home_shown` with `via` (`start`, `nav`, `last-deleted` or
+`back`) when it shows; `home_left` with `via` (`current-project`,
+`continue`, `open` or `nav`) when the work replaces it; `home_tile_opened` with `tile`
 (`new-project`, `tutorials` or `programs`) when a user opens a tile;
 `home_tutorial_opened` when a user opens a tutorial card;
 `home_quickstart_opened` with `id` (`continue`, `new` or `tutorial`) when a

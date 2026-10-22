@@ -10,6 +10,8 @@ import type { PhoneQuickstart, QuickstartTarget } from "./BasePhoneHome";
 
 export interface PhoneHomeProps {
   onAsk: () => void;
+  /** Continue was picked: go back to the project open under Home */
+  onContinue: () => void;
 }
 
 const log = createLogger("home:actions");
@@ -31,13 +33,20 @@ const freeProjectName = (framework: string) => {
  * one gone since (a project deleted in another tab) throws rather than
  * passing for an open.
  */
-const openQuickstart = async (target: QuickstartTarget) => {
+const openQuickstart = async (
+  target: QuickstartTarget,
+  onContinue: () => void
+) => {
   switch (target.id) {
     case "continue": {
       if (!PgExplorer.allWorkspaceNames?.includes(target.workspace)) {
         throw new Error(`${target.workspace} no longer exists.`);
       }
-      await PgExplorer.switchWorkspace(target.workspace);
+      // Continue names the project open when Home drew it, which the work
+      // under Home still holds; a switch would re-read it under a live
+      // editor. Only one opened since (another tab) needs the switch.
+      if (target.workspace === PgExplorer.currentWorkspaceName) onContinue();
+      else await PgExplorer.switchWorkspace(target.workspace);
       return;
     }
     case "new": {
@@ -62,7 +71,7 @@ const openQuickstart = async (target: QuickstartTarget) => {
   }
 };
 
-const PhoneHome = ({ onAsk }: PhoneHomeProps) => {
+const PhoneHome = ({ onAsk, onContinue }: PhoneHomeProps) => {
   useRenderOnChange(PgExplorer.onDidSwitchWorkspace);
   useRenderOnChange(PgExplorer.onDidInit);
   const programCount = useProgramCount();
@@ -104,7 +113,7 @@ const PhoneHome = ({ onAsk }: PhoneHomeProps) => {
       programCount={programCount}
       onQuickstart={async (quickstart) => {
         try {
-          await openQuickstart(quickstart);
+          await openQuickstart(quickstart, onContinue);
         } catch (e) {
           // Logged once here and told by a toast, so the button's own
           // `onError` never sees it
