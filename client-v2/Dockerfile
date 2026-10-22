@@ -3,7 +3,7 @@ ARG HAS_SERVER
 # Default non-root user
 ARG USER
 # Base image; the tag matches .nvmrc
-ARG IMAGE="node:22.20.0"
+ARG IMAGE="node:22.23.4"
 
 ################################## Has server ##################################
 FROM ${IMAGE} AS server-true

@@ -64,7 +64,7 @@ upstream.
 
 ## Setup and commands
 
-Node is pinned by `.nvmrc` (^22.20.0); package manager is yarn 1.x.
+Node is pinned by `.nvmrc`; package manager is yarn 1.x.
 All commands run from `client-v2/`.
 
 ```sh
