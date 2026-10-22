@@ -1349,7 +1349,8 @@ Decided with Slava on 2026-10-16 (HOO-2070), from the prototype's sidebar
 
 Kept: "Cluster: <name>" on the rail's dot, "Change cluster, currently
 <name>" on the cluster row, "Connect wallet", "Sign in with GitHub" and the
-settings trigger attribute that lets a second click close the settings. The
+settings trigger attribute (since 5.20 the page covers the triggers, and only
+finds them for tests). The
 account controls, the row and the rail's button alike, are named
 "Account: <login>" or "Account, signed out"; tests match `/^Account/`.
 
@@ -1530,6 +1531,113 @@ only logged (5.4), and nothing on screen said the action did not happen.
 _Rejected:_ an inline message on the control (a failed click often closed
 the dialog or menu it sat in, and one channel reads the same everywhere);
 showing the raw error (it is written for the log, not for the user).
+
+## Settings as a full page (5.20)
+
+Decided with Slava on 2026-10-20 (HOO-2071), from the prototype (`#app`,
+settings opened from the cluster row, at 1280, 834 and 390 px). How many
+sections and whether settings stay in the app or take the page are open
+questions to the designer (q-20261015-13); the prototype is followed until
+they are answered. One PR.
+
+- **A page, not an overlay.** The settings take the whole window, the
+  navigation included: at the left a column with "Back to app" over the
+  section list, at the right the sections one after another, centred, about
+  36 rem wide. `GearSidebar`, the 22 rem overlay, is deleted. Under it the
+  stage bar's tabs (`relative z-10`) drew over the overlay's title, and a grey
+  layer floated over the editor; neither can happen when nothing of the app
+  is drawn.
+- **The app stays mounted.** `LayoutShell` is made invisible
+  (`visibility: hidden` and `inert`) while the page shows, never unmounted:
+  `Write` must not unmount, and Monaco, the terminal's session and the
+  assistant's thread keep their state. Not `display: none`: the shell keeps
+  its boxes, so no panel sees a resize to zero (`react-resizable-panels` folds
+  a panel on its own when its size drops, 5.1) and Monaco and xterm do not
+  re-measure. The page is a sibling of the shell in `Flow`, fixed over the
+  whole window, so nothing of the shell's tree changes.
+- **The sections**, in order: Network, Project, Block Explorer, Build,
+  Connection, Editor, Notification, Server, Test UI, UI, Wallet, and a twelfth,
+  Experimental, for `experimental.unstable` (D37; Slava, 2026-10-20: a setting
+  is not dropped for want of a section in the prototype). Network and Project
+  are the overlay's own (the network chips; Export, From GitHub, From files);
+  the rest come from `PgSettings.all`, grouped by the id's prefix as before.
+  The overlay's Explorer links (Wallet, Program, Program IDL) sit in Block
+  Explorer, shown only when there is a wallet or a program. A setting is a row:
+  name and description at the left, the control at the right; on a phone a
+  select goes under them, full width, while a switch stays at the right, as
+  the prototype's checkbox does. A boolean is a `Switch` (5.3), where the
+  prototype draws a checkbox.
+- **Sections do not fold.** The prototype's sections are flat, so the
+  upstream `Collapsible` groups go. The fold scenario in `client-v2-elements`
+  moves to the Build stage's compiler output, the other fold e2e can reach.
+- **The section list** scrolls its section into view on a click and marks
+  the section being read (`aria-current`), following the scroll. Below
+  `LAYOUT_BREAKPOINTS.phone` there is no list: a 60 px bar holds "Back to app"
+  (an arrow) and the title.
+- **Open and close.** The triggers stay what they are: the cluster row, the
+  rail's dot, the account menu's Settings and cluster warning, ⌘,
+  (Ctrl+, off macOS), and the Get set up checklist's "Choose a network"
+  (5.16), which only opens: a pick of any chip, the current one included,
+  marks that step done (`onChooseNetwork`). `focus: "network"` lands on the chosen network, any
+  other open on the page's heading. "Back to app", Escape (not while a modal
+  is open, nor one an open select already took) and ⌘, close it and give
+  focus back to the control that opened it; the account menu names its
+  trigger (`SettingsRequest.returnTo`), since the item unmounts with the
+  menu. ⌘, closes a dialog opened from the page along with it.
+  The close control is named "Back to app", its visible text, replacing
+  "Close settings" (Slava, 2026-10-20: the name says what the button shows).
+- **A widget, `widgets/settings-page`**: `BaseSettingsPage` (the frame, the
+  list, the sections, all through props), `BaseSettingRow`, and
+  `SettingsPage`, which connects `PgSettings`, the explorer and the wallet.
+  `SettingsRequest` (`SettingsFocus`, `SettingsEntry`, `SettingsExit`) and
+  the trigger attribute move to `shared/lib`, so the session footer does not
+  import another widget. The upstream renderer `app/Panels/Side/Left/` has no
+  other user and sits in the `app` layer, which a widget cannot import:
+  `Settings.tsx` and its test move into the widget's `ui/` as
+  `SettingControl`, in their own commit by the UI move rule, and lose their
+  folding groups and popover chrome there. `CustomSetting.tsx` goes to the
+  legacy `views/flow/settings/` instead: it is drawn in overlays'
+  `ModalFrame`, and a widget cannot import another widget.
+- **Taken into this PR from its review** (Slava, 2026-10-21, intakes
+  2026-10-20-settings-control-throw, -settings-endpoint-names and
+  -settings-popover-over-page):
+  - A setting that throws as it renders (a malformed `values` entry, a
+    Custom value with no `custom`) no longer unmounts the app beneath the
+    page: `SettingsBoundary` puts a notice and "Back to app" in its place and
+    reports the error through the logger's `panic`.
+  - `connection.endpoint` is named "RPC endpoint" and `server.endpoint`
+    "Build server" in the registry, so the two selects no longer share the
+    name "Endpoint".
+  - A menu, popover or tooltip open when the page opens closes: they portal
+    to `body`, outside the hidden shell, and a modal menu's focus trap would
+    pull focus back from the page. `closeOpenLayers` (`shared/lib`) sends an
+    Escape from the topmost open layer, never from focus (a project's rename
+    field would read it as a cancel), one per frame while a layer is still
+    `open`, and nothing when none is (Escape would then close the
+    navigation's Sheet as a key's, not the product's). The page opens once
+    they are closed, and the trigger of the layer focus was in stands in as
+    the control to give focus back to.
+  - When the control that opened the page is gone on close (a checklist step
+    the pick ticked, a footer the navigation's Sheet took with it), focus
+    goes to the first control that opens the settings still on screen, else
+    to the one that opens the navigation. The failure notice closes on
+    Escape too, its own listener in place of the page's.
+- **Telemetry**, prefix `settings`: `settings_opened {from: cluster | rail |
+  menu | key | setup}`, `settings_closed {via: back | escape | key}` and
+  `settings_section_picked {section}`. Export and import failures keep going
+  through `reportButtonFailure`; the widget logs under `settings-page:*`.
+
+Kept: the region named "Settings", the radio group "Network", every setting
+control's name (the setting's name; the two endpoint selects are renamed, see
+above), the trigger attribute (tests find the
+triggers by it; with nothing of the app on screen, a second click on a
+trigger is no longer the way out, "Back to app" is), "Change cluster,
+currently <name>" and "Cluster: <name>". The floating wallet is hidden with
+the shell, and the navigation's Sheet still closes as the settings open: it
+portals to `body`, outside the hidden shell, and its overlay would cover the
+page. Toasts and dialogs are not the app here: they are the page's own
+feedback (a failed export, an import dialog), so `ToastHost` and `ModalHost`
+stay outside the hidden shell, above the page.
 
 ## Risks / Trade-offs
 

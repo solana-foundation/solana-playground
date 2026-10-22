@@ -11,11 +11,6 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 import type { AccountView } from "../model/account";
 import BaseSessionFooter from "./BaseSessionFooter";
 
-// The settings panel module reaches the utils barrel, which reads globals only the built app has
-vi.mock("@/views/flow/settings/GearSidebar", () => ({
-  SETTINGS_TRIGGER_ATTR: "data-settings-trigger",
-}));
-
 // The stock Sidebar reads the viewport through `matchMedia`, which jsdom lacks
 beforeAll(() => {
   vi.stubGlobal("matchMedia", (query: string) => ({
@@ -166,15 +161,6 @@ it("says nothing under the row of a sign-in the user cancelled", () => {
     }),
   });
   expect(screen.queryByText("Couldn't sign in")).toBeNull();
-});
-
-it("marks the account row as a settings trigger, so opening the menu keeps open settings open", () => {
-  draw({ account: view({}) });
-  expect(
-    screen
-      .getByRole("button", { name: "Account, signed out" })
-      .hasAttribute("data-settings-trigger")
-  ).toBe(true);
 });
 
 it("offers Cancel beside the row while signing in", async () => {

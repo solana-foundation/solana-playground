@@ -1,22 +1,18 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, LONG, seedWorkspace, test } from "./fixtures";
+import {
+  expect,
+  FAILED_BUILD_STDERR,
+  json,
+  LONG,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 /**
  * The scenarios of `client-v2-controls`: the stepper, a radio group and a
  * select, by pointer and by keyboard.
  */
-
-/** What rustc prints for one type error, as the build server returns it */
-const FAILED_BUILD_STDERR = [
-  "error[E0308]: mismatched types",
-  " --> src/lib.rs:5:9",
-  "  |",
-  '5 |     let x: u32 = "no";',
-  "  |            ---   ^^^^ expected `u32`, found `&str`",
-  "",
-  "error: could not compile `e2e-project` (lib) due to 1 previous error",
-].join("\n");
 
 /**
  * The editor focuses itself when it opens the first file, at a moment that
@@ -102,7 +98,7 @@ test.describe("client-v2-controls", () => {
 
     const light = page.getByRole("option", { name: "Light", exact: true });
     await expect(light).toBeVisible();
-    // The options sit above the settings panel, not under it
+    // The options sit above the settings page, not under it
     const onTop = await light.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const hit = document.elementFromPoint(
@@ -112,6 +108,13 @@ test.describe("client-v2-controls", () => {
       return hit !== null && el.contains(hit);
     });
     expect(onTop).toBe(true);
+
+    // Escape closes the options, and leaves the settings open
+    await page.keyboard.press("Escape");
+    await expect(light).toBeHidden();
+    await expect(page.getByRole("region", { name: "Settings" })).toBeVisible();
+    await row.getByRole("combobox").focus();
+    await page.keyboard.press("ArrowDown");
 
     // The list opens on the chosen theme, Dark; Light is the next option
     await page.keyboard.press("ArrowDown");

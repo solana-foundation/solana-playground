@@ -17,7 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from "@/shared/ui/dropdown-menu";
-import { SETTINGS_TRIGGER_ATTR } from "@/views/flow/settings/GearSidebar";
+import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import {
   DOCS_URL,
   formatBalance,
@@ -46,7 +46,7 @@ const MOVES_FOCUS: ReadonlySet<AccountItem> = new Set([
   "cluster-down",
 ]);
 
-/** Lets a pick through `GearSidebar`'s outside-click check, so a second pick closes the settings */
+/** Marks the items that open the settings, as tests find them */
 const settingsTrigger = { [SETTINGS_TRIGGER_ATTR]: "" };
 
 const External = () => (

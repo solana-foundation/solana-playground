@@ -83,46 +83,20 @@ test("client-v2-layout: Choosing a network", async ({ page }) => {
   await expect(title(page)).toHaveText("Get set up· 0 of 4", LONG);
 
   await chooseCurrentNetwork(page);
+  // The settings page covers the navigation, the checklist with it
+  await page.getByRole("button", { name: "Back to app" }).click();
 
   await expect(doneStep(page, "Choose a network")).toContainText("devnet");
   await expect(title(page)).toHaveText("Get set up· 1 of 4");
+  // The step that opened the settings is ticked now, no longer a button:
+  // focus comes back to a control that still opens them
+  await expect(page.locator(":focus")).toHaveAttribute(
+    "data-settings-trigger",
+    ""
+  );
   await expect
     .poll(() => lineOf(lines, "setup_item_picked"))
     .toContain("{item: network}");
-});
-
-test("the network step keeps settings that are already open on screen", async ({
-  page,
-}) => {
-  await seedWorkspace(page);
-  await page
-    .getByRole("button", { name: "Change cluster, currently devnet" })
-    .click();
-  const network = page.getByRole("radiogroup", { name: "Network" });
-  await expect(network).toBeVisible();
-  // Watch for the panel closing (it stays mounted, `aria-hidden`) at any
-  // point during the click: a mousedown outside it closes it
-  await page.evaluate(() => {
-    const w = window as unknown as { settingsClosed: boolean };
-    w.settingsClosed = false;
-    new MutationObserver(() => {
-      const chips = document.querySelector('[aria-label="Network"]');
-      if (chips?.closest('[aria-hidden="true"]')) w.settingsClosed = true;
-    }).observe(document.body, {
-      attributes: true,
-      attributeFilter: ["aria-hidden"],
-      subtree: true,
-    });
-  });
-
-  await step(page, "Choose a network").click();
-
-  await expect(network).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => (window as unknown as { settingsClosed: boolean }).settingsClosed
-    )
-  ).toBe(false);
 });
 
 test("client-v2-layout: A step opens its action", async ({ page }) => {

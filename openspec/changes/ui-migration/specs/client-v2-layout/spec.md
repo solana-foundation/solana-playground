@@ -200,7 +200,7 @@ would otherwise cover the settings and keep focus from them.
 #### Scenario: The rail's footer
 
 - **WHEN** a user on an 834 px wide window clicks the cluster's dot at the
-  foot of the rail, clicks it again, then clicks "Account"
+  foot of the rail, clicks "Back to app", then clicks "Account"
 - **THEN** the settings open with focus on the cluster, then close, and the
   account menu opens beside the rail
 
@@ -341,8 +341,8 @@ together on the device.
 
 - **WHEN** a user clicks "Choose a network" in the checklist and picks the
   network already selected in the settings
-- **THEN** the settings open on the network, and after the pick the step is
-  ticked and the count goes up by one
+- **THEN** the settings open on the network, and after the pick, back in
+  the app, the step is ticked and the count goes up by one
 
 #### Scenario: A step opens its action
 
@@ -359,6 +359,84 @@ together on the device.
 - **WHEN** the last of the four steps is done, and the user later opens the
   product in a new tab where no model is connected
 - **THEN** the checklist is gone, and does not come back in the new tab
+
+### Requirement: Settings are a page of their own
+
+The settings SHALL open as a page that takes the whole window, in place of
+the app, which SHALL stay loaded beneath it: the open file, the editor's
+content and the terminal's session SHALL be as they were when the user comes
+back. From 720 px wide the page SHALL show "Back to app" over a list of its
+sections (Network, Project, Block Explorer, Build, Connection, Editor,
+Notification, Server, Test UI, UI, Wallet, Experimental) beside the sections
+themselves; a click on a section in the list SHALL bring that section into
+view and mark it as current. Below 720 px the page SHALL show a bar with
+"Back to app" and the title, and no list. Nothing of the app SHALL be drawn
+over the page: a menu, popover or tooltip open when it opens SHALL close.
+"Back to app", Escape and ⌘, (Ctrl+, off macOS) SHALL close it and give
+focus back to the control that opened it, or, when that control is gone, to
+another that opens the settings. A setting that fails to render
+SHALL leave the app as it was, with a notice and "Back to app" in place of
+the page.
+
+#### Scenario: A wide window's settings page
+
+- **WHEN** a user on a 1280 px wide window opens the settings and clicks
+  "Editor" in the section list
+- **THEN** the page lists the twelve sections, the Editor section comes into
+  view, and "Editor" is marked as current
+
+#### Scenario: Nothing draws over the settings
+
+- **WHEN** a user on a 1440 by 900 px window, in the dark theme and then in
+  the light one, opens the settings
+- **THEN** the stage tabs and the editor are not shown, and the page's
+  heading is the topmost element where it is drawn
+
+#### Scenario: Back to the app keeps the work
+
+- **WHEN** a user with a file open in the editor opens the settings from the
+  cluster row and clicks "Back to app"
+- **THEN** the same file is open with the same content, and focus is back
+  on the cluster row
+
+#### Scenario: A menu open at ⌘, closes as the settings open
+
+- **WHEN** a user opens the account menu and presses ⌘,
+- **THEN** the settings page opens with focus on its heading and the menu
+  is gone
+
+#### Scenario: A tooltip open at ⌘, closes as the settings open
+
+- **WHEN** a user on an 834 px wide window hovers the rail's cluster dot
+  until its tooltip shows, and presses ⌘,
+- **THEN** the settings page opens and the tooltip is gone
+
+#### Scenario: Escape in a dialog opened from the settings closes only the dialog
+
+- **WHEN** a user opens "From GitHub" on the settings page and presses
+  Escape
+- **THEN** the dialog closes and the settings page stays open
+- **WHEN** the user opens it again and presses ⌘,
+- **THEN** the settings page and the dialog both close
+
+#### Scenario: The settings page on a phone
+
+- **WHEN** a user on a 390 px wide screen opens the settings
+- **THEN** a bar with "Back to app" and "Settings" heads the page, no
+  section list is shown, and "Back to app" returns to the app
+
+### Requirement: The settings page is measured
+
+The product SHALL send `settings_opened` with where it was opened from
+(`cluster`, `rail`, `menu`, `key` or `setup`, the Get set up checklist), `settings_closed` with how it was
+closed (`back`, `escape` or `key`), and `settings_section_picked` with the
+section, each time a user picks one in the section list.
+
+#### Scenario: Opening and closing the settings is counted
+
+- **WHEN** a user opens the settings by ⌘, and closes them with Escape
+- **THEN** `settings_opened` is sent with `key` and `settings_closed` with
+  `escape`
 
 ### Requirement: The navigation opens the gallery
 

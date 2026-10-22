@@ -56,6 +56,17 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
  */
 export const HELP_TAIL = "Run test(s)";
 
+/** What rustc prints for one type error, as the build server returns it */
+export const FAILED_BUILD_STDERR = [
+  "error[E0308]: mismatched types",
+  " --> src/lib.rs:5:9",
+  "  |",
+  '5 |     let x: u32 = "no";',
+  "  |            ---   ^^^^ expected `u32`, found `&str`",
+  "",
+  "error: could not compile `e2e-project` (lib) due to 1 previous error",
+].join("\n");
+
 /**
  * Waits for the editor to take focus, then moves focus out of it.
  *

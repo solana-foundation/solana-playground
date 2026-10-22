@@ -56,9 +56,6 @@ vi.mock("@/utils", () => ({
   PgWallet: walletWindow,
   PgView: { setToast },
 }));
-vi.mock("@/views/flow/settings/GearSidebar", () => ({
-  SETTINGS_TRIGGER_ATTR: "data-settings-trigger",
-}));
 vi.mock("@/features/feedback", () => ({
   FeedbackMenuItems: () => null,
   useFeedbackSend: () => ({ sending: false, triggerRef: { current: null } }),
@@ -138,7 +135,10 @@ it("opens the settings on the cluster from the footer's cluster row", async () =
   await userEvent.click(
     screen.getByRole("button", { name: "Change cluster, currently devnet" })
   );
-  expect(fromRow).toHaveBeenCalledExactlyOnceWith("network");
+  expect(fromRow).toHaveBeenCalledExactlyOnceWith({
+    from: "cluster",
+    focus: "network",
+  });
 });
 
 it("opens the settings on the cluster from the rail's dot", async () => {
@@ -146,7 +146,10 @@ it("opens the settings on the cluster from the rail's dot", async () => {
   await userEvent.click(
     screen.getByRole("button", { name: "Cluster: devnet" })
   );
-  expect(fromDot).toHaveBeenCalledExactlyOnceWith("network");
+  expect(fromDot).toHaveBeenCalledExactlyOnceWith({
+    from: "rail",
+    focus: "network",
+  });
 });
 
 it.each(["footer", "rail"] as const)(
@@ -303,7 +306,12 @@ it("opens the settings from the menu's Settings, showing ⌘, on a Mac", async (
   const settings = await screen.findByRole("menuitem", { name: /^Settings/ });
   expect(settings.textContent).toContain("⌘,");
   await userEvent.click(settings);
-  expect(onToggleSettings).toHaveBeenCalledExactlyOnceWith();
+  // The item unmounts with its menu: focus is to come back to the trigger
+  expect(onToggleSettings).toHaveBeenCalledExactlyOnceWith({
+    from: "menu",
+    focus: "page",
+    returnTo: screen.getByRole("button", { name: /^Account/ }),
+  });
 });
 
 it("connects a wallet through the connect command", async () => {

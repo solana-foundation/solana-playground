@@ -16,7 +16,7 @@ const computed = (
 const isDark = (page: Page) =>
   page.evaluate(() => document.documentElement.classList.contains("dark"));
 
-/** The theme select in the Settings panel, opened */
+/** The theme select on the Settings page, opened */
 const openThemeSelect = async (page: Page) => {
   await page.locator("[data-settings-trigger]").first().click();
   const row = page
@@ -30,6 +30,8 @@ const openThemeSelect = async (page: Page) => {
 const pickTheme = async (page: Page, name: "Dark" | "Light") => {
   await openThemeSelect(page);
   await page.getByRole("option", { name, exact: true }).click();
+  // Back to the app, which the page covers, to read its colours
+  await page.getByRole("button", { name: "Back to app" }).click();
 };
 
 /**

@@ -175,9 +175,12 @@ Done:
   tiles, and four tutorial cards; below 720 px it has quick starts (a new
   Anchor project, a beginner tutorial), a Browse button that opens the
   gallery, and the composer. The New Workspace gallery starts a project from
-  34 upstream programs or 16 tutorials. The cluster row,
-  the account menu's Settings or Cmd+, open a settings overlay embedding the
-  existing settings registry.
+  34 upstream programs or 16 tutorials. The cluster row, the account menu's
+  Settings or Cmd+, open Settings as a page of its own over the whole window:
+  a list of sections (Network, Project, Block Explorer, Build, Connection,
+  Editor, Notification, Server, Test UI, UI, Wallet, Experimental) built from
+  the existing settings registry, and "Back to app", Escape or Cmd+, to
+  return to the work as it was.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
 - Conversations and project code are persisted. Threads are keyed by project

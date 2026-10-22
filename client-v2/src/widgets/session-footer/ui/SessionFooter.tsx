@@ -1,10 +1,10 @@
-import type { SettingsFocus } from "@/views/flow/settings/GearSidebar";
+import type { SettingsRequest } from "@/shared/lib/settings-request";
 import BaseSessionFooter from "./BaseSessionFooter";
 import { useAccount } from "./use-account";
 
 interface SessionFooterProps {
   settingsOpen: boolean;
-  onToggleSettings: (focus?: SettingsFocus) => void;
+  onToggleSettings: (request: SettingsRequest) => void;
 }
 
 /** `BaseSessionFooter` on the live cluster, session, wallet and feedback */
@@ -19,7 +19,9 @@ const SessionFooter = ({
       <BaseSessionFooter
         account={account}
         settingsOpen={settingsOpen}
-        onOpenCluster={() => onToggleSettings("network")}
+        onOpenCluster={() =>
+          onToggleSettings({ from: "cluster", focus: "network" })
+        }
         onCancelSignIn={() => pick("cancel-sign-in")}
         menu={menu}
         onMenuOpenChange={onMenuOpenChange}

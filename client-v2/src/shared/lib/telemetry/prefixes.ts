@@ -10,6 +10,7 @@ export const EVENT_PREFIXES = {
   overlays: "overlay",
   persistence: "sync",
   "session-footer": "session",
+  "settings-page": "settings",
   "setup-list": "setup",
 } as const;
 

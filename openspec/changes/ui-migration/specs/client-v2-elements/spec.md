@@ -13,14 +13,14 @@ A section the user can fold SHALL be folded and unfolded from its heading, by
 pointer and by keyboard, and its heading SHALL tell assistive technology
 whether the section is open.
 
-#### Scenario: A settings group folds
+#### Scenario: The compiler output folds
 
-- **WHEN** a user opens the settings and clicks the heading of an open
-  settings group
-- **THEN** the group's settings are hidden and the heading is announced as
-  collapsed
-- **WHEN** the user clicks the heading again
-- **THEN** the settings are shown and the heading is announced as expanded
+- **WHEN** a build fails and the user clicks "Show compiler output" under
+  its errors
+- **THEN** the compiler's output is shown and the toggle is announced as
+  expanded
+- **WHEN** the user clicks it again
+- **THEN** the output is hidden and the toggle is announced as collapsed
 
 ### Requirement: A checkbox is toggled by its label
 

@@ -1,10 +1,10 @@
-import type { SettingsFocus } from "@/views/flow/settings/GearSidebar";
+import type { SettingsRequest } from "@/shared/lib/settings-request";
 import BaseRailFooter from "./BaseRailFooter";
 import { useAccount } from "./use-account";
 
 interface RailFooterProps {
   settingsOpen: boolean;
-  onToggleSettings: (focus?: SettingsFocus) => void;
+  onToggleSettings: (request: SettingsRequest) => void;
 }
 
 /** `BaseRailFooter` on the live cluster, session, wallet and feedback */
@@ -18,7 +18,9 @@ const RailFooter = ({ settingsOpen, onToggleSettings }: RailFooterProps) => {
       <BaseRailFooter
         account={account}
         settingsOpen={settingsOpen}
-        onOpenCluster={() => onToggleSettings("network")}
+        onOpenCluster={() =>
+          onToggleSettings({ from: "rail", focus: "network" })
+        }
         menu={menu}
         onMenuOpenChange={onMenuOpenChange}
         accountRef={accountRef}

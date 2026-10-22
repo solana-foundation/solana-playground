@@ -1,20 +1,15 @@
-import { expect, LONG, seedWorkspace, test } from "./fixtures";
+import {
+  expect,
+  FAILED_BUILD_STDERR,
+  LONG,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 /**
  * The scenarios of `client-v2-stages`: what the Build and Deploy stages
  * show, and where their action sits on a phone.
  */
-
-/** What rustc prints for one type error, as the build server returns it */
-const FAILED_BUILD_STDERR = [
-  "error[E0308]: mismatched types",
-  " --> src/lib.rs:5:9",
-  "  |",
-  '5 |     let x: u32 = "no";',
-  "  |            ---   ^^^^ expected `u32`, found `&str`",
-  "",
-  "error: could not compile `e2e-project` (lib) due to 1 previous error",
-].join("\n");
 
 const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
 

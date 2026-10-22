@@ -11,7 +11,7 @@ import {
 } from "@/shared/ui/sidebar";
 import { Spinner } from "@/shared/ui/spinner";
 import { StatusDot } from "@/shared/ui/status-dot";
-import { SETTINGS_TRIGGER_ATTR } from "@/views/flow/settings/GearSidebar";
+import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import {
   accountLabel,
   accountLines,
@@ -31,7 +31,7 @@ const LINE_STYLE: Record<AccountLine["kind"], string> = {
 export interface BaseSessionFooterProps {
   account: AccountView;
   settingsOpen: boolean;
-  /** Opens or closes the settings on the cluster */
+  /** Opens the settings on the cluster; the page covers the row while open */
   onOpenCluster: () => void;
   onCancelSignIn: () => void;
   /** The account menu's content (`BaseAccountMenu`) */
@@ -64,8 +64,7 @@ const BaseSessionFooter = ({
             "Change cluster, currently "
           )}
           aria-expanded={settingsOpen}
-          // Lets the click through `GearSidebar`'s outside-click check, so a
-          // second click closes the settings instead of reopening them
+          // Tests find the controls that open the settings by it
           {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
           onClick={onOpenCluster}
         >
@@ -84,9 +83,6 @@ const BaseSessionFooter = ({
               size="lg"
               aria-label={accountLabel(account)}
               aria-busy={account.sending || undefined}
-              // Opening the menu is no click outside the settings: Settings
-              // in it toggles them, so open settings must still be open then
-              {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
             >
               <AccountAvatar
                 image={accountUser(account)?.image ?? null}

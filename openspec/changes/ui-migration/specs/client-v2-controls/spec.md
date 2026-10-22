@@ -55,5 +55,5 @@ pick an option.
 
 - **WHEN** a user focuses the theme select in settings, presses the down
   arrow key and picks Light
-- **THEN** the options are visible above the settings panel and the theme
+- **THEN** the options are visible above the settings page and the theme
   becomes Light

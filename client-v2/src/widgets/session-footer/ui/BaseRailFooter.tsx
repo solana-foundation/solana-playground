@@ -8,7 +8,7 @@ import {
 } from "@/shared/ui/sidebar";
 import { Spinner } from "@/shared/ui/spinner";
 import { StatusDot } from "@/shared/ui/status-dot";
-import { SETTINGS_TRIGGER_ATTR } from "@/views/flow/settings/GearSidebar";
+import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { accountLabel, accountUser, clusterLabel } from "../model/account";
 import type { AccountView } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
@@ -16,7 +16,7 @@ import AccountAvatar from "./AccountAvatar";
 export interface BaseRailFooterProps {
   account: AccountView;
   settingsOpen: boolean;
-  /** Opens or closes the settings on the cluster, as the footer's row does */
+  /** Opens the settings on the cluster, as the footer's row does */
   onOpenCluster: () => void;
   /** The account menu's content, opened beside the rail */
   menu: ReactNode;
@@ -46,8 +46,7 @@ const BaseRailFooter = ({
           tooltip={dotLabel}
           aria-label={dotLabel}
           aria-expanded={settingsOpen}
-          // Lets the click through `GearSidebar`'s outside-click check, so a
-          // second click closes the settings instead of reopening them
+          // Tests find the controls that open the settings by it
           {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
           className="justify-center"
           onClick={onOpenCluster}
@@ -66,9 +65,6 @@ const BaseRailFooter = ({
               tooltip="Account"
               aria-label={accountLabel(account)}
               aria-busy={account.sending || undefined}
-              // Opening the menu is no click outside the settings: Settings
-              // in it toggles them, so open settings must still be open then
-              {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
               className="justify-center"
             >
               {account.sending ? (

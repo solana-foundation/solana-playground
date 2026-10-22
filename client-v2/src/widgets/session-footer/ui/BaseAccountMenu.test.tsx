@@ -6,11 +6,6 @@ import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import type { AccountView } from "../model/account";
 import BaseAccountMenu from "./BaseAccountMenu";
 
-// The settings panel module reaches the utils barrel, which reads globals only the built app has
-vi.mock("@/views/flow/settings/GearSidebar", () => ({
-  SETTINGS_TRIGGER_ATTR: "data-settings-trigger",
-}));
-
 const UP = { name: "devnet", down: false };
 const TESTER = { name: "Tester", login: "t", image: null };
 const WALLET = {
@@ -155,7 +150,7 @@ it("puts a cluster that is down first, as the way to the network settings", asyn
   expect(onPick).toHaveBeenCalledExactlyOnceWith("cluster-down");
 });
 
-it("marks Settings as a settings trigger, so a second pick closes them", async () => {
+it("marks Settings as a settings trigger, as tests find it", async () => {
   const onPick = await open(view({}));
   const settings = screen.getByRole("menuitem", { name: /Settings/ });
   expect(settings.hasAttribute("data-settings-trigger")).toBe(true);
@@ -174,7 +169,7 @@ it.each([
   async (name, account) => {
     const panel = document.createElement("button");
     document.body.append(panel);
-    // The settings panel focuses itself as it opens, as `GearSidebar` does;
+    // The settings page focuses itself as it opens;
     // while the menu is mounted, its focus trap would pull focus back
     await open(
       account,

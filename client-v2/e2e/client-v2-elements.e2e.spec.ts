@@ -1,5 +1,5 @@
 import { expect } from "@playwright/test";
-import { test } from "./fixtures";
+import { FAILED_BUILD_STDERR, LONG, test } from "./fixtures";
 
 test("client-v2-elements: An unknown page is an alert", async ({
   seededPage: page,
@@ -39,19 +39,32 @@ test("client-v2-elements: A skill is switched by its name", async ({
   await expect.poll(color).toBe(checkedColor);
 });
 
-test("client-v2-elements: A settings group folds", async ({
+test("client-v2-elements: The compiler output folds", async ({
   seededPage: page,
 }) => {
-  await page.locator("[data-settings-trigger]").first().click();
-  // Pin the first open group by its name: once it folds it no longer matches
-  // `expanded: true`, and the locator would move on to the next group
-  const settings = page.getByLabel("Settings");
-  const open = settings.getByRole("button", { expanded: true }).first();
-  const name = ((await open.textContent()) ?? "").trim();
-  expect(name).not.toBe("");
-  const heading = settings.getByRole("button", { name, exact: true });
-  await heading.click();
-  await expect(heading).toHaveAttribute("aria-expanded", "false");
-  await heading.click();
-  await expect(heading).toHaveAttribute("aria-expanded", "true");
+  // CI has no build server: the request is answered here
+  await page.route("**/build", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        stderr: FAILED_BUILD_STDERR,
+        uuid: null,
+        idl: null,
+      }),
+    })
+  );
+  await page.locator("#flow-stage-tab-build").click();
+  const panel = page.locator("#flow-stage-panel-build");
+  await panel.getByRole("button", { name: /^Build$/ }).click();
+
+  const toggle = panel.getByRole("button", { name: /compiler output/ });
+  await expect(toggle).toHaveAttribute("aria-expanded", "false", LONG);
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  // The compiler's own words, the summary line the diagnostics leave out
+  const output = panel.locator("pre", { hasText: "could not compile" });
+  await expect(output).toBeVisible();
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(output).toBeHidden();
 });

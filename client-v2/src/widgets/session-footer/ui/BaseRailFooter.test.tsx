@@ -11,11 +11,6 @@ import { TooltipProvider } from "@/shared/ui/tooltip";
 import type { AccountView } from "../model/account";
 import BaseRailFooter from "./BaseRailFooter";
 
-// The settings panel module reaches the utils barrel, which reads globals only the built app has
-vi.mock("@/views/flow/settings/GearSidebar", () => ({
-  SETTINGS_TRIGGER_ATTR: "data-settings-trigger",
-}));
-
 // The rail's tooltips measure themselves with a `ResizeObserver` on hover
 class NoopResizeObserver {
   observe() {}
@@ -98,15 +93,6 @@ it("opens the account menu from Account, not the navigation", async () => {
   );
   expect(screen.getByRole("menuitem", { name: "Item" })).toBeTruthy();
   expect(onMenuOpenChange).toHaveBeenCalledWith(true);
-});
-
-it("marks Account as a settings trigger, so opening the menu keeps open settings open", () => {
-  draw({ account: view({}) });
-  expect(
-    screen
-      .getByRole("button", { name: "Account, signed out" })
-      .hasAttribute("data-settings-trigger")
-  ).toBe(true);
 });
 
 it("shows a send in flight on Account, with the labelled spinner", () => {

@@ -1,5 +1,4 @@
 import { FC, useMemo } from "react";
-import styled, { css } from "styled-components";
 
 import {
   Select,
@@ -10,159 +9,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import {
-  Collapsible,
-  CollapsibleChevron,
-  CollapsibleContent,
-  CollapsibleHeading,
-} from "@/shared/ui/collapsible";
 import { Switch } from "@/shared/ui/switch";
-import { HelpTip } from "@/shared/ui/help-tip";
-import { useRenderOnChange } from "../../../../hooks";
-import {
-  PgCommon,
-  PgSettings,
-  PgTheme,
-  PgView,
-  RequiredKey,
-  Setting as SettingType,
-} from "../../../../utils";
-import { CustomSetting } from "./CustomSetting";
-
-const Settings = () => (
-  <Wrapper>
-    {PgSettings.all
-      .reduce((acc, cur) => {
-        const groupName = cur.id.split(".")[0];
-        const lastGroup = acc.at(-1);
-        if (lastGroup?.name === groupName) lastGroup!.settings.push(cur);
-        else acc.push({ name: groupName, settings: [cur] });
-
-        return acc;
-      }, [] as SettingGroupProps[])
-      .map((group) => {
-        group.settings.sort((a, b) => {
-          // Prioritize select components over checkboxes
-          if (a.values && !b.values) return -1;
-          if (b.values && !a.values) return 1;
-
-          // Alphabetically order based on UI name
-          return a.name.localeCompare(b.name);
-        });
-
-        return group;
-      })
-      .map((group) => (
-        <SettingGroup key={group.name} {...group} />
-      ))}
-  </Wrapper>
-);
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    min-width: calc(
-      ${theme.views.sidebar.left.default.width} +
-        ${theme.views.sidebar.right.default.initialWidth}
-    );
-    min-height: 10rem;
-    max-height: clamp(20rem, 40rem, 80vh);
-    background: ${theme.components.tooltip.bg};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    box-shadow: ${theme.default.boxShadow};
-    overflow: auto;
-    ${PgTheme.getScrollbarCSS({ width: "0.25rem" })};
-  `}
-`;
-
-type SettingGroupProps = {
-  name: string;
-  settings: SettingType[];
-};
-
-const SettingGroup: FC<React.PropsWithChildren<SettingGroupProps>> = ({
-  name,
-  settings,
-}) => (
-  <SettingGroupWrapper>
-    <Collapsible defaultOpen>
-      <CollapsibleHeading>
-        <CollapsibleChevron />
-        {PgCommon.toTitleFromCamel(name).replace("Ui", "UI")}
-      </CollapsibleHeading>
-      <CollapsibleContent className="mt-2">
-        {settings.map((setting) => (
-          <Setting key={setting.id} {...setting} />
-        ))}
-      </CollapsibleContent>
-    </Collapsible>
-  </SettingGroupWrapper>
-);
-
-const SettingGroupWrapper = styled.div`
-  ${({ theme }) => css`
-    padding: 1rem;
-    max-width: calc(
-      ${theme.views.sidebar.left.default.width} +
-        ${theme.views.sidebar.right.default.initialWidth}
-    );
-
-    &:not(:last-child) {
-      border-bottom: 1px solid ${theme.colors.default.border};
-    }
-  `}
-`;
-
-const Setting: FC<React.PropsWithChildren<SettingType>> = (setting) => (
-  <SettingWrapper isCheckBox={!setting.values}>
-    <Left>
-      <SettingName>{setting.name}</SettingName>
-      {setting.description && <HelpTip>{setting.description}</HelpTip>}
-    </Left>
-
-    <Right>
-      <SettingSetter {...setting} />
-    </Right>
-  </SettingWrapper>
-);
-
-const SettingWrapper = styled.div<{ isCheckBox: boolean }>`
-  ${({ isCheckBox }) => css`
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 0.5rem 0 0.5rem 0.25rem;
-
-    ${!isCheckBox &&
-    `& > div:last-child {
-      width: 11.5rem;
-    }`}
-  `}
-`;
-
-const Left = styled.div`
-  display: flex;
-  align-items: center;
-
-  & > :nth-child(2) {
-    margin-left: 0.5rem;
-  }
-`;
-
-const SettingName = styled.span`
-  color: ${({ theme }) => theme.colors.default.textSecondary};
-`;
-
-const Right = styled.div`
-  margin-left: 1rem;
-`;
+import { useRenderOnChange } from "@/hooks";
+import { PgCommon, PgView, RequiredKey, Setting as SettingType } from "@/utils";
+import { CustomSetting } from "@/views/flow/settings/CustomSetting";
 
 type SettingSetterProps = SettingType;
 
-const SettingSetter: FC<React.PropsWithChildren<SettingSetterProps>> = ({
-  values,
-  ...props
-}) => {
+/** The control that sets one setting: a select when it has values, else a switch */
+export const SettingControl: FC<
+  React.PropsWithChildren<SettingSetterProps>
+> = ({ values, ...props }) => {
   useRenderOnChange(props.onChange);
   if (values) return <SettingSetterSelect values={values} {...props} />;
   return <SettingSetterCheckBox {...props} />;
@@ -303,5 +160,3 @@ const SettingSetterCheckBox: FC<
     onCheckedChange={(checked) => setValue(checked)}
   />
 );
-
-export default Settings;

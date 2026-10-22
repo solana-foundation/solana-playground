@@ -2,17 +2,8 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-// GearSidebar's store-backed imports are not under test; `BaseNetworkChoice` is
-// prop-driven.
-vi.mock("../../../utils", () => ({ PgCommon: {} }));
-vi.mock("../../../hooks", () => ({}));
-vi.mock("../../../app/Panels/Side/Left/Settings", () => ({
-  default: () => null,
-}));
-vi.mock("../../sidebar/explorer/Component/Modals", () => ({}));
-
-import { BaseNetworkChoice } from "./GearSidebar";
-import { Endpoint } from "../../../constants";
+import BaseNetworkChoice from "./BaseNetworkChoice";
+import { Endpoint } from "@/constants";
 
 describe("BaseNetworkChoice", () => {
   beforeEach(() => {

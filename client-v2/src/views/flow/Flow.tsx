@@ -19,17 +19,23 @@ import {
   PgLesson,
 } from "./lessons";
 import type { LessonState } from "./lessons";
-import GearSidebar from "./settings/GearSidebar";
-import type { SettingsFocus } from "./settings/GearSidebar";
 import StageRouter from "./stages/StageRouter";
 import { PgDeployHistory } from "./state/deploy-history";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import type { FlowState } from "./state/stage";
 import { GAP } from "./tokens";
 import { FeedbackHost } from "@/features/feedback";
+import {
+  SETTINGS_TRIGGER_ATTR,
+  type SettingsFocus,
+  type SettingsExit,
+  type SettingsRequest,
+} from "@/shared/lib/settings-request";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import Wallet from "@/components/Wallet";
 import { useKeybind } from "@/hooks";
+import { closeOpenLayers } from "@/shared/lib/close-open-layers";
+import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
@@ -38,6 +44,7 @@ import { homeSlot, isHomeShown, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
+import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
 
 /**
@@ -63,14 +70,34 @@ const Flow = () => (
   </FeedbackHost>
 );
 
+const log = createLogger("flow:settings");
+
+/**
+ * Where focus goes back when the control that opened the settings is gone: a
+ * checklist step that the pick ticked, a footer the navigation's Sheet took
+ * with it. The first control that opens the settings still on screen, else
+ * the control that opens the navigation.
+ */
+const fallbackFocus = () =>
+  [
+    ...document.querySelectorAll<HTMLElement>(
+      `[${SETTINGS_TRIGGER_ATTR}], [data-sidebar="trigger"]`
+    ),
+  ].find((el) => el.getClientRects().length > 0);
+
+/** Open, the settings page remembers where focus was, to give it back */
+type SettingsState =
+  | { open: false }
+  | { open: true; focus: SettingsFocus; returnTo: HTMLElement | null };
+
 const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   const [reading, setReading] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settings, setSettings] = useState<SettingsState>({ open: false });
+  const settingsOpen = settings.open;
   const viewport = useViewport();
   const phone = viewport === "phone";
-  const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
 
   useEffect(() => {
     const subs = [
@@ -84,27 +111,66 @@ const FlowFrame = () => {
   }, []);
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
-  // Toggles rather than opens: the footer's cluster row and the account
-  // menu's Settings, the rail's dot and ⌘, all lead in, so a second use of one
-  // has to be the way out. Opening closes the
-  // navigation's Sheet below `LAYOUT_BREAKPOINTS.left` (`closeSheet`): the
-  // footer sits in it, and its modal overlay would cover the panel and trap
+  // Back to the control that opened them, once the shell is no longer inert,
+  // or, when that is gone, to `fallbackFocus`
+  const refocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (settings.open) return;
+    if (refocus.current?.isConnected) refocus.current.focus();
+    else fallbackFocus()?.focus();
+    refocus.current = null;
+  }, [settings.open]);
+  const closeSettings = (via: SettingsExit) => {
+    if (!settings.open) return;
+    // A dialog opened from the page (an import, a Custom value) belongs to it
+    PgView.closeModal();
+    settingsTelemetry.track("settings_closed", { via });
+    refocus.current = settings.returnTo;
+    setSettings({ open: false });
+  };
+  // The settings page covers the app, so of the ways in only ⌘, can still be
+  // used while it is open: that is the one request that closes it. Opening
+  // closes the navigation's Sheet below `LAYOUT_BREAKPOINTS.left`
+  // (`closeSheet`): the footer sits in it, and the Sheet portals to `body`,
+  // outside the hidden shell, so its overlay would cover the page and trap
   // focus away from it.
   const toggleSettings =
     (closeSheet: () => void) =>
-    (focus: SettingsFocus = "panel") => {
-      if (!settingsOpen) closeSheet();
-      setSettingsFocus(focus);
-      setSettingsOpen((open) => !open);
+    ({ from, focus, returnTo }: SettingsRequest) => {
+      if (settings.open) return closeSettings("key");
+      const active = document.activeElement;
+      closeSheet();
+      // A menu, popover or tooltip still open would float over the page;
+      // closed first, and its trigger stands in for the item focus was on
+      closeOpenLayers()
+        .then((trigger) => {
+          settingsTelemetry.track("settings_opened", { from });
+          setSettings({
+            open: true,
+            focus,
+            returnTo:
+              returnTo ??
+              trigger ??
+              (active instanceof HTMLElement && active !== document.body
+                ? active
+                : null),
+          });
+        })
+        .catch((error) =>
+          log.error(error, {
+            report: true,
+            context: { step: "close open layers", from },
+          })
+        );
     };
+
   // Opens, never toggles: the checklist's "Choose a network" must not shut
   // settings that are already open
   const openSettings =
     (closeSheet: () => void) =>
-    (focus: SettingsFocus = "panel") => {
-      closeSheet();
-      setSettingsFocus(focus);
-      setSettingsOpen(true);
+    (focus: SettingsFocus = "page") => {
+      if (settings.open) return;
+      toggleSettings(closeSheet)({ from: "setup", focus });
     };
 
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘, on a Mac and Ctrl+,
@@ -112,9 +178,11 @@ const FlowFrame = () => {
   // the navigation last handed over: below `LAYOUT_BREAKPOINTS.left` the
   // navigation's Sheet may be open, and its overlay would cover the settings.
   const closeNavSheet = useRef<() => void>(() => undefined);
-  useKeybind("Ctrl+,", () => toggleSettings(closeNavSheet.current)(), [
-    settingsOpen,
-  ]);
+  useKeybind(
+    "Ctrl+,",
+    () => toggleSettings(closeNavSheet.current)({ from: "key", focus: "page" }),
+    [settings]
+  );
 
   const start = useStartView();
 
@@ -144,112 +212,123 @@ const FlowFrame = () => {
 
   return (
     <Wrapper>
-      {/* In flow, not floating: it is a blocking question, and the file it
+      {/* The app stays mounted under the settings page, invisible and inert
+          (design.md, "Settings as a full page (5.20)"): `Write` must never
+          unmount, and with `display: contents` and `visibility` the shell
+          keeps its boxes, so no panel sees a resize and folds on its own */}
+      <div
+        className={settings.open ? "contents invisible" : "contents"}
+        inert={settings.open}
+      >
+        {/* In flow, not floating: it is a blocking question, and the file it
           names has to stay visible beneath it */}
-      <BannerSlot>
-        <SyncBanner />
-      </BannerSlot>
-      <LayoutShell
-        home={homeSlot(start, viewport)}
-        nav={({ collapsed, toggle, closeSheet }) => {
-          closeNavSheet.current = closeSheet;
-          return (
-            <AppNav
-              homeShown={isHomeShown(start)}
-              collapsed={collapsed}
-              onToggle={toggle}
-              logo={<Logomark aria-hidden="true" />}
-              projects={<ProjectList />}
-              footer={
-                <SessionFooter
-                  settingsOpen={settingsOpen}
-                  onToggleSettings={toggleSettings(closeSheet)}
-                />
-              }
-              railFooter={
-                <RailFooter
-                  settingsOpen={settingsOpen}
-                  onToggleSettings={toggleSettings(closeSheet)}
-                />
-              }
-              setup={
-                <SetupList
-                  onConnectAssistant={() => openConnectDialog("setup")}
-                  onChooseNetwork={() => openSettings(closeSheet)("network")}
-                />
-              }
-            />
-          );
-        }}
-        stageTabs={<StageBar />}
-        files={({ collapsed }) => <LeftPanel collapsed={collapsed} />}
-        stage={({ openFiles }) => (
-          <Center>
-            <ObjectiveBand
-              state={lesson}
-              flow={state}
-              onRead={read}
-              onOpenGallery={openGallery}
-              compact={
-                phone
-                  ? {
-                      // Below `LAYOUT_BREAKPOINTS.phone`, where the band is
-                      // compact, the Files sheet mounts the column fresh, and
-                      // it reads its tab from the per-project memory
-                      // (`kept-column.ts`)
-                      onOpenSteps: () => {
-                        keepTab(PgExplorer.currentWorkspaceId, "steps");
-                        openFiles();
-                      },
+        <BannerSlot>
+          <SyncBanner />
+        </BannerSlot>
+        <LayoutShell
+          home={homeSlot(start, viewport)}
+          nav={({ collapsed, toggle, closeSheet }) => {
+            closeNavSheet.current = closeSheet;
+            return (
+              <AppNav
+                homeShown={isHomeShown(start)}
+                collapsed={collapsed}
+                onToggle={toggle}
+                logo={<Logomark aria-hidden="true" />}
+                projects={<ProjectList />}
+                footer={
+                  <SessionFooter
+                    settingsOpen={settingsOpen}
+                    onToggleSettings={toggleSettings(closeSheet)}
+                  />
+                }
+                railFooter={
+                  <RailFooter
+                    settingsOpen={settingsOpen}
+                    onToggleSettings={toggleSettings(closeSheet)}
+                  />
+                }
+                setup={
+                  <SetupList
+                    onConnectAssistant={() => openConnectDialog("setup")}
+                    onChooseNetwork={() => openSettings(closeSheet)("network")}
+                  />
+                }
+              />
+            );
+          }}
+          stageTabs={<StageBar />}
+          files={({ collapsed }) => <LeftPanel collapsed={collapsed} />}
+          stage={({ openFiles }) => (
+            <Center>
+              <ObjectiveBand
+                state={lesson}
+                flow={state}
+                onRead={read}
+                onOpenGallery={openGallery}
+                compact={
+                  phone
+                    ? {
+                        // Below `LAYOUT_BREAKPOINTS.phone`, where the band is
+                        // compact, the Files sheet mounts the column fresh, and
+                        // it reads its tab from the per-project memory
+                        // (`kept-column.ts`)
+                        onOpenSteps: () => {
+                          keepTab(PgExplorer.currentWorkspaceId, "steps");
+                          openFiles();
+                        },
+                      }
+                    : undefined
+                }
+              />
+              <Stage>
+                <StageRouter stage={state.stage} />
+                {reading && described && (
+                  <Reader
+                    key={described.step.id}
+                    step={described.step}
+                    position={described.number}
+                    criterion={described.verifiedBy}
+                    offersAttest={
+                      described.offersPrimary &&
+                      graderClass(described.step.verify) === "attestation"
                     }
-                  : undefined
-              }
-            />
-            <Stage>
-              <StageRouter stage={state.stage} />
-              {reading && described && (
-                <Reader
-                  key={described.step.id}
-                  step={described.step}
-                  position={described.number}
-                  criterion={described.verifiedBy}
-                  offersAttest={
-                    described.offersPrimary &&
-                    graderClass(described.step.verify) === "attestation"
-                  }
-                  onLoaded={() => PgLesson.opened(described.step.id)}
-                  onClose={() => setReading(false)}
-                  onAttest={() => {
-                    PgLesson.attest();
-                    setReading(false);
-                  }}
-                />
-              )}
-            </Stage>
-          </Center>
-        )}
-        console={({ open, toggle }) => (
-          <ConsoleDrawer open={open} onToggle={toggle} />
-        )}
-        assistant={({ open, toggle, ...widen }) => (
-          <Right>
-            {/* The head carries "Collapse assistant", and Widen while the
+                    onLoaded={() => PgLesson.opened(described.step.id)}
+                    onClose={() => setReading(false)}
+                    onAttest={() => {
+                      PgLesson.attest();
+                      setReading(false);
+                    }}
+                  />
+                )}
+              </Stage>
+            </Center>
+          )}
+          console={({ open, toggle }) => (
+            <ConsoleDrawer open={open} onToggle={toggle} />
+          )}
+          assistant={({ open, toggle, ...widen }) => (
+            <Right>
+              {/* The head carries "Collapse assistant", and Widen while the
                 shell says it can widen. Hidden, the column takes no width and
                 the stage bar carries "Expand assistant" (design.md, "Frame
                 chrome (5.25)") */}
-            {open && <Assistant widen={widen} onHide={toggle} />}
-          </Right>
-        )}
-      />
+              {open && <Assistant widen={widen} onHide={toggle} />}
+            </Right>
+          )}
+        />
 
-      <GearSidebar
-        open={settingsOpen}
-        focus={settingsFocus}
-        onClose={() => setSettingsOpen(false)}
-        onChooseNetwork={markNetworkChosen}
-      />
+        <Wallet />
+      </div>
 
-      <Wallet />
+      {settings.open && (
+        <SettingsPage
+          focus={settings.focus}
+          onClose={closeSettings}
+          onChooseNetwork={markNetworkChosen}
+        />
+      )}
+
       <ModalHost />
       <ToastHost />
     </Wrapper>

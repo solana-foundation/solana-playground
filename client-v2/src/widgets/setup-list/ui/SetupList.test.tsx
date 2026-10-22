@@ -36,10 +36,6 @@ vi.mock("@/utils", () => ({
   PgConnection: { onDidChangeCluster: () => ({ dispose: () => {} }) },
   PgView: { setToast },
 }));
-// The settings panel module reaches the utils barrel, which reads globals only the built app has
-vi.mock("@/views/flow/settings/GearSidebar", () => ({
-  SETTINGS_TRIGGER_ATTR: "data-settings-trigger",
-}));
 vi.mock("@/views/sidebar/assistant/store", () => ({
   PgAssistant: {
     get isConnected() {
@@ -202,8 +198,7 @@ it("reports a wallet connection that fails, and tells the user", async () => {
   ]);
 });
 
-it("marks the network step as a settings trigger, so open settings stay open", () => {
-  // `GearSidebar` closes on a mousedown outside it unless the target is one
+it("marks the network step as a settings trigger, as tests find it", () => {
   draw();
   expect(
     screen

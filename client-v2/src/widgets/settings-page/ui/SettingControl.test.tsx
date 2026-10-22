@@ -4,19 +4,21 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 
 // The utils barrel reads a build-time global and cannot load under vitest;
 // the real `PgCommon` is all the select needs besides a spy-able `PgView`
-vi.mock("../../../../utils", async () => {
-  const { PgCommon } = await import("../../../../utils/common");
+vi.mock("@/utils", async () => {
+  const { PgCommon } = await import("@/utils/common");
   return { PgCommon, PgView: { setModal: () => {} }, PgSettings: {} };
 });
 
 // Only the select is under test: the modal and tooltip pull in the theme,
 // which needs the same build-time global
-vi.mock("./CustomSetting", () => ({ CustomSetting: () => null }));
-vi.mock("../../../../components/Tooltip", () => ({ default: () => null }));
-vi.mock("../../../../hooks", () => ({ useRenderOnChange: () => {} }));
+vi.mock("@/views/flow/settings/CustomSetting", () => ({
+  CustomSetting: () => null,
+}));
+vi.mock("@/components/Tooltip", () => ({ default: () => null }));
+vi.mock("@/hooks", () => ({ useRenderOnChange: () => {} }));
 
-import { PgView } from "../../../../utils";
-import { SettingSetterSelect } from "./Settings";
+import { PgView } from "@/utils";
+import { SettingSetterSelect } from "./SettingControl";
 
 // Radix Select calls these while opening; jsdom implements none of them
 beforeAll(() => {
