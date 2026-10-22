@@ -293,9 +293,10 @@ changes. Asked to build something in the client, look there first.
   its own workspace). Never share one target folder between worktrees: cargo
   names a path `cdylib` without a hash and judges freshness by mtime, so one
   worktree packages another's `.wasm`. A linked worktree's missing target folder
-  is first copied from the main checkout's (an APFS clone on macOS, skipped when
-  `CARGO_TARGET_DIR` is set), so a warm build takes minutes, not the hour of a
-  cold one. The stubs (`wasm/stub-packages.sh`) are
+  is first copied from the main checkout's (an APFS clone on macOS), so a warm
+  build takes minutes, not the hour of a cold one. `setup-wasm.sh` unsets
+  `CARGO_TARGET_DIR` and fails when a cargo config's `build.target-dir` moves
+  either target folder, since both would share one folder again. The stubs (`wasm/stub-packages.sh`) are
   written only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
   the manual `client-v2-with-stubs.yml` set; they make Rust intellisense and the `solana`/`anchor`/
   `spl-token`/`sugar` terminal commands throw. `yarn start`, `yarn dev`,
@@ -304,7 +305,8 @@ changes. Asked to build something in the client, look there first.
   Vercel build fails on a bundle that carries a stub or lacks any of the six
   real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`). yarn 1 copies a `file:`
   package again only when its folder is missing, so `setup-wasm.sh` clears
-  `node_modules` (all but `.cache`) before it installs; `--check-files` alone
+  `node_modules` (all but `.cache`, less webpack's `default-<mode>` caches, which
+  identify a package by name and version) before it installs; `--check-files` alone
   keeps the old copy, and an install over an old tree also kept a stale hoisting
   that failed webpack on `@noble/hashes/sha3`. The variable's name lives in `client-v2/scripts/wasm-stubs.sh`
   and `client-v2/scripts/wasm-stubs.mjs`. `client-v2.yml` runs on the real

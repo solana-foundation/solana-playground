@@ -185,7 +185,8 @@ Expect: the `client`, `server`, and `wasm` images build for `linux/amd64`. Verif
 ### B-7. client-v2: local packages are real
 
 `yarn setup` builds `wasm/*/pkg` into the checkout's own `wasm/target` and `wasm/rust-analyzer/target` (a linked
-worktree first copies missing ones from the main checkout), clears `client-v2/node_modules` except `.cache`, and
+worktree first copies missing ones from the main checkout), clears `client-v2/node_modules` except `.cache` (less
+webpack's `default-<mode>` caches), and
 installs again, so a checkout that held stubs takes the real packages.
 
 ```sh

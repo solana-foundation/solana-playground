@@ -240,9 +240,11 @@ Honesty rule for the demo — never present a mocked step as working.
   bypass secret; you cannot switch it on from the panel alone. Which applies is
   a property of each server, shown in the Sources tab, not of the backend you
   picked.
-- **Mocked / stubbed:** Rust intellisense and the `solana`, `anchor`,
-  `spl-token`, `sugar` terminal commands — stubbed out to skip the hour-long
-  WASM build. They throw a clear message pointing at `wasm/build.sh`.
+- **Real, stubbed only on request:** Rust intellisense and the `solana`,
+  `anchor`, `spl-token`, `sugar` terminal commands. A deployment always ships
+  the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to
+  skip the WASM build; a stub throws a message pointing at
+  `yarn --cwd client-v2 setup`.
 - **Prototype-grade:** the default backend's spend: sign-in decides who can
   spend the configured key, but nothing yet caps how much one signed-in user
   spends.
