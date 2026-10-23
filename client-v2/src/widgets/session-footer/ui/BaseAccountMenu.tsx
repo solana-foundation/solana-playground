@@ -153,7 +153,9 @@ const BaseAccountMenu = ({
       side={side}
       align={side === "top" ? "start" : "end"}
       sideOffset={8}
-      className="min-w-56"
+      // Above the row it is as wide as the row, as the prototype draws it;
+      // beside the 52 px rail it needs a width of its own
+      className={side === "right" ? "min-w-56" : undefined}
       aria-label="Account"
       onCloseAutoFocus={(ev) => {
         const item = deferred.current;

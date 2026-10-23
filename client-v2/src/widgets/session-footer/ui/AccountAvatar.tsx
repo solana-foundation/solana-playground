@@ -22,7 +22,8 @@ const AccountAvatar = ({ image, sending, className }: AccountAvatarProps) => (
     )}
     <Avatar className={cn("size-6", className)}>
       <AvatarImage src={image ?? undefined} alt="" />
-      <AvatarFallback className="bg-transparent">
+      {/* The prototype's signed-out avatar: a small glyph on a filled disc */}
+      <AvatarFallback className="bg-accent text-muted-foreground [&>svg]:size-3.5">
         <CircleUserRound aria-hidden />
       </AvatarFallback>
     </Avatar>

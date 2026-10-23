@@ -18,14 +18,15 @@ const draw = (
       status={idle}
       onOpenChange={handlers.onOpenChange ?? vi.fn()}
       onClear={handlers.onClear ?? vi.fn()}
+      shortcut="⌘J"
     >
       <div className="xterm" />
     </BaseConsoleDrawer>
   );
 
-it("names its button Console and controls the body by its fixed id", () => {
+it("names its button Terminal and controls the body by its fixed id", () => {
   draw(false, {});
-  const button = screen.getByRole("button", { name: "Console" });
+  const button = screen.getByRole("button", { name: "Terminal" });
   expect(button.getAttribute("aria-expanded")).toBe("false");
   expect(button.getAttribute("aria-controls")).toBe(CONSOLE_BODY_ID);
   expect(
@@ -36,9 +37,9 @@ it("names its button Console and controls the body by its fixed id", () => {
 it("asks to open, from the button and from the strip, while closed", () => {
   const onOpenChange = vi.fn();
   draw(false, { onOpenChange });
-  fireEvent.click(screen.getByRole("button", { name: "Console" }));
+  fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
   fireEvent.click(
-    screen.getByText("Console", { selector: "[data-console-label]" })
+    screen.getByText("Terminal", { selector: "[data-console-label]" })
   );
   expect(onOpenChange.mock.calls).toEqual([[true], [true]]);
 });
@@ -46,7 +47,7 @@ it("asks to open, from the button and from the strip, while closed", () => {
 it("asks to close from the button while open", () => {
   const onOpenChange = vi.fn();
   draw(true, { onOpenChange });
-  fireEvent.click(screen.getByRole("button", { name: "Console" }));
+  fireEvent.click(screen.getByRole("button", { name: "Terminal" }));
   expect(onOpenChange.mock.calls).toEqual([[false]]);
 });
 
@@ -76,6 +77,7 @@ it("shows the status text with a dot of its tone", () => {
       status={{ text: "build failed", tone: "error" }}
       onOpenChange={vi.fn()}
       onClear={vi.fn()}
+      shortcut="⌘J"
     />
   );
   expect(screen.getByText("build failed")).toBeTruthy();

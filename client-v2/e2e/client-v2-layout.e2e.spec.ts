@@ -47,7 +47,7 @@ const startTutorial = async (page: Page) => {
 
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
 const consoleHandle = (page: Page) =>
-  page.getByRole("button", { name: "Console" });
+  page.getByRole("button", { name: "Terminal" });
 // A separator controls the panel before it: the assistant's is right of it
 const assistantHandle = (page: Page) =>
   page.locator('[data-slot="resizable-handle"][aria-controls="assistant"]');

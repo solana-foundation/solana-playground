@@ -32,11 +32,11 @@ test("client-v2-feedback: The menu opens", async ({ seededPage: page }) => {
   await openMenu(page);
 
   await expect(
-    page.getByRole("menuitem", { name: "Suggest an idea" })
-  ).toBeVisible();
-  await expect(
     page.getByRole("menuitem", { name: "Report a bug" })
   ).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Suggest an idea" })
+  ).toHaveCount(0);
 });
 
 // The dev server has no VERCEL_ENV, so it carries no Sentry whatever its DSN
@@ -51,12 +51,12 @@ test("client-v2-feedback: A local build", async ({ seededPage: page }) => {
   ).toHaveCount(0);
 });
 
-test("client-v2-feedback: Suggest an idea from the menu", async ({
+test("client-v2-feedback: Report a bug from the menu", async ({
   seededPage: page,
 }) => {
   await openMenu(page);
   const popup = page.waitForEvent("popup");
-  await page.getByRole("menuitem", { name: "Suggest an idea" }).click();
+  await page.getByRole("menuitem", { name: "Report a bug" }).click();
 
   expect((await popup).url()).toBe(ISSUES);
 });

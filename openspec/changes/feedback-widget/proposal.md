@@ -14,7 +14,8 @@ widget gives the team a channel that costs the user one form.
 - A `features/feedback` slice: a trigger in the navigation's footer, under
   the status chips (the prototype keeps "Report a bug" in that footer's
   account menu), a menu with "Share
-  feedback", "Suggest an idea" and "Report a bug", and a form with a
+  feedback" and "Report a bug" ("Suggest an idea" left the menu on
+  2026-10-23, Slava: the prototype has no such row; the form keeps it), and a form with a
   five-star rating, a message and an optional X handle.
 - The form sends its values to Sentry as user feedback, tagged as the spec's
   "A sent form reaches Sentry as user feedback" lists. A sent form closes and
@@ -23,8 +24,8 @@ widget gives the team a channel that costs the user one form.
   a send succeeds. A failed send shows an alert in the open form, or a toast
   when the form is closed, and both point the user back at the form.
 - "Share feedback" shows only in a build that carries Sentry. Everywhere else
-  (local, CI, a preview without `SENTRY_PREVIEW_ENABLED`) the menu offers the
-  two GitHub links only.
+  (local, CI, a preview without `SENTRY_PREVIEW_ENABLED`) the menu offers
+  "Report a bug" only.
 - "Suggest an idea" and "Report a bug" open the issue list of
   `solana-foundation/solana-playground`; telemetry records which one was
   picked.

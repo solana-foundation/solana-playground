@@ -12,7 +12,7 @@ import { Kbd } from "@/shared/ui/kbd";
 import { StatusDot } from "@/shared/ui/status-dot";
 import type { ConsoleStatus } from "./status";
 
-/** The well's id. The Console button's `aria-controls` names it, and the
+/** The well's id. The Terminal button's `aria-controls` names it, and the
  * drawer's unit tests find the body by it; no e2e does. */
 export const CONSOLE_BODY_ID = "flow-console-drawer-body";
 
@@ -22,6 +22,8 @@ interface BaseConsoleDrawerProps {
   onOpenChange: (open: boolean) => void;
   onClear: () => void;
   status: ConsoleStatus;
+  /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
+  shortcut: string;
   children?: ReactNode;
 }
 
@@ -38,6 +40,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   onOpenChange,
   onClear,
   status,
+  shortcut,
   children,
 }) => (
   <ConsoleDrawer
@@ -47,14 +50,14 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     contentId={CONSOLE_BODY_ID}
     className="h-full bg-surface"
   >
-    <ConsoleDrawerBar triggerLabel="Console" className="shrink-0">
+    <ConsoleDrawerBar triggerLabel="Terminal" className="shrink-0">
       <ConsoleDrawerStatus>
         <StatusDot variant={status.tone} />
         <span
           data-console-label
           className="font-semibold tracking-wide text-foreground"
         >
-          Console
+          Terminal
         </span>
         {status.text && (
           <span className={status.tone === "error" ? "text-error" : undefined}>
@@ -63,7 +66,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
         )}
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions>
-        <Kbd aria-hidden>⌘J</Kbd>
+        <Kbd aria-hidden>{shortcut}</Kbd>
         {open && (
           <Button type="button" variant="ghost" size="xs" onClick={onClear}>
             Clear

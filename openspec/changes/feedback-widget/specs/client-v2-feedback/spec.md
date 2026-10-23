@@ -12,7 +12,8 @@ the events `features/feedback` sends.
 
 The account menu at the foot of the navigation (and beside its rail) SHALL
 carry the feedback entries, after "Settings" and "Docs": "Share feedback"
-where feedback can be sent, "Suggest an idea" and "Report a bug". There
+where feedback can be sent, and "Report a bug". It SHALL NOT carry
+"Suggest an idea", which only the form offers. There
 SHALL be no separate feedback button. The form, its draft and its send SHALL
 be held above the navigation, so they outlive the menu: below 768 px the
 footer is on the menu page, and the rail swaps the footer for its own. A
@@ -22,8 +23,8 @@ An open modal SHALL cover the account row.
 #### Scenario: The menu opens
 
 - **WHEN** the user opens the account menu
-- **THEN** it holds "Suggest an idea" and "Report a bug", with "Share
-  feedback" before them where feedback can be sent
+- **THEN** it holds "Report a bug", with "Share feedback" before it where
+  feedback can be sent, and no "Suggest an idea"
 
 #### Scenario: A modal covers the account row (manual)
 
@@ -36,14 +37,13 @@ An open modal SHALL cover the account row.
 The menu SHALL offer "Share feedback" only in a build that carries Sentry: a
 DSN is set and the build reports (production, or a preview with
 `SENTRY_PREVIEW_ENABLED=true`). Every other build SHALL show the account
-menu with the two GitHub links only.
+menu with "Report a bug" only.
 
 #### Scenario: A local build
 
 - **WHEN** the app runs locally with `REACT_APP_SENTRY_DSN` set and no
   `VERCEL_ENV`
-- **THEN** the menu shows "Suggest an idea" and "Report a bug" and no "Share
-  feedback"
+- **THEN** the menu shows "Report a bug" and no "Share feedback"
 
 #### Scenario: A production build (manual)
 
@@ -52,14 +52,14 @@ menu with the two GitHub links only.
 
 ### Requirement: The GitHub links open the Foundation's issue list
 
-"Suggest an idea" and "Report a bug" SHALL each open
+"Report a bug" in the menu, and "Suggest an idea" and "Report a bug" under
+the form's submit button, SHALL each open
 `https://github.com/solana-foundation/solana-playground/issues` in a new tab
-with `rel="noopener noreferrer"`. The form SHALL carry the same two links
-under its submit button.
+with `rel="noopener noreferrer"`.
 
-#### Scenario: Suggest an idea from the menu
+#### Scenario: Report a bug from the menu
 
-- **WHEN** the user picks "Suggest an idea"
+- **WHEN** the user picks "Report a bug" in the menu
 - **THEN** a new tab opens on the issue list
 
 #### Scenario: Report a bug from the form (manual)
