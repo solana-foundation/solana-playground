@@ -541,9 +541,9 @@ test.describe("on a phone", () => {
     await expect(
       network.getByRole("radio", { name: "Localnet" })
     ).toHaveAttribute("aria-checked", "true");
-    await network.getByRole("radio", { name: "Devnet" }).click();
+    await network.getByRole("radio", { name: "Devnet", exact: true }).click();
     await expect(
-      network.getByRole("radio", { name: "Devnet" })
+      network.getByRole("radio", { name: "Devnet", exact: true })
     ).toHaveAttribute("aria-checked", "true");
   });
 
