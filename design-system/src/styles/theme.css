@@ -217,7 +217,8 @@
 }
 
 /* The brand action (brandAction): the ring at rest, the whole gradient
- * fading in underneath on hover and press. */
+ * fading in underneath on hover and press, unless the action is disabled or
+ * refused (`aria-disabled`, kept focusable for its tooltip). */
 @utility brand-action {
   position: relative;
   isolation: isolate;
@@ -235,8 +236,8 @@
     opacity: 0;
     transition: opacity 0.2s ease;
   }
-  &:hover:not(:disabled)::before,
-  &:active:not(:disabled)::before {
+  &:hover:not(:disabled, [aria-disabled="true"])::before,
+  &:active:not(:disabled, [aria-disabled="true"])::before {
     opacity: 1;
   }
 }

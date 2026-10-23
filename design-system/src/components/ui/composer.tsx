@@ -224,7 +224,7 @@ function ComposerSend({ className, children, ...props }: React.ComponentProps<"b
       aria-label="Send"
       disabled={empty}
       className={cn(
-        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4",
+        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-foreground hover:not-disabled:not-aria-disabled:text-white active:not-disabled:not-aria-disabled:text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4",
         className
       )}
       {...props}

@@ -121,7 +121,7 @@ export function BaseAssistantComposer({
               <TooltipTrigger asChild>
                 <ComposerSend
                   aria-disabled="true"
-                  className="aria-disabled:opacity-35 aria-disabled:hover:before:opacity-0"
+                  className="aria-disabled:opacity-35"
                 >
                   <LogoPlay className="size-4" />
                 </ComposerSend>
