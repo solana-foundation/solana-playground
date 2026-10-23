@@ -28,6 +28,13 @@ test("slimModules lists nested modules with their parent's chunks and drops grou
   ]);
 });
 
+test("slimModules throws on a nested module without a name", () => {
+  assert.throws(
+    () => slimModules([concatenated(undefined)]),
+    /stats\.toJson\(\{ modules: true \}\) has no string name/
+  );
+});
+
 // [module name, whether it is test-only]
 const NAMES = [
   [STORED_VALUES, true],
@@ -46,17 +53,3 @@ for (const [name, offending] of NAMES) {
     );
   });
 }
-
-test("offendingModules finds a test helper nested in a concatenated module", () => {
-  assert.deepEqual(
-    offendingModules(slimModules([concatenated(STORED_VALUES)])),
-    [STORED_VALUES]
-  );
-});
-
-test("offendingModules passes a clean bundle", () => {
-  assert.deepEqual(
-    offendingModules(slimModules([concatenated("./src/app/App.tsx")])),
-    []
-  );
-});

@@ -9,8 +9,11 @@ export async function locatePullRequest({ github, context, core }) {
     ...context.repo,
     run_id: run.id,
   });
+  // A warning, not info: the pull request's sticky comment still shows an older head's report
   if (!artifacts.some((artifact) => artifact.name === ARTIFACT)) {
-    return core.info("No bundle report artifact on this run; skipping.");
+    return core.warning(
+      `No ${ARTIFACT} artifact on run ${run.id}: the build job saved no report; no comment posted.`
+    );
   }
 
   const { data: prs } =
@@ -27,8 +30,8 @@ export async function locatePullRequest({ github, context, core }) {
       pr.head.repo?.full_name === run.head_repository?.full_name
   );
   if (!pr) {
-    return core.info(
-      "No open pull request has this run's head as its current head; skipping."
+    return core.warning(
+      `No open pull request has ${run.head_sha} as its current head; no comment posted.`
     );
   }
 
