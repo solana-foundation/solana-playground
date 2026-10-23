@@ -2,7 +2,7 @@
 
 Every task is HOO-1754, whose scope this change replaces, except 6.1, which
 closes HOO-1753. One task per PR, in this order. 2.2 and 2.3 may run at the
-same time, and so may 5.1 and 5.2; every other task depends on the one
+same time, and so may 5.1, 5.2 and 5.3; every other task depends on the one
 before it as stated.
 
 ## 1. Dependencies
@@ -88,11 +88,25 @@ before it as stated.
       thread; record the results, and whether any turn paused, in
       `design.md` (depends on 4.1; may run beside 5.1); verify every
       combination has a recorded result
+- [x] 5.3 `e2e/assistant-pause.e2e.spec.ts`: the two scenarios of "A paused
+      turn is resumed, up to a limit" as Playwright tests titled
+      `client-v2-ai: <scenario>`, through the default backend with the
+      session and `/api/agent` answered by `page.route` (the GET reports a
+      model; each POST is an event stream in the chat-completions shape whose
+      last chunk's `finish_reason` is `pause_turn`, or `stop` for the
+      resumed answer); drop the `(manual)` mark from both scenarios
+      (depends on 4.1; may run beside 5.1 and 5.2); verify
+      `yarn spec:coverage` maps both scenarios to the titles, both tests
+      pass, and each fails against the wrong implementation it names: the
+      resume test against a `runTurn` that returns at `pause_turn`, the limit
+      test against one that resumes without a limit (plan:
+      [plans/5.3-pause-e2e.md](plans/5.3-pause-e2e.md))
 
 ## 6. Close the verdict
 
 - [ ] 6.1 Draft, for a human to post: the PR description from the repository
       template, saved untracked as `.github/assistant-ai-sdk.pr.md`, and a
       review comment on #70, saved untracked in `.github/`, that says this
-      change supersedes the verdict and why (HOO-1753; depends on 5.1 and 5.2); verify both files exist and the
+      change supersedes the verdict and why (HOO-1753; depends on 5.1, 5.2 and
+      5.3); verify both files exist and the
       comment names this change

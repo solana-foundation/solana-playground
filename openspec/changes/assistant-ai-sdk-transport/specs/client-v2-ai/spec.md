@@ -29,19 +29,19 @@ turn, and SHALL stop with an `AiTurnError` once the turn has paused more times
 than the caller's resume limit, or `DEFAULT_MAX_RESUMES` when the caller sets
 none.
 
-#### Scenario: A paused turn is resumed (manual)
+#### Scenario: A paused turn is resumed
 
 - **WHEN** the provider's first response ends with `pause_turn` and its second
-  ends with `end_turn`
+  ends normally
 - **THEN** the module sends a second request whose history ends with the
   paused assistant content, the text of both responses reaches the caller's
   text callback, and the turn resolves
 
-#### Scenario: A turn that keeps pausing (manual)
+#### Scenario: A turn that keeps pausing
 
-- **WHEN** every response ends with `pause_turn` and the resume limit is 2
-- **THEN** the module sends 3 requests and the turn rejects with an
-  `AiTurnError` that says the turn kept pausing
+- **WHEN** every response ends with `pause_turn`
+- **THEN** the module sends one request more than the resume limit and the
+  turn rejects with an `AiTurnError` that says the turn kept pausing
 
 ### Requirement: A failed request is not retried
 

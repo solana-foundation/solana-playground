@@ -282,21 +282,25 @@ them.
 Alternative: a second route that speaks the SDK's protocol. Rejected: it moves
 the transport to the server, which is out of scope.
 
-### Decision: scenarios are held by unit tests and marked `(manual)`
+### Decision: scenarios are held by unit tests and marked `(manual)`, except through the default backend
 
 `spec:coverage` counts a scenario as covered only by a Playwright test titled
 `client-v2-ai: <scenario>` or by a `(manual)` mark. The guarantees are
-unit-level: they need a fake model or `fetch`, which the browser suite cannot
-inject. Every scenario is marked `(manual)`, as `feedback-widget` does for
-scenarios held by interaction tests, and this table names the test that holds
-each one. The assistant's own behaviour stays covered by the browser specs in
-task 3.1.
+unit-level: they need a fake model or `fetch`. A provider the browser calls
+directly is cross-origin, where the browser suite cannot answer, so those
+scenarios are marked `(manual)`, as `feedback-widget` does for scenarios held
+by interaction tests, and this table names the test that holds each one. The
+default backend's requests go to `/api/agent` on the page's own origin, where
+`page.route` answers them, as `assistant-sign-in.e2e.spec.ts` already does;
+the two pause scenarios are Playwright tests on that path (task 5.3), with
+the unit tests kept for the limit a caller sets. The assistant's own
+behaviour stays covered by the browser specs in task 3.1.
 
 | Scenario | Test file |
 | --- | --- |
 | A model that keeps calling tools | `shared/lib/ai/run-turn.test.ts` |
-| A paused turn is resumed | `shared/lib/ai/run-turn.test.ts` |
-| A turn that keeps pausing | `shared/lib/ai/run-turn.test.ts` |
+| A paused turn is resumed | `e2e/assistant-pause.e2e.spec.ts`, and `shared/lib/ai/run-turn.test.ts` |
+| A turn that keeps pausing | `e2e/assistant-pause.e2e.spec.ts`, and `shared/lib/ai/run-turn.test.ts` |
 | A 429 from the provider | `shared/lib/ai/run-turn.test.ts` |
 | Abort mid-stream | `shared/lib/ai/run-turn.test.ts` |
 | An error frame mid-stream | `shared/lib/ai/run-turn.test.ts` |
