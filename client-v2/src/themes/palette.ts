@@ -259,9 +259,10 @@ const PALETTE: ThemeParam = {
           border: `1px solid ${BORDER}`,
           borderRadius: PANEL_RADIUS,
           overflow: "hidden",
-          // The wrapper hardcodes `calc(100vh - bottom)` before this block;
+          // The wrapper hardcodes `calc(100vh - bottom)` before this block (dvh
+          // here: the visible height on iPad Safari too);
           // subtract the 2x0.5rem vertical gutters the Side wrapper adds
-          height: "calc(100vh - 1.5rem - 1rem)",
+          height: "calc(100dvh - 1.5rem - 1rem)",
         },
         title: {
           // 40px panel header on the 8px rhythm
