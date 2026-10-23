@@ -1,0 +1,111 @@
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+import {
+  initLogger,
+  memoryProvider as memoryLogs,
+  resetLogger,
+} from "@/shared/lib/logger";
+
+const deps = vi.hoisted(() => ({
+  fetchPrograms: vi.fn(),
+  PgTutorial: {
+    all: [] as {
+      name: string;
+      description: string;
+      thumbnail: string;
+      level: string;
+      framework?: string;
+    }[],
+  },
+}));
+vi.mock("@/entities/program", () => ({
+  fetchPrograms: deps.fetchPrograms,
+  PROGRAMS_URL: "/programs/programs.json",
+}));
+vi.mock("@/utils", () => ({ PgTutorial: deps.PgTutorial }));
+
+import { useProgramList } from "./use-program-list";
+import { useTutorialList } from "./use-tutorial-list";
+
+const tutorial = (name: string) => ({
+  name,
+  description: `About ${name}`,
+  thumbnail: `/${name}.png`,
+  level: "Beginner",
+  framework: "Anchor",
+});
+const program = (name: string) => ({
+  name,
+  description: `About ${name}`,
+  repo: `https://github.com/x/${name}`,
+  icon: `/${name}.png`,
+  framework: "Anchor",
+  categories: ["DeFi"],
+});
+const noOpen = () => undefined;
+
+let logged: ReturnType<typeof memoryLogs>;
+beforeEach(() => {
+  deps.PgTutorial.all = [tutorial("Hello Anchor"), tutorial("Escrow")];
+  deps.fetchPrograms
+    .mockReset()
+    .mockResolvedValue([program("drift"), program("bubblegum")]);
+  logged = memoryLogs();
+  initLogger({ providers: [logged] });
+});
+afterEach(() => resetLogger());
+
+it("counts every tutorial whatever the query", () => {
+  const { result } = renderHook(() => useTutorialList("escrow", noOpen));
+
+  expect(result.current.count).toBe(2);
+  expect(result.current.list).toEqual({
+    state: "ready",
+    cards: [expect.objectContaining({ id: "Escrow" })],
+  });
+});
+
+it("puts a card's Open on its card", () => {
+  const { result } = renderHook(() =>
+    useTutorialList("", (id) =>
+      id === "Escrow" ? { state: "failed", message: "gone" } : undefined
+    )
+  );
+
+  const list = result.current.list;
+  expect(list.state === "ready" && list.cards[1].open).toEqual({
+    state: "failed",
+    message: "gone",
+  });
+});
+
+it("has no program count until the list is read", async () => {
+  const { result } = renderHook(() => useProgramList("drift", noOpen));
+
+  expect(result.current.count).toBe("loading");
+  expect(result.current.list).toEqual({ state: "loading" });
+  await waitFor(() => expect(result.current.count).toBe(2));
+  const list = result.current.list;
+  expect(list.state === "ready" && list.cards.map((c) => c.title)).toEqual([
+    "drift",
+  ]);
+});
+
+it("reports a program list it cannot read, and Retry reads it again", async () => {
+  deps.fetchPrograms
+    .mockReset()
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValueOnce([program("drift")]);
+  const { result } = renderHook(() => useProgramList("", noOpen));
+
+  await waitFor(() => expect(result.current.count).toBe("failed"));
+  expect(logged.entries.map((e) => [e.ns, e.report])).toEqual([
+    ["catalog:programs", true],
+  ]);
+  const list = result.current.list;
+  act(() => {
+    if (list.state === "failed") list.onRetry();
+  });
+  await waitFor(() => expect(result.current.count).toBe(1));
+});

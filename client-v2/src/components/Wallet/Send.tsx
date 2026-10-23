@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import Input from "../Input";
-import Foldable from "../Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 import {
   PgCommon,
   PgTerminal,
@@ -16,9 +22,15 @@ import { useBalance, useKeybind } from "../../hooks";
 
 const Send = () => (
   <Wrapper>
-    <Foldable element={<Title>Send</Title>}>
-      <SendExpanded />
-    </Foldable>
+    <Collapsible>
+      <CollapsibleHeading>
+        <CollapsibleChevron />
+        <Title>Send</Title>
+      </CollapsibleHeading>
+      <CollapsibleContent className="mt-2">
+        <SendExpanded />
+      </CollapsibleContent>
+    </Collapsible>
   </Wrapper>
 );
 
@@ -28,7 +40,7 @@ const Wrapper = styled.div`
   `}
 `;
 
-const Title = styled.div`
+const Title = styled.span`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(theme.components.wallet.main.send.title)};
   `}
@@ -86,7 +98,8 @@ const SendExpanded = () => {
       switch (document.activeElement) {
         case recipientInputRef.current:
         case amountInputRef.current:
-          return send();
+          // The button's `onError` does not see a send started by a key
+          return send().catch(reportButtonFailure("send SOL"));
       }
     },
     // Make `Enter` usable elsewhere (e.g. editor new line)
@@ -116,15 +129,16 @@ const SendExpanded = () => {
         }}
         placeholder="SOL amount"
       />
-      <ExpandedButton
+      <AsyncButton
         onClick={send}
+        onError={reportButtonFailure("send SOL")}
         disabled={disabled}
-        loading={{ text: "Sending..." }}
-        kind="primary-transparent"
-        fullWidth
+        loadingText="Sending..."
+        variant="ghost"
+        className="mb-1 w-full"
       >
         Send
-      </ExpandedButton>
+      </AsyncButton>
     </ExpandedWrapper>
   );
 };
@@ -138,14 +152,6 @@ const ExpandedWrapper = styled.div`
 const ExpandedInput = styled(Input)`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(theme.components.wallet.main.send.expanded.input)};
-  `}
-`;
-
-const ExpandedButton = styled(Button)`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.send.expanded.sendButton
-    )};
   `}
 `;
 

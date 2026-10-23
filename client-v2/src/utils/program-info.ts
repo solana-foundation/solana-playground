@@ -13,8 +13,12 @@ import {
   updatable,
 } from "./decorators";
 import { PgExplorer } from "./explorer";
+import { writeWorkspaceFile } from "./explorer/workspace-file";
 import { PgWeb3 } from "./web3";
 import type { Nullable } from "./types";
+import { createLogger } from "../shared/lib/logger";
+
+const log = createLogger("program-info:storage");
 
 /** Program info state */
 type ProgramInfo = Nullable<{
@@ -85,7 +89,11 @@ const storage = {
     };
   },
 
-  /** Serialize the data and write to storage. */
+  /**
+   * Serialize the data and write it with `writeWorkspaceFile`: a reload right
+   * after the write that creates the file would otherwise lose it, and with
+   * it the program's keypair.
+   */
   async write(state: ProgramInfo) {
     if (!PgExplorer.isInitialized || !PgExplorer.currentWorkspaceName) return;
 
@@ -98,7 +106,13 @@ const storage = {
       lastBuildFailed: state.lastBuildFailed,
     };
 
-    await PgExplorer.fs.writeFile(this.PATH, JSON.stringify(serializedState));
+    // `updatable` calls this without awaiting it, so a failure is logged
+    // here; rethrown, it would be an unhandled rejection naming nothing
+    try {
+      await writeWorkspaceFile(this.PATH, JSON.stringify(serializedState));
+    } catch (e) {
+      log.error(e, { report: true });
+    }
   },
 };
 

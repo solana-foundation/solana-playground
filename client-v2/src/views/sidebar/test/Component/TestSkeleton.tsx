@@ -1,55 +1,14 @@
-import styled, { css } from "styled-components";
+import { Skeleton } from "@/shared/ui/skeleton";
 
-import { Skeleton } from "../../../../components/Loading";
-
+/** The form's outline while the page loads */
 const TestSkeleton = () => (
-  <Wrapper>
-    <ProgramNameWrapper>
-      <Skeleton width="4rem" />
-      <Skeleton width="6rem" />
-    </ProgramNameWrapper>
-
-    <Heading>
-      <Skeleton width="6.5rem" />
-    </Heading>
-
-    <FullWidthBg>
-      <Skeleton width="7.5rem" />
-    </FullWidthBg>
-
-    <Heading>
-      <Skeleton width="4.5rem" />
-    </Heading>
-
-    <FullWidthBg>
-      <Skeleton width="8rem" />
-    </FullWidthBg>
-  </Wrapper>
+  <div className="flex flex-col gap-4 p-6">
+    <Skeleton className="h-4 w-40" />
+    <Skeleton className="h-3 w-24" />
+    <Skeleton className="h-12 w-full rounded-xl" />
+    <Skeleton className="h-3 w-20" />
+    <Skeleton className="h-12 w-full rounded-xl" />
+  </div>
 );
-
-const Wrapper = styled.div``;
-
-const ProgramNameWrapper = styled.div`
-  display: flex;
-  padding: 1rem 1rem 0 1rem;
-
-  & > :first-child {
-    margin-right: 0.75rem;
-  }
-`;
-
-const Heading = styled.div`
-  padding: 1.5rem 0 0 1rem;
-`;
-
-const FullWidthBg = styled.div`
-  ${({ theme }) => css`
-    padding: 1rem;
-    margin-top: 0.75rem;
-    background: ${theme.views.sidebar.right.default.otherBg};
-    border-top: 1px solid ${theme.colors.default.border};
-    border-bottom: 1px solid ${theme.colors.default.border};
-  `}
-`;
 
 export default TestSkeleton;

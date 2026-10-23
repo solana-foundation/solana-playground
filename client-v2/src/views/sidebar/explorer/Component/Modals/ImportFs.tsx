@@ -1,11 +1,11 @@
 import { FC, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled from "styled-components";
 
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
-import Text from "../../../../../components/Text";
+import { ModalFrame } from "@/widgets/overlays";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import UploadArea from "../../../../../components/UploadArea";
-import { ImportWorkspace, Info } from "../../../../../components/Icons";
 import {
   PgExplorer,
   PgFramework,
@@ -42,10 +42,8 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
 
       const pgFiles = await PgFramework.convertToPlaygroundLayout(importFiles);
 
-      // Multiple programs require selecting the program to import which closes
-      // the current modal
+      // Closed while the files were read: open it again with them
       if (!mounted.current) {
-        PgView.closeModal();
         PgView.setModal(<ImportFs name={name} files={pgFiles} />);
       } else {
         setFiles(pgFiles);
@@ -53,7 +51,6 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       }
     } catch (e: any) {
       if (!mounted.current) {
-        PgView.closeModal();
         PgView.setModal(<ImportFs name={name} importError={e.message} />);
       } else {
         setImportError(e.message);
@@ -62,13 +59,13 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="import-fs"
       title="Import project"
       buttonProps={{
         text: "Import",
         onSubmit: () => PgExplorer.createWorkspace(name, { files }),
         disabled: !files || !!nameError || !!importError,
-        rightIcon: <ImportWorkspace />,
       }}
     >
       <Content>
@@ -94,11 +91,14 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
           />
         </UploadAreaWrapper>
 
-        <StyledText icon={<Info color="info" />}>
-          You can drag & drop a Cargo workspace directory.
-        </StyledText>
+        <Callout variant="info" className="mt-4">
+          <InfoIcon />
+          <CalloutDescription>
+            You can drag & drop a Cargo workspace directory.
+          </CalloutDescription>
+        </Callout>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 
@@ -118,9 +118,5 @@ const MainText = styled.div`
 `;
 
 const UploadAreaWrapper = styled.div`
-  margin-top: 1rem;
-`;
-
-const StyledText = styled(Text)`
   margin-top: 1rem;
 `;

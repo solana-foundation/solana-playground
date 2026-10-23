@@ -120,11 +120,11 @@ with two implementations:
   resolves, or rejects when `fail` is set. Only tests use it, by its module
   path; the slice's `index.ts` does not export it.
 
-`FeedbackWidget` reads the provider from a React context whose default is
+`FeedbackHost` reads the provider from a React context whose default is
 `reporterFeedbackProvider()`. `useFeedbackForm` receives the provider, the
 cluster, and the `onSent` and `onFailedClosed` callbacks in one options
 object, so its tests pass them directly and never touch `PgConnection` or
-`PgView`; the widget reads the cluster and shows the toasts.
+`PgView`; the host reads the cluster and shows the toasts.
 
 ### Tests, by layer
 
@@ -136,8 +136,9 @@ object, so its tests pass them directly and never touch `PgConnection` or
   memory telemetry provider), against `memoryFeedbackProvider`.
 - `Base*` components: interaction, driven with `user-event` by role,
   label and key, through props only.
-- `FeedbackWidget`: integration, the whole slice and one send end to end,
-  over the real reporter and the capturing transport.
+- `FeedbackHost` with `FeedbackTrigger`: integration, the whole slice and
+  one send end to end, over the real reporter and the capturing transport,
+  and a draft and a send that outlive the trigger unmounting.
 - The page: Playwright, the scenarios not marked `(manual)`, against the
   dev server.
 
@@ -161,8 +162,10 @@ All four live in `features/feedback/ui`:
 - `BaseStarRating`, private to the form: native radios, the `lucide-react`
   `Star`, `fill-primary` for a chosen star and `fill-surface-raised` for
   the rest.
-- `FeedbackWidget`: the two `Base*` components, `useFeedbackForm`, the
-  provider context, and the telemetry.
+- `FeedbackHost`: `BaseFeedbackForm`, `useFeedbackForm`, the provider
+  context and the telemetry; `FeedbackTrigger`, below it wherever the page
+  puts it, renders `BaseFeedbackWidget` from what the host hands it through a
+  context of the slice's own.
 
 `modal` replaces the Explorer's split between `Dialog` and `Drawer` on
 `isSm`: it is already a dialog on a wide screen and a page on a phone.
@@ -194,9 +197,16 @@ The modal opens from a menu item and has no trigger of its own, so
 
 ### Where it mounts
 
-`views/flow/Flow.tsx` renders `<FeedbackWidget />` beside `LayoutShell`. A
-legacy root may import a feature; the widget adds no UI to the legacy root
-itself.
+`views/flow/Flow.tsx` wraps the whole frame in `<FeedbackHost>` and puts
+`<FeedbackTrigger />` in the navigation's footer. The state sits in the host,
+above the shell, because the footer does not stay mounted: below 768 px it is
+on the phone's menu page, and crossing that width swaps the page for the
+rail. A legacy root may import a feature;
+the slice adds no UI to the legacy root itself.
+
+The trigger moved into the account menu in `ui-migration` 5.15
+(2026-10-16): the menu carries the three entries, and a send in flight shows
+on the account row.
 
 ### What the browser suite can reach
 
@@ -223,12 +233,15 @@ is nothing to read but the toast, so the failure is a toast there.
 - [Moving the logger's SDK calls into the reporter can change what the
   logger sends] → the move keeps `logger/providers/sentry.test.ts` and
   `widgets/observability` tests unchanged and passing.
-- [The trigger covers what is under it] → it sits at the bottom left, above
-  the project panel's "+ New file", where the panel's file tree ends; at the
-  bottom right it covered the assistant's key field. It is z-12: over the
-  panel (z-10), under the toasts that open in that corner and every modal.
-  Its offset is one place to change; the walk-through checks the panel open,
-  folded to its rail, and as a phone Sheet.
+- [The trigger covers what is under it] → it does not float. Fixed at the
+  bottom left it would sit over the project panel's "+ New file" and, with the
+  four-column frame (`ui-migration` 5.2), over the cluster chip and the avatar
+  in the navigation's footer. It sits in that footer instead, under the
+  status chips, where the prototype keeps "Report a bug".
+  The rail swaps the footer for its own (the cluster's dot and the account)
+  and the phone's Sheet unmounts it on close, so the form and its state stay
+  in `FeedbackHost`, above the navigation, and only the trigger moves with
+  the footer.
 - [The feedback text reaches Sentry, which the team reads] → the message is
   never put in telemetry; the spec forbids it.
 

@@ -21,14 +21,17 @@ Case IDs are stable: refer to a case by ID, not by position.
 Every case states its success result under "Expect": what must be observed, not only that a command exits 0. Cases that
 test a failure on purpose (C-2, C-3, C-5, M-4, G-2 to G-5) say so in their title or steps.
 
-Console messages that are expected and fail no case:
+**Expected console messages.** These fail no case; C-1 and C-4 allow only the rows whose "Where" matches the run:
 
 | Message | Where | Why |
 | --- | --- | --- |
 | A COEP error for the preview toolbar | Vercel previews | The toolbar's frame lacks the headers the page's COEP requires |
 | A failed request for `manifest.json` | Vercel previews behind protection | The browser fetches the manifest without the bypass cookie |
-| A `503` for `/api/auth/get-session` | client-v2 with no database (C-4, D-8) | The account endpoints need Postgres |
-| `ResizeObserver loop completed with undelivered notifications` | client-v2 | Reported by the browser for the panel layout; harmless |
+| A `503` for `/api/auth/get-session` | client-v2 with no database or no sign-in configured locally (C-4, D-8) | The account endpoints need Postgres and the OAuth app |
+| `ENOENT` for `/<project>/.workspace`, once, right after a project is created | client-v2 | The workspace folder is read before its first write (HOO-2150); it also shows in runs where everything else passes |
+
+The browser's `ResizeObserver loop completed with undelivered notifications.` is not in the table: client-v2's global
+error handler drops it (HOO-2125). A `logger:global` error with that text means the filter regressed, and C-4 fails.
 
 ## 0. Prerequisites
 
@@ -198,7 +201,8 @@ curl -sI http://localhost:3000
 
 Expect:
 
-- [ ] the page loads at `http://localhost:3000` with no console errors on load.
+- [ ] the page loads at `http://localhost:3000` with no console errors on load, apart from the "Expected console
+      messages" whose "Where" matches the run.
 - [ ] the IDE renders: file explorer, editor, and terminal. Typing `help` in the terminal lists the commands, which
       proves the wasm packages loaded.
 - [ ] the network tab shows no failed request on load (no 4xx, 5xx, or HTML served for a non-HTML file), apart from
@@ -238,8 +242,8 @@ curl -s http://localhost:3000/api/health
 
 Expect:
 
-- [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the IDE, the terminal `help`, and the network
-      tab pass.
+- [ ] the page loads at `http://localhost:3000`, and the C-1 checks for the console, the IDE, the terminal `help`, and
+      the network tab pass.
 - [ ] `/api/health` returns `200` (it is served by the client-v2 dev server, not the build server).
 - [ ] the COEP and COOP headers from C-1 are present.
 - [ ] S-10 passes against this server.
@@ -812,23 +816,38 @@ COMPOSE_PROJECT_NAME=pg-slot$k PG_CLIENT_PORT=$((13000 + 10 * k)) PG_CLIENT_V2_P
 
 In each case of a group, read `http://localhost:3000` and `http://localhost:8080` as the slot's client and server ports.
 
-client-v2's browser suite takes the same slot through `PORT`:
+client-v2's browser suite does not take one of these slots: leave `PORT` unset and run only the specs you touched.
 
 ```sh
-k=5
-PORT=$((13000 + 10 * k)) yarn test-e2e
+yarn test-e2e e2e/<spec>.e2e.spec.ts
 ```
 
-The run starts its own dev server on that port, or reuses one that this worktree already started there. A server on
-the port from another worktree, or anything else that is not this worktree's client-v2, fails the run before any test.
+A local run waits in a machine-wide queue, so several worktrees do not swap the machine, and the queue picks its port:
+queue slot `N` runs on `13900 + N`, so the 139xx range is the queue's and no group above uses it. At most
+`E2E_MAX_RUNS` runs (default 1) go at once, each with `E2E_WORKERS` Chromiums (default 2). The queue's slots are the
+directories `slot-1`, `slot-2`, ... under `~/.cache/solana-playground-e2e` (`E2E_QUEUE_DIR` moves them); each one's
+`owner.json` names the run's pid, worktree, and port. A waiting run prints who holds the slots. A run that was killed
+leaves its slot behind, and the next run reclaims it once the owner's pid is gone. If an unrelated process has since
+been given that pid, the slot stays held until that process exits: when a run waits on a holder that is not an e2e run,
+delete the slot by hand (`rm -r ~/.cache/solana-playground-e2e/slot-N`). CI does not queue and uses port 3000.
 
-A local run also waits in a machine-wide queue, so several worktrees do not swap the machine: at most `E2E_MAX_RUNS`
-runs (default 2) go at once, each with `E2E_WORKERS` Chromiums (default 2). The slots are the directories `slot-1`,
-`slot-2`, ... under `~/.cache/solana-playground-e2e` (`E2E_QUEUE_DIR` moves them). A waiting run prints who holds the
-slots. A run that was killed leaves its slot behind, and the next run reclaims it once the owner's pid is gone. If an
-unrelated process has since been given that pid, the slot stays held until that process exits: when a run waits on a
-holder that is not an e2e run, delete the slot by hand (`rm -r ~/.cache/solana-playground-e2e/slot-N`). CI does not
-queue.
+The run starts its own dev server on its port, or reuses one that this worktree already started there. A server on the
+port from another worktree, or anything else that is not this worktree's client-v2, fails the run before any test, and
+the message names the pid holding the port. On a queue port that holder can only be a dev server left behind by a run
+that was killed (its slot was reclaimed, its server was not): stop it and run again. A hand-set `PORT` still works,
+outside 139xx, and gets the same check.
+
+A spec that fails on the runner and passes on a laptop is usually a timing race. `E2E_CPU_THROTTLE=<n>` slows each
+test's `page` `n` times through CDP, and `--repeat-each` with more `E2E_WORKERS` adds load, so the race shows locally:
+`E2E_WORKERS=4 E2E_CPU_THROTTLE=6 yarn test-e2e e2e/<spec>.e2e.spec.ts --repeat-each 10`. It reaches only specs that
+import `test` from `e2e/fixtures.ts`, and in them only the `page` fixture: a page the test opens itself runs at full
+speed.
+
+The full suite is CI's. A local run with no spec, or with a filter that names the test directory (`e2e/`, `.`), stops
+with a message; a `--grep`, `--only-changed`, `--test-list`, or `--ui` run goes ahead, and so does `--last-failed` once
+a last run's record exists (without one it runs everything). `E2E_FULL=1 yarn test-e2e` runs the full suite anyway,
+still through the queue. The check reads filters as paths, while Playwright reads them as regular expressions, so a
+broad pattern such as `spec` gets past it: it catches the usual mistake, not every spelling.
 
 ### Limits
 
@@ -910,8 +929,9 @@ backend and supply your own key."}`.
 
 Signed out:
 
-- [ ] The assistant panel's Default backend carries the tag "sign-in needed" and the description "Sign in with GitHub
-      to use it, or bring your own key below.", and the button reads **Sign in with GitHub**, not **Start**.
+- [ ] Send a message in the assistant panel (or open More, then Connect a model): Connect a model opens, its Default
+      backend carries the tag "sign-in needed" and the description "Sign in with GitHub to use it, or bring your own
+      key below.", and its button reads **Sign in with GitHub**, not **Start**. The prompt stays in the composer.
 - [ ] In the browser console, a turn from the page itself is refused:
 
   ```js
@@ -926,7 +946,8 @@ Signed in with GitHub. This half needs a real GitHub OAuth app whose callback is
 `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` values cover only the signed-out half.
 
 - [ ] After a reload, wait until `/api/auth/get-session` has answered in the network tab: until then the panel shows the
-      signed-out state. Then Default carries "no key needed" and the button reads **Start**.
+      signed-out state. Then a send connects the default, and in Connect a model Default carries "no key needed" and the
+      button reads **Start**.
 - [ ] The same console request passes the gate: the body has no `reason`. With a placeholder key the status is still
       `401`, from the upstream, and the body reads `Upstream 401: …`.
 - [ ] Copy the `better-auth.session_token` cookie from the browser's devtools into G-2's request as

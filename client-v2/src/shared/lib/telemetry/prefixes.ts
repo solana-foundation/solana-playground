@@ -1,10 +1,19 @@
 /** Slice name to the prefix its event names start with; a prefix is never reused */
 export const EVENT_PREFIXES = {
   auth: "auth",
+  "app-nav": "nav",
+  assistant: "assistant",
+  catalog: "catalog",
   feedback: "feedback",
+  home: "home",
   "layout-shell": "layout",
+  "new-project": "new_project",
   observability: "obs",
+  overlays: "overlay",
   persistence: "sync",
+  "session-footer": "session",
+  "settings-page": "settings",
+  "setup-list": "setup",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];

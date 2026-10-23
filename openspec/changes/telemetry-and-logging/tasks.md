@@ -52,7 +52,11 @@ the same time; section 3 follows both.
       after 2.1)
 - [ ] 2.5 ESLint inside the layers: `no-console` except the console provider;
       `no-restricted-imports` for `@sentry/*` in the logger's providers
-      except the Sentry provider (HOO-1897; after 2.2)
+      except the Sentry provider (HOO-2107; after 2.2)
+- [x] 2.6 The global `error` listener drops the browser's ResizeObserver loop
+      notice before logging; `docs/testing.md` lists C-1/C-4's known console
+      exceptions (HOO-2125; plan:
+      [plans/2.6-resizeobserver-notice.md](plans/2.6-resizeobserver-notice.md))
 
 ## 3. Rules
 

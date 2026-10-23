@@ -1,19 +1,20 @@
 import {
+  cloneElement,
   ComponentPropsWithoutRef,
   CSSProperties,
   FC,
   forwardRef,
   MouseEvent,
-  ReactNode,
+  ReactElement,
   useCallback,
   useMemo,
   useRef,
   useState,
 } from "react";
+import { cn } from "cn";
 import styled, { css, useTheme } from "styled-components";
 
 import ExplorerButtons from "./ExplorerButtons";
-import Button, { ButtonProps } from "../../../../components/Button";
 import Dnd, { DragStartEvent, DragEndEvent } from "../../../../components/Dnd";
 import LangIcon from "../../../../components/LangIcon";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
@@ -29,11 +30,15 @@ import {
 import { PgCommon, PgExplorer, PgView, PgTheme } from "../../../../utils";
 import { useCreateItem } from "./useCreateItem";
 import { useExplorerContextMenu } from "./useExplorerContextMenu";
+import { useResetCtxSelected } from "./useResetCtxSelected";
 import { useHandleItemState } from "./useHandleItemState";
-import { useKeybind, useOnClickOutside } from "../../../../hooks";
+import { useKeybind } from "../../../../hooks";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const Folders = () => {
-  useHandleItemState();
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  useHandleItemState(wrapperRef);
 
   const ctxMenu = useExplorerContextMenu();
   const { createItem } = useCreateItem();
@@ -47,9 +52,7 @@ const Folders = () => {
     []
   );
 
-  // Reset ctx selected on outside clicks
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  useOnClickOutside(wrapperRef, PgExplorer.removeCtxSelectedEl);
+  useResetCtxSelected(wrapperRef);
 
   // No need to memoize here
   const relativeRootPath = PgExplorer.getProjectRootPath();
@@ -73,29 +76,33 @@ const Folders = () => {
             data-path={relativeRootPath}
           >
             {/* Program */}
-            <SectionTopWrapper>
+            <SectionTopWrapper data-section>
               <SectionHeader>Program</SectionHeader>
               {folders.includes(PgExplorer.PATHS.SRC_DIRNAME) ? (
                 <>
                   <SectionButton
                     onClick={ctxMenu.runBuild}
+                    failureAction="build"
                     disabled={ctxMenu.buildLoading}
                     icon={<Wrench />}
-                    addTextMargin
                   >
                     Build
                   </SectionButton>
                   <SectionButton
                     onClick={ctxMenu.runDeploy}
+                    failureAction="deploy"
                     disabled={ctxMenu.deployState !== "ready"}
                     icon={<Rocket />}
-                    addTextMargin
                   >
                     Deploy
                   </SectionButton>
                 </>
               ) : (
-                <SectionButton onClick={ctxMenu.addProgram} icon={<Plus />}>
+                <SectionButton
+                  onClick={ctxMenu.addProgram}
+                  failureAction="add a program"
+                  icon={<Plus />}
+                >
                   Add
                 </SectionButton>
               )}
@@ -108,19 +115,23 @@ const Folders = () => {
             />
 
             {/* Client and tests */}
-            <SectionTopWrapper>
+            <SectionTopWrapper data-section>
               <SectionHeader>Client</SectionHeader>
               {folders.includes(PgExplorer.PATHS.CLIENT_DIRNAME) ? (
                 <SectionButton
                   onClick={ctxMenu.runClientFolder}
+                  failureAction="run the client"
                   icon={<Triangle rotate="90deg" />}
                   title="Run All (in client dir)"
-                  addTextMargin
                 >
                   Run
                 </SectionButton>
               ) : (
-                <SectionButton onClick={ctxMenu.addClient} icon={<Plus />}>
+                <SectionButton
+                  onClick={ctxMenu.addClient}
+                  failureAction="add a client"
+                  icon={<Plus />}
+                >
                   Add client
                 </SectionButton>
               )}
@@ -128,13 +139,18 @@ const Folders = () => {
               {folders.includes(PgExplorer.PATHS.TESTS_DIRNAME) ? (
                 <SectionButton
                   onClick={ctxMenu.runTestFolder}
+                  failureAction="run the tests"
                   icon={<TestTube />}
                   title="Test All (in tests dir)"
                 >
                   Test
                 </SectionButton>
               ) : (
-                <SectionButton onClick={ctxMenu.addTests} icon={<Plus />}>
+                <SectionButton
+                  onClick={ctxMenu.addTests}
+                  failureAction="add tests"
+                  icon={<Plus />}
+                >
                   Add tests
                 </SectionButton>
               )}
@@ -150,7 +166,7 @@ const Folders = () => {
 
             {/* Other */}
             {otherFolders.length > 0 && (
-              <SectionTopWrapper>
+              <SectionTopWrapper data-section>
                 <SectionHeader>Other</SectionHeader>
               </SectionTopWrapper>
             )}
@@ -239,34 +255,33 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
   );
 };
 
-interface SectionButtonProps extends ButtonProps {
-  icon: ReactNode;
-  addTextMargin?: boolean;
+interface SectionButtonProps
+  extends Omit<ComponentPropsWithoutRef<typeof AsyncButton>, "onError"> {
+  icon: ReactElement<{ "data-icon"?: string }>;
+  /** What did not happen when the click fails, completing "Could not …" */
+  failureAction: string;
 }
 
-const SectionButton: FC<React.PropsWithChildren<SectionButtonProps>> = ({
-  onClick,
+const SectionButton: FC<SectionButtonProps> = ({
   icon,
-  addTextMargin,
+  failureAction,
   children,
+  className,
   ...props
 }) => (
-  <Button onClick={onClick} kind="icon" {...props}>
-    {icon}
-    <SectionButtonText addTextMargin={addTextMargin}>
-      {children}
-    </SectionButtonText>
-  </Button>
+  <AsyncButton
+    variant="ghost"
+    size="xs"
+    className={cn("text-muted-foreground hover:text-foreground", className)}
+    onError={reportButtonFailure(failureAction)}
+    {...props}
+  >
+    {/* Each icon spreads its props onto its <svg>, which is how the data-icon
+        reaches the element the button sizes */}
+    {cloneElement(icon, { "data-icon": "inline-start" })}
+    {children}
+  </AsyncButton>
 );
-
-const SectionButtonText = styled.span<
-  Pick<SectionButtonProps, "addTextMargin">
->`
-  ${({ addTextMargin }) => css`
-    margin: 0 0.25rem;
-    ${addTextMargin && "margin-left: 0.50rem"};
-  `}
-`;
 
 interface FolderGroupProps {
   folders: string[];

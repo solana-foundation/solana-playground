@@ -63,15 +63,44 @@ function ComposerChip({ className, ...props }: React.ComponentProps<"span">) {
   )
 }
 
-function ComposerInput({ className, onKeyDown, onInput, ...props }: React.ComponentProps<"textarea">) {
+function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React.ComponentProps<"textarea">) {
   const { setEmpty } = React.useContext(ComposerContext)
+  const ref = React.useRef<HTMLTextAreaElement>(null)
+  // The width the height was last measured at; null until it first is
+  const measuredAt = React.useRef<number | null>(null)
   const grow = (el: HTMLTextAreaElement) => {
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    measuredAt.current = el.clientWidth
     setEmpty(!el.value.trim())
   }
+  // A controlled value can change without an input event (a prompt the
+  // product puts in, a send that clears it), so emptiness follows it too.
+  // `grow` is left out of the deps: it only uses the stable setEmpty and the ref
+  React.useLayoutEffect(() => {
+    if (value === undefined || !ref.current) return
+    grow(ref.current)
+  }, [value])
+  // The height follows the width too. An input measured in a narrow column
+  // (a panel that mounts it while still folded, then opens) wraps its
+  // placeholder per character and would keep that height once the column
+  // grows. Only a width other than the measured one re-grows, so the height
+  // this sets never feeds back into the observer; its first call, on
+  // observe, catches a width that changed before this effect ran.
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => {
+      if (measuredAt.current === null || measuredAt.current === el.clientWidth) return
+      grow(el)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   return (
     <textarea
+      ref={ref}
+      value={value}
       data-slot="composer-input"
       rows={1}
       aria-label="Message"

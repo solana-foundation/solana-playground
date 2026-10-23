@@ -53,7 +53,7 @@ function DiffContent({ className, ...props }: React.ComponentProps<"pre">) {
   )
 }
 
-const diffLineVariants = cva("block px-3 before:mr-2 before:inline-block before:w-2 before:select-none", {
+const diffLineVariants = cva("block px-3 font-mono before:mr-2 before:inline-block before:w-2 before:select-none", {
   variants: {
     variant: {
       context: "text-muted-foreground before:content-['_']",

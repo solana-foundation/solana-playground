@@ -152,7 +152,7 @@ export const projectSync = (): Disposable => {
         schedule();
         return;
       }
-      // One the user renamed from the project switcher without opening it.
+      // One the user renamed from the navigation's project list without opening it.
       // Nothing else would ever send that name: its row has not moved and
       // its mark is clean, so reconcile's cheap path skips it, and the
       // editor's pushes are only ever for the open project. Flagged, the

@@ -1,5 +1,6 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
 import { createArgs, createCmd } from "../create";
+import { SETUP_REJECTED } from "./setup-rejected";
 
 export const connect = createCmd({
   name: "connect",
@@ -65,7 +66,7 @@ export const connect = createCmd({
       case "setup": {
         const { Setup } = await import("../../components/Wallet/Modals/Setup");
         const setupCompleted = await PgView.setModal<boolean>(Setup);
-        if (!setupCompleted) throw new Error("Setup rejected.");
+        if (!setupCompleted) throw new Error(SETUP_REJECTED);
 
         const { changed } = await toggleStandardIfNeeded(input.args.wallet);
         if (!changed) PgWallet.state = "pg";

@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
-import { seedWorkspace } from "./fixtures";
+import { HELP_TAIL, runInTerminal, seedWorkspace } from "./fixtures";
 
 /**
  * The editor and its neighbours, end to end. Written for the React 19 move,
@@ -79,11 +79,11 @@ test.describe.serial("the editor", () => {
   });
 
   test("closes every tab to the start screen and reopens", async () => {
-    const tabs = page.locator('#tabs [role="button"][id^="/"]');
+    const tabs = page.locator('#tabs [data-slot="editor-tab"][id^="/"]');
     for (let left = await tabs.count(); left > 0; left--) {
       const tab = tabs.first();
       await tab.hover({ force: true });
-      await tab.locator("svg").last().click({ force: true });
+      await tab.getByRole("button", { name: /^Close / }).click({ force: true });
       await expect(tabs).toHaveCount(left - 1);
     }
     await expect(page.locator(".monaco-editor")).toHaveCount(0);
@@ -110,10 +110,8 @@ test.describe.serial("the editor", () => {
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }
-    await page.getByLabel("Terminal input").first().click();
-    await page.keyboard.type("help");
-    await page.keyboard.press("Enter");
-    await expect(page.locator(".xterm-rows").first()).toContainText("rustfmt");
+    await runInTerminal(page, "help");
+    await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
     await expect(page.locator(".xterm")).toHaveCount(1);
   });
 });

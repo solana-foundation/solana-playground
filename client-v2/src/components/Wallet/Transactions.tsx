@@ -1,13 +1,18 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
+import { Button } from "@/shared/ui/button";
 import Link from "../Link";
-import Text from "../Text";
-import { Clock, Refresh, Sad, Error as ErrorIcon } from "../Icons";
+import { FrownIcon } from "lucide-react";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Clock, Refresh, Error as ErrorIcon } from "../Icons";
 import { SpinnerWithBg } from "../Loading";
-import { PgCommon, PgTheme, PgWallet, PgWeb3 } from "../../utils";
+import { PgCommon, PgConnection, PgTheme, PgWallet, PgWeb3 } from "../../utils";
 import { useBlockExplorer, useConnection } from "../../hooks";
+import { createLogger } from "@/shared/lib/logger";
+import { describeTxsError } from "./txs-error";
+
+const log = createLogger("wallet:transactions");
 
 const Transactions = () => {
   const [signatures, setSignatures] =
@@ -19,24 +24,47 @@ const Transactions = () => {
   const connection = useConnection();
 
   useEffect(() => {
+    // A request still out when the connection or the wallet changes must not
+    // overwrite the list the next one draws
+    let stale = false;
     const { dispose } = PgWallet.onDidChangeCurrent(async (wallet) => {
+      // The wallet passes through `null` while it switches; the list is
+      // closing or about to be redrawn
+      if (!wallet) return;
       setLoading(true);
       try {
         const _signatures = await PgCommon.transition(
-          connection.getSignaturesForAddress(wallet!.publicKey, { limit: 10 })
+          connection.getSignaturesForAddress(wallet.publicKey, { limit: 10 })
         );
+        if (stale) return;
 
         setSignatures(_signatures);
         setError("");
-      } catch (e: any) {
-        setError(e.message ? e.message : "Unknown error");
+      } catch (e: unknown) {
+        if (stale) return;
+        // `stale` is set when the connection changes, so the current cluster
+        // is the one that failed
+        const cluster = PgConnection.cluster;
+
+        // The list says what failed; the endpoint's own words go to the log.
+        // Not reported: an endpoint that is down or limits requests is the
+        // user's network, and the list asks again every 30 s
+        log.warn("could not read the wallet's transactions", {
+          context: { cluster, error: String(e) },
+        });
+        setError(
+          describeTxsError(e, { endpoint: connection.rpcEndpoint, cluster })
+        );
         setSignatures([]);
       } finally {
-        setLoading(false);
+        if (!stale) setLoading(false);
       }
     });
 
-    return dispose;
+    return () => {
+      stale = true;
+      dispose();
+    };
   }, [connection, refreshCount]);
 
   const refresh = useCallback(() => {
@@ -56,9 +84,15 @@ const Transactions = () => {
     <TxsWrapper>
       <TxsTitleWrapper>
         <TxsTitleText>Transactions</TxsTitleText>
-        <TxsRefreshButton kind="icon" title="Refresh" onClick={refresh}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          title="Refresh"
+          onClick={refresh}
+          className="mr-2"
+        >
           <Refresh />
-        </TxsRefreshButton>
+        </Button>
       </TxsTitleWrapper>
 
       <TxsTable>
@@ -78,11 +112,17 @@ const Transactions = () => {
             <NoTransaction>
               {!loading &&
                 (error ? (
-                  <Text kind="error" icon={<Sad />}>
-                    Connection error: {error}
-                  </Text>
+                  <Callout variant="error">
+                    <FrownIcon />
+                    <CalloutDescription>{error}</CalloutDescription>
+                  </Callout>
                 ) : (
-                  <Text icon={<Sad />}>No transaction found.</Text>
+                  <Callout>
+                    <FrownIcon />
+                    <CalloutDescription>
+                      No transaction found.
+                    </CalloutDescription>
+                  </Callout>
                 ))}
             </NoTransaction>
           )}
@@ -110,14 +150,6 @@ const TxsTitleText = styled.span`
   ${({ theme }) => css`
     ${PgTheme.convertToCSS(
       theme.components.wallet.main.transactions.title.text
-    )};
-  `}
-`;
-
-const TxsRefreshButton = styled(Button)`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.components.wallet.main.transactions.title.refreshButton
     )};
   `}
 `;

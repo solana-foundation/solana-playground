@@ -5,10 +5,15 @@ import { isUuid } from "../src/shared/lib/ids";
 import type { Page, Route } from "@playwright/test";
 import {
   applyWrite,
-  hasDefaultBackend,
+  currentProject,
+  home,
+  homeRegion,
   json,
   LONG,
   makeLocalProject,
+  openGallery,
+  projectMenu,
+  projectRow,
   settled,
   workspaceIdOf,
 } from "./fixtures";
@@ -108,26 +113,18 @@ test("a signed-in browser takes on the whole account", async ({ page }) => {
 
   // The newest project is opened, so a device that has just pulled the whole
   // account down does not sit there saying "No project"
-  await expect(page.locator('[aria-haspopup="true"]').first()).toContainText(
-    "Hello Anchor",
-    LONG
-  );
+  await expect(currentProject(page)).toContainText("Hello Anchor", LONG);
   // The thread id is the conversation's own, not the workspace's: a project
   // may hold several. What matters here is that opening the lesson opened a
   // conversation at all.
   await expect.poll(() => threadIdIsUuid(page), LONG).toBe(true);
 
-  // The gallery greets an empty browser, and this one only looked empty while
-  // the account was still answering
-  await expect(page.locator("[data-gallery-modal]")).toHaveCount(0, LONG);
+  // Home greets an empty browser, and this one only looked empty while the
+  // account was still answering
+  await expect(home(page)).toBeHidden(LONG);
 
   // Every project the account has, not just the one that happens to be open
-  await page.locator('[aria-haspopup="true"]').first().click();
-  const menu = page.getByLabel("Projects and lessons");
-  await expect(menu).toBeVisible(LONG);
-  await expect(menu.getByText("From The Laptop", { exact: true })).toBeVisible(
-    LONG
-  );
+  await expect(projectRow(page, "From The Laptop")).toBeVisible(LONG);
 });
 
 test("the conversation is on screen before a backend is picked", async ({
@@ -137,36 +134,26 @@ test("the conversation is on screen before a backend is picked", async ({
   await stubAccount(page);
   await page.goto("/");
 
-  // Picking a backend is per-browser, so a second device always starts at the
-  // picker. The thread is in memory well before that, and used to be invisible
-  // until the user clicked through -- which reads as "it did not sync".
+  // Picking a backend is per-browser, so a second device always starts with
+  // nothing connected. The thread is in memory well before that, and used to
+  // be invisible until the user clicked through -- which reads as "it did not
+  // sync". The composer is always there now, so the claim is that the
+  // conversation is readable beside it, whatever the deployment's default.
   await expect(page.getByText(SAID)).toBeVisible(LONG);
-  // The picker's connect button reads "Start" for the keyless default backend
-  // and "Connect" for one that needs a key -- which is what it falls back to
-  // where the dev server has no default configured (see `hasDefaultBackend`),
-  // CI included. The claim here is "the picker is up and the conversation is
-  // already readable", so either label proves it; the exact label is checked
-  // only where the default exists, rather than skipping the whole test and
-  // with it the only guard on the hidden-conversation regression.
-  const connect = page.getByRole("button", { name: /^(Start|Connect)$/ });
-  await expect(connect).toBeVisible(LONG);
-  if (await hasDefaultBackend(page)) {
-    await expect(connect).toHaveText("Start");
-  }
+  await expect(
+    page.getByRole("textbox", { name: "Message the assistant" })
+  ).toBeVisible(LONG);
 });
 
 /** The same project is open again: not an imported copy beside it */
 const reopened = async (page: Page, id: string, name: string) => {
   await expect.poll(() => workspaceIdOf(page, name), LONG).toBe(id);
-  await expect(page.locator('[aria-haspopup="true"]').first()).toContainText(
-    name,
-    LONG
-  );
-  await page.locator('[aria-haspopup="true"]').first().click();
-  const menu = page.getByLabel("Projects and lessons");
-  await expect(menu).toBeVisible(LONG);
-  await expect(menu.getByText(/ imported( \d+)?$/)).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  await expect(currentProject(page)).toContainText(name, LONG);
+  await expect(
+    page
+      .locator('[data-slot="sidebar"]')
+      .getByRole("button", { name: / imported( \d+)?$/ })
+  ).toHaveCount(0);
 };
 
 /**
@@ -437,18 +424,12 @@ test("the other device's rename arrives, and the next edit keeps it", async ({
   expect(name).toBe("Renamed elsewhere");
 });
 
-test("a project renamed from the switcher, without opening it, reaches the account", async ({
-  page,
-}) => {
+test("client-v2-layout: A rename reaches the account", async ({ page }) => {
   test.setTimeout(240_000);
 
   const alphaId = await makeLocalProject(page, "Alpha");
   // A second project, so Alpha is not the open one
-  await page.locator('[aria-haspopup="true"]').first().click();
-  await page
-    .getByLabel("Projects and lessons")
-    .getByText("Browse gallery")
-    .click();
+  await openGallery(page);
   const gallery = page.locator("[data-gallery-modal]");
   await gallery.getByLabel("Project name").fill("Beta");
   await gallery.getByRole("button", { name: /^Start/ }).click();
@@ -520,24 +501,18 @@ test("a project renamed from the switcher, without opening it, reaches the accou
   await page.reload();
   await expect.poll(() => rows.has(alphaId), LONG).toBe(true);
   await settled(page, writes);
-  await expect(page.locator('[aria-haspopup="true"]').first()).toContainText(
-    "Beta"
-  );
+  await expect(currentProject(page)).toContainText("Beta");
 
-  // Renamed from the switcher, the way a person would, while in Beta
-  await page.locator('[aria-haspopup="true"]').first().click();
-  const menu = page.getByLabel("Projects and lessons");
-  await menu.getByText("Alpha", { exact: true }).hover();
-  await menu.getByRole("button", { name: "Rename Alpha" }).click();
-  const input = page.locator("input").last();
+  // Renamed in the navigation's list, the way a person would, while in Beta
+  const menu = await projectMenu(page, "Alpha");
+  await menu.getByRole("menuitem", { name: "Rename Alpha" }).click();
+  const input = page.getByRole("textbox", { name: "Rename Alpha" });
   await input.fill("Alpha renamed");
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await input.press("Enter");
 
   await expect.poll(() => rows.get(alphaId)?.name, LONG).toBe("Alpha renamed");
   // The user stays where they were
-  await expect(page.locator('[aria-haspopup="true"]').first()).toContainText(
-    "Beta"
-  );
+  await expect(currentProject(page)).toContainText("Beta");
 });
 
 /**
@@ -858,11 +833,9 @@ test("a started tutorial hands over its keypair and progress", async ({
   test.setTimeout(240_000);
 
   await page.goto("/");
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-  await page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..")
-    .getByRole("button", { name: "Open" })
+  await expect(home(page)).toBeVisible(LONG);
+  await homeRegion(page)
+    .getByRole("button", { name: "Open Hello Anchor" })
     .click();
   await page.getByRole("button", { name: "START", exact: true }).click();
   // The thread id is the conversation's own, not the workspace's: a project

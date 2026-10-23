@@ -233,6 +233,41 @@ describe("PgExplorer.refreshWorkspaces", () => {
     expect(PgExplorer.currentWorkspaceName).toBe("renamed");
   });
 
+  it("tells a listener the list changed when it takes a neighbour's", async () => {
+    const alpha = PgExplorer.workspaceIdOf("alpha")!;
+    const beta = PgExplorer.workspaceIdOf("beta")!;
+    writeConfig({
+      workspaces: [
+        { id: alpha, name: "renamed" },
+        { id: beta, name: "beta" },
+      ],
+      currentId: beta,
+    });
+    const changed = vi.fn();
+    const { dispose } = PgExplorer.onDidChangeWorkspaceList(changed);
+
+    try {
+      await PgExplorer.refreshWorkspaces();
+    } finally {
+      dispose();
+    }
+
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing when the neighbour's list is this tab's", async () => {
+    const changed = vi.fn();
+    const { dispose } = PgExplorer.onDidChangeWorkspaceList(changed);
+
+    try {
+      await PgExplorer.refreshWorkspaces();
+    } finally {
+      dispose();
+    }
+
+    expect(changed).not.toHaveBeenCalled();
+  });
+
   it("drops a workspace deleted elsewhere", async () => {
     const alpha = PgExplorer.workspaceIdOf("alpha")!;
     writeConfig({
@@ -417,6 +452,25 @@ describe("renaming a workspace that is not the current one", () => {
     expect(events.seen).toEqual([]);
   });
 
+  it("tells a listener the list changed, announced or not", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+    const changed = vi.fn();
+    const { dispose } = PgExplorer.onDidChangeWorkspaceList(changed);
+
+    try {
+      await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
+      await PgExplorer.renameWorkspace("delta", {
+        from: "gamma",
+        announce: true,
+      });
+    } finally {
+      dispose();
+    }
+
+    expect(changed).toHaveBeenCalledTimes(2);
+  });
+
   it("renames it on disk and in the list, and stays where it was", async () => {
     await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
     const alphaId = PgExplorer.currentWorkspaceId;
@@ -527,4 +581,24 @@ describe("importing a workspace under a name already in use", () => {
     expect(stored().get("/alpha/src/lib.rs")).toBe("declare_id!();");
     expect(PgExplorer.workspaceNameOf("p3")).toBeUndefined();
   });
+});
+
+// The tree finds an item by its path on every render while a file waits to
+// be shown (`useHandleItemState`), so a path the selector cannot hold must
+// not throw: a file name may carry a quote
+describe("PgExplorer.getElFromPath", () => {
+  afterEach(() => document.body.replaceChildren());
+
+  for (const path of [
+    "/w1/src/it's.rs",
+    '/w1/src/say "hi".rs',
+    "/w1/src/back\\slash.rs",
+  ]) {
+    it(`finds the item at ${path}`, () => {
+      const el = document.createElement("div");
+      el.setAttribute("data-path", path);
+      document.body.append(el);
+      expect(PgExplorer.getElFromPath(path)).toBe(el);
+    });
+  }
 });

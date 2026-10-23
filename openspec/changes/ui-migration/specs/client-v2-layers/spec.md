@@ -32,8 +32,9 @@ layers below its own in the order `app -> widgets -> features -> entities -> sha
   uses the pool) or `features/persistence` imports `features/auth` (it reads
   the session)
 - **THEN** the import is tolerated as the named exception until the cycle is
-  broken (`ui-migration` task 1.4), and the boundary check exempts exactly
-  these two
+  broken (`ui-migration` task 1.4), and the boundary check
+  (`client-v2/eslint-layers.js`, run by `yarn lint` and the build) exempts
+  exactly these two
 
 #### Scenario: A new screen-level composition is needed
 
@@ -51,10 +52,19 @@ through those files.
 - **WHEN** a module imports `features/<a>/model/<file>` directly
 - **THEN** the import is a violation and is rewritten to `features/<a>`
 
+#### Scenario: A test's mock rebuilds a slice's entry
+
+- **WHEN** a test's `vi.mock` of a slice's entry imports the modules behind
+  that entry, because the whole entry cannot load in the test
+- **THEN** the boundary check allows it, for test files only; the same import
+  in production code is a violation, and a test still may not import upward
+  or a sibling slice
+
 ### Requirement: The legacy roots are outside the layers
 
 The pre-existing roots SHALL be treated as legacy: importable from new code,
-exempt from the boundary check, and closed to new UI. They are `components/`,
+outside the boundary check (which reads only the five layers and `api/`,
+neither what a legacy root imports nor what imports it), and closed to new UI. They are `components/`,
 `views/`, `utils/`, `hooks/`, `providers/`, `commands/`, `effects/`,
 `routes/`, `settings/`, `themes/`, `frameworks/`, `languages/`,
 `tutorials/`, `block-explorers/`, `constants/`, `globals/`, `types/`.

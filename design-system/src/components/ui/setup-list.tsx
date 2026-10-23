@@ -98,7 +98,7 @@ function SetupListIndicator({ className, ...props }: React.ComponentProps<"span"
       )}
       {...props}
     >
-      <Check className="hidden size-2.5 text-[#151515] group-data-[status=done]/setup-item:block" strokeWidth={3.5} />
+      <Check className="hidden size-2.5 text-brand-ink group-data-[status=done]/setup-item:block" strokeWidth={3.5} />
     </span>
   )
 }

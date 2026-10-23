@@ -144,6 +144,48 @@
       ]
     },
     {
+      "name": "input-group",
+      "type": "registry:ui",
+      "title": "Input group",
+      "description": "Stock shadcn input group: an input or textarea with addons and buttons inside its border.",
+      "registryDependencies": [
+        "@playground/button",
+        "@playground/input",
+        "@playground/textarea"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/input-group.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "cn"
+      ]
+    },
+    {
+      "name": "command",
+      "type": "registry:ui",
+      "title": "Command",
+      "description": "Stock shadcn command (cmdk): a list that searches and acts from the keyboard.",
+      "registryDependencies": [
+        "@playground/dialog",
+        "@playground/input-group"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/command.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cmdk",
+        "cn",
+        "lucide-react"
+      ]
+    },
+    {
       "name": "label",
       "type": "registry:ui",
       "title": "Label",
@@ -157,6 +199,75 @@
       "dependencies": [
         "cn",
         "radix-ui"
+      ]
+    },
+    {
+      "name": "select",
+      "type": "registry:ui",
+      "title": "Select",
+      "description": "Stock shadcn select, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/select.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "native-select",
+      "type": "registry:ui",
+      "title": "Native Select",
+      "description": "Stock shadcn native-select, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/native-select.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "radio-group",
+      "type": "registry:ui",
+      "title": "Radio Group",
+      "description": "Stock shadcn radio-group, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/radio-group.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "field",
+      "type": "registry:ui",
+      "title": "Field",
+      "description": "Stock shadcn field, as the design system ships it.",
+      "registryDependencies": [
+        "@playground/label",
+        "@playground/separator"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/field.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "cn"
       ]
     },
     {
@@ -258,7 +369,7 @@
       "name": "logo",
       "type": "registry:ui",
       "title": "Logo",
-      "description": "The Playground mark beside its name. The mark takes the colour of its text.",
+      "description": "The Playground lockup (the triangle-and-circle mark with its name, drawn), and the ring mark beside its name. Both take the colour of their text.",
       "registryDependencies": [
         "@playground/playground-tokens"
       ],
@@ -562,6 +673,85 @@
       ]
     },
     {
+      "name": "message",
+      "type": "registry:ui",
+      "title": "Message",
+      "description": "One message in the assistant's conversation: who sent it, its content, a header and a footer.",
+      "registryDependencies": [
+        "@playground/playground-tokens"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/message.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn"
+      ]
+    },
+    {
+      "name": "message-scroller",
+      "type": "registry:ui",
+      "title": "Message scroller",
+      "description": "The conversation's scrolling list: with autoScroll it follows the end while you are there, and offers a way back when you are not.",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/button"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/message-scroller.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "@shadcn/react",
+        "lucide-react",
+        "cn"
+      ]
+    },
+    {
+      "name": "bubble",
+      "type": "registry:ui",
+      "title": "Bubble",
+      "description": "A message's body, in one of seven variants (default, secondary, muted, tinted, outline, ghost, destructive), on the end side with align=\"end\".",
+      "registryDependencies": [
+        "@playground/playground-tokens"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/bubble.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "radix-ui",
+        "cn"
+      ]
+    },
+    {
+      "name": "marker",
+      "type": "registry:ui",
+      "title": "Marker",
+      "description": "A line in the conversation that is not a message: a day, a tool the assistant used.",
+      "registryDependencies": [
+        "@playground/playground-tokens"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/marker.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "radix-ui",
+        "cn"
+      ]
+    },
+    {
       "name": "action-card",
       "type": "registry:ui",
       "title": "Action card",
@@ -675,6 +865,124 @@
         "lucide-react",
         "cn",
         "radix-ui"
+      ]
+    },
+    {
+      "name": "dialog",
+      "type": "registry:ui",
+      "title": "Dialog",
+      "description": "Stock shadcn dialog, as the design system ships it.",
+      "registryDependencies": [
+        "@playground/button"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/dialog.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "dropdown-menu",
+      "type": "registry:ui",
+      "title": "Dropdown menu",
+      "description": "Stock shadcn dropdown-menu, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/dropdown-menu.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "context-menu",
+      "type": "registry:ui",
+      "title": "Context menu",
+      "description": "Stock shadcn context-menu, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/context-menu.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "popover",
+      "type": "registry:ui",
+      "title": "Popover",
+      "description": "Stock shadcn popover, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/popover.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "hover-card",
+      "type": "registry:ui",
+      "title": "Hover card",
+      "description": "Stock shadcn hover-card, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/hover-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "drawer",
+      "type": "registry:ui",
+      "title": "Drawer",
+      "description": "Stock shadcn drawer, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/drawer.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "vaul"
+      ]
+    },
+    {
+      "name": "sonner",
+      "type": "registry:ui",
+      "title": "Sonner",
+      "description": "Stock shadcn sonner, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/sonner.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "sonner",
+        "lucide-react"
       ]
     },
     {
@@ -809,6 +1117,120 @@
         "@playground/merge"
       ],
       "files": []
+    },
+    {
+      "name": "badge",
+      "type": "registry:ui",
+      "title": "Badge",
+      "description": "Stock shadcn badge, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/badge.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "checkbox",
+      "type": "registry:ui",
+      "title": "Checkbox",
+      "description": "Stock shadcn checkbox, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/checkbox.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "lucide-react",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "collapsible",
+      "type": "registry:ui",
+      "title": "Collapsible",
+      "description": "Stock shadcn collapsible plus CollapsibleChevron, the fold's mark that turns 90 degrees when open.",
+      "files": [
+        {
+          "path": "src/components/ui/collapsible.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "lucide-react",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "kbd",
+      "type": "registry:ui",
+      "title": "Kbd",
+      "description": "Stock shadcn kbd, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/kbd.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn"
+      ]
+    },
+    {
+      "name": "empty",
+      "type": "registry:ui",
+      "title": "Empty",
+      "description": "Stock shadcn empty state, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/empty.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "cn"
+      ]
+    },
+    {
+      "name": "avatar",
+      "type": "registry:ui",
+      "title": "Avatar",
+      "description": "Stock shadcn avatar, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/avatar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "switch",
+      "type": "registry:ui",
+      "title": "Switch",
+      "description": "Stock shadcn switch, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/switch.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cn",
+        "radix-ui"
+      ]
     }
   ]
 }

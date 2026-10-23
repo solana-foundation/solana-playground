@@ -149,16 +149,44 @@ Done:
   layout (anatomy and navigation built on top of it; the classic layout, since
   removed), then **Flow** —
   re-anatomizing the UI around the Write → Build → Deploy → Interact loop
-  (`decisions.md` → D10, D17). Flow is the only layout: a header
-  stepper (Write → Build → Deploy → Interact, state derived from real
-  build/deploy events) plus a two-tab left panel (Projects | Files), an
-  assistant column, and the terminal in a console drawer (Cmd+J). The
-  assistant is a resizable panel on screens 1024 px and wider and a side
-  Sheet below that; below 768 px the left panel is a Sheet too, and below
-  600 px the editor is read-only and says why. The header and the stages
-  have no phone layout. A New Workspace gallery starts a project from 34 upstream
-  programs or 16 tutorials. A gear icon opens a settings overlay embedding
-  the existing settings registry.
+  (`decisions.md` → D10, D17). Flow is the only layout, a frame of four
+  columns with no header. From the left: the navigation (Home, New project,
+  Tutorials, Programs, the project list under them, and its session
+  footer: a cluster row, which opens the settings on the cluster, and an
+  account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
+  entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
+  keeps the cluster's status dot and an Account button that opens the same
+  menu), the
+  assistant, then the work area. Across the top of the work area runs the
+  stage bar, with the stepper (Write → Build → Deploy →
+  Interact, state derived from real build/deploy events); under it sit the
+  Files column (Cmd+E folds it; on a Mac not while the editor has focus,
+  where the editor takes the key; the column's own button always works)
+  and the stage, with the terminal in a console
+  drawer under the stage (Cmd+J). The assistant is a resizable panel on
+  screens 1024 px and wider and a side Sheet from 768 to 1023 px, where the
+  navigation starts as a rail. Below 768 px the app is three swiped
+  pages: the navigation, Work (Chat or Code, with Files in a Sheet) and
+  Preview (the Build, Deploy or Interact stage over the console); there the assistant is the Chat view
+  of Work, not a Sheet. The editor edits at every width. A start with no
+  project opens Home ("Where should we begin?"), not a popup. From 768 px
+  Home has a composer, New project, Follow a tutorial and Open a program
+  tiles, and four tutorial cards; below 768 px it has quick starts (a new
+  Anchor project, a beginner tutorial), a Browse button that opens the
+  Tutorials page, and the composer. The navigation's Home opens Home from an
+  open project too, and deleting the last project lands there; picking the
+  open project in the list (or Continue on a phone) goes back to it with the
+  editor, its undo history and the console as they were. Tutorials and
+  Programs in the navigation (and Home's tiles, and the `/tutorials` and
+  `/programs` links) open pages with a search field and cards, over the open
+  project, which comes back as it was; opening a card opens the tutorial or
+  imports the program. The New Workspace gallery (New project) starts a
+  project from scratch, 34 upstream programs or 16 tutorials. The cluster
+  row, the account menu's Settings or Cmd+, open Settings as a page of its
+  own over the whole window: a list of sections (Network, Project, Block
+  Explorer, Build, Connection, Editor, Notification, Server, Test UI, UI,
+  Wallet, Experimental) built from the existing settings registry, and "Back
+  to app", Escape or Cmd+, to return to the work as it was.
 - Deploy history is new: a client-side store in `localStorage`, keyed by
   workspace, that records each real deploy as it happens.
 - Conversations and project code are persisted. Threads are keyed by project
@@ -189,7 +217,7 @@ model connected at all. The `tools/list` and `tools/call` round trips are
 verified against the live server; what has not been exercised is a full turn
 where a *model* chooses to call one, since that needs a key.
 
-Not started: real wallet adapters, phone layouts for the header and stages.
+Not started: real wallet adapters.
 
 ## What is real and what is mocked
 
@@ -220,7 +248,7 @@ Honesty rule for the demo — never present a mocked step as working.
   saves the IDL a successful build already produced; "Load IDL file" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
-- **Not view-only:** the New Workspace gallery's ecosystem program cards
+- **Not view-only:** the Programs page's and the gallery's ecosystem program cards
   import from GitHub through upstream's own mechanism (`PgGithub.import`)
   into a normal, editable project -- they open as a normal project; those
   targeting Anchor newer than the pinned 0.29 will not compile on this build
@@ -246,8 +274,8 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Real, kept per tab:** your own key. It is kept in the tab's
   `sessionStorage`: a reload keeps it and a new tab asks again, while a tab the
   browser duplicates or restores (a reopened closed tab, a restored session)
-  carries it and reconnects, as after a reload. Forget key in the chat header
-  removes it. It goes from the browser straight to the provider as a header on
+  carries it and reconnects, as after a reload. Forget key, in the panel
+  head's More menu, removes it. It goes from the browser straight to the provider as a header on
   every request, never through our server, and is never logged or synced.
   Project code runs in the same origin and could read it while the tab is open;
   that is why it is not in `localStorage`.

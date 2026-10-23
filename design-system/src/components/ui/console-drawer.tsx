@@ -16,6 +16,7 @@ function ConsoleDrawer({
   defaultOpen = false,
   onOpenChange,
   hotkey = "j",
+  contentId,
   ...props
 }: React.ComponentProps<"div"> & {
   open?: boolean
@@ -23,10 +24,13 @@ function ConsoleDrawer({
   onOpenChange?: (open: boolean) => void
   /** the key that, with ⌘ or Ctrl, opens and closes it; null for none */
   hotkey?: string | null
+  /** the well's id, when the app already names it; generated otherwise */
+  contentId?: string
 }) {
   const [inner, setInner] = React.useState(defaultOpen)
   const open = openProp ?? inner
-  const id = React.useId()
+  const generated = React.useId()
+  const id = contentId ?? generated
   const setOpen = React.useCallback(
     (next: boolean) => {
       setInner(next)
@@ -58,7 +62,16 @@ function ConsoleDrawer({
 }
 
 /* The strip. A click anywhere on it toggles; the chevron is the real button */
-function ConsoleDrawerBar({ className, onClick, children, ...props }: React.ComponentProps<"div">) {
+function ConsoleDrawerBar({
+  className,
+  onClick,
+  children,
+  triggerLabel,
+  ...props
+}: React.ComponentProps<"div"> & {
+  /** the chevron's accessible name, when the app has one of its own */
+  triggerLabel?: string
+}) {
   const { open, setOpen, id } = React.useContext(ConsoleDrawerContext)
   return (
     <div
@@ -76,7 +89,7 @@ function ConsoleDrawerBar({ className, onClick, children, ...props }: React.Comp
         data-slot="console-drawer-trigger"
         aria-expanded={open}
         aria-controls={id}
-        aria-label={open ? "Close the console" : "Open the console"}
+        aria-label={triggerLabel ?? (open ? "Close the console" : "Open the console")}
         onClick={() => setOpen(!open)}
         className="grid size-6 place-items-center rounded-md text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >

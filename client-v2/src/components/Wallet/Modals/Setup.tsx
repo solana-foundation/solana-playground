@@ -1,11 +1,15 @@
 import { useState } from "react";
+import { TriangleAlertIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
-import Modal from "../../Modal";
-import Text from "../../Text";
-import { Warning } from "../../Icons";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { ModalFrame } from "@/widgets/overlays";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet, PgWeb3 } from "../../../utils";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("wallet:setup");
 
 export const Setup = () => {
   const [text, setText] = useState("");
@@ -32,13 +36,18 @@ export const Setup = () => {
       if (PgWallet.accounts.length) PgWallet.remove(0);
       const keypair = await PgWallet.import();
       if (keypair) setText("Imported address: " + keypair.publicKey.toBase58());
-    } catch (err: any) {
-      console.log(err.message);
+    } catch (err) {
+      log.error(err, { report: true });
+      setText(
+        "Could not import the keypair: " +
+          (err instanceof Error ? err.message : String(err))
+      );
     }
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="wallet-setup"
       title="Playground Wallet"
       buttonProps={{
         text: "Continue",
@@ -58,22 +67,35 @@ export const Setup = () => {
           You don't need to do anything other than saving the keypair for future
           use. You can also choose to import an existing wallet.
         </ContentText>
-        <WarningTextWrapper>
-          <Text kind="warning" icon={<Warning color="warning" />}>
+        <Callout variant="warning" className="mt-4">
+          <TriangleAlertIcon />
+          <CalloutDescription>
             Wallet information is stored in your browser's local storage. You
             are going to lose the wallet if you clear your browser history
             unless you save the keypair.
-          </Text>
-        </WarningTextWrapper>
+          </CalloutDescription>
+        </Callout>
         <WalletButtonsWrapper>
-          <Button onClick={handleExport} kind="primary-outline">
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onClick={handleExport}
+            onError={reportButtonFailure("save the keypair")}
+          >
             Save keypair
-          </Button>
-          <Button onClick={handleImport}>Import keypair</Button>
+          </AsyncButton>
+          <AsyncButton
+            type="button"
+            variant="outline"
+            onClick={handleImport}
+            onError={reportButtonFailure("import the keypair")}
+          >
+            Import keypair
+          </AsyncButton>
         </WalletButtonsWrapper>
         {text && <KeypairText>{text}</KeypairText>}
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 
@@ -92,18 +114,6 @@ const ContentTitle = styled.div`
 
 const ContentText = styled.p`
   color: ${({ theme }) => theme.colors.default.textSecondary};
-`;
-
-const WarningTextWrapper = styled.div`
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-
-  & div > svg {
-    height: 2rem;
-    width: 2rem;
-    margin-right: 1rem;
-  }
 `;
 
 const WalletButtonsWrapper = styled.div`

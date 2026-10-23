@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import styled, { css, keyframes } from "styled-components";
 
 import ErrorBoundary, {
@@ -7,6 +7,9 @@ import ErrorBoundary, {
 import { SpinnerWithBg } from "../../../../components/Loading";
 import { PgCommon, PgTheme, PgView } from "../../../../utils";
 import { useGetAndSetStatic } from "../../../../hooks";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("view:main-primary");
 
 const Primary = () => {
   const [el, setEl] = useState<ErrorBoundaryChildren>(null);
@@ -25,6 +28,10 @@ const Primary = () => {
       try {
         await PgCommon.transition(setContent);
       } catch (e) {
+        // Shown in place of the view, but never thrown, so React and the
+        // boundary do not see it: say it here. A view put back on a remount
+        // (`PgView.announceMainPrimaryUnmount`) runs its route's loader again.
+        log.error(e, { report: true });
         setEl({ error: e as Error, refresh: setContent });
       }
     } else {
@@ -37,6 +44,15 @@ const Primary = () => {
     el,
     setElWithTransition
   );
+
+  // Declared after `useGetAndSetStatic`, so its listeners are in place when
+  // the `setMainPrimary` calls this releases send `set`. The unmount lets
+  // the next `Primary` to mount get this one's content back: the work
+  // unmounts once no project is open, and its route does not run again.
+  useEffect(() => {
+    PgView.announceMainPrimaryMount();
+    return () => PgView.announceMainPrimaryUnmount();
+  }, []);
 
   return (
     <Wrapper>

@@ -41,13 +41,27 @@ existing code moves.
 - `design-system/` moves from PR #32 into the repository as its own package
   with a registry that has no outside links; `client-v2` installs from it.
 - The new layout shell is built once, on React 19, with today's panels
-  inside; then panels move one by one.
+  inside. Then the app moves to the designer's prototype in big steps (the
+  four-column frame, Home, the workspace, projects, the assistant and
+  lessons, the details), while the small elements are swapped app-wide on a
+  parallel track.
 - The classic layout (`?classic`) is removed with the shell; Flow is the only
   layout.
 - The layout shell adds the telemetry events `layout_panel_toggled`,
-  `layout_viewport` (field `viewport`), `layout_readonly_edit_blocked` and
-  `layout_restore_failed` (prefix `layout`), described in the
-  `client-v2-layout` spec.
+  `layout_viewport` (field `viewport`) and `layout_restore_failed` (prefix
+  `layout`), described in the `client-v2-layout` spec. The 5.1 shell also
+  added `layout_readonly_edit_blocked`; the phone's three pages (5.7) remove
+  it with the read-only editor and add `layout_page_shown` and
+  `layout_work_view`. The four-column frame names the panels in
+  `layout_panel_toggled` `nav`, `files`, `assistant` and `console` (`left`
+  is gone), and its navigation (`widgets/app-nav`) adds `nav_item_opened`
+  (prefix `nav`).
+- The assistant (`widgets/assistant`, 5.17) adds `assistant_model_picked`,
+  `assistant_effort_changed`, `assistant_connect_opened`,
+  `assistant_turn_stopped` and `assistant_default_probe_failed` (prefix
+  `assistant`), described in the `client-v2-assistant` spec. Its thread
+  (5.18) adds `assistant_approval_answered`, `assistant_suggestion_picked`
+  and `assistant_make_change_requested`.
 
 ## Capabilities
 
@@ -59,12 +73,29 @@ existing code moves.
   happens to a saved theme that no longer exists.
 - `client-v2-browser-support`: the browsers the production bundle targets.
 - `client-v2-layout`: the arrangement of the panels, what of it survives a
-  reload, how it changes with screen width, and where the editor is read-only.
+  reload, how it changes with screen width, and what a phone shows.
+- `client-v2-overlays`: menus, dialogs, tooltips and toasts: how they open,
+  close and answer, where they sit on screen, and what they report.
+- `client-v2-controls`: how the development loop's switch, a choice of a few
+  and a select behave for the user, by pointer and by keyboard.
+- `client-v2-buttons`: what a button does when pressed: the one call to
+  action of a screen, waiting on the work it starts, copying a value, and
+  telling the user once when a click fails.
+- `client-v2-elements`: how the small elements a screen is built from behave
+  for the user: a section that folds, a checkbox and its label, a note that
+  says what kind it is.
+- `client-v2-stages`: what the Build and Deploy stages show: a failed build's
+  diagnostics with the faulty line marked, the latest deployment's program id
+  to copy, and the stage's action at the foot on a phone.
+- `client-v2-assistant`: how the assistant's composer names the model it
+  talks to, how a turn is sent and stopped, how a model is connected, and
+  how the thread reads and answers approvals at every width.
 
 ### Modified Capabilities
 
-None. `openspec/specs/` is empty before this change; these are the first
-capabilities it records.
+- `assistant-own-key`: the picker and the chat header's Forget key are gone
+  (5.17), so its scenarios name Connect a model, the composer's model button
+  and Forget key in the assistant head's More menu.
 
 ## Impact
 

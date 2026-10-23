@@ -1,7 +1,7 @@
 import { FC } from "react";
 
-import Text from "../Text";
-import { Sad } from "../Icons";
+import { FrownIcon } from "lucide-react";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 interface FallbackProps {
   /** Error that was thrown */
@@ -9,10 +9,13 @@ interface FallbackProps {
 }
 
 const Fallback: FC<React.PropsWithChildren<FallbackProps>> = ({ error }) => (
-  <Text kind="error" icon={<Sad />}>
-    <div>There was an unexpected error!</div>
-    {error.message && <div>Reason: {error.message}</div>}
-  </Text>
+  <Callout variant="error">
+    <FrownIcon />
+    <CalloutDescription>
+      <div>There was an unexpected error!</div>
+      {error.message && <div>Reason: {error.message}</div>}
+    </CalloutDescription>
+  </Callout>
 );
 
 export default Fallback;

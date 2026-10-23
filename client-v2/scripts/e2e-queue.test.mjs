@@ -6,7 +6,13 @@ import path from "node:path";
 import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
-import { acquireSlot, describeHolders, tryAcquireSlot } from "./e2e-queue.mjs";
+import {
+  QUEUE_BASE_PORT,
+  acquireSlot,
+  describeHolders,
+  queuePort,
+  tryAcquireSlot,
+} from "./e2e-queue.mjs";
 
 const MODULE_URL = pathToFileURL(
   path.join(import.meta.dirname, "e2e-queue.mjs")
@@ -52,7 +58,9 @@ const deadPid = () => {
 const holdInChild = async (dir, holdMs) => {
   const code = `
     import { acquireSlot } from ${JSON.stringify(MODULE_URL)};
-    const slot = acquireSlot({ dir: ${JSON.stringify(dir)}, max: 2, owner: { pid: process.pid, worktree: "/wt/child", port: 13020 } });
+    const slot = acquireSlot({ dir: ${JSON.stringify(
+      dir
+    )}, max: 2, owner: { pid: process.pid, worktree: "/wt/child", port: 13020 } });
     process.stdout.write("held\\n");
     setTimeout(() => { slot.release(); process.exit(0); }, ${holdMs});
   `;
@@ -103,6 +111,85 @@ test("a third run waits while live runs hold both slots, then takes the freed on
     [child.pid, process.pid].sort()
   );
   await new Promise((resolve) => child.once("exit", resolve));
+});
+
+test("without a port of its own, a run gets its slot's port", (t) => {
+  const dir = tempDir(t);
+  const mine = { pid: process.pid, worktree: "/wt/mine" };
+  const first = acquireSlot({
+    dir,
+    max: 2,
+    owner: mine,
+    portForSlot: queuePort,
+  });
+  const second = acquireSlot({
+    dir,
+    max: 2,
+    owner: mine,
+    portForSlot: queuePort,
+  });
+  assert.equal(first.port, QUEUE_BASE_PORT + 1);
+  assert.equal(second.port, QUEUE_BASE_PORT + 2);
+  const written = JSON.parse(
+    fs.readFileSync(path.join(dir, "slot-2", "owner.json"), "utf8")
+  );
+  assert.equal(written.port, QUEUE_BASE_PORT + 2);
+});
+
+test("a run with a port of its own keeps it", (t) => {
+  const dir = tempDir(t);
+  const slot = acquireSlot({ dir, max: 1, owner: owner(4321) });
+  assert.equal(slot.port, 4321);
+});
+
+test("a slot with no port is refused and not left behind", (t) => {
+  const dir = tempDir(t);
+  const portless = { pid: process.pid, worktree: "/wt/mine" };
+  assert.throws(() => acquireSlot({ dir, max: 1, owner: portless }), TypeError);
+  assert.ok(!fs.existsSync(path.join(dir, "slot-1")));
+});
+
+test("a reclaimed slot hands out the same port", (t) => {
+  const dir = tempDir(t);
+  writeOwner(dir, 1, deadPid());
+  const slot = acquireSlot({
+    dir,
+    max: 1,
+    owner: { pid: process.pid, worktree: "/wt/mine" },
+    portForSlot: queuePort,
+  });
+  assert.equal(slot.port, queuePort(1));
+});
+
+/** A child that takes a slot with a queue port, prints the port, and holds it until stdin closes. */
+const portInChild = (dir) => {
+  const code = `
+    import { acquireSlot, queuePort } from ${JSON.stringify(MODULE_URL)};
+    const slot = acquireSlot({ dir: ${JSON.stringify(
+      dir
+    )}, max: 2, owner: { pid: process.pid, worktree: "/wt/child" }, portForSlot: queuePort });
+    process.stdout.write(slot.port + "\\n");
+    process.stdin.on("end", () => { slot.release(); process.exit(0); });
+    process.stdin.resume();
+  `;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", code], {
+    stdio: ["pipe", "pipe", "inherit"],
+  });
+  const port = new Promise((resolve) =>
+    child.stdout.once("data", (chunk) => resolve(Number(chunk.toString())))
+  );
+  return { child, port };
+};
+
+test("two runs started together get distinct ports", async (t) => {
+  const dir = tempDir(t);
+  const runs = [portInChild(dir), portInChild(dir)];
+  const ports = await Promise.all(runs.map((r) => r.port));
+  runs.forEach((r) => r.child.stdin.end());
+  assert.deepEqual(ports.sort(), [queuePort(1), queuePort(2)]);
+  await Promise.all(
+    runs.map((r) => new Promise((resolve) => r.child.once("exit", resolve)))
+  );
 });
 
 test("reclaims a slot whose owner is gone", (t) => {
@@ -156,7 +243,9 @@ const raceInChild = (dir, goFile) => {
     while (!fs.existsSync(${JSON.stringify(goFile)})) {
       Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1);
     }
-    const result = tryAcquireSlot({ dir: ${JSON.stringify(dir)}, max: 1, owner: { pid: process.pid, worktree: "/wt/racer", port: 1 } });
+    const result = tryAcquireSlot({ dir: ${JSON.stringify(
+      dir
+    )}, max: 1, owner: { pid: process.pid, worktree: "/wt/racer", port: 1 } });
     process.stdout.write(result.kind + "\\n");
     process.stdin.resume();
   `;

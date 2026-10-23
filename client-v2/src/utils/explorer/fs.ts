@@ -177,7 +177,10 @@ export class PgFs {
    * the explorer reports the workspace as missing.
    *
    * Content writes do not need this. Structural changes -- creating,
-   * renaming or deleting a workspace -- do.
+   * renaming or deleting a workspace, or creating a file -- do; a file the
+   * workspace keeps under `.workspace/` goes through `writeWorkspaceFile`,
+   * which flushes on its first write. It rewrites the whole tree, so never
+   * call it per write.
    */
   static async flush() {
     await this._fs.flush();

@@ -19,6 +19,7 @@
     "@project-serum/anchor": "^0.23.0",
     "@sentry/node": "11.4.0",
     "@sentry/react": "^11.4.0",
+    "@shadcn/react": "^0.3.1",
     "@solana-playground/anchor-cli": "../wasm/anchor-cli/pkg",
     "@solana-playground/playnet": "../wasm/pkgs/playnet",
     "@solana-playground/rust-analyzer": "../wasm/rust-analyzer/pkg",
@@ -37,6 +38,7 @@
     "assert": "^2.0.0",
     "better-auth": "^1.7.5",
     "class-variance-authority": "^0.7.1",
+    "cmdk": "^1.1.1",
     "cn": "^0.4.0",
     "crypto-browserify": "^3.12.0",
     "diff": "^5.0.0",
@@ -59,16 +61,16 @@
     "react-rnd": "^10.5.2",
     "react-router-dom": "^6.3.0",
     "react-scripts": "5.0.0",
-    "react-select": "^5.10.2",
-    "react-toastify": "^9.0.0",
     "react-use-clipboard": "^1.0.8",
     "remark-gfm": "^4.0.1",
     "shiki": "^0.14.4",
+    "sonner": "^2.0.8",
     "stream-browserify": "^3.0.0",
     "styled-components": "^5.3.3",
     "tw-animate-css": "^1.4.0",
     "typescript": "=5.0.4",
     "uuid": "^8.3.2",
+    "vaul": "^1.1.2",
     "vscode-oniguruma": "^1.7.0",
     "vscode-textmate": "^9.0.0",
     "xterm": "^4.18.0",
@@ -96,6 +98,8 @@
     "circular-dependency-plugin": "^5.2.2",
     "csstype": "^3.1.2",
     "esbuild": "0.25.9",
+    "eslint-import-resolver-typescript": "^3.10.1",
+    "eslint-plugin-boundaries": "7.2.0",
     "jsdom": "^29.1.1",
     "markdownlint-cli2": "0.23.3",
     "monaco-editor-webpack-plugin": "^7.0.1",
@@ -129,8 +133,8 @@
     "dev-cra": "BROWSER=none craco start",
     "dev-vercel": "yarn generate-fast && npx vercel dev --cwd .. --listen ${VERCEL_DEV_PORT:-3000}",
     "build": "bash ../wasm/build.sh && yarn install --frozen-lockfile --check-files && yarn build:bundle",
-    "build:bundle": "yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
-    "build-fast": "yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
+    "build:bundle": "yarn lint:layers && yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
+    "build-fast": "yarn lint:layers && yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
     "build-wasm": "build=\"../wasm/build.sh\" && chmod +x $build && $build --update",
     "format": "prettier --write src/ api/",
     "check-format": "prettier --check src/ api/",
@@ -139,6 +143,7 @@
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
     "lint": "eslint --ext .ts,.tsx,.mjs,.mts src api e2e",
+    "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
     "check": "yarn test-types && yarn check-format && yarn check-md && yarn lint && yarn check-colors && yarn spec:validate && yarn spec:coverage && yarn test-unit && yarn test-api",
@@ -165,7 +170,8 @@
   },
   "eslintConfig": {
     "extends": [
-      "react-app"
+      "react-app",
+      "./eslint-layers.js"
     ],
     "overrides": [
       {
@@ -183,6 +189,10 @@
             {
               "selector": "VariableDeclarator > ObjectPattern > Property[key.name='randomUUID']",
               "message": "Mint ids with uuid() from src/shared/lib/ids; crypto.randomUUID exists only in secure contexts."
+            },
+            {
+              "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
+              "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
             }
           ]
         }
@@ -272,6 +282,10 @@
             {
               "selector": "Literal[regex.pattern=/\\{8\\}\\\\?-/]",
               "message": "Check an id with isUuid() from src/shared/lib/ids instead of a copied UUID regex."
+            },
+            {
+              "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
+              "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
             }
           ]
         }
