@@ -165,3 +165,44 @@ it("names Ctrl+R in the assistant's hint, and no key when told none", async () =
     "Expand assistant"
   );
 });
+
+it("labels the files toggle 'Files' in text, as the prototype's head does", () => {
+  draw({
+    title: null,
+    files: { open: true, onToggle: vi.fn() },
+    assistant: { open: true, onToggle: vi.fn() },
+  });
+  const files = screen.getByRole("button", { name: "Collapse project panel" });
+  expect(files.textContent).toBe("Files");
+});
+
+it("draws the title muted and the controls as 30 px squares", () => {
+  const { container } = draw({
+    title: "Counter",
+    files: { open: true, onToggle: vi.fn() },
+    assistant: { open: false, onToggle: vi.fn() },
+  });
+  expect(screen.getByText("Counter").className).toMatch(
+    /\btext-muted-foreground\b/
+  );
+  for (const control of container.querySelectorAll(
+    '[data-slot="stage-bar"] [data-slot="button"]'
+  )) {
+    expect(control.className).toMatch(/\bh-7\.5\b/);
+    expect(control.className).toMatch(/\brounded-lg\b/);
+  }
+  expect(
+    screen.getByRole("button", { name: "Expand assistant" }).className
+  ).toMatch(/\bsize-7\.5\b/);
+});
+
+it("parts the documentation from the toggles with a rule", () => {
+  const { container } = draw({
+    title: null,
+    files: null,
+    assistant: { open: true, onToggle: vi.fn() },
+  });
+  expect(
+    container.querySelector('[data-slot="stage-bar"] [data-slot="separator"]')
+  ).not.toBeNull();
+});
