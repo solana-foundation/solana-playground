@@ -91,6 +91,11 @@ git config core.hooksPath .githooks   # once per clone; runs `check` on pre-push
 `spec:validate` runs the OpenSpec CLI pinned in `devDependencies`, so its
 verdict is the one CI sees whatever version is installed globally.
 
+`bundle:info` rewrites [`bench/BUNDLE.md`](bench/BUNDLE.md), the committed
+sizes of the production bundle, from `build/`. Run it after `yarn build-fast`
+when a change moves bundle sizes and commit the file: `yarn test-build` fails
+while the snapshot differs from the build.
+
 ### Static assets and worktrees
 
 `public/` is mirrored from the `client/public` submodule, and `yarn start` /
