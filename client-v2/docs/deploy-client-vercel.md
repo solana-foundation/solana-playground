@@ -14,8 +14,11 @@ as soon as the Root Directory points at `client-v2`.
 2. **Production env vars**, scoped to Production —
    [Assistant default backend](#assistant-default-backend) and
    [Conversation and project sync](#conversation-and-project-sync):
-   - `DATABASE_URL` — the pooled URL of the parent Neon database, the same one
-     `migrate-production-db` migrates.
+   - `DATABASE_URL` — the pooled URL of production's Neon database, the same one
+     `migrate-production-db` migrates. It is in a Neon project of its own,
+     never the preview project ([Neon preview databases](neon.md)).
+   - `AUTH_OAUTH_PROXY_SECRET` — the same value as on Preview, and never equal
+     to either `AUTH_SECRET` ([Sign-in on previews](#sign-in-on-previews)).
    - `SYNC_ENABLED=true`.
    - `AUTH_SECRET` — generated for production, never reused from a preview.
    - `AUTH_BASE_URL` — the production origin. **Required here, not optional:**
@@ -45,7 +48,8 @@ as soon as the Root Directory points at `client-v2`.
    make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview
    ```
 
-   This uses the Neon branch `preview/master`. On the preview URL:
+   This uses the Neon branch `preview/master`, cut from the preview Neon
+   project, so the dry run runs on preview data. On the preview URL:
    `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
    project edited in one browser shows up in a second.
 6. **Migrate production:**
@@ -364,13 +368,20 @@ proxy's completion endpoints: the secret sits in every preview's environment,
 and on the host those endpoints would turn a forged payload into a session. The
 host must run this code before any preview can sign in.
 
-Accepted risk: whoever holds one preview's environment can forge a session on
-any other preview. That holds only while no preview reaches production's
-database. A preview from `preview.yml` or the Makefile runs on a Neon branch:
-a copy of production's data as of the moment the branch was cut
-([The parent branch](neon.md#the-parent-branch)), never production itself. A
-Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which must
-therefore never name production's database.
+Whoever holds one preview's environment holds `AUTH_OAUTH_PROXY_SECRET`, and
+with it can forge a session on any preview. Two rules keep that away from real
+accounts:
+
+- **No preview reaches production's data.** A preview from `preview.yml` or the
+  Makefile runs on a branch of the preview Neon project
+  ([The parent branch](neon.md#the-parent-branch)). A Git-triggered preview
+  runs on the Preview-scoped `DATABASE_URL`, which names a database in that
+  project too, never production's.
+- **Production's `AUTH_SECRET` is used nowhere else.** It signs production's
+  session cookies. The proxy secret is the same on production and every
+  preview, so it must never equal production's `AUTH_SECRET`, or the preview's
+  either, since one key would then decrypt what was sealed for the other's
+  purpose.
 
 A user signed in on a preview has no `login`: the proxy forwards only Better
 Auth's own user fields, so `mapProfileToUser` does not reach it. The header
