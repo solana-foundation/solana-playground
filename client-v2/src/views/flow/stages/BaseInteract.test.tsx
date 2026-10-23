@@ -36,7 +36,7 @@ const props = (
   surface,
   cluster: over.cluster === undefined ? "devnet" : over.cluster,
   onGoTo: over.onGoTo ?? vi.fn(),
-  idlLoad: <button>Load IDL file</button>,
+  idlLoad: <button>Upload IDL</button>,
   form: <div>FORM</div>,
 });
 
@@ -65,25 +65,27 @@ describe("BaseInteract", () => {
     expect(screen.getByText(/Once it is on the network,/)).toBeTruthy();
   });
 
-  it("before a build it offers Go to Build", () => {
+  /** The prototype says what is missing for Interact: a deployment */
+  it("before a build it asks for a deploy and offers Go to Deploy", () => {
     const onGoTo = vi.fn();
     render(<BaseInteract {...props("not-built", { onGoTo })} />);
-    fireEvent.click(screen.getByRole("button", { name: "Go to Build" }));
-    expect(onGoTo).toHaveBeenCalledWith("build");
+    expect(screen.getByText(/^Deploy the program first\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Go to Deploy" }));
+    expect(onGoTo).toHaveBeenCalledWith("deploy");
   });
 
-  it("one Load IDL file in every surface", () => {
+  it("one Upload IDL in every surface", () => {
     for (const surface of SURFACES) {
       const { container, unmount } = render(
         <BaseInteract {...props(surface)} />
       );
       expect(
-        screen.getAllByRole("button", { name: "Load IDL file" })
+        screen.getAllByRole("button", { name: "Upload IDL" })
       ).toHaveLength(1);
       if (surface === "no-idl") {
         expect(
           within(actions(container)).getByRole("button", {
-            name: "Load IDL file",
+            name: "Upload IDL",
           })
         ).toBeTruthy();
       }
