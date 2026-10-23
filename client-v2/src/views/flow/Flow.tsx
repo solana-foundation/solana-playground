@@ -407,6 +407,9 @@ const Wrapper = styled.div.attrs({
   ${({ theme }) => css`
     width: 100vw;
     height: 100vh;
+    /* The visible height: on iPad and iPhone Safari 100vh is the height with
+       the toolbar hidden, so the foot of the navigation started under it */
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     position: relative;
