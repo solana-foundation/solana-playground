@@ -32,7 +32,7 @@ global {
   };
 
   /** Rust Analyzer crates */
-  const CRATES: { importable: string[]; transitive: string[] };
+  const CRATES: { importable: string[] };
 
   /** Supported client packages */
   const PACKAGES: {
