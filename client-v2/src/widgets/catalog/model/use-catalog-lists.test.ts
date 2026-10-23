@@ -35,13 +35,13 @@ const tutorial = (name: string) => ({
   level: "Beginner",
   framework: "Anchor",
 });
-const program = (name: string) => ({
+const program = (name: string, categories = ["DeFi"]) => ({
   name,
   description: `About ${name}`,
   repo: `https://github.com/x/${name}`,
   icon: `/${name}.png`,
   framework: "Anchor",
-  categories: ["DeFi"],
+  categories,
 });
 const noOpen = () => undefined;
 
@@ -108,4 +108,32 @@ it("reports a program list it cannot read, and Retry reads it again", async () =
     if (list.state === "failed") list.onRetry();
   });
   await waitFor(() => expect(result.current.count).toBe(1));
+});
+
+it("tags a program with its framework and first category only", async () => {
+  deps.fetchPrograms
+    .mockReset()
+    .mockResolvedValue([
+      program("drift", ["DeFi", "Lending", "Trading"]),
+      program("bare", []),
+    ]);
+  const { result } = renderHook(() => useProgramList("", noOpen));
+
+  await waitFor(() => expect(result.current.count).toBe(2));
+  const list = result.current.list;
+  expect(list.state === "ready" && list.cards.map((c) => c.tags)).toEqual([
+    [{ label: "Anchor" }, { label: "DeFi" }],
+    [{ label: "Anchor" }],
+  ]);
+});
+
+it("still finds a program by a category its card leaves out", async () => {
+  deps.fetchPrograms
+    .mockReset()
+    .mockResolvedValue([program("drift", ["DeFi", "Lending"])]);
+  const { result } = renderHook(() => useProgramList("lending", noOpen));
+
+  await waitFor(() => expect(result.current.count).toBe(1));
+  const list = result.current.list;
+  expect(list.state === "ready" && list.cards.length).toBe(1);
 });

@@ -61,7 +61,8 @@ const DEFAULT_PROVIDER = PROVIDERS.find((p) => p.id === "default")!;
 /** Everything behind the accordion: each of these needs a key of your own */
 const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
 
-const FIELD_LABEL = "text-xs tracking-[0.1em] text-muted-foreground";
+/** The prototype's field label: small, grey, in sentence case, untracked */
+const FIELD_LABEL = "text-[0.7rem] font-normal text-muted-foreground";
 
 /** The backend, and maybe the model, Connect a model opens on */
 export interface ConnectPreset {
@@ -340,7 +341,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         </Intro>
       )}
 
-      <Label as="div">BACKEND</Label>
+      <Label as="div">Backend</Label>
       <Providers>
         <RadioGroup
           aria-label="Backend"
@@ -383,7 +384,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         <>
           <Field className="mb-3">
             <FieldLabel htmlFor="assistant-base-url" className={FIELD_LABEL}>
-              BASE URL
+              Base URL
             </FieldLabel>
             <Input
               id="assistant-base-url"
@@ -397,7 +398,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
           </Field>
           <Field className="mb-3">
             <FieldLabel htmlFor="assistant-model" className={FIELD_LABEL}>
-              MODEL
+              Model
             </FieldLabel>
             {provider.endpoint.models && (
               <Segmented
@@ -438,7 +439,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               htmlFor="assistant-model-select"
               className={FIELD_LABEL}
             >
-              MODEL
+              Model
             </FieldLabel>
             <Select
               value={activeSettings.model}
@@ -468,7 +469,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               htmlFor="assistant-effort-select"
               className={FIELD_LABEL}
             >
-              EFFORT
+              Effort
             </FieldLabel>
             <Select
               value={activeSettings.effort}
@@ -499,7 +500,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         <>
           <Field className="mb-3">
             <FieldLabel htmlFor="assistant-api-key" className={FIELD_LABEL}>
-              API KEY{provider.keyOptional ? " (OPTIONAL)" : ""}
+              API key{provider.keyOptional ? " (optional)" : ""}
             </FieldLabel>
             <Input
               id="assistant-api-key"
@@ -582,7 +583,6 @@ const Label = styled.label`
     display: block;
     color: ${theme.colors.default.textSecondary};
     font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.1em;
     padding-bottom: 0.4375rem;
   `}
 `;

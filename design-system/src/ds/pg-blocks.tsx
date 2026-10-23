@@ -776,7 +776,7 @@ function PlaygroundComponents() {
         ))}
       </Block>
 
-      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring." className="grid gap-3 md:grid-cols-2">
+      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring. The glyph media variant is the icon alone, with no tile behind it, for a vertical card." className="grid gap-3 md:grid-cols-2">
         <ActionCard>
           <ActionCardMedia><Coins /></ActionCardMedia>
           <ActionCardContent>
@@ -785,6 +785,13 @@ function PlaygroundComponents() {
             <ActionCardDescription>Take tips in SOL and send them on to one wallet.</ActionCardDescription>
           </ActionCardContent>
           <ActionCardAction><Button size="sm" variant="outline">Open</Button></ActionCardAction>
+        </ActionCard>
+        <ActionCard orientation="vertical">
+          <ActionCardMedia variant="glyph"><Plus /></ActionCardMedia>
+          <ActionCardContent>
+            <ActionCardTitle><ActionCardLink href="#c-action-card">New project</ActionCardLink></ActionCardTitle>
+            <ActionCardDescription>Anchor, Native or Seahorse</ActionCardDescription>
+          </ActionCardContent>
         </ActionCard>
         <ActionCard variant="frame">
           <ActionCardMedia><Vote /></ActionCardMedia>

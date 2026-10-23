@@ -54,15 +54,19 @@ function ActionCardMedia({
   className,
   variant = "icon",
   ...props
-}: React.ComponentProps<"div"> & { variant?: "icon" | "image" }) {
+}: React.ComponentProps<"div"> & { variant?: "icon" | "image" | "glyph" }) {
+  /* glyph is the icon alone, with no tile or clip behind it, so it sits in
+     the text's column; its bottom margin assumes a vertical card */
   return (
     <div
       data-slot="action-card-media"
       data-variant={variant}
       className={cn(
-        "grid shrink-0 place-items-center overflow-hidden rounded-lg bg-surface-raised text-muted-foreground",
+        "grid shrink-0 place-items-center text-muted-foreground",
+        variant !== "glyph" && "overflow-hidden rounded-lg bg-surface-raised",
         variant === "icon" && "size-11 [&_svg:not([class*='size-'])]:size-5",
         variant === "image" && "h-[2.625rem] w-14 *:size-full *:object-cover",
+        variant === "glyph" && "mb-1 size-[1.125rem] *:size-full",
         className
       )}
       {...props}
