@@ -30,9 +30,25 @@ const BaseSettingRow = ({
       )}
     >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{name}</span>
+        {/* On a phone, the body type and the description in the
+            secondary one, as the prototype's phone sets them */}
+        <span
+          className={cn(
+            "text-sm font-medium text-foreground",
+            phone && "text-body font-read"
+          )}
+        >
+          {name}
+        </span>
         {description && (
-          <span className="text-xs text-muted-foreground">{description}</span>
+          <span
+            className={cn(
+              "text-xs text-muted-foreground",
+              phone && "text-control font-read"
+            )}
+          >
+            {description}
+          </span>
         )}
       </div>
       <div

@@ -221,7 +221,10 @@ const BaseSettingsPage = ({
               >
                 <h2
                   id={headingId(s.id)}
-                  className="border-b border-border pb-2 text-base font-semibold text-foreground"
+                  className={cn(
+                    "border-b border-border pb-2 text-base font-semibold text-foreground",
+                    phone && "text-title font-act"
+                  )}
                 >
                   {s.title}
                 </h2>

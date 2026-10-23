@@ -312,3 +312,28 @@ it("should draw a default submit as the stock button", () => {
     screen.getByRole("button", { name: "Rename" }).getAttribute("data-slot")
   ).toBe("button");
 });
+
+it("on a phone, has no Cancel beside the bar's Close and draws a brand submit as the accent", () => {
+  const onSubmit = vi.fn();
+  render(
+    <Modal open>
+      <BaseModalFrame
+        phone
+        title={{ text: "Connect a model", hidden: false }}
+        submit={{
+          text: "Connect",
+          status: "ready",
+          variant: "brand",
+          onSubmit,
+          onCancel: vi.fn(),
+        }}
+        size="default"
+      />
+    </Modal>
+  );
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  const submit = screen.getByRole("button", { name: "Connect" });
+  expect(submit.getAttribute("data-variant")).toBe("accent");
+  fireEvent.click(submit);
+  expect(onSubmit).toHaveBeenCalledTimes(1);
+});
