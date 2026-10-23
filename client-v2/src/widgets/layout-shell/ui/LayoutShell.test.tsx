@@ -201,10 +201,15 @@ const shellTree = (
           </>
         )}
         stageTabs={<div>stage tabs</div>}
-        files={({ collapsed, toggle }) => (
+        files={({ collapsed, toggle, phone }) => (
           // Stands for a control inside the column; the stage bar carries
           // "Collapse project panel" / "Expand project panel"
-          <button type="button" aria-expanded={!collapsed} onClick={toggle}>
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            data-phone={phone}
+            onClick={toggle}
+          >
             Files column control
           </button>
         )}
@@ -287,6 +292,13 @@ it("should report the navigation's own button as a button", () => {
   shell();
   fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
   expect(toggled()).toEqual([{ panel: "nav", open: false, via: "button" }]);
+});
+
+it("should tell the files column it is not in the phone's Sheet", () => {
+  shell();
+  expect(
+    screen.getByRole("button", { name: "Files column control" }).dataset.phone
+  ).toBe("false");
 });
 
 it("should toggle the files column by Cmd+E and by its button, and say which", () => {
@@ -1210,6 +1222,8 @@ describe("on a phone", () => {
   it("closes the Files sheet by the column's own button", () => {
     phoneShell();
     tap(button("Files"));
+    // The column is told it is in the Sheet, so Flow draws no Hide files there
+    expect(button("Files column control").dataset.phone).toBe("true");
     fireEvent.click(button("Files column control"));
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
     expect(toggled().at(-1)).toEqual({

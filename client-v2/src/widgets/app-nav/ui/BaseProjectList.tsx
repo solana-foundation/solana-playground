@@ -187,8 +187,10 @@ const Row = ({
       )}
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
+          {/* The open project's stays in view, as the prototype draws it;
+              the others show on hover */}
           <SidebarMenuAction
-            showOnHover
+            showOnHover={!isCurrent}
             aria-label={`Actions for ${entry.name}`}
           >
             <EllipsisVertical />

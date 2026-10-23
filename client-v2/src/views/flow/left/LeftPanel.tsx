@@ -1,10 +1,10 @@
 import type { FC } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PanelLeft } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
-import Eyebrow from "./Eyebrow";
 import StepRail from "../lessons/StepRail";
 import { cursorStep, foldRecord, PgLesson } from "../lessons";
 import Explorer from "../../sidebar/explorer/Component";
@@ -23,7 +23,28 @@ interface LeftPanelProps {
    * (design.md, "Frame chrome (5.25)"), so it draws nothing
    */
   collapsed: boolean;
+  /**
+   * Hides the column, as ⌘E does; its button sits in the column's head, as
+   * the prototype draws it. Absent where nothing can hide the column (the
+   * phone's Files sheet has its own close).
+   */
+  onHide?: () => void;
 }
+
+/** The head's way to hide the column */
+const HideButton = ({ onHide }: { onHide: () => void }) => (
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    aria-label="Hide files"
+    title="Hide files (⌘E)"
+    className="ml-auto text-muted-foreground"
+    onClick={onHide}
+  >
+    <PanelLeft />
+  </Button>
+);
 
 /**
  * Where you are inside the current project. Which project you are in is
@@ -33,6 +54,7 @@ interface LeftPanelProps {
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
+  onHide,
 }) => {
   // From the first commit, not from the subscription's first call: a commit
   // without the lesson draws the tree, and the scroll put back below would
@@ -117,6 +139,16 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
                 Files
               </SegmentedItem>
             </Segmented>
+            {onHide && <HideButton onHide={onHide} />}
+          </div>
+        )}
+        {/* The prototype's head: the column's name and a way to hide it */}
+        {!inLesson && (
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+            <span className="truncate text-[0.8125rem] font-medium text-muted-foreground">
+              Files
+            </span>
+            {onHide && <HideButton onHide={onHide} />}
           </div>
         )}
         <Body
@@ -130,7 +162,6 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
             <StepRail state={lesson} />
           ) : (
             <>
-              {!inLesson && <Eyebrow>Files</Eyebrow>}
               <ExplorerContainer>
                 <Explorer />
               </ExplorerContainer>
