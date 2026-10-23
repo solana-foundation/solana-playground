@@ -29,6 +29,12 @@ function LogoMark({ className, ...props }: React.ComponentProps<"svg">) {
   )
 }
 
+/* The play shape alone, for a button that is already round (the composer's
+   send): the mark cropped to the shape, which sits inside the ring's hole */
+function LogoPlay(props: React.ComponentProps<"svg">) {
+  return <LogoMark {...props} data-slot="logo-play" viewBox="61 48 116 116" />
+}
+
 /* The lockup's paths, unchanged from the prototype's `PlaygroundLogoNext`
    (branch prototype/redesign), in its 911 × 202 box: the mark, then the words */
 const LOCKUP_MARK =
@@ -79,4 +85,4 @@ function LogoText({ className, ...props }: React.ComponentProps<"span">) {
   return <span data-slot="logo-text" className={cn("tracking-tight", className)} {...props} />
 }
 
-export { Logo, LogoLockup, LogoMark, LogoText }
+export { Logo, LogoLockup, LogoMark, LogoPlay, LogoText }

@@ -104,3 +104,20 @@ it("opens the assistant from the composer", () => {
   fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
   expect(p.onAsk).toHaveBeenCalledTimes(1);
 });
+
+it("lays out the prototype's 736 px column, 20 px apart, with its send", () => {
+  draw(props());
+  const home = screen.getByRole("region", { name: "Home" });
+  // min(50rem, 100%) less 2rem a side
+  expect(home.className).toMatch(/\bmax-w-\[50rem\]/);
+  expect(home.className).toMatch(/\bpx-8\b/);
+  expect(home.className).toMatch(/\bgap-5\b/);
+  expect(home.querySelector('[data-slot="logo-play"]')).not.toBeNull();
+});
+
+it("lets its send open the assistant too", () => {
+  const p = props();
+  const home = draw(p);
+  fireEvent.click(home.getByRole("button", { name: "Send" }));
+  expect(p.onAsk).toHaveBeenCalledTimes(1);
+});
