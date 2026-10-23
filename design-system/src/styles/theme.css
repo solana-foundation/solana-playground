@@ -77,13 +77,14 @@
   --font-mono: var(--font-code);
 
   /* ── radius: controls 8, panels 12, cards and dialogs 16 ──────────── */
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* The prototype's steps, 6 / 8 / 12 / 16 at the 8px base: md, lg, xl, 2xl */
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
   --radius-control: var(--radius);
   --radius-panel: calc(var(--radius) * 1.5);
   --radius-card: calc(var(--radius) * 2);
