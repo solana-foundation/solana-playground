@@ -34,6 +34,7 @@ describe("/api/conversations", () => {
     // `Origin` would be answering a question it is not asking.
     delete process.env.AUTH_BASE_URL;
     delete process.env.VERCEL_URL;
+    delete process.env.VERCEL_BRANCH_URL;
   });
 
   /** Past the kill switch, so the case can assert on a later gate */
@@ -111,7 +112,7 @@ describe("/api/conversations", () => {
     });
 
     it("checks nothing when there is no deployment origin to check", async () => {
-      // Neither AUTH_BASE_URL nor VERCEL_URL, which is local development
+      // No AUTH_BASE_URL and no Vercel hostname, which is local development
       enableSync();
       const mod = await load();
       const res = makeRes();

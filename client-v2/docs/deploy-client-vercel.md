@@ -1,6 +1,6 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration deploys the Production Branch ([settings](#verified-vercel-project-settings)) from the dashboard's Root Directory, `client-v2`. A push to any other branch is cancelled by the Ignored Build Step; a preview comes from `preview.yml` or the Makefile, which build the prebuilt output on a runner ([Known gaps](#known-gaps)). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
+Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, any other branch to a preview. `preview.yml` and the Makefile also deploy previews, built on a runner, each with a Neon branch of its own ([Neon preview databases](neon.md)). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
 
 ## Release checklist: `client-v2` to production
 
@@ -20,10 +20,11 @@ as soon as the Root Directory points at `client-v2`.
    - `AUTH_SECRET` — generated for production, never reused from a preview.
    - `AUTH_BASE_URL` — the production origin. **Required here, not optional:**
      without it `resolveBaseURL()` (`src/features/auth/model/auth.mjs`) falls
-     back to `VERCEL_URL`, the per-deployment hostname, so the session cookie
-     and the origin checks (`isAllowedOrigin`) in `api/agent.mjs`,
-     `api/mcp.mjs`, `api/projects.mjs` and `api/conversations.mjs` are issued
-     for a host nobody visits. A production build with `AGENT_API_KEY` fails
+     back to Vercel's hostnames for the deployment, its per-deployment URL
+     and branch alias, so the session cookie and the origin checks
+     (`isAllowedOrigin`) in `api/agent.mjs`, `api/mcp.mjs`,
+     `api/projects.mjs` and `api/conversations.mjs` are issued for hosts
+     nobody visits. A production build with `AGENT_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
    - `AGENT_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
@@ -57,7 +58,7 @@ as soon as the Root Directory points at `client-v2`.
    missing what it expects — and `/api/sync` still reports `db: "ok"`, because
    it checks reachability, not schema.
 7. **Dashboard settings.** Production Branch `master`; Root Directory →
-   `client-v2`; the Ignored Build Step still lets `master` through.
+   `client-v2`.
 8. **Deploy.** Redeploy the latest `master` commit from the dashboard, or
    push to `master`.
 9. **Smoke test production** the same way as step 5.
@@ -141,7 +142,7 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 
 ## Deploy
 
-- **Automatic:** push the Production Branch. The Git integration builds `client-v2`, the dashboard's Root Directory, and deploys to production. A push to any other branch is cancelled by the Ignored Build Step ([Known gaps](#known-gaps)).
+- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to any other branch deploys a preview, reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
 - **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending.
 - **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
@@ -262,9 +263,11 @@ the body or calls the upstream:
 | `503` | The session lookup failed, a database or Better Auth outage; logged as `auth: session lookup failed` |
 | `401` | No Better Auth session |
 
-The `403` compares against `AUTH_BASE_URL` (or `VERCEL_URL`), as on the sync
-routes: a page opened on another hostname of the same deployment, such as a
-branch alias or a `www` domain, gets `403` on turns and sync writes.
+The `403` compares against `deploymentOrigins()`, as on the sync routes:
+`AUTH_BASE_URL` where it is set, otherwise both of a preview's hostnames (see
+[Sign-in on previews](#sign-in-on-previews)). A page opened on any other
+hostname of the same deployment, such as a `www` domain or an alias assigned
+by hand, gets `403` on turns and sync writes.
 
 An upstream that refuses the key with `401` or `403` is answered `502` and
 logged as `agent: upstream refused the key`, so the panel never reads it as its
@@ -367,6 +370,31 @@ Auth's own user fields, so `mapProfileToUser` does not reach it. The header
 chip shows the GitHub name instead, and the account menu has no `@login` line
 and no GitHub profile link.
 
+#### Which preview URLs sign in
+
+A preview answers on two hostnames Vercel generates, and both sign in:
+
+| Hostname | Variable | Example |
+| --- | --- | --- |
+| Per-deployment: one commit, never moves | `VERCEL_URL` | `solana-playground-<hash>-hoodies.vercel.app` |
+| Branch alias: follows the branch's latest deployment | `VERCEL_BRANCH_URL` | `solana-playground-git-new-face-hoodies.vercel.app` |
+
+With no `AUTH_BASE_URL`, `resolveBaseURL()` hands Better Auth a dynamic base
+URL, `{ allowedHosts: [VERCEL_BRANCH_URL, VERCEL_URL] }`. Each request resolves
+to the host it arrived on, so sign-in starts there, GitHub's answer comes back
+there through the host, and the session cookie is set there. The two
+hostnames hold separate sessions: signing in on one does not sign in on the
+other. `isAllowedOrigin` (`/api/agent`, `/api/mcp`, the sync routes) accepts
+either origin.
+
+Any other hostname is refused. Better Auth throws `Host "…" is not in the
+allowed hosts list` for a host outside `allowedHosts`, and checks the `Origin`
+of a sign-in that carries a cookie, which a protected preview always does
+(`_vercel_jwt`). A request from an origin outside the list gets `403
+INVALID_ORIGIN`. Before both hostnames were listed, that was what the branch
+alias got, because the base URL named only `VERCEL_URL`. Production is
+unaffected: `AUTH_BASE_URL` wins, and it is the one origin there.
+
 ### Known gaps
 
 - **No signed-in end-to-end coverage.** The e2e suite runs signed out, so the
@@ -377,11 +405,10 @@ and no GitHub profile link.
   [Assistant default backend](#assistant-default-backend).
 - The deployed-preview reachability of `DATABASE_URL` has not been verified;
   everything so far has run against a local container.
-- **Git-triggered preview builds never run.** The Ignored Build Step exits 0
-  for anything that is not production, so preview builds are switched off at
-  the project level. Previews come from a runner instead (`preview.yml`, or the
-  Makefile by hand), which builds and deploys the prebuilt output; the first
-  one deployed on 2026-10-15.
+- **A Git-triggered preview has no Neon branch of its own.** It runs with the
+  project's Preview-scoped variables. Only `preview.yml` and the Makefile cut a
+  Neon branch and pass it as `DATABASE_URL`
+  ([Neon preview databases](neon.md)).
 - **The Neon targets are untested against real Neon.** See
   [Neon preview databases](neon.md#known-gaps).
 

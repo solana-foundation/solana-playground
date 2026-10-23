@@ -30,12 +30,18 @@ const needsDatabase = process.env.DATABASE_URL ? false : "needs DATABASE_URL";
 const HOST = "https://solana-playground-teal.vercel.app";
 const PREVIEW_HOST = "solana-playground-abc123-hoodies.vercel.app";
 const PREVIEW = `https://${PREVIEW_HOST}`;
+const BRANCH_HOST = "solana-playground-git-new-face-hoodies.vercel.app";
+const BRANCH = `https://${BRANCH_HOST}`;
 const PROXY_SECRET = "proxy-secret-proxy-secret-proxy-secret";
 
-/** The environment a preview deploys with: the host's URL, no base URL */
+/**
+ * The environment a preview deploys with: the host's URL, no base URL, and
+ * Vercel's two hostnames for it
+ */
 const asPreview = () => {
   process.env.VERCEL_ENV = "preview";
   process.env.VERCEL_URL = PREVIEW_HOST;
+  process.env.VERCEL_BRANCH_URL = BRANCH_HOST;
   process.env.AUTH_OAUTH_PROXY_URL = HOST;
   process.env.AUTH_OAUTH_PROXY_SECRET = PROXY_SECRET;
 };
@@ -55,12 +61,20 @@ const complete = (auth, origin) =>
     )
   );
 
-/** What `signIn.social` sends from the popup */
+/**
+ * What `signIn.social` sends from the popup. With a cookie, as a browser on a
+ * protected preview always has `_vercel_jwt`: Better Auth checks the `Origin`
+ * only on a request that carries one.
+ */
 const signIn = (auth, origin) =>
   auth.handler(
     new Request(`${origin}/api/auth/sign-in/social`, {
       method: "POST",
-      headers: { origin, "content-type": "application/json" },
+      headers: {
+        origin,
+        cookie: "_vercel_jwt=x",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({
         provider: "github",
         callbackURL: "/api/auth-complete?nonce=n",
@@ -68,6 +82,19 @@ const signIn = (auth, origin) =>
       }),
     })
   );
+
+/**
+ * Where the host sends the user back to after GitHub: the `callbackURL` the
+ * proxy seals into the `state` it hands GitHub, as the host decrypts it
+ */
+const returnURL = async (res) => {
+  const { symmetricDecrypt } = await import("better-auth/crypto");
+  const state = new URL((await res.json()).url).searchParams.get("state");
+  const open = async (data) =>
+    JSON.parse(await symmetricDecrypt({ key: PROXY_SECRET, data }));
+  const { stateCookie } = await open(state);
+  return new URL((await open(stateCookie)).callbackURL);
+};
 
 describe("oauthProxyPlugins", () => {
   // Cleared for each case: `yarn test-api` loads `.env`
@@ -77,6 +104,7 @@ describe("oauthProxyPlugins", () => {
       AUTH_BASE_URL: undefined,
       VERCEL_ENV: undefined,
       VERCEL_URL: undefined,
+      VERCEL_BRANCH_URL: undefined,
       AUTH_OAUTH_PROXY_URL: undefined,
       AUTH_OAUTH_PROXY_SECRET: undefined,
       AUTH_SECRET: "a-test-secret-of-at-least-32-bytes!",
@@ -85,6 +113,39 @@ describe("oauthProxyPlugins", () => {
     });
   });
   afterEach(() => restore());
+
+  test("serves a preview on both of its hostnames", async () => {
+    asPreview();
+    const { deploymentOrigins } = await load();
+    assert.deepEqual(deploymentOrigins(), [BRANCH, PREVIEW]);
+  });
+
+  test("serves a preview with no branch alias on its deployment URL", async () => {
+    asPreview();
+    delete process.env.VERCEL_BRANCH_URL;
+    const { deploymentOrigins } = await load();
+    assert.deepEqual(deploymentOrigins(), [PREVIEW]);
+  });
+
+  test("serves AUTH_BASE_URL alone wherever it is set", async () => {
+    asHost();
+    process.env.VERCEL_URL = PREVIEW_HOST;
+    process.env.VERCEL_BRANCH_URL = BRANCH_HOST;
+    const { deploymentOrigins } = await load();
+    assert.deepEqual(deploymentOrigins(), [HOST]);
+  });
+
+  test("allows writes from either of a preview's hostnames", async () => {
+    asPreview();
+    const { isAllowedOrigin } = await load();
+    const from = (origin) => isAllowedOrigin({ headers: { origin } });
+    assert.equal(from(BRANCH), true);
+    assert.equal(from(PREVIEW), true);
+    assert.equal(
+      from("https://solana-playground-evil-hoodies.vercel.app"),
+      false
+    );
+  });
 
   test("is off without the secret", async () => {
     process.env.VERCEL_URL = PREVIEW_HOST;
@@ -154,6 +215,39 @@ describe("oauthProxyPlugins", () => {
       assert.equal(
         github.searchParams.get("redirect_uri"),
         `${HOST}/api/auth/callback/github`
+      );
+    }
+  );
+
+  // A single base URL made the other hostname answer INVALID_ORIGIN; the
+  // session must also come back to the hostname the user is on, since a
+  // cookie set on the other one would leave them signed out here
+  for (const [label, origin] of [
+    ["branch alias", BRANCH],
+    ["deployment URL", PREVIEW],
+  ]) {
+    test(
+      `signs in on a preview's ${label} and returns there`,
+      { skip: needsDatabase },
+      async () => {
+        asPreview();
+        const { getAuth } = await load();
+        const res = await signIn(getAuth(), origin);
+        assert.equal(res.status, 200);
+        assert.equal((await returnURL(res)).origin, origin);
+      }
+    );
+  }
+
+  test(
+    "refuses sign-in on a host that is not the preview's",
+    { skip: needsDatabase },
+    async () => {
+      asPreview();
+      const { getAuth } = await load();
+      await assert.rejects(
+        signIn(getAuth(), "https://solana-playground-evil-hoodies.vercel.app"),
+        /not in the allowed hosts list/
       );
     }
   );

@@ -8,8 +8,8 @@ through the project-level `DATABASE_URL`; see [Deploy the client to Vercel](depl
 ## Previews from a PR label
 
 The Neon project caps its branch count. The Vercel integration's own option, a branch for every preview
-deployment, created one for every pushed git branch: Vercel creates the deployment, and the integration its
-branch, before the Ignored Build Step cancels the build. So that option is off, and
+deployment, creates one for every pushed git branch, since the Git integration deploys every push. So that
+option is off, a preview the Git integration deploys runs with the project's Preview-scoped variables, and
 [`preview.yml`](../../.github/workflows/preview.yml) owns preview branches instead:
 
 | PR event | What happens |
@@ -19,9 +19,8 @@ branch, before the Ignored Build Step cancels the build. So that option is off, 
 
 A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs that
 Dependabot triggers get no deploy secrets and are skipped, and a Dependabot PR never gets a preview, even
-labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, so the project's
-Ignored Build Step (which cancels every preview build) does not apply, and `vercel-install.sh` takes the wasm
-packages from Remote Cache with the runner's `VERCEL_TOKEN`.
+labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, and
+`vercel-install.sh` takes the wasm packages from Remote Cache with the runner's `VERCEL_TOKEN`.
 
 The deployment gets only `DATABASE_URL` from the workflow. The app reads no other `DATABASE_*` variable, so the
 integration's project-level ones, if still set for Preview, are unused.

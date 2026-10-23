@@ -43,7 +43,7 @@ if (production) {
     fail(
       "AUTH_BASE_URL is unset or empty. Without it the session cookie and " +
         "the origin check on /api/agent, /api/mcp and the sync routes use " +
-        "VERCEL_URL, a hostname nobody visits."
+        "Vercel's own hostnames for the deployment, which nobody visits."
     );
   }
   if (baseUrl && !URL.canParse(baseUrl)) {
