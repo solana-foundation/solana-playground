@@ -103,6 +103,17 @@ describe("BaseProjectList", () => {
     ).toBe("page");
   });
 
+  /** The prototype keeps the open project's "⋮" in view, not on hover only */
+  it("shows the open project's actions without a hover", () => {
+    draw();
+    const hidden = (name: string) =>
+      screen
+        .getByRole("button", { name: `Actions for ${name}` })
+        .className.includes("md:opacity-0");
+    expect(hidden("alpha")).toBe(false);
+    expect(hidden("beta")).toBe(true);
+  });
+
   it("marks a pinned row, whose menu offers Unpin", () => {
     draw();
     const projects = screen.getByRole("group", { name: "Projects" });

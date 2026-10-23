@@ -78,10 +78,10 @@ const anyTheme: DefaultTheme = new Proxy(
   }
 ) as unknown as DefaultTheme;
 
-const draw = (collapsed: boolean) =>
+const draw = (collapsed: boolean, onHide?: () => void) =>
   render(
     <ThemeProvider theme={anyTheme}>
-      <LeftPanel collapsed={collapsed} />
+      <LeftPanel collapsed={collapsed} onHide={onHide} />
     </ThemeProvider>
   );
 
@@ -175,11 +175,26 @@ describe("LeftPanel in the flush frame", () => {
     draw(false);
     expect(document.getElementById("root-dir")).not.toBeNull();
     expect(screen.getByRole("button", { name: "+ New file" })).toBeTruthy();
-    // No tab row at all: the column's only fold control is the stage bar's
+    // No tab row outside a lesson
     expect(document.querySelector('[data-slot="segmented"]')).toBeNull();
     expect(screen.queryByRole("group", { name: "Lesson panel" })).toBeNull();
     expect(document.getElementById("flow-left-tab-steps")).toBeNull();
     expect(document.getElementById("flow-left-tab-files")).toBeNull();
+  });
+
+  /** The prototype's head: "Files" and a way to hide the column */
+  it("hides the column from its own head, named with its key", () => {
+    const onHide = vi.fn();
+    draw(false, onHide);
+    const hide = screen.getByRole("button", { name: "Hide files" });
+    expect(hide.getAttribute("title")).toBe("Hide files (\u2318E)");
+    fireEvent.click(hide);
+    expect(onHide).toHaveBeenCalledOnce();
+  });
+
+  it("draws no hide button where nothing can hide it", () => {
+    draw(false);
+    expect(screen.queryByRole("button", { name: "Hide files" })).toBeNull();
   });
 
   it("draws nothing while hidden", () => {

@@ -47,9 +47,14 @@ export interface LayoutShellProps {
    */
   stageTabs: ReactNode;
   /**
-   * The files column. `collapsed` is never true in the phone's Files Sheet.
+   * The files column. `collapsed` is never true in the phone's Files Sheet;
+   * `phone` says the column is in that Sheet, where `toggle` closes it.
    */
-  files: (panel: { collapsed: boolean; toggle: () => void }) => ReactNode;
+  files: (panel: {
+    collapsed: boolean;
+    toggle: () => void;
+    phone: boolean;
+  }) => ReactNode;
   /**
    * The stage. `openFiles` opens the phone's Files sheet, for a control in the
    * stage that points at the files column (the lesson band's "Show the steps"),
@@ -529,17 +534,19 @@ const LayoutShell = ({
       files={(stock) => {
         // In the phone's Files Sheet the column is always open, so a control
         // of its own, if it draws one, closes the Sheet, as ⌘E does there
-        // (Flow's column draws none since the stage bar took its toggle)
+        // (Flow's column draws none there: the Sheet has its own close)
         if (stock.isMobile) {
           return files({
             collapsed: false,
             toggle: toggleNav(stock.toggle),
+            phone: true,
           });
         }
         return files({
           collapsed: !state.open.files,
           toggle: () =>
             setOpen("files", { open: !state.open.files, via: "button" }),
+          phone: false,
         });
       }}
       sheetFont={{
