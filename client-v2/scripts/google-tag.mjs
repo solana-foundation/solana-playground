@@ -9,15 +9,10 @@ export const GTAG_SRC = "https://www.googletagmanager.com/gtag/js";
 // The id lands inside an inline script, so anything but the GA4 shape is refused
 const GA4_ID = /^G-[A-Z0-9]+$/;
 
-// A regex, not includes(GTAG_SRC): js/incomplete-url-substring-sanitization reads includes as a URL check
-const GTAG_SRC_PATTERN = GTAG_SRC.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-const GTAG_SCRIPT = new RegExp(
-  `<script\\b[^>]*\\ssrc=["']${GTAG_SRC_PATTERN}[?"']`
-);
-
 /**
  * `html` with the Google tag placed right after `<head>`, as Google's install
- * guide asks. Unchanged when a `<script src>` already loads gtag.js.
+ * guide asks. The template carries no tag of its own; whether a build gets one
+ * at all is decided by `REACT_APP_GA_MEASUREMENT_ID` in craco.config.js.
  *
  * @param {string} html
  * @param {string} id a GA4 measurement id
@@ -28,7 +23,6 @@ export const insertGoogleTag = (html, id) => {
   if (!GA4_ID.test(id)) {
     throw new Error(`REACT_APP_GA_MEASUREMENT_ID is not a GA4 id: ${id}`);
   }
-  if (GTAG_SCRIPT.test(html)) return html;
 
   const snippet =
     `<script async src="${GTAG_SRC}?id=${id}"></script>` +

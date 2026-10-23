@@ -217,8 +217,7 @@ async function getRegistry() {
   const registryPath = path.join(cargoHome, "registry", "src");
   const registries = await fs.readdir(registryPath);
   const cratesIoRegistry = registries.find((registry) => {
-    // Cargo's whole directory name, not a prefix: js/incomplete-url-substring-sanitization reads a prefix as a host check
-    return /^index\.crates\.io-[0-9a-f]+$/.test(registry);
+    return /^index\.crates\.io-[0-9a-f]+$/.test(registry); // foundation: whole cargo folder name, not startsWith (CodeQL js/incomplete-url-substring-sanitization)
   });
   if (!cratesIoRegistry) throw new Error("crates.io registry not found");
 
