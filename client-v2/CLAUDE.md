@@ -318,7 +318,11 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   built CSS (or bundle) for what the configuration must produce, Tailwind's
   `.flex` rule and the `_Pg*` class names, and the build tests
   (`yarn test-build`) read `build/`: `scripts/in-source-tests.build-test.mjs`
-  fails when a chunk holds an in-source test title. A test that runs the real
+  fails when a chunk holds an in-source test title,
+  `scripts/bundle-modules.build-test.mjs` when the bundle holds a module
+  under `src/test-utils/` or from `vitest` or `@vitest/*`, and
+  `scripts/bundle-info.build-test.mjs` when `bench/BUNDLE.md` no longer
+  matches the build. A test that runs the real
   build tool, with the production options, on representative input and
   asserts on its output is allowed: `scripts/esbuild-minify.test.mjs` (run by
   `yarn test-api`, no build needed) minifies two small chunks with
@@ -366,6 +370,12 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   push with `git config core.hooksPath .githooks` once per clone. To run a
   CI job itself, in its runner image, see
   [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
+- **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**
+  Run `yarn build-fast`, then `yarn bundle:info`, and commit the file;
+  `yarn test-build` fails while the snapshot differs from the build. A cell
+  changes only when its chunk moved past one rounding step, so a rebuild of
+  the same commit leaves the file as it is. CI posts the change against the
+  base branch's snapshot as a comment on the PR.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
   `client-v2.yml`, one shard per matrix entry) on every PR (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a

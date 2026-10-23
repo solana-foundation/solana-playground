@@ -78,6 +78,7 @@ yarn test                  # test-types + test-unit + build:bundle
 yarn test-types            # tsc --noEmit
 yarn test-e2e              # playwright
 yarn test-api              # node --test, for api/ and **/server/*.mjs
+yarn bundle:info           # rewrite bench/BUNDLE.md from build/; commit it when bundle sizes move
 yarn check-format          # prettier; CI enforces this
 yarn lint                  # eslint over src/, api/, e2e/; CI enforces this
 yarn spec:validate         # openspec validate --all --strict; CI enforces this

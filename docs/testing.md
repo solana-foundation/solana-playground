@@ -161,8 +161,9 @@ yarn --cwd client-v2 test-build
 Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
 `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
 minification", and "Build tests" in `reusable-client-v2-build.yml` require. `run check` covers the in-source
-collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle check
-(`scripts/in-source-tests.build-test.mjs`). Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle checks
+(`scripts/in-source-tests.build-test.mjs`, `scripts/bundle-modules.build-test.mjs`, and
+`scripts/bundle-info.build-test.mjs`, see M-7). Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 
@@ -710,7 +711,7 @@ Expect: one image per directory in `server/templates/`.
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
 not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
-`openspec/specs/client-v2-build/spec.md`; M-1 to M-6 walk its manual scenarios.
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk its manual scenarios.
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine
@@ -811,6 +812,34 @@ Expect:
       plant.
 - [ ] with `yarn --cwd client-v2 dev` running, the served `static/js/bundle.js` holds none of that module's test
       titles either.
+
+### M-7. the bundle snapshot is current and carries no test code
+
+```sh
+yarn --cwd client-v2 build-fast
+yarn --cwd client-v2 test-build
+yarn --cwd client-v2 bundle:info
+git -C client-v2 diff --exit-code -- bench/BUNDLE.md
+```
+
+`build-fast` writes `client-v2/build/bundle-modules.json`, the module list `BundleModulesPlugin` in
+`client-v2/craco.config.js` takes from webpack. `test-build` runs `scripts/bundle-modules.build-test.mjs` over that list
+and `scripts/bundle-info.build-test.mjs` against `client-v2/bench/BUNDLE.md`. The pure functions behind both
+(`bundle-info.test.mjs`, `bundle-info-diff.test.mjs`, `bundle-modules.test.mjs`) run under `test-api`.
+
+Expect:
+
+- [ ] `test-build` passes, and `bundle:info` leaves `bench/BUNDLE.md` unchanged: the `git diff` exits 0.
+- [ ] a planted test helper makes `bundle-modules.build-test.mjs` fail naming it: add
+      `import { storedValues } from "@/test-utils/stored-values";` and `console.log(storedValues(localStorage));` to
+      `client-v2/src/index.tsx`, rebuild, and run `test-build`; the failure lists `./src/test-utils/stored-values.ts`.
+      The call matters: webpack drops a bare `import "...";` of a module with no side effects, and nothing ships.
+      Revert the plant and rebuild.
+- [ ] a stale snapshot makes `bundle-info.build-test.mjs` fail naming `yarn bundle:info` and the row: change one
+      chunk's cell in `bench/BUNDLE.md` by more than one step (`10 kB` to `50 kB`) and run `test-build`. Restore the file.
+- [ ] `test-build` without a `client-v2/build/` fails instead of passing.
+- [ ] on a pull request to `master`, the build job's "Bundle change report" step summary holds the report, and one
+      comment headed "Bundle change vs `master`" appears on the pull request; a second push updates the same comment.
 
 ## 8. Parallel runs
 
