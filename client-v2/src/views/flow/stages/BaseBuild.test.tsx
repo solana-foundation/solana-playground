@@ -59,7 +59,8 @@ const lastIsActions = (container: HTMLElement) =>
     ?.lastElementChild?.getAttribute("data-slot");
 
 describe("BaseBuild", () => {
-  it("offers a first build with no brand button", () => {
+  /** The prototype's empty stage: no icon tile, the brand pill to press */
+  it("offers a first build as the brand pill", async () => {
     const p = props({ kind: "empty" });
     const { container } = render(<BaseBuild {...p} />);
 
@@ -67,8 +68,11 @@ describe("BaseBuild", () => {
       screen.getByRole("heading", { name: "Nothing built yet" })
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Build" }));
-    expect(p.onBuild).toHaveBeenCalled();
-    expect(brandButtons(container)).toHaveLength(0);
+    await vi.waitFor(() => expect(p.onBuild).toHaveBeenCalled());
+    expect(brandButtons(container)).toHaveLength(1);
+    expect(
+      container.querySelector('[data-slot="stage-empty-media"]')
+    ).toBeNull();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
