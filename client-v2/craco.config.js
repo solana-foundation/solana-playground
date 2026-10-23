@@ -50,6 +50,27 @@ const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
 const { esbuildMinifyOptions } = require("./scripts/esbuild-minify.mjs");
+const { MODULES_FILE, slimModules } = require("./scripts/bundle-modules.mjs");
+
+/** Writes the bundle's module list for `scripts/bundle-modules.build-test.mjs`; only the module list names a test helper that ships */
+class BundleModulesPlugin {
+  apply(compiler) {
+    compiler.hooks.done.tap("BundleModulesPlugin", (stats) => {
+      const { modules } = stats.toJson({
+        all: false,
+        modules: true,
+        nestedModules: true,
+        ids: true,
+        // CRA's filesystem cache serves most modules on a rebuild, and `all: false` would leave those out
+        cachedModules: true,
+      });
+      fs.writeFileSync(
+        path.join(compiler.outputPath, MODULES_FILE),
+        JSON.stringify(slimModules(modules))
+      );
+    });
+  }
+}
 
 /** CRA's in-build type check and lint, by plugin class name */
 const BUILD_ONLY_CHECKS = [
@@ -147,6 +168,7 @@ module.exports = {
         webpackConfig.plugins = webpackConfig.plugins.filter(
           (plugin) => !BUILD_ONLY_CHECKS.includes(plugin.constructor.name)
         );
+        webpackConfig.plugins.push(new BundleModulesPlugin());
       }
 
       // `build:bundle` passes GENERATE_SOURCEMAP=false, so CRA emits none; hidden maps
