@@ -26,23 +26,18 @@ const server: McpServerEntry = {
   name: "Docs",
   url: "https://example.com/mcp",
   enabled: true,
-  executor: "browser",
 };
 
 afterEach(() => vi.restoreAllMocks());
 
 it("flips Show more and Show less and says which state it is in", () => {
   vi.spyOn(PgAssistant, "mcpTools", "get").mockReturnValue({
-    docs: [{ name: "search", description: "x".repeat(300) }],
+    docs: [{ name: "search", description: "x".repeat(300), inputSchema: {} }],
   });
 
   render(
     <ThemeProvider theme={theme}>
-      <ServerConsole
-        server={server}
-        providerName="Anthropic"
-        hasServerExecutor
-      />
+      <ServerConsole server={server} providerName="Anthropic" />
     </ThemeProvider>
   );
   fireEvent.change(screen.getByRole("combobox"), {

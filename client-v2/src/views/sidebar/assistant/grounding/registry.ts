@@ -46,9 +46,8 @@ export const SKILLS: SkillEntry[] = [
  * server has no bypass configured.
  *
  * This list is only for servers wanted *in addition*: something CORS-open a
- * page can reach directly, or an `executor: "server"` entry to route through
- * Anthropic's connector instead. Empty by default, and deliberately not a
- * mirror of what the gateway serves — two lists would disagree.
+ * page can reach directly. Empty by default, and deliberately not a mirror of
+ * what the gateway serves, since two lists would disagree.
  */
 export const LOCAL_MCP_SERVERS: McpServerEntry[] = [];
 

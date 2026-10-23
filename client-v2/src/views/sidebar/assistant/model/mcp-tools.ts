@@ -1,7 +1,7 @@
 import { PgAssistant } from "../store";
 import { callTool } from "../grounding";
 import type { McpServerEntry, McpTool } from "../grounding";
-import type { ToolDefinition, ToolSchema } from "./types";
+import type { ToolDefinition, ToolSchema } from "@/shared/lib/ai";
 
 /** Separates the server from the tool, and is legal in every provider's names */
 const SEPARATOR = "__";
@@ -51,23 +51,11 @@ const define = (server: McpServerEntry, tool: McpTool): ToolDefinition => ({
 });
 
 /**
- * MCP tools the browser can execute, as ordinary tool definitions.
- *
- * This is what makes MCP a per-server matter rather than an Anthropic one: the
- * definitions are vendor-neutral, so any backend that calls tools gets them.
- * Servers whose executor is `server` are absent — the connector declares those
- * itself, and declaring them here too would show the model each tool twice.
- *
- * Reads the discovery cache rather than the network, because `createTools()` is
- * synchronous. A server not yet discovered contributes nothing this turn.
- *
- * @returns vendor-neutral definitions for every discovered browser server
+ * MCP tools, as ordinary tool definitions, so any backend that calls tools gets them.
+ * Reads the discovery cache, because `createTools()` is synchronous: a server not
+ * yet discovered contributes nothing this turn.
  */
 export const createMcpTools = (): ToolDefinition[] =>
-  PgAssistant.enabledMcpServers
-    .filter((server) => server.executor === "browser")
-    .flatMap((server) =>
-      (PgAssistant.mcpTools[server.id] ?? []).map((tool) =>
-        define(server, tool)
-      )
-    );
+  PgAssistant.enabledMcpServers.flatMap((server) =>
+    (PgAssistant.mcpTools[server.id] ?? []).map((tool) => define(server, tool))
+  );

@@ -1,7 +1,8 @@
 import { createLogger } from "@/shared/lib/logger";
+import type { ModelProvider } from "@/shared/lib/ai";
 import type { Connection } from "../store";
 import { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
-import { PROVIDERS, type ProviderId } from "./types";
+import { PROVIDERS } from "./types";
 
 export { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
 
@@ -25,7 +26,7 @@ export { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
  */
 const CONNECTION_KEY = "assistant.connection";
 
-const DEFAULT_ID: ProviderId = "default";
+const DEFAULT_ID: ModelProvider = "default";
 
 const log = createLogger("assistant:remembered-backend");
 
