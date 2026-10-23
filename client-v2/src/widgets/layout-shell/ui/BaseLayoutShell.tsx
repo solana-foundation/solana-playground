@@ -593,17 +593,17 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
           inside the provider instead, where the banner pushes it down rather
           than being covered by it. The frame is flush (design.md, "Frame
           chrome (5.25)"): the container keeps its right line, the columns'
-          divider, and drops its fill, so the navigation sits on the page's
-          ground like the other columns. */}
+          divider. Its fill is the page's colour, so it covers the window's
+          pattern as the prototype's navigation does. */}
           <Sidebar
             collapsible="icon"
-            className="absolute inset-y-0 left-0 h-auto border-border [&>[data-slot=sidebar-inner]]:bg-transparent"
+            className="absolute inset-y-0 left-0 h-auto border-border [&>[data-slot=sidebar-inner]]:bg-background"
           >
             <div className="contents" style={props.sheetFont}>
               <NavSlot nav={props.nav} />
             </div>
           </Sidebar>
-          <SidebarInset className="relative min-h-0 min-w-0">
+          <SidebarInset className="relative min-h-0 min-w-0 bg-transparent">
             {!workInFrame ? (
               // The column bar over Home (or over a page in Home's place) as
               // over the work: no stage tabs, since no stage shows

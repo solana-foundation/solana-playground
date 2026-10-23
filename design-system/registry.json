@@ -870,6 +870,21 @@
       ]
     },
     {
+      "name": "pattern",
+      "type": "registry:ui",
+      "title": "Pattern",
+      "description": "The brand pattern as the window's ground, lit where the pointer is; transparent panes show it.",
+      "registryDependencies": [
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/pattern.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "stage-empty",
       "type": "registry:ui",
       "title": "Stage empty",
