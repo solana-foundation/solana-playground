@@ -112,7 +112,8 @@ const Group = ({
       {/* The prototype's section heading: small, grey, sentence case */}
       <SidebarGroupLabel
         id={labelId}
-        className="mb-1 h-4 text-xs font-normal text-subtle"
+        // On a phone, the label type, lined up with the 52 px rows' text
+        className="mb-1 h-4 text-xs font-normal text-subtle max-md:mb-1.5 max-md:px-3 max-md:text-caption max-md:font-label"
       >
         {label}
       </SidebarGroupLabel>

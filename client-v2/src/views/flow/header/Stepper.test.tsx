@@ -145,3 +145,22 @@ describe("fill", () => {
     expect(list()).not.toMatch(/\bw-full\b/);
   });
 });
+
+describe("phone", () => {
+  beforeEach(() => {
+    observed.clear();
+    vi.stubGlobal("ResizeObserver", StubResizeObserver);
+  });
+
+  it("shows Build, Deploy and Interact in full, Write being the code's page", () => {
+    render(<Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} phone />);
+    expect(screen.queryByRole("tab", { name: /^Write:/ })).toBeNull();
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.id.replace(/^.*-/, ""))
+    ).toEqual(["build", "deploy", "interact"]);
+    resizeTo(STEPPER_FULL_WIDTH_PX - 1);
+    expect(screen.getByRole("tablist").getAttribute("data-compact")).toBe(
+      "false"
+    );
+  });
+});

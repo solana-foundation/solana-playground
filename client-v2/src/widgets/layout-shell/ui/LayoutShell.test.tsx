@@ -186,8 +186,11 @@ const shellTree = (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
       <LayoutShell
-        nav={({ collapsed, toggle, closeSheet }) => (
+        nav={({ collapsed, toggle, closeSheet, phone }) => (
           <>
+            <span data-testid="nav-shape">
+              {phone ? "menu page" : "column"}
+            </span>
             <button type="button" onClick={toggle}>
               {collapsed ? "Expand navigation" : "Collapse navigation"}
             </button>
@@ -885,6 +888,17 @@ describe("on a phone", () => {
   const boxOf = (el: Element) => el.closest("div[class*='flex']")!;
   const consoleBox = () =>
     consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']")!;
+
+  it("hands the navigation the menu page, whose toggle brings the work back", () => {
+    phoneShell();
+    expect(screen.getByTestId("nav-shape").textContent).toBe("menu page");
+    fireEvent.click(button("Menu"));
+    fireEvent.click(button("Collapse navigation"));
+    expect(events("layout_page_shown")).toEqual([
+      { page: "menu", via: "button" },
+      { page: "work", via: "button" },
+    ]);
+  });
 
   it("lands on the work page showing the code", () => {
     phoneShell();

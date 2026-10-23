@@ -32,12 +32,14 @@ export interface LayoutShellProps {
    * over it (settings, from the session footer): on a phone, where the
    * navigation is a page, it brings Work into view; from
    * `LAYOUT_BREAKPOINTS.phone` up, where the navigation is a column, it does
-   * nothing.
+   * nothing. `phone` is the pager's menu page (the stock `isMobile`), where
+   * the navigation draws the page's head and `toggle` closes it.
    */
   nav: (panel: {
     collapsed: boolean;
     toggle: () => void;
     closeSheet: () => void;
+    phone: boolean;
   }) => ReactNode;
   /**
    * The stage tabs, in a row across the files column and the stage, under the
@@ -521,6 +523,7 @@ const LayoutShell = ({
           collapsed: stock.collapsed,
           toggle: toggleNav(stock.toggle),
           closeSheet: closeNav,
+          phone: stock.isMobile,
         })
       }
       files={(stock) => {

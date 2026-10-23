@@ -253,7 +253,7 @@ const FlowFrame = () => {
           )}
           keepWork={page.workKept}
           cover={catalogSlot(catalog)}
-          nav={({ collapsed, toggle, closeSheet }) => {
+          nav={({ collapsed, toggle, closeSheet, phone: menuPage }) => {
             closeNavSheet.current = closeSheet;
             return (
               <AppNav
@@ -278,6 +278,7 @@ const FlowFrame = () => {
                 }}
                 onClosePage={catalogPage.close}
                 closeSheet={closeSheet}
+                phone={menuPage}
                 collapsed={collapsed}
                 onToggle={toggle}
                 logo={<LogoLockup aria-hidden="true" />}
@@ -304,6 +305,7 @@ const FlowFrame = () => {
                 }
                 setup={
                   <SetupList
+                    folded={menuPage}
                     onConnectAssistant={() => openConnectDialog("setup")}
                     onChooseNetwork={() => openSettings(closeSheet)("network")}
                   />
