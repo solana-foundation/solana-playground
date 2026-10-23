@@ -50,6 +50,37 @@ const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
 const { esbuildMinifyOptions } = require("./scripts/esbuild-minify.mjs");
+const { MODULES_FILE, slimModules } = require("./scripts/bundle-modules.mjs");
+const MODULES_PATH = path.join(__dirname, MODULES_FILE);
+
+/** Writes the bundle's module list for `scripts/bundle-modules.build-test.mjs`; only the module list names a test helper that ships */
+class BundleModulesPlugin {
+  apply(compiler) {
+    // Removed first, so a build that cannot write the list leaves none for the test to read as current
+    compiler.hooks.run.tap("BundleModulesPlugin", () => {
+      fs.rmSync(MODULES_PATH, { force: true });
+    });
+    compiler.hooks.done.tap("BundleModulesPlugin", (stats) => {
+      try {
+        const { modules } = stats.toJson({
+          all: false,
+          modules: true,
+          nestedModules: true,
+          ids: true,
+          // CRA's filesystem cache serves most modules on a rebuild, and `all: false` would leave those out
+          cachedModules: true,
+        });
+        fs.mkdirSync(path.dirname(MODULES_PATH), { recursive: true });
+        fs.writeFileSync(MODULES_PATH, JSON.stringify(slimModules(modules)));
+      } catch (e) {
+        // Only a build test reads the list, so a failure here must not fail a deployment
+        console.error(
+          `BundleModulesPlugin: wrote no ${MODULES_FILE}, so yarn test-build will fail: ${e.message}`
+        );
+      }
+    });
+  }
+}
 
 /** CRA's in-build type check and lint, by plugin class name */
 const BUILD_ONLY_CHECKS = [
@@ -151,6 +182,7 @@ module.exports = {
         webpackConfig.plugins = webpackConfig.plugins.filter(
           (plugin) => !BUILD_ONLY_CHECKS.includes(plugin.constructor.name)
         );
+        webpackConfig.plugins.push(new BundleModulesPlugin());
       }
 
       // `build:bundle` passes GENERATE_SOURCEMAP=false, so CRA emits none; hidden maps
