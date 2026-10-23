@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { CSSProperties, FormEvent, RefObject } from "react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { ExternalLink } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";

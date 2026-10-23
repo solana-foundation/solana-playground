@@ -1,7 +1,7 @@
 "use client"
 
 import { ChevronRightIcon } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { Collapsible as CollapsiblePrimitive } from "radix-ui"
 
 function Collapsible({

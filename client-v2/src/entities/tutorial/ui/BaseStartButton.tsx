@@ -4,7 +4,7 @@ import { CheckIcon } from "lucide-react";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Spinner } from "@/shared/ui/spinner";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 type BaseStartButtonProps = {
   progress: "new" | "started" | "completed";

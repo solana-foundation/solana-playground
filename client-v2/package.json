@@ -257,6 +257,10 @@
                 {
                   "name": "uuid",
                   "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "name": "cn",
+                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
                 }
               ],
               "patterns": [
@@ -298,6 +302,14 @@
         "rules": {
           "no-restricted-imports": "off",
           "no-restricted-syntax": "off"
+        }
+      },
+      {
+        "files": [
+          "src/shared/lib/utils.ts"
+        ],
+        "rules": {
+          "no-restricted-imports": "off"
         }
       },
       {

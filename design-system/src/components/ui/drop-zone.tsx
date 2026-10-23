@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* Where a file lands: an IDL, a keypair, a program to import. It is also a
    button to browse for one, since not everyone can drag. */

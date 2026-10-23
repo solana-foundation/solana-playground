@@ -12,7 +12,7 @@ import {
   DiffStat,
   DiffTitle,
 } from "@/shared/ui/diff";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import {
   diffLines,
   summarizeDiff,

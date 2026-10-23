@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* A build error, said the way a person would: what went wrong, where, and
    the line itself with the fault marked. The compiler's own words sit

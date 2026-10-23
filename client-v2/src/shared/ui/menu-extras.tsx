@@ -1,6 +1,6 @@
 import * as React from "react";
 import { ChevronRight } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
 
 /* What client-v2's four menus do that shadcn's menus leave out, as parts to

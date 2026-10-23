@@ -1,6 +1,6 @@
 import type { FC } from "react";
 import { ChevronDown } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";

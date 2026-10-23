@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Plus, Square } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 /* Where you ask the assistant for something: a note above it, the files it
    will read, the words, then the tools. Enter sends; Shift and Enter make a

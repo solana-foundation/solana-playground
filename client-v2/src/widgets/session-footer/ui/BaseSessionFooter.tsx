@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from "react";
 import { ChevronsUpDown } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import {

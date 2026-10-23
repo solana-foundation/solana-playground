@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* An achievement as a profile shows it (profiles, v0.2, proposed): a disc
    in a ring of the brand's gradient once earned, grey until then. */

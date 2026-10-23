@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Check, CornerDownRight } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* A lesson's steps as a line down the side: done ones ticked and joined in
    green, a skipped one dashed, the current one a purple dot with a halo,

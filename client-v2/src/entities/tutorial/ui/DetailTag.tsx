@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { createLogger } from "@/shared/lib/logger";
 import Img from "../../../components/Img";

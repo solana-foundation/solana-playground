@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from "react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import Link from "@/components/Link";
 import { ExportFile, Github, ImportFile } from "@/components/Icons";
