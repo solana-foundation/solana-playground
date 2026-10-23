@@ -5,14 +5,18 @@ paths:
   - "client-v2/src/views/sidebar/assistant/**"
   - "client-v2/src/utils/explorer/**"
   - "client-v2/src/components/Editor/Monaco/**"
+  - "client-v2/src/utils/program-info.ts"
+  - "client-v2/src/globals/program-info.ts"
+  - "client-v2/src/utils/tutorial/tutorial.ts"
+  - "client-v2/src/globals/tutorial.ts"
   - "client-v2/api/**"
   - "client-v2/db/**"
 ---
 
 # Sync and persistence gotchas
 
-Moved out of the root CLAUDE.md (token diet, 2026-10-23); loads only when a
-session works under these paths.
+Invariants of chat persistence and project sync. Claude Code loads this file
+when a session reads a file matching the paths above.
 
 - **Chat threads share the code's IndexedDB volume**, as files under
   `/.config/chats/<threadId>.json` via `PgFs` -- not `localStorage`, which is

@@ -124,9 +124,11 @@ changes. Asked to build something in the client, look there first.
   are gitignored.
 - **Sync and persistence gotchas** (chat threads, sync mark, merges, push gate, tabs,
   keypairs, diagnostics) live in `.claude/rules/project-sync.md`, which loads when a
-  session touches `features/persistence`, `effects`, the assistant view, the explorer,
-  the Monaco editor, `client-v2/api` or `client-v2/db`. Read it before
-  changing chat storage or project sync from anywhere else.
+  session reads a file under `client-v2/src/features/persistence`, `src/effects`,
+  `src/views/sidebar/assistant`, `src/utils/explorer`, `src/components/Editor/Monaco`,
+  `client-v2/api` or `client-v2/db`, or the program-info and tutorial modules. Read it
+  before touching anything that reads or writes `/.config/chats`, `/.config/sync*` or
+  `project_files` from elsewhere.
 - **`wasm/` carries two fork-owned pins that an upstream sync must keep:**
   the exact `wasm-bindgen` version under `[workspace.dependencies]` in
   `wasm/Cargo.toml`, which every member that depends on `wasm-bindgen`
