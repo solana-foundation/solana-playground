@@ -47,17 +47,40 @@ export interface McpConnection {
   close(): Promise<void>;
 }
 
+/** Thrown from the transport's fetch, so only the call whose request 404'd carries it */
+class McpSessionExpiredError extends Error {
+  constructor() {
+    super("The MCP server no longer knows this session.");
+    this.name = "McpSessionExpiredError";
+  }
+}
+
 const findUnreachable = (error: unknown): McpUnreachableError | undefined => {
   for (let e = error; e instanceof Error; e = e.cause) {
     if (e instanceof McpUnreachableError) return e;
   }
 };
 
+const isSessionExpired = (error: unknown): boolean => {
+  for (let e = error; e instanceof Error; e = e.cause) {
+    if (e instanceof McpSessionExpiredError) return true;
+  }
+  return false;
+};
+
+/** One client and the calls still running on it */
+interface Session {
+  client: Promise<MCPClient>;
+  running: number;
+  retired: boolean;
+}
+
 /**
  * Connect to an MCP server. The session opens on the first call.
  *
  * A call the server rejects for an expired session (HTTP 404 on a request
- * that carried a session id) opens a new session and is repeated once.
+ * that carried a session id) is repeated once on a new session, which every
+ * call that failed on the same expired session shares.
  *
  * @throws {McpUnreachableError} from any call, when the browser cannot reach the host
  * @example List a server's tools
@@ -66,8 +89,7 @@ const findUnreachable = (error: unknown): McpUnreachableError | undefined => {
  * ```
  */
 export const connectMcp = (server: McpServer): McpConnection => {
-  let client: Promise<MCPClient> | undefined;
-  let expired = false;
+  let current: Session | undefined;
 
   const send: typeof fetch = async (input, init) => {
     let response: Response;
@@ -86,7 +108,7 @@ export const connectMcp = (server: McpServer): McpConnection => {
       response.status === 404 &&
       new Headers(init?.headers).has("mcp-session-id")
     ) {
-      expired = true;
+      throw new McpSessionExpiredError();
     }
     return response;
   };
@@ -103,20 +125,20 @@ export const connectMcp = (server: McpServer): McpConnection => {
       protocolVersionDiscovery: false,
     });
 
-  const connected = () => {
-    if (!client) {
-      const opening = open();
-      client = opening;
-      opening.catch(() => {
-        // The caller awaiting `opening` gets the error; this only forgets the failed client
-        if (client === opening) client = undefined;
+  const connected = (): Session => {
+    if (!current) {
+      const session: Session = { client: open(), running: 0, retired: false };
+      current = session;
+      session.client.catch(() => {
+        // The caller awaiting the client gets the error; this only forgets the failed session
+        if (current === session) current = undefined;
       });
     }
-    return client;
+    return current;
   };
 
-  const closeQuietly = (stale: Promise<MCPClient>) =>
-    stale
+  const closeQuietly = (stale: Session) =>
+    stale.client
       .then((c) => c.close())
       .catch((e) =>
         log.debug("Closing a stale MCP client failed", {
@@ -124,23 +146,43 @@ export const connectMcp = (server: McpServer): McpConnection => {
         })
       );
 
+  const run = async <T>(
+    session: Session,
+    operation: (c: MCPClient) => Promise<T>
+  ): Promise<T> => {
+    session.running++;
+    try {
+      return await operation(await session.client);
+    } finally {
+      session.running--;
+      if (session.retired && session.running === 0) void closeQuietly(session);
+    }
+  };
+
+  // Closing rejects every request still pending on the client, so it waits for the last call to settle
+  const retire = (session: Session) => {
+    if (session.retired) return;
+    session.retired = true;
+    if (current === session) current = undefined;
+    log.debug("Reopening an expired MCP session", {
+      context: { url: server.url },
+    });
+    if (session.running === 0) void closeQuietly(session);
+  };
+
   const withSession = async <T>(
     operation: (c: MCPClient) => Promise<T>
   ): Promise<T> => {
+    const session = connected();
     try {
-      return await operation(await connected());
+      return await run(session, operation);
     } catch (e) {
       const unreachable = findUnreachable(e);
       if (unreachable) throw unreachable;
-      if (!expired || !client) throw e;
+      if (!isSessionExpired(e)) throw e;
 
-      expired = false;
-      log.debug("Reopening an expired MCP session", {
-        context: { url: server.url },
-      });
-      void closeQuietly(client);
-      client = undefined;
-      return operation(await connected());
+      retire(session);
+      return run(connected(), operation);
     }
   };
 
@@ -171,9 +213,9 @@ export const connectMcp = (server: McpServer): McpConnection => {
         };
       }),
     close: async () => {
-      const current = client;
-      client = undefined;
-      if (current) await (await current).close();
+      const session = current;
+      current = undefined;
+      if (session) await (await session.client).close();
     },
   };
 };
