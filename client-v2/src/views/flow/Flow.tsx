@@ -270,6 +270,7 @@ const FlowFrame = () => {
                   page.showHome("nav");
                 }}
                 current={catalog ?? undefined}
+                homeShown={page.view === "home"}
                 onOpenPage={(p) => {
                   catalogPage.open(p, "nav");
                   // A phone's menu page would cover the page it just opened
