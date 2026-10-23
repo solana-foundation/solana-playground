@@ -163,11 +163,23 @@
   --text-code: 0.8125rem;
   --text-code--line-height: 1.6;
 
-  /* Lighter than the usual 400/500: light text on a dark ground blooms */
+  /* The phone's weights, lighter than the usual 400/500: light text on a
+   * dark ground blooms at the phone's 16px base */
   --font-weight-read: 320;
   --font-weight-label: 380;
   --font-weight-headline: 400;
   --font-weight-act: 440;
+}
+
+/* From the md breakpoint up the prototype sets body text at 400 and labels
+ * and titles at 500, so reading and acting text step up there. */
+@layer theme {
+  @media (width >= 48rem) {
+    :root {
+      --font-weight-read: 400;
+      --font-weight-act: 500;
+    }
+  }
 }
 
 /* The brand's fill and its type, where a class is clearer than a value */
