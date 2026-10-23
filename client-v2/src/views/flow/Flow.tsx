@@ -293,6 +293,8 @@ const FlowFrame = () => {
                 }
                 footer={
                   <SessionFooter
+                    page={menuPage}
+                    closeSheet={closeSheet}
                     settingsOpen={settingsOpen}
                     onToggleSettings={toggleSettings(closeSheet)}
                   />
