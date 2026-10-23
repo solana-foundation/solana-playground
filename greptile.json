@@ -6,7 +6,12 @@
     "files": [
       {
         "path": "CLAUDE.md",
-        "description": "Repository notes: fork layout, which client is edited, commands, storage and sync gotchas"
+        "description": "Repository notes: fork layout, which client is edited, commands, gotchas outside sync"
+      },
+      {
+        "path": ".claude/rules/project-sync.md",
+        "description": "Chat persistence and project sync invariants: sync mark, merge base, push gate, tab lock, keypairs, diagnostics",
+        "scope": ["client-v2/**"]
       },
       {
         "path": "CONTRIBUTING.md",
