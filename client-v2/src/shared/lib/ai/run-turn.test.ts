@@ -123,6 +123,26 @@ describe("runTurn", () => {
     expect((failure as AiTurnError).body).toContain("bad key [your key]");
   });
 
+  it("never logs a failed response's key to the console", async () => {
+    const { fetch } = fakeFetch(openAiError(401, "bad key test-key"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+
+    await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+      apiKey: "test-key",
+    }).catch((e: unknown) => e);
+
+    const logged = consoleError.mock.calls.flat().map((arg) => {
+      if (arg instanceof Error) return `${arg.message} ${JSON.stringify(arg)}`;
+      return typeof arg === "string" ? arg : JSON.stringify(arg);
+    });
+    consoleError.mockRestore();
+    expect(logged.filter((line) => line.includes("test-key"))).toEqual([]);
+  });
+
   it("puts the status and the redacted body in the message when the body has no error object", async () => {
     const { fetch } = fakeFetch(
       new Response(

@@ -186,6 +186,8 @@ export const runTurn = async ({
         maxOutputTokens,
         abortSignal: signal,
         maxRetries: 0,
+        // The SDK's default logs the raw error, key included; runTurn rethrows it redacted by toTurnError
+        onError: () => undefined,
         // Checked only after a step with tool calls: no request follows a Stop
         stopWhen: [
           isStepCount(maxSteps - stepsTaken),
