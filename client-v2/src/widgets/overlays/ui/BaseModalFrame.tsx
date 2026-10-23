@@ -32,6 +32,12 @@ export type BaseModalFrameProps = {
   title: { text: string; hidden: boolean };
   /** Why the last submit failed */
   error?: string;
+  /**
+   * Below `LAYOUT_BREAKPOINTS.phone`, where the dialog is a page: the bar's
+   * Close is the way out, so there is no Cancel, and the one action is the
+   * flat accent across the foot, as the prototype's phone pins it
+   */
+  phone?: boolean;
   /** The footer; a dialog without one has only the header's Close */
   submit?: {
     text: string;
@@ -84,6 +90,7 @@ const OWNS_ENTER =
 export const BaseModalFrame = ({
   title,
   error,
+  phone = false,
   submit,
   size,
   onCloseAutoFocus,
@@ -169,7 +176,7 @@ export const BaseModalFrame = ({
         </ModalBody>
         {submit && (
           <ModalFooter>
-            {submit.onCancel && (
+            {submit.onCancel && !phone && (
               <Button
                 type="button"
                 variant="ghost"
@@ -180,7 +187,13 @@ export const BaseModalFrame = ({
               </Button>
             )}
             {submit.variant === "brand" ? (
-              <BrandButton ref={submitRef} type="submit" disabled={!canSubmit}>
+              <BrandButton
+                ref={submitRef}
+                type="submit"
+                variant={phone ? "accent" : "ring"}
+                className={phone ? "h-12 rounded-xl text-control" : undefined}
+                disabled={!canSubmit}
+              >
                 {submitLabel}
               </BrandButton>
             ) : (

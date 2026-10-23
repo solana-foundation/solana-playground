@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PROJECT_NAME } from "@/constants";
 import { PgView } from "@/utils/view";
 import { overlayTelemetry } from "../model/telemetry";
@@ -97,6 +98,7 @@ export const ModalFrame = ({
   );
   const openReport = useOpenReport();
   const blockDismiss = useBlockDismiss();
+  const phone = useViewport() === "phone";
 
   useEffect(() => {
     mounted.current = true;
@@ -178,6 +180,7 @@ export const ModalFrame = ({
 
   return (
     <BaseModalFrame
+      phone={phone}
       title={{
         text: typeof title === "string" && title ? title : PROJECT_NAME,
         hidden: !title,

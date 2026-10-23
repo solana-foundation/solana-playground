@@ -96,7 +96,10 @@ export const SettingSetterSelect: FC<
         else setting.setValue(v);
       }}
     >
-      <SelectTrigger aria-label={setting.name} className="w-full">
+      <SelectTrigger
+        aria-label={setting.name}
+        className="w-full max-md:text-body max-md:font-read max-md:data-[size=default]:h-12"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
