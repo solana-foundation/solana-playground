@@ -11,7 +11,8 @@ const GA4_ID = /^G-[A-Z0-9]+$/;
 
 /**
  * `html` with the Google tag placed right after `<head>`, as Google's install
- * guide asks. Unchanged when it already references gtag.js.
+ * guide asks. The template carries no tag of its own; whether a build gets one
+ * at all is decided by `REACT_APP_GA_MEASUREMENT_ID` in craco.config.js.
  *
  * @param {string} html
  * @param {string} id a GA4 measurement id
@@ -22,7 +23,6 @@ export const insertGoogleTag = (html, id) => {
   if (!GA4_ID.test(id)) {
     throw new Error(`REACT_APP_GA_MEASUREMENT_ID is not a GA4 id: ${id}`);
   }
-  if (html.includes(GTAG_SRC)) return html;
 
   const snippet =
     `<script async src="${GTAG_SRC}?id=${id}"></script>` +

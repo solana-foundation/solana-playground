@@ -5,6 +5,7 @@ import Button from "../../Button";
 import Card from "../../Card";
 import Img from "../../Img";
 import Link from "../../Link";
+import { getSrc } from "./platform-icon";
 import { ResourceProps, RESOURCES } from "./resources";
 import { TutorialProps, TUTORIALS } from "./tutorials";
 import { External, ShortArrow } from "../../Icons";
@@ -192,15 +193,6 @@ const Tutorial: FC<React.PropsWithChildren<TutorialProps>> = ({
       </TutorialCard>
     </Link>
   );
-};
-
-const getSrc = (url: string) => {
-  let src = "";
-
-  if (url.includes("youtube.com")) src = "youtube.png";
-  else if (url.includes("dev.to")) src = "devto.png";
-
-  if (src) return "/icons/platforms/" + src;
 };
 
 const TutorialCard = styled(Card)`

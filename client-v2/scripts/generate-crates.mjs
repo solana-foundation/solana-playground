@@ -242,7 +242,8 @@ async function getCrates() {
 async function getRegistry() {
   const root = path.join(cargoHome, "registry", "src");
   const dirs = (await fs.readdir(root))
-    .filter((dir) => dir.startsWith("index.crates.io"))
+    // Cargo's whole directory name, not a prefix: js/incomplete-url-substring-sanitization reads a prefix as a host check
+    .filter((dir) => /^index\.crates\.io-[0-9a-f]+$/.test(dir))
     .map((dir) => path.join(root, dir));
   if (!dirs.length) throw new Error(`No crates.io registry in ${root}`);
 
