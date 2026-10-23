@@ -13,7 +13,7 @@ import {
   UnfoldVertical,
   XIcon,
 } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Segmented, SegmentedItem } from "@/components/ui/segmented"
 

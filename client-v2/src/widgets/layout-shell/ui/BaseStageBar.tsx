@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { CircleHelp, FolderClosed, MessageSquare } from "lucide-react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { Separator } from "@/shared/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 export const DOCS_URL = "https://solana.com/docs";
@@ -32,17 +34,27 @@ export interface BaseStageBarProps {
   assistantKey?: string | null;
 }
 
+/**
+ * The prototype's head control: 30 px tall, radius 8, muted until hovered
+ * or while its column shows, when it takes the accent fill
+ */
+const BAR_CONTROL =
+  "h-7.5 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground dark:hover:bg-accent";
+
 /** An icon button with its label as the tooltip, as the assistant's head draws them */
 const BarButton = ({
   label,
   hint,
   expanded,
+  text,
   onClick,
   children,
 }: {
   label: string;
   hint: string;
   expanded?: boolean;
+  /** A visible label beside the icon, as the prototype's "Files" */
+  text?: string;
   onClick: () => void;
   children: ReactNode;
 }) => (
@@ -50,12 +62,17 @@ const BarButton = ({
     <TooltipTrigger asChild>
       <Button
         variant="ghost"
-        size="icon-sm"
+        size={text ? "default" : "icon-sm"}
+        className={cn(
+          BAR_CONTROL,
+          text ? "gap-1.5 pr-2.5 pl-2 text-[0.8125rem]" : "size-7.5"
+        )}
         aria-label={label}
         aria-expanded={expanded}
         onClick={onClick}
       >
         {children}
+        {text}
       </Button>
     </TooltipTrigger>
     <TooltipContent>{hint}</TooltipContent>
@@ -70,6 +87,7 @@ const FilesToggle = ({ files }: { files: BarToggle }) => {
       label={label}
       hint={`${label} (⌘E)`}
       expanded={files.open}
+      text="Files"
       onClick={files.onToggle}
     >
       <FolderClosed aria-hidden="true" />
@@ -121,7 +139,7 @@ const BaseStageBar = ({
       className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3"
     >
       <span
-        className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
+        className="min-w-0 flex-1 truncate text-sm font-medium text-muted-foreground"
         title={title ?? undefined}
       >
         {title}
@@ -130,9 +148,18 @@ const BaseStageBar = ({
       {assistant && (
         <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
       )}
+      <Separator
+        orientation="vertical"
+        className="mx-1 data-vertical:h-4 data-vertical:self-center"
+      />
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" asChild>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={cn(BAR_CONTROL, "size-7.5")}
+            asChild
+          >
             <a
               href={DOCS_URL}
               target="_blank"

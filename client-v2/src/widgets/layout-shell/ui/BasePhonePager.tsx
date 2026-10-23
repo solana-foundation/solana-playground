@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { ChevronDown, ChevronLeft, Folder, Menu, Play, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";

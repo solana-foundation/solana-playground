@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
 
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { createLogger } from "@/shared/lib/logger";
 import type { SettingsFocus } from "@/shared/lib/settings-request";
 import { Button } from "@/shared/ui/button";

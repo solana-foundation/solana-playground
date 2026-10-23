@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Check, ChevronDown, X } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
 
 /* "Get set up · 2 of 4": the few things a new workspace needs, in the
@@ -47,18 +47,18 @@ function SetupListTrigger({
     <CollapsiblePrimitive.Trigger
       data-slot="setup-list-trigger"
       className={cn(
-        "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-[0.8125rem] font-act text-foreground outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
+        "flex h-7 min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 text-xs font-normal text-subtle outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring",
         className
       )}
       {...props}
     >
-      <span className="truncate">{children}</span>
+      <span className="min-w-0 truncate">{children}</span>
       {total ? (
-        <span className="text-muted-foreground tabular-nums">
+        <span className="shrink-0 tabular-nums">
           · {done ?? 0} of {total}
         </span>
       ) : null}
-      <ChevronDown className="ml-auto size-3.5 text-muted-foreground transition-transform duration-150 group-data-[state=closed]/setup-list:-rotate-90" />
+      <ChevronDown className="size-3 shrink-0 text-muted-foreground transition-transform duration-150 group-data-[state=closed]/setup-list:-rotate-90" />
     </CollapsiblePrimitive.Trigger>
   );
 }
@@ -95,7 +95,9 @@ function SetupListContent({
       asChild
       {...props}
     >
-      <ul className={cn("mt-0.5 flex flex-col", className)}>{children}</ul>
+      <ul className={cn("mt-0.5 flex flex-col gap-px", className)}>
+        {children}
+      </ul>
     </CollapsiblePrimitive.Content>
   );
 }
@@ -110,7 +112,7 @@ function SetupListItem({
       data-slot="setup-list-item"
       data-status={status}
       className={cn(
-        "group/setup-item flex h-8 items-center gap-2.5 rounded-md px-2 text-[0.8125rem] text-muted-foreground data-[status=done]:text-subtle",
+        "group/setup-item flex h-7 items-center gap-2.5 rounded-md px-2 text-[0.8125rem] text-muted-foreground data-[status=done]:text-subtle",
         className
       )}
       {...props}
@@ -145,10 +147,7 @@ function SetupListLabel({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="setup-list-label"
-      className={cn(
-        "min-w-0 flex-1 truncate group-data-[status=todo]/setup-item:text-foreground",
-        className
-      )}
+      className={cn("min-w-0 flex-1 truncate", className)}
       {...props}
     />
   );
@@ -160,7 +159,7 @@ function SetupListValue({ className, ...props }: React.ComponentProps<"span">) {
     <span
       data-slot="setup-list-value"
       className={cn(
-        "ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-error [&_svg]:size-3.5",
+        "ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-error [&_svg]:size-3",
         className
       )}
       {...props}

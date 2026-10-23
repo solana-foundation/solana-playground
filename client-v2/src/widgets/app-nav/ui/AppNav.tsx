@@ -13,6 +13,8 @@ export type AppNavProps = Omit<BaseAppNavProps, "onOpen" | "current"> & {
   onHome: () => void;
   /** The page shown, if any; its item is marked current */
   current?: NavPage;
+  /** Home shows; its item is marked current when no page covers it */
+  homeShown: boolean;
   onOpenPage: (page: NavPage) => void;
   onClosePage: () => void;
   /**
@@ -32,6 +34,7 @@ export type AppNavProps = Omit<BaseAppNavProps, "onOpen" | "current"> & {
 const AppNav = ({
   onHome,
   current,
+  homeShown,
   onOpenPage,
   onClosePage,
   closeSheet,
@@ -56,7 +59,8 @@ const AppNav = ({
     void PgView.setModal(NewWorkspaceModal);
   };
 
-  return <BaseAppNav {...props} current={current} onOpen={open} />;
+  const marked = current ?? (homeShown ? "home" : undefined);
+  return <BaseAppNav {...props} current={marked} onOpen={open} />;
 };
 
 export default AppNav;

@@ -1,4 +1,4 @@
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject, ReactNode } from "react";
 import { usePanelRef } from "react-resizable-panels";

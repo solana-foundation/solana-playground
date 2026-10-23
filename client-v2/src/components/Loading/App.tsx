@@ -11,6 +11,7 @@ export const AppLoading = () => (
 const Wrapper = styled.div`
   position: relative;
   height: 100vh;
+  height: 100dvh;
   width: 100vw;
 
   & > :first-child {

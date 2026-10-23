@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { KeyboardEvent, ReactNode, SyntheticEvent } from "react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";

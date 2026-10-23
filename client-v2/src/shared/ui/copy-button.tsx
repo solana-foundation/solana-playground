@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Check, Copy } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { Button } from "@/shared/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";

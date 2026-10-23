@@ -31,30 +31,23 @@ const itemNames = () =>
 
 it("offers Share feedback first where a send can succeed", async () => {
   await draw(true);
-  expect(itemNames()).toEqual([
-    "Share feedback",
-    "Suggest an idea",
-    "Report a bug",
-  ]);
+  expect(itemNames()).toEqual(["Share feedback", "Report a bug"]);
 });
 
-it("offers only the two GitHub links where it cannot", async () => {
+it("offers only Report a bug where it cannot", async () => {
   await draw(false);
-  expect(itemNames()).toEqual(["Suggest an idea", "Report a bug"]);
+  expect(itemNames()).toEqual(["Report a bug"]);
 });
 
-it.each([
-  ["Suggest an idea", "idea"],
-  ["Report a bug", "bug"],
-] as const)("opens %s on the issue list in a new tab", async (name, link) => {
+it("opens Report a bug on the issue list in a new tab", async () => {
   const onGithub = vi.fn();
   await draw(false, vi.fn(), onGithub);
-  const item = screen.getByRole("menuitem", { name });
-  expect(item.getAttribute("href")).toBe(GITHUB_LINKS[link]);
+  const item = screen.getByRole("menuitem", { name: "Report a bug" });
+  expect(item.getAttribute("href")).toBe(GITHUB_LINKS.bug);
   expect(item.getAttribute("target")).toBe("_blank");
   expect(item.getAttribute("rel")).toBe("noopener noreferrer");
   await userEvent.click(item);
-  expect(onGithub).toHaveBeenCalledExactlyOnceWith(link);
+  expect(onGithub).toHaveBeenCalledExactlyOnceWith("bug");
 });
 
 it("opens the form from Share feedback", async () => {

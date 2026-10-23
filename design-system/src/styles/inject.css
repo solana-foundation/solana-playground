@@ -29,7 +29,6 @@
 }
 :where([data-slot]) {
   font-family: var(--font-text);
-  -webkit-font-smoothing: antialiased;
 }
 :where([data-slot] button, [data-slot] input, [data-slot] textarea, [data-slot] select, button[data-slot], input[data-slot], textarea[data-slot]) {
   font: inherit;

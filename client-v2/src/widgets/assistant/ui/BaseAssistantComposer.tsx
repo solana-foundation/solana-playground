@@ -9,7 +9,7 @@ import {
   ComposerSend,
   ComposerToolbar,
 } from "@/shared/ui/composer";
-import { LogoMark } from "@/shared/ui/logo";
+import { LogoPlay } from "@/shared/ui/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 /** One thing the assistant reads each turn, named in the composer */
@@ -111,7 +111,7 @@ export function BaseAssistantComposer({
           {effort}
           {blocked === null ? (
             <ComposerSend>
-              <LogoMark className="size-4" />
+              <LogoPlay className="size-4" />
             </ComposerSend>
           ) : (
             <Tooltip>
@@ -121,9 +121,9 @@ export function BaseAssistantComposer({
               <TooltipTrigger asChild>
                 <ComposerSend
                   aria-disabled="true"
-                  className="aria-disabled:opacity-35 aria-disabled:hover:bg-primary"
+                  className="aria-disabled:opacity-35"
                 >
-                  <LogoMark className="size-4" />
+                  <LogoPlay className="size-4" />
                 </ComposerSend>
               </TooltipTrigger>
               <TooltipContent>{blocked}</TooltipContent>

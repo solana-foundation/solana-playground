@@ -3,7 +3,7 @@ import type { ReactElement, ReactNode } from "react";
 import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { Input } from "@/shared/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/shared/ui/radio-group";

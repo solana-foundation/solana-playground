@@ -9,6 +9,7 @@ import { PgFlow } from "@/views/flow/state/stage";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import { CONSOLE_KEY } from "../model/keys";
 import { homeOf, isCovered, screenOf } from "../model/screen";
 import type {
   PageSource,
@@ -350,7 +351,7 @@ const LayoutShell = ({
     [viewport, assistantShown, view]
   );
   useKeybind(
-    "Ctrl+J",
+    CONSOLE_KEY,
     () => {
       if (isCovered(screenNow.current)) return;
       if (phone) setPhoneConsoleOpen(!phoneConsoleNow.current, "key");

@@ -42,7 +42,7 @@ const pickTheme = async (page: Page, name: "Dark" | "Light") => {
  * the terminal and take the typing.
  */
 const runHelp = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Console", exact: true });
+  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }

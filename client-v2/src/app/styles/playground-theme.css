@@ -77,13 +77,14 @@
   --font-mono: var(--font-code);
 
   /* ── radius: controls 8, panels 12, cards and dialogs 16 ──────────── */
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+  /* The prototype's steps, 6 / 8 / 12 / 16 at the 8px base: md, lg, xl, 2xl */
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.5);
+  --radius-2xl: calc(var(--radius) * 2);
+  --radius-3xl: calc(var(--radius) * 2.5);
+  --radius-4xl: calc(var(--radius) * 3);
   --radius-control: var(--radius);
   --radius-panel: calc(var(--radius) * 1.5);
   --radius-card: calc(var(--radius) * 2);
@@ -196,11 +197,23 @@
   --text-code: 0.8125rem;
   --text-code--line-height: 1.6;
 
-  /* Lighter than the usual 400/500: light text on a dark ground blooms */
+  /* The phone's weights, lighter than the usual 400/500: light text on a
+   * dark ground blooms at the phone's 16px base */
   --font-weight-read: 320;
   --font-weight-label: 380;
   --font-weight-headline: 400;
   --font-weight-act: 440;
+}
+
+/* From the md breakpoint up the prototype sets body text at 400 and labels
+ * and titles at 500, so reading and acting text step up there. */
+@layer theme {
+  @media (width >= 48rem) {
+    :root {
+      --font-weight-read: 400;
+      --font-weight-act: 500;
+    }
+  }
 }
 
 /* The brand's fill and its type, where a class is clearer than a value */
@@ -240,7 +253,8 @@
 }
 
 /* The brand action (brandAction): the ring at rest, the whole gradient
- * fading in underneath on hover and press. */
+ * fading in underneath on hover and press, unless the action is disabled or
+ * refused (`aria-disabled`, kept focusable for its tooltip). */
 @utility brand-action {
   position: relative;
   isolation: isolate;
@@ -261,8 +275,8 @@
     opacity: 0;
     transition: opacity 0.2s ease;
   }
-  &:hover:not(:disabled)::before,
-  &:active:not(:disabled)::before {
+  &:hover:not(:disabled, [aria-disabled="true"])::before,
+  &:active:not(:disabled, [aria-disabled="true"])::before {
     opacity: 1;
   }
 }
@@ -270,4 +284,12 @@
 @utility bg-backdrop {
   background-color: var(--backdrop);
   backdrop-filter: blur(6px);
+}
+
+/* Lucide's icons at the prototype's stroke: 1.5, not lucide's default 2.
+ * Only the default is matched, so an icon given another strokeWidth keeps it. */
+@layer base {
+  svg.lucide[stroke-width="2"] {
+    stroke-width: 1.5;
+  }
 }

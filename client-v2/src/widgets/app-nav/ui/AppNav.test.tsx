@@ -73,7 +73,7 @@ afterEach(() => {
   resetLogger();
 });
 
-const draw = (current?: "tutorials" | "programs") =>
+const draw = (current?: "tutorials" | "programs", homeShown = false) =>
   render(
     <TooltipProvider>
       <SidebarProvider>
@@ -87,6 +87,7 @@ const draw = (current?: "tutorials" | "programs") =>
           setup={null}
           onHome={onHome}
           current={current}
+          homeShown={homeShown}
           onOpenPage={pages.open}
           onClosePage={pages.close}
           closeSheet={closeSheet}
@@ -143,6 +144,23 @@ it("marks the page shown as the current item", () => {
   expect(item.dataset.active).toBe("true");
   expect(screen.getByRole("button", { name: "Programs" }).dataset.active).toBe(
     "false"
+  );
+});
+
+it("marks Home as the current item while Home shows", () => {
+  draw(undefined, true);
+  expect(screen.getByRole("button", { name: "Home" }).dataset.active).toBe(
+    "true"
+  );
+});
+
+it("marks the page, not Home, when a page covers Home", () => {
+  draw("programs", true);
+  expect(screen.getByRole("button", { name: "Home" }).dataset.active).toBe(
+    "false"
+  );
+  expect(screen.getByRole("button", { name: "Programs" }).dataset.active).toBe(
+    "true"
   );
 });
 

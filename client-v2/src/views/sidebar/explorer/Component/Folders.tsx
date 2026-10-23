@@ -11,7 +11,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import styled, { css, useTheme } from "styled-components";
 
 import ExplorerButtons from "./ExplorerButtons";

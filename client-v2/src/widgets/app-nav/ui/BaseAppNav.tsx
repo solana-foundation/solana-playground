@@ -1,10 +1,13 @@
-import { Code, GraduationCap, House, PanelLeft, Plus } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import { PanelLeft } from "lucide-react";
+import type { ReactNode } from "react";
 
+import { BrandIcon } from "@/shared/ui/brand-icon";
+import type { BrandIconName } from "@/shared/ui/brand-icon";
 import { Button } from "@/shared/ui/button";
 import {
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -13,12 +16,13 @@ import {
 import type { NavItem } from "../model/nav-item";
 
 /** Keyed by item so a new `NavItem` without an entry does not compile; the
- * menu lists them in the order written here */
-const ITEMS: Record<NavItem, { label: string; Icon: ComponentType }> = {
-  home: { label: "Home", Icon: House },
-  "new-project": { label: "New project", Icon: Plus },
-  tutorials: { label: "Tutorials", Icon: GraduationCap },
-  programs: { label: "Programs", Icon: Code },
+ * menu lists them in the order written here. The icons are the prototype's,
+ * cut from the mark (`BrandIcon`) */
+const ITEMS: Record<NavItem, { label: string; icon: BrandIconName }> = {
+  home: { label: "Home", icon: "home" },
+  "new-project": { label: "New project", icon: "new" },
+  tutorials: { label: "Tutorials", icon: "tutorial" },
+  programs: { label: "Programs", icon: "programs" },
 };
 
 const ORDER = Object.keys(ITEMS) as NavItem[];
@@ -66,31 +70,35 @@ const BaseAppNav = ({
       </div>
     </SidebarHeader>
     <SidebarContent>
-      <SidebarMenu>
-        {ORDER.map((item) => {
-          const { label, Icon } = ITEMS[item];
-          return (
-            <SidebarMenuItem key={item}>
-              <SidebarMenuButton
-                tooltip={label}
-                isActive={item === current}
-                onClick={() => onOpen(item)}
-              >
-                <Icon />
-                <span>{label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          );
-        })}
-      </SidebarMenu>
-      {!collapsed && projects}
+      {/* In a group, as the DS sidebar expects: its padding insets every
+          row 8 px from the column's edges, as the prototype draws them */}
+      <SidebarGroup>
+        <SidebarMenu className="gap-px">
+          {ORDER.map((item) => {
+            const { label, icon } = ITEMS[item];
+            return (
+              <SidebarMenuItem key={item}>
+                <SidebarMenuButton
+                  tooltip={label}
+                  isActive={item === current}
+                  onClick={() => onOpen(item)}
+                >
+                  <BrandIcon name={icon} />
+                  <span>{label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+        {!collapsed && projects}
+      </SidebarGroup>
       {!collapsed && <div className="mt-auto">{setup}</div>}
     </SidebarContent>
     {/* Swapped, not hidden, on the rail: what the full footer holds keeps
         its state above it (`FeedbackHost`, `PgSession`), as it must anyway
         across `LAYOUT_BREAKPOINTS.phone`, where the pager and the frame
         replace each other's tree */}
-    <SidebarFooter>
+    <SidebarFooter className="border-t border-sidebar-border px-2 pt-1.5 pb-2">
       {collapsed ? (
         railFooter
       ) : (

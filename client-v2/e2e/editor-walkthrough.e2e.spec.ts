@@ -106,7 +106,7 @@ test.describe.serial("the editor", () => {
   });
 
   test("runs a terminal command", async () => {
-    const drawer = page.getByRole("button", { name: "Console", exact: true });
+    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }

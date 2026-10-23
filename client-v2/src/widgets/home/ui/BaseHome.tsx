@@ -68,7 +68,7 @@ const BaseHome = ({
   return (
     <section
       aria-label="Home"
-      className="mx-auto flex w-full max-w-[46rem] flex-col gap-8 px-6 py-16"
+      className="mx-auto flex w-full max-w-[50rem] flex-col gap-5 px-8 pt-20 pb-16"
     >
       <h1 className="text-center font-heading text-display font-headline text-foreground">
         Where should we begin?

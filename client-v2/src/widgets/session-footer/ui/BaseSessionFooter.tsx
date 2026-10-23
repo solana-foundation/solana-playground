@@ -1,6 +1,6 @@
 import type { ReactNode, Ref } from "react";
 import { ChevronsUpDown } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import {
@@ -68,11 +68,17 @@ const BaseSessionFooter = ({
           {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
           onClick={onOpenCluster}
         >
-          <StatusDot
-            variant={account.cluster.down ? "error" : "success"}
-            size="lg"
-          />
-          <span className="truncate">{account.cluster.name}</span>
+          {/* In the 16 px glyph box every row's icon has, so its label
+              lines up with theirs */}
+          <span className="grid size-4 shrink-0 place-items-center">
+            <StatusDot
+              variant={account.cluster.down ? "error" : "success"}
+              size="lg"
+            />
+          </span>
+          {/* "Devnet", as the prototype writes it; the name stays lower case
+              in the label the screen reader reads */}
+          <span className="truncate capitalize">{account.cluster.name}</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>
@@ -81,6 +87,8 @@ const BaseSessionFooter = ({
             <SidebarMenuButton
               ref={accountRef}
               size="lg"
+              // The prototype's 40 px account row, under the 28 px rows
+              className="h-10 text-[0.8125rem]"
               aria-label={accountLabel(account)}
               aria-busy={account.sending || undefined}
             >

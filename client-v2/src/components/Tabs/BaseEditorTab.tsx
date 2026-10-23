@@ -6,7 +6,7 @@ import {
   EditorTabLabel,
   EditorTabTrigger,
 } from "@/shared/ui/editor-tabs";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 /** How a tab takes part in a drag: `source` is the tab left in its place,
  * `overlay` the copy that follows the pointer */

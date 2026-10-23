@@ -69,7 +69,6 @@
   }
   :where([data-slot]) {
     font-family: var(--font-text);
-    -webkit-font-smoothing: antialiased;
   }
   :where([data-slot] button, [data-slot]
       input, button[data-slot], input[data-slot]) {
@@ -118,6 +117,16 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+  }
+
+  /* The document never scrolls; only the app's own panes do. With the shell
+     at 100dvh, a page taller than the window (Safari's 100vh under its
+     toolbar) cannot push the header out of view */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
   }
 
   body {
