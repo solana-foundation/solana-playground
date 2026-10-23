@@ -417,6 +417,21 @@
       ]
     },
     {
+      "name": "brand-icon",
+      "type": "registry:ui",
+      "title": "Brand icon",
+      "description": "The product's icons cut from the mark: home, new, tutorial, programs, search and profile. Filled with the colour of their text.",
+      "registryDependencies": [
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/brand-icon.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
       "name": "status-dot",
       "type": "registry:ui",
       "title": "Status dot",
