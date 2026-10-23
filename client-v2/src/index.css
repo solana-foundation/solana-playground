@@ -138,3 +138,17 @@
     color: inherit;
   }
 }
+
+/*
+ * The account menu is a page on a phone (`BaseAccountMenu`'s `page`): the
+ * whole screen, as the prototype draws it. Radix places every menu through
+ * a wrapper it translates to the trigger, and a fixed element inside a
+ * transformed one is fixed to it, not to the screen; so that one wrapper
+ * stays put, and covers the screen itself (`inset`), since a wrapper with
+ * `will-change: transform` holds its fixed child whatever its transform.
+ */
+[data-radix-popper-content-wrapper]:has(> [data-account-page]) {
+  transform: none !important;
+  inset: 0 !important;
+  min-width: 0 !important;
+}

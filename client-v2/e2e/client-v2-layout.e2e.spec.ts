@@ -453,6 +453,28 @@ test.describe("on a phone", () => {
     await page.setViewportSize({ width: 390, height: 844 });
   };
 
+  test("the account is a page of its own on a phone", async ({ page }) => {
+    await seedThenNarrow(page);
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    // A tap: the page opens over the row, and the release lands on its foot
+    await page.getByRole("button", { name: "Account, signed out" }).click();
+    const account = page.getByRole("menu", { name: "Account" });
+    await expect(account).toBeVisible();
+    // Once its opening animation has settled
+    await expect
+      .poll(() => account.boundingBox())
+      .toEqual({ x: 0, y: 0, width: 390, height: 844 });
+    await expect(
+      account.getByRole("menuitem", { name: "Sign in with GitHub" })
+    ).toBeInViewport();
+    await account.getByRole("menuitem", { name: "Close" }).click();
+    await expect(account).toHaveCount(0);
+    // The release that opened it was no pick: no sign-in started
+    await expect(
+      page.getByRole("button", { name: "Account, signed out" })
+    ).toBeVisible();
+  });
+
   test("client-v2-layout: A phone", async ({ page }) => {
     await seedThenNarrow(page);
     const lines = page.locator(".monaco-editor .view-lines");
