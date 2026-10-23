@@ -9,6 +9,7 @@ import {
 } from "./bundle-info.mjs";
 
 const SNAPSHOT_PATH = "client-v2/bench/BUNDLE.md";
+const TOLERANCE = `${DISPLAY_STEP_TOLERANCE_BYTES / 1024} KiB`;
 
 /** The data rows of a snapshot; throws when there are none, so a format change cannot read as an empty bundle */
 export const parseSnapshot = (markdown) => {
@@ -46,7 +47,7 @@ export const diffSnapshots = (base, fresh) => {
   return changes;
 };
 
-/** Whether a change is more than rounding: a size cell moved past one display step, or any other cell changed */
+/** Whether a change is more than rounding: a size cell more than {@link DISPLAY_STEP_TOLERANCE_BYTES} from its base cell, or any other cell changed */
 export const exceedsTolerance = (change) => {
   if (change.kind !== "changed") return true;
   if (change.before.length !== change.after.length) return true;
@@ -96,12 +97,18 @@ const count = (changes, kind) =>
   changes.filter((change) => change.kind === kind).length;
 
 /**
- * The markdown comment for a pull request: rows that moved past one display step, the number that moved within it,
+ * The markdown comment for a pull request at commit `head`: rows past the tolerance, the number of rows within it,
  * and the fresh tables collapsed. `base` is `null` when the base branch has no snapshot.
  */
-export const formatReport = ({ base, fresh, baseLabel, stale }) => {
+export const formatReport = ({ base, fresh, baseLabel, head, stale }) => {
   const freshRows = parseSnapshot(fresh);
-  const lines = [`### Bundle change vs \`${baseLabel}\``, ""];
+  // A sticky comment outlives a run that fails before its report, so it names the commit it measured
+  const lines = [
+    `### Bundle change vs \`${baseLabel}\``,
+    "",
+    `Head: ${head}`,
+    "",
+  ];
   if (stale) {
     lines.push(
       `**\`${SNAPSHOT_PATH}\` is out of date for this branch:** run \`yarn build-fast\`, then \`yarn bundle:info\`, and commit the refreshed file.`,
@@ -117,7 +124,7 @@ export const formatReport = ({ base, fresh, baseLabel, stale }) => {
     const changes = diffSnapshots(parseSnapshot(base), freshRows);
     const significant = changes.filter(exceedsTolerance);
     if (significant.length === 0) {
-      lines.push("No chunk size changed.");
+      lines.push(`No row moved past the ${TOLERANCE} tolerance.`);
     } else {
       lines.push(
         `**${count(significant, "changed")} changed, ${count(
@@ -133,7 +140,7 @@ export const formatReport = ({ base, fresh, baseLabel, stale }) => {
         "",
         `_${noise} row${
           noise === 1 ? "" : "s"
-        } moved by one rounding step (noise)._`
+        } moved within the ${TOLERANCE} tolerance (noise)._`
       );
     }
   }
@@ -158,11 +165,11 @@ const readOrNull = (file) =>
   });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  const [mode, basePath, freshPath, baseLabel = "master", committedPath] =
+  const [mode, basePath, freshPath, baseLabel, head, committedPath] =
     process.argv.slice(2);
-  if (mode !== "report" || !basePath || !freshPath) {
+  if (mode !== "report" || !basePath || !freshPath || !baseLabel || !head) {
     console.error(
-      "Usage: bundle-info-diff.mjs report <base.md> <fresh.md> [base-label] [committed.md]"
+      "Usage: bundle-info-diff.mjs report <base.md> <fresh.md> <base-label> <head-sha> [committed.md]"
     );
     process.exit(2);
   }
@@ -171,6 +178,12 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     ? (await readOrNull(committedPath)) !== fresh
     : false;
   console.log(
-    formatReport({ base: await readOrNull(basePath), fresh, baseLabel, stale })
+    formatReport({
+      base: await readOrNull(basePath),
+      fresh,
+      baseLabel,
+      head,
+      stale,
+    })
   );
 }

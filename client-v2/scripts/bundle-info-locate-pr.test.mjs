@@ -3,20 +3,23 @@ import test from "node:test";
 
 import { locatePullRequest } from "./bundle-info-locate-pr.mjs";
 
+const REPOSITORY = "solana-foundation/solana-playground";
+
 const RUN = {
   id: 42,
   head_sha: "abc123",
   head_branch: "feat/thing",
-  head_repository: { full_name: "hoodieshq/solana-playground" },
+  head_repository: { full_name: REPOSITORY },
 };
 
 const pullRequest = ({
+  number = 77,
   state = "open",
   sha = "abc123",
   ref = "feat/thing",
-  repo = "hoodieshq/solana-playground",
+  repo = REPOSITORY,
 } = {}) => ({
-  number: 77,
+  number,
   state,
   head: { sha, ref, repo: { full_name: repo } },
 });
@@ -26,14 +29,15 @@ const locate = async ({
   prs = [pullRequest()],
 } = {}) => {
   const outputs = {};
-  const infos = [];
+  const warnings = [];
   await locatePullRequest({
     context: {
       payload: { workflow_run: RUN },
       repo: { owner: "solana-foundation", repo: "solana-playground" },
     },
+    // No `info`: a skip logged below warning level throws here
     core: {
-      info: (message) => infos.push(message),
+      warning: (message) => warnings.push(message),
       setOutput: (name, value) => {
         outputs[name] = value;
       },
@@ -49,31 +53,46 @@ const locate = async ({
       },
     },
   });
-  return { outputs, infos };
+  return { outputs, warnings };
 };
 
-test("an open pull request whose head is the run's head gets the comment", async () => {
-  const { outputs } = await locate();
-  assert.deepEqual(outputs, { found: "true", pr: "77" });
-});
-
-test("a run without the report artifact is skipped", async () => {
-  const { outputs, infos } = await locate({ artifacts: [{ name: "other" }] });
+test("a run without the report artifact is skipped with a warning", async () => {
+  const { outputs, warnings } = await locate({
+    artifacts: [{ name: "other" }],
+  });
   assert.deepEqual(outputs, {});
-  assert.match(infos[0], /No bundle report artifact/);
+  assert.match(warnings[0], /No bundle-info-comment artifact on run 42/);
 });
 
-// [case, the one field of the pull request that differs from the run]
-const MISMATCHES = [
-  ["a closed pull request", { state: "closed" }],
-  ["a head that moved past the run", { sha: "newer" }],
-  ["a stacked branch holding the commit", { ref: "other-branch" }],
-  ["a head in another repository", { repo: "someone/solana-playground" }],
+const SKIPPED = {};
+
+// [case, the pull requests holding the run's head commit, outputs]
+const PULL_REQUESTS = [
+  [
+    "the matching pull request gets the comment past one whose head moved on",
+    [pullRequest({ number: 76, sha: "newer" }), pullRequest({ number: 78 })],
+    { found: "true", pr: "78" },
+  ],
+  [
+    "a closed pull request is skipped",
+    [pullRequest({ state: "closed" })],
+    SKIPPED,
+  ],
+  [
+    "a stacked branch holding the commit is skipped",
+    [pullRequest({ ref: "other-branch" })],
+    SKIPPED,
+  ],
+  [
+    "a head in another repository is skipped",
+    [pullRequest({ repo: "someone/solana-playground" })],
+    SKIPPED,
+  ],
 ];
 
-for (const [name, fields] of MISMATCHES) {
-  test(`${name} is skipped`, async () => {
-    const { outputs } = await locate({ prs: [pullRequest(fields)] });
-    assert.deepEqual(outputs, {});
+for (const [name, prs, expected] of PULL_REQUESTS) {
+  test(name, async () => {
+    const { outputs } = await locate({ prs });
+    assert.deepEqual(outputs, expected);
   });
 }

@@ -63,21 +63,34 @@ jobs:
           done
 
       # Ahead of "Build tests", so the report reaches the pull request in the run where the snapshot test fails.
-      # `github.event_name` and `GITHUB_BASE_REF` are the caller's (`client-v2.yml`).
+      # `github.event_name`, `github.event` and `GITHUB_BASE_REF` are the caller's (`client-v2.yml`).
+      # continue-on-error: a report failure must not skip "Build tests".
       - name: Bundle change report
         if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          scripts/bundle-info-report.sh "$GITHUB_BASE_REF"
+          scripts/bundle-info-report.sh "$GITHUB_BASE_REF" "$HEAD_SHA" || {
+            echo "::warning::Bundle change report failed; the pull request gets no new bundle comment"
+            exit 1
+          }
           cat build/bundle-report.md >> "$GITHUB_STEP_SUMMARY"
 
       # A fork's pull request gets a read-only token here, so bundle-info-comment.yml posts the comment from this artifact.
       - name: Save bundle change report
+        id: save-report
         if: github.event_name == 'pull_request'
+        continue-on-error: true
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bundle-info-comment
           path: client-v2/build/bundle-report.md
           if-no-files-found: error
+
+      - name: Warn about an unsaved bundle change report
+        if: steps.save-report.outcome == 'failure'
+        run: echo "::warning::Saving the bundle change report failed; the pull request gets no new bundle comment"
 
       # `*.build-test.mjs` reads `build/`, so it runs here rather than in `test-api`.
       - name: Build tests

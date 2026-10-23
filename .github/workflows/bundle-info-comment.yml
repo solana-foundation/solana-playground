@@ -29,8 +29,8 @@ jobs:
             client-v2/scripts/bundle-info-locate-pr.mjs
           sparse-checkout-cone-mode: false
 
-      # The artifact is missing when the build job failed before uploading it; the pull request comes from the head
-      # commit, since `workflow_run.pull_requests` is empty for a fork's pull request.
+      # The artifact is missing when the build job saved no report, and the step warns instead of posting; the pull
+      # request comes from the head commit, since `workflow_run.pull_requests` is empty for a fork's pull request.
       - name: Locate report and pull request
         id: locate
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -39,7 +39,7 @@ jobs:
             const { locatePullRequest } = await import('${{ github.workspace }}/client-v2/scripts/bundle-info-locate-pr.mjs');
             await locatePullRequest({ context, core, github });
 
-      # Outside the workspace: the artifact is fork-controlled and must not place files where a later step reads them.
+      # Outside the workspace, so the fork-controlled artifact cannot overwrite checked-out files.
       - name: Download report
         if: steps.locate.outputs.found == 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

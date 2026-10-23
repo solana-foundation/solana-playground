@@ -94,7 +94,10 @@ verdict is the one CI sees whatever version is installed globally.
 `bundle:info` rewrites [`bench/BUNDLE.md`](bench/BUNDLE.md), the committed
 sizes of the production bundle, from `build/`. Run it after `yarn build-fast`
 when a change moves bundle sizes and commit the file: `yarn test-build` fails
-while the snapshot differs from the build.
+while the snapshot differs from the build. CI measures the merge commit, so
+rebase onto the base branch first, and build with `REACT_APP_SENTRY_DSN` and
+`REACT_APP_GA_MEASUREMENT_ID` unset, as CI does: a tracker adds code CI's build
+lacks.
 
 ### Static assets and worktrees
 

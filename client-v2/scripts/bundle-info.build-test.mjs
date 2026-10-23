@@ -1,4 +1,4 @@
-// Hysteresis reproduces every committed cell while the bytes move within one display step, so any difference is a real size change or a hand edit
+// Hysteresis reproduces every committed cell while the fresh cell stays within DISPLAY_STEP_TOLERANCE_BYTES of it, so any difference is a real size change or a hand edit
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
