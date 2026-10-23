@@ -35,7 +35,7 @@ export interface BaseStageBarProps {
 }
 
 /**
- * The prototype's head control: a 30 px square, radius 8, muted until hovered
+ * The prototype's head control: 30 px tall, radius 8, muted until hovered
  * or while its column shows, when it takes the accent fill
  */
 const BAR_CONTROL =

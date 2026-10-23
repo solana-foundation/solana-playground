@@ -247,7 +247,7 @@
 }
 
 /* Lucide's icons at the prototype's stroke: 1.5, not lucide's default 2.
- * Only the default is matched, so an icon given its own strokeWidth keeps it. */
+ * Only the default is matched, so an icon given another strokeWidth keeps it. */
 @layer base {
   svg.lucide[stroke-width="2"] {
     stroke-width: 1.5;

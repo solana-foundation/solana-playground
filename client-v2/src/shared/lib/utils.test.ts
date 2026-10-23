@@ -33,4 +33,10 @@ describe("cn", () => {
     expect(cn("font-act font-medium")).toBe("font-medium");
     expect(cn("font-medium font-read")).toBe("font-read");
   });
+
+  it("still merges the stock classes", () => {
+    expect(cn("p-2 p-4")).toBe("p-4");
+    expect(cn("text-red-500 text-blue-500")).toBe("text-blue-500");
+    expect(cn("px-2", false && "px-4", undefined, "py-1")).toBe("px-2 py-1");
+  });
 });
