@@ -68,11 +68,17 @@ const BaseSessionFooter = ({
           {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
           onClick={onOpenCluster}
         >
-          <StatusDot
-            variant={account.cluster.down ? "error" : "success"}
-            size="lg"
-          />
-          <span className="truncate">{account.cluster.name}</span>
+          {/* In the 16 px glyph box every row's icon has, so its label
+              lines up with theirs */}
+          <span className="grid size-4 shrink-0 place-items-center">
+            <StatusDot
+              variant={account.cluster.down ? "error" : "success"}
+              size="lg"
+            />
+          </span>
+          {/* "Devnet", as the prototype writes it; the name stays lower case
+              in the label the screen reader reads */}
+          <span className="truncate capitalize">{account.cluster.name}</span>
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>

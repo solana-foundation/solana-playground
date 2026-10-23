@@ -5,6 +5,7 @@ import { Button } from "@/shared/ui/button";
 import {
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
@@ -66,31 +67,35 @@ const BaseAppNav = ({
       </div>
     </SidebarHeader>
     <SidebarContent>
-      <SidebarMenu>
-        {ORDER.map((item) => {
-          const { label, Icon } = ITEMS[item];
-          return (
-            <SidebarMenuItem key={item}>
-              <SidebarMenuButton
-                tooltip={label}
-                isActive={item === current}
-                onClick={() => onOpen(item)}
-              >
-                <Icon />
-                <span>{label}</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          );
-        })}
-      </SidebarMenu>
-      {!collapsed && projects}
+      {/* In a group, as the DS sidebar expects: its padding insets every
+          row 8 px from the column's edges, as the prototype draws them */}
+      <SidebarGroup>
+        <SidebarMenu className="gap-px">
+          {ORDER.map((item) => {
+            const { label, Icon } = ITEMS[item];
+            return (
+              <SidebarMenuItem key={item}>
+                <SidebarMenuButton
+                  tooltip={label}
+                  isActive={item === current}
+                  onClick={() => onOpen(item)}
+                >
+                  <Icon />
+                  <span>{label}</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            );
+          })}
+        </SidebarMenu>
+        {!collapsed && projects}
+      </SidebarGroup>
       {!collapsed && <div className="mt-auto">{setup}</div>}
     </SidebarContent>
     {/* Swapped, not hidden, on the rail: what the full footer holds keeps
         its state above it (`FeedbackHost`, `PgSession`), as it must anyway
         across `LAYOUT_BREAKPOINTS.phone`, where the pager and the frame
         replace each other's tree */}
-    <SidebarFooter>
+    <SidebarFooter className="border-t border-sidebar-border px-2 pt-1.5 pb-2">
       {collapsed ? (
         railFooter
       ) : (

@@ -107,10 +107,16 @@ const Group = ({
   const labelId = useId();
   return (
     // No side padding of its own: the rows line up with the items above,
-    // which sit straight in `SidebarContent`, as in the prototype
-    <SidebarGroup role="group" aria-labelledby={labelId} className="px-0">
-      <SidebarGroupLabel id={labelId}>{label}</SidebarGroupLabel>
-      <SidebarMenu>
+    // whose group already insets them from the column's edges
+    <SidebarGroup role="group" aria-labelledby={labelId} className="px-0 pt-5">
+      {/* The prototype's section heading: small, grey, sentence case */}
+      <SidebarGroupLabel
+        id={labelId}
+        className="mb-1 h-4 text-xs font-normal text-subtle"
+      >
+        {label}
+      </SidebarGroupLabel>
+      <SidebarMenu className="gap-px">
         {entries.map((entry) => (
           <SidebarMenuItem key={entry.name}>
             {list.renaming === entry.name ? (
