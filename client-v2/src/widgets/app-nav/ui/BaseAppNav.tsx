@@ -1,6 +1,8 @@
-import { Code, GraduationCap, House, PanelLeft, Plus } from "lucide-react";
-import type { ComponentType, ReactNode } from "react";
+import { PanelLeft } from "lucide-react";
+import type { ReactNode } from "react";
 
+import { BrandIcon } from "@/shared/ui/brand-icon";
+import type { BrandIconName } from "@/shared/ui/brand-icon";
 import { Button } from "@/shared/ui/button";
 import {
   SidebarContent,
@@ -14,12 +16,13 @@ import {
 import type { NavItem } from "../model/nav-item";
 
 /** Keyed by item so a new `NavItem` without an entry does not compile; the
- * menu lists them in the order written here */
-const ITEMS: Record<NavItem, { label: string; Icon: ComponentType }> = {
-  home: { label: "Home", Icon: House },
-  "new-project": { label: "New project", Icon: Plus },
-  tutorials: { label: "Tutorials", Icon: GraduationCap },
-  programs: { label: "Programs", Icon: Code },
+ * menu lists them in the order written here. The icons are the prototype's,
+ * cut from the mark (`BrandIcon`) */
+const ITEMS: Record<NavItem, { label: string; icon: BrandIconName }> = {
+  home: { label: "Home", icon: "home" },
+  "new-project": { label: "New project", icon: "new" },
+  tutorials: { label: "Tutorials", icon: "tutorial" },
+  programs: { label: "Programs", icon: "programs" },
 };
 
 const ORDER = Object.keys(ITEMS) as NavItem[];
@@ -72,7 +75,7 @@ const BaseAppNav = ({
       <SidebarGroup>
         <SidebarMenu className="gap-px">
           {ORDER.map((item) => {
-            const { label, Icon } = ITEMS[item];
+            const { label, icon } = ITEMS[item];
             return (
               <SidebarMenuItem key={item}>
                 <SidebarMenuButton
@@ -80,7 +83,7 @@ const BaseAppNav = ({
                   isActive={item === current}
                   onClick={() => onOpen(item)}
                 >
-                  <Icon />
+                  <BrandIcon name={icon} />
                   <span>{label}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
