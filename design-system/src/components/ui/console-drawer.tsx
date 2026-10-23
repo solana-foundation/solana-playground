@@ -1,6 +1,6 @@
 import * as React from "react"
 import { ChevronUp } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* The console under the stage: a thin frosted strip that says how the last
    run went, and a well that opens above it. It folds by height, so the

@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Check } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { Tabs as TabsPrimitive } from "radix-ui";
 
 import { useIndicator } from "@/shared/lib/hooks/use-indicator";

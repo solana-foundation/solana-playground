@@ -1,5 +1,5 @@
 import * as React from "react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 /* What a stage says before there is anything on it: what it is for, what
    it needs, and the one thing to do. It sits on the stage's own ground, so

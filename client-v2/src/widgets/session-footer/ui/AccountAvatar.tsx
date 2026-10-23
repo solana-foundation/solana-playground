@@ -1,5 +1,5 @@
 import { CircleUserRound } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 

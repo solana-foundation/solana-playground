@@ -40,7 +40,7 @@ test("every playground dependency names an item", () => {
 // `from "x"` and a bare `import "x"`, in either quote.
 const IMPORT = /(?:from|import)\s*["']([^"']+)["']/g;
 // What an item file may import from the registry: one item by name.
-const ITEM_IMPORT = /^@\/(?:components\/ui|hooks)\/([a-z0-9-]+)$/;
+const ITEM_IMPORT = /^@\/(?:components\/ui|hooks|lib)\/([a-z0-9-]+)$/;
 // The consumer brings React; every other package is the item's to declare.
 const PROVIDED = new Set(["react", "react-dom"]);
 

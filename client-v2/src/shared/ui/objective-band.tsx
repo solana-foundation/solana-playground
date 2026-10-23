@@ -1,6 +1,6 @@
 import * as React from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 
 /* A lesson's band over the stage: how far along, what to do now, and the
    way on. Frosted, so the work shows through it. On a phone it folds to one

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Check, ChevronDown, X } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { Collapsible as CollapsiblePrimitive } from "radix-ui"
 
 /* "Get set up · 2 of 4": the few things a new workspace needs, in the
