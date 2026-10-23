@@ -113,6 +113,9 @@ test("the checklist is on a phone's menu page, and its network step works there"
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(title(page)).toHaveText("Get set up· 0 of 4");
+  // Folded to its one line on a phone, as the prototype keeps it
+  await expect(title(page)).toHaveAttribute("aria-expanded", "false");
+  await title(page).click();
 
   await step(page, "Choose a network").click();
 
