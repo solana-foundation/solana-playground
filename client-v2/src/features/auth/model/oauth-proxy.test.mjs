@@ -32,6 +32,7 @@ const PREVIEW_HOST = "solana-playground-abc123-hoodies.vercel.app";
 const PREVIEW = `https://${PREVIEW_HOST}`;
 const BRANCH_HOST = "solana-playground-git-new-face-hoodies.vercel.app";
 const BRANCH = `https://${BRANCH_HOST}`;
+const OTHER = "https://solana-playground-evil-hoodies.vercel.app";
 const PROXY_SECRET = "proxy-secret-proxy-secret-proxy-secret";
 
 /**
@@ -62,16 +63,17 @@ const complete = (auth, origin) =>
   );
 
 /**
- * What `signIn.social` sends from the popup. With a cookie, as a browser on a
- * protected preview always has `_vercel_jwt`: Better Auth checks the `Origin`
- * only on a request that carries one.
+ * What `signIn.social` sends from the popup, on `origin`'s host and from the
+ * page at `from`. With a cookie, as a browser on a protected preview always
+ * has `_vercel_jwt`: Better Auth checks the `Origin` only on a request that
+ * carries one.
  */
-const signIn = (auth, origin) =>
+const signIn = (auth, origin, from = origin) =>
   auth.handler(
     new Request(`${origin}/api/auth/sign-in/social`, {
       method: "POST",
       headers: {
-        origin,
+        origin: from,
         cookie: "_vercel_jwt=x",
         "content-type": "application/json",
       },
@@ -141,10 +143,7 @@ describe("oauthProxyPlugins", () => {
     const from = (origin) => isAllowedOrigin({ headers: { origin } });
     assert.equal(from(BRANCH), true);
     assert.equal(from(PREVIEW), true);
-    assert.equal(
-      from("https://solana-playground-evil-hoodies.vercel.app"),
-      false
-    );
+    assert.equal(from(OTHER), false);
   });
 
   test("is off without the secret", async () => {
@@ -178,6 +177,21 @@ describe("oauthProxyPlugins", () => {
     const [plugin] = oauthProxyPlugins();
     assert.deepEqual(plugin.endpoints, {});
   });
+
+  // A preview whose proxy URL is one of its own hostnames is the host: it
+  // would otherwise complete a payload it forged for itself
+  for (const [label, url] of [
+    ["branch alias", BRANCH],
+    ["deployment URL", PREVIEW],
+  ]) {
+    test(`is the host when the proxy URL is its ${label}`, async () => {
+      asPreview();
+      process.env.AUTH_OAUTH_PROXY_URL = url;
+      const { oauthProxyPlugins } = await load();
+      const [plugin] = oauthProxyPlugins();
+      assert.deepEqual(plugin.endpoints, {});
+    });
+  }
 
   // Fails closed: production given the preview's settings by mistake
   test("is the host outside a preview whatever the proxy URL", async () => {
@@ -239,16 +253,30 @@ describe("oauthProxyPlugins", () => {
     );
   }
 
+  for (const [label, origin, from] of [
+    ["on a host that is not the preview's", OTHER, OTHER],
+    ["from a page on another site", BRANCH, "https://evil.example"],
+  ]) {
+    test(`refuses sign-in ${label}`, { skip: needsDatabase }, async () => {
+      asPreview();
+      const { getAuth } = await load();
+      const res = await signIn(getAuth(), origin, from);
+      assert.equal(res.status, 403);
+    });
+  }
+
+  // Falls back to the deployment URL rather than throwing, which answered a
+  // 500 on /api/auth and "try again" from every route that reads the session
   test(
-    "refuses sign-in on a host that is not the preview's",
+    "reads no session on a host that is not the preview's",
     { skip: needsDatabase },
     async () => {
       asPreview();
-      const { getAuth } = await load();
-      await assert.rejects(
-        signIn(getAuth(), "https://solana-playground-evil-hoodies.vercel.app"),
-        /not in the allowed hosts list/
-      );
+      const { readSession } = await load();
+      const host = new URL(OTHER).host;
+      assert.deepEqual(await readSession({ headers: { host } }), {
+        status: "signed-out",
+      });
     }
   );
 

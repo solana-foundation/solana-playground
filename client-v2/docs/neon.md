@@ -23,7 +23,9 @@ labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-p
 `vercel-install.sh` takes the wasm packages from Remote Cache with the runner's `VERCEL_TOKEN`.
 
 The deployment gets only `DATABASE_URL` from the workflow. The app reads no other `DATABASE_*` variable, so the
-integration's project-level ones, if still set for Preview, are unused.
+integration's project-level ones are unused there. A preview the Git integration deploys does read the Preview-scoped
+`DATABASE_URL`, which must never name production's database
+([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)).
 
 [`preview-sweep.yml`](../../.github/workflows/preview-sweep.yml) is the safety net for a teardown that was
 cancelled or failed. Daily, it deletes every `preview/pr-<n>` older than its `MIN_AGE_MINUTES` whose PR is no
@@ -116,8 +118,8 @@ name comes from the local branch checked out where `make` runs. Three targets ca
 
 `migrate-preview-db` applies the migrations the git branch adds over `main`'s. The branch belongs to one git branch and
 nothing else reads it, so a bad migration costs a `neon branches delete`, not an incident, and two people testing
-two migrations cannot corrupt each other. Before previews had their own branches, preview and production shared a
-single database.
+two migrations cannot corrupt each other. A Git-triggered preview has no branch of its own: it shares the database
+the Preview-scoped `DATABASE_URL` names with every other Git-triggered preview.
 
 ## Cleanup
 

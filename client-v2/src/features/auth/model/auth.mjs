@@ -30,7 +30,10 @@ let instance = null;
  * follows the branch's latest deployment. People open both, so a preview gets
  * Better Auth's dynamic base URL: each request resolves to its own `Host`,
  * provided that host is one of these, and each host carries a session of its
- * own. A request on any other host is refused.
+ * own. A request on any other host, or with no `Host`, falls back to
+ * `VERCEL_URL`, as every request did before the alias was listed: its sign-in
+ * is refused as `INVALID_ORIGIN` and its session reads as signed out, rather
+ * than Better Auth throwing on every request there.
  *
  * `undefined` rather than `""` when nothing is set, so local development falls
  * through to Better Auth's own default instead of being handed a base URL that
@@ -41,16 +44,24 @@ let instance = null;
  * that could drift from it: an origin check keyed off a different answer than
  * the cookie's would be a check of nothing in particular.
  *
- * @returns {string | { allowedHosts: string[]; protocol: "https" } | undefined}
- * the base URL, the hosts a preview resolves among, or `undefined` to let
- * Better Auth decide
+ * @returns {string | {
+ *   allowedHosts: string[];
+ *   protocol: "https";
+ *   fallback: string;
+ * } | undefined} the base URL, the hosts a preview resolves among, or
+ * `undefined` to let Better Auth decide
  */
 export const resolveBaseURL = () => {
   const { AUTH_BASE_URL, VERCEL_BRANCH_URL, VERCEL_URL } = authEnv();
   if (AUTH_BASE_URL) return AUTH_BASE_URL;
 
   const allowedHosts = [VERCEL_BRANCH_URL, VERCEL_URL].filter(Boolean);
-  return allowedHosts.length ? { allowedHosts, protocol: "https" } : undefined;
+  if (!allowedHosts.length) return undefined;
+  return {
+    allowedHosts,
+    protocol: "https",
+    fallback: `https://${VERCEL_URL ?? VERCEL_BRANCH_URL}`,
+  };
 };
 
 /**
@@ -102,12 +113,19 @@ export const oauthProxyPlugins = () => {
     secret: AUTH_OAUTH_PROXY_SECRET,
   });
 
-  const origins = deploymentOrigins();
+  // Parsed last, so a malformed AUTH_BASE_URL on the host fails in Better
+  // Auth's own check, which names the value, rather than here
+  const proxiesElsewhere = () => {
+    const origins = deploymentOrigins();
+    return (
+      origins.length > 0 &&
+      !origins.includes(new URL(AUTH_OAUTH_PROXY_URL).origin)
+    );
+  };
   const isPreview =
     VERCEL_ENV === "preview" &&
     AUTH_OAUTH_PROXY_URL !== undefined &&
-    origins.length > 0 &&
-    !origins.includes(new URL(AUTH_OAUTH_PROXY_URL).origin);
+    proxiesElsewhere();
   return [isPreview ? plugin : { ...plugin, endpoints: {} }];
 };
 
@@ -141,9 +159,18 @@ export const isAllowedOrigin = (req) => {
   const origin = req.headers.origin;
   if (!origin) return true;
 
+  let expected;
   try {
-    const expected = deploymentOrigins();
-    return !expected.length || expected.includes(new URL(origin).origin);
+    expected = deploymentOrigins();
+  } catch (e) {
+    // Refuses every write until fixed; logged, since the 403 names the client
+    console.error("auth: AUTH_BASE_URL is not a URL", { message: e?.message });
+    return false;
+  }
+  if (!expected.length) return true;
+
+  try {
+    return expected.includes(new URL(origin).origin);
   } catch {
     // An `Origin` we cannot even parse is not one of ours
     return false;
