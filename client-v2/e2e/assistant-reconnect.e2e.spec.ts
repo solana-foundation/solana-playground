@@ -449,10 +449,9 @@ test.describe("assistant-own-key", () => {
       return route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body:
-          `data: ${JSON.stringify({
-            choices: [{ delta: { content: REPLY } }],
-          })}\n\n` + "data: [DONE]\n\n",
+        body: `data: ${JSON.stringify({
+          choices: [{ delta: { content: REPLY } }],
+        })}\n\ndata: [DONE]\n\n`,
       });
     });
     const leaks: string[] = [];
