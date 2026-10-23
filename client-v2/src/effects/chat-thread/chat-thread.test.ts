@@ -2,6 +2,7 @@ import type { MockInstance } from "vitest";
 import { chatThread } from "./chat-thread";
 import { openThread } from "./open-thread";
 import { pushThread } from "./push-thread";
+import { PgSession } from "../../features/auth";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgAssistant } from "../../views/sidebar/assistant/store";
@@ -51,6 +52,7 @@ describe("the chat-thread effect", () => {
   afterEach(() => {
     effect?.dispose();
     vi.restoreAllMocks();
+    PgSession.reset();
   });
 
   it("hands the open thread over as the tab goes to the background", async () => {
@@ -191,6 +193,26 @@ describe("the chat-thread effect", () => {
 
       expect(push).toHaveBeenCalledWith("p1");
     });
+  });
+
+  it("opens a thread again once a sign-out has closed it", async () => {
+    // The teardown closes the thread and the workspace stays the same, so
+    // nothing reopened it: what the user typed next lived in memory only
+    await PgSession.refreshWith({
+      id: "u1",
+      name: null,
+      image: null,
+      login: null,
+    });
+    effect = chatThread();
+    await settle();
+    const load = vi.mocked(PgAssistant.loadThread);
+    load.mockClear();
+
+    await PgSession.refreshWith(null);
+    await settle();
+
+    expect(load).toHaveBeenCalled();
   });
 
   it("stops listening once disposed", async () => {
