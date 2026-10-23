@@ -105,7 +105,7 @@ const BaseCatalogGrid = ({
           </ActionCardMedia>
           <ActionCardContent>
             {/* Plain text, as the prototype writes it: level · framework, or
-                framework · categories */}
+                framework · first category */}
             <ActionCardEyebrow>
               {c.tags.map((t) => t.label).join(" · ")}
             </ActionCardEyebrow>
