@@ -87,6 +87,8 @@ const BaseSessionFooter = ({
             <SidebarMenuButton
               ref={accountRef}
               size="lg"
+              // The prototype's 40 px account row, under the 28 px rows
+              className="h-10 text-[0.8125rem]"
               aria-label={accountLabel(account)}
               aria-busy={account.sending || undefined}
             >

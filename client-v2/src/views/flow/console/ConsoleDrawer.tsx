@@ -2,7 +2,7 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 
 import { createLogger } from "../../../shared/lib/logger";
-import { PgTerminal } from "../../../utils";
+import { PgCommon, PgTerminal } from "../../../utils";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgFlow } from "../state/stage";
@@ -66,6 +66,7 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
         if (next !== open) onToggle();
       }}
       status={status}
+      shortcut={PgCommon.getOS() === "MacOS" ? "⌘J" : "Ctrl+J"}
       onClear={clear}
     >
       <Terminal />

@@ -153,7 +153,7 @@ test.describe("client-v2-buttons", () => {
     const logged: string[] = [];
     page.on("console", (message) => logged.push(message.text()));
 
-    const drawer = page.getByRole("button", { name: "Console", exact: true });
+    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }
@@ -183,7 +183,7 @@ test.describe("client-v2-buttons", () => {
       route.fulfill({ status: 500, body: "boom" })
     );
 
-    const drawer = page.getByRole("button", { name: "Console", exact: true });
+    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
     if ((await drawer.getAttribute("aria-expanded")) === "true") {
       await drawer.click();
     }

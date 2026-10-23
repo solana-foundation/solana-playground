@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 
-import { PgTerminal } from "../../../utils";
+import { PgCommon, PgTerminal } from "../../../utils";
 import type { FlowState, StageStatus } from "../state/stage";
 
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
@@ -33,6 +33,7 @@ vi.mock("../../../shared/lib/logger", () => ({
 // stubs only what the drawer calls: every other `Pg*` export is undefined.
 vi.mock("@/utils", () => ({
   PgTerminal: { clear: vi.fn(), setConsoleOpen: vi.fn() },
+  PgCommon: { getOS: vi.fn(() => "MacOS") },
 }));
 
 /** The flow's state and its one listener, which a test drives by hand */
@@ -81,7 +82,7 @@ beforeEach(() => {
 it("should show what it is told and ask to toggle", () => {
   const onToggle = vi.fn();
   render(<ConsoleDrawer open={false} onToggle={onToggle} />);
-  const handle = screen.getByRole("button", { name: "Console" });
+  const handle = screen.getByRole("button", { name: "Terminal" });
   expect(handle.getAttribute("aria-expanded")).toBe("false");
   expect(
     document.getElementById(CONSOLE_BODY_ID)!.querySelector(".xterm")
@@ -92,7 +93,7 @@ it("should show what it is told and ask to toggle", () => {
 
 it("should report itself expanded when open", () => {
   render(<ConsoleDrawer open={true} onToggle={vi.fn()} />);
-  const handle = screen.getByRole("button", { name: "Console" });
+  const handle = screen.getByRole("button", { name: "Terminal" });
   expect(handle.getAttribute("aria-expanded")).toBe("true");
 });
 
@@ -147,4 +148,14 @@ it("should show the flow's status as it changes", () => {
   act(() => flow.listener!(flowState("running")));
 
   expect(screen.getByText("building...")).toBeTruthy();
+});
+
+it.each([
+  ["MacOS", "⌘J"],
+  ["Windows", "Ctrl+J"],
+  ["Linux", "Ctrl+J"],
+] as const)("shows the toggle's key on %s as %s", (os, key) => {
+  vi.mocked(PgCommon.getOS).mockReturnValue(os);
+  render(<ConsoleDrawer open={false} onToggle={vi.fn()} />);
+  expect(vi.mocked(BaseConsoleDrawer).mock.lastCall![0].shortcut).toBe(key);
 });
