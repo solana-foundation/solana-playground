@@ -36,6 +36,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
   useRenderOnChange(PgSession.onDidChange);
   const [authError, setAuthError] = useState<string | null>(null);
   const [signingIn, setSigningIn] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const github = PgSession.get();
 
   const [profileOpen, setProfileOpen] = useState(false);
@@ -82,6 +83,20 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
     }
   };
 
+  // A failed sign-out keeps the session, so the chip still reads signed in;
+  // this says why the click did nothing
+  const signOut = async () => {
+    setAuthError(null);
+    setSigningOut(true);
+    try {
+      await PgSession.signOut();
+    } catch (e) {
+      setAuthError((e as Error).message);
+    } finally {
+      setSigningOut(false);
+    }
+  };
+
   return (
     <Wrapper>
       <ChipButton
@@ -118,15 +133,29 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
           <GithubChip
             ref={profileChipRef}
             type="button"
-            onClick={() => setProfileOpen((open) => !open)}
+            // The upload and the request can take seconds, and the chip
+            // still reads signed in until the server answers. `aria-disabled`
+            // rather than `disabled`: closing the popover returns focus here,
+            // and a disabled button cannot take it.
+            onClick={() => {
+              if (!signingOut) setProfileOpen((open) => !open);
+            }}
+            aria-disabled={signingOut}
+            aria-busy={signingOut}
             title="GitHub profile"
             aria-expanded={profileOpen}
-            aria-label={`GitHub profile: ${
-              github.login ?? github.name ?? "account"
-            }`}
+            aria-label={
+              signingOut
+                ? "Signing out of GitHub"
+                : `GitHub profile: ${github.login ?? github.name ?? "account"}`
+            }
           >
             <Avatar src={github.image ?? undefined} alt="" aria-hidden />
-            <span>{github.login ?? github.name ?? "Account"}</span>
+            <span>
+              {signingOut
+                ? "Signing out..."
+                : github.login ?? github.name ?? "Account"}
+            </span>
           </GithubChip>
           {profileOpen && (
             <Popover aria-label="GitHub profile">
@@ -137,7 +166,7 @@ const StatusChips: FC<React.PropsWithChildren<StatusChipsProps>> = ({
                     <ConfirmSignOutButton
                       type="button"
                       onClick={() => {
-                        void PgSession.signOut();
+                        void signOut();
                         closeProfile();
                       }}
                     >

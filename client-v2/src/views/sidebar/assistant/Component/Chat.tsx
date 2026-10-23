@@ -178,24 +178,28 @@ const Chat = () => {
 
     const controller = new AbortController();
     turn.current = controller;
+    PgAssistant.beginTurn(controller);
 
     try {
       await provider.current!.instance.send(trimmed, controller.signal);
     } catch (e) {
-      // Stopping is the user's own doing; `stop` already said so
+      // Stopping is the user's own doing, and `stop` already said so; a
+      // thread closing under the turn stopped it on the way out
       if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
       }
     } finally {
       if (turn.current === controller) turn.current = null;
+      const finished = PgAssistant.endTurn(controller);
       PgAssistant.setStatus("idle");
 
       // End of turn is the natural commit point: the exchange is complete and
       // the user is reading rather than typing. Deliberately not awaited --
       // a slow or failed upload must not hold up the panel, and the local
-      // copy is already written either way.
+      // copy is already written either way. Not for a turn whose thread
+      // closed: the thread open now holds nothing of it.
       const threadId = PgAssistant.threadId;
-      if (threadId) {
+      if (finished && threadId) {
         void pushThread(threadId).catch((e) => report("push turn", e));
       }
     }

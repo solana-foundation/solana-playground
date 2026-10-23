@@ -64,26 +64,14 @@ const acquire = (locks: LockManager) =>
       .catch(failed);
   });
 
-/** How long a request made while holding the lock may take */
-export const LOCKED_REQUEST_MS = 15_000;
-
 /**
- * A signal that aborts a request after `ms`, for anything sent while the
- * lock is held.
+ * How long a request made while holding the lock may take.
  *
- * Every other tab's sync waits behind the holder, and `fetch` itself never
- * gives up: a request stuck on a dead connection kept the lock, and with it
- * every tab's reconcile and upload, for as long as the browser let it hang.
- * An aborted request rejects, which lands in the caller's existing catch.
- *
- * @returns the signal, or `undefined` where the browser cannot make one --
- * the request then behaves as it did before
+ * Every other tab's sync waits behind the holder, so a request stuck on a dead
+ * connection kept the lock, and with it every tab's reconcile and upload. Sent
+ * with `timeoutSignal` (`shared/lib/timeout-signal`).
  */
-export const timeoutSignal = (ms: number): AbortSignal | undefined =>
-  typeof AbortSignal !== "undefined" &&
-  typeof AbortSignal.timeout === "function"
-    ? AbortSignal.timeout(ms)
-    : undefined;
+export const LOCKED_REQUEST_MS = 15_000;
 
 if (import.meta.vitest) {
   const { describe, it, expect, vi, afterEach } = import.meta.vitest;
@@ -201,35 +189,6 @@ if (import.meta.vitest) {
           theirs = true;
         });
         expect(theirs).toBe(true);
-      });
-    });
-
-    describe("timeoutSignal", () => {
-      const original = Object.getOwnPropertyDescriptor(AbortSignal, "timeout");
-      const setTimeoutFn = (value: unknown) =>
-        Object.defineProperty(AbortSignal, "timeout", {
-          value,
-          configurable: true,
-          writable: true,
-        });
-
-      afterEach(() => {
-        if (original) Object.defineProperty(AbortSignal, "timeout", original);
-        else delete (AbortSignal as { timeout?: unknown }).timeout;
-      });
-
-      it("is undefined where the browser cannot make one", () => {
-        setTimeoutFn(undefined);
-        expect(timeoutSignal(15_000)).toBeUndefined();
-      });
-
-      it("asks the browser for a signal that times out", () => {
-        const signal = new AbortController().signal;
-        const timeout = vi.fn(() => signal);
-        setTimeoutFn(timeout);
-
-        expect(timeoutSignal(15_000)).toBe(signal);
-        expect(timeout).toHaveBeenCalledWith(15_000);
       });
     });
   });

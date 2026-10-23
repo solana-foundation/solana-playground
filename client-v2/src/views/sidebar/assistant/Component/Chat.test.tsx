@@ -50,20 +50,29 @@ vi.mock("../bridge/lesson-context", () => ({ describeLesson: () => null }));
 vi.mock("../bridge/playground-bridge", () => ({
   realBridge: { listFiles: () => [], listOpenFiles: () => [] },
 }));
+/** The provider's `send`, which a test may replace to hold a turn open */
+const provider = vi.hoisted(() => ({
+  send: async (_text: string, _signal: AbortSignal) => {},
+}));
 vi.mock("../model", () => ({
-  createProvider: () => ({ label: "Test backend", send: async () => {} }),
+  createProvider: () => ({
+    label: "Test backend",
+    send: (text: string, signal: AbortSignal) => provider.send(text, signal),
+  }),
 }));
 vi.mock("../../../../effects/chat-thread/push-thread", () => ({
   pushThread: async () => true,
 }));
 
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import Chat from "./Chat";
 import { PgSession } from "../../../../features/auth";
+import { PgChatStorage } from "../../../../features/persistence/model/chat-storage";
 import { PgAssistant, type Connection } from "../store";
+import { PgFs } from "../../../../utils/explorer/fs";
 
 /** A theme that answers every key; see `Connect.test.tsx` */
 const anyTheme: DefaultTheme = new Proxy(
@@ -155,5 +164,105 @@ describe("Chat when the session ends", () => {
     act(() => PgAssistant.pickBackend());
 
     expect(screen.getByRole("button", { name: "Back to chat" })).toBeTruthy();
+  });
+});
+
+/**
+ * Sign-out's teardown and a workspace switch both close the open thread. A
+ * turn still running then belongs to a thread that is gone, and nothing it
+ * does afterwards may land in the one that opens next.
+ */
+describe("Chat when the thread closes mid-turn", () => {
+  /** What the turn sees: its signal, and a way to let it finish */
+  interface HeldTurn {
+    signal: AbortSignal;
+    finish: () => void;
+  }
+
+  let held: Promise<HeldTurn>;
+
+  beforeEach(async () => {
+    (PgFs as unknown as { __files: Map<string, string> }).__files.clear();
+    PgAssistant.closeThread();
+    PgAssistant.clear();
+    Element.prototype.scrollIntoView = vi.fn();
+    PgAssistant.connect(OWN);
+    await PgAssistant.loadThread("before");
+
+    held = new Promise((started) => {
+      provider.send = (_text, signal) =>
+        new Promise<void>((finish) => started({ signal, finish }));
+    });
+  });
+  afterEach(async () => {
+    provider.send = async () => {};
+    PgAssistant.closeThread();
+    PgAssistant.disconnect();
+    await PgAssistant.whenPersisted();
+  });
+
+  /** Send a prompt and wait until the provider has it */
+  const startTurn = async () => {
+    renderChat();
+    const input = screen.getByLabelText("Message the assistant");
+    fireEvent.change(input, { target: { value: "build it" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    return held;
+  };
+
+  it("stops the turn when its thread closes", async () => {
+    const turn = await startTurn();
+
+    act(() => PgAssistant.closeThread());
+
+    expect(turn.signal.aborted).toBe(true);
+    await act(async () => turn.finish());
+  });
+
+  it("writes nothing from the stopped turn into the thread opened next", async () => {
+    const turn = await startTurn();
+
+    act(() => PgAssistant.closeThread());
+    await act(() => PgAssistant.loadThread("after"));
+
+    // What a provider still unwinding does: its tools report, its reply
+    // streams, its gated tool asks, and the request fails
+    let approval: Promise<{ allowed: boolean }> | undefined;
+    act(() => {
+      PgAssistant.addToolCall("read src/lib.rs");
+      const reply = PgAssistant.startAssistantMessage();
+      PgAssistant.appendToAssistantMessage(reply, "Half a rep");
+      approval = PgAssistant.requestApproval({
+        type: "command",
+        name: "build",
+        effect: "builds",
+      });
+      PgAssistant.addError("request failed");
+    });
+    await act(async () => turn.finish());
+
+    expect(PgAssistant.items).toEqual([]);
+    expect(PgAssistant.status).toBe("idle");
+    await expect(approval).resolves.toMatchObject({ allowed: false });
+    await PgAssistant.whenPersisted();
+    expect(await PgChatStorage.read("after")).toEqual([]);
+  });
+
+  it("lets the next turn write to the thread opened next", async () => {
+    const turn = await startTurn();
+    act(() => PgAssistant.closeThread());
+    await act(() => PgAssistant.loadThread("after"));
+    await act(async () => turn.finish());
+
+    provider.send = async () => {
+      PgAssistant.addToolCall("read src/lib.rs");
+    };
+    const input = screen.getByLabelText("Message the assistant");
+    fireEvent.change(input, { target: { value: "again" } });
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter" });
+    });
+
+    expect(PgAssistant.items.map((i) => i.kind)).toEqual(["user", "tool"]);
   });
 });
