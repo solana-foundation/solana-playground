@@ -5,8 +5,10 @@ import { Dialog as DialogPrimitive } from "radix-ui";
 
 /* The product's dialog. On a desk, a card on the dimmed stage: bg2, a
    stronger edge, 16 corners, the title on the left in the headline face.
-   On a phone, a page of its own, with a 60px bar and its buttons pinned to
-   the foot. wide is the gallery's. */
+   On a desk the title stands over a hairline that runs the width of the
+   body, as every titled dialog of the prototype draws it. On a phone, a
+   page of its own, with a 60px bar and its buttons pinned to the foot.
+   wide is the gallery's, narrow a one-column form's. */
 
 function Modal(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="modal" {...props} />;
@@ -28,7 +30,7 @@ function ModalContent({
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  size?: "default" | "wide";
+  size?: "default" | "narrow" | "wide";
 }) {
   return (
     <DialogPrimitive.Portal>
@@ -41,7 +43,7 @@ function ModalContent({
         data-size={size}
         className={cn(
           "fixed z-50 flex flex-col bg-surface-panel text-foreground outline-none data-open:animate-in data-open:fade-in-0 data-closed:animate-out data-closed:fade-out-0",
-          "md:top-1/2 md:left-1/2 md:max-h-[calc(100dvh-4rem)] md:w-[min(36rem,calc(100vw-2rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-border-strong md:shadow-modal md:data-open:zoom-in-95 md:data-[size=wide]:w-[min(64rem,90vw)]",
+          "md:top-1/2 md:left-1/2 md:max-h-[calc(100dvh-4rem)] md:w-[min(36rem,calc(100vw-2rem))] md:-translate-x-1/2 md:-translate-y-1/2 md:rounded-2xl md:border md:border-border-strong md:shadow-modal md:data-open:zoom-in-95 md:data-[size=narrow]:w-[min(27rem,calc(100vw-2rem))] md:data-[size=wide]:w-[min(64rem,90vw)]",
           "max-md:inset-0 max-md:h-dvh",
           className
         )}
@@ -62,7 +64,7 @@ function ModalHeader({
     <div
       data-slot="modal-header"
       className={cn(
-        "flex items-start gap-3 px-6 pt-6 pb-2 max-md:h-phone-bar max-md:shrink-0 max-md:items-center max-md:border-b max-md:border-border max-md:px-4 max-md:py-0",
+        "mx-6 flex items-start gap-3 border-b border-border pt-5 pb-1 max-md:mx-0 max-md:h-phone-bar max-md:shrink-0 max-md:items-center max-md:px-4 max-md:py-0",
         className
       )}
       {...props}
@@ -70,7 +72,7 @@ function ModalHeader({
       <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
       <DialogPrimitive.Close
         aria-label="Close"
-        className="-mt-1 -mr-2 grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:m-0 max-md:size-11"
+        className="-my-1.5 -mr-2 grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:m-0 max-md:size-11"
       >
         <XIcon className="size-4" />
       </DialogPrimitive.Close>

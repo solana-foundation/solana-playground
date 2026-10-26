@@ -948,7 +948,8 @@ test.describe("a select inside the assistant Sheet", () => {
     await dialog.getByRole("combobox", { name: "Model" }).click();
     const option = page.getByRole("option").first();
     await expect(option).toBeVisible();
-    await expect(option).toContainText("claude");
+    // The model by name, as the prototype writes it (R39)
+    await expect(option).toContainText("Opus");
     const hit = await option.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const top = document.elementFromPoint(

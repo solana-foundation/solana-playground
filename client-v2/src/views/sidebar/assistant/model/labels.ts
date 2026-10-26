@@ -1,3 +1,14 @@
+import type { Effort } from "./types";
+
+/** The words for each effort level, in the composer's menu and on Connect a model */
+export const EFFORT_LABELS: Record<Effort, string> = {
+  low: "Low",
+  medium: "Medium",
+  high: "High",
+  xhigh: "Extra high",
+  max: "Max",
+};
+
 /** Display names for model ids the product ships with; anything else is shown as it is */
 const NAMES: Record<string, string> = {
   "z-ai/glm-5.3-flash:US": "GLM 5.3 Flash",
@@ -12,7 +23,7 @@ export const displayModelName = (id: string) => NAMES[id] ?? id;
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
-  describe("widgets/assistant/model/model-name", () => {
+  describe("views/sidebar/assistant/model/labels", () => {
     describe("displayModelName", () => {
       it("names the hosted default", () => {
         expect(displayModelName("z-ai/glm-5.3-flash:US")).toBe("GLM 5.3 Flash");
