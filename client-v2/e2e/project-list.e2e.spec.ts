@@ -205,7 +205,7 @@ test("client-v2-layout: A lesson's menu", async ({ seededPage: page }) => {
   await page.getByRole("button", { name: "Open Hello Anchor" }).click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
   // A lesson is a workspace only once it is started
-  await page.getByRole("button", { name: "START" }).click();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
 
   const lessons = page.getByRole("group", { name: "Lessons" });
   await expect(lessons.getByText("Hello Anchor")).toBeVisible(LONG);

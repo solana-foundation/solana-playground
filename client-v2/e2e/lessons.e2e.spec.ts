@@ -9,8 +9,8 @@ const rows = (page: Page) =>
   page.locator('[data-slot="step-rail"] [data-slot="step-rail-item"]');
 
 /**
- * Home -> Open Hello Anchor -> START, as `lesson-path` does.
- * `START` creates the workspace and flips the route to the lesson chrome.
+ * Home -> Open Hello Anchor -> Start, as `lesson-path` does.
+ * `Start` creates the workspace and flips the route to the lesson chrome.
  */
 const startHelloAnchor = async (page: Page) => {
   // No default backend, whatever the dev server is configured with
@@ -27,7 +27,7 @@ const startHelloAnchor = async (page: Page) => {
     })
     .click();
   await expect(home(page)).toBeHidden();
-  await page.getByRole("button", { name: "START", exact: true }).click();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(band(page)).toBeVisible();
 };
 
@@ -136,7 +136,7 @@ test.describe("client-v2-lessons", () => {
     ).toBeVisible();
 
     // Leaves as soon as the band shows Step 2, then comes back. Every write
-    // since START lands within lightning-fs's 500 ms tree-save window, so
+    // since Start lands within lightning-fs's 500 ms tree-save window, so
     // without the flush on the record file's first write (`writeWorkspaceFile`)
     // the file itself is lost; it failed that way before the flush existed.
     // Step 1 coming back means one of two things: the flush regressed, or the

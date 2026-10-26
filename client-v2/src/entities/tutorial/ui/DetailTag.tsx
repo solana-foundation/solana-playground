@@ -18,7 +18,8 @@ const log = createLogger("tutorial:detail-tag");
 const reported = new Set<string>();
 
 function DetailTag({ kind, value, className }: DetailTagProps) {
-  // The design system's Tag rounds its icons to `rounded-sm`
+  // A framework whose image is a circle is drawn round; the box leaves icons
+  // square
   const round =
     kind === "framework" &&
     PgFramework.get(value as FrameworkName)?.circleImage;

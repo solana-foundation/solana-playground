@@ -71,14 +71,14 @@ test.describe("on a desktop window", () => {
       .click();
 
     await expect(page).toHaveURL(/\/tutorials\//);
-    // Opening only routes there; the About screen's START is what a tutorial
+    // Opening only routes there; the About screen's Start is what a tutorial
     // that was never started shows (see lesson-path.e2e.spec.ts)
     await expect(
-      page.getByRole("button", { name: "START", exact: true })
+      page.getByRole("button", { name: "Start", exact: true })
     ).toBeVisible();
     await expect(home(page)).toBeHidden();
 
-    await page.getByRole("button", { name: "START", exact: true }).click();
+    await page.getByRole("button", { name: "Start", exact: true }).click();
     // The lesson panel's Steps | Files switch is a Segmented: its items are
     // radios (5.19)
     await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
