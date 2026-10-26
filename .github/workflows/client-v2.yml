@@ -165,16 +165,17 @@ jobs:
   # the dev server serves `api/*.mjs` itself. The suite runs as shards, one
   # per matrix entry, each on its own runner; `e2e-report` reads every
   # shard's json report and checks the skips there against
-  # `e2e/known-skips.txt`.
-  # `playwright.config.mts` says what `CI` changes.
+  # `e2e/known-skips.txt`. `playwright.config.mts` says what `CI` changes.
   e2e:
     name: e2e (${{ matrix.shard }})
     runs-on: ubuntu-latest
     # Measured on run 40369790881 (2026-10-26, 278 tests): about 4 minutes
     # from checkout to the first test (install, browser, dev-server compile),
     # and the slowest of four shards holds about 7 minutes of tests. A
-    # genuine hang still fails, just later; Playwright's `globalTimeout`
-    # (playwright.config.mts) is under this limit and ends a hung shard first.
+    # genuine hang still fails, just later: Playwright's `globalTimeout`
+    # (playwright.config.mts) starts with the dev-server boot and ends a hung
+    # shard first while the steps before `Browser tests` stay under the
+    # difference between the two limits.
     timeout-minutes: 20
 
     strategy:
@@ -182,8 +183,9 @@ jobs:
       # failure and `e2e-report` sees every report.
       fail-fast: false
       # The list is 1..N without gaps: `strategy.job-total` is its length and
-      # the divisor below, and a shard index the matrix skips is a slice
-      # nobody runs while this job stays green. `e2e-report` fails on the gap.
+      # the divisor in the `--shard` argument of `Browser tests`, and a shard
+      # index the matrix skips is a slice nobody runs while this job stays
+      # green. `e2e-report` fails on the gap.
       matrix:
         shard: [1, 2, 3, 4]
 
@@ -294,13 +296,17 @@ jobs:
       # Playwright writes `config.shard` as `{ total, current }` into the
       # json report. The reports must agree on `total` and cover 1..total: a
       # cancelled shard, a shard that never reached a report, or a lost
-      # upload is a slice nobody checked, not a pass.
+      # upload is a slice nobody checked, not a pass. `pipefail`, because the
+      # default shell drops a jq failure behind `sort`.
       - name: Every shard reported
         run: |
+          set -o pipefail
           shopt -s nullglob
           reports=(shard-reports/*/report.json)
           [ "${#reports[@]}" -gt 0 ] || { echo "::error::no shard-reports/*/report.json -- no shard ran to a report"; exit 1; }
           for report in "${reports[@]}"; do
+            jq -e . "$report" > /dev/null \
+              || { echo "::error::$report is not JSON -- the upload is truncated or the run died mid-write"; exit 1; }
             jq -e '.config.shard | type == "object"' "$report" > /dev/null \
               || { echo "::error::$report has no config.shard -- the run was not sharded"; exit 1; }
           done
@@ -316,10 +322,15 @@ jobs:
       # reports: a skip outside `e2e/known-skips.txt` fails the job, a listed
       # test that no longer skips is a warning to prune the list, and a
       # flaky test is a warning with its title -- work to do, not a pass.
+      # `pipefail`, so a jq failure inside `titles` fails the step instead of
+      # passing a truncated list; `sed` rather than `grep -v`, which exits 1
+      # on a list that holds only comments.
       - name: Check skips against the known list
         run: |
+          set -o pipefail
+          [ -f e2e/known-skips.txt ] || { echo "::error::e2e/known-skips.txt not checked out -- the sparse-checkout path in this job is stale"; exit 1; }
           titles() { jq -r --arg s "$1" '.. | objects | select(has("tests")) | select(any(.tests[]; .status == $s)) | .title' shard-reports/*/report.json | sort; }
-          grep -v '^#' e2e/known-skips.txt | sed '/^$/d' | sort > /tmp/known-skips
+          sed '/^#/d; /^$/d' e2e/known-skips.txt | sort > /tmp/known-skips
           titles skipped > /tmp/skipped
           comm -13 /tmp/known-skips /tmp/skipped | while read -r t; do echo "::error title=unexpected e2e skip::$t -- not in e2e/known-skips.txt"; done
           comm -23 /tmp/known-skips /tmp/skipped | while read -r t; do echo "::warning title=stale known skip::$t -- listed in e2e/known-skips.txt but ran"; done

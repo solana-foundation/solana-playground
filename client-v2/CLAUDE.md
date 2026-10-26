@@ -356,9 +356,9 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
   fork"), and a red spec fails the PR's checks. It needs no server and no
   Postgres: every spec stubs the account endpoints with `page.route`, and
-  the dev server serves
-  `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,
-  so none depends on the machine's default backend. Two sync tests ("switching
+  the dev server serves `api/*.mjs` itself. The assistant's specs stub
+  `/api/agent` the same way, so none depends on the machine's default
+  backend. Two sync tests ("switching
   tabs mid-debounce raises no conflict", "reloading a project the account
   already has writes nothing") are `test.fixme` on the runner, where the
   load's timing differs and the sync races they guard show. The two are
