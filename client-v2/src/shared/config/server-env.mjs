@@ -38,8 +38,15 @@ export const mcpExplorerEnv = () => ({
   TOKEN: read("MCP_EXPLORER_TOKEN"),
 });
 
-/** Postgres for sync, and its opt-in kill switch */
+/**
+ * Postgres for sync, and its opt-in kill switch. `DB_PROVIDER` picks how the
+ * pool is built (`model/providers/` in the persistence feature); each provider
+ * reads only its own variables.
+ */
 export const databaseEnv = () => ({
+  // Unset means `url`. Any other value is passed through so the pool can
+  // refuse it by name, never guessed from which variables happen to be set
+  DB_PROVIDER: read("DB_PROVIDER") || "url",
   DATABASE_URL: read("DATABASE_URL"),
   // Only the exact string enables sync; anything else keeps it off
   SYNC_ENABLED: process.env.SYNC_ENABLED === "true",

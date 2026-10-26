@@ -4,7 +4,7 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
 
 ## 1. The provider layer
 
-- [ ] 1.1 Add `DB_PROVIDER` to `databaseEnv()` in
+- [x] 1.1 Add `DB_PROVIDER` to `databaseEnv()` in
       `client-v2/src/shared/config/server-env.mjs`; move the connection-string
       pool into `features/persistence/model/providers/url.mjs`; make `getPool()`
       in `db.mjs` async, memoised, and delegating by `DB_PROVIDER`; await it in

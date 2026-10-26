@@ -224,7 +224,7 @@ const VERSION_OF = (row, cast = "") =>
  * @throws {ThreadDeleted} when the thread, or its project, was deleted
  */
 export const appendMessages = async (userId, thread, items) => {
-  const client = await getPool().connect();
+  const client = await (await getPool()).connect();
   try {
     await client.query("begin");
     const conversationId = await ensureThread(client, userId, thread);

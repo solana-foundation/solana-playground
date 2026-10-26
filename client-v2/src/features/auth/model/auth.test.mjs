@@ -61,7 +61,7 @@ describe("readSession", () => {
     ],
   ]) {
     test(label, async () => {
-      mock.method(getAuth().api, "getSession", getSession);
+      mock.method((await getAuth()).api, "getSession", getSession);
       mock.method(console, "error", () => {});
       assert.deepEqual(await readSession(req()), expected);
     });
