@@ -25,12 +25,13 @@ export const AUTH_CHANNEL_NAME = "pg-auth-complete";
 export const SIGNED_OUT_REASON = "signed-out";
 
 /**
- * The variables sign-in cannot run without. `missingConfig` reports these, and
- * `scripts/check-agent-env.mjs` fails a Vercel build that sets the agent key
- * without them, since `/api/agent` would refuse every turn.
+ * The variables sign-in cannot run without, besides the database's. `missingConfig`
+ * reports these, and `scripts/check-agent-env.mjs` fails a Vercel build that
+ * sets the agent key without them, since `/api/agent` would refuse every turn.
+ * The database's depend on `DB_PROVIDER`, so they come from the persistence
+ * feature's `missingDatabaseEnv`, and both callers list them first.
  */
 export const SIGN_IN_ENV = [
-  "DATABASE_URL",
   "GITHUB_CLIENT_ID",
   "GITHUB_CLIENT_SECRET",
   "AUTH_SECRET",

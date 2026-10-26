@@ -17,18 +17,26 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       passing unchanged, `yarn test-api` green against
       the CI service container, and `yarn test-e2e e2e/account-sync.e2e.spec.ts`
       passing. Ticket to file.
-- [ ] 1.2 Add `providers/cloud-sql.mjs`: `@google-cloud/cloud-sql-connector`,
+- [x] 1.2 Add `providers/cloud-sql.mjs`: `@google-cloud/cloud-sql-connector`,
       `google-auth-library`, and `@vercel/oidc` as dependencies; the
       `ExternalAccountClient` fed by `getVercelOidcToken`;
       `getOptions({ authType: "IAM" })` into `pg.Pool` with the pool limits from
       the `url` provider; `isConfigured` over the `CLOUD_SQL_*` and `GCP_*`
       variables; and the refusal of `CLOUD_SQL_DATABASE=solpg` when `VERCEL_ENV`
-      is not `production`, before any token exchange. Verify with
+      is not `production`, before any token exchange. Each provider's
+      variables are declared once, in `features/persistence/config.mjs`, and
+      sign-in's `missingConfig` and `scripts/check-agent-env.mjs` require the
+      chosen provider's (an unknown `DB_PROVIDER` fails a production build),
+      so a production build on Cloud SQL passes without `DATABASE_URL`. Verify with
       `db.test.mjs` cases "reports unconfigured when a Cloud SQL variable is
       missing", "refuses the production database outside production", and "allows
       a preview database outside production", with the connector and the auth
       client stubbed so no case reaches the network; and with
-      `client-v2/api/sync.test.mjs` gaining "reports unreachable without detail".
+      `client-v2/api/sync.test.mjs` gaining "reports unreachable without detail";
+      and with `client-v2/scripts/check-agent-env.test.mjs` gaining "passes a
+      production key on Cloud SQL without DATABASE_URL", "fails a production
+      key on Cloud SQL without one of its variables", and "fails a production
+      key whose DB_PROVIDER names no provider".
       Depends on 1.1. Ticket to file.
 - [ ] 1.3 Add `client-v2/scripts/db/preview-name.mjs` (`solpg_preview_pr_<n>`
       for a PR, `solpg_preview_br_<id>` for a laptop branch) and the provisioning
