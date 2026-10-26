@@ -66,12 +66,40 @@ export const listGatewayServers = async (): Promise<McpServerEntry[]> => {
 const kindOf = (server: McpServerEntry): McpServerKind =>
   server.url.trim().split(/[?#]/)[0] === GATEWAY ? "gateway" : "user";
 
-/** A connection and what it was opened with */
-interface Held {
+/** What a connection is opened with: the URL with its query parameters, and the headers with the token */
+interface Target {
   url: string;
   headers: Record<string, string>;
+}
+
+/** A connection and what it was opened with */
+interface Held extends Target {
   connection: McpConnection;
 }
+
+const targetOf = (server: McpServerEntry): Target => ({
+  url: serverUrl(server),
+  headers: {
+    ...(server.authToken?.trim()
+      ? { authorization: `Bearer ${server.authToken.trim()}` }
+      : {}),
+    ...server.headers,
+  },
+});
+
+const sameHeaders = (a: Record<string, string>, b: Record<string, string>) => {
+  const keys = Object.keys(a);
+  return (
+    keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
+  );
+};
+
+const sameTarget = (a: Target, b: Target) =>
+  a.url === b.url && sameHeaders(a.headers, b.headers);
+
+/** Whether two entries reach the same server the same way, so one's session and tools are the other's */
+export const sameConnection = (a: McpServerEntry, b: McpServerEntry) =>
+  sameTarget(targetOf(a), targetOf(b));
 
 // One per entry id, so an edited or removed entry's session can be closed rather than left open
 const connections = new Map<string, Held>();
@@ -86,29 +114,14 @@ const closeQuietly = (held: Held) =>
     })
   );
 
-const sameHeaders = (a: Record<string, string>, b: Record<string, string>) => {
-  const keys = Object.keys(a);
-  return (
-    keys.length === Object.keys(b).length && keys.every((k) => a[k] === b[k])
-  );
-};
-
 const connectionFor = (
   server: McpServerEntry,
   connectMcp: Awaited<ReturnType<typeof loadAi>>["connectMcp"]
 ) => {
-  const headers: Record<string, string> = {
-    ...(server.authToken?.trim()
-      ? { authorization: `Bearer ${server.authToken.trim()}` }
-      : {}),
-    ...server.headers,
-  };
-  const url = serverUrl(server);
+  const { url, headers } = targetOf(server);
 
   const held = connections.get(server.id);
-  if (held && held.url === url && sameHeaders(held.headers, headers)) {
-    return held.connection;
-  }
+  if (held && sameTarget(held, { url, headers })) return held.connection;
   if (held) void closeQuietly(held);
 
   const kind = kindOf(server);
@@ -246,17 +259,18 @@ if (import.meta.vitest) {
     let initTelemetry: typeof import("@/shared/lib/telemetry").initTelemetry;
     let resetTelemetry: typeof import("@/shared/lib/telemetry").resetTelemetry;
     let memoryProvider: typeof import("@/shared/lib/telemetry").memoryProvider;
-    let rpcResult: typeof import("@/shared/lib/ai/fake-mcp").rpcResult;
-    let rpcError: typeof import("@/shared/lib/ai/fake-mcp").rpcError;
-    let initializeResult: typeof import("@/shared/lib/ai/fake-mcp").initializeResult;
+    let rpcResult: typeof import("@/shared/lib/json-rpc.mjs").rpcResult;
+    let rpcError: typeof import("@/shared/lib/json-rpc.mjs").rpcError;
+    let initializeResult: typeof import("@/shared/lib/ai/__fixtures__/fake-mcp").initializeResult;
     let sent: ReturnType<typeof memoryProvider>;
 
     beforeAll(async () => {
       ({ initTelemetry, resetTelemetry, memoryProvider } = await import(
         "@/shared/lib/telemetry"
       ));
-      ({ rpcResult, rpcError, initializeResult } = await import(
-        "@/shared/lib/ai/fake-mcp"
+      ({ rpcResult, rpcError } = await import("@/shared/lib/json-rpc.mjs"));
+      ({ initializeResult } = await import(
+        "@/shared/lib/ai/__fixtures__/fake-mcp"
       ));
     });
     beforeEach(() => {

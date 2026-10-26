@@ -367,13 +367,14 @@ if (import.meta.vitest) {
     let initLogger: typeof import("../logger").initLogger;
     let memoryProvider: typeof import("../logger").memoryProvider;
     let resetLogger: typeof import("../logger").resetLogger;
-    let rpcResult: typeof import("./fake-mcp").rpcResult;
-    let rpcError: typeof import("./fake-mcp").rpcError;
-    let initializeResult: typeof import("./fake-mcp").initializeResult;
+    let rpcResult: typeof import("../json-rpc.mjs").rpcResult;
+    let rpcError: typeof import("../json-rpc.mjs").rpcError;
+    let initializeResult: typeof import("./__fixtures__/fake-mcp").initializeResult;
 
     beforeAll(async () => {
       ({ initLogger, memoryProvider, resetLogger } = await import("../logger"));
-      ({ rpcResult, rpcError, initializeResult } = await import("./fake-mcp"));
+      ({ rpcResult, rpcError } = await import("../json-rpc.mjs"));
+      ({ initializeResult } = await import("./__fixtures__/fake-mcp"));
     });
 
     const json = (body: unknown, headers: Record<string, string> = {}) => {

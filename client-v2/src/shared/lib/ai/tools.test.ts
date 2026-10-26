@@ -1,7 +1,11 @@
 import { z } from "zod";
 import type { ModelMessage } from "ai";
 
-import { fakeFetch, openAiText, openAiToolCall } from "./fake-provider";
+import {
+  fakeFetch,
+  openAiText,
+  openAiToolCall,
+} from "./__fixtures__/fake-provider";
 import { createModel } from "./models";
 import { runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";

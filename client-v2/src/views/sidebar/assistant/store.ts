@@ -4,8 +4,10 @@ import {
   listGatewayServers,
   listTools,
   LOCAL_MCP_SERVERS,
+  sameConnection,
 } from "@/features/mcp";
 import { redactKey } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 import { forgetBackend, rememberBackend } from "./model/remembered-backend";
 import { PgSession } from "../../../features/auth";
 import {
@@ -23,6 +25,8 @@ import type { Disposable } from "../../../utils";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import type { ModelProvider } from "@/shared/lib/ai";
 import { isDefaultBackend, type Effort } from "./model/types";
+
+const log = createLogger("assistant:store");
 
 /** A change the assistant wants to make, waiting on the user */
 export interface PatchApproval {
@@ -475,10 +479,13 @@ export class PgAssistant {
   private static _replaceServers(change: () => void) {
     const before = PgAssistant.mcpServers;
     change();
-    const after = new Map(PgAssistant.mcpServers.map((s) => [s.id, s.url]));
-    // A new URL under the same id (an edit, or the gateway taking over a local id) is another server's session and tools
+    const after = new Map(PgAssistant.mcpServers.map((s) => [s.id, s]));
+    // Another connection under the same id (an edit, or the gateway taking over a local id) is another server's session and tools
     const gone = before
-      .filter((server) => after.get(server.id) !== server.url)
+      .filter((server) => {
+        const next = after.get(server.id);
+        return !next || !sameConnection(next, server);
+      })
       .map((server) => server.id);
     for (const id of gone) closeConnection(id);
     if (gone.length) {
@@ -524,8 +531,26 @@ export class PgAssistant {
     return PgAssistant._mcpTools;
   }
 
-  static setMcpTools(serverId: string, tools: readonly McpTool[]) {
-    PgAssistant._mcpTools = { ...PgAssistant._mcpTools, [serverId]: tools };
+  /**
+   * Discover one server's tools and cache them under its id.
+   *
+   * The result is dropped when the id now names another connection or is off,
+   * so a discovery that outlived a takeover or an edit cannot restore the old tools.
+   *
+   * @throws what {@link listTools} throws
+   */
+  static async discoverToolsOf(server: McpServerEntry) {
+    const tools = await listTools(server);
+    const current = PgAssistant.enabledMcpServers.find(
+      (s) => s.id === server.id
+    );
+    if (!current || !sameConnection(current, server)) {
+      log.debug("Dropped tools discovered on a replaced MCP server", {
+        context: { server: server.id },
+      });
+      return;
+    }
+    PgAssistant._mcpTools = { ...PgAssistant._mcpTools, [server.id]: tools };
     PgAssistant._emit();
   }
 
@@ -549,7 +574,7 @@ export class PgAssistant {
     await Promise.all(
       servers.map(async (server) => {
         try {
-          PgAssistant.setMcpTools(server.id, await listTools(server));
+          await PgAssistant.discoverToolsOf(server);
         } catch (err) {
           console.warn(`MCP server ${server.id}: tool discovery failed`, err);
         }
@@ -1944,7 +1969,7 @@ if (import.meta.vitest) {
         ]);
 
         const loading = PgAssistant.loadThread("t1");
-        PgAssistant.setMcpTools("probe", []);
+        PgAssistant.keepBackend();
         await loading;
         await settled();
 

@@ -4,7 +4,7 @@ import styled, { css } from "styled-components";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
-import { callTool, listTools } from "@/features/mcp";
+import { callTool } from "@/features/mcp";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 
 interface ServerConsoleProps {
@@ -75,7 +75,7 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
     setError(null);
     setResult(null);
     try {
-      PgAssistant.setMcpTools(server.id, await listTools(server));
+      await PgAssistant.discoverToolsOf(server);
     } catch (e) {
       setError(explain(e));
     } finally {

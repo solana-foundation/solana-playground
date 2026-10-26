@@ -1,14 +1,19 @@
-import type { McpServerEntry } from "@/features/mcp";
+import { expect, it, vi } from "vitest";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
 
 const mcp = vi.hoisted(() => ({
   closeConnection: vi.fn(),
   listGatewayServers: vi.fn(),
+  listTools: vi.fn(),
 }));
 vi.mock("@/features/mcp", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/mcp")>();
   return {
     LOCAL_MCP_SERVERS: actual.LOCAL_MCP_SERVERS,
-    listTools: actual.listTools,
+    sameConnection: actual.sameConnection,
+    // A real listing unless a test queues an answer of its own
+    listTools: (server: McpServerEntry) =>
+      mcp.listTools(server) ?? actual.listTools(server),
     callTool: actual.callTool,
     // Recorded, and still closes, so a test can see which requests a closed entry gets
     closeConnection: (id: string) => {
@@ -20,7 +25,8 @@ vi.mock("@/features/mcp", async (importOriginal) => {
 });
 
 import { loadAi } from "@/shared/lib/ai";
-import { initializeResult, rpcResult } from "@/shared/lib/ai/fake-mcp";
+import { initializeResult } from "@/shared/lib/ai/__fixtures__/fake-mcp";
+import { rpcResult } from "@/shared/lib/json-rpc.mjs";
 import { createMcpTools } from "./model/mcp-tools";
 import { PgAssistant } from "./store";
 
@@ -46,6 +52,12 @@ const gatewayTakesOverExplorer = async (afterLocal = async () => {}) => {
   await afterLocal();
   mcp.listGatewayServers.mockResolvedValueOnce([gatewayEntry("explorer")]);
   await PgAssistant.loadMcpServers();
+};
+
+/** Cache `tools` under `server`'s id, the way discovery does */
+const discovered = (server: McpServerEntry, tools: McpTool[]) => {
+  mcp.listTools.mockResolvedValueOnce(tools);
+  return PgAssistant.discoverToolsOf(server);
 };
 
 /** Every MCP server answers with one `search` tool; returns each request's URL and method */
@@ -97,7 +109,9 @@ it("closes the connection of a gateway entry the gateway stops serving", async (
 
 it("keeps one entry per id, the gateway's, when the gateway takes over a local entry's id, and builds its tools", async () => {
   await gatewayTakesOverExplorer();
-  PgAssistant.setMcpTools("explorer", [{ name: "search", inputSchema: {} }]);
+  await discovered(gatewayEntry("explorer"), [
+    { name: "search", inputSchema: {} },
+  ]);
   const { toSdkTools } = await loadAi();
 
   expect(PgAssistant.mcpServers).toEqual([gatewayEntry("explorer")]);
@@ -116,12 +130,39 @@ it("shows a local entry the gateway took over as replaced, and uses it again onc
 });
 
 it("drops the tools discovered on a local entry when the gateway takes over its id", async () => {
-  await gatewayTakesOverExplorer(async () => {
-    PgAssistant.setMcpTools("explorer", [{ name: "local", inputSchema: {} }]);
-  });
+  await gatewayTakesOverExplorer(() =>
+    discovered(entry("explorer"), [{ name: "local", inputSchema: {} }])
+  );
 
   expect(PgAssistant.mcpTools.explorer).toBeUndefined();
 });
+
+it.each([
+  ["discovery of every server", () => PgAssistant.discoverMcpTools(true)],
+  [
+    "the console's discovery",
+    () => PgAssistant.discoverToolsOf(entry("explorer")),
+  ],
+])(
+  "keeps a local entry's tools out of the cache when %s ends after the gateway took over its id",
+  async (_, discover) => {
+    let answer: (tools: McpTool[]) => void = () => {};
+    mcp.listTools.mockReturnValueOnce(
+      new Promise<McpTool[]>((resolve) => {
+        answer = resolve;
+      })
+    );
+    let discovering: Promise<void> = Promise.resolve();
+    await gatewayTakesOverExplorer(async () => {
+      discovering = discover();
+    });
+
+    answer([{ name: "local", inputSchema: {} }]);
+    await discovering;
+
+    expect(PgAssistant.mcpTools.explorer).toBeUndefined();
+  }
+);
 
 it("sends a local entry's URL nothing but the session's close once the gateway takes over its id", async () => {
   const requests = fakeMcpServers();

@@ -5,7 +5,7 @@ import {
   openAiText,
   openAiToolCall,
   sse,
-} from "./fake-provider";
+} from "./__fixtures__/fake-provider";
 import { createModel } from "./models";
 import { AiTurnError, runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";

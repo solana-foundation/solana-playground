@@ -52,7 +52,8 @@ since SHALL be refused without sending a request.
 
 The servers the assistant uses SHALL hold one entry per id. When the gateway serves an id that a local entry also
 has, the client SHALL use the gateway's entry: the local entry contributes no tools and no connection, and the
-connection and discovered tools it had SHALL be dropped. The local entry SHALL stay in the user's list, shown as
+connection and discovered tools it had SHALL be dropped. A listing of the local entry's tools that ends after the
+gateway took the id SHALL be discarded. The local entry SHALL stay in the user's list, shown as
 replaced by the gateway's server, and SHALL be used again once the gateway stops serving the id.
 
 #### Scenario: A gateway server takes over a local entry's id (manual)
@@ -62,6 +63,12 @@ replaced by the gateway's server, and SHALL be used again once the gateway stops
 - **THEN** the assistant uses one `explorer` entry, the gateway's; its tools build without a duplicate name; the
   local entry's connection is closed and no later listing or call reaches the local entry's URL; the Sources tab
   shows the local entry as replaced; and when the gateway stops serving `explorer`, the local entry is used again
+
+#### Scenario: Discovery that started before a takeover does not restore the old tools (manual)
+
+- **WHEN** a listing of a local entry `explorer`'s tools starts, the gateway then serves `explorer`, and the
+  listing ends with the local entry's tools, whether the panel's discovery or the server console started it
+- **THEN** the cached tools for `explorer` are not the local entry's, and the next turn offers none of them
 
 ### Requirement: Listing a server's tools is reported
 

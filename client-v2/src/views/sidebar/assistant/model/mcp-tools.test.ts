@@ -1,11 +1,12 @@
 import type { McpServerEntry } from "@/features/mcp";
 
-const mcp = vi.hoisted(() => ({ callTool: vi.fn() }));
+const mcp = vi.hoisted(() => ({ callTool: vi.fn(), listTools: vi.fn() }));
 vi.mock("@/features/mcp", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/features/mcp")>();
   return {
     LOCAL_MCP_SERVERS: actual.LOCAL_MCP_SERVERS,
-    listTools: actual.listTools,
+    sameConnection: actual.sameConnection,
+    listTools: mcp.listTools,
     listGatewayServers: actual.listGatewayServers,
     closeConnection: vi.fn(),
     callTool: mcp.callTool,
@@ -22,16 +23,17 @@ const server: McpServerEntry = {
   enabled: true,
 };
 
-const echo = () => {
+const echo = async () => {
   PgAssistant.setMcpServers([server]);
-  PgAssistant.setMcpTools("srv", [{ name: "echo", inputSchema: {} }]);
+  mcp.listTools.mockResolvedValueOnce([{ name: "echo", inputSchema: {} }]);
+  await PgAssistant.discoverToolsOf(server);
   const [tool] = createMcpTools();
   return tool;
 };
 
 it("calls an entry edited after its tools were built with the edited URL and token only", async () => {
   mcp.callTool.mockResolvedValue({ text: "done", isError: false });
-  const tool = echo();
+  const tool = await echo();
   const edited: McpServerEntry = {
     id: "srv",
     name: "Srv",
@@ -50,7 +52,7 @@ it("calls an entry edited after its tools were built with the edited URL and tok
 });
 
 it("refuses, with no request, a call to an entry removed after its tools were built", async () => {
-  const tool = echo();
+  const tool = await echo();
   PgAssistant.setMcpServers([]);
   const before = mcp.callTool.mock.calls.length;
 
@@ -64,7 +66,7 @@ it("passes the turn's abort signal to the call", async () => {
   mcp.callTool.mockResolvedValue({ text: "done", isError: false });
   const controller = new AbortController();
 
-  await echo().run({ q: 1 }, { signal: controller.signal });
+  await (await echo()).run({ q: 1 }, { signal: controller.signal });
 
   expect(mcp.callTool).toHaveBeenCalledWith(
     server,
@@ -82,7 +84,7 @@ it("records no failure for a call that Stop ended", async () => {
   });
   const recorded = vi.spyOn(PgAssistant, "addToolCall");
 
-  await echo().run({}, { signal: controller.signal });
+  await (await echo()).run({}, { signal: controller.signal });
 
   expect(recorded.mock.calls).toEqual([["echo on Srv"]]);
 });

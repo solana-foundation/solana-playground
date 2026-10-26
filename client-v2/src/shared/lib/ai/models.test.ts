@@ -6,7 +6,7 @@ import {
   fakeFetch,
   openAiText,
   openAiToolCall,
-} from "./fake-provider";
+} from "./__fixtures__/fake-provider";
 import { createModel } from "./models";
 import { runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";

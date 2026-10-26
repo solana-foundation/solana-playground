@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
 
-import { fakeFetch, openAiError } from "./fake-provider";
+import { fakeFetch, openAiError } from "./__fixtures__/fake-provider";
 import { createModel } from "./models";
 import { REDACTED_KEY } from "./redact";
 import { runTurn } from "./run-turn";

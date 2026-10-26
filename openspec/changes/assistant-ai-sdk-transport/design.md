@@ -56,7 +56,7 @@ block or a `*.test.ts`, as `client-v2/AGENTS.md` decides), and each file logs th
 | `run-turn.ts` | `runTurn(options): Promise<TurnResult>`, `AiTurnError` | Wraps `streamText` with `maxRetries: 0`, `stopWhen: isStepCount(maxSteps)`, the abort `signal`, and the `pause_turn` resume up to `maxResumes`. Takes `instructions` (the system messages, with their provider options), `providerOptions`, `maxOutputTokens` (without it `@ai-sdk/anthropic` caps a model it does not know at 4096), and `apiKey`, which is redacted from every error. Streams text, reasoning, and tool events to callbacks (`onText`, `onReasoning`, `onToolCall`). Turns a refusal or an in-stream error into a thrown `AiTurnError`. Returns the updated `ModelMessage[]` history and `reachedStepLimit`, true when the model still wanted tools at the step limit. |
 | `mcp.ts` | `connectMcp(server)`, `McpUnreachableError`, `McpTimeoutError` | `@ai-sdk/mcp` over HTTP with headers, our reconnect after a stale session, CORS failures raised as `McpUnreachableError`, and a request past the timeout raised as `McpTimeoutError`. Returns `{ listTools, callTool, close }` so callers map results to `ToolDefinition`; `close` lets running calls finish, then closes the session, and every later call rejects. |
 | `redact.ts` | `redactKey`, `REDACTED_KEY` | Moved from `assistant/model/redact-key.ts`, with `MIN_REDACTED_KEY_LENGTH`; error text never carries the caller's key. |
-| `fake-provider.ts` | none (test-only) | Fakes of the chat-completions and Anthropic Messages streams and a recording `fetch`, for the module's tests and its callers' tests. Not exported from `index.ts`. |
+| `__fixtures__/fake-provider.ts` | none (test-only) | Fakes of the chat-completions and Anthropic Messages streams and a recording `fetch`, for the module's tests and its callers' tests. Not exported from `index.ts`. |
 | `runtime.ts` | none (internal) | Re-exports the SDK-backed values: `createModel`, `runTurn`, `AiTurnError`, `toSdkTools`, `connectMcp`, `isMcpSessionExpired`, `McpUnreachableError`, `McpTimeoutError`. Reached only through `loadAi`. |
 | `index.ts` | `loadAi()`, `redactKey`, `REDACTED_KEY`, `MIN_REDACTED_KEY_LENGTH`, every type above | The only import path: `@/shared/lib/ai`. `loadAi()` resolves to the `runtime.ts` exports. |
 
@@ -309,6 +309,7 @@ through the default backend", and are marked `(manual)`. Each is held by:
 | An entry edited after the tools were built | `views/sidebar/assistant/model/mcp-tools.test.ts` |
 | A call running when its connection closes | `shared/lib/ai/mcp.ts` |
 | A gateway server takes over a local entry's id | `views/sidebar/assistant/store.test.ts` |
+| Discovery that started before a takeover does not restore the old tools | `views/sidebar/assistant/store.test.ts` (`it.each`) |
 | A gateway server lists two tools | `features/mcp/model/mcp-client.ts` |
 | An unreachable host | `features/mcp/model/mcp-client.ts` |
 | A call retried on a new session | `features/mcp/model/mcp-client.ts` |

@@ -7,7 +7,7 @@ import {
   openAiText,
   openAiToolCall,
   sse,
-} from "@/shared/lib/ai/fake-provider";
+} from "@/shared/lib/ai/__fixtures__/fake-provider";
 import { createProvider } from "./provider";
 import { PgAssistant, type ChatItem } from "../store";
 import { PgSession } from "../../../../features/auth";

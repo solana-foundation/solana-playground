@@ -26,6 +26,11 @@ import {
 } from "../src/features/api/server.mjs";
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
 import { mcpExplorerEnv } from "../src/shared/config/server-env.mjs";
+import {
+  rpcError,
+  rpcRequest,
+  rpcResult,
+} from "../src/shared/lib/json-rpc.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
@@ -100,22 +105,6 @@ const explorerWithheld = async (req) => {
   const session = await readSession(req);
   return session.status === "signed-in" ? null : session.status;
 };
-
-const rpcResult = (id, result) => ({ jsonrpc: "2.0", id, result });
-
-const rpcError = (id, code, message) => ({
-  jsonrpc: "2.0",
-  id: id ?? null,
-  error: { code, message },
-});
-
-// The gateway sends one request per upstream connection, so a fixed id is enough
-const rpcRequest = (method, params) => ({
-  jsonrpc: "2.0",
-  id: 1,
-  method,
-  ...(params === undefined ? {} : { params }),
-});
 
 const sendRpcError = (res, id, code, message) =>
   sendJson(res, 200, rpcError(id, code, message));
