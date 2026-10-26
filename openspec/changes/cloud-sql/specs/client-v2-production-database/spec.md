@@ -4,8 +4,8 @@
 
 Production's Postgres on Cloud SQL: the identity the functions connect with,
 the instance settings that keep Postgres's own port closed, who migrates it
-and which database a migration reaches, the cutover that moves the data with
-a rollback at every step, and the guide that lets the upstream repository's
+and which database a migration reaches, the cutover that switches production
+to an empty, migrated `solpg` with a rollback at every step, and the guide that lets the upstream repository's
 maintainers set all of it up themselves.
 
 ## ADDED Requirements
@@ -33,6 +33,16 @@ string SHALL be stored for production anywhere.
 - **THEN** its subject is
   `owner:<team>:project:<project>:environment:production` and no other
   subject may impersonate it
+
+#### Scenario: The production identity connects before the cutover (manual)
+
+- **WHEN** a staged production deployment (`vercel deploy --prod
+  --skip-domain`, assigned no domain) is made with `DB_PROVIDER=cloud-sql`,
+  the `CLOUD_SQL_*` variables naming the empty `solpg`, the federation
+  variables, and `SYNC_ENABLED=false`, each passed to that deployment alone
+- **THEN** its `GET /api/sync` answers `{ "enabled": false, "db": "ok" }`, and
+  the instance's logs show the connection authenticated as the production IAM
+  database user, with no operator credential involved
 
 ### Requirement: Postgres's port on the production instance accepts nothing from outside
 
@@ -106,37 +116,41 @@ identity.
 - **WHEN** the IAM policy bindings of `github-ci` are listed
 - **THEN** none grants a Cloud SQL role on instance `solpg`
 
-### Requirement: The cutover moves the data behind a write freeze
+### Requirement: The cutover switches production to an empty, migrated database
 
-The move from Neon to Cloud SQL SHALL happen with `SYNC_ENABLED=false` on
-Production, so no write reaches either database while the production Neon
-project's data is restored into the empty `solpg`. Before `SYNC_ENABLED`
-returns to `true`, `GET /api/sync` SHALL answer `db: "ok"` through the
-`cloud-sql` provider and row counts SHALL match Neon's. Until then, restoring
-`DATABASE_URL` on Production and redeploying SHALL be a complete rollback.
+Production SHALL move to Cloud SQL without copying data: the production
+Neon project holds no user data to keep, so `solpg` starts empty. Every
+migration SHALL be applied to `solpg`, under the production IAM user's role,
+before Production's variables name it. Sync SHALL stay on throughout; nothing
+is frozen, because nothing moves. Until the production Neon project is
+deleted, restoring `DATABASE_URL` and `DB_PROVIDER=url` on Production and
+redeploying SHALL be a complete rollback, and anything written to `solpg`
+in between is test data and may be lost.
 
-#### Scenario: Writes are frozen during the restore (manual)
+#### Scenario: solpg is ready before the switch (manual)
 
-- **WHEN** `SYNC_ENABLED=false` is set on Production and the deployment is
-  redeployed
-- **THEN** `GET /api/sync` answers `enabled: false`, the client reports sync
-  off, and `PUT /api/projects` answers 503
+- **WHEN** the migrations have been applied to `solpg` and Production still
+  reads Neon
+- **THEN** `dbmate status` through `migration-url production` lists every
+  migration as applied, and `\dt` shows every table owned by the production
+  IAM user
 
-#### Scenario: The restore is verified before writes return (manual)
+#### Scenario: Production runs on solpg after the switch (manual)
 
-- **WHEN** the restore into `solpg` completes
-- **THEN** `select count(*)` per table on `solpg` equals the same count on the
-  production Neon project, every table is owned by the production IAM user,
-  `migrate-production-db` finds nothing to apply on `solpg`, and the counts
-  are recorded in the cutover PR
+- **WHEN** Production's variables name `solpg` through the `cloud-sql`
+  provider, `DATABASE_URL` is removed, and Production is redeployed
+- **THEN** `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`,
+  `migrate-production-db` names `solpg` and reports nothing to apply, and a
+  sign-in followed by a project edit on the production domain writes a row to
+  `solpg`
 
-#### Scenario: Rollback before the switch (manual)
+#### Scenario: Rollback after the switch (manual)
 
 - **WHEN** the production deployment's `GET /api/sync` answers
   `db: "unreachable"` after the switch to `cloud-sql`
 - **THEN** restoring `DATABASE_URL` and `DB_PROVIDER=url` on Production and
-  redeploying makes it answer `db: "ok"` again, with no data lost, because no
-  write happened since the freeze
+  redeploying makes it answer `db: "ok"` again from the untouched production
+  Neon project
 
 ### Requirement: A push to master is checked against production
 
@@ -193,4 +207,6 @@ repository, with each value specific to this deployment as a placeholder.
 - **WHEN** a maintainer moves another deployment from a connection string to
   Cloud SQL
 - **THEN** the guide's cutover and rollback steps match task 3.2, with the
-  checks that must pass before writes are reopened
+  checks that must pass before the switch, and say that a deployment with
+  users to keep needs a data copy behind a write freeze, which this guide
+  does not give

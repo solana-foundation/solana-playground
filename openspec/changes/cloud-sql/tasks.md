@@ -11,8 +11,10 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       `query`, `transaction`, `conversations.mjs`, and `getAuth()`, and await
       `getAuth()` in `api/auth.mjs` and `readSession`. Verify with
       `client-v2/src/features/persistence/model/db.test.mjs` gaining "defaults to
-      the url provider" and "refuses an unknown provider rather than falling
-      back", the existing cases passing unchanged, `yarn test-api` green against
+      the url provider", "refuses an unknown provider rather than falling
+      back", and "retries a pool that failed to build" (a provider whose first
+      `createPool` rejects and whose second resolves), the existing cases
+      passing unchanged, `yarn test-api` green against
       the CI service container, and `yarn test-e2e e2e/account-sync.e2e.spec.ts`
       passing. Ticket to file.
 - [ ] 1.2 Add `providers/cloud-sql.mjs`: `@google-cloud/cloud-sql-connector`,
@@ -105,7 +107,10 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
 ## 3. Production on Cloud SQL
 
 - [ ] 3.1 Instance `solpg`: set `cloudsql.iam_authentication=on`,
-      `connectorEnforcement=REQUIRED`, `ssl_mode=ENCRYPTED_ONLY`; create the empty
+      `connectorEnforcement=REQUIRED`, `ssl_mode=ENCRYPTED_ONLY`; grant
+      `vercel-production` Cloud SQL Client and Instance User on `solpg` only,
+      conditioned on that instance, and add it as an IAM database user there
+      (`gcloud sql users create <sa>@<project>.iam --instance=solpg --type=cloud_iam_service_account`); create the empty
       database `solpg` owned by the `vercel-production` IAM user; `REVOKE CONNECT ON DATABASE solpg FROM PUBLIC`; add each operator as an IAM database user on
       `solpg` with Cloud SQL Client and Instance User there, a member of the
       `vercel-production` role, and list them in `client-v2/docs/cloud-sql.md`.
@@ -119,23 +124,33 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       Vercel, the date) in `client-v2/docs/cloud-sql.md`. Verify with
       `gcloud sql instances describe solpg` showing the three settings,
       `\l solpg` showing `CONNECT` for the production user only, a direct `psql`
-      to port 5432 refused, `migrate-production-db` still naming the production
+      to port 5432 refused, a staged production deployment
+      (`vercel deploy --prod --skip-domain` with `-e DB_PROVIDER=cloud-sql`,
+      the `CLOUD_SQL_*` and `GCP_*` variables, and `-e SYNC_ENABLED=false`)
+      answering `{ "enabled": false, "db": "ok" }` on `GET /api/sync` with the
+      instance log naming the production IAM user, which proves the
+      application's own identity reaches `solpg` (the operator checks do not), `migrate-production-db` still naming the production
       Neon host and "nothing to apply" while Production is on `url`, and
       `dbmate status` through `migration-url production` as an operator listing
       every migration pending on `solpg`. Depends on 1.3, 2.1. Ticket to file.
-- [ ] 3.2 Cutover, after 2.4's results are recorded: `SYNC_ENABLED=false` on
-      Production and redeploy; `pg_dump` the production Neon project and
-      `pg_restore --no-owner` into the empty `solpg` through the proxy under the
-      production user's role; compare `select count(*)` per table; set
-      `DB_PROVIDER=cloud-sql`, the `CLOUD_SQL_*` and `GCP_*` variables on
-      Production and remove `DATABASE_URL`; redeploy; `GET /api/sync` answers
-      `db: "ok"`; `migrate-production-db` names `solpg` and reports nothing to
-      apply; `SYNC_ENABLED=true` and redeploy. Update `deploy-client-vercel.md`
-      ("Release checklist", "Conversation and project sync") and the root
-      `CLAUDE.md` gotcha on the production database. Verify by the row counts,
-      `\dt` showing every table owned by the production user, and the three
-      `GET /api/sync` bodies recorded in the PR. Depends on 2.4, 3.1. Ticket to
-      file.
+- [ ] 3.2 Cutover, after 2.4's results are recorded, with sync on throughout:
+      confirm with the team that production still has no users, and stop if it
+      has (a copy behind a freeze is then needed, outside this change); apply
+      every migration to `solpg` with
+      `scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema up`
+      as an operator, the Cloud SQL values given inline since Production does
+      not name them yet; set `DB_PROVIDER=cloud-sql`, the `CLOUD_SQL_*` and
+      `GCP_*` variables on Production and remove `DATABASE_URL` and
+      `DATABASE_URL_UNPOOLED`; redeploy; `GET /api/sync` answers
+      `{ "enabled": true, "db": "ok" }`; `migrate-production-db` names `solpg`
+      and reports nothing to apply. Leave the production Neon project
+      untouched as the rollback. Update `deploy-client-vercel.md` ("Release
+      checklist", "Conversation and project sync") and the root `CLAUDE.md`
+      gotcha on the production database. Verify by `\dt` showing every table
+      owned by the production user before the switch, the `GET /api/sync`
+      body after it, and a sign-in and project edit on the production domain
+      writing a row to `solpg`, all recorded in the PR. Depends on 2.4, 3.1.
+      Ticket to file.
 - [ ] 3.3 Add a `smoke` job to `client-v2.yml` on push to `master` that waits
       for the Vercel deployment of the pushed commit and fails unless its
       `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, naming the URL

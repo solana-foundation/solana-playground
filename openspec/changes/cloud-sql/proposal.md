@@ -49,11 +49,10 @@ Google Cloud region, so it cannot be the way there.
   `solpg` after it, through the Cloud SQL Auth Proxy as the operator's own
   Google identity. No CI identity holds a role on `solpg`. Nothing migrates
   from a serverless function, as before.
-- **Cutover.** `SYNC_ENABLED=false` freezes writes, the production Neon
-  project's data is restored into the empty `solpg`, the Production
-  environment switches provider, `/api/sync` reports `db: "ok"`, and
-  `SYNC_ENABLED=true` reopens writes. Rollback before the last step is
-  restoring `DATABASE_URL`.
+- **Cutover.** Production has no users yet, so no data moves and nothing is
+  frozen: `solpg` is migrated from zero, the Production environment switches
+  provider, and `/api/sync` reports `db: "ok"`. Rollback is restoring
+  `DATABASE_URL`; the production Neon project is left untouched.
 - **Telemetry.** The change touches `features/persistence` and
   `features/auth` on their server side only (`.mjs` modules the functions
   load). It adds, renames, and removes no telemetry event. A provider that
@@ -115,9 +114,10 @@ how the functions reach Postgres.
   cutover and rollback runbook; `client-v2/docs/neon.md`,
   `client-v2/docs/deploy-client-vercel.md`, the root `CLAUDE.md` "Gotchas"
   entry on the production database.
-- User-visible: during the cutover's write freeze, sync is off and the app is
-  local-only, as it is on any deployment without a database; a preview
-  labelled `preview:cloud-sql` starts with the rows of `solpg_preview_base`,
+- User-visible: the cutover starts production on an empty `solpg`, so the
+  team's test accounts and their synced rows on the production Neon project
+  stay behind; a test account signs in again, and its browser's local
+  projects upload to the new, empty account. A preview labelled `preview:cloud-sql` starts with the rows of `solpg_preview_base`,
   which are preview data, as a Neon preview starts with the preview project's
   `main`. Otherwise nothing changes for a user.
 - Out of scope: a query or repository abstraction over SQL (both providers are
@@ -126,4 +126,6 @@ how the functions reach Postgres.
   edition of `solpg` has no managed pooling, and the sizing rule in
   `client-v2-production-database` replaces it until Cloud SQL reports
   exhaustion); migrating the Rust build server's MongoDB; the Vercel function
-  region, which is a project setting.
+  region, which is a project setting; copying production's Neon data into
+  `solpg`, and the write freeze such a copy would need, since production has
+  no users yet.
