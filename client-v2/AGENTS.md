@@ -1,5 +1,13 @@
 # client-v2 agent rules
 
+## Sync and persistence: read the gotchas first
+
+Before changing chat storage or project sync, read
+[`.claude/rules/project-sync.md`](../.claude/rules/project-sync.md). It records the
+invariants of the sync mark, the merge base, the push gate, the tab lock, program
+keypairs and diagnostics. Claude Code loads it on its own for the paths in its
+frontmatter; other agents read it by hand.
+
 ## Tests: no spread for creating new shapes
 
 In test files and in-source test blocks, do not build a new object or array shape by spreading an existing one
