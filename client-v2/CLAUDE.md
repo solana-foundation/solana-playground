@@ -222,16 +222,25 @@ counts.
    `tasks.md`, then `/opsx:archive` merges the deltas into `openspec/specs/`
    and moves the folder to `changes/archive/<date>-<name>/`, all committed in
    that same PR. On a no, the PR description says
-   `OpenSpec: <change> stays open (<who answered>, <date>)`. A change whose
-   last task merged without the question is closed in a PR of its own once a
-   human says yes. `specs/` therefore always describes the code as it is,
-   never a plan; nothing is back-filled for code that is not changing.
+   `OpenSpec: <change> stays open (<who answered>, <date>)`, and the change is
+   closed in a PR of its own once a human says yes; so is a change whose last
+   task merged without the question. `specs/` therefore always describes the
+   code as it is, never a plan; nothing is back-filled for code that is not changing.
 6. **Asked to build something, look in `openspec/changes/` first**
    (`openspec list`). If a change covers it, `/opsx:apply` that change and
    say which task. If none does and the work is more than a bug fix, offer
    `/opsx:propose` rather than starting on the code. A bug fix in a slice
    that sends no events, or none for the path being fixed, says so and
    proposes the missing events as a follow-up ticket.
+
+**Active means unfinished.** `openspec/changes/` holds changes with
+tasks left, usually work that takes several PRs, and a finished change only
+until a human says yes to closing it (step 5). A change whose tasks are all
+done is archived, without `tasks.md`, so `openspec/specs/` carries its
+requirements; no change stays open as a standing record, however wide its
+scope. An archived change under `changes/archive/<date>-<name>/` is a record,
+not work: never apply, tick or edit one, and read its `proposal.md` and
+`design.md` for the reasoning behind code it introduced.
 
 **Where the superpowers skills write.** Their default locations
 (`docs/superpowers/specs/`, `docs/superpowers/plans/`) are not used in this
