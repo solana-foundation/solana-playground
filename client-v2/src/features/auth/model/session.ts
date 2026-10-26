@@ -3,6 +3,7 @@ import {
   AUTH_COMPLETE_ROUTE,
   AUTH_MESSAGE_TYPE,
   FLOW_MAX_AGE_SECONDS,
+  SIGN_OUT_TIMEOUT_MS,
 } from "../config.mjs";
 import { openPopupChannel } from "../lib/popup-channel";
 import type { PopupChannel } from "../lib/popup-channel";
@@ -50,9 +51,6 @@ export type SignOutTeardown = () => Promise<void>;
 
 /** Runs before the sign-out request; see `PgSession.setOnSignOut` */
 export type SignOutHook = () => Promise<SignOutTeardown | undefined>;
-
-/** Long enough for a slow network; a hung request otherwise never answers */
-const SIGN_OUT_TIMEOUT_MS = 15_000;
 
 /**
  * The signed-in user, from our backend rather than from GitHub.
@@ -237,7 +235,7 @@ export class PgSession {
   static signOut(): Promise<void> {
     if (!PgSession._signingOut) {
       PgSession._signingOut = PgSession._signOut().finally(() => {
-        PgSession._signingOut = null;
+        PgSession._signingOut = undefined;
       });
     }
     return PgSession._signingOut;
@@ -352,11 +350,11 @@ export class PgSession {
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
     PgSession._signingInFrom = null;
-    PgSession._signingOut = null;
+    PgSession._signingOut = undefined;
     PgSession._ending = false;
   }
 
-  private static _signingOut: Promise<void> | null = null;
+  private static _signingOut: Promise<void> | undefined;
   private static _ending = false;
   private static _user: SessionUser | null = null;
   private static _signingInFrom: SignInOrigin | null = null;
