@@ -139,6 +139,17 @@ const invalid = [
     "vi.mock(`../auth`);",
     "vi.mock(`@/features/auth`);",
   ],
+  // The fix writes the path back escaped for the delimiter it keeps
+  [
+    "features/agent/probe.ts",
+    "import x from '../auth/it\\'s';",
+    "import x from '@/features/auth/it\\'s';",
+  ],
+  [
+    "features/agent/probe.test.ts",
+    "vi.mock(`../auth/a\\`b\\${c`);",
+    "vi.mock(`@/features/auth/a\\`b\\${c`);",
+  ],
 ].map(([file, code, output, data]) => ({
   filename: path.join(src, file),
   code,

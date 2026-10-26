@@ -68,6 +68,12 @@ const specifierOf = (node) => {
   return null;
 };
 
+/** `text` written back inside `delimiter`, escaped so the fix stays the same string */
+const escapeFor = (text, delimiter) =>
+  delimiter === "`"
+    ? text.replace(/\\|`|\$\{/g, (match) => `\\${match}`)
+    : text.replace(/\\/g, "\\\\").replaceAll(delimiter, `\\${delimiter}`);
+
 const aliasAcrossModules = {
   meta: {
     type: "suggestion",
@@ -114,7 +120,11 @@ const aliasAcrossModules = {
         node,
         messageId: "alias",
         data: { from, to, alias },
-        fix: (fixer) => fixer.replaceText(node, delimiter + alias + delimiter),
+        fix: (fixer) =>
+          fixer.replaceText(
+            node,
+            delimiter + escapeFor(alias, delimiter) + delimiter
+          ),
       });
     };
 
