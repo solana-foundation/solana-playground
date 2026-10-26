@@ -82,7 +82,7 @@ before it as stated.
       [design.md](design.md), "Risks / Trade-offs" (depends on 4.1); verify the figures replace the
       #70 estimate there, and a search of the built chunks finds the SDK only
       in the chunks `loadAi()` requests
-- [ ] 5.2 Walk through the default backend signed in, an Anthropic key, and
+- [x] 5.2 Walk through the default backend signed in, an Anthropic key, and
       an OpenAI or Gemini key; on each, a tool turn with an approval, an MCP
       call to an `explorer__*` tool, Stop mid-turn, and a reload that restores
       the thread; record the results, and whether any turn paused, in
@@ -126,7 +126,7 @@ before it as stated.
 
 ## 6. Close the verdict
 
-- [ ] 6.1 Draft, for a human to post: the PR description from the repository
+- [x] 6.1 Draft, for a human to post: the PR description from the repository
       template, saved untracked as `.github/assistant-ai-sdk.pr.md`, and a
       review comment on #70, saved untracked in `.github/`, that says this
       change supersedes the verdict and why (HOO-1753; depends on 5.1, 5.2 and

@@ -451,6 +451,20 @@ old loops, `model/redact-key.ts`, the re-exports of the moved types, and
 4.1 first. No stored data changes: threads keep their format, and
 `parseServers` accepts a configuration that still names `executor`.
 
+## Walk-through (task 5.2)
+
+Run by hand in browsers on 2026-10-26, at `70e9555f`. Each run covered a tool turn with an approval, an MCP call
+to an `explorer__*` tool, Stop mid-turn, and a reload that restores the thread.
+
+| Model provider | Result |
+| --- | --- |
+| Default backend, signed in | Passed |
+| Anthropic key | Not run: no key available |
+| OpenAI or Gemini key | Not run |
+
+No paused turn was seen by hand. The resume and its limit are held by `e2e/assistant-pause.e2e.spec.ts`
+(task 5.3), which passed.
+
 ## Open Questions
 
 - When the `(manual)` marks on the `client-v2-ai` and `client-v2-mcp`
@@ -459,5 +473,6 @@ old loops, `model/redact-key.ts`, the re-exports of the moved types, and
   be replaced by the tests in the scenario tables.
 - Whether `pause_turn` still occurs once no MCP server runs on Anthropic's
   side. It was observed after long connector rounds; whether other causes
-  remain is unverified. The resume costs little to keep; task 5.2's
-  walk-through records whether any turn paused.
+  remain is unverified, and the walk-through did not run Anthropic. The
+  resume costs little to keep; a walk-through with an Anthropic key settles
+  whether any turn still pauses.
