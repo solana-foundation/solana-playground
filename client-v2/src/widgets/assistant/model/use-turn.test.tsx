@@ -991,4 +991,22 @@ describe("useTurn when the thread closes mid-turn", () => {
 
     expect(PgAssistant.items.map((i) => i.kind)).toEqual(["user", "tool"]);
   });
+
+  it("starts no turn over the stopped one, even from a remounted panel", async () => {
+    const { hook, turn } = await startTurn();
+    act(() => PgAssistant.closeThread());
+    await act(() => PgAssistant.loadThread("after"));
+
+    // Leaving for another view and back loses the hook's own controller
+    hook.unmount();
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("stopping");
+    await act(() => result.current.send("again"));
+    act(() => PgAssistant.addNotice("the old tool reports late"));
+
+    expect(provider.send).toHaveBeenCalledTimes(1);
+    expect(PgAssistant.items).toEqual([]);
+    await act(async () => turn.finish());
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
+  });
 });

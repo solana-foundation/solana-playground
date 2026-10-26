@@ -553,18 +553,46 @@ export class PgAssistant {
   }
 
   /**
+   * Whether a turn is in flight, including one cut off and still unwinding.
+   *
+   * The panel reads this, not its own state, to decide whether it may start
+   * another: leaving a thread resets `status` to idle, and a remounted panel
+   * has lost its controller, while the cut turn can still write. A new turn
+   * begun over it would replace `_turn` and let those writes through.
+   */
+  static get turnRunning() {
+    return PgAssistant._turn !== null;
+  }
+
+  /**
+   * Stop the turn in flight whether or not a thread is open.
+   *
+   * For sign-out: the panel works with no thread open, and `closeThread` then
+   * has nothing to close, so a turn running there would carry on for the next
+   * account. A workspace opening does not stop it -- that thread adopts it.
+   */
+  static stopTurn() {
+    PgAssistant._cutTurn();
+    // Not persisted: the teardown that calls this is about to close the thread
+    PgAssistant._emitOnly();
+  }
+
+  /**
    * Stop the turn writing to the thread being left.
    *
    * Aborting stops the request, but a provider unwinds on its own schedule: a
    * tool already running reports, and the stream's last chunk may already be
    * read. Those writes are dropped (`_turnCut`) until the turn ends, which no
-   * new turn can overlap: the panel offers none while one is running.
+   * new turn can overlap: the panel offers none while `turnRunning`.
    */
   private static _cutTurn() {
     const turn = PgAssistant._turn;
     if (!turn || turn.cut) return;
     turn.cut = true;
     turn.controller.abort();
+    // Denied here as well as by `closeThread`, which returns early with no
+    // thread open: an approval the stopped turn waits on holds it open
+    PgAssistant._denyPending();
   }
 
   /** Whether what is written now comes from a turn whose thread has closed */
@@ -2404,6 +2432,36 @@ if (import.meta.vitest) {
         PgAssistant.addNotice("Stopped.");
 
         expect(PgAssistant.items.map((i) => i.kind)).toEqual(["notice"]);
+      });
+
+      it("counts as running until it ends, even once cut off", () => {
+        expect(PgAssistant.turnRunning).toBe(true);
+        PgAssistant.closeThread();
+
+        expect(PgAssistant.status).toBe("idle");
+        expect(PgAssistant.turnRunning).toBe(true);
+        PgAssistant.endTurn(turn);
+        expect(PgAssistant.turnRunning).toBe(false);
+      });
+
+      it("stops on sign-out with no thread open", async () => {
+        PgAssistant.endTurn(turn);
+        PgAssistant.closeThread();
+        turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+        const approval = PgAssistant.requestApproval({
+          type: "command",
+          name: "build",
+          effect: "builds",
+        });
+
+        PgAssistant.stopTurn();
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(true);
+        await expect(approval).resolves.toMatchObject({ allowed: false });
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["approval"]);
+        expect(PgAssistant.endTurn(turn)).toBe(false);
       });
     });
 

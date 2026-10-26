@@ -168,13 +168,15 @@ export const session = (): Disposable => {
    * storage the next time anything changes -- from where the next account's
    * sign-in dump uploads it. What is stored survives the close: the upload has
    * already happened, `closeThread` persists nothing, and `forget` keeps any
-   * thread written to since. A turn still running is stopped by the close,
-   * the same as on a workspace switch mid-turn: its unfinished reply and any
-   * approval it was waiting on are dropped, and nothing it writes afterwards
-   * reaches the thread opened next. It closes again last, because
-   * removing the open project switches workspace and the chat effect opens
-   * the next one's thread; that effect opens a fresh one once the user is
-   * cleared.
+   * thread written to since. A turn still running is stopped first, thread
+   * open or not, the same as on a workspace switch mid-turn: its unfinished
+   * reply and any approval it was waiting on are dropped, and nothing it
+   * writes afterwards reaches the thread opened next. With no workspace there
+   * is no thread to close, and what the panel holds was never stored: it is
+   * dropped, or the next thread to open would adopt it. It closes again last,
+   * because removing the open project switches workspace and the chat effect
+   * opens the next one's thread; that effect opens a fresh one once the user
+   * is cleared.
    *
    * `releaseLocalProjects` is `forget`'s counterpart for code. It runs before
    * `signOut` clears the user, because a mark is keyed by the user id and
@@ -211,7 +213,13 @@ export const session = (): Disposable => {
         }
       };
 
+      // Stopped on its own as well: with no thread open the close below does
+      // nothing, and a turn running there would carry on for the next account
+      await step("stop turn", () => PgAssistant.stopTurn());
       await step("close thread", () => PgAssistant.closeThread());
+      // With no thread open the close keeps what the panel holds, for the
+      // thread that opens next to adopt -- here, the next account's
+      await step("drop unsaved messages", () => PgAssistant.clear());
       // A write the panel queued before closing lands now, so `forget` sees it
       await step("wait for chat writes", () => PgAssistant.whenPersisted());
       await step("forget conversations", () => PgChatSync.forget(handed));

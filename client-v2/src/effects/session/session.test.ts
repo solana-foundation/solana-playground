@@ -485,9 +485,17 @@ describe("signing out", () => {
       order.push("releaseProjects");
       return [];
     });
+    vi.spyOn(PgAssistant, "stopTurn").mockImplementation(
+      () => order.push("stopTurn") as unknown as void
+    );
     vi.spyOn(PgAssistant, "closeThread").mockImplementation(
       () => order.push("closeThread") as unknown as void
     );
+    const clear = PgAssistant.clear.bind(PgAssistant);
+    vi.spyOn(PgAssistant, "clear").mockImplementation(() => {
+      order.push("clear");
+      clear();
+    });
     vi.spyOn(PgAssistant, "whenPersisted").mockImplementation(async () => {
       order.push("whenPersisted");
     });
@@ -506,7 +514,8 @@ describe("signing out", () => {
 
   it("uploads before the request and tears down after it", async () => {
     // Uploads while the request is still authenticated, teardown only once
-    // the server has ended the session. The thread closes first, so the panel
+    // the server has ended the session. The turn stops and the thread closes
+    // first, so the panel
     // stops writing the previous user's transcript back into storage, and
     // again last, because releasing the open project switches workspace and
     // the chat effect opens the next one's thread. A write the panel queued
@@ -520,12 +529,29 @@ describe("signing out", () => {
       "pushChats",
       "pushProject",
       "request",
+      "stopTurn",
       "closeThread",
+      "clear",
       "whenPersisted",
       "forgetChats",
       "releaseProjects",
       "closeThread",
     ]);
+    effect.dispose();
+  });
+
+  it("drops what the panel holds with no workspace open", async () => {
+    // Deleting the last project leaves the panel working with no thread; what
+    // it holds then was never stored, and the next thread to open -- the next
+    // account's -- would adopt it
+    serverSignsOut({ ok: true });
+    expect(PgAssistant.threadId).toBeNull();
+    PgAssistant.addUserMessage("from the last account");
+
+    const effect = session();
+    await PgSession.signOut();
+
+    expect(PgAssistant.items).toEqual([]);
     effect.dispose();
   });
 

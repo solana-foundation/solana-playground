@@ -149,11 +149,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   const starting = useRef(false);
 
   // The store says what a live turn is doing; the controller says whether a
-  // turn is over, since a stopped one still has to unwind
+  // turn is over, since a stopped one still has to unwind. A turn this hook
+  // has no controller for is one a closed thread cut off: the hook remounted
+  // since it started, and the store's record is all that says it still runs
   const phaseOf = (): TurnPhase => {
     if (turn.current?.signal.aborted) return "stopping";
     if (PgAssistant.status !== "idle") return PgAssistant.status;
     if (turn.current) return "running";
+    if (PgAssistant.turnRunning) return "stopping";
     return "idle";
   };
   const phase = phaseOf();
@@ -231,9 +234,17 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   const openConnect = (via: ConnectVia, preset?: ConnectPreset) =>
     opener.current(via, preset);
 
-  /** Whether a turn, or a send still finding its backend, is under way */
+  /**
+   * Whether a turn, or a send still finding its backend, is under way.
+   * `turnRunning` covers a turn started before this hook remounted: a closed
+   * thread resets the status, and a turn begun over one still unwinding would
+   * let its writes through.
+   */
   const occupied = () =>
-    starting.current || !!turn.current || PgAssistant.status !== "idle";
+    starting.current ||
+    !!turn.current ||
+    PgAssistant.turnRunning ||
+    PgAssistant.status !== "idle";
 
   /**
    * @returns `false` when the send was refused because another one is under
