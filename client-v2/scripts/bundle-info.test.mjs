@@ -48,7 +48,7 @@ for (const [name, bytes, committed, expected] of HYSTERESIS) {
   });
 }
 
-test("chunkRows gives a named chunk and a worker a row each and sums the numbered chunks", () => {
+test("chunkRows gives a named chunk and a worker a row each and sums the other chunks", () => {
   const file = (name, gzip) => ({ name, raw: gzip, gzip });
   assert.deepEqual(
     chunkRows(
@@ -62,17 +62,17 @@ test("chunkRows gives a named chunk and a worker a row each and sums the numbere
     [
       { id: "main", count: 1, gzip: 20 },
       { id: "worker:ts", count: 1, gzip: 40 },
-      { id: "numbered chunks", count: 2, gzip: 40 },
+      { id: "other chunks", count: 2, gzip: 40 },
     ]
   );
 });
 
-const measurement = ({ jsRaw, jsGzip, cssGzip, numbered, main }) => ({
+const measurement = ({ jsRaw, jsGzip, cssGzip, other, main }) => ({
   js: { count: 2, raw: jsRaw, gzip: jsGzip },
   css: { count: 1, raw: 30 * KB, gzip: cssGzip },
   chunks: [
     { id: "main", count: 1, gzip: main },
-    { id: "numbered chunks", count: 1, gzip: numbered },
+    { id: "other chunks", count: 1, gzip: other },
   ],
 });
 
@@ -81,7 +81,7 @@ const COMMITTED = renderSnapshot(
     jsRaw: 1.48 * MB,
     jsGzip: 470 * KB,
     cssGzip: 10 * KB,
-    numbered: 470 * KB,
+    other: 470 * KB,
     main: 1.48 * MB,
   })
 );
@@ -91,7 +91,7 @@ test("renderSnapshot reproduces the committed file when every cell moved within 
     jsRaw: 1.487 * MB,
     jsGzip: 470.2 * KB,
     cssGzip: 10.2 * KB,
-    numbered: 470.2 * KB,
+    other: 470.2 * KB,
     main: 1.487 * MB,
   });
   assert.equal(renderSnapshot(fresh, COMMITTED), COMMITTED);
@@ -102,14 +102,14 @@ test("renderSnapshot changes only the row that moved past the tolerance", () => 
     jsRaw: 1.48 * MB,
     jsGzip: 470 * KB,
     cssGzip: 10 * KB,
-    numbered: 490 * KB,
+    other: 490 * KB,
     main: 1.48 * MB,
   });
   assert.equal(
     renderSnapshot(fresh, COMMITTED),
     COMMITTED.replace(
-      "| `numbered chunks` | 1 | 470 kB |",
-      "| `numbered chunks` | 1 | 490 kB |"
+      "| `other chunks` | 1 | 470 kB |",
+      "| `other chunks` | 1 | 490 kB |"
     )
   );
 });

@@ -19,7 +19,7 @@ Locally and on CI, `yarn test-build` fails the same way.
 
 - Rejected: the Explorer's `check` subcommand run as a workflow step.
 
-### The snapshot: totals, named rows, and one sum of numbered chunks, with a fixed tolerance
+### The snapshot: totals, named rows, and one sum of the other chunks, with a fixed tolerance
 
 `bench/BUNDLE.md` holds JavaScript and CSS totals (count, raw, gzipped) and a
 chunk table with a count and a gzipped cell per row. The JavaScript files are
@@ -27,9 +27,9 @@ chunk table with a count and a gzipped cell per row. The JavaScript files are
 (`ts.worker.js` alone is over 5 MB raw); the two `*.module.wasm` files are
 left out. `chunkRows` gives a row to each named chunk (`main`, or any name a
 `webpackChunkName` adds) and to each worker (`worker:<name>`): a named row
-says which part of the app moved. Every chunk whose name is a number is summed
-into one `numbered chunks` row, because such an id names no module and shifts
-when code moves; a growth in one lazy chunk still moves the sum.
+says which part of the app moved. Every other chunk is summed into one
+`other chunks` row: webpack names those by a numeric id, which says nothing
+about their content. A growth in one lazy chunk still moves the sum.
 
 `formatBytes` rounds as the Explorer does: 10 B under 1 kB, up to the next
 10 kB under 1000 kB, 0.01 MB above. A fresh cell within 11 KiB of the committed

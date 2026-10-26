@@ -11,7 +11,7 @@ ships without a title and passed them.
 
 - `client-v2/bench/BUNDLE.md` is a committed snapshot of the production bundle:
   JavaScript (Monaco workers included) and CSS totals, one gzipped size per
-  named chunk and per worker, and one sum of the numbered chunks.
+  named chunk and per worker, and one sum of the other chunks.
   `yarn bundle:info` regenerates it from `build/`.
 - `yarn test-build` fails when the snapshot is stale
   (`scripts/bundle-info.build-test.mjs`) and when the bundle holds a module

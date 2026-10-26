@@ -9,8 +9,8 @@ production build's JavaScript and CSS files, where the JavaScript files are
 `build/static/js/*.js` and the Monaco workers `build/*.worker.js`; the
 `build/*.module.wasm` files SHALL NOT be measured. It SHALL hold a gzipped
 size row for each named chunk, one for each worker keyed `worker:<name>`, and
-one `numbered chunks` row with the count and gzipped sum of the chunks whose
-name is a number. A fresh size cell within 11 KiB of the committed cell
+one `other chunks` row with the count and gzipped sum of every other chunk.
+A fresh size cell within 11 KiB of the committed cell
 (`DISPLAY_STEP_TOLERANCE_BYTES`) SHALL keep the committed value. The rule
 compares rounded cells, so real growth of up to about two display steps can go
 unrecorded. `yarn test-build` SHALL fail when the file differs from a fresh

@@ -29,7 +29,7 @@ const snapshot = ({ jsCount = "2", jsGzip = "470 kB", chunks }) =>
 
 const BASE_CHUNKS = [
   ["main", "1", "470 kB"],
-  ["numbered chunks", "2", "1.48 MB"],
+  ["other chunks", "2", "1.48 MB"],
 ];
 
 const BASE = snapshot({ chunks: BASE_CHUNKS });
@@ -48,7 +48,7 @@ test("a row within the tolerance is counted as noise, not listed, under a headin
     snapshot({
       chunks: [
         ["main", "1", "480 kB"],
-        ["numbered chunks", "2", "1.49 MB"],
+        ["other chunks", "2", "1.49 MB"],
       ],
     })
   );
@@ -69,7 +69,7 @@ const LISTED = [
       jsGzip: "490 kB",
       chunks: [
         ["main", "1", "490 kB"],
-        ["numbered chunks", "2", "1.48 MB"],
+        ["other chunks", "2", "1.48 MB"],
       ],
     }),
     "**2 changed, 0 added, 0 removed**",
@@ -83,7 +83,7 @@ const LISTED = [
     "a removed chunk and an added worker",
     snapshot({
       chunks: [
-        ["numbered chunks", "2", "1.48 MB"],
+        ["other chunks", "2", "1.48 MB"],
         ["worker:json", "1", "10 kB"],
       ],
     }),
