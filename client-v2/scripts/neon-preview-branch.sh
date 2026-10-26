@@ -28,7 +28,9 @@ BASE_BRANCH=${NEON_BASE_BRANCH:-main}
 
 neon() { npx --yes neonctl@latest "$@"; }
 
-branch="preview/$(git rev-parse --abbrev-ref HEAD)"
+# PREVIEW_GIT_BRANCH lets scripts/db/url/ name the git branch it was given;
+# unset, it is the one checked out
+branch="preview/${PREVIEW_GIT_BRANCH:-$(git rev-parse --abbrev-ref HEAD)}"
 
 conn() {
   neon connection-string "$branch" "$@" --ssl require \

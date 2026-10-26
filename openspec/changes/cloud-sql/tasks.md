@@ -38,7 +38,7 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       key on Cloud SQL without one of its variables", and "fails a production
       key whose DB_PROVIDER names no provider".
       Depends on 1.1. Ticket to file.
-- [ ] 1.3 Add `client-v2/scripts/db/preview-name.mjs` (`solpg_preview_pr_<n>`
+- [x] 1.3 Add `client-v2/scripts/db/preview-name.mjs` (`solpg_preview_pr_<n>`
       for a PR, `solpg_preview_br_<id>` for a laptop branch) and the provisioning
       scripts `scripts/db/url/{create-preview-db,drop-preview-db,migration-url}`
       (wrapping `.github/scripts/neon.sh` and `scripts/neon-preview-branch.sh`)

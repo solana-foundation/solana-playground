@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# Create (or reuse) a preview's Neon branch, cut from the preview project's
+# `main`, and print what its deployment needs, one KEY=VALUE per line: the
+# pooled DATABASE_URL. A PR's branch goes through neon.sh, as preview.yml's
+# does; a laptop's through neon-preview-branch.sh, as `make preview-db-branch`
+# did. Both need NEON_API_KEY and NEON_PROJECT_ID.
+#
+#   create-preview-db --pr <number> | --branch <name>
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+parse_target "" "$@"
+branch=$(neon_branch)
+
+if [ "$TARGET_KIND" = pr ]; then
+  bash "$NEON_SH" ensure "$branch" >/dev/null
+  url=$(bash "$NEON_SH" uri "$branch" pooled)
+else
+  url=$(PREVIEW_GIT_BRANCH=$TARGET "$NEON_PREVIEW_BRANCH" --pooled)
+fi
+
+printf '%s\n' "$url" | sed -E 's#^[^@]*@([^/?]*).*#preview database: \1#' >&2
+printf 'DATABASE_URL=%s\n' "$url"

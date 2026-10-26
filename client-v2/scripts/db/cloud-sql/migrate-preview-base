@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Bring the template `solpg_preview_base` up to client-v2/db/migrations, so
+# new previews replay fewer migrations. Run by hand when that replay grows
+# long; a clone works without it.
+#
+# The base refuses connections outside this script, because cloning fails
+# while any session is connected to a template. This lifts that for the run
+# and restores it on every exit, failure included.
+#
+#   migrate-preview-base
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+[ "$#" -eq 0 ] || { echo "usage: $(basename "$0")" >&2; exit 2; }
+command -v dbmate >/dev/null 2>&1 || { echo "dbmate required: see client-v2/db/README.md" >&2; exit 1; }
+. "$DB_SCRIPTS/cloud-sql/proxy.sh"
+
+BASE=solpg_preview_base
+
+start_proxy
+close_base() {
+  admin_sql "alter database $BASE with allow_connections false" ||
+    echo "WARNING: $BASE still accepts connections; previews cannot clone it until: alter database $BASE with allow_connections false" >&2
+  stop_proxy
+}
+trap close_base EXIT
+
+url=$(proxy_url "$BASE" "$CLOUD_SQL_USER")
+admin_sql "alter database $BASE with allow_connections true"
+cd "$CLIENT_V2"
+DATABASE_URL=$url dbmate --no-dump-schema up

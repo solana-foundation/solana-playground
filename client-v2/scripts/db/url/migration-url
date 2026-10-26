@@ -1,0 +1,29 @@
+#!/usr/bin/env bash
+# The URL dbmate migrates through: the Neon branch's direct (unpooled)
+# endpoint, since the pooled one carries `channel_binding`, which dbmate's
+# driver cannot parse. `production` reads DATABASE_URL_UNPOOLED from the
+# environment, which `make migrate-production-db` pulls from Vercel's
+# Production environment.
+#
+#   migration-url (--pr <number> | --branch <name> | production) [-- <command>...]
+#
+# With a command, runs it with DATABASE_URL set to the URL; without, prints it.
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+split_command "$@"
+parse_target production ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}
+
+case "$TARGET_KIND" in
+  production)
+    url=${DATABASE_URL_UNPOOLED:?DATABASE_URL_UNPOOLED is unset: no Production database to migrate}
+    ;;
+  pr) url=$(bash "$NEON_SH" uri "$(neon_branch)") ;;
+  branch) url=$(PREVIEW_GIT_BRANCH=$TARGET "$NEON_PREVIEW_BRANCH") ;;
+esac
+
+if [ "${#COMMAND[@]}" -eq 0 ]; then
+  printf '%s\n' "$url"
+else
+  DATABASE_URL=$url exec "${COMMAND[@]}"
+fi
