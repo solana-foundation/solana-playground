@@ -272,19 +272,25 @@ describe("the chat-thread effect", () => {
     vi.spyOn(PgChatSync, "adoptAccountThread").mockResolvedValue(
       "account-thread"
     );
+    // Repointed, not loaded: a load empties memory while it reads, and a reply
+    // streaming meanwhile lost the text that arrived then
+    const repoint = vi
+      .spyOn(PgAssistant, "repointThread")
+      .mockResolvedValue(true);
     const load = PgAssistant.loadThread as unknown as MockInstance;
 
     await openThread("p1", "p1");
 
     expect(PgChatSync.adoptAccountThread).toHaveBeenCalledWith("p1");
-    expect(load).toHaveBeenLastCalledWith("account-thread");
+    expect(repoint).toHaveBeenCalledWith("p1", "account-thread");
+    expect(load).not.toHaveBeenCalledWith("account-thread");
     expect(PgChatSync.fetchThread).toHaveBeenLastCalledWith("account-thread");
   });
 
   it("does not go looking for the account's thread when the request failed", async () => {
-    // Adopting reloads the panel, and the session effect opens a thread that
-    // may be mid-turn: a reload then denies the card the user has not
-    // answered. Only a thread the server says it lacks is worth that.
+    // Adopting merges this thread into the account's, removes it and moves
+    // the panel to the other id. A failed request says nothing about whether
+    // the server lacks the thread; only one it says it lacks is worth that.
     vi.spyOn(PgChatSync, "fetchThread").mockResolvedValue(null);
 
     await openThread("p1", "p1");

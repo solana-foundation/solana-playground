@@ -8,7 +8,8 @@ import type { ChatItem } from "../../views/sidebar/assistant/store";
  * When the server has never heard of this thread id, the account may still
  * hold the workspace's conversation under another -- sign-out clears the
  * thread index, so the next open mints a fresh id. `adoptAccountThread` finds
- * it by project, and the panel moves over to it.
+ * it by project, and the panel moves over to it (`repointThread`), keeping
+ * what memory holds.
  *
  * Shared with the session effect, which repoints threads at sign-in and has
  * to move the panel with them -- and which calls this for a thread that is
@@ -29,14 +30,15 @@ export const openThread = async (workspaceId: string, id: string) => {
   }
   // Only a thread the server answered for as missing is a reason to look for
   // the account's. A failed request says nothing about that, and adopting
-  // reloads the panel -- mid-turn, too, since the session effect calls this
-  // for a thread that is already open.
+  // moves the panel to another thread id -- mid-turn, too, since the session
+  // effect calls this for a thread that is already open.
   if (fromServer !== "missing") return;
 
   const adopted = await PgChatSync.adoptAccountThread(workspaceId);
-  if (!adopted || PgAssistant.threadId !== id) return;
+  // Repointed rather than loaded: a load empties memory while it reads, and a
+  // reply streaming meanwhile loses the text that arrives then
+  if (!adopted || !(await PgAssistant.repointThread(id, adopted))) return;
 
-  await PgAssistant.loadThread(adopted);
   const adoptedItems = await PgChatSync.fetchThread(adopted);
   if (Array.isArray(adoptedItems)) await settleInto(adopted, adoptedItems);
 };

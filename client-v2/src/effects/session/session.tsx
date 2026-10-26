@@ -103,9 +103,10 @@ export const session = (): Disposable => {
     //
     // A turn may well be running by now -- this is several round trips after
     // load. For an unchanged thread the server's copy is folded into memory
-    // rather than reloaded, which leaves the turn alone; see `openThread` for
-    // the one case that does reload (the server has never seen the thread and
-    // the account holds another for the workspace).
+    // rather than reloaded, which leaves the turn alone. The one case that
+    // changes the thread id (the server has never seen the thread and the
+    // account holds another for the workspace) repoints the panel and keeps
+    // memory too; see `openThread`.
     //
     // The workspace is checked again after the index read: a switch landing
     // inside it has already opened the new workspace's thread, and this must

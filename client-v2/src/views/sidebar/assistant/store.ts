@@ -947,12 +947,12 @@ export class PgAssistant {
   /**
    * Open a thread, replacing whatever is rendered.
    *
-   * Called when the workspace changes, after `closeThread`, and when sync
-   * repoints the open workspace at another thread id (`openThread` adopting
-   * the account's). Anything still awaiting approval is denied rather than
-   * carried across. A running turn is not cut: a workspace switch has cut it
-   * in `closeThread` already, and a repoint keeps the same conversation, so
-   * the turn carries on into the thread opened.
+   * Called when the workspace changes, after `closeThread`. Anything still
+   * awaiting approval is denied rather than carried across. A running turn is
+   * not cut: a workspace switch has cut it in `closeThread` already, and a
+   * turn started with no thread open carries on into the thread opened. Sync
+   * moving the open workspace to another thread id uses `repointThread`
+   * instead, which keeps memory while it reads.
    *
    * The id is claimed before the read so a second switch landing mid-read can
    * be detected and its result discarded — otherwise a slow read for project A
@@ -982,6 +982,76 @@ export class PgAssistant {
     } finally {
       if (PgAssistant._loading === loading) PgAssistant._loading = null;
     }
+  }
+
+  /**
+   * Move the open thread to another id, keeping the conversation in memory.
+   *
+   * For sync adopting the account's thread for the open workspace
+   * (`openThread`): the same conversation under the id the account knows,
+   * possibly mid-turn. `loadThread` replaced memory with an empty list while
+   * it read the new id, so chunks streamed meanwhile found no message to
+   * append to and the saved reply had a hole; it also denied the approval the
+   * turn waited on. Here what is rendered stays in memory, `to`'s stored copy
+   * is merged into it as `foldIn` merges the server's, and the turn, the
+   * status and pending approvals carry on untouched.
+   *
+   * `from`'s file is removed once its queued writes land. `adoptAccountThread`
+   * has already merged it into `to` and removed it, but a write the turn
+   * queued before the move would bring it back as a thread no workspace
+   * points at.
+   *
+   * @param from the thread open now
+   * @param to the thread the workspace points at instead
+   * @returns whether `from` was open and the panel is now on `to`
+   */
+  static async repointThread(from: string, to: string) {
+    await PgAssistant._settled(from);
+    if (PgAssistant._threadId !== from) return false;
+
+    PgAssistant._threadId = to;
+    const seq = ++PgAssistant._loadSeq;
+    // Closed to writes until `to` is read: memory lacks what `to` holds, and
+    // a write now would replace it
+    PgAssistant._writes = "reading";
+    // Registered as `to`'s read, so a `foldIn` or `loadThread` of `to` waits
+    // for the merge instead of landing in the middle of it
+    const loading = { threadId: to, done: PgAssistant._repoint(from, to, seq) };
+    PgAssistant._loading = loading;
+    try {
+      return await loading.done;
+    } finally {
+      if (PgAssistant._loading === loading) PgAssistant._loading = null;
+    }
+  }
+
+  private static async _repoint(from: string, to: string, seq: number) {
+    // Captured for an overtaken move: the close or load overtaking it
+    // replaces `_items`, and what was typed in the meantime is `to`'s
+    const live = PgAssistant._items;
+
+    await PgAssistant._afterThreadWrites(to);
+    const stored = await PgChatStorage.read(to);
+    if (PgAssistant._loadSeq !== seq) {
+      PgAssistant._keepOvertaken(to, live);
+      return false;
+    }
+
+    // As in `_load`: an unreadable `to` is shown from memory but not written
+    // over, and `from` is kept, since it may hold what `to` cannot give back
+    PgAssistant._writes = stored === null ? "unreadable" : "open";
+    PgAssistant._items = capThread(
+      to,
+      mergeThreads(stored ?? [], live),
+      Math.max(MAX_MESSAGES_PER_THREAD, live.length)
+    );
+    PgAssistant._emit();
+    if (stored !== null) {
+      PgAssistant._enqueue(from, async () => {
+        await PgChatStorage.remove(from);
+      });
+    }
+    return true;
   }
 
   /** Once `threadId`'s read has landed, if one is in flight */
@@ -1209,9 +1279,11 @@ export class PgAssistant {
   private static _lastWrite: Promise<void> = Promise.resolve();
   /** Each thread's latest step on the write queue, while it is out */
   private static readonly _threadWrites = new Map<string, Promise<void>>();
-  /** The thread read `loadThread` has out, if any */
-  private static _loading: { threadId: string; done: Promise<void> } | null =
-    null;
+  /** The thread read `loadThread` or `repointThread` has out, if any */
+  private static _loading: {
+    threadId: string;
+    done: Promise<unknown>;
+  } | null = null;
 
   /**
    * Resolves once every pending write has landed.
@@ -2479,15 +2551,98 @@ if (import.meta.vitest) {
         expect(PgAssistant.endTurn(turn)).toBe(false);
       });
 
-      it("carries on when sync repoints the workspace at another thread", async () => {
-        // `openThread` adopting the account's thread: the same conversation
-        // under another id, and a reply still streaming into it
-        await PgAssistant.loadThread("t2");
-        PgAssistant.addToolCall("listed the project");
+      /**
+       * `openThread` adopting the account's thread: the same conversation
+       * under another id, with a reply still streaming into it
+       */
+      describe("when sync repoints the workspace at another thread", () => {
+        const onAccount: ChatItem = {
+          kind: "user",
+          id: "66666666-6666-4666-8666-666666666666",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          text: "from the account",
+        };
 
-        expect(turn.signal.aborted).toBe(false);
-        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["tool"]);
-        expect(PgAssistant.endTurn(turn)).toBe(true);
+        const texts = () =>
+          PgAssistant.items.map((i) => ("text" in i ? i.text : i.kind));
+
+        /** Holds the read of `threadId` until the returned gate opens */
+        const holdRead = (threadId: string) => {
+          let open = () => {};
+          const gate = new Promise<void>((resolve) => (open = resolve));
+          const realRead = PgChatStorage.read.bind(PgChatStorage);
+          const read = vi
+            .spyOn(PgChatStorage, "read")
+            .mockImplementation(async (id) => {
+              if (id === threadId) await gate;
+              return realRead(id);
+            });
+          return { open, read };
+        };
+
+        it("streams the reply on without losing text mid-move", async () => {
+          PgAssistant.addUserMessage("build it");
+          const id = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(id, "Hel");
+          // What `adoptAccountThread` does before the move: the local thread
+          // merged into the account's, and removed
+          await PgAssistant.whenPersisted();
+          const local = (await PgChatStorage.read("t1")) ?? [];
+          await PgChatStorage.write("t2", mergeThreads([onAccount], local));
+          await PgChatStorage.remove("t1");
+          const { open, read } = holdRead("t2");
+
+          try {
+            const moving = PgAssistant.repointThread("t1", "t2");
+            await vi.waitFor(() => expect(read).toHaveBeenCalledWith("t2"));
+            PgAssistant.appendToAssistantMessage(id, "lo, ");
+            open();
+            await moving;
+            PgAssistant.appendToAssistantMessage(id, "world");
+          } finally {
+            read.mockRestore();
+          }
+
+          expect(PgAssistant.threadId).toBe("t2");
+          expect(texts()).toEqual([
+            "from the account",
+            "build it",
+            "Hello, world",
+          ]);
+          await PgAssistant.whenPersisted();
+          expect(
+            (await PgChatStorage.read("t2"))?.map((i) =>
+              "text" in i ? i.text : i.kind
+            )
+          ).toEqual(["from the account", "build it", "Hello, world"]);
+          expect(turn.signal.aborted).toBe(false);
+          expect(PgAssistant.endTurn(turn)).toBe(true);
+        });
+
+        it("leaves the approval the turn waits on to the user", async () => {
+          const approval = PgAssistant.requestApproval({
+            type: "command",
+            name: "build",
+            effect: "builds",
+          });
+
+          await PgAssistant.repointThread("t1", "t2");
+          const [card] = PgAssistant.items;
+          PgAssistant.resolveApproval(card.id, true);
+
+          expect(await approval).toEqual({ id: card.id, allowed: true });
+        });
+
+        it("drops the thread it moved from once its writes land", async () => {
+          // `adoptAccountThread` has removed it already; a write queued for it
+          // before the move would bring it back, pointed at by no workspace
+          PgAssistant.addUserMessage("build it");
+
+          await PgAssistant.repointThread("t1", "t2");
+          await PgAssistant.whenPersisted();
+
+          expect(await PgChatStorage.threadIds()).toEqual(["t2"]);
+        });
       });
 
       it("carries on into the thread that opens when none was", async () => {
