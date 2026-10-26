@@ -46,7 +46,7 @@ const BaseNetworkChoice = ({
           key={n.endpoint}
           value={n.endpoint}
           // A fingertip tall on a phone, as the prototype's network chips
-          className="font-mono max-md:h-12 max-md:px-4 max-md:text-control"
+          className="max-md:h-12 max-md:px-4 max-md:text-control"
           onClick={() => {
             if (n.endpoint === endpoint) onChoose?.(n.endpoint);
           }}

@@ -97,7 +97,7 @@ const LiveSettingsPage = ({
             name={setting.name}
             description={setting.description}
             control={<SettingControl {...setting} />}
-            // A setting without values is a switch
+            // A setting without values is a checkbox
             small={!setting.values}
             phone={phone}
           />

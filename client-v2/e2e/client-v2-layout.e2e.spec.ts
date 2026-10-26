@@ -1705,7 +1705,7 @@ test.describe("the settings page", () => {
     // Each setting's control carries its own name: two of one name ("Endpoint"
     // twice, once) cannot be told apart by a screen reader or a test
     const names = await settingsPage(page)
-      .locator('[role="combobox"], [role="switch"]')
+      .locator('[role="combobox"], [role="checkbox"]')
       .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
     expect(names.length).toBeGreaterThan(5);
     expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);

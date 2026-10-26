@@ -14,10 +14,9 @@ export const connection = [
     default: "confirmed" as const,
   }),
   createSetting({
+    // "Endpoint", from the id, as the prototype names it; the build server's
+    // is "Build server", so the two controls keep names of their own
     id: "connection.endpoint",
-    // Not "Endpoint": `server.endpoint` would share it, and a control is
-    // named by its setting
-    name: "RPC endpoint",
     description:
       "RPC URL that lets you interact with a specific Solana cluster",
     values: [
