@@ -18,6 +18,7 @@ import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
+// TODO(ui-migration 1.4): a feature importing a feature; project sync runs only for a signed-in session
 import { PgSession } from "@/features/auth";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit

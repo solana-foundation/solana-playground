@@ -187,10 +187,16 @@ not the OS. `PgTheme.set` toggles `dark` on `<html>` next to `colorScheme`.
 
 ## The `@/` alias
 
-CRA deletes `compilerOptions.paths` from `tsconfig.json` on every start
-(`verifyTypeScriptSetup.js`). The alias lives in `tsconfig.paths.json`, which
-`tsconfig.json` extends, plus craco `webpack.alias`, plus the test runner's
-resolver (Jest `moduleNameMapper` until vitest, then `resolve.alias`).
+`@/*` is declared once, in `client-v2/tsconfig.json` `paths`. Webpack reads
+it through `resolve.tsconfig` (set in `craco.config.js`), vitest through
+`resolve.tsconfigPaths`, and ESLint through its typescript resolver.
+react-scripts 5 runs `verifyTypeScriptSetup`, which would strip `paths`, only
+from `init`, so `paths` survives start and build.
+
+Because webpack and vitest resolve runtime imports through `paths`, every
+entry there names a runtime file. A package subpath that needs a type-only
+mapping (`moduleResolution: "node"` ignores package `exports`) is declared in
+`src/types/package-exports.d.ts` instead.
 
 ## What the spike measured (HOO-1840)
 

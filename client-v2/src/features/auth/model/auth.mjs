@@ -14,6 +14,7 @@ import { betterAuth } from "better-auth";
 import { oAuthProxy } from "better-auth/plugins";
 
 import { authEnv } from "../../../shared/config/server-env.mjs";
+// TODO(ui-migration 1.4): a feature importing a feature; the auth database adapter needs persistence's pool
 import { getPool, isConfigured } from "../../persistence/server.mjs";
 import { SIGN_IN_ENV } from "../config.mjs";
 

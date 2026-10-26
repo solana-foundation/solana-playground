@@ -35,11 +35,15 @@ app -> widgets -> features -> entities -> shared
 Two rules on top of the direction:
 
 - **A feature never imports another feature.** When two features must meet,
-  they meet in a widget that imports both. One named exception exists today:
-  `auth` and `persistence` import each other (`auth`'s server module uses
-  `persistence`'s pool; `persistence` reads the session). It is recorded as
-  the exception in the `client-v2-layers` spec and is broken by task 1.4 of
-  `ui-migration`; the boundary check exempts these two by name until then.
+  they meet in a widget that imports both. One named exception holds until
+  `ui-migration` task 1.4 breaks it: `auth` and `persistence` import each
+  other (`auth`'s server module uses `persistence`'s pool; `persistence`
+  reads the session), as the `client-v2-layers` spec records. The pair's 8
+  existing imports, each marked `TODO(ui-migration 1.4)`, are warnings from
+  `layers/recorded-exception`, and only through the other slice's entry; the
+  same import from any file outside `RECORDED_EXCEPTION` (`eslint-layers.js`)
+  is an error. `scripts/eslint-layers.test.mjs` pins the 8 imports, so CI
+  fails on a new one, or on one that is gone without the list shrinking.
 - **Entities do not import each other.** FSD's `@x` cross-imports are not
   enabled.
 

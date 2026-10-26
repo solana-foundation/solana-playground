@@ -1,6 +1,7 @@
 import { report } from "./diagnostics";
 import { isUserFile, sha256 } from "./snapshot";
 import { isMissing } from "./sync-mark";
+// TODO(ui-migration 1.4): a feature importing a feature; bases are stored per signed-in account
 import { PgSession } from "@/features/auth";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { BaseContents } from "./merge";

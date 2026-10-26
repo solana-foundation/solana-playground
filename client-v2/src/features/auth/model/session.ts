@@ -381,7 +381,8 @@ export class PgSession {
    * Inversion on purpose: the persistence slice needs to flush threads here,
    * but it already imports this module, and importing it back would make the
    * two slices circular. The session effect wires them together instead, so
-   * `features/auth` stays unaware that persistence exists.
+   * the browser side of `features/auth` stays unaware that persistence exists
+   * (its server module, `model/auth.mjs`, does import it).
    */
   static setOnSignOut(hook: SignOutHook | null) {
     PgSession._onSignOut = hook;

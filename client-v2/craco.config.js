@@ -134,14 +134,10 @@ module.exports = {
   },
 
   webpack: {
-    // `@/` is `src/`. The same mapping lives in tsconfig.json `paths` for the
-    // compiler and the editor, and in `jest.moduleNameMapper` in package.json
-    // for the tests. CRA's `verifyTypeScriptSetup` would strip `paths` from
-    // tsconfig.json, but react-scripts 5.0.0 only runs it from `init`, never
-    // from start or build (checked: both leave the file untouched).
-    alias: { "@": path.resolve(__dirname, "src") },
-
     configure: (webpackConfig, { env }) => {
+      // tsconfig `paths` is the only `@/` mapping; react-scripts 5 strips it only in `init`, never in start or build
+      webpackConfig.resolve.tsconfig = path.join(__dirname, "tsconfig.json");
+
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
 

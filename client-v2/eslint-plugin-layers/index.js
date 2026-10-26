@@ -141,4 +141,12 @@ const aliasAcrossModules = {
   },
 };
 
-module.exports = { rules: { "alias-across-modules": aliasAcrossModules } };
+module.exports = {
+  rules: {
+    "alias-across-modules": aliasAcrossModules,
+    // `boundaries/dependencies` under a second id: eslintrc gives a rule id one
+    // severity, and `eslint-layers.js` needs the recorded exception at "warn"
+    "recorded-exception": require("eslint-plugin-boundaries").rules
+      .dependencies,
+  },
+};

@@ -1497,9 +1497,7 @@ if (import.meta.vitest) {
       ({ truncationNoticeId } = await import(
         "../../../features/persistence/model/chat-storage"
       ));
-      // Through `@/` on purpose: the alias is mapped in `tsconfig.json`'s `paths`, in
-      // craco's webpack alias and in `vitest.config.ts`'s `resolve.alias`, and this
-      // dynamic import is what fails when the vitest mapping drifts from the other two.
+      // Through `@/` on purpose: this dynamic import fails if vitest stops resolving `@/` through tsconfig `paths`
       ({ PgFs } = await import("@/utils/explorer/fs"));
       ({ storedValues } = await import("../../../test-utils/stored-values"));
     });

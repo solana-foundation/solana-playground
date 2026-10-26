@@ -1,10 +1,11 @@
 /**
- * The layer rule from `CLAUDE.md` ("Layers") as ESLint errors. `package.json`
- * `eslintConfig` extends this file, so `yarn lint` and the dev server read it,
- * and so does `yarn lint:layers`, the first step of the production build,
- * which drops CRA's own lint (`BUILD_ONLY_CHECKS` in `craco.config.js`). It is
- * a module rather than part of `package.json` so the exception below can
- * carry its comment.
+ * The layer rule from `CLAUDE.md` ("Layers") as ESLint errors, and its one
+ * recorded exception as warnings. `package.json` `eslintConfig` extends this
+ * file, so `yarn lint` and the dev server read it, and so does
+ * `yarn lint:layers`, the first step of the production build, which drops
+ * CRA's own lint (`BUILD_ONLY_CHECKS` in `craco.config.js`). It is a module
+ * rather than part of `package.json` so the exception below can carry its
+ * comment.
  *
  * The five layers under `src/` are checked, and `api/`, whose routes reach
  * `src/` only through a slice's `server.mjs` (or `shared`). The legacy roots
@@ -48,9 +49,37 @@ const SERVER_MESSAGE =
 const API_MESSAGE =
   "api/ reaches {{to.element.type}}/{{to.element.captured.slice}} only through its server.mjs, not {{to.element.fileInternalPath}}. See client-v2/CLAUDE.md, Layers";
 
-const slice = (type, name) => ({
-  element: { type, captured: { slice: name } },
-});
+const RECORDED_EXCEPTION_MESSAGE =
+  'features/{{from.element.captured.slice}} imports "{{dependency.source}}", another feature: the recorded auth <-> persistence exception, tolerated in these files only until ui-migration task 1.4 breaks the cycle. Add no other. See client-v2/CLAUDE.md, Layers';
+
+/** The entries the recorded exception's imports go through */
+const PAIR_ENTRIES = [
+  {
+    element: {
+      type: "features",
+      captured: { slice: "auth" },
+      fileInternalPath: "index.ts",
+    },
+  },
+  {
+    element: {
+      type: "features",
+      captured: { slice: "persistence" },
+      fileInternalPath: "server.mjs",
+    },
+  },
+];
+
+/**
+ * The recorded exception: these files' imports of the other slice's entry
+ * warn, and the same import from any other file errors. `eslint-layers.test.mjs`
+ * pins the set; `ui-migration` task 1.4 empties it
+ */
+const RECORDED_EXCEPTION = [
+  "src/features/auth/model/auth.mjs",
+  "src/features/persistence/model/{chat-sync,project-sync,sync-base,sync-mark}.ts",
+  "src/features/persistence/model/{project-restore,project-sync,two-devices}.test.ts",
+];
 
 module.exports = {
   plugins: ["boundaries", "layers"],
@@ -111,12 +140,10 @@ module.exports = {
             from: { file: { path: "**/*.integration.spec.{ts,tsx,mjs}" } },
             allow: { to: { element: { type: "api" } } },
           },
-          // The one recorded exception: `auth`'s server module uses
-          // `persistence`'s pool, and `persistence` reads the session.
-          // `ui-migration` task 1.4 breaks the cycle and deletes this policy.
+          // `layers/recorded-exception` reports these as warnings instead
           {
-            from: slice("features", "{auth,persistence}"),
-            allow: { to: slice("features", "{auth,persistence}") },
+            from: { file: { path: RECORDED_EXCEPTION } },
+            allow: { to: PAIR_ENTRIES },
           },
           // A test file may reach past a slice's entry, so a `vi.mock` can
           // rebuild the entry from the modules behind it
@@ -151,4 +178,21 @@ module.exports = {
       },
     ],
   },
+  overrides: [
+    {
+      files: RECORDED_EXCEPTION,
+      rules: {
+        // A warning: `yarn lint` shows it, the build's `lint:layers --quiet`
+        // does not fail on it
+        "layers/recorded-exception": [
+          "warn",
+          {
+            default: "allow",
+            message: RECORDED_EXCEPTION_MESSAGE,
+            policies: [{ disallow: { to: PAIR_ENTRIES } }],
+          },
+        ],
+      },
+    },
+  ],
 };
