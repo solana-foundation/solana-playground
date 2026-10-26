@@ -2,13 +2,11 @@ name: client-v2
 
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
 # `client/`'s build or tests; this one guards `client-v2/` and never touches
-# the Rust workspaces. Keep the push branch list identical on master and
-# new-face, so a merge in either direction leaves it unchanged. A
-# pull_request run reads this file from the PR's merge commit (CLAUDE.md,
-# "This is a fork").
+# the Rust workspaces. A pull_request run reads this file from the PR's
+# merge commit (CLAUDE.md, "This is a fork").
 on:
   push:
-    branches: ["master", "new-face"]
+    branches: ["master"]
   pull_request:
 
   workflow_dispatch:
