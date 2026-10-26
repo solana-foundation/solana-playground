@@ -53,7 +53,7 @@ const slice = (type, name) => ({
 });
 
 module.exports = {
-  plugins: ["boundaries"],
+  plugins: ["boundaries", "layers"],
   settings: {
     // Both read paths from here, not from the working directory, so ESLint
     // run from the repository root (an editor, `npx eslint client-v2/...`)
@@ -84,6 +84,11 @@ module.exports = {
     ],
   },
   rules: {
+    // Scoped inside `eslint-plugin-layers`, so no `overrides` entry
+    "layers/alias-across-modules": [
+      "error",
+      { src: path.join(__dirname, "src") },
+    ],
     // Imports inside one element (the app, a slice, shared) are not checked.
     // Two slices of one layer are two elements, so a widget importing a
     // widget, or a feature a feature, matches no policy and is disallowed.

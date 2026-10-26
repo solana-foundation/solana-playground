@@ -5,12 +5,12 @@ import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import { memoryFeedbackProvider } from "./provider";
 import type { FeedbackProvider } from "./provider";
 import { EMPTY_DRAFT, useFeedbackForm } from "./use-feedback-form";

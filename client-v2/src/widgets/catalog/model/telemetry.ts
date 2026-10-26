@@ -1,4 +1,4 @@
-import { createTracker } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
 
 /** The two pages the catalog shows */
 export type CatalogPage = "tutorials" | "programs";

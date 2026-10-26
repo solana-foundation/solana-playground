@@ -1,8 +1,8 @@
 import Delayed from "../components/Delayed";
 import ErrorBoundary from "../components/ErrorBoundary";
 import FadeIn from "../components/FadeIn";
-import Effects from "./Effects";
-import Panels from "./Panels";
+import Effects from "@/app/Effects";
+import Panels from "@/app/Panels";
 import { GlobalsProvider } from "../providers/globals";
 import { RouterProvider } from "../providers/router";
 import { SolanaProvider } from "../providers/solana";

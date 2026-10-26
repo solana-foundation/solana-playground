@@ -8,7 +8,7 @@ import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
 import { reconcile, releaseLocalProjects } from "./project-restore";
-import { PgSession } from "../../auth";
+import { PgSession } from "@/features/auth";
 import { projectSync } from "../../../effects/project-sync/project-sync";
 import { PgCommon } from "../../../utils/common";
 import { PgExplorer } from "../../../utils/explorer/explorer";

@@ -5,14 +5,14 @@ import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
-import * as reportModule from "../../../shared/lib/report-button-failure";
-import { PgSession } from "../../../features/auth";
+} from "@/shared/lib/telemetry";
+import * as reportModule from "@/shared/lib/report-button-failure";
+import { PgSession } from "@/features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { APIUserAbortError } from "@anthropic-ai/sdk";
 import { createProvider } from "../../../views/sidebar/assistant/model";

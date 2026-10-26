@@ -8,8 +8,8 @@ import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
-import { BUTTON_FAILED_TOAST } from "../../../shared/lib/report-button-failure";
+} from "@/shared/lib/logger";
+import { BUTTON_FAILED_TOAST } from "@/shared/lib/report-button-failure";
 import { PgView } from "../../../utils/view";
 import type { ToastChildProps } from "../../../utils/view";
 import { BaseThreadItem } from "./BaseThreadItem";

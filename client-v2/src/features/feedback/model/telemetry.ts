@@ -1,5 +1,5 @@
-import { createTracker } from "../../../shared/lib/telemetry";
-import type { NoParams } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
+import type { NoParams } from "@/shared/lib/telemetry";
 import type { GithubLink } from "../lib/github-links";
 import type { Rating } from "./provider";
 

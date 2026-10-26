@@ -4,8 +4,8 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
-import { PgSession } from "../../../features/auth";
-import { report, toReplayMessages } from "../../../features/persistence";
+import { PgSession } from "@/features/auth";
+import { report, toReplayMessages } from "@/features/persistence";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import {
   isDefaultBackendRemembered,
@@ -18,7 +18,7 @@ import type {
   PromptRequest,
 } from "../../../views/sidebar/assistant/store";
 import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
-import { reportButtonFailure } from "../../../shared/lib/report-button-failure";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 // Deep import rather than the `utils` barrel, as `effects/chat-thread` does
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { DEFAULT_CONNECTION } from "./connection";

@@ -1,6 +1,6 @@
 import { report } from "./diagnostics";
 import { PgSyncClaim } from "./sync-claim";
-import { PgSession } from "../../auth";
+import { PgSession } from "@/features/auth";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { FileHashes } from "./snapshot";
 

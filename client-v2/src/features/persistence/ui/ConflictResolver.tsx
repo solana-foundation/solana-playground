@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BaseConflictResolver } from "./BaseConflictResolver";
 import { conflictKey } from "./merge-editor/merge-file";
-import { createLogger } from "../../../shared/lib/logger";
+import { createLogger } from "@/shared/lib/logger";
 import { PgProjectSync } from "../model/project-sync";
 import { persistenceTelemetry } from "../model/telemetry";
 import type { FileConflict, ResolvedFiles } from "../model/merge";

@@ -14,7 +14,7 @@
  *
  *   __pgSyncDiagnostics.failures()
  */
-import { createLogger } from "../../../shared/lib/logger";
+import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("persistence:diagnostics");
 
@@ -65,12 +65,12 @@ if (import.meta.vitest) {
   const { describe, it, expect, beforeAll, beforeEach, afterEach } = import.meta
     .vitest;
   describe("features/persistence/model/diagnostics", () => {
-    let initLogger: typeof import("../../../shared/lib/logger").initLogger;
-    let memoryProvider: typeof import("../../../shared/lib/logger").memoryProvider;
-    let resetLogger: typeof import("../../../shared/lib/logger").resetLogger;
+    let initLogger: typeof import("@/shared/lib/logger").initLogger;
+    let memoryProvider: typeof import("@/shared/lib/logger").memoryProvider;
+    let resetLogger: typeof import("@/shared/lib/logger").resetLogger;
     beforeAll(async () => {
       ({ initLogger, memoryProvider, resetLogger } = await import(
-        "../../../shared/lib/logger"
+        "@/shared/lib/logger"
       ));
     });
     let logged: ReturnType<typeof memoryProvider>;

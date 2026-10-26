@@ -1,5 +1,5 @@
-import { createTracker } from "../../../shared/lib/telemetry";
-import type { NoParams } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
+import type { NoParams } from "@/shared/lib/telemetry";
 
 export type HomeTile = "new-project" | "tutorials" | "programs";
 /** The tiles that open the Tutorials or Programs page; New project unfolds instead */

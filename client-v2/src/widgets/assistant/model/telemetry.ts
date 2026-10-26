@@ -1,6 +1,6 @@
-import type { ModelProvider } from "../../../shared/lib/ai";
-import { createTracker } from "../../../shared/lib/telemetry";
-import type { NoParams } from "../../../shared/lib/telemetry";
+import type { ModelProvider } from "@/shared/lib/ai";
+import { createTracker } from "@/shared/lib/telemetry";
+import type { NoParams } from "@/shared/lib/telemetry";
 import type { Effort } from "../../../views/sidebar/assistant/model";
 
 export type AssistantEvents = {

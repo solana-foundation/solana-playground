@@ -1,7 +1,7 @@
 import { PgChatStorage } from "./chat-storage";
 import { report } from "./diagnostics";
 import { withSyncLock } from "./sync-lock";
-import { isUuid, uuid } from "../../../shared/lib/ids";
+import { isUuid, uuid } from "@/shared/lib/ids";
 import { PgFs } from "../../../utils/explorer/fs";
 
 /**

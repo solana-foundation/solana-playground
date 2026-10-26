@@ -1,5 +1,5 @@
-import { reporter } from "../../../shared/lib/reporter";
-import type { Reporter } from "../../../shared/lib/reporter";
+import { reporter } from "@/shared/lib/reporter";
+import type { Reporter } from "@/shared/lib/reporter";
 
 export type Rating = 1 | 2 | 3 | 4 | 5;
 

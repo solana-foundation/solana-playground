@@ -9,8 +9,8 @@ import { openPopupChannel } from "../lib/popup-channel";
 import type { PopupChannel } from "../lib/popup-channel";
 import { authTelemetry } from "./telemetry";
 import type { SignInFailure } from "./telemetry";
-import { createLogger } from "../../../shared/lib/logger";
-import { timeoutSignal } from "../../../shared/lib/timeout-signal";
+import { createLogger } from "@/shared/lib/logger";
+import { timeoutSignal } from "@/shared/lib/timeout-signal";
 import type { Disposable } from "../../../utils/types";
 
 /** A sign-in that ended at a known step; any other error counts as `request-failed` */
@@ -465,12 +465,12 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, afterEach } = import.meta.vitest;
   type Mock = import("vitest").Mock;
   describe("features/auth/model/session", () => {
-    let initLogger: typeof import("../../../shared/lib/logger").initLogger;
-    let memoryProvider: typeof import("../../../shared/lib/logger").memoryProvider;
-    let resetLogger: typeof import("../../../shared/lib/logger").resetLogger;
+    let initLogger: typeof import("@/shared/lib/logger").initLogger;
+    let memoryProvider: typeof import("@/shared/lib/logger").memoryProvider;
+    let resetLogger: typeof import("@/shared/lib/logger").resetLogger;
     beforeAll(async () => {
       ({ initLogger, memoryProvider, resetLogger } = await import(
-        "../../../shared/lib/logger"
+        "@/shared/lib/logger"
       ));
     });
     const signedIn = (user: {

@@ -8,7 +8,7 @@ import { PgSyncClaim } from "./sync-claim";
 import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
-import { PgSession } from "../../auth";
+import { PgSession } from "@/features/auth";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgWorkspace } from "../../../utils/explorer/workspace";
