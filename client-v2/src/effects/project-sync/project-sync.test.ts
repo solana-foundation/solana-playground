@@ -538,7 +538,7 @@ describe("deleting a workspace here", () => {
     vi.spyOn(PgExplorer, "workspaceNameOf").mockImplementation((id: string) =>
       id === "tut:here" ? "Here" : undefined
     );
-    const drop = vi.spyOn(PgSyncClaim, "drop").mockResolvedValue(undefined);
+    const forget = vi.spyOn(PgSyncClaim, "forget").mockResolvedValue(undefined);
     registered([
       { id: "tut:here", name: "Here" },
       { id: "made-next-door", name: "Next Door" },
@@ -548,7 +548,7 @@ describe("deleting a workspace here", () => {
     dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(drop.mock.calls).toEqual([["tut:gone"]]);
+    expect(forget.mock.calls).toEqual([["tut:gone"]]);
   });
 
   it("deletes nothing when the store cannot say what it lists", async () => {

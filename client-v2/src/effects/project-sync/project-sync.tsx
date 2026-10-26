@@ -256,10 +256,12 @@ export const projectSync = (): Disposable => {
       // A workspace deleted before its first upload has a claim and no mark,
       // so the loop above never meets it. Left behind, the claim would vouch
       // for another account's project that later turns up under the same id.
+      // Every account's, not the signed-in one's: a workspace deleted after
+      // its account signed out takes that account's claim with it.
       for (const projectId of await PgSyncClaim.projectIds()) {
         if (PgExplorer.workspaceNameOf(projectId)) continue;
         if ((await PgWorkspaceRegistry.lists(projectId)) !== false) continue;
-        await PgSyncClaim.drop(projectId);
+        await PgSyncClaim.forget(projectId);
       }
     } catch (e) {
       report("settle local deletes", e);

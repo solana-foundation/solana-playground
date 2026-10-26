@@ -74,17 +74,96 @@ export class PgSyncClaim {
     }
   }
 
-  /** Every project the signed-in account holds a claim for */
+  /**
+   * Every project any account on this browser holds a claim for, signed in
+   * or not.
+   *
+   * A workspace can be deleted while signed out, or while another account is
+   * signed in, and its claim has to go with it all the same. Listed for the
+   * signed-in account alone, the claim of a tutorial deleted after its
+   * account signed out survived, and later vouched for the next account's
+   * leftover copy under the same id.
+   */
   static async projectIds(): Promise<string[]> {
-    const userId = currentUserId();
-    if (!userId) return [];
-
     try {
-      const names = await PgFs.readDir(dirFor(userId));
-      return names.filter((name) => name.endsWith(SUFFIX)).map(projectIdOf);
+      const ids = new Set<string>();
+      for (const owner of await PgSyncClaim._owners()) {
+        const names = await PgFs.readDir(dirFor(owner));
+        for (const name of names) {
+          if (name.endsWith(SUFFIX)) ids.add(projectIdOf(name));
+        }
+      }
+      return [...ids];
     } catch (e) {
       if (!isMissing(e)) report("list claims", e);
       return [];
     }
   }
+
+  /** Drop every account's claim, for a workspace that no longer exists */
+  static async forget(projectId: string) {
+    try {
+      for (const owner of await PgSyncClaim._owners()) {
+        try {
+          await PgFs.removeFile(pathOf(owner, projectId));
+        } catch (e) {
+          if (!isMissing(e)) throw e;
+        }
+      }
+    } catch (e) {
+      if (!isMissing(e)) report(`forget claim ${projectId}`, e);
+    }
+  }
+
+  private static async _owners(): Promise<string[]> {
+    return (await PgFs.readDir(ROOT)).map(decodeURIComponent);
+  }
+}
+
+if (import.meta.vitest) {
+  const { describe, it, expect, beforeEach } = import.meta.vitest;
+
+  describe("features/persistence/model/sync-claim", () => {
+    const storedFiles = () =>
+      (PgFs as unknown as { __files: Map<string, string> }).__files;
+
+    const signIn = (id: string) =>
+      PgSession.refreshWith({ id, name: null, image: null, login: null });
+
+    beforeEach(() => {
+      PgSession.reset();
+      storedFiles().clear();
+    });
+
+    it("lists every account's claims, signed out too", async () => {
+      await signIn("u1");
+      await PgSyncClaim.claim("tut:one");
+      await signIn("u2");
+      await PgSyncClaim.claim("tut:two");
+      await PgSession.refreshWith(null);
+
+      expect((await PgSyncClaim.projectIds()).sort()).toEqual([
+        "tut:one",
+        "tut:two",
+      ]);
+    });
+
+    it("forgets a deleted workspace's claim for whichever account made it", async () => {
+      // Deleted after its account signed out: the claim must not outlive it
+      // and vouch for the next account's copy under the same id
+      await signIn("u1");
+      await PgSyncClaim.claim("tut:hello");
+      await PgSession.refreshWith(null);
+
+      await PgSyncClaim.forget("tut:hello");
+
+      await signIn("u1");
+      expect(await PgSyncClaim.has("tut:hello")).toBe(false);
+    });
+
+    it("lists nothing, and reports nothing, before any claim", async () => {
+      expect(await PgSyncClaim.projectIds()).toEqual([]);
+      await expect(PgSyncClaim.forget("tut:hello")).resolves.toBeUndefined();
+    });
+  });
 }
