@@ -351,18 +351,20 @@ check's job (Layers, "The boundary check"); the rest hold by review.
 - **The `check` script is green before the push.** It runs what CI runs,
   in CI's order, minus the production build. Opt in to running it on every
   push with `git config core.hooksPath .githooks` once per clone.
-- **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` job of
-  `client-v2.yml`) on every PR (GitHub reads the workflow from the PR's
-  merge commit; see the root `CLAUDE.md`, "This is a fork"), and a red spec
-  fails the PR's checks. It needs no server and no Postgres: every spec
-  stubs the account endpoints with `page.route`, and the dev server serves
+- **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
+  `client-v2.yml`, one shard per matrix entry) on every PR (GitHub reads the
+  workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
+  fork"), and a red spec fails the PR's checks. It needs no server and no
+  Postgres: every spec stubs the account endpoints with `page.route`, and
+  the dev server serves
   `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,
   so none depends on the machine's default backend. Two sync tests ("switching
   tabs mid-debounce raises no conflict", "reloading a project the account
   already has writes nothing") are `test.fixme` on the runner, where the
   load's timing differs and the sync races they guard show. The two are
-  listed by title in `e2e/known-skips.txt`; the job fails on any skip that
-  is not in the list and warns on an entry that no longer skips. CI retries a
+  listed by title in `e2e/known-skips.txt`; the `e2e-report` job checks the
+  list once, over every shard's report, and fails on any skip that is not in
+  the list and warns on an entry that no longer skips. CI retries a
   failed spec once, because the runner is three times slower than a laptop and
   fails specs on timing alone; a pass on the retry is reported as **flaky**, named in the
   run's annotations, and is work to do, not a pass. Locally `retries` is 0,
