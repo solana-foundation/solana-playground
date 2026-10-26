@@ -14,6 +14,7 @@ import {
 import * as reportModule from "../../../shared/lib/report-button-failure";
 import { PgSession } from "../../../features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import { APIUserAbortError } from "@anthropic-ai/sdk";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
@@ -352,6 +353,21 @@ describe("useTurn", () => {
     // Seeded from what is rendered: the first exchange is on screen
     const seed = vi.mocked(createProvider).mock.calls[1][1];
     expect(seed?.length).toBeGreaterThan(0);
+  });
+
+  it("rebuilds the provider once what is rendered is dropped, with no thread open", async () => {
+    // Sign-out with no thread open: `threadId` stays null and a key-based
+    // connection survives, so only `clear` says the conversation is gone
+    PgAssistant.closeThread();
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    const { result } = renderHook(() => useTestTurn());
+    await act(() => result.current.send("from the last account"));
+
+    act(() => PgAssistant.clear());
+    await act(() => result.current.send("from the next one"));
+
+    expect(createProvider).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createProvider).mock.calls[1][1]).toEqual([]);
   });
 
   it("puts a requested prompt in the composer without sending", async () => {
@@ -803,6 +819,29 @@ describe("useTurn's failures and races", () => {
         new Promise<void>((_resolve, reject) => {
           signal?.addEventListener("abort", () =>
             reject(new DOMException("The user aborted", "AbortError"))
+          );
+        })
+    );
+    const { result } = renderHook(() => useTestTurn());
+    act(() => {
+      void result.current.send("hi");
+    });
+
+    act(() => result.current.stop());
+
+    await waitFor(() => expect(result.current.busy).toBe(false));
+    expect(logged()).toEqual([["assistant:turn", "debug", false]]);
+  });
+
+  it("logs the Anthropic SDK's abort at debug only", async () => {
+    // Its abort error is named a plain `Error`, so it read as a stopped turn
+    // ending on a bug, and every stop was reported
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockImplementation(
+      (_: string, signal?: AbortSignal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new APIUserAbortError())
           );
         })
     );

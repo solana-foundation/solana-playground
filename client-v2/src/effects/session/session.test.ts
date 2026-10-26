@@ -514,11 +514,12 @@ describe("signing out", () => {
 
   it("uploads before the request and tears down after it", async () => {
     // Uploads while the request is still authenticated, teardown only once
-    // the server has ended the session. The turn stops and the thread closes
-    // first, so the panel
-    // stops writing the previous user's transcript back into storage, and
-    // again last, because releasing the open project switches workspace and
-    // the chat effect opens the next one's thread. A write the panel queued
+    // the server has ended the session. The turn stops before the close,
+    // which does nothing with no thread open, and `clear` then drops what the
+    // panel held unstored. The thread closes first, so the panel stops
+    // writing the previous user's transcript back into storage, and again
+    // last, because releasing the open project switches workspace and the
+    // chat effect opens the next one's thread. A write the panel queued
     // before the close lands ahead of `forget`, which then keeps that thread.
     serverSignsOut({ ok: true });
 
