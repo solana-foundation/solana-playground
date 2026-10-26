@@ -508,9 +508,11 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  *
  * Local workspaces are not account-scoped -- they predate accounts, and
  * signing out never cleared them -- so the next person to sign in here found
- * the previous user's projects sitting in the explorer. `ownedByAnother`
- * already stops those being *uploaded* into the new account, so nothing
- * reaches the server that should not; what was left is that they are visible.
+ * the previous user's projects sitting in the explorer.
+ * `PgSyncMark.belongsToAnotherAccount` already stops those being *uploaded*
+ * into the new account -- unless the new account claimed one by creating it
+ * here -- so nothing reaches the server that should not; what was left is
+ * that they are visible.
  *
  * Decided per project, and only where the account demonstrably holds the same
  * content -- the same trade `PgChatSync.forget` makes for conversations,

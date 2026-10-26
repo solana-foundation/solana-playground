@@ -248,6 +248,21 @@ const stamp = (item: ChatItem) => {
     previous >= Date.parse(at) ? new Date(previous + 1).toISOString() : at;
 };
 
+/**
+ * Whether `items` holds anything `stored` lacks, or a newer copy of what it
+ * has. A version that does not parse counts as newer, so nothing is judged
+ * already kept on a guess.
+ */
+const holdsNewer = (
+  items: readonly ChatItem[],
+  stored: readonly ChatItem[]
+) => {
+  const versions = new Map(stored.map((item) => [item.id, versionOf(item)]));
+  return items.some(
+    (item) => !(versionOf(item) <= (versions.get(item.id) ?? NaN))
+  );
+};
+
 const isSame = (a: Connection | null, b: Connection) =>
   !!a &&
   a.id === b.id &&
@@ -1046,12 +1061,33 @@ export class PgAssistant {
       Math.max(MAX_MESSAGES_PER_THREAD, live.length)
     );
     PgAssistant._emit();
-    if (stored !== null) {
-      PgAssistant._enqueue(from, async () => {
-        await PgChatStorage.remove(from);
-      });
-    }
+    if (stored !== null) PgAssistant._dropMoved(from, to);
     return true;
+  }
+
+  /**
+   * Remove `from` once `to`, as stored, holds every item of it at least as
+   * new.
+   *
+   * Checked against storage rather than trusting the write queued for `to`:
+   * `PgChatStorage.write` reports a failure and returns, and `from` may then
+   * hold the only stored copy of what the turn wrote last.
+   */
+  private static _dropMoved(from: string, to: string) {
+    PgAssistant._enqueue(from, async () => {
+      const [left, moved] = await Promise.all([
+        PgChatStorage.read(from),
+        PgChatStorage.read(to),
+      ]);
+      if (left === null || moved === null) return;
+
+      if (!holdsNewer(left, moved)) {
+        await PgChatStorage.remove(from);
+        return;
+      }
+      // `report` appends "failed" to this
+      report(`move ${from} to ${to}: ${from} kept, as ${to} lacks it`, null);
+    });
   }
 
   /** Once `threadId`'s read has landed, if one is in flight */
@@ -1124,10 +1160,12 @@ export class PgAssistant {
   }
 
   /**
-   * Keep what was typed during a read that was overtaken before it landed.
+   * Keep what was typed during a read that was overtaken before it landed,
+   * or what an overtaken `repointThread` held.
    *
    * With writes closed it was never written, and the close or the next load
-   * took it off screen: it belongs to `threadId`, so it is not dropped.
+   * took it off screen: it belongs to `threadId`, so it is not dropped. An
+   * item already stored is written again when this copy is newer.
    *
    * - The same thread is open again: it goes onto what is rendered, where
    *   that load adopts it, or writes it now if its read has landed.
@@ -1161,8 +1199,10 @@ export class PgAssistant {
         );
         return;
       }
-      const known = new Set(stored.map((item) => item.id));
-      if (unwritten.some((item) => !known.has(item.id))) {
+      // A newer copy of a stored item is owed as much as a new one: an
+      // overtaken `repointThread` hands over a reply that streamed on, or an
+      // approval answered, under an id the thread already has
+      if (holdsNewer(unwritten, stored)) {
         await PgChatStorage.write(threadId, mergeThreads(stored, unwritten));
       }
     });
@@ -2580,16 +2620,27 @@ if (import.meta.vitest) {
           return { open, read };
         };
 
-        it("streams the reply on without losing text mid-move", async () => {
-          PgAssistant.addUserMessage("build it");
-          const id = PgAssistant.startAssistantMessage();
-          PgAssistant.appendToAssistantMessage(id, "Hel");
-          // What `adoptAccountThread` does before the move: the local thread
-          // merged into the account's, and removed
+        /**
+         * What `adoptAccountThread` does before the move: the local thread
+         * merged into the account's, and removed
+         */
+        const adopt = async () => {
           await PgAssistant.whenPersisted();
           const local = (await PgChatStorage.read("t1")) ?? [];
           await PgChatStorage.write("t2", mergeThreads([onAccount], local));
           await PgChatStorage.remove("t1");
+        };
+
+        const storedTexts = async (threadId: string) =>
+          (await PgChatStorage.read(threadId))?.map((i) =>
+            "text" in i ? i.text : i.kind
+          );
+
+        it("streams the reply on without losing text mid-move", async () => {
+          PgAssistant.addUserMessage("build it");
+          const id = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(id, "Hel");
+          await adopt();
           const { open, read } = holdRead("t2");
 
           try {
@@ -2610,11 +2661,11 @@ if (import.meta.vitest) {
             "Hello, world",
           ]);
           await PgAssistant.whenPersisted();
-          expect(
-            (await PgChatStorage.read("t2"))?.map((i) =>
-              "text" in i ? i.text : i.kind
-            )
-          ).toEqual(["from the account", "build it", "Hello, world"]);
+          expect(await storedTexts("t2")).toEqual([
+            "from the account",
+            "build it",
+            "Hello, world",
+          ]);
           expect(turn.signal.aborted).toBe(false);
           expect(PgAssistant.endTurn(turn)).toBe(true);
         });
@@ -2642,6 +2693,84 @@ if (import.meta.vitest) {
           await PgAssistant.whenPersisted();
 
           expect(await PgChatStorage.threadIds()).toEqual(["t2"]);
+        });
+
+        it("keeps the thread it moved from when the move's write fails", async () => {
+          // `PgChatStorage.write` reports a failure and returns: removing the
+          // source on that would lose what only the source holds
+          PgAssistant.addUserMessage("build it");
+          await PgAssistant.whenPersisted();
+          const realWrite = PgChatStorage.write.bind(PgChatStorage);
+          const write = vi
+            .spyOn(PgChatStorage, "write")
+            .mockImplementation(async (threadId, items) => {
+              if (threadId !== "t2") await realWrite(threadId, items);
+            });
+
+          try {
+            await PgAssistant.repointThread("t1", "t2");
+            await PgAssistant.whenPersisted();
+          } finally {
+            write.mockRestore();
+          }
+
+          expect(await storedTexts("t1")).toEqual(["build it"]);
+        });
+
+        describe("overtaken by a switch before the read lands", () => {
+          it("keeps text streamed into a reply the account already has", async () => {
+            // Every id is already stored, so only the newer version says
+            // anything is owed
+            PgAssistant.addUserMessage("build it");
+            const id = PgAssistant.startAssistantMessage();
+            PgAssistant.appendToAssistantMessage(id, "Hel");
+            await adopt();
+            const { open, read } = holdRead("t2");
+
+            try {
+              const moving = PgAssistant.repointThread("t1", "t2");
+              await vi.waitFor(() => expect(read).toHaveBeenCalledWith("t2"));
+              PgAssistant.appendToAssistantMessage(id, "lo");
+              PgAssistant.closeThread();
+              open();
+              expect(await moving).toBe(false);
+              await PgAssistant.whenPersisted();
+            } finally {
+              read.mockRestore();
+            }
+
+            expect(await storedTexts("t2")).toEqual([
+              "from the account",
+              "build it",
+              "Hello",
+            ]);
+          });
+
+          it("keeps the answer to an approval the account already has", async () => {
+            void PgAssistant.requestApproval({
+              type: "command",
+              name: "build",
+              effect: "builds",
+            });
+            await adopt();
+            const { open, read } = holdRead("t2");
+
+            try {
+              const moving = PgAssistant.repointThread("t1", "t2");
+              await vi.waitFor(() => expect(read).toHaveBeenCalledWith("t2"));
+              // Denies the card, which nobody is left to answer
+              PgAssistant.closeThread();
+              open();
+              await moving;
+              await PgAssistant.whenPersisted();
+            } finally {
+              read.mockRestore();
+            }
+
+            const stored = await PgChatStorage.read("t2");
+            const card = stored?.find((i) => i.kind === "approval");
+            expect(card).toMatchObject({ status: "denied" });
+          });
         });
       });
 

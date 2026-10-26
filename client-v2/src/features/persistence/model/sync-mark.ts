@@ -148,11 +148,16 @@ export class PgSyncMark {
     }
   }
 
-  /** Drops the project's claim too: the mark says whose it is from here on */
+  /**
+   * Drops the project's claim too once the mark is written: the mark says
+   * whose it is from here on. Not when the write failed: with neither, the
+   * project reads as another account's leftover and never uploads again.
+   */
   static write(projectId: string, mark: SyncMark) {
     return PgSyncMark._serial(projectId, async () => {
-      await PgSyncMark._write(projectId, mark);
-      await PgSyncClaim.drop(projectId);
+      if (await PgSyncMark._write(projectId, mark)) {
+        await PgSyncClaim.drop(projectId);
+      }
     });
   }
 
@@ -176,16 +181,19 @@ export class PgSyncMark {
     });
   }
 
+  /** @returns whether the mark was written */
   private static async _write(projectId: string, mark: SyncMark) {
     const userId = currentUserId();
-    if (!userId) return;
+    if (!userId) return false;
 
     try {
       await PgFs.writeFile(pathOf(userId, projectId), JSON.stringify(mark), {
         createParents: true,
       });
+      return true;
     } catch (e) {
       report(`write sync mark ${projectId}`, e);
+      return false;
     }
   }
 
@@ -373,6 +381,23 @@ if (import.meta.vitest) {
         });
 
         expect(await PgSyncClaim.has("tut:hello")).toBe(false);
+      });
+
+      it("keeps the claim when the mark could not be written", async () => {
+        // Neither a mark nor a claim reads as another account's leftover, and
+        // the tutorial would never upload again
+        await PgSyncClaim.claim("tut:hello");
+        vi.spyOn(PgFs, "writeFile").mockRejectedValueOnce(new Error("quota"));
+
+        await PgSyncMark.write("tut:hello", {
+          files: { a: "h1" },
+          name: "one",
+          updatedAt: "t1",
+          dirty: false,
+        });
+
+        expect(await PgSyncMark.exists("tut:hello")).toBe(false);
+        expect(await PgSyncClaim.has("tut:hello")).toBe(true);
       });
 
       it("drops the claim when it removes the mark", async () => {
