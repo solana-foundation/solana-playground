@@ -11,8 +11,9 @@ are reached, and where a connection's key may appear.
 ### Requirement: A turn stops at its step limit
 
 A turn SHALL send no model request after it reaches the caller's step limit,
-or `DEFAULT_MAX_STEPS` when the caller sets none, even when the last step
-asked for more tool calls. Resumes of a paused turn are counted by their own
+or the module's private fallback when the caller sets none, even when the
+last step asked for more tool calls. The module SHALL NOT export the
+fallback: each caller passes its own limit from its `config.ts`. Resumes of a paused turn are counted by their own
 limit, not by this one.
 
 #### Scenario: A model that keeps calling tools (manual)
@@ -26,8 +27,9 @@ limit, not by this one.
 When a step ends because the provider paused the turn (Anthropic's
 `pause_turn`), the module SHALL send the paused content back and continue the
 turn, and SHALL stop with an `AiTurnError` once the turn has paused more times
-than the caller's resume limit, or `DEFAULT_MAX_RESUMES` when the caller sets
-none.
+than the caller's resume limit, or the module's private fallback when the
+caller sets none. The module SHALL NOT export the fallback: each caller
+passes its own limit from its `config.ts`.
 
 #### Scenario: A paused turn is resumed
 
@@ -148,9 +150,10 @@ connection with an empty key SHALL send no `Authorization` header.
 
 ### Requirement: The default backend goes through /api/agent
 
-A connection to the default backend SHALL send every model request to
-`/api/agent` on the app's own origin, in the chat-completions format, with no
-key.
+A connection to the default backend SHALL send every model request to the
+same-origin route its caller passes, in the chat-completions format, with no
+key. The assistant passes `/api/agent`, `DEFAULT_BACKEND_URL` in its
+`config.ts`; the module's private fallback is the same route.
 
 #### Scenario: A turn on the default backend (manual)
 

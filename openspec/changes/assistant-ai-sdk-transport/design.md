@@ -45,21 +45,20 @@ and the default `maxRetries: 2` sends a 429 three times.
 Nothing here imports `PgAssistant`, playground tools, prompts, or the store.
 Callers inject behaviour through callbacks. The module follows the
 `shared/lib/logger` conventions: `index.ts` is the public API with types
-exported separately, files are kebab-case, tests are co-located `*.test.ts`,
-and each file logs through `createLogger("ai:<module>")`.
+exported separately, files are kebab-case, tests are co-located (an in-source
+block or a `*.test.ts`, as `client-v2/AGENTS.md` decides), and each file logs through `createLogger("ai:<module>")`.
 
 | File | Public API | Responsibility |
 | --- | --- | --- |
-| `types.ts` | `ToolDefinition`, `ToolSchema`, `ModelConnection` | Vendor-neutral tool shape, moved from `assistant/model/types.ts`. A `ToolDefinition`'s schema is either a plain JSON Schema (`ToolSchema`) or a zod 4 schema; with a zod schema, `run(input)` gets the inferred type. `ModelConnection` is a union discriminated by `provider`: the default backend takes no key and an optional model, Anthropic takes a key and a model, and an OpenAI-compatible provider takes a base URL, a model, and an optional key; each takes an optional `fetch`. |
-| `models.ts` | `createModel(connection): LanguageModel` | Maps a connection to an SDK model: `@ai-sdk/openai-compatible` for OpenAI-compatible providers, `@ai-sdk/anthropic` for Anthropic (with the browser-access header). A custom `fetch` lets the default backend keep posting to `/api/agent`. |
-| `default-backend.ts` | `DEFAULT_BACKEND_URL` | The default backend's route, in a file of its own so a static import of it does not bring `models.ts` and the SDK into the boot chunk (see "Decision: the SDK loads on first use"). |
+| `types.ts` | `ToolDefinition`, `ToolSchema`, `ModelConnection` | Vendor-neutral tool shape, moved from `assistant/model/types.ts`. A `ToolDefinition`'s schema is either a plain JSON Schema (`ToolSchema`) or a zod 4 schema; with a zod schema, `run(input)` gets the inferred type. `ModelConnection` is a union discriminated by `provider`: the default backend takes no key, an optional same-origin `url`, and an optional model, Anthropic takes a key and a model, and an OpenAI-compatible provider takes a base URL, a model, and an optional key; each takes an optional `fetch`. |
+| `models.ts` | `createModel(connection): LanguageModel` | Maps a connection to an SDK model: `@ai-sdk/openai-compatible` for OpenAI-compatible providers, `@ai-sdk/anthropic` for Anthropic (with the browser-access header). A custom `fetch` lets the default backend post every request to the connection's `url`, or to a private fallback when the caller passes none. |
 | `tools.ts` | `toSdkTools(defs): ToolSet` | `tool({ inputSchema, execute: run })` per definition: a JSON Schema goes through `jsonSchema(schema)`, a zod schema is passed as is. An `execute` that awaits an approval holds the step loop. |
 | `run-turn.ts` | `runTurn(options): Promise<TurnResult>`, `AiTurnError` | Wraps `streamText` with `maxRetries: 0`, `stopWhen: isStepCount(maxSteps)`, the abort `signal`, and the `pause_turn` resume up to `maxResumes`. Takes `instructions` (the system messages, with their provider options), `providerOptions`, `maxOutputTokens` (without it `@ai-sdk/anthropic` caps a model it does not know at 4096), and `apiKey`, which is redacted from every error. Streams text, reasoning, and tool events to callbacks (`onText`, `onReasoning`, `onToolCall`). Turns a refusal or an in-stream error into a thrown `AiTurnError`. Returns the updated `ModelMessage[]` history and `reachedStepLimit`, true when the model still wanted tools at the step limit. |
-| `mcp.ts` | `connectMcp(server)`, `McpUnreachableError` | `@ai-sdk/mcp` over HTTP with headers, our reconnect after a stale session, and CORS failures raised as `McpUnreachableError`. Returns `{ listTools, callTool, close }` so callers map results to `ToolDefinition`. |
+| `mcp.ts` | `connectMcp(server)`, `McpUnreachableError`, `McpTimeoutError` | `@ai-sdk/mcp` over HTTP with headers, our reconnect after a stale session, CORS failures raised as `McpUnreachableError`, and a request past the timeout raised as `McpTimeoutError`. Returns `{ listTools, callTool, close }` so callers map results to `ToolDefinition`; `close` lets running calls finish, then closes the session, and every later call rejects. |
 | `redact.ts` | `redactKey`, `REDACTED_KEY` | Moved from `assistant/model/redact-key.ts`, with `MIN_REDACTED_KEY_LENGTH`; error text never carries the caller's key. |
 | `fake-provider.ts` | none (test-only) | Fakes of the chat-completions and Anthropic Messages streams and a recording `fetch`, for the module's tests and its callers' tests. Not exported from `index.ts`. |
-| `runtime.ts` | none (internal) | Re-exports the SDK-backed values: `createModel`, `runTurn`, `AiTurnError`, `DEFAULT_MAX_STEPS`, `DEFAULT_MAX_RESUMES`, `toSdkTools`, `connectMcp`, `McpUnreachableError`. Reached only through `loadAi`. |
-| `index.ts` | `loadAi()`, `redactKey`, `REDACTED_KEY`, `MIN_REDACTED_KEY_LENGTH`, `DEFAULT_BACKEND_URL`, every type above | The only import path: `@/shared/lib/ai`. `loadAi()` resolves to the `runtime.ts` exports. |
+| `runtime.ts` | none (internal) | Re-exports the SDK-backed values: `createModel`, `runTurn`, `AiTurnError`, `toSdkTools`, `connectMcp`, `isMcpSessionExpired`, `McpUnreachableError`, `McpTimeoutError`. Reached only through `loadAi`. |
+| `index.ts` | `loadAi()`, `redactKey`, `REDACTED_KEY`, `MIN_REDACTED_KEY_LENGTH`, every type above | The only import path: `@/shared/lib/ai`. `loadAi()` resolves to the `runtime.ts` exports. |
 
 The default backend's base URL is resolved against `location`: the SDK parses
 it with `new URL`, which rejects a relative URL.
@@ -79,9 +78,13 @@ sentence.
 A paused step does not count against `maxSteps`: the resume continues that
 step, and resumes have their own limit.
 
-Constants the module owns: `DEFAULT_MAX_STEPS`, which replaces the two
-`MAX_ITERATIONS`, and `DEFAULT_MAX_RESUMES`, which replaces `MAX_RESUMES` in
-`model/anthropic.ts`.
+Constants the module owns are private fallbacks, used only when a caller
+passes nothing: `FALLBACK_MAX_STEPS` and `FALLBACK_MAX_RESUMES` in
+`run-turn.ts`, `FALLBACK_MCP_TIMEOUT_MS` in `mcp.ts`, and
+`FALLBACK_BACKEND_URL` in `models.ts`. None is exported. Each consumer passes
+its own values from its `config.ts` ("Decision: a consumer owns its
+defaults"). The assistant's `MAX_STEPS` replaces the two `MAX_ITERATIONS`,
+and its `MAX_RESUMES` replaces `MAX_RESUMES` in `model/anthropic.ts`.
 
 ## The assistant on the module (`client-v2/src/views/sidebar/assistant/`)
 
@@ -98,30 +101,43 @@ Constants the module owns: `DEFAULT_MAX_STEPS`, which replaces the two
   tool's items, and no bubble is ever empty, which is what `discardIfEmpty`
   achieved in the old loops. A change between reasoning and text inside a
   bubble starts a new paragraph (`"\n\n"`).
-- Provider-specific behaviour is data, not a second loop: per-provider
-  `providerOptions` (Anthropic adaptive thinking with `display: "updates"` and
-  `drop_block`, `effort`, `fallbacks`, `cache_control` on the first system
-  message, `maxOutputTokens: 64000`) and whether reasoning reaches the bubble
-  (Anthropic only, as before). `@ai-sdk/anthropic` adds the thinking and
-  fallback betas itself from those options.
+- Provider-specific behaviour is data, not a second loop. Each backend has a
+  profile in `model/backends/` behind one interface, `BackendProfile`, whose
+  `profile(input)` returns a `TurnProfile`: the connection, the label,
+  `providerOptions` (Anthropic adaptive thinking with `display: "updates"`
+  and `drop_block`, `effort`, `fallbacks`), `promptOptions` (`cache_control`
+  on the first system message), `maxOutputTokens`
+  (`ANTHROPIC_MAX_OUTPUT_TOKENS` in the assistant's `config.ts`), whether
+  reasoning reaches the bubble (Anthropic only, as before), and, for the
+  default backend only, how to read its signed-out refusal. `BACKENDS` in
+  `model/backends/index.ts` is a `Record<ModelProvider, BackendProfile>`, so
+  a provider id without a profile does not compile; `openai`, `openrouter`,
+  and `gemini` share one profile that takes the id. `@ai-sdk/anthropic` adds
+  the thinking and fallback betas itself from those options.
 - History is `ModelMessage[]`, seeded from `toReplayMessages`, which does not
   change. A turn that fails leaves the history as it was, as
   `model/anthropic.ts` did, so a refused prompt is not re-sent with every
   later turn.
 - The assistant's wording, on top of the module's neutral errors: a refusal
   ends with "Rephrase it, or switch backends."; a turn that reaches the step
-  limit says the model was still calling tools after `DEFAULT_MAX_STEPS`
-  rounds; a turn with no text and no tool call adds "returned an empty
-  response" on every backend. A 401 from the default backend whose `body`
+  limit says the model was still calling tools after `MAX_STEPS` rounds; a
+  turn with no text and no tool call adds "returned an empty response" on
+  every backend. A 401 from the default backend whose `body`
   has `reason: SIGNED_OUT_REASON` (`default-backend-sign-in`) is shown as
   that body's `error` sentence and calls `PgSession.refresh()`, so the
-  store's session listener returns the panel to the picker; the check lives
-  in `model/provider.ts`, not in the module.
-- `grounding/mcp-client.ts` keeps `listGatewayServers` and calls `connectMcp`,
-  one connection per server entry as it reaches the wire (id, URL with
-  `queryParams`, headers with `authToken`). It adds to `McpUnreachableError`
+  store's session listener returns the panel to the picker; the default
+  backend's profile (`model/backends/default.ts`) reads the sentence and
+  `model/provider.ts` refreshes the session, neither in the module.
+- The browser MCP client, in `features/mcp` ("Decision: the browser MCP
+  client is a feature"), keeps `listGatewayServers` and calls `connectMcp`,
+  with one connection per server entry id. A connection opened with an
+  entry's earlier URL, `queryParams`, `authToken`, or headers is closed when
+  the entry's next request finds them changed, and a removed entry's
+  connection is closed by `closeConnection`. It adds to `McpUnreachableError`
   that a host refusing the browser is reached through the `/api/mcp`
-  gateway. `model/mcp-tools.ts` maps its tools.
+  gateway. `model/mcp-tools.ts` maps its tools; each tool keeps its entry's
+  id and looks the entry up in `PgAssistant.enabledMcpServers` when it runs,
+  so an entry edited mid-turn is never called with its old URL or token.
 - The `server` executor goes: `executor` in `grounding/types.ts`, its
   validation in `grounding/config.ts`, `SERVER_EXECUTORS` and its text in
   `Component/Grounding.tsx`, the executor badge and notice in
@@ -131,10 +147,17 @@ Constants the module owns: `DEFAULT_MAX_STEPS`, which replaces the two
 - `@anthropic-ai/sdk` is removed.
 - `api/agent.mjs` stays chat-completions in, chat-completions out.
   `stream_options` is not added to `FORWARDED`: usage reporting is HOO-1751's.
-- Every value the assistant takes from the module at boot (`redactKey`,
-  `DEFAULT_BACKEND_URL`) is a static import of `@/shared/lib/ai`; everything
-  that needs the SDK comes from `loadAi()` on the first turn or the first MCP
-  call.
+- The assistant's limits and route live in its own `config.ts`
+  (`views/sidebar/assistant/config.ts`): `MAX_STEPS`, `MAX_RESUMES`,
+  `ANTHROPIC_MAX_OUTPUT_TOKENS`, and `DEFAULT_BACKEND_URL` (`/api/agent`).
+  `model/provider.ts` passes the two limits to `runTurn`; the backend
+  profiles put the output budget and the route in their `TurnProfile`; the
+  composer's probe of the default backend (`widgets/assistant`) reads the
+  same route. `features/mcp/config.ts` holds `MCP_TIMEOUT_MS`, which
+  `features/mcp/model/mcp-client.ts` passes to `connectMcp`.
+- Every value the assistant takes from the module at boot (`redactKey`) is a
+  static import of `@/shared/lib/ai`; everything that needs the SDK comes
+  from `loadAi()` on the first turn or the first MCP call.
 
 ## Decisions
 
@@ -241,6 +264,59 @@ connector can then return through `providerOptions.anthropic.mcpServers`, if
 saving the browser's round trip per MCP call matters. It brings `pause_turn`
 back with it.
 
+### Decision: the browser MCP client is a feature
+
+Connecting to MCP servers is a user action with state of its own: the
+servers a user adds in Sources, their sessions, and their failures. That is
+a feature under `client-v2/CLAUDE.md`'s layers, so the client moves from the
+legacy `views/sidebar/assistant/grounding/` to `features/mcp`, beside the
+gateway's integration spec, and the assistant imports `@/features/mcp`. The
+protocol client, `connectMcp`, stays in `shared/lib/ai`: it knows no server,
+entry, or user. Skills stay in the assistant, since they are not MCP. As a
+slice, `features/mcp` declares its events in `model/telemetry.ts` and logs
+under `mcp:client`.
+
+Alternative: keep the client in `views/` until the assistant panel moves.
+Rejected: it would keep growing in a root that new code may not extend, and
+its connection lifetime (one per entry, closed on change) is the slice's
+concern, not the panel's.
+
+Closing a connection waits for its running calls rather than aborting them:
+an aborted request reaches the SDK's error handler as a transport failure,
+and the requests of a running call were already sent with the credentials
+the server already had. The closed connection refuses every later call,
+including the repeat after an expired session, so no new session opens with
+the old credentials. A call whose entry is removed while the call waits for
+`loadAi()` is refused, so a removed entry cannot get a connection back.
+
+The gateway can start serving an id after a local entry took it, because
+Apply checks a local id only against the gateway's list at that moment.
+`PgAssistant.mcpServers` then leaves the local entry out, since tool names
+and connections are keyed by id and two entries under one id made
+`toSdkTools` refuse every turn. The gateway wins because it owns its ids, as
+Apply already rules; the local entry stays in the editor, shown as
+replaced, and returns when the gateway stops serving the id.
+
+The `client-v2-mcp` scenarios are unit-level for the reason given in
+"Decision: scenarios are held by unit tests and marked `(manual)`, except
+through the default backend", and are marked `(manual)`. Each is held by:
+
+| Scenario | Test file |
+| --- | --- |
+| An entry's token, URL, or query parameters change | `features/mcp/model/mcp-client.ts` (`it.each`) |
+| An entry is removed | `features/mcp/model/mcp-client.ts`, and `views/sidebar/assistant/store.test.ts` |
+| An entry removed while a call starts | `features/mcp/model/mcp-client.ts` |
+| An entry edited after the tools were built | `views/sidebar/assistant/model/mcp-tools.test.ts` |
+| A call running when its connection closes | `shared/lib/ai/mcp.ts` |
+| A gateway server takes over a local entry's id | `views/sidebar/assistant/store.test.ts` |
+| A gateway server lists two tools | `features/mcp/model/mcp-client.ts` |
+| An unreachable host | `features/mcp/model/mcp-client.ts` |
+| A call retried on a new session | `features/mcp/model/mcp-client.ts` |
+| A call the user stops | `features/mcp/model/mcp-client.ts`, and `views/sidebar/assistant/model/mcp-tools.test.ts` |
+| A call that outlives the timeout | `features/mcp/model/mcp-client.ts` |
+| Two calls share one reopen | `features/mcp/model/mcp-client.ts` |
+| A user server with a token | `features/mcp/model/mcp-client.ts` |
+
 ### Decision: the SDK loads on first use
 
 The assistant panel loads on boot, and #70 measured `ai` plus one provider
@@ -249,20 +325,18 @@ at +205 KB gzip there; importing all five packages from the boot path raised
 first turn or the first MCP call, so `@/shared/lib/ai` exports it only
 through `loadAi()`, a dynamic `import()` of `runtime.ts`, and the bundler
 puts it in a chunk of its own. The light values a caller needs at once
-(`redactKey`, which `PgAssistant.addError` runs synchronously, and
-`DEFAULT_BACKEND_URL`) and every type stay static exports of the same path,
-so there is still one public path.
+(`redactKey`, which `PgAssistant.addError` runs synchronously) and every type
+stay static exports of the same path, so there is still one public path.
 
 `index.ts` cannot both re-export `runtime.ts`'s modules statically and keep
 them out of the boot chunk. Checked with `craco build` on 2026-10-15: with
 static re-exports, a static import of `redactKey` kept the barrel and every
 module it re-exports in the assistant's chunk, and the dynamic `import()` of
-the same barrel split nothing off. For the same reason `DEFAULT_BACKEND_URL`
-lives in `default-backend.ts`, not in `models.ts`.
+the same barrel split nothing off.
 
 Alternatives:
 
-- **Deep imports of `redact.ts` and `default-backend.ts`.** Rejected: a
+- **A deep import of `redact.ts`.** Rejected: a
   second import path into the module.
 - **`"sideEffects": false` for the module's folder**, so the bundler drops
   unused re-exports. Rejected: it needs a nested `package.json` or an
@@ -274,13 +348,28 @@ Cost: the first turn and the first MCP call wait for one more chunk.
 
 `@ai-sdk/openai-compatible` appends `/chat/completions` to its base URL, and
 `/api/agent` is a full path. `createModel` gives the default backend a custom
-`fetch` that sends every request to `DEFAULT_BACKEND_URL` with no key.
+`fetch` that sends every request to the connection's `url` with no key; the
+assistant passes its `DEFAULT_BACKEND_URL`, `/api/agent`.
 `api/agent.mjs` ignores every field outside `FORWARDED`, so the `model` and
 `stream` fields the SDK adds do not reach the upstream as the client wrote
 them.
 
 Alternative: a second route that speaks the SDK's protocol. Rejected: it moves
 the transport to the server, which is out of scope.
+
+### Decision: a consumer owns its defaults
+
+`shared/lib/ai` keeps a fallback for every limit and route it needs and
+exports none of them. A consumer writes its own values in a `config.ts` at
+its root and passes them to the module's helpers: the assistant in
+`views/sidebar/assistant/config.ts`, the MCP feature in
+`features/mcp/config.ts`. A value the module exported would read as the
+right value for every consumer, and a second consumer would inherit the
+assistant's step limit or route without deciding to.
+
+Alternative: export the module's values as defaults, as the first version of
+this change did. Rejected: the shared layer then carries one consumer's
+decisions.
 
 ### Decision: scenarios are held by unit tests and marked `(manual)`, except through the default backend
 
@@ -307,8 +396,8 @@ behaviour stays covered by the browser specs in task 3.1.
 | A refusal | `shared/lib/ai/run-turn.test.ts` |
 | A tool waiting for approval | `shared/lib/ai/tools.test.ts` |
 | A tool with a zod schema | `shared/lib/ai/tools.test.ts` |
-| A stale MCP session | `shared/lib/ai/mcp.test.ts` |
-| A host that refuses the browser | `shared/lib/ai/mcp.test.ts` |
+| A stale MCP session | `shared/lib/ai/mcp.ts` |
+| A host that refuses the browser | `shared/lib/ai/mcp.ts` |
 | Each provider's endpoint and auth header | `shared/lib/ai/models.test.ts` (`it.each`) |
 | A turn on the default backend | `shared/lib/ai/models.test.ts` |
 | A provider error that quotes the key | `shared/lib/ai/redact.test.ts` |
@@ -359,10 +448,10 @@ configuration that still names `executor`.
 
 ## Open Questions
 
-- When the `(manual)` marks on the `client-v2-ai` scenarios can go. A
-  follow-up ticket (to file) teaches `scripts/spec-coverage.mjs` to accept
-  vitest test titles, so the marks can be replaced by the tests in the
-  scenario table.
+- When the `(manual)` marks on the `client-v2-ai` and `client-v2-mcp`
+  scenarios can go. A follow-up ticket (to file) teaches
+  `scripts/spec-coverage.mjs` to accept vitest test titles, so the marks can
+  be replaced by the tests in the scenario tables.
 - Whether `pause_turn` still occurs once no MCP server runs on Anthropic's
   side. It was observed after long connector rounds; whether other causes
   remain is unverified. The resume costs little to keep; task 5.2's

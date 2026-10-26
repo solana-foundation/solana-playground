@@ -2,7 +2,7 @@
 
 Every task is HOO-1754, whose scope this change replaces, except 6.1, which
 closes HOO-1753. One task per PR, in this order. 2.2 and 2.3 may run at the
-same time, and so may 5.1, 5.2 and 5.3; every other task depends on the one
+same time, and so may 5.1, 5.2, 5.3 and 5.4; every other task depends on the one
 before it as stated.
 
 ## 1. Dependencies
@@ -25,7 +25,7 @@ before it as stated.
       backend's requests go to `/api/agent` with no key) and `redact.test.ts`
       pass, and each fails against a wrong mapping it names
 - [x] 2.2 `tools.ts` (`toSdkTools`) and `run-turn.ts` (`runTurn`,
-      `AiTurnError`, `DEFAULT_MAX_STEPS`, `DEFAULT_MAX_RESUMES`) (depends on
+      `AiTurnError`, with private step and resume fallbacks) (depends on
       2.1); verify `run-turn.test.ts` and `tools.test.ts` hold the step limit,
       the `pause_turn` resume and its limit, one request on a 429, abort with
       no further request, `AiTurnError` on an in-stream error frame cut
@@ -35,7 +35,7 @@ before it as stated.
       miss
 - [x] 2.3 `mcp.ts` (`connectMcp`, `McpUnreachableError`) on `@ai-sdk/mcp`
       over HTTP with headers (depends on 2.1; may run beside 2.2); verify
-      `mcp.test.ts` holds the reconnect after a stale session and
+      `mcp.ts`'s in-source block holds the reconnect after a stale session and
       `McpUnreachableError` on a `fetch` `TypeError`
 
 ## 3. The assistant on the module
@@ -101,6 +101,27 @@ before it as stated.
       resume test against a `runTurn` that returns at `pause_turn`, the limit
       test against one that resumes without a limit (plan:
       [plans/5.3-pause-e2e.md](plans/5.3-pause-e2e.md))
+- [x] 5.4 Move the browser MCP client from
+      `views/sidebar/assistant/grounding/` (`mcp-client.ts`, `config.ts`, the
+      server entry type, `LOCAL_MCP_SERVERS`, and their tests) to
+      `features/mcp` with `index.ts` as its public API, register the `mcp`
+      prefix, and declare, describe, and emit the four events of
+      `specs/client-v2-mcp/spec.md` from `model/telemetry.ts`, with tests that
+      assert them through the memory provider; key connections by server
+      entry id and close the previous connection when the entry changes or is
+      removed, with a test that fails on the code before the fix (depends on
+      4.1; may run beside 5.1, 5.2 and 5.3); verify `yarn run check` passes,
+      `src/app/slice-structure.test.ts` accepts the slice, and no import of
+      `grounding/mcp-client` or `grounding/config` remains
+- [x] 5.5 Each consumer owns its defaults ("Decision: a consumer owns its
+      defaults" in `design.md`): `shared/lib/ai` keeps private fallbacks and
+      exports none; `views/sidebar/assistant/config.ts` holds `MAX_STEPS`,
+      `MAX_RESUMES`, `ANTHROPIC_MAX_OUTPUT_TOKENS`, and `DEFAULT_BACKEND_URL`,
+      and `features/mcp/config.ts` holds `MCP_TIMEOUT_MS`, each passed to the
+      module explicitly; the per-backend `switch` in `model/provider.ts`
+      becomes the profiles in `model/backends/` (depends on 5.4); verify
+      `yarn run check` passes and `model/provider.test.ts` fails when the
+      assistant omits its step limit, resume limit, or route
 
 ## 6. Close the verdict
 

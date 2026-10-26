@@ -36,20 +36,29 @@ answers the verdict's objections:
 ## What Changes
 
 - A module, `client-v2/src/shared/lib/ai/`, with one public path,
-  `@/shared/lib/ai`: `redactKey`, `REDACTED_KEY`, `DEFAULT_BACKEND_URL`, the
-  types `ToolDefinition`, `ToolSchema`, `ModelConnection`, and `loadAi()`,
-  which loads `createModel`, `toSdkTools`, `runTurn`, `connectMcp`,
-  `McpUnreachableError`, `AiTurnError`, and the constants
-  `DEFAULT_MAX_STEPS` and `DEFAULT_MAX_RESUMES`. It has no domain knowledge:
-  callers inject behaviour through callbacks. A `ToolDefinition` takes either
+  `@/shared/lib/ai`: `redactKey`, `REDACTED_KEY`, the types
+  `ToolDefinition`, `ToolSchema`, `ModelConnection`, and `loadAi()`, which
+  loads `createModel`, `toSdkTools`, `runTurn`, `connectMcp`,
+  `McpUnreachableError`, `McpTimeoutError`, and `AiTurnError`. It has no
+  domain knowledge: callers inject behaviour through callbacks. Its step
+  limit, resume limit, MCP timeout, and default backend route are private
+  fallbacks; each caller passes its own values from its `config.ts`
+  (`views/sidebar/assistant/config.ts`, `features/mcp/config.ts`). A `ToolDefinition` takes either
   a plain JSON Schema or a zod 4 schema, whose inferred type reaches `run`;
   the existing tools keep their JSON Schema.
 - The assistant's two loops become one `model/provider.ts` that implements
   the existing `Provider { send(input, signal) }` on `runTurn`.
   Provider-specific behaviour (Anthropic thinking, effort, fallbacks, betas,
-  `cache_control`) becomes per-provider data, not a second loop.
-- `grounding/mcp-client.ts` keeps `listGatewayServers` and calls
-  `connectMcp` for the MCP protocol.
+  `cache_control`) becomes per-provider data, not a second loop: one profile
+  per backend in `model/backends/`, registered by provider id.
+- The browser MCP client moves from `views/sidebar/assistant/grounding/` to
+  the feature slice `features/mcp`, with `index.ts` as its public API:
+  `listGatewayServers`, `listTools`, `callTool`, `closeConnection`,
+  `parseServers`, `serializeServers`, the server entry and tool types, and
+  `LOCAL_MCP_SERVERS`. It calls `connectMcp` for the MCP protocol. A
+  connection follows its server entry: changing the entry's URL or
+  credentials, or removing it, closes the previous connection. Skills stay in
+  the assistant.
 - The `executor` field of an MCP server entry is removed. Every MCP server is
   called from the browser, directly or through the `/api/mcp` gateway; a host
   that refuses the browser is added as a gateway upstream in `api/mcp.mjs`,
@@ -67,9 +76,10 @@ answers the verdict's objections:
   `@ai-sdk/anthropic`, `@ai-sdk/mcp`, and `zod` are added.
 - `api/agent.mjs` is unchanged: chat-completions in, chat-completions out.
   The default backend keeps posting to `/api/agent` through a custom `fetch`.
-- Telemetry: the assistant panel lives in the legacy `views/` root and the
-  module lives in `shared/`; neither is a slice under `features/` or
-  `widgets/`. This change adds, renames, and removes no events.
+- Telemetry: `features/mcp` adds `mcp_tools_listed`, `mcp_tools_list_failed`,
+  `mcp_tool_called`, and `mcp_session_reopened` (prefix `mcp`, logger
+  namespace `mcp:client`). The assistant panel stays in the legacy `views/`
+  root and the module in `shared/`; neither adds, renames, or removes events.
 
 ## Capabilities
 
@@ -80,6 +90,8 @@ answers the verdict's objections:
   raised as `AiTurnError`, an approval that holds the loop, the MCP reconnect
   and `McpUnreachableError`, the provider mapping, the default backend's
   route, and no key in error text.
+- `client-v2-mcp`: the browser MCP client of `features/mcp`: connections that
+  follow their server entry, and the events the slice reports.
 
 ### Modified Capabilities
 
@@ -88,13 +100,15 @@ None. No capability spec describes the assistant panel, so the removal of the
 
 ## Impact
 
-- Code: `client-v2/src/shared/lib/ai/` (added);
+- Code: `client-v2/src/shared/lib/ai/` (added); `client-v2/src/features/mcp/`
+  (the browser MCP client, moved from `grounding/` with its tests);
   `client-v2/src/views/sidebar/assistant/`: `model/provider.ts` (added),
   `model/index.ts`, `model/types.ts`, `model/mcp-tools.ts`,
   `model/remembered-backend.ts`, `Component/Connect.tsx`, `store.ts`,
-  `grounding/mcp-client.ts`, `grounding/types.ts`, `grounding/config.ts`,
-  `grounding/registry.ts`, `Component/Grounding.tsx`,
-  `Component/ServerConsole.tsx`; deleted: `model/openai.ts`,
+  `grounding/index.ts`, `grounding/types.ts`, `grounding/registry.ts`,
+  `Component/Grounding.tsx`, `Component/ServerConsole.tsx`; moved to
+  `features/mcp`: `grounding/mcp-client.ts` and `grounding/config.ts`, with
+  their tests; deleted: `model/openai.ts`,
   `model/anthropic.ts`, `model/redact-key.ts`, and their tests, ported to
   `model/provider.test.ts`. Docs: `docs/assistant-context.md`, copied with
   `yarn sync-assistant-context`.
