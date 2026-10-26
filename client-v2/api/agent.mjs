@@ -63,6 +63,9 @@ import {
 } from "../src/features/auth/server.mjs";
 import { query } from "../src/features/persistence/server.mjs";
 import { agentEnv } from "../src/shared/config/server-env.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:agent");
 
 /**
  * Request fields forwarded upstream; everything else is the server's to
@@ -292,10 +295,7 @@ async function handler(req, res) {
       caps: configured.caps,
     });
   } catch (e) {
-    console.error("agent: spend ledger unavailable", {
-      message: e?.message,
-      code: e?.code,
-    });
+    log.error(e, { report: true, context: { code: e?.code } });
     return sendJson(res, 503, {
       error: "The default backend is unavailable right now. Try again shortly.",
     });
@@ -327,10 +327,9 @@ async function handler(req, res) {
       }).catch((e) =>
         // The reservation stays spent for the day: an overcharge, never an
         // undercharge
-        console.error("agent: settling a turn failed", {
-          message: e?.message,
-          code: e?.code,
-          end: end.kind,
+        log.error(e, {
+          report: true,
+          context: { code: e?.code, end: end.kind },
         })
       );
     }
@@ -398,31 +397,36 @@ const relay = async (res, configured, body, tier, now) => {
     // the upstream may already have taken the request: charging nothing here
     // would let a caller that hangs up early spend past the cap
     if (abortUpstream.signal.aborted) return { kind: "unfinished" };
+    log.error(e, { report: true });
     sendJson(res, 502, { error: `Upstream unreachable: ${e.message}` });
     return { kind: "refused" };
   }
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch((e) => {
+      log.warn(`upstream ${response.status} body unreadable: ${e.message}`);
+      return "";
+    });
     // Our request was refused: relayed, it would read as this route refusing
     // the caller
     if (response.status === 401 || response.status === 403) {
       const cause = refusalCause(response.status, text);
-      console.error("agent: upstream refused the default backend", {
-        status: response.status,
-        cause,
-        tier,
-        body: text.slice(0, 300),
+      log.error(new Error("upstream refused the default backend"), {
+        report: true,
+        context: { status: response.status, cause, tier },
       });
+      // Kept out of Sentry: a refusal's text can quote part of the key
+      log.warn(`upstream ${response.status} body: ${text.slice(0, 300)}`);
       sendJson(res, 502, {
         error: `${REFUSAL_CAUSES[cause]} (${response.status}).`,
       });
       return { kind: "refused" };
     }
     if (response.status === 402 && isPoolExhausted(text)) {
-      console.warn("agent: tier pool exhausted", {
-        tier,
-        body: text.slice(0, 300),
+      // Reported: the tier's pool stays out until a person buys credits
+      log.warn("tier pool exhausted", {
+        report: true,
+        context: { tier, body: text.slice(0, 300) },
       });
       res.setHeader("retry-after", String(secondsToReset(now)));
       sendJson(res, REFUSAL_STATUS[POOL_EXHAUSTED_REASON], {
@@ -537,10 +541,8 @@ const isPoolExhausted = (text) => {
  * @param {unknown} e
  */
 const warnNotJson = (check, status, e) =>
-  console.warn("agent: upstream error body is not JSON", {
-    check,
-    status,
-    error: e instanceof Error ? e.name : typeof e,
+  log.warn("upstream error body is not JSON", {
+    context: { check, status, error: e instanceof Error ? e.name : typeof e },
   });
 
 export default withObservability("agent", handler);

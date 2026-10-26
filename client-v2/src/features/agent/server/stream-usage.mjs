@@ -7,6 +7,10 @@
  * none. The last non-null one wins.
  */
 
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
+
+const log = createServerLogger("agent:stream-usage");
+
 /**
  * @typedef {{ prompt_tokens?: number; completion_tokens?: number }} Usage
  */
@@ -48,9 +52,8 @@ export const usageReader = () => {
             // and V8's `SyntaxError` quotes the text it failed on
             if (!warned) {
               warned = true;
-              console.warn("agent: skipped a malformed usage event", {
-                error: e?.name,
-                bytes: payload.length,
+              log.warn("skipped a malformed usage event", {
+                context: { error: e?.name, bytes: payload.length },
               });
             }
           }

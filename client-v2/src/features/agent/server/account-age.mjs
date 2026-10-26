@@ -9,6 +9,10 @@
  * `newcomer` and the next turn tries again.
  */
 
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
+
+const log = createServerLogger("agent:account-age");
+
 /** The token GitHub issued at sign-in; Better Auth stores it unencrypted */
 const TOKEN = `select "accessToken" from account
                 where "userId" = $1 and "providerId" = 'github'
@@ -41,7 +45,9 @@ const TIMEOUT_MS = 5000;
  */
 export const learnAccountAge = async (query, userId, options = {}) => {
   const skipped = (reason, detail) => {
-    console.warn("agent: account age not learned", { userId, reason, detail });
+    log.warn("account age not learned", {
+      context: { userId, reason, detail },
+    });
     return { outcome: "skipped", reason };
   };
 
@@ -82,11 +88,7 @@ export const learnAccountAge = async (query, userId, options = {}) => {
   } catch (e) {
     // The database, not GitHub: the same "try again next turn" answer, but
     // an error, since the ledger on the same database may be failing too
-    console.error("agent: account age lookup failed", {
-      userId,
-      message: e?.message,
-      code: e?.code,
-    });
+    log.error(e, { report: true, context: { userId, code: e?.code } });
     return { outcome: "skipped", reason: "database" };
   }
 };

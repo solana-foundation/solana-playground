@@ -297,10 +297,10 @@ it. Import order is an ESLint error in all of `src/`, `api/`, `e2e/`,
 `scripts/` and `eslint-plugin-layers/` (`simple-import-sort/imports`), legacy
 roots included; in the layers and `api/` it also fails the build's
 `lint:layers`. Unused variables and shadowing are ESLint errors across the
-same five folders, and so is any `console` method in `src/` and `e2e/`
-outside the logger's console provider and the `.mjs` modules, which plain
-Node runs without the logger; in the layers and `api/` these fail
-`lint:layers` too. `scripts/` and `eslint-plugin-layers/` may call `console`:
+same five folders, and so is any `console` method in `src/`, `api/` and
+`e2e/` outside the logger's two console providers,
+`shared/lib/logger/providers/console.ts` and `server-console.mjs`; in the
+layers and `api/` these fail `lint:layers` too. `scripts/` and `eslint-plugin-layers/` may call `console`:
 they run in Node, outside the app and its logger. A leading `_` does not exempt
 an unused name: drop the binding (`[, value]`) or disable the line with a
 reason.
@@ -317,10 +317,12 @@ reason.
 - **Ids come from `src/shared/lib/ids`.** `uuid()` mints one, `isUuid()`
   checks one. Never `crypto.randomUUID()`, never a
   copied UUID regex, never `import ... from "uuid"` anywhere else.
-  `api/` cannot import `src/`, so it uses the `uuid` package directly;
-  it is the one exception.
+  `api/` imports only `.mjs` from `src/`, and `ids.ts` is TypeScript that
+  plain Node cannot load, so `api/` uses the `uuid` package directly; it is
+  the one exception.
 - **A `catch` is never empty.** It rethrows, logs through `shared/lib/logger`
-  (with `report: true` when the team must hear of it in production), or tells
+  (`shared/lib/logger/server.mjs` in `api/` and the server-side `.mjs`
+  modules; with `report: true` when the team must hear of it in production), or tells
   the user. A failure that is swallowed on purpose still logs why, in the
   `catch`, so the next reader does not have to guess whether it was
   forgotten.

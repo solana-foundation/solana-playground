@@ -313,6 +313,54 @@
       },
       {
         "files": [
+          "api/**"
+        ],
+        "rules": {
+          "no-console": "error"
+        }
+      },
+      {
+        "files": [
+          "src/shared/lib/logger/providers/**"
+        ],
+        "excludedFiles": [
+          "src/shared/lib/logger/providers/sentry.ts",
+          "src/shared/lib/logger/providers/sentry.test.ts"
+        ],
+        "rules": {
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "uuid",
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "name": "cn",
+                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
+                }
+              ],
+              "patterns": [
+                {
+                  "group": [
+                    "uuid/*"
+                  ],
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "group": [
+                    "@sentry/*"
+                  ],
+                  "message": "The browser logger reaches Sentry only through providers/sentry.ts; the server logger is handed the SDK by with-observability.mjs. See the client-v2-logging spec."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "files": [
           "src/shared/lib/ids.ts",
           "src/shared/lib/ids.test.mts"
         ],
@@ -483,8 +531,8 @@
       },
       {
         "files": [
-          "src/**/*.mjs",
-          "src/shared/lib/logger/providers/console.ts"
+          "src/shared/lib/logger/providers/console.ts",
+          "src/shared/lib/logger/providers/server-console.mjs"
         ],
         "rules": {
           "no-console": "off"
