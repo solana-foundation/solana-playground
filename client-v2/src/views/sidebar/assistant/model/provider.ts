@@ -4,15 +4,15 @@ import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
 import { MAX_RESUMES, MAX_STEPS } from "../config";
 import { PgSession } from "../../../../features/auth";
-import { BACKENDS } from "./backends";
+import { MODEL_PROVIDER_PROFILES } from "./model-providers";
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
-import type { BackendInput } from "./backends";
+import type { ModelProviderInput } from "./model-providers";
 import type { Provider } from "./types";
 
 /** What a provider needs to be built: structurally the store's `Connection` */
-export interface ProviderConnection extends BackendInput {
+export interface ProviderConnection extends ModelProviderInput {
   id: ModelProvider;
 }
 
@@ -47,7 +47,7 @@ const createReplies = () => {
 };
 
 /**
- * One conversation with any backend, on `runTurn`. The history keeps the SDK's messages, so
+ * One conversation with any model provider, on `runTurn`. The history keeps the SDK's messages, so
  * tool calls and Gemini's thought signatures go back as sent; a failed turn leaves it unchanged.
  */
 export const createProvider = (
@@ -55,7 +55,7 @@ export const createProvider = (
   /** Prior turns, text only, when reopening a stored thread (`toReplayMessages`) */
   seed: readonly ReplayMessage[] = []
 ): Provider => {
-  const backend = BACKENDS[connection.id].profile(connection);
+  const profile = MODEL_PROVIDER_PROFILES[connection.id].profile(connection);
   let history: ModelMessage[] = seed.map((m) => ({
     role: m.role,
     content: m.content,
@@ -64,12 +64,12 @@ export const createProvider = (
 
   return {
     id: connection.id,
-    label: backend.label,
+    label: profile.label,
 
     async send(input, signal) {
       const ai = await loadAi();
       signal?.throwIfAborted();
-      model ??= ai.createModel(backend.connection);
+      model ??= ai.createModel(profile.connection);
 
       const replies = createReplies();
       let calledTool = false;
@@ -83,7 +83,7 @@ export const createProvider = (
             {
               role: "system",
               content: systemPrompt(),
-              providerOptions: backend.promptOptions,
+              providerOptions: profile.promptOptions,
             },
             {
               role: "system",
@@ -92,14 +92,14 @@ export const createProvider = (
           ],
           // Built per turn, so MCP tools discovered since the last one are offered
           tools: ai.toSdkTools(createTools()),
-          providerOptions: backend.providerOptions,
-          maxOutputTokens: backend.maxOutputTokens,
+          providerOptions: profile.providerOptions,
+          maxOutputTokens: profile.maxOutputTokens,
           signal,
           maxSteps: MAX_STEPS,
           maxResumes: MAX_RESUMES,
           apiKey: connection.apiKey,
           onText: (delta) => replies.write("text", delta),
-          onReasoning: backend.showsReasoning
+          onReasoning: profile.showsReasoning
             ? (delta) => replies.write("reasoning", delta)
             : undefined,
           onToolCall: () => {
@@ -112,7 +112,7 @@ export const createProvider = (
         if (e.kind === "refusal") {
           throw new Error(`${e.message} Rephrase it, or switch backends.`);
         }
-        const refusal = backend.signedOutRefusal?.(e);
+        const refusal = profile.signedOutRefusal?.(e);
         if (!refusal) throw e;
         // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
         void PgSession.refresh();
@@ -128,7 +128,7 @@ export const createProvider = (
       // A turn that did its work and had nothing to add ends quietly: a retry would rerun the tools
       if (!replies.wrote && !calledTool) {
         PgAssistant.addError(
-          `${backend.label} returned an empty response. Try again, or pick another model.`
+          `${profile.label} returned an empty response. Try again, or pick another model.`
         );
       }
     },

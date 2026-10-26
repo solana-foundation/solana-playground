@@ -31,7 +31,8 @@ answers the verdict's objections:
   This change loads the SDK through `loadAi()` on the first turn or the first
   MCP call, so the boot path does not carry it, and the boot path shrinks by
   57.5 kB gzip because `@anthropic-ai/sdk` leaves it. Total JS grows by
-  201.2 kB gzip. `design.md`, "Risks / Trade-offs", has the measurement.
+  201.2 kB gzip. [design.md](design.md), "Risks / Trade-offs", has the
+  measurement.
 
 ## What Changes
 
@@ -43,14 +44,15 @@ answers the verdict's objections:
   domain knowledge: callers inject behaviour through callbacks. Its step
   limit, resume limit, MCP timeout, and default backend route are private
   fallbacks; each caller passes its own values from its `config.ts`
-  (`views/sidebar/assistant/config.ts`, `features/mcp/config.ts`). A `ToolDefinition` takes either
-  a plain JSON Schema or a zod 4 schema, whose inferred type reaches `run`;
+  (`views/sidebar/assistant/config.ts`, `features/mcp/config.ts`). A
+  `ToolDefinition` takes either a plain JSON Schema or a zod 4 schema, whose
+  inferred type reaches `run`;
   the existing tools keep their JSON Schema.
 - The assistant's two loops become one `model/provider.ts` that implements
   the existing `Provider { send(input, signal) }` on `runTurn`.
   Provider-specific behaviour (Anthropic thinking, effort, fallbacks, betas,
   `cache_control`) becomes per-provider data, not a second loop: one profile
-  per backend in `model/backends/`, registered by provider id.
+  per model provider in `model/model-providers/`, registered by provider id.
 - The browser MCP client moves from `views/sidebar/assistant/grounding/` to
   the feature slice `features/mcp`, with `index.ts` as its public API:
   `listGatewayServers`, `listTools`, `callTool`, `closeConnection`,
@@ -63,14 +65,14 @@ answers the verdict's objections:
   called from the browser, directly or through the `/api/mcp` gateway; a host
   that refuses the browser is added as a gateway upstream in `api/mcp.mjs`,
   which is a deploy. On the default and OpenAI-compatible backends a `server`
-  entry contributed no tools before (`createMcpTools` keeps only browser
-  servers), so nothing is lost there. Only the Anthropic backend loses the
+  entry contributed no tools before this change (`createMcpTools` keeps only
+  browser servers), so nothing is lost there. Only the Anthropic backend loses the
   connector path, and only for a custom server whose host refuses the
   browser. A configuration that still names `"executor"` keeps loading:
   `parseServers` ignores the field, as it ignores any key it does not know,
   and the server is called from the browser. The Sources tab's help text no
-  longer lists the executor, its badge and its "no executor" notice go, and
-  the Anthropic backend's description no longer mentions Anthropic's MCP
+  longer lists the executor, its badge and its "no executor" notice are
+  removed, and the Anthropic backend's description no longer mentions Anthropic's MCP
   connector.
 - `@anthropic-ai/sdk` is removed. `ai`, `@ai-sdk/openai-compatible`,
   `@ai-sdk/anthropic`, `@ai-sdk/mcp`, and `zod` are added.
@@ -116,12 +118,14 @@ None. No capability spec describes the assistant panel, so the removal of the
   `@ai-sdk/mcp`, and `zod` added; `@anthropic-ai/sdk` removed. The SDK sits
   in chunks of its own that only `loadAi()` requests (257.3 kB gzip, plus a
   2.6 kB runtime chunk); the boot path falls from 1,907.6 kB to 1,850.2 kB
-  gzip. `design.md`, "Risks / Trade-offs", has the per-file figures.
+  gzip. [design.md](design.md), "Risks / Trade-offs", has the per-file
+  figures.
 - Users: the first turn and the first MCP call of a session download the SDK
-  chunks; every page load downloads less JavaScript than before. Chat, tools,
-  approvals, Stop, stored threads, and the default backend behave as before,
-  including the default backend's sign-in gate (`default-backend-sign-in`).
-  A server configured with the `server` executor is called from the browser instead of by Anthropic, and its tools
+  chunks; every page load downloads less JavaScript than before this change.
+  Chat, tools, approvals, Stop, stored threads, and the default backend
+  behave as before, including the default backend's sign-in gate
+  (`default-backend-sign-in`). A server configured with the `server`
+  executor is called from the browser instead of by Anthropic, and its tools
   are absent when its host refuses the browser.
 - Depends on: branch `feat/assistant-sources-on-by-default`, for the
   `/api/mcp` gateway always listing Explorer; this change is rebased onto it

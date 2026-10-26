@@ -1,7 +1,7 @@
 import { SIGNED_OUT_REASON } from "../../../../../features/auth";
 import { DEFAULT_BACKEND_URL } from "../../config";
 import type { AiTurnError } from "@/shared/lib/ai";
-import type { BackendProfile } from "./types";
+import type { ModelProviderProfile } from "./types";
 
 /**
  * The sentence `/api/agent` refuses a signed-out turn with. Read only from our
@@ -22,7 +22,7 @@ const signedOutRefusal = (error: AiTurnError): string | undefined => {
   }
 };
 
-export const defaultBackend: BackendProfile = {
+export const defaultProfile: ModelProviderProfile = {
   // The model is the server's to pick, so none is sent and none is shown
   profile: () => ({
     connection: { provider: "default", url: DEFAULT_BACKEND_URL },

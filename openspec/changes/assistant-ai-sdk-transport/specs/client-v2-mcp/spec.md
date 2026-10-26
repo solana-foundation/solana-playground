@@ -16,7 +16,8 @@ previous connection after it was closed, including the repeat of a call whose se
 without sending a request. A call whose entry was removed after the call started SHALL reject without opening a
 connection. A tool built from an entry SHALL call the entry as it is when the tool runs: an entry edited after
 the tools were built is called with its current URL and credentials, and a call to an entry removed or turned off
-since SHALL be refused without sending a request.
+since SHALL be refused without sending a request. A list with an entry whose URL, with its query parameters, does
+not parse SHALL be rejected when it is applied, and the list in effect SHALL stay unchanged.
 
 #### Scenario: An entry's token, URL, or query parameters change (manual)
 
@@ -47,6 +48,11 @@ since SHALL be refused without sending a request.
 - **WHEN** a tool call is waiting for the server's answer and its connection is closed
 - **THEN** the call returns the server's answer, the session closes after it, and a later call on that connection
   rejects without opening a session
+
+#### Scenario: A server URL that does not parse (manual)
+
+- **WHEN** the user applies a server list with an entry whose URL, with its query parameters, does not parse
+- **THEN** the editor shows an error naming the entry, and the server list in effect is unchanged
 
 ### Requirement: The gateway's entry wins an id
 

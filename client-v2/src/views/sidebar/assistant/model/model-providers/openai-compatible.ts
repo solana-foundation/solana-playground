@@ -1,11 +1,11 @@
 import { PROVIDERS } from "../types";
 import type { OpenAiCompatibleProvider } from "@/shared/lib/ai";
-import type { BackendProfile } from "./types";
+import type { ModelProviderProfile } from "./types";
 
 /** One profile per OpenAI-compatible provider id; they differ only in their default endpoint */
-export const openAiCompatibleBackend = (
+export const openAiCompatibleProfile = (
   id: OpenAiCompatibleProvider
-): BackendProfile => ({
+): ModelProviderProfile => ({
   profile: ({ apiKey, endpoint }) => {
     const { baseUrl, model } =
       endpoint ?? PROVIDERS.find((p) => p.id === id)!.endpoint!;

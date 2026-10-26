@@ -1,12 +1,12 @@
 import { ANTHROPIC_MAX_OUTPUT_TOKENS } from "../../config";
 import { PROVIDERS } from "../types";
-import type { BackendProfile } from "./types";
+import type { ModelProviderProfile } from "./types";
 
 /**
  * Anthropic drops thinking blocks whose prefix changed (the project snapshot
  * moves between turns); `updates` returns the progress notes.
  */
-export const anthropicBackend: BackendProfile = {
+export const anthropicProfile: ModelProviderProfile = {
   profile: ({ apiKey, settings }) => {
     const { model, effort } =
       settings ??

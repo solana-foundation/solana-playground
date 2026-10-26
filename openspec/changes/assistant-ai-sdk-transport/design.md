@@ -2,7 +2,7 @@
 
 ## Context
 
-See proposal.md, "Why". Before this change, `model/index.ts`
+See [proposal.md](proposal.md), "Why". Before this change, `model/index.ts`
 `createProvider` picked one of two loops: `createOpenAiProvider`
 (`model/openai.ts`, a hand-written chat-completions loop that also drove the
 default backend through `DEFAULT_BACKEND_URL`, `/api/agent`) and
@@ -17,7 +17,7 @@ by hand for every `browser`-executor server and for the `/api/mcp` gateway.
 `api/agent.mjs` forwards only `messages`, `tools`, and `tool_choice` from the
 client (`FORWARDED`) and sets the model and streaming itself.
 
-#70 (`ai-sdk-transport-verdict`) built the OpenAI-compatible loop on
+PR #70 (`ai-sdk-transport-verdict`) built the OpenAI-compatible loop on
 `streamText` from `ai@7.0.138` and found: the SDK builds under CRA 5,
 `tool({ inputSchema: jsonSchema(schema), execute: run })` carries the registry
 unchanged, a `run` that awaits the approval holds the SDK's loop, the stored
@@ -31,8 +31,9 @@ and the default `maxRetries: 2` sends a 429 three times.
 - One module through which any part of `client-v2` talks to a model, with no
   domain knowledge.
 - The assistant on that module with no change a user sees, apart from the
-  `server` executor (proposal.md, "What Changes").
-- The guarantees in `specs/client-v2-ai/spec.md`, each held by a unit test.
+  `server` executor ([proposal.md](proposal.md), "What Changes").
+- The guarantees in [specs/client-v2-ai/spec.md](specs/client-v2-ai/spec.md),
+  each held by a unit test.
 
 **Non-Goals:**
 
@@ -46,7 +47,8 @@ Nothing here imports `PgAssistant`, playground tools, prompts, or the store.
 Callers inject behaviour through callbacks. The module follows the
 `shared/lib/logger` conventions: `index.ts` is the public API with types
 exported separately, files are kebab-case, tests are co-located (an in-source
-block or a `*.test.ts`, as `client-v2/AGENTS.md` decides), and each file logs through `createLogger("ai:<module>")`.
+block or a `*.test.ts`, as `client-v2/AGENTS.md` decides), and each file
+logs through `createLogger("ai:<module>")`.
 
 | File | Public API | Responsibility |
 | --- | --- | --- |
@@ -58,7 +60,7 @@ block or a `*.test.ts`, as `client-v2/AGENTS.md` decides), and each file logs th
 | `redact.ts` | `redactKey`, `REDACTED_KEY` | Moved from `assistant/model/redact-key.ts`, with `MIN_REDACTED_KEY_LENGTH`; error text never carries the caller's key. |
 | `__fixtures__/fake-provider.ts` | none (test-only) | Fakes of the chat-completions and Anthropic Messages streams and a recording `fetch`, for the module's tests and its callers' tests. Not exported from `index.ts`. |
 | `runtime.ts` | none (internal) | Re-exports the SDK-backed values: `createModel`, `runTurn`, `AiTurnError`, `toSdkTools`, `connectMcp`, `isMcpSessionExpired`, `McpUnreachableError`, `McpTimeoutError`. Reached only through `loadAi`. |
-| `index.ts` | `loadAi()`, `redactKey`, `REDACTED_KEY`, `MIN_REDACTED_KEY_LENGTH`, every type above | The only import path: `@/shared/lib/ai`. `loadAi()` resolves to the `runtime.ts` exports. |
+| `index.ts` | `loadAi()`, `redactKey`, `REDACTED_KEY`, `MIN_REDACTED_KEY_LENGTH`, every type in this table | The only import path: `@/shared/lib/ai`. `loadAi()` resolves to the `runtime.ts` exports. |
 
 The default backend's base URL is resolved against `location`: the SDK parses
 it with `new URL`, which rejects a relative URL.
@@ -71,8 +73,8 @@ neutral, with no advice to the user; a caller adds its own wording by
 `kind`, as the assistant does for a refusal. When a failed response's body
 does not match the provider's error object, so the SDK's message is only the
 status text, the message is `<status> <statusText> — <body>` with the body
-redacted and cut to 300 characters, as in the old loops: a backend that
-answers `{ error: "<sentence>" }`, as `/api/agent` does, still shows its
+redacted and cut to 300 characters (`BODY_IN_MESSAGE`), as in the old loops:
+a backend that answers `{ error: "<sentence>" }`, as `/api/agent` does, still shows its
 sentence.
 
 A paused step does not count against `maxSteps`: the resume continues that
@@ -101,17 +103,19 @@ and its `MAX_RESUMES` replaces `MAX_RESUMES` in `model/anthropic.ts`.
   tool's items, and no bubble is ever empty, which is what `discardIfEmpty`
   achieved in the old loops. A change between reasoning and text inside a
   bubble starts a new paragraph (`"\n\n"`).
-- Provider-specific behaviour is data, not a second loop. Each backend has a
-  profile in `model/backends/` behind one interface, `BackendProfile`, whose
-  `profile(input)` returns a `TurnProfile`: the connection, the label,
+- Provider-specific behaviour is data, not a second loop. Each model provider
+  has a profile in `model/model-providers/` behind one interface,
+  `ModelProviderProfile`, whose `profile(input)` returns a `TurnProfile`:
+  the connection, the label,
   `providerOptions` (Anthropic adaptive thinking with `display: "updates"`
   and `drop_block`, `effort`, `fallbacks`), `promptOptions` (`cache_control`
   on the first system message), `maxOutputTokens`
   (`ANTHROPIC_MAX_OUTPUT_TOKENS` in the assistant's `config.ts`), whether
   reasoning reaches the bubble (Anthropic only, as before), and, for the
-  default backend only, how to read its signed-out refusal. `BACKENDS` in
-  `model/backends/index.ts` is a `Record<ModelProvider, BackendProfile>`, so
-  a provider id without a profile does not compile; `openai`, `openrouter`,
+  default backend only, how to read its signed-out refusal.
+  `MODEL_PROVIDER_PROFILES` in `model/model-providers/index.ts` is a
+  `Record<ModelProvider, ModelProviderProfile>`, so a provider id without a
+  profile does not compile; `openai`, `openrouter`,
   and `gemini` share one profile that takes the id. `@ai-sdk/anthropic` adds
   the thinking and fallback betas itself from those options.
 - History is `ModelMessage[]`, seeded from `toReplayMessages`, which does not
@@ -126,7 +130,7 @@ and its `MAX_RESUMES` replaces `MAX_RESUMES` in `model/anthropic.ts`.
   has `reason: SIGNED_OUT_REASON` (`default-backend-sign-in`) is shown as
   that body's `error` sentence and calls `PgSession.refresh()`, so the
   store's session listener returns the panel to the picker; the default
-  backend's profile (`model/backends/default.ts`) reads the sentence and
+  backend's profile (`model/model-providers/default.ts`) reads the sentence and
   `model/provider.ts` refreshes the session, neither in the module.
 - The browser MCP client, in `features/mcp` ("Decision: the browser MCP
   client is a feature"), keeps `listGatewayServers` and calls `connectMcp`,
@@ -150,7 +154,7 @@ and its `MAX_RESUMES` replaces `MAX_RESUMES` in `model/anthropic.ts`.
 - The assistant's limits and route live in its own `config.ts`
   (`views/sidebar/assistant/config.ts`): `MAX_STEPS`, `MAX_RESUMES`,
   `ANTHROPIC_MAX_OUTPUT_TOKENS`, and `DEFAULT_BACKEND_URL` (`/api/agent`).
-  `model/provider.ts` passes the two limits to `runTurn`; the backend
+  `model/provider.ts` passes the two limits to `runTurn`; the model provider
   profiles put the output budget and the route in their `TurnProfile`; the
   composer's probe of the default backend (`widgets/assistant`) reads the
   same route. `features/mcp/config.ts` holds `MCP_TIMEOUT_MS`, which
@@ -243,14 +247,14 @@ Explorer goes through the gateway for another reason: to keep one server
 list and to keep the optional `MCP_EXPLORER_TOKEN` off the client.
 
 The Anthropic backend keeps the Solana and Explorer MCP servers, as browser
-tools through the gateway, exactly like the default backend.
-This depends on branch `feat/assistant-sources-on-by-default`, where
+tools through the gateway, exactly like the default backend. Explorer
+on the gateway depends on branch `feat/assistant-sources-on-by-default`, where
 `upstreams()` in `api/mcp.mjs` always lists `explorer`.
 
-`connectMcp` reopens a session on its own: `@ai-sdk/mcp` does not. It treats
-an HTTP 404 on a request that carried `mcp-session-id` as an expired
-session, because a 404 whose body is a JSON-RPC error for the request
-bypasses the transport's own expiry hook. It sets
+`connectMcp` reopens a session on its own: `@ai-sdk/mcp` does not.
+`connectMcp` treats an HTTP 404 on a request that carried `mcp-session-id`
+as an expired session, because a 404 whose body is a JSON-RPC error for the
+request bypasses the transport's own expiry hook. `connectMcp` sets
 `protocolVersionDiscovery: false`: the servers it reaches speak the
 session-based protocol, and the probe costs a round trip per session.
 
@@ -258,11 +262,11 @@ Alternative: keep the connector through `providerOptions` on the older beta.
 Rejected: a second MCP path for one provider, on a beta Anthropic has
 replaced.
 
-Reopen when `@ai-sdk/anthropic` supports the connector beta that
-`model/anthropic.ts` used (`mcp-client-2025-11-20` with `mcp_toolset`). The
-connector can then return through `providerOptions.anthropic.mcpServers`, if
-saving the browser's round trip per MCP call matters. It brings `pause_turn`
-back with it.
+Reopen this decision when `@ai-sdk/anthropic` supports the connector beta
+that `model/anthropic.ts` used (`mcp-client-2025-11-20` with `mcp_toolset`).
+The connector can then return through `providerOptions.anthropic.mcpServers`,
+if saving the browser's round trip per MCP call matters. The connector brings
+`pause_turn` back with it.
 
 ### Decision: the browser MCP client is a feature
 
@@ -277,9 +281,9 @@ slice, `features/mcp` declares its events in `model/telemetry.ts` and logs
 under `mcp:client`.
 
 Alternative: keep the client in `views/` until the assistant panel moves.
-Rejected: it would keep growing in a root that new code may not extend, and
-its connection lifetime (one per entry, closed on change) is the slice's
-concern, not the panel's.
+Rejected: the client would keep growing in a root that new code may not
+extend, and its connection lifetime (one per entry, closed on change) is the
+slice's concern, not the panel's.
 
 Closing a connection waits for its running calls rather than aborting them:
 an aborted request reaches the SDK's error handler as a transport failure,
@@ -308,6 +312,7 @@ through the default backend", and are marked `(manual)`. Each is held by:
 | An entry removed while a call starts | `features/mcp/model/mcp-client.ts` |
 | An entry edited after the tools were built | `views/sidebar/assistant/model/mcp-tools.test.ts` |
 | A call running when its connection closes | `shared/lib/ai/mcp.ts` |
+| A server URL that does not parse | `features/mcp/model/config.ts` (`it.each`) |
 | A gateway server takes over a local entry's id | `views/sidebar/assistant/store.test.ts` |
 | Discovery that started before a takeover does not restore the old tools | `views/sidebar/assistant/store.test.ts` (`it.each`) |
 | A gateway server lists two tools | `features/mcp/model/mcp-client.ts` |
@@ -436,16 +441,15 @@ behaviour stays covered by the browser specs in task 3.1.
 
 ## Migration Plan
 
-Each task lands as one PR, in the order of `tasks.md`. Until task 4.1, the
-old loops stay in the tree, unused after task 3.1, so reverting 3.2 and 3.1
+Each task lands as one PR, in the order of [tasks.md](tasks.md). Until task
+4.1, the old loops stay in the tree, unused after task 3.1, so reverting 3.2 and 3.1
 restores the old transport and the `server` executor. Task 3.2 leaves
 `model/anthropic.ts` compiling by declaring no connector server, since
 `McpServerEntry` has no `executor` to select one by. Task 4.1 deletes the
 old loops, `model/redact-key.ts`, the re-exports of the moved types, and
 `@anthropic-ai/sdk`, so restoring the old transport after it means reverting
-4.1 first. No stored data
-changes: threads keep their format, and `parseServers` accepts a
-configuration that still names `executor`.
+4.1 first. No stored data changes: threads keep their format, and
+`parseServers` accepts a configuration that still names `executor`.
 
 ## Open Questions
 

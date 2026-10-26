@@ -147,15 +147,23 @@ export const parseServers = (
       }
     }
 
-    return {
+    const server: McpServerEntry = {
       id: id as string,
       name: (name as string | undefined) ?? (id as string),
-      url: (url as string).trim(),
+      url: target,
       enabled: isEnabled,
       ...(authToken ? { authToken: authToken as string } : {}),
       ...(queryParams ? { queryParams } : {}),
       ...(headers ? { headers } : {}),
     };
+
+    // Applying a list compares connections through serverUrl, which would throw after the list is installed
+    try {
+      serverUrl(server);
+    } catch {
+      fail(`${where}: "url" is not a valid URL: ${target}`);
+    }
+    return server;
   });
 };
 
@@ -187,6 +195,21 @@ if (import.meta.vitest) {
           ["explorer"]
         )
       ).toThrow('id "explorer" is a server the gateway already serves');
+    });
+
+    it.each(["https://[", "//["])(
+      "rejects a url that does not parse: %s",
+      (url) => {
+        expect(() =>
+          parseServers(JSON.stringify([{ id: "remote", url }]))
+        ).toThrow(`Server 1: "url" is not a valid URL: ${url}`);
+      }
+    );
+
+    it("accepts a url relative to the page, as the gateway's are", () => {
+      expect(
+        parseServers(JSON.stringify([{ id: "local", url: "/api/mcp?x=1" }]))
+      ).toHaveLength(1);
     });
   });
 }

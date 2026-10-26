@@ -1,3 +1,4 @@
+// @ts-check
 // JSON-RPC 2.0 envelopes, built by `api/mcp.mjs` and by the fake MCP servers
 // in the browser tests. `.mjs` so Node can import it directly; `allowJs` lets
 // the TypeScript side import the same file (see `features/auth/config.mjs`).

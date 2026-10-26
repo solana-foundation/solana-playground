@@ -13,8 +13,8 @@ are reached, and where a connection's key may appear.
 A turn SHALL send no model request after it reaches the caller's step limit,
 or the module's private fallback when the caller sets none, even when the
 last step asked for more tool calls. The module SHALL NOT export the
-fallback: each caller passes its own limit from its `config.ts`. Resumes of a paused turn are counted by their own
-limit, not by this one.
+fallback: each caller passes its own limit from its `config.ts`. Resumes of a
+paused turn are counted by their own limit, not by the step limit.
 
 #### Scenario: A model that keeps calling tools (manual)
 

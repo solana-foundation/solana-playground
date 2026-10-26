@@ -49,8 +49,8 @@ before it as stated.
       backend's signed-out refusal) to `model/provider.test.ts` against a
       fake model or `fetch`; verify `yarn test-unit`, `yarn test-api`, and
       the e2e specs `assistant-reconnect`, `assistant-sign-in`,
-      `chat-threads`, `fix-with-assistant` and `thread-restore` pass. A `server`-executor server gets no tools from
-      this task until 3.2 lands
+      `chat-threads`, `fix-with-assistant` and `thread-restore` pass. A
+      `server`-executor server gets no tools from this task until 3.2 lands
 - [x] 3.2 `grounding/mcp-client.ts` keeps `listGatewayServers` and calls
       `connectMcp`; `model/mcp-tools.ts` maps its tools. Remove the `server`
       executor: `executor` and `McpExecutor` in `grounding/types.ts`, its
@@ -78,15 +78,15 @@ before it as stated.
 ## 5. Measure and walk through
 
 - [x] 5.1 Two production builds, at the commit before 1.1 and after 4.1;
-      record per-file gzip sizes and the boot chunk's delta in `design.md`,
-      "Risks / Trade-offs" (depends on 4.1); verify the figures replace the
+      record per-file gzip sizes and the boot chunk's delta in
+      [design.md](design.md), "Risks / Trade-offs" (depends on 4.1); verify the figures replace the
       #70 estimate there, and a search of the built chunks finds the SDK only
       in the chunks `loadAi()` requests
-- [ ] 5.2 Walk through the default backend signed in, an Anthropic key, and an OpenAI
-      or Gemini key; on each, a tool turn with an approval, an MCP call to an
-      `explorer__*` tool, Stop mid-turn, and a reload that restores the
-      thread; record the results, and whether any turn paused, in
-      `design.md` (depends on 4.1; may run beside 5.1); verify every
+- [ ] 5.2 Walk through the default backend signed in, an Anthropic key, and
+      an OpenAI or Gemini key; on each, a tool turn with an approval, an MCP
+      call to an `explorer__*` tool, Stop mid-turn, and a reload that restores
+      the thread; record the results, and whether any turn paused, in
+      [design.md](design.md) (depends on 4.1; may run beside 5.1); verify every
       combination has a recorded result
 - [x] 5.3 `e2e/assistant-pause.e2e.spec.ts`: the two scenarios of "A paused
       turn is resumed, up to a limit" as Playwright tests titled
@@ -106,7 +106,8 @@ before it as stated.
       server entry type, `LOCAL_MCP_SERVERS`, and their tests) to
       `features/mcp` with `index.ts` as its public API, register the `mcp`
       prefix, and declare, describe, and emit the four events of
-      `specs/client-v2-mcp/spec.md` from `model/telemetry.ts`, with tests that
+      [specs/client-v2-mcp/spec.md](specs/client-v2-mcp/spec.md) from
+      `model/telemetry.ts`, with tests that
       assert them through the memory provider; key connections by server
       entry id and close the previous connection when the entry changes or is
       removed, with a test that fails on the code before the fix (depends on
@@ -114,12 +115,12 @@ before it as stated.
       `src/app/slice-structure.test.ts` accepts the slice, and no import of
       `grounding/mcp-client` or `grounding/config` remains
 - [x] 5.5 Each consumer owns its defaults ("Decision: a consumer owns its
-      defaults" in `design.md`): `shared/lib/ai` keeps private fallbacks and
-      exports none; `views/sidebar/assistant/config.ts` holds `MAX_STEPS`,
+      defaults" in [design.md](design.md)): `shared/lib/ai` keeps private
+      fallbacks and exports none; `views/sidebar/assistant/config.ts` holds `MAX_STEPS`,
       `MAX_RESUMES`, `ANTHROPIC_MAX_OUTPUT_TOKENS`, and `DEFAULT_BACKEND_URL`,
       and `features/mcp/config.ts` holds `MCP_TIMEOUT_MS`, each passed to the
-      module explicitly; the per-backend `switch` in `model/provider.ts`
-      becomes the profiles in `model/backends/` (depends on 5.4); verify
+      module explicitly; the per-provider `switch` in `model/provider.ts`
+      becomes the profiles in `model/model-providers/` (depends on 5.4); verify
       `yarn run check` passes and `model/provider.test.ts` fails when the
       assistant omits its step limit, resume limit, or route
 
@@ -129,5 +130,4 @@ before it as stated.
       template, saved untracked as `.github/assistant-ai-sdk.pr.md`, and a
       review comment on #70, saved untracked in `.github/`, that says this
       change supersedes the verdict and why (HOO-1753; depends on 5.1, 5.2 and
-      5.3); verify both files exist and the
-      comment names this change
+      5.3); verify both files exist and the comment names this change
