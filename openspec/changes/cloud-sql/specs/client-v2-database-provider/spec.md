@@ -66,9 +66,7 @@ With `DB_PROVIDER=cloud-sql`, the functions SHALL connect to the instance
 user `CLOUD_SQL_USER`, through the Cloud SQL connector with IAM database
 authentication. The deployment's identity SHALL come from Vercel's OIDC token
 exchanged for the service account the federation binds to that Vercel
-environment. The provider SHALL hold no password and no connection string, and
-SHALL report itself unconfigured when any of the three `CLOUD_SQL_*`
-variables or the federation variables is unset.
+environment. The provider SHALL hold no password and no connection string.
 
 #### Scenario: A production deployment reaches Postgres without a URL (manual)
 
@@ -78,6 +76,12 @@ variables or the federation variables is unset.
 - **THEN** `GET /api/sync` on the production deployment answers
   `{ "enabled": true, "db": "ok" }`, and the Cloud SQL instance's logs show the
   connection authenticated as the production IAM database user
+
+### Requirement: A cloud-sql provider missing a variable is unconfigured
+
+With `DB_PROVIDER=cloud-sql`, the provider SHALL report itself unconfigured
+when any of the three `CLOUD_SQL_*` variables or the federation variables is
+unset, and SHALL attempt no token exchange.
 
 #### Scenario: A variable is missing (manual)
 
@@ -110,7 +114,7 @@ in `client-v2/src/features/persistence/model/db.test.mjs`.
 #### Scenario: A preview database is allowed (manual)
 
 - **WHEN** a deployment with `VERCEL_ENV=preview` sets `DB_PROVIDER=cloud-sql`
-  and `CLOUD_SQL_DATABASE=solpg_preview_fix_sync`
+  and `CLOUD_SQL_DATABASE=solpg_preview_pr_42`
 - **THEN** the provider creates the pool
 
 Checked by the unit test "allows a preview database outside production" in

@@ -3,9 +3,10 @@
 ## Purpose
 
 Production's Postgres on Cloud SQL: the identity the functions connect with,
-the instance settings that keep Postgres's own port closed, the two targets
-every migration reaches, and the cutover that moves the data with a rollback
-at every step.
+the instance settings that keep Postgres's own port closed, who migrates it
+and which database a migration reaches, the cutover that moves the data with
+a rollback at every step, and the guide that lets the upstream repository's
+maintainers set all of it up themselves.
 
 ## ADDED Requirements
 
@@ -71,36 +72,48 @@ side SHALL be checked against the other and recorded in
   `max`, the concurrent instance count the product allows for, and the date
   the count was last read from Vercel
 
-### Requirement: A production migration reaches both targets
+### Requirement: A production migration reaches the database production reads
 
-`migrate-production-db` SHALL print the two targets it is about to migrate,
-database `solpg` on Cloud SQL and Neon `main`, list the pending migrations on
-each, and require a typed `yes` once before applying to both. It SHALL reach
-Cloud SQL through the Cloud SQL Auth Proxy with federated or user credentials,
-never a stored password. When one target fails, the other SHALL still be
-reported, and the target left behind SHALL be named.
+`migrate-production-db` SHALL migrate the one database the Production
+environment reads, chosen by Production's `DB_PROVIDER`: the production Neon
+project through its unpooled URL while it is `url` or unset, and database
+`solpg` through the Cloud SQL Auth Proxy once it is `cloud-sql`. It SHALL
+print the target's host and database and the pending migrations, and require a
+typed `yes` before applying them.
 
 #### Scenario: Nothing pending (manual)
 
-- **WHEN** both targets are at the newest migration
-- **THEN** the target prints both hosts and "nothing to apply", and asks no
-  question
+- **WHEN** the target is at the newest migration
+- **THEN** the make target prints its host and database and "nothing to
+  apply", and asks no question
 
-#### Scenario: One target behind (manual)
+#### Scenario: Production on Cloud SQL (manual)
 
-- **WHEN** Neon `main` has a pending migration and Cloud SQL `solpg` does not
-- **THEN** the target prints the pending migration under Neon `main` only, asks
-  once, and applies it there only
+- **WHEN** Production's `DB_PROVIDER` is `cloud-sql` and a migration is pending
+- **THEN** the make target names `solpg` on instance `solpg`, never a Neon
+  host, applies the migration after `yes`, and the tables it creates are owned
+  by the production IAM user
+
+### Requirement: Production is migrated by a person
+
+`migrate-production-db` SHALL reach `solpg` as the operator's own Google
+identity, an IAM database user on `solpg`, with the session role set to the
+production IAM user, and never with a stored password, a key, or a CI
+identity.
+
+#### Scenario: CI cannot migrate production (manual)
+
+- **WHEN** the IAM policy bindings of `github-ci` are listed
+- **THEN** none grants a Cloud SQL role on instance `solpg`
 
 ### Requirement: The cutover moves the data behind a write freeze
 
 The move from Neon to Cloud SQL SHALL happen with `SYNC_ENABLED=false` on
-Production, so no write reaches either database while the Neon data is
-restored into `solpg`. Before `SYNC_ENABLED` returns to `true`, the production
-deployment's `GET /api/sync` SHALL answer `db: "ok"` through the `cloud-sql`
-provider, and a row count per table SHALL match Neon's. Until that point,
-restoring `DATABASE_URL` on Production and redeploying SHALL be a complete
-rollback.
+Production, so no write reaches either database while the production Neon
+project's data is restored into the empty `solpg`. Before `SYNC_ENABLED`
+returns to `true`, `GET /api/sync` SHALL answer `db: "ok"` through the
+`cloud-sql` provider and row counts SHALL match Neon's. Until then, restoring
+`DATABASE_URL` on Production and redeploying SHALL be a complete rollback.
 
 #### Scenario: Writes are frozen during the restore (manual)
 
@@ -112,8 +125,10 @@ rollback.
 #### Scenario: The restore is verified before writes return (manual)
 
 - **WHEN** the restore into `solpg` completes
-- **THEN** `select count(*)` per table on `solpg` equals the same count on Neon
-  `main`, and the counts are recorded in the cutover PR
+- **THEN** `select count(*)` per table on `solpg` equals the same count on the
+  production Neon project, every table is owned by the production IAM user,
+  `migrate-production-db` finds nothing to apply on `solpg`, and the counts
+  are recorded in the cutover PR
 
 #### Scenario: Rollback before the switch (manual)
 
@@ -140,3 +155,42 @@ deployment URL and the body received.
 
 - **WHEN** the deployment's `GET /api/sync` answers `db: "unreachable"`
 - **THEN** the job fails, naming the URL and the body
+
+### Requirement: A maintainer guide sets the pipeline up from nothing
+
+`client-v2/docs/cloud-sql.md` SHALL be written for maintainers of
+`solana-foundation/solana-playground` who did not build this change. It SHALL
+describe the design of the pipeline, then give, in order, every step that sets
+it up in an empty Google Cloud project, a Vercel project, and a GitHub
+repository, with each value specific to this deployment as a placeholder.
+
+#### Scenario: The design is explained before the steps (manual)
+
+- **WHEN** a maintainer reads the guide's design section
+- **THEN** it states which identity reaches which instance, the four gates
+  between a preview and `solpg`, which workflow creates, migrates, and drops
+  which database, and who migrates production
+
+#### Scenario: The setup steps are complete (manual)
+
+- **WHEN** a reviewer compares the guide with tasks 2.1, 2.3, and 3.1
+- **THEN** every `gcloud`, `vercel`, `gh`, and SQL command those tasks ran is
+  in the guide, in the order it must run, and no project id, team, instance
+  address, or e-mail address appears except as a placeholder
+
+#### Scenario: The guide covers every party (manual)
+
+- **WHEN** a reviewer reads the guide's setup section
+- **THEN** it covers Google Cloud (both instances, their flags, the template
+  base, both federation pools and providers, the three service accounts and
+  their conditional bindings, the IAM database users and role memberships),
+  Vercel (the OIDC issuer mode, the variables per environment, the function
+  region), GitHub (the repository variables and secrets the preview workflows
+  read, the `preview` and `preview:cloud-sql` labels), and adding an operator
+
+#### Scenario: The guide is the runbook for the cutover and its rollback (manual)
+
+- **WHEN** a maintainer moves another deployment from a connection string to
+  Cloud SQL
+- **THEN** the guide's cutover and rollback steps match task 3.2, with the
+  checks that must pass before writes are reopened

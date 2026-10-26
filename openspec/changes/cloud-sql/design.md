@@ -7,10 +7,12 @@ See `proposal.md`, "Why". The code that reaches Postgres is one module,
 `pg.Pool` from `DATABASE_URL` once, synchronously, and `query`, `transaction`,
 `conversations.mjs`, and `auth.mjs` (`betterAuth({ database: pool })`) read it.
 `GET /api/sync` runs `select 1` on it and answers one of three shapes. The
-preview tooling is keyed by git branch: `.github/scripts/neon.sh`
-(`ensure`, `uri`, `delete`, `list`), `scripts/neon-preview-branch.sh`, and the
-`Makefile.vercel` targets. The only workflow that reaches Google Cloud is
-`cicd.yml`, through a stored JSON key.
+preview tooling is `.github/scripts/neon.sh` (`ensure`, `uri`, `delete`,
+`list`), `scripts/neon-preview-branch.sh`, and the `Makefile.vercel` targets: a
+labelled PR gets the Neon branch `preview/pr-<number>`, a laptop deploy gets
+`preview/<git-branch>`, both cut from `main` of the preview Neon project, which
+is separate from production's Neon project. The only workflow that reaches
+Google Cloud is `cicd.yml`, through a stored JSON key.
 
 Verified 2026-10-22: with no change to the instance,
 `cloud-sql-proxy --gcloud-auth analytics-324114:us-central1:solpg` reached
@@ -36,6 +38,7 @@ database `postgres`, one built-in user `postgres`.
 - A query layer. Both providers are Postgres; `pg` and every statement stay.
 - Moving the default `preview` label off Neon.
 - Keeping the `solpg` and `solpg-preview` instances identical in size.
+- Migrating production from CI. It stays a person's step, as it is today.
 
 ## Decisions
 
@@ -65,11 +68,11 @@ database `postgres`, one built-in user `postgres`.
   named by `GCP_SERVICE_ACCOUNT_EMAIL`, and the connector takes that client
   with `authType: "IAM"`. No key, no password. The alternative, Application
   Default Credentials from a key file, is what the team has ruled out.
-- **The refusal gate reads `VERCEL_ENV`.** Vercel sets it; a deployment's own
-  variables cannot override a system variable. The gate compares
-  `CLOUD_SQL_DATABASE` to the literal `solpg` and runs before the token
-  exchange, so a refused preview spends nothing and leaves no trace on the
-  instance.
+- **The refusal gate reads `VERCEL_ENV`.** Vercel sets it, and the gate
+  assumes a deployment's own variables cannot override it (see Open
+  Questions). The gate compares `CLOUD_SQL_DATABASE` to the literal `solpg`
+  and runs before the token exchange, so a refused preview spends nothing and
+  leaves no trace on the instance.
 - **One service account per Vercel environment, on separate instances.**
   `vercel-production` (subject `environment:production`) holds Cloud SQL
   Client and Instance User on `solpg`; `vercel-preview` (subject
@@ -78,37 +81,78 @@ database `postgres`, one built-in user `postgres`.
   grants a connection to the instance, and a preview migration or a runaway
   query on the production instance shares its CPU. A small zonal
   `solpg-preview` costs a fraction of `solpg`.
-- **Preview databases are named by branch, with underscores.** Neon branches,
-  laptop deploys, and the sweep are all keyed by git branch, so one key fits
-  both providers. Postgres treats `-` as an operator in an unquoted
-  identifier, so the name uses `_`; identifiers cap at 63 bytes, so a long
-  branch is cut and gets eight hex characters of its SHA-256, which also keeps
-  `fix/a-b` and `fix/a_b` apart. One module, `scripts/db/preview-name.mjs`,
-  computes the name for the workflows, the make targets, and the scripts.
+- **A Cloud SQL preview database is cloned from a template.** Cloud SQL has no
+  copy-on-write branches, but Postgres copies a database at creation:
+  `CREATE DATABASE <name> TEMPLATE solpg_preview_base OWNER <preview user>`.
+  The clone carries the base's schema, rows, and `schema_migrations`, so dbmate
+  applies only the migrations the base lacks, as on a Neon branch. The base is
+  marked `IS_TEMPLATE true` and `ALLOW_CONNECTIONS false`, because a clone
+  fails while any session is connected to its template; the script that
+  migrates the base lifts `ALLOW_CONNECTIONS` for the run and restores it. It
+  holds preview data only, never a copy of production's, for the reason
+  `client-v2/docs/neon.md` gives for the separate preview Neon project. The
+  copy is a full one, not copy-on-write, which is cheap at preview sizes. The
+  alternative, an empty database migrated from zero, leaves every preview
+  without rows and replays every migration on every new preview.
+- **Tables are owned by the application's user.** In Postgres the role that
+  creates a table owns it; membership in another role does not change that.
+  So every migration connection sets its session role to the user the
+  application connects as (`options=-c role=<user>` in the URL dbmate reads),
+  on `solpg-preview` and on `solpg`. The application then owns every table and
+  needs no per-table grant, and the base's tables, copied as they are into each
+  clone, already belong to the preview user.
+- **Preview databases are named by PR number.** A labelled PR's database is
+  `solpg_preview_pr_<number>`, as its Neon branch is `preview/pr-<number>`: no
+  sanitising, no length limit to meet, no collision. A laptop deploy has no PR,
+  so its database is named after the git branch, as its Neon branch is:
+  `solpg_preview_br_<id>`, where `<id>` is the branch with every character
+  outside `[a-z0-9_]` replaced by `_` (Postgres treats `-` as an operator in an
+  unquoted identifier), cut to fit 63 bytes, and suffixed with eight hex
+  characters of the branch's SHA-256 so `fix/a-b` and `fix/a_b` stay apart.
+  The prefixes differ so a branch called `pr_12` cannot take PR 12's database.
+  One module, `scripts/db/preview-name.mjs`, computes both names for the
+  workflows, the make targets, and the scripts.
 - **Provisioning is one script set per provider under `scripts/db/<provider>/`.**
-  `create-preview-db <branch>`, `drop-preview-db <branch>`, and
-  `migration-url <branch | production>`. The `url` set wraps `neon.sh` and
+  `create-preview-db`, `drop-preview-db`, and `migration-url`, each taking
+  `--pr <number>` or `--branch <name>` and never a database name, and
+  `migration-url production`. The `url` set wraps `neon.sh` and
   `neon-preview-branch.sh`; the `cloud-sql` set runs the Cloud SQL Auth Proxy,
-  `CREATE DATABASE ... OWNER` as the CI IAM user, and prints
-  `postgres://<user>@127.0.0.1:<port>/<database>?sslmode=disable` for dbmate
-  (the proxy carries the TLS). `preview.yml`, `preview-sweep.yml`, and
+  clones the template as the CI IAM user, and prints
+  `postgres://<user>@127.0.0.1:<port>/<database>?sslmode=disable&options=-c%20role%3D<app user>`
+  for dbmate (the proxy carries the TLS). The `cloud-sql` set also has
+  `migrate-preview-base`. `preview.yml`, `preview-sweep.yml`, and
   `Makefile.vercel` call the generic names and pass `DB_PROVIDER`.
-- **GitHub Actions reaches Google Cloud through its own federation.** A second
-  Workload Identity pool provider trusts GitHub's OIDC issuer for this
-  repository, and `google-github-actions/auth` exchanges the job's token for a
-  CI service account that holds Cloud SQL Client and Instance User on
-  `solpg-preview` and, for the migration job, on `solpg`. `cicd.yml`'s stored
-  JSON key is not reused and is not touched by this change.
-- **Ownership on a preview database.** The CI IAM user creates the database
-  with `OWNER` set to the preview IAM user and is granted that role, so
-  migrations run by CI create tables the preview user owns and the app needs
-  no per-table grant. On `solpg`, the migration user is a member of the
-  production user's role for the same reason.
-- **Migrations reach two targets.** `migrate-production-db` migrates `solpg`
-  through the proxy and Neon `main` through its unpooled URL, prints both
-  hosts and both pending lists, and asks once. Neon `main` stays the parent
-  of Neon preview branches, so a migration missing there would be replayed by
-  every later preview.
+- **GitHub Actions reaches `solpg-preview` only.** A second Workload Identity
+  pool provider trusts GitHub's OIDC issuer, with an attribute condition
+  naming this repository, and `google-github-actions/auth` exchanges the job's
+  token for `github-ci`, which holds Cloud SQL Client and Instance User on
+  `solpg-preview`, `CREATEDB`, and membership of the preview user's role. It
+  holds nothing on `solpg`: `preview.yml` runs on `pull_request`, which reads
+  the workflow from the PR's merge commit, so anyone who can push a branch can
+  change what the job does with its identity. `cicd.yml`'s stored JSON key is
+  not reused and is not touched by this change.
+- **Production migrations run as a person.** `migrate-production-db` stays a
+  make target run from a laptop. On Cloud SQL it runs the proxy with the
+  operator's own Google credentials (`--auto-iam-authn`); each operator is an
+  IAM database user on `solpg`, a member of the production user's role, and
+  sets that role per the ownership decision above. Operators are named in
+  `client-v2/docs/cloud-sql.md`; adding one is an IAM grant and a database
+  user, not a shared secret.
+- **A production migration has one target: the database production reads.**
+  `migrate-production-db` already pulls the Production environment's
+  variables. While Production's `DB_PROVIDER` is `url` or unset, it migrates
+  the production Neon project through its unpooled URL, as today; once it is
+  `cloud-sql`, it migrates `solpg` through the proxy and no longer reaches
+  Neon. No database is migrated that production does not read: the preview
+  Neon project's `main` and `solpg_preview_base` are preview infrastructure,
+  and the preview that clones them applies whatever they lack.
+- **The cutover restores into an empty database.** `solpg` is created empty
+  and stays empty until the cutover, when a `pg_dump` of the production Neon
+  project is restored into it with `--no-owner` under the production user's
+  role. The dump carries the schema and `schema_migrations`, so the first
+  `migrate-production-db` against `solpg` afterwards reports nothing to apply.
+  Migrating `solpg` ahead of time would make the restore collide with tables
+  that already exist.
 - **The smoke check is `GET /api/sync`, not a new route.** It already runs
   `select 1` and already hides detail. A job in `client-v2.yml` on push to
   `master` waits for the Vercel deployment of that commit (the Vercel CLI
@@ -127,44 +171,56 @@ database `postgres`, one built-in user `postgres`.
   when Cloud SQL reports exhaustion.
 - [The first connection of a cold instance pays the token exchange and the
   certificate fetch] → the connector caches both per instance; the pool is
-  memoised at module scope so a warm instance pays once.
-- [Neon `main` drifts from production's data after the cutover] → accepted:
-  previews need the schema and some rows, not current data. The migration job
-  keeps its schema current.
+  memoised at module scope so a warm instance pays once. Task 2.4 records the
+  cold and warm latency of `GET /api/sync` so the cost is a number before the
+  cutover.
+- [`solpg_preview_base` falls behind `client-v2/db/migrations`] → accepted:
+  each clone applies what the base lacks. `migrate-preview-base` brings it
+  forward when the replay grows long.
+- [A clone fails while a session is connected to the base] →
+  `ALLOW_CONNECTIONS false` on the base outside `migrate-preview-base`, and
+  `create-preview-db` reports the failure on the PR like any failed step.
 - [`preview-sweep.yml` lists databases on an instance, which needs a
   connection where the Neon sweep needed only an API key] → the sweep runs
   the proxy under the CI federation; a sweep that cannot connect fails and
   deletes nothing, as the Neon sweep does on an API error.
-- [Two labelled PRs with head branches that sanitise alike] → the hash suffix
-  applies whenever the sanitised names collide, not only when the name is cut.
+- [The production Neon project outlives the cutover] → it is the rollback
+  until the cutover's last redeploy, and a read-only copy after. Deleting it
+  is a later decision, outside this change.
 
 ## Migration Plan
 
 1. Provider layer merged; every deployment still on `DB_PROVIDER` unset, so
    `url`. No behaviour change.
 2. Google Cloud set up by hand and documented in `client-v2/docs/cloud-sql.md`:
-   `solpg-preview`, the two federation pools and providers, the three service
-   accounts, the IAM database users, the instance flags on both instances.
+   `solpg-preview` and its `solpg_preview_base`, the two federation pools and
+   providers, the three service accounts, the IAM database users, the instance
+   flags on both instances.
 3. A PR labelled `preview:cloud-sql` deploys against `solpg-preview`;
    `GET /api/sync` answers `db: "ok"`; sign-in and a two-browser project edit
    work. Recorded in that PR.
-4. `migrate-production-db` rewritten; `solpg` database created on instance
-   `solpg`; `CONNECT` revoked from `PUBLIC`; all migrations applied to the
-   empty database.
+4. `migrate-production-db` rewritten; empty database `solpg` created on
+   instance `solpg`; `CONNECT` revoked from `PUBLIC`; the operators' IAM
+   users added; `dbmate status` through the proxy as an operator lists every
+   migration pending.
 5. Cutover, in one sitting: `SYNC_ENABLED=false` on Production, redeploy;
-   `pg_dump` Neon `main`, `pg_restore` into `solpg` through the proxy; row
-   counts compared; `DB_PROVIDER=cloud-sql` and the `CLOUD_SQL_*` and `GCP_*`
-   variables set on Production, `DATABASE_URL` removed; redeploy;
-   `GET /api/sync` answers `db: "ok"`; `SYNC_ENABLED=true`, redeploy.
+   `pg_dump` the production Neon project, `pg_restore` into `solpg` through
+   the proxy; row counts compared; `DB_PROVIDER=cloud-sql` and the
+   `CLOUD_SQL_*` and `GCP_*` variables set on Production, `DATABASE_URL`
+   removed; redeploy; `GET /api/sync` answers `db: "ok"`;
+   `migrate-production-db` names `solpg` and reports nothing to apply;
+   `SYNC_ENABLED=true`, redeploy.
 6. Rollback before step 5's last redeploy: restore `DATABASE_URL` and
    `DB_PROVIDER=url` on Production and redeploy. Nothing was written since the
-   freeze, so Neon `main` is current.
+   freeze, so the production Neon project is current.
 
 ## Open Questions
 
 - Which Vercel region the functions run in. `solpg` is in `us-central1`; the
   nearest Vercel region is a project setting read from the dashboard, and the
   latency difference is unmeasured. It changes no spec or task.
-- Whether the CI IAM user and the application IAM user on `solpg` should be
-  one user. The design keeps them separate with role membership; collapsing
-  them removes one grant and one principal and changes no behaviour.
+- Who the operators are: the people who hold an IAM database user on `solpg`
+  and may run `migrate-production-db`.
+- Whether Vercel lets a project variable named `VERCEL_ENV` shadow the system
+  one. The refusal gate assumes not. If it can, that gate is weaker than the
+  spec states, and the other three still hold.
