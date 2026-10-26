@@ -1,4 +1,7 @@
 import { observabilityEnv } from "../../../shared/config/server-env.mjs";
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:observability");
 
 /**
  * The ids the browser bundle needs to report errors and send analytics.
@@ -25,6 +28,6 @@ export const warnAboutMissingObservabilityIds = (env = observabilityEnv()) => {
   if (warned) return;
   warned = true;
   for (const message of missingObservabilityIds(env)) {
-    console.warn(`api: ${message}`);
+    log.warn(message);
   }
 };

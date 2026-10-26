@@ -1,12 +1,11 @@
-# Spec Delta
+# client-v2-logging Specification
 
 ## Purpose
-
 How code in `client-v2` logs, how each entry names its origin, which providers
 receive it, and which entries reach Sentry, so that a failure in a user's
 browser reaches the team with enough context to find its source.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Every entry has a namespace
 
@@ -73,11 +72,13 @@ SHALL print only entries at or above its threshold: `debug` in development,
 - **THEN** `initLogger` is called once, by the `Observability` widget, with
   the console and Sentry providers
 
-### Requirement: Sentry receives reported entries through one provider
+### Requirement: The browser logger reaches Sentry through one provider
 
-The logger SHALL reach Sentry only through
-`shared/lib/logger/providers/sentry.ts`; no other logger provider SHALL
-import `@sentry/*`. The Sentry provider SHALL send every `panic` entry, and
+The browser logger SHALL reach Sentry only through
+`shared/lib/logger/providers/sentry.ts`; no other file under
+`shared/lib/logger/providers/` SHALL import `@sentry/*` statically. The server
+logger reaches Sentry as "Server code logs through the server logger" states.
+The Sentry provider SHALL send every `panic` entry, and
 every `error` or `warn`
 entry logged with `report: true`, and no `info` or `debug` entry. It SHALL set
 the tag `ns` to the entry's namespace, and SHALL do nothing when
@@ -86,7 +87,7 @@ the tag `ns` to the entry's namespace, and SHALL do nothing when
 #### Scenario: A Sentry import in another logger provider
 
 - **WHEN** a file under `shared/lib/logger/providers/` other than the Sentry
-  provider imports `@sentry/react`
+  provider has a static import of `@sentry/react`
 - **THEN** `yarn lint` fails
 
 #### Scenario: An error not marked for reporting
@@ -151,14 +152,23 @@ create an `Error` whose message is the value converted to a string and whose
 
 ### Requirement: Code in the layers logs through the logger
 
-Code under `src/{features,shared,entities,widgets}/` SHALL NOT call
-`console.*`, except `shared/lib/logger/providers/console.ts`. A `catch` in
-those layers SHALL rethrow, log through the logger, or show the failure to
-the user.
+Code under `src/{features,shared,entities,widgets}/` and `api/` SHALL NOT
+call `console.*`, except the browser console provider
+`shared/lib/logger/providers/console.ts`, the server console provider
+`shared/lib/logger/providers/server-console.mjs`, and test files. Browser
+code logs through `shared/lib/logger`; `api/` and the slices' `.mjs` server
+modules log through `shared/lib/logger/server.mjs`. A `catch` in those
+layers and in `api/` SHALL rethrow, log through a logger, or show the
+failure to the user.
 
 #### Scenario: A console call in a feature
 
 - **WHEN** a file under `features/` calls `console.error`
+- **THEN** `yarn lint` fails
+
+#### Scenario: A console call in a route
+
+- **WHEN** a file under `api/` calls `console.error`
 - **THEN** `yarn lint` fails
 
 #### Scenario: Output of the user's code
@@ -166,6 +176,64 @@ the user.
 - **WHEN** a legacy root such as `utils/js-runtime` or a `.raw` template
   calls `console.log` for the user's program
 - **THEN** the lint rule does not apply
+
+### Requirement: Server code logs through the server logger
+
+`createServerLogger(ns)` in `shared/lib/logger/server.mjs` SHALL take the
+levels `error`, `warn`, `info` and `debug`, the `ns` and `report` options
+of the browser logger, and a `context` option, a record of fields that
+describe the failure. It SHALL send each entry to the providers configured
+at the time of the call. Before `initServerLogger` is called, entries SHALL
+go to the server console provider only. The server console provider SHALL
+print an error as a plain object of its own properties, `message`, `code`,
+`stack`, and `cause`, because the platform's console reduces an `Error` to
+its `message` and `stack`, and SHALL print `context` after it. Once
+`@sentry/node` has loaded, `withObservability` SHALL call `initServerLogger`
+with the console and Sentry providers. The server Sentry provider SHALL
+capture every `error` or `warn` entry logged with `report: true`, with the
+tag `ns` and `context` as the event's `extra`, and no other entry.
+`shared/lib/logger` SHALL NOT import `@sentry/node`: the provider takes the
+loaded SDK as an argument. `withObservability` SHALL initialise
+`@sentry/node` so that no event carries a request body, a cookie, or a
+request header.
+
+#### Scenario: A driver error in a route
+
+- **WHEN** `api/projects.mjs` catches a database error that carries `code`
+  and `constraint`, and logs it
+- **THEN** the function log shows `[api:projects]` and the error's
+  `message`, `code`, `constraint`, `stack`, and `cause`
+
+#### Scenario: A module-level server logger and a later initServerLogger
+
+- **WHEN** a server logger is created at module import, `initServerLogger`
+  is then called with another provider, and the logger logs a warning
+- **THEN** that provider receives the entry
+
+#### Scenario: A reported server error with Sentry on
+
+- **WHEN** Sentry is on and a handler wrapped by `withObservability` calls
+  `createServerLogger("api:projects").error(error, { report: true, context: { code: "23505" } })`
+- **THEN** Sentry receives the exception with the tag `ns: api:projects` and
+  `extra` `{ code: "23505" }`
+
+#### Scenario: A request's body, cookies and headers
+
+- **WHEN** Sentry is on and an error is captured while a function handles a
+  request with a body, a session cookie, and an `authorization` header
+- **THEN** the event Sentry receives holds none of them
+
+#### Scenario: A server error not marked for reporting
+
+- **WHEN** a server logger logs `error(error)` without `report: true`
+- **THEN** the server Sentry provider sends nothing
+
+#### Scenario: Sentry off on the server
+
+- **WHEN** a function runs where `sentryEnabled` is false and logs an error
+  with `report: true`
+- **THEN** the error is printed by the console provider and nothing else
+  receives it
 
 ### Requirement: Stack traces in Sentry are readable and source maps are private
 

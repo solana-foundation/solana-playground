@@ -159,7 +159,7 @@
     "test": "yarn test-types && yarn test-unit && yarn build:bundle",
     "test-types": "tsc --noEmit",
     "test-unit": "vitest run",
-    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\"",
+    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\" \"src/shared/**/*.test.mjs\"",
     "db-migrate": "dbmate --no-dump-schema up",
     "db-rollback": "dbmate --no-dump-schema down",
     "db-status": "dbmate status",
@@ -290,6 +290,60 @@
             {
               "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
               "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/{features,shared,entities,widgets}/**",
+          "api/**"
+        ],
+        "excludedFiles": [
+          "src/shared/lib/logger/providers/console.ts",
+          "src/shared/lib/logger/providers/server-console.mjs",
+          "**/*.{test,spec}.{ts,tsx,mts,mjs}"
+        ],
+        "rules": {
+          "no-console": "error"
+        }
+      },
+      {
+        "files": [
+          "src/shared/lib/logger/providers/**"
+        ],
+        "excludedFiles": [
+          "src/shared/lib/logger/providers/sentry.ts",
+          "src/shared/lib/logger/providers/sentry.test.ts"
+        ],
+        "rules": {
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "uuid",
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "name": "cn",
+                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
+                }
+              ],
+              "patterns": [
+                {
+                  "group": [
+                    "uuid/*"
+                  ],
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "group": [
+                    "@sentry/*"
+                  ],
+                  "message": "The browser logger reaches Sentry only through providers/sentry.ts; the server logger is handed the SDK by with-observability.mjs. See the client-v2-logging spec."
+                }
+              ]
             }
           ]
         }

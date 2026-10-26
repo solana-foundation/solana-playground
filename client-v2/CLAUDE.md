@@ -264,10 +264,12 @@ check's job (Layers, "The boundary check"); the rest hold by review.
 - **Ids come from `src/shared/lib/ids`.** `uuid()` mints one, `isUuid()`
   checks one. Never `crypto.randomUUID()`, never a
   copied UUID regex, never `import ... from "uuid"` anywhere else.
-  `api/` cannot import `src/`, so it uses the `uuid` package directly;
-  it is the one exception.
+  `api/` imports only `.mjs` from `src/`, and `ids.ts` is TypeScript that
+  plain Node cannot load, so `api/` uses the `uuid` package directly; it is
+  the one exception.
 - **A `catch` is never empty.** It rethrows, logs through `shared/lib/logger`
-  (with `report: true` when the team must hear of it in production), or tells
+  (`shared/lib/logger/server.mjs` in `api/` and the server-side `.mjs`
+  modules; with `report: true` when the team must hear of it in production), or tells
   the user. A failure that is swallowed on purpose still logs why, in the
   `catch`, so the next reader does not have to guess whether it was
   forgotten.

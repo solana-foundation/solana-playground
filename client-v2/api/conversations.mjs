@@ -21,6 +21,9 @@ import {
   NotYours,
   ThreadDeleted,
 } from "../src/features/persistence/server.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:conversations");
 
 /** Anything larger is not a conversation batch, it is an attack or a bug */
 const MAX_BODY_BYTES = 2_000_000;
@@ -258,26 +261,14 @@ async function handler(req, res) {
     const { status, body } = describeFailure(e);
     // Only the generic branch is a surprise, and its text is the half that
     // must not travel: driver messages name columns, constraints and values.
-    //
-    // Printed field by field rather than as one object, because `console.error`
-    // on the platform stringifies an Error to its `message` and `stack` and
-    // drops every property `pg` hangs off it -- `code` and `constraint` among
-    // them, which are the two that say what to do next. `statement` is added by
-    // `db.mjs` and is the text held by the module that is actually running:
-    // against a schema-shaped failure it is the only way to tell code that is
-    // behind the database from a database that is behind the code.
     if (status === 500) {
-      console.error("api/conversations:", {
-        message: e.message,
-        code: e.code,
-        constraint: e.constraint,
-        table: e.table,
-        column: e.column,
-        detail: e.detail,
-        hint: e.hint,
-        routine: e.routine,
-        statement: e.statement,
-        stack: e.stack,
+      log.error(e, {
+        report: true,
+        context: {
+          code: e?.code,
+          constraint: e?.constraint,
+          statement: e?.statement,
+        },
       });
     }
     return sendJson(res, status, body);

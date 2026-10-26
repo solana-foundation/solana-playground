@@ -14,8 +14,11 @@ import { betterAuth } from "better-auth";
 import { oAuthProxy } from "better-auth/plugins";
 
 import { authEnv } from "../../../shared/config/server-env.mjs";
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 import { getPool, isConfigured } from "../../persistence/server.mjs";
 import { SIGN_IN_ENV } from "../config.mjs";
+
+const log = createServerLogger("auth:session");
 
 let instance = null;
 
@@ -237,12 +240,7 @@ export const readSession = async (req) => {
       ? { status: "signed-in", user: { id: String(session.user.id) } }
       : { status: "signed-out" };
   } catch (e) {
-    // Field by field: the platform's console drops an Error's own properties
-    console.error("auth: session lookup failed", {
-      message: e?.message,
-      code: e?.code,
-      stack: e?.stack,
-    });
+    log.error(e, { report: true, context: { op: "readSession" } });
     return { status: "unavailable" };
   }
 };

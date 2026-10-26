@@ -13,6 +13,10 @@
 // on the broadcast, by which time nothing was listening. The wait now ends
 // only on an answer, on `cancel()`, or on `timeoutMs`.
 
+import { createLogger } from "../../../shared/lib/logger";
+
+const log = createLogger("auth:popup");
+
 /**
  * Why the channel stopped waiting with nothing delivered.
  *
@@ -120,7 +124,7 @@ export const openPopupChannel = (
 
       const reject = (why: string) => {
         sawRejected = true;
-        console.warn(`popup-channel: ${why}`);
+        log.warn(why);
       };
 
       const onMessage = (ev: MessageEvent) => {

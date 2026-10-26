@@ -68,6 +68,8 @@ and the level set and error handling of its
    rejected; the calls now live in a shared Sentry module the provider
    delegates to, so every use of Sentry in the browser shares one SDK client.
    _Rejected:_ a second logger provider that reaches Sentry on its own.
+   _Revised:_ this decision and its rejection hold for the browser logger;
+   the server logger has a Sentry provider of its own (decision 12).
 
 7. **Namespace: a default, an option, a bound logger.**
 
@@ -115,13 +117,29 @@ and the level set and error handling of its
     _Rejected:_ a hand-written catalogue (drifts); TSDoc alone (a change's
     analytics impact is invisible until coded).
 
+12. **A server logger beside the browser one (HOO-2107).**
+    `shared/lib/logger/server.mjs` gives `api/*.mjs` and the slices'
+    server-side `.mjs` modules the same levels, `ns` and `report`, plus a
+    `context` record. It is a separate `.mjs` module because the functions
+    run in Node without a TypeScript build. `sentryServerProvider` takes the
+    loaded SDK as an argument, so `shared` never imports `@sentry/node`;
+    `loadSentry` in `features/api/server/with-observability.mjs` registers it
+    beside the console provider once the SDK has loaded, and sets
+    `dataCollection` so that no request body, cookie or header reaches
+    Sentry: requests carry user code and the session cookie, and the agent
+    route's upstream call carries its API key. _Rejected:_ importing the
+    TypeScript logger from `api/` (plain Node cannot load it); a static
+    `@sentry/node` import inside `shared/lib/logger` (every function would
+    load the SDK, also where `sentryEnabled` is false).
+
 ## Risks / Trade-offs
 
 - `shared` gains a list of slice names in `prefixes.ts`.
-- `@sentry/react` loads eagerly; its size is unmeasured until task 2.2.
+- `@sentry/react` loads eagerly and adds its size to the bundle.
 - GA4 receives events without a consent prompt. For visitors in the EU and
   the UK this may require consent under GDPR and ePrivacy rules; the decision
   to send without consent is the product owner's, and a gate can be added in
   `initTelemetry` without touching any slice.
-- `handled: false` is taken from Sentry's own integrations; task 2.2 confirms
-  the public type accepts it.
+- `handled: false` is taken from Sentry's own integrations; the public
+  `captureException` hint type accepts it without a cast
+  (`shared/lib/reporter/sentry.ts`).

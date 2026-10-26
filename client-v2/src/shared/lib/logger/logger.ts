@@ -160,6 +160,7 @@ if (import.meta.vitest) {
       Logger.warn("still delivered");
 
       expect(logged.entries).toHaveLength(1);
+      // eslint-disable-next-line no-console -- asserts on console.error, and no-console does not exclude in-source test blocks
       expect(console.error).toHaveBeenCalledWith(
         "[logger:provider] a log provider threw",
         expect.any(Error)
