@@ -9,13 +9,9 @@ import { useIdl } from "../IdlProvider";
 
 interface EventProps {
   eventName: string;
-  index: number;
 }
 
-const Event: FC<React.PropsWithChildren<EventProps>> = ({
-  index,
-  eventName,
-}) => {
+const Event: FC<React.PropsWithChildren<EventProps>> = ({ eventName }) => {
   const connection = useConnection();
   const wallet = useWallet();
   const { idl } = useIdl();
@@ -36,8 +32,8 @@ const Event: FC<React.PropsWithChildren<EventProps>> = ({
   }, [eventName, idl, connection, wallet]);
 
   return (
-    <Interaction name={`${eventName} (${receivedEvents.length})`} index={index}>
-      <CodeResult index={index}>
+    <Interaction name={`${eventName} (${receivedEvents.length})`}>
+      <CodeResult>
         {receivedEvents.map((ev) => PgCommon.prettyJSON(ev)).join("\n")}
       </CodeResult>
     </Interaction>

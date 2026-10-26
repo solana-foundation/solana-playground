@@ -15,8 +15,8 @@ import { pushThread } from "./push-thread";
  * the server before the tab goes away.
  *
  * An app-level effect rather than something the assistant panel does, because
- * the panel is not always mounted -- it can be collapsed, or showing the
- * backend picker -- and which conversation is open must not depend on whether
+ * the panel is not always mounted -- it can be collapsed, or showing Sources
+ * and tools -- and which conversation is open must not depend on whether
  * anyone is looking at it. Otherwise a message sent right after a project
  * switch lands in the previous project's thread, or in none at all.
  *
@@ -136,7 +136,7 @@ export const chatThread = (): Disposable => {
    * blocked on an approval and its reply resumes once the user answers.
    *
    * `pending` is left set, so the thread is still owed: the end-of-turn push
-   * in `Chat` sends the finished items, and so does the next hide after it. A
+   * in `useTurn` sends the finished items, and so does the next hide after it. A
    * page closed mid-turn keeps them in IndexedDB, and the next load's
    * `pushAll` uploads them.
    *

@@ -1,181 +1,73 @@
 import { useEffect } from "react";
-import styled, { css } from "styled-components";
 import BN from "bn.js";
 
 import Account from "./Account";
 import Event from "./Event";
 import Instruction from "./Instruction";
 import IdlProvider from "./IdlProvider";
-import Text from "../../../../components/Text";
-import { PgCommand, PgProgramInfo } from "../../../../utils";
-import { PgProgramInteraction } from "../../../../utils/program-interaction";
+import { PgProgramInfo } from "../../../../utils";
 import {
-  useExplorer,
-  useProgramInfo,
-  useRenderOnChange,
-} from "../../../../hooks";
+  Idl,
+  PgProgramInteraction,
+} from "../../../../utils/program-interaction";
 
-const Test = () => {
-  useRenderOnChange(PgCommand.build.onDidFinish);
-
-  const programInfo = useProgramInfo();
-  const error = !programInfo.onChain;
-  const deployed = programInfo.onChain?.deployed;
-
+/**
+ * The form for a deployed program's instructions, accounts and events. The
+ * Interact stage draws it only once `interactSurface` is `ready`, and redraws
+ * it with every new `idl`, so it needs no build event of its own.
+ */
+const Test = ({ idl }: { idl: Idl }) => {
   // Used for both accounts and events data
   useBigNumberJson();
 
   // Handle instruction storage
   useSyncInstructionStorage();
 
-  const explorer = useExplorer();
-  if (!explorer.isTemporary && !explorer.currentWorkspaceName) {
-    return (
-      <InitialWrapper>
-        <Text>No project to test.</Text>
-      </InitialWrapper>
-    );
-  }
-
-  // An IDL can arrive without a build -- "Load IDL file" -- and must not be
-  // blocked behind the build artefacts; the `deployed` check below still
-  // guards actual calls
-  const { idl } = programInfo;
-  if (!idl) {
-    return (
-      <InitialWrapper>
-        <Text>
-          {programInfo.importedProgram || programInfo.uuid
-            ? "Anchor IDL not found."
-            : "Program is not built."}
-        </Text>
-      </InitialWrapper>
-    );
-  }
-
-  if (!programInfo.pk) {
-    return (
-      <InitialWrapper>
-        <Text>The program has no public key.</Text>
-      </InitialWrapper>
-    );
-  }
-
-  if (!idl.instructions) {
-    return (
-      <InitialWrapper>
-        <Text kind="error">
-          You've imported a corrupted IDL. Please double check you've imported
-          an Anchor IDL.
-        </Text>
-      </InitialWrapper>
-    );
-  }
-
-  if (error) {
-    return (
-      <InitialWrapper>
-        <Text kind="error">
-          Connection error. Please try changing the RPC endpoint from the
-          settings.
-        </Text>
-      </InitialWrapper>
-    );
-  }
-
-  if (!deployed) {
-    return (
-      <InitialWrapper>
-        <Text>Program is not deployed.</Text>
-      </InitialWrapper>
-    );
-  }
-
   return (
     <IdlProvider idl={idl}>
-      <Wrapper>
-        <ProgramNameWrapper>
-          Program:
-          <ProgramName>{idl.name}</ProgramName>
-        </ProgramNameWrapper>
+      <div className="flex max-w-[42rem] flex-col gap-6 px-6 py-6 select-none">
+        <p className="m-0 font-mono text-xs text-muted-foreground">
+          Program: <span className="text-foreground">{idl.name}</span>
+        </p>
 
-        <ProgramInteractionWrapper>
-          <ProgramInteractionHeader>Instructions</ProgramInteractionHeader>
+        <Section title="Instructions">
           {idl.instructions.map((ix, i) => (
-            <Instruction
-              key={JSON.stringify(ix)}
-              index={i}
-              idlInstruction={ix}
-            />
+            <Instruction key={JSON.stringify(ix)} idlInstruction={ix} />
           ))}
-        </ProgramInteractionWrapper>
+        </Section>
 
         {idl.accounts && (
-          <ProgramInteractionWrapper>
-            <ProgramInteractionHeader>Accounts</ProgramInteractionHeader>
+          <Section title="Accounts">
             {idl.accounts.map((acc, i) => (
-              <Account key={acc.name} index={i} accountName={acc.name} />
+              <Account key={acc.name} accountName={acc.name} />
             ))}
-          </ProgramInteractionWrapper>
+          </Section>
         )}
 
         {idl.events && (
-          <ProgramInteractionWrapper>
-            <ProgramInteractionHeader>Events</ProgramInteractionHeader>
+          <Section title="Events">
             {idl.events.map((event, i) => (
-              <Event key={event.name} index={i} eventName={event.name} />
+              <Event key={event.name} eventName={event.name} />
             ))}
-          </ProgramInteractionWrapper>
+          </Section>
         )}
-      </Wrapper>
+      </div>
     </IdlProvider>
   );
 };
 
-const InitialWrapper = styled.div`
-  padding: 1.5rem;
-`;
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    user-select: none;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    padding-top: 1rem;
-    /**
-     * Allow scrolling past the end so the last component can reach the top of
-     * the view, similar to the "scroll beyond last line" behavior in editors.
-     */
-    padding-bottom: calc(
-      100vh -
-        (
-          ${theme.views.sidebar.right.title.height} +
-            ${theme.views.bottom.height}
-        )
-    );
-  `}
-`;
-
-const ProgramNameWrapper = styled.div`
-  padding-left: 1rem;
-`;
-
-const ProgramName = styled.span`
-  font-weight: bold;
-  margin-left: 0.25rem;
-`;
-
-const ProgramInteractionWrapper = styled.div``;
-
-const ProgramInteractionHeader = styled.div`
-  ${({ theme }) => `
-    margin: 0.5rem 1rem;
-    color: ${theme.colors.default.primary};
-    font-size: ${theme.font.code.size.large};
-    font-weight: bold;
-  `};
-`;
+/** A headed list of cards: the instructions, the accounts or the events */
+const Section = ({
+  title,
+  children,
+}: React.PropsWithChildren<{ title: string }>) => (
+  <section className="flex flex-col gap-2">
+    <h3 className="m-0 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+      {title}
+    </h3>
+    {children}
+  </section>
+);
 
 /**
  * Temporarily change `BN.toJSON` method to `BN.toString` in order to have

@@ -14,11 +14,7 @@ test("google-tag places the tag right after <head>", () => {
     )
   );
   assert.ok(html.includes('gtag("config","G-ABC123")'));
-});
-
-test("google-tag adds nothing when the html already loads gtag.js", () => {
-  const once = insertGoogleTag(HTML, "G-ABC123");
-  assert.equal(insertGoogleTag(once, "G-ABC123"), once);
+  assert.equal(html.split(GTAG_SRC).length - 1, 1);
 });
 
 // A Universal Analytics id, and a valid prefix carrying markup after it

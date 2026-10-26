@@ -1,10 +1,12 @@
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 /* A small question mark beside a setting, and the answer on hover or tap.
-   The mark is small; the place you can press is not. */
+   The mark is small; the place you can press is not. Its type and name are
+   its own: props come first, so a caller cannot turn it into a submit or
+   drop its label. */
 function HelpTip({
   className,
   label = "More about this",
@@ -15,6 +17,7 @@ function HelpTip({
     <Tooltip>
       <TooltipTrigger asChild>
         <button
+          {...props}
           type="button"
           data-slot="help-tip"
           aria-label={label}
@@ -22,7 +25,6 @@ function HelpTip({
             "relative inline-grid size-4 place-items-center rounded-full border border-border-strong text-[10px] leading-none font-act text-muted-foreground outline-none after:absolute after:-inset-3 hover:border-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
             className
           )}
-          {...props}
         >
           ?
         </button>

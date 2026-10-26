@@ -1,13 +1,27 @@
+import type { VariantProps } from "class-variance-authority";
+
+import type { statusDotVariants } from "@/shared/ui/status-dot";
 import { parseBuildReport } from "../stages/build-report";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { FlowState } from "../state/stage";
 
-/** Visual weight for the collapsed console handle's status text */
-export type ConsoleStatusTone = "idle" | "success" | "error";
+type StatusDotVariant = NonNullable<
+  VariantProps<typeof statusDotVariants>["variant"]
+>;
+
+/** Its argument, accepted only if every member is a `StatusDot` variant */
+type DotVariants<T extends StatusDotVariant> = T;
+
+/** Which `StatusDot` variant the console strip shows, and whether its text
+ * reads as an error. tsc fails here if the dot drops one of them (an
+ * `Extract` would drop the tone too, silently). */
+export type ConsoleStatusTone = DotVariants<
+  "idle" | "running" | "success" | "error"
+>;
 
 export interface ConsoleStatus {
   /** e.g. `building...`, `last build \u00b7 3.4s \u00b7 ok`, or `""`
-   * before the first build */
+   * before the first build, when the tone is `"idle"` */
   text: string;
   tone: ConsoleStatusTone;
 }
@@ -17,7 +31,7 @@ const buildTime = (ms: number | null) =>
   ms === null ? null : `${(ms / 1000).toFixed(1)}s`;
 
 /**
- * The collapsed console handle's status line, derived from `PgFlow.state`
+ * The console strip's status line, derived from `PgFlow.state`
  * plus (only on a failed build) the first diagnostic code out of
  * `PgBuildOutput.latest` via `parseBuildReport`.
  *
@@ -31,9 +45,9 @@ const buildTime = (ms: number | null) =>
  * the last build's result, then nothing before the first build.
  */
 export const describeConsoleStatus = (flow: FlowState): ConsoleStatus => {
-  if (flow.build === "running") return { text: "building...", tone: "idle" };
+  if (flow.build === "running") return { text: "building...", tone: "running" };
   if (flow.deploy === "running") {
-    return { text: "deploying...", tone: "idle" };
+    return { text: "deploying...", tone: "running" };
   }
   if (flow.deploy === "failed") {
     return { text: "deploy failed", tone: "error" };

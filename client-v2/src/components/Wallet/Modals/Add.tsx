@@ -1,11 +1,12 @@
 import { useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
 import Input from "../../Input";
-import Modal from "../../Modal";
-import Text from "../../Text";
-import { Info } from "../../Icons";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { ModalFrame } from "@/widgets/overlays";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet, PgWeb3 } from "../../../utils";
 
 export const Add = () => {
@@ -18,7 +19,8 @@ export const Add = () => {
   const [error, setError] = useState("");
 
   return (
-    <Modal
+    <ModalFrame
+      name="wallet-add"
       title
       buttonProps={{
         text: "Create",
@@ -41,16 +43,22 @@ export const Add = () => {
           />
         </InputWrapper>
 
-        <WarningTextWrapper>
-          <Text icon={<Info color="info" />}>
+        <Callout variant="info" className="mt-4">
+          <InfoIcon />
+          <CalloutDescription>
             Saving the keypair will allow you to recover the wallet.
-          </Text>
-        </WarningTextWrapper>
-        <Button onClick={() => PgWallet.export({ name, keypair })}>
+          </CalloutDescription>
+        </Callout>
+        <AsyncButton
+          type="button"
+          variant="outline"
+          onClick={() => PgWallet.export({ name, keypair })}
+          onError={reportButtonFailure("save the keypair")}
+        >
           Save keypair
-        </Button>
+        </AsyncButton>
       </MainContent>
-    </Modal>
+    </ModalFrame>
   );
 };
 
@@ -78,18 +86,6 @@ const Desc = styled.span`
     color: ${theme.colors.default.textSecondary};
     margin-top: 0.5rem;
   `}
-`;
-
-const WarningTextWrapper = styled.div`
-  margin-top: 1rem;
-  display: flex;
-  align-items: center;
-
-  & svg {
-    height: 2rem;
-    width: 2rem;
-    margin-right: 1rem;
-  }
 `;
 
 const InputWrapper = styled.div`

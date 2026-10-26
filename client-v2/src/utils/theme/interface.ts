@@ -1,9 +1,6 @@
 import { StandardProperties } from "csstype";
 import { ITerminalOptions as XtermOptions } from "xterm";
 
-import { ButtonKind } from "../../components/Button";
-import { MenuKind } from "../../components/Menu";
-import { TextKind } from "../../components/Text";
 import { AllRequired, ChildRequired, NestedRequired } from "../types";
 
 /** Playground theme */
@@ -85,9 +82,6 @@ export interface ThemeParam {
 
   /** Override the component defaults */
   components?: {
-    /** Button component */
-    button?: OverridableComponent<ButtonKind>;
-
     /** Card component */
     card?: DefaultComponent;
 
@@ -149,7 +143,10 @@ export interface ThemeParam {
         };
       } & Pick<StandardProperties, "borderColor">;
 
-      /** Tooltip or widget component */
+      /**
+       * Tooltip or widget component: Monaco's hover, suggest and dropdown
+       * widgets read it. It stays though the design system's tooltip does not.
+       */
       tooltip?: BgAndColor & {
         selectedBg?: Bg;
         selectedColor?: Color;
@@ -164,27 +161,6 @@ export interface ThemeParam {
 
     /** Markdown component */
     markdown?: DefaultComponent & { subtleBg?: Bg };
-
-    /** Menu component */
-    menu?: OverridableComponent<MenuKind>;
-
-    /** Modal component */
-    modal?: ExtendibleComponent<"backdrop" | "top" | "content" | "bottom">;
-
-    /** Progress bar component */
-    progressbar?: ExtendibleComponent<"indicator">;
-
-    /** Select component */
-    select?: ExtendibleComponent<
-      | "control"
-      | "menu"
-      | "option"
-      | "singleValue"
-      | "input"
-      | "groupHeading"
-      | "dropdownIndicator"
-      | "indicatorSeparator"
-    >;
 
     /** Skeleton component */
     skeleton?: DefaultComponent & {
@@ -224,16 +200,15 @@ export interface ThemeParam {
       };
     }>;
 
-    /** Text component */
-    text?: OverridableComponent<TextKind>;
-
-    /** Notification toast component */
-    toast?: ExtendibleComponent<"progress" | "closeButton">;
-
     /** Topbar component (e.g. top section of primary main view) */
     topbar?: DefaultComponent;
 
-    /** Tooltip component */
+    /**
+     * Tooltip component. The design system's tooltip no longer reads it, but
+     * `Settings`, `Build`, `Deploy` and `Stepper` still read `tooltip.bg` for
+     * parts that are not tooltips, so the section stays until the global
+     * reset (ui-migration 5.24).
+     */
     tooltip?: DefaultStyles & { bgSecondary?: Bg };
 
     /** Tutorial component */
@@ -265,12 +240,12 @@ export interface ThemeParam {
           /** Send section foldable title text */
           title?: DefaultComponent;
           /** Expanded send component */
-          expanded?: ExtendibleComponent<"input" | "sendButton">;
+          expanded?: ExtendibleComponent<"input">;
         }>;
         /** Transaction history section */
         transactions?: ExtendibleComponent<{
           /** Transactions title */
-          title?: ExtendibleComponent<"text" | "refreshButton">;
+          title?: ExtendibleComponent<"text">;
           /** Transactions table */
           table?: ExtendibleComponent<{
             /** Transactions table header */
@@ -301,9 +276,7 @@ export interface ThemeParam {
             /** Resources title */
             title?: DefaultComponent;
             /** Resource card */
-            card?: ExtendibleComponent<
-              "image" | "title" | "description" | "button"
-            >;
+            card?: ExtendibleComponent<"image" | "title" | "description">;
           }>;
           /** Tutorials section */
           tutorials?: ExtendibleComponent<"title" | "card">;
@@ -448,18 +421,11 @@ type DefaultComponents =
 type ExtendibleComponents =
   | "editor"
   | "markdown"
-  | "modal"
-  | "progressbar"
-  | "select"
   | "tabs"
   | "terminal"
-  | "toast"
   | "tutorial"
   | "uploadArea"
   | "wallet";
-
-/** Components that use `OverridableComponent` type */
-type OverridableComponents = "button" | "menu" | "text";
 
 /** Theme to be used while setting the defaults internally */
 export type ThemeInternal = Omit<ImportableTheme, "import"> &
@@ -487,13 +453,6 @@ export type Theme<
 } & {
   // Extendible components
   components: AllRequired<Pick<C, ExtendibleComponents>>;
-} & {
-  // Overridable components
-  components: ChildRequired<
-    Pick<C, OverridableComponents>,
-    OverridableComponents,
-    "default"
-  >;
 } & {
   // All views
   views: AllRequired<V>;
@@ -551,16 +510,6 @@ type ExtendibleComponent<
 } & (T extends string
   ? { [K in U extends any ? keyof U : never]?: DefaultComponent }
   : U);
-
-/** A component with multiple kinds */
-type OverridableComponent<T extends string> = {
-  /** Default StandardProperties values of the Button component */
-  default?: DefaultComponent;
-  /** Override the defaults with specificity */
-  overrides?: {
-    [K in T]?: DefaultComponent;
-  };
-};
 
 /** StandardProperties background */
 type Bg = string;

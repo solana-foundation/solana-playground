@@ -1,7 +1,7 @@
 import { FC } from "react";
 import styled, { css } from "styled-components";
 
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import { Warning } from "../../../../../components/Icons";
 import { PgExplorer } from "../../../../../utils";
 
@@ -24,7 +24,8 @@ export const ReplaceItem: FC<React.PropsWithChildren<ReplaceItemProps>> = ({
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="replace-item"
       title
       buttonProps={{
         text: "Replace",
@@ -40,7 +41,7 @@ export const ReplaceItem: FC<React.PropsWithChildren<ReplaceItemProps>> = ({
           <Desc>This action is irreversable.</Desc>
         </ContentText>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

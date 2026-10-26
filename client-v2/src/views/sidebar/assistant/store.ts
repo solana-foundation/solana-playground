@@ -16,6 +16,7 @@ import {
   MAX_MESSAGES_PER_THREAD,
   PgChatStorage,
 } from "../../../features/persistence/model/chat-storage";
+import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
 import type { Disposable } from "../../../utils";
 import type { McpServerEntry, McpTool } from "./grounding";
@@ -164,6 +165,18 @@ export const KEY_NOT_FORGOTTEN =
   "Your key could not be removed from this tab's storage. Close this tab to " +
   "remove it.";
 
+/**
+ * Shown on a thread that could not be read. Its file may still be recoverable
+ * by hand, so nothing is written over it -- which means nothing typed here is
+ * kept either, and the user has to be told.
+ */
+export const THREAD_NOT_SAVED =
+  "This conversation could not be read from this device's storage, so new " +
+  "messages here are not saved.";
+
+/** Whether the open thread may be written, and why not -- see `_writes` */
+type ThreadWrites = "open" | "reading" | "unreadable";
+
 /** Which backend the panel is talking to, and what it needs to reach it */
 export interface Connection {
   id: ProviderId;
@@ -191,6 +204,19 @@ export type AssistantStatus =
 
 const makeId = uuid;
 const now = () => new Date().toISOString();
+
+let lastCreated = 0;
+
+/**
+ * When a new item is made: now, but strictly later than the item made before
+ * it in this tab. Items are ordered by `createdAt` wherever threads merge
+ * (`mergeThreads`), and a tie falls to the id, which is random, so a message
+ * and the reply started in the same millisecond came back either way round.
+ */
+const created = () => {
+  lastCreated = Math.max(Date.now(), lastCreated + 1);
+  return new Date(lastCreated).toISOString();
+};
 
 /**
  * Mark an existing item as changed now.
@@ -254,7 +280,7 @@ export class PgAssistant {
     return !!PgAssistant._connection;
   }
 
-  /** Whether the backend picker is open on top of an existing connection */
+  /** Whether Connect a model is open; reconnects stand down while it is */
   static get isPickingBackend() {
     return PgAssistant._pickingBackend;
   }
@@ -262,13 +288,14 @@ export class PgAssistant {
   /**
    * Choose a backend for this tab.
    *
-   * Re-picking the current one is a no-op beyond closing the picker; switching
+   * Re-picking the current one keeps the conversation and marks Connect a
+   * model closed; switching
    * to a different one starts a new conversation, because the history lives
    * inside the provider and the new one cannot see the old transcript.
    *
    * Connecting when nothing is connected is *not* a switch, and must not reset
    * anything. The live connection starts empty after every reload, and by the
-   * time one is made -- the user's pick, or `Connect`'s reconnect on load from
+   * time one is made -- the user's pick, or `useTurn`'s reconnect on load from
    * `remembered-backend` -- `chat-thread` may already have restored this
    * workspace's conversation from storage. Treating that as a switch cleared
    * the restored thread on every single reload.
@@ -298,30 +325,58 @@ export class PgAssistant {
     PgAssistant._emitOnly();
   }
 
+  /**
+   * Switch the model or effort on the connected backend, keeping the thread.
+   *
+   * Does not `clear`, unlike `connect` with a different connection: the
+   * provider for the next turn is rebuilt from what is rendered (`useTurn`
+   * compares connection identity), so the new settings apply to the
+   * next turn and the transcript on screen stays the history it works from.
+   * Remembered as `connect` remembers, so a reload of this tab keeps the new
+   * model and effort. `_emitOnly` for the same reason as `connect`: nothing
+   * here is the user writing to the conversation.
+   *
+   * @throws when `canTune(next)` is false
+   */
+  static tune(next: Connection) {
+    if (!PgAssistant.canTune(next)) {
+      throw new Error("tune changes model or effort, not the backend");
+    }
+    PgAssistant._connection = next;
+    rememberBackend(next);
+    PgAssistant._emitOnly();
+  }
+
+  /** Whether `tune(next)` would take it: the connected backend, with its key */
+  static canTune(next: Connection) {
+    const current = PgAssistant._connection;
+    return (
+      !!current && current.id === next.id && current.apiKey === next.apiKey
+    );
+  }
+
   /** Whether connecting with these settings would keep the conversation */
   static isCurrent(next: Connection) {
     return isSame(PgAssistant._connection, next);
   }
 
-  /** Reopen the picker, keeping the conversation in case the user comes back */
+  /** Mark Connect a model open, keeping the conversation */
   static pickBackend() {
     PgAssistant._pickingBackend = true;
     PgAssistant._emit();
   }
 
-  /** Whether the connection is the default backend while nobody is signed in */
+  /**
+   * Whether the connection is the default backend while nobody is signed in.
+   * `/api/agent` refuses every turn then, so `useTurn` treats it as nothing
+   * connected and a send opens Connect a model, which offers sign-in.
+   */
   static get needsSignIn() {
     return isDefaultBackend(PgAssistant._connection?.id) && !PgSession.get();
   }
 
-  /**
-   * Close the picker without changing anything.
-   *
-   * Refused while `needsSignIn`: every turn would get the 401 refusal, and a
-   * refresh of an already null session fires no change to reopen the picker.
-   */
+  /** Mark Connect a model closed without changing anything */
   static keepBackend() {
-    if (PgAssistant.needsSignIn) return;
     PgAssistant._pickingBackend = false;
     PgAssistant._emit();
   }
@@ -329,7 +384,7 @@ export class PgAssistant {
   /**
    * Drop the backend and the key, and clear the conversation with it.
    *
-   * What the chat header's Forget key button does. If the key could not be
+   * What Forget key in the assistant head's More does. If the key could not be
    * removed from this tab's storage, a notice says how to get rid of it.
    */
   static disconnect() {
@@ -346,7 +401,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "notice",
       id: makeId(),
-      createdAt: now(),
+      createdAt: created(),
       text: KEY_NOT_FORGOTTEN,
     });
     PgAssistant._emitOnly();
@@ -473,7 +528,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "user",
       id: makeId(),
-      createdAt: now(),
+      createdAt: created(),
       text,
     });
     PgAssistant._emit();
@@ -484,14 +539,14 @@ export class PgAssistant {
    * assistant" on a build error card.
    *
    * The panel itself owns the actual send (its provider lives in a ref
-   * inside `Chat`), so this only notifies; it does not append a message
+   * inside `useTurn`), so this only notifies; it does not append a message
    * itself.
    *
    * Observers subscribe too and never send: `Flow` reopens the panel when it
-   * is collapsed, `Assistant` switches to the chat tab. `Chat` is the only
+   * is collapsed, `Assistant` switches to the chat tab. `useTurn` is the only
    * subscriber that can act on a request, so with none registered the request
    * is buffered in `_pendingPrompt` until one mounts a moment later and claims
-   * it -- which is exactly the collapsed-panel and other-tab cases.
+   * it -- which is exactly the collapsed-panel case.
    *
    * @param text the prompt to send
    * @param opts `send: false` leaves it in the composer for the user to edit,
@@ -548,7 +603,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "assistant",
       id,
-      createdAt: now(),
+      createdAt: created(),
       text: "",
       ...(origin ? { origin } : {}),
     });
@@ -579,7 +634,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "tool",
       id: makeId(),
-      createdAt: now(),
+      createdAt: created(),
       label,
     });
     PgAssistant._emit();
@@ -589,7 +644,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "notice",
       id: makeId(),
-      createdAt: now(),
+      createdAt: created(),
       text,
     });
     PgAssistant._emit();
@@ -599,7 +654,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "error",
       id: makeId(),
-      createdAt: now(),
+      createdAt: created(),
       text: redactKey(text, PgAssistant._connection?.apiKey),
     });
     PgAssistant._emit();
@@ -625,7 +680,7 @@ export class PgAssistant {
     PgAssistant._items.push({
       kind: "approval",
       id,
-      createdAt: now(),
+      createdAt: created(),
       request,
       status: "pending",
     });
@@ -700,7 +755,10 @@ export class PgAssistant {
    */
   static clear() {
     PgAssistant._denyPending();
-    PgAssistant._items = [];
+    // Not while a read is out: what is rendered then is only what was typed
+    // during it, written nowhere yet, and the read adopts it from this very
+    // list -- a new one would leave it, and anything typed after, unkept
+    if (PgAssistant._writes !== "reading") PgAssistant._items = [];
     PgAssistant._status = "idle";
     PgAssistant._emitOnly();
   }
@@ -708,6 +766,14 @@ export class PgAssistant {
   /** Which thread is open, or `null` before one has been chosen */
   static get threadId() {
     return PgAssistant._threadId;
+  }
+
+  /**
+   * Whether the open thread could not be read, so nothing typed into it is
+   * saved. The panel shows `THREAD_NOT_SAVED` while it is.
+   */
+  static get unsaved() {
+    return PgAssistant._writes === "unreadable";
   }
 
   /**
@@ -726,7 +792,10 @@ export class PgAssistant {
 
     PgAssistant._denyPending();
     PgAssistant._threadId = null;
-    PgAssistant._readOnly = false;
+    // A read still out for the closed thread is stale from here on, even if
+    // the same thread opens again before it lands
+    PgAssistant._loadSeq++;
+    PgAssistant._writes = "open";
     PgAssistant._items = [];
     PgAssistant._status = "idle";
     PgAssistant._emitOnly();
@@ -786,30 +855,101 @@ export class PgAssistant {
 
     PgAssistant._denyPending();
     PgAssistant._threadId = threadId;
-    PgAssistant._items = [];
+    const seq = ++PgAssistant._loadSeq;
+    // Kept by reference: messages sent during the read are pushed onto it,
+    // and it is what holds them if the read is overtaken before it lands
+    const gap: ChatItem[] = [];
+    PgAssistant._items = gap;
     PgAssistant._status = "idle";
+    // Closed to writes until the read lands. `_items` is a stand-in for the
+    // thread until then, and any `_emit` in the gap -- MCP discovery on a
+    // reload, say -- would write it over the stored thread, behind a read
+    // that still returns the old content: memory right, storage `[]`.
+    // Messages sent meanwhile are adopted when the read lands, and written
+    // unless it failed.
+    PgAssistant._writes = "reading";
     PgAssistant._emitOnly();
 
+    // After this thread's queued writes, such as what `_keepOvertaken` kept
+    // for it: a read issued first would come back without them, and the next
+    // write from memory would replace the file that had them. Only this
+    // thread's, so another thread's write that is slow, or never settles,
+    // does not hold a load with nothing of its own queued behind it
+    await PgAssistant._afterThreadWrites(threadId);
     const items = await PgChatStorage.read(threadId);
-    if (PgAssistant._threadId !== threadId) return;
+    // By load, not by thread id: A -> B -> A faster than a read leaves the
+    // same id open, and the first read passing for the current one dropped
+    // what was typed in its gap and handed the second read its whole thread
+    // to adopt, so every item showed twice
+    if (PgAssistant._loadSeq !== seq) {
+      PgAssistant._keepOvertaken(threadId, [...orphans, ...gap]);
+      return;
+    }
 
     // A thread that could not be read renders as empty -- there is nothing
     // else the panel can show -- but it must not be *persisted* as empty. The
     // next `_persist()` would write this back over a file that may still be
     // recoverable, so the thread stays closed to writes until it reads
-    // cleanly. `__pgChatStorage.lastFailure` says why. Set before the emit
-    // below, which is where `_persist` reads it.
-    PgAssistant._readOnly = items === null;
+    // cleanly, and the panel says so (`unsaved`).
+    // `__pgChatStorage.lastFailure` says why. A clean read is also what opens
+    // the thread to writes again, closed since the read began. Set before the
+    // emit below, which is where `_persist` reads it.
+    PgAssistant._writes = items === null ? "unreadable" : "open";
 
     // Whatever is in `_items` now arrived during the read, for this thread
     const adopted = [...orphans, ...PgAssistant._items];
     PgAssistant._items = [...(items ?? []), ...adopted];
     // `_emit` rather than `_emitOnly` when something was adopted: those
-    // messages have never been written down under this thread. On a read-only
-    // thread `_persist` declines regardless, so they stay on screen without
-    // overwriting a file that may still be recoverable.
+    // messages have never been written down under this thread. On an
+    // unreadable thread `_persist` declines regardless, so they stay on
+    // screen without overwriting a file that may still be recoverable.
     if (adopted.length) PgAssistant._emit();
     else PgAssistant._emitOnly();
+  }
+
+  /**
+   * Keep what was typed during a read that was overtaken before it landed.
+   *
+   * With writes closed it was never written, and the close or the next load
+   * took it off screen: it belongs to `threadId`, so it is not dropped.
+   *
+   * - The same thread is open again: it goes onto what is rendered, where
+   *   that load adopts it, or writes it now if its read has landed.
+   * - Another thread, or none, is open: it is written after what is stored
+   *   by then, on the write queue.
+   * - The thread could not be read: nothing is written over it, and the loss
+   *   is reported, since nothing else would say so.
+   */
+  private static _keepOvertaken(threadId: string, unwritten: ChatItem[]) {
+    if (!unwritten.length) return;
+
+    if (PgAssistant._threadId === threadId) {
+      // In place, in the order they were typed: a newer load of this thread
+      // may still hold this list, and what was typed during it is newer
+      const all = mergeThreads(PgAssistant._items, unwritten);
+      PgAssistant._items.splice(0, PgAssistant._items.length, ...all);
+      PgAssistant._emit();
+      return;
+    }
+
+    // Merged into the thread as it is when the write's turn comes, not into
+    // the copy this read saw: two overtaken reads of one thread saw the same
+    // copy, and writing each one's own let the second replace the first
+    PgAssistant._enqueue(threadId, async () => {
+      const stored = await PgChatStorage.read(threadId);
+      if (stored === null) {
+        // `report` appends "failed" to this
+        report(
+          `keep ${unwritten.length} message(s) typed while ${threadId} was unreadable`,
+          null
+        );
+        return;
+      }
+      const known = new Set(stored.map((item) => item.id));
+      if (unwritten.some((item) => !known.has(item.id))) {
+        await PgChatStorage.write(threadId, mergeThreads(stored, unwritten));
+      }
+    });
   }
 
   /**
@@ -897,14 +1037,21 @@ export class PgAssistant {
   private static readonly _promptSenders = new Set<
     (request: PromptRequest) => void
   >();
-  // Set by `requestPrompt` when `Chat` is not around to receive it live;
+  // Set by `requestPrompt` when `useTurn` is not around to receive it live;
   // claimed and cleared by the next `onDidRequestPrompt` subscriber.
   private static _pendingPrompt: PromptRequest | null = null;
 
   private static _threadId: string | null = null;
-  /** Set when the open thread failed to read, cleared when one reads cleanly */
-  private static _readOnly = false;
+  /**
+   * Whether the open thread may be written: not while its read is out, nor
+   * after that read failed, since in both cases `_items` is not the thread
+   */
+  private static _writes: ThreadWrites = "open";
+  /** Bumped by every load and close, so a read can tell it was overtaken */
+  private static _loadSeq = 0;
   private static _lastWrite: Promise<void> = Promise.resolve();
+  /** Each thread's latest step on the write queue, while it is out */
+  private static readonly _threadWrites = new Map<string, Promise<void>>();
   /** The thread read `loadThread` has out, if any */
   private static _loading: { threadId: string; done: Promise<void> } | null =
     null;
@@ -929,20 +1076,59 @@ export class PgAssistant {
    */
   private static _persist() {
     if (!PgAssistant._threadId) return;
-    // The open thread could not be read, so what is in memory is not the
-    // thread -- it is the empty list the panel fell back to. Writing it back
-    // would replace a file that may still be recoverable by hand with
-    // nothing, which is the same mistake as reporting it uploaded.
-    if (PgAssistant._readOnly) return;
+    // The open thread is still being read, or could not be: either way what
+    // is in memory is not the stored thread, and writing it back would
+    // replace that thread, or a file that may still be recoverable by hand
+    if (PgAssistant._writes !== "open") return;
 
-    // Chained rather than fired independently, so writes cannot land out of
-    // order -- two quick messages must not race into the second overwriting
-    // the first with a shorter list
-    const threadId = PgAssistant._threadId;
-    const items = [...PgAssistant._items];
-    PgAssistant._lastWrite = PgAssistant._lastWrite
-      .catch(() => {})
-      .then(() => PgChatStorage.write(threadId, items));
+    PgAssistant._queueWrite(PgAssistant._threadId, [...PgAssistant._items]);
+  }
+
+  /**
+   * Chained rather than fired independently, so writes cannot land out of
+   * order -- two quick messages must not race into the second overwriting
+   * the first with a shorter list
+   */
+  private static _queueWrite(threadId: string, items: readonly ChatItem[]) {
+    PgAssistant._enqueue(threadId, () => PgChatStorage.write(threadId, items));
+  }
+
+  /**
+   * Put a step for `threadId` on the write queue, and remember it as that
+   * thread's latest until it settles, for `_afterThreadWrites`
+   */
+  private static _enqueue(threadId: string, step: () => Promise<void>) {
+    const done = PgAssistant._afterWrites().then(step);
+    PgAssistant._lastWrite = done;
+    PgAssistant._threadWrites.set(threadId, done);
+    // Both ways rather than `finally`, whose own promise would reject
+    // unhandled with `done`; a failure is `_settle`'s to report
+    const forget = () => {
+      if (PgAssistant._threadWrites.get(threadId) === done) {
+        PgAssistant._threadWrites.delete(threadId);
+      }
+    };
+    void done.then(forget, forget);
+  }
+
+  /** Once `threadId`'s queued writes have settled; at once if it has none */
+  private static async _afterThreadWrites(threadId: string) {
+    const pending = PgAssistant._threadWrites.get(threadId);
+    if (pending) await PgAssistant._settle(pending);
+  }
+
+  /** Once every write queued so far has settled, however it went */
+  private static _afterWrites() {
+    return PgAssistant._settle(PgAssistant._lastWrite);
+  }
+
+  private static _settle(write: Promise<void>) {
+    return write.catch((e) => {
+      // Nothing on the queue rejects today: `PgChatStorage` catches and
+      // reports its own failures. If something ever did, it is reported here
+      // and the queue goes on, since one failed write must not stop the rest
+      report("chat write queue", e);
+    });
   }
 
   /** Notify and write back. Every mutator goes through here. */
@@ -956,12 +1142,6 @@ export class PgAssistant {
     for (const cb of PgAssistant._listeners) cb();
   }
 }
-
-// The default backend needs a session, and only the picker offers sign-in;
-// the connection stays remembered so signing in again reconnects it
-PgSession.onDidChange(() => {
-  if (PgAssistant.needsSignIn) PgAssistant.pickBackend();
-});
 
 // A handle on the panel's state for the browser console, and for the e2e tests
 // that cover thread persistence -- sending a message for real would need a
@@ -981,6 +1161,7 @@ if (import.meta.vitest) {
     let MIN_REDACTED_KEY_LENGTH: typeof import("./model/redact-key").MIN_REDACTED_KEY_LENGTH;
     let REDACTED_KEY: typeof import("./model/redact-key").REDACTED_KEY;
     let isDefaultBackendRemembered: typeof import("./model/remembered-backend").isDefaultBackendRemembered;
+    let rememberedConnection: typeof import("./model/remembered-backend").rememberedConnection;
     let truncationNoticeId: typeof import("../../../features/persistence/model/chat-storage").truncationNoticeId;
     let PgFs: typeof import("@/utils/explorer/fs").PgFs;
     let storedValues: typeof import("../../../test-utils/stored-values").storedValues;
@@ -988,7 +1169,7 @@ if (import.meta.vitest) {
       ({ MIN_REDACTED_KEY_LENGTH, REDACTED_KEY } = await import(
         "./model/redact-key"
       ));
-      ({ isDefaultBackendRemembered } = await import(
+      ({ isDefaultBackendRemembered, rememberedConnection } = await import(
         "./model/remembered-backend"
       ));
       ({ truncationNoticeId } = await import(
@@ -1003,6 +1184,10 @@ if (import.meta.vitest) {
 
     /** Storage writes are fired and forgotten; this waits for them to land */
     const settled = () => PgAssistant.whenPersisted();
+
+    /** The texts of a stored thread, in order */
+    const storedTexts = (items: readonly ChatItem[] | null) =>
+      (items ?? []).map((i) => (i as { text?: string }).text);
 
     /** The id of the approval card added most recently */
     const latestCard = () =>
@@ -1092,6 +1277,24 @@ if (import.meta.vitest) {
         PgAssistant.addUserMessage("second");
 
         expect(PgAssistant.items[0].id).not.toBe(first);
+      });
+
+      it("gives items made in one millisecond increasing times", () => {
+        // A tie in `createdAt` is ordered by id, which is random, so a merge put
+        // a message and the reply started in the same millisecond either way
+        vi.useFakeTimers({ toFake: ["Date"] });
+        try {
+          vi.setSystemTime(new Date("2026-03-01T00:00:00.000Z"));
+          PgAssistant.addUserMessage("asked");
+          PgAssistant.startAssistantMessage();
+
+          const [asked, reply] = PgAssistant.items;
+          expect(Date.parse(reply.createdAt)).toBeGreaterThan(
+            Date.parse(asked.createdAt)
+          );
+        } finally {
+          vi.useRealTimers();
+        }
       });
 
       it("stamps every kind of item, not just user messages", () => {
@@ -1493,73 +1696,52 @@ if (import.meta.vitest) {
       const signedIn = (name: string | null) =>
         PgSession.refreshWith({ id: "u1", name, image: null, login: null });
 
-      // Not `PgSession.reset()`: it drops every listener, the store's included.
-      // Disconnecting first, so ending the session here cannot reach the store.
-      const signedOutAndDisconnected = async () => {
+      const signedOutAndDisconnected = () => {
         PgAssistant.disconnect();
         localStorage.clear();
         sessionStorage.clear();
-        await PgSession.refreshWith(null);
+        PgSession.reset();
       };
 
       beforeEach(signedOutAndDisconnected);
       afterEach(signedOutAndDisconnected);
 
-      it("returns a default-backend user to the picker when the session ends", async () => {
+      it("needs sign-in for the default backend once the session ends", async () => {
         await signedIn(null);
         PgAssistant.connect({ id: "default", apiKey: "" });
+        expect(PgAssistant.needsSignIn).toBe(false);
 
         await PgSession.refreshWith(null);
 
-        expect(PgAssistant.isPickingBackend).toBe(true);
+        expect(PgAssistant.needsSignIn).toBe(true);
+        // Nothing opens on its own: the next send asks (`useTurn`)
+        expect(PgAssistant.isPickingBackend).toBe(false);
       });
 
-      it("leaves a key-based backend alone when the session ends", async () => {
+      it("never needs sign-in for a key-based backend", async () => {
         await signedIn(null);
         PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
 
         await PgSession.refreshWith(null);
 
-        expect(PgAssistant.isPickingBackend).toBe(false);
+        expect(PgAssistant.needsSignIn).toBe(false);
+        // Signing out leaves the backend and its key where they were
+        expect(PgAssistant.connection).toMatchObject({
+          id: "openai",
+          apiKey: "sk-test",
+        });
       });
 
-      it("stays in chat when a signed-in user's profile refreshes", async () => {
-        await signedIn(null);
-        PgAssistant.connect({ id: "default", apiKey: "" });
-
-        // A changed field notifies listeners although the user is still signed in
-        await signedIn("Ada");
-
-        expect(PgAssistant.isPickingBackend).toBe(false);
-      });
-
-      it("keeps the picker open while the default backend has no session", async () => {
+      it("closes Connect a model even while the default backend has no session", async () => {
         await signedIn(null);
         PgAssistant.connect({ id: "default", apiKey: "" });
         await PgSession.refreshWith(null);
-
-        PgAssistant.keepBackend();
-
-        expect(PgAssistant.isPickingBackend).toBe(true);
-      });
-
-      it("closes the picker for the default backend once signed in again", async () => {
-        await signedIn(null);
-        PgAssistant.connect({ id: "default", apiKey: "" });
-        await PgSession.refreshWith(null);
-        await signedIn(null);
-
-        PgAssistant.keepBackend();
-
-        expect(PgAssistant.isPickingBackend).toBe(false);
-      });
-
-      it("closes the picker for a key-based backend with no session", async () => {
-        PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
         PgAssistant.pickBackend();
 
         PgAssistant.keepBackend();
 
+        // The dialog's cleanup ends the mark this way, and `openConnectDialog`
+        // opens nothing while it is set
         expect(PgAssistant.isPickingBackend).toBe(false);
       });
     });
@@ -1600,6 +1782,52 @@ if (import.meta.vitest) {
         await settled();
 
         expect(files.get("/.config/chats/t1.json")).toBe(corrupt);
+      });
+
+      it("says a thread it could not read is not being saved", async () => {
+        // Every message after a failed read stays in memory only; without this
+        // the panel looked like any other conversation while nothing was kept
+        const files = (PgFs as unknown as { __files: Map<string, string> })
+          .__files;
+        const corrupt = "{ not json";
+        files.set("/.config/chats/t1.json", corrupt);
+
+        await PgAssistant.loadThread("t1");
+        PgAssistant.addUserMessage("hi");
+        await settled();
+
+        expect(PgAssistant.unsaved).toBe(true);
+        expect(files.get("/.config/chats/t1.json")).toBe(corrupt);
+      });
+
+      it("still says so after the panel resets on a backend switch", async () => {
+        const files = (PgFs as unknown as { __files: Map<string, string> })
+          .__files;
+        files.set("/.config/chats/t1.json", "{ not json");
+        await PgAssistant.loadThread("t1");
+
+        // `clear` empties what is rendered; the thread is no more saved than before
+        PgAssistant.clear();
+
+        expect(PgAssistant.unsaved).toBe(true);
+      });
+
+      it("does not say so while a thread is only being read", async () => {
+        const loading = PgAssistant.loadThread("t1");
+        expect(PgAssistant.unsaved).toBe(false);
+        await loading;
+      });
+
+      it("stops saying so once the thread reads cleanly", async () => {
+        const files = (PgFs as unknown as { __files: Map<string, string> })
+          .__files;
+        files.set("/.config/chats/t1.json", "{ not json");
+        await PgAssistant.loadThread("t1");
+
+        files.delete("/.config/chats/t1.json");
+        await PgAssistant.loadThread("t1", true);
+
+        expect(PgAssistant.unsaved).toBe(false);
       });
 
       it("writes again once a thread reads cleanly", async () => {
@@ -1670,6 +1898,324 @@ if (import.meta.vitest) {
         // Adoption is for messages with no thread, never for another thread's
         expect(PgAssistant.items).toHaveLength(0);
         expect(await PgChatStorage.read("t2")).toHaveLength(0);
+      });
+
+      it("does not write over a thread while it is still being read", async () => {
+        // A reload restores the thread while the panel's mount effects land:
+        // MCP discovery calls `_emit` with nothing in the conversation changed.
+        // Landing mid-read, that wrote the empty list standing in for the thread
+        // over the stored one, behind a read that still returned it -- so memory
+        // held the conversation and storage held `[]` (HOO-2109)
+        await PgChatStorage.write("t1", [
+          {
+            kind: "user",
+            id: "55555555-5555-4555-8555-555555555555",
+            createdAt: at,
+            text: "remember me",
+          },
+        ]);
+
+        const loading = PgAssistant.loadThread("t1");
+        PgAssistant.setMcpTools("probe", []);
+        await loading;
+        await settled();
+
+        expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+          "remember me",
+        ]);
+
+        // And open to writes again once the read has landed
+        PgAssistant.addUserMessage("after");
+        await settled();
+        expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+          "remember me",
+          "after",
+        ]);
+      });
+
+      // Passes without the HOO-2109 fix too: it guards the adoption that fix
+      // relies on, since with writes closed nothing else would write the message
+      it("writes a message sent while the thread was being read, after the stored ones", async () => {
+        await PgChatStorage.write("t1", [
+          {
+            kind: "user",
+            id: "66666666-6666-4666-8666-666666666666",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+
+        const loading = PgAssistant.loadThread("t1");
+        PgAssistant.addUserMessage("sent mid-read");
+        await loading;
+        await settled();
+
+        expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+          "stored",
+          "sent mid-read",
+        ]);
+      });
+
+      it("keeps a message sent mid-read when the thread closes before the read lands", async () => {
+        await PgChatStorage.write("t1", [
+          {
+            kind: "user",
+            id: "77777777-7777-4777-8777-777777777777",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+
+        const loading = PgAssistant.loadThread("t1");
+        PgAssistant.addUserMessage("sent mid-read");
+        // A workspace switch or a sign-out, before the read is back
+        PgAssistant.closeThread();
+        await loading;
+        await settled();
+
+        expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+          "stored",
+          "sent mid-read",
+        ]);
+      });
+
+      it("does not write a message sent mid-read over a thread it could not read", async () => {
+        const files = (PgFs as unknown as { __files: Map<string, string> })
+          .__files;
+        const corrupt = "{ not json";
+        files.set("/.config/chats/t1.json", corrupt);
+
+        const loading = PgAssistant.loadThread("t1");
+        PgAssistant.addUserMessage("sent mid-read");
+        await loading;
+        await settled();
+
+        expect(files.get("/.config/chats/t1.json")).toBe(corrupt);
+        // Still on screen, with the panel saying it is not saved
+        expect(storedTexts(PgAssistant.items)).toEqual(["sent mid-read"]);
+        expect(PgAssistant.unsaved).toBe(true);
+      });
+
+      it("reads a reopened thread after the write that kept its overtaken message", async () => {
+        // Overtaken by a switch, A's message is queued behind B's writes. A reopen
+        // reading before that write was issued came back without it, and the next
+        // write from memory then replaced the file that had it
+        await PgChatStorage.write("tA", [
+          {
+            kind: "user",
+            id: "99999999-9999-4999-8999-999999999999",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+        // Each write waits on the gate in place when it is issued, so the queue
+        // can be held twice: behind B's write, then behind the kept message
+        const gates: Array<() => void> = [];
+        let hold: Promise<void> = Promise.resolve();
+        const holdWrites = () => {
+          hold = new Promise<void>((resolve) => gates.push(resolve));
+        };
+        const releaseAll = () => gates.forEach((resolve) => resolve());
+        const realWrite = PgChatStorage.write.bind(PgChatStorage);
+        const write = vi
+          .spyOn(PgChatStorage, "write")
+          .mockImplementation(async (threadId, items) => {
+            await hold;
+            return realWrite(threadId, items);
+          });
+
+        try {
+          await PgAssistant.loadThread("tB");
+          holdWrites();
+          PgAssistant.addUserMessage("in B");
+
+          // A's read is overtaken by going back to B, so its message is queued
+          const first = PgAssistant.loadThread("tA");
+          PgAssistant.addUserMessage("sent mid-read");
+          const backToB = PgAssistant.loadThread("tB", true);
+          // B's write must have taken the first gate before the second goes up
+          await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+          const releaseB = gates[0];
+          holdWrites();
+          releaseB();
+          await Promise.all([first, backToB]);
+
+          // Reopened while that write is still held
+          const reopened = PgAssistant.loadThread("tA");
+          releaseAll();
+          await reopened;
+          PgAssistant.addUserMessage("later");
+          await settled();
+        } finally {
+          releaseAll();
+          write.mockRestore();
+        }
+
+        expect(storedTexts(await PgChatStorage.read("tA"))).toEqual([
+          "stored",
+          "sent mid-read",
+          "later",
+        ]);
+      });
+
+      it("opens a thread while another thread's write is still out", async () => {
+        // Only this thread's own writes are waited for: a write of another thread
+        // that never settles used to hold every later load at "reading"
+        await PgChatStorage.write("tA", [
+          {
+            kind: "user",
+            id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+        let release = () => {};
+        const hold = new Promise<void>((resolve) => (release = resolve));
+        const realWrite = PgChatStorage.write.bind(PgChatStorage);
+        const write = vi
+          .spyOn(PgChatStorage, "write")
+          .mockImplementation(async (threadId, items) => {
+            await hold;
+            return realWrite(threadId, items);
+          });
+
+        try {
+          await PgAssistant.loadThread("tB");
+          PgAssistant.addUserMessage("in B");
+          await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+
+          void PgAssistant.loadThread("tA");
+          await vi.waitFor(() =>
+            expect(storedTexts(PgAssistant.items)).toEqual(["stored"])
+          );
+        } finally {
+          release();
+          write.mockRestore();
+        }
+      });
+
+      it("keeps what was typed mid-read across a backend switch", async () => {
+        // `clear` on a backend switch replaced the stand-in list, so messages
+        // typed after it were on no list an overtaken read could keep
+        await PgChatStorage.write("t1", [
+          {
+            kind: "user",
+            id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+
+        const loading = PgAssistant.loadThread("t1");
+        PgAssistant.addUserMessage("before the switch");
+        PgAssistant.clear();
+        PgAssistant.addUserMessage("after the switch");
+        PgAssistant.closeThread();
+        await loading;
+        await settled();
+
+        expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+          "stored",
+          "before the switch",
+          "after the switch",
+        ]);
+      });
+
+      it("puts messages kept from an overtaken read in the order they were typed", async () => {
+        vi.useFakeTimers({ toFake: ["Date"] });
+        try {
+          await PgChatStorage.write("t1", [
+            {
+              kind: "user",
+              id: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+              createdAt: at,
+              text: "stored",
+            },
+          ]);
+
+          vi.setSystemTime(new Date("2026-02-01T00:00:00.000Z"));
+          const first = PgAssistant.loadThread("t1");
+          PgAssistant.addUserMessage("earlier");
+          PgAssistant.closeThread();
+          const second = PgAssistant.loadThread("t1");
+          vi.setSystemTime(new Date("2026-02-01T00:00:01.000Z"));
+          PgAssistant.addUserMessage("later");
+          await Promise.all([first, second]);
+          await settled();
+
+          expect(storedTexts(PgAssistant.items)).toEqual([
+            "stored",
+            "earlier",
+            "later",
+          ]);
+          expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+            "stored",
+            "earlier",
+            "later",
+          ]);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it("keeps the messages of two overtaken reads of one thread", async () => {
+        // A -> B -> A -> C with a message typed in each read of A: both reads
+        // are overtaken, and writing each one's own snapshot let the second
+        // replace the first
+        await PgChatStorage.write("tA", [
+          {
+            kind: "user",
+            id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+
+        const first = PgAssistant.loadThread("tA");
+        PgAssistant.addUserMessage("first read");
+        const toB = PgAssistant.loadThread("tB");
+        const second = PgAssistant.loadThread("tA");
+        PgAssistant.addUserMessage("second read");
+        const toC = PgAssistant.loadThread("tC");
+        await Promise.all([first, toB, second, toC]);
+        await settled();
+
+        expect(storedTexts(await PgChatStorage.read("tA"))).toEqual([
+          "stored",
+          "first read",
+          "second read",
+        ]);
+      });
+
+      it("keeps a message sent mid-read when the same thread is reopened before the read lands", async () => {
+        // A -> B -> A faster than a read: the first read used to pass for the
+        // current one, since the thread id matched again. The message typed in
+        // its gap was dropped by the close, and the second read adopted the
+        // first's whole thread as though it had arrived mid-read: every item twice
+        await PgChatStorage.write("t1", [
+          {
+            kind: "user",
+            id: "88888888-8888-4888-8888-888888888888",
+            createdAt: at,
+            text: "stored",
+          },
+        ]);
+
+        const first = PgAssistant.loadThread("t1");
+        PgAssistant.addUserMessage("sent mid-read");
+        PgAssistant.closeThread();
+        const second = PgAssistant.loadThread("t1");
+        await Promise.all([first, second]);
+        await settled();
+
+        expect(storedTexts(PgAssistant.items)).toEqual([
+          "stored",
+          "sent mid-read",
+        ]);
+        expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
+          "stored",
+          "sent mid-read",
+        ]);
       });
 
       it("does not overwrite a thread when the panel resets on backend switch", async () => {
@@ -1846,6 +2392,98 @@ if (import.meta.vitest) {
         expect(
           JSON.stringify(await PgChatStorage.read("own-key"))
         ).not.toContain(KEY_NOT_FORGOTTEN);
+      });
+    });
+
+    describe("PgAssistant.tune", () => {
+      beforeEach(() => {
+        localStorage.clear();
+        sessionStorage.clear();
+        PgAssistant.disconnect();
+        PgAssistant.clear();
+      });
+
+      it("changes model and effort and keeps the thread", () => {
+        PgAssistant.connect({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-opus-4-8", effort: "medium" },
+        });
+        PgAssistant.addUserMessage("hello");
+
+        PgAssistant.tune({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
+        });
+
+        expect(PgAssistant.items).toHaveLength(1);
+        expect(PgAssistant.connection?.settings).toEqual({
+          model: "claude-sonnet-5-5",
+          effort: "high",
+        });
+      });
+
+      it("keeps the tuned model and effort for a reload of this tab", () => {
+        PgAssistant.connect({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-opus-4-8", effort: "medium" },
+        });
+
+        PgAssistant.tune({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
+        });
+
+        expect(rememberedConnection()).toEqual({
+          id: "anthropic",
+          apiKey: "sk-test",
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
+        });
+      });
+
+      it("refuses another backend and leaves the connection", () => {
+        PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+
+        expect(() =>
+          PgAssistant.tune({ id: "openai", apiKey: "sk-test" })
+        ).toThrow("tune changes model or effort, not the backend");
+        expect(PgAssistant.connection?.id).toBe("anthropic");
+      });
+
+      it("refuses another key", () => {
+        PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+
+        expect(() =>
+          PgAssistant.tune({ id: "anthropic", apiKey: "sk-other" })
+        ).toThrow("tune changes model or effort, not the backend");
+        expect(PgAssistant.connection?.apiKey).toBe("sk-test");
+      });
+
+      it("says beforehand which changes it takes", () => {
+        expect(
+          PgAssistant.canTune({ id: "anthropic", apiKey: "sk-test" })
+        ).toBe(false);
+        PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+
+        expect(
+          PgAssistant.canTune({ id: "anthropic", apiKey: "sk-test" })
+        ).toBe(true);
+        expect(
+          PgAssistant.canTune({ id: "anthropic", apiKey: "sk-other" })
+        ).toBe(false);
+        expect(PgAssistant.canTune({ id: "openai", apiKey: "sk-test" })).toBe(
+          false
+        );
+      });
+
+      it("refuses when nothing is connected", () => {
+        expect(() =>
+          PgAssistant.tune({ id: "anthropic", apiKey: "sk-test" })
+        ).toThrow("tune changes model or effort, not the backend");
+        expect(PgAssistant.isConnected).toBe(false);
       });
     });
   });

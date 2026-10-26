@@ -1,6 +1,7 @@
 import { PgCommon } from "../common";
 import { PgExplorer, TupleFiles } from "../explorer";
 import { PgWorkspace } from "../explorer/workspace";
+import { writeWorkspaceFile } from "../explorer/workspace-file";
 import { PgRouter } from "../router";
 import {
   createDerivable,
@@ -345,15 +346,14 @@ class _PgTutorial {
       }
 
       /**
-       * Save the file with the given storage data.
+       * Save the storage data with `writeWorkspaceFile`: a reload right after
+       * the write that creates the file would otherwise lose it, and with it
+       * the lesson's progress.
        *
        * @param data storage data
        */
       private async _writeFile(data: T) {
-        await PgExplorer.fs.writeFile(
-          PgTutorialStorage._PATH,
-          JSON.stringify(data)
-        );
+        await writeWorkspaceFile(PgTutorialStorage._PATH, JSON.stringify(data));
       }
 
       /** Relative path to the tutorial storage JSON file */

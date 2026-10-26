@@ -10,6 +10,8 @@ import {
 export const server = [
   createSetting({
     id: "server.endpoint",
+    // Not "Endpoint", which `connection.endpoint` would share
+    name: "Build server",
     description: "Build server URL",
     // The list lives beside the default so the two cannot disagree about
     // which host is Solana's and which is upstream's (D30)

@@ -1,25 +1,17 @@
-// The legacy button pulls in the utils barrel, whose generated globals exist
-// only once the app has booted; what the banner does on a press is all
-// that is under test, so a plain button stands in.
-vi.mock("../../../components/Button", () => ({
-  default: (props: {
-    children: React.ReactNode;
-    disabled?: boolean;
-    onClick?: () => void;
-  }) => (
-    <button disabled={props.disabled} onClick={props.onClick}>
-      {props.children}
-    </button>
-  ),
-}));
 // The resolve view loads Monaco, which jsdom cannot run; it is not opened
 vi.mock("../ui/ConflictResolver", () => ({ ConflictResolver: () => null }));
+// The banner binds its onError at render, before a test could spy on it
+const report = vi.hoisted(() => vi.fn());
+vi.mock("@/shared/lib/report-button-failure", () => ({
+  reportButtonFailure: vi.fn(() => report),
+}));
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 // `@types/mocha` also declares a global `it`, without `each`
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 import SyncBanner from "./SyncBanner";
 import {
@@ -34,21 +26,6 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
-
-/**
- * A theme that answers every key: the banner and the legacy button read
- * deep theme keys for their styles, none of which matters here, and the
- * real theme's module needs the utils barrel.
- */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
 
 describe("SyncBanner telemetry", () => {
   let container: HTMLDivElement;
@@ -73,13 +50,7 @@ describe("SyncBanner telemetry", () => {
     vi.spyOn(PgProjectSync, "resolve").mockResolvedValue(true);
     container = document.body.appendChild(document.createElement("div"));
     root = createRoot(container);
-    await act(async () =>
-      root.render(
-        <ThemeProvider theme={anyTheme}>
-          <SyncBanner />
-        </ThemeProvider>
-      )
-    );
+    await act(async () => root.render(<SyncBanner />));
   });
 
   afterEach(() => {
@@ -103,6 +74,20 @@ describe("SyncBanner telemetry", () => {
     ]);
     expect(PgProjectSync.resolve).toHaveBeenCalledWith("p1", answer);
   });
+
+  it("reports an answer that fails and leaves the prompt up", async () => {
+    const failure = new Error("offline");
+    vi.spyOn(PgProjectSync, "resolve").mockRejectedValue(failure);
+    const found = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Keep this version"
+    );
+    await act(async () => found!.click());
+
+    expect(reportButtonFailure).toHaveBeenCalledWith("apply your choice");
+    expect(report).toHaveBeenCalledWith(failure);
+    expect(container.querySelector('[role="alert"]')).not.toBeNull();
+    expect(found!.disabled).toBe(false);
+  });
 });
 
 describe("SyncBanner wording", () => {
@@ -120,13 +105,7 @@ describe("SyncBanner wording", () => {
     // The banner reads the conflict as it mounts, so each question is a mount
     act(() => root.unmount());
     root = createRoot(container);
-    await act(async () =>
-      root.render(
-        <ThemeProvider theme={anyTheme}>
-          <SyncBanner />
-        </ThemeProvider>
-      )
-    );
+    await act(async () => root.render(<SyncBanner />));
     return container.querySelector('[role="alert"] p')!.textContent;
   };
 

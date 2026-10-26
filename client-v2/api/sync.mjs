@@ -8,8 +8,10 @@
  * Deliberately plain ESM using raw Node request/response APIs, like the rest
  * of `api/` -- see `api/health.mjs` for why.
  */
-import { warnAboutMissingObservabilityIds } from "../src/features/api/server/observability.mjs";
-import { withObservability } from "../src/features/api/server/with-observability.mjs";
+import {
+  warnAboutMissingObservabilityIds,
+  withObservability,
+} from "../src/features/api/server.mjs";
 import {
   isConfigured,
   isEnabled,

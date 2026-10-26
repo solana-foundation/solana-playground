@@ -1,6 +1,8 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
+import { Badge } from "@/shared/ui/badge";
+import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
 import { callTool, listTools, McpUnreachableError } from "../grounding";
@@ -153,7 +155,9 @@ const ServerConsole = ({
     <Card>
       <Head>
         <Name>{server.name || server.id}</Name>
-        <Badge>{server.executor}</Badge>
+        <Badge variant="outline" className="shrink-0 font-mono">
+          {server.executor}
+        </Badge>
       </Head>
 
       {server.executor === "server" ? (
@@ -182,18 +186,20 @@ const ServerConsole = ({
           {tools.length > 0 && (
             <>
               <Label htmlFor={`mcp-tool-${server.id}`}>TOOL</Label>
-              <Picker
+              <NativeSelect
+                size="sm"
+                className="w-full [&_select]:font-mono [&_select]:text-xs"
                 id={`mcp-tool-${server.id}`}
                 value={selected ?? ""}
                 onChange={(ev) => pick(ev.target.value)}
               >
-                <option value="">Pick a tool…</option>
+                <NativeSelectOption value="">Pick a tool…</NativeSelectOption>
                 {tools.map((tool) => (
-                  <option key={tool.name} value={tool.name}>
+                  <NativeSelectOption key={tool.name} value={tool.name}>
                     {tool.name}
-                  </option>
+                  </NativeSelectOption>
                 ))}
-              </Picker>
+              </NativeSelect>
 
               {selected && (
                 <>
@@ -201,13 +207,14 @@ const ServerConsole = ({
                     {description}
                   </Description>
                   {descriptionIsLong && (
-                    <Disclosure
+                    <button
                       type="button"
                       aria-expanded={descriptionOpen}
                       onClick={() => setDescriptionOpen((open) => !open)}
+                      className="mt-1 cursor-pointer p-0 text-xs text-muted-foreground underline hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                     >
                       {descriptionOpen ? "Show less" : "Show more"}
-                    </Disclosure>
+                    </button>
                   )}
 
                   <Label htmlFor={`mcp-args-${server.id}`}>ARGUMENTS</Label>
@@ -265,17 +272,6 @@ const Name = styled.div`
   `}
 `;
 
-const Badge = styled.span`
-  ${({ theme }) => css`
-    flex-shrink: 0;
-    padding: 0.0625rem 0.375rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
-
 const Note = styled.div`
   ${({ theme }) => css`
     padding: 0.375rem 0 0;
@@ -295,19 +291,6 @@ const Label = styled.label`
   `}
 `;
 
-const Picker = styled.select`
-  ${({ theme }) => css`
-    width: 100%;
-    padding: 0.3125rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font: inherit;
-    font-size: ${theme.font.code.size.small};
-  `}
-`;
-
 const Description = styled.div<{ $clamped: boolean }>`
   ${({ theme, $clamped }) => css`
     padding-top: 0.375rem;
@@ -324,29 +307,6 @@ const Description = styled.div<{ $clamped: boolean }>`
       -webkit-line-clamp: 3;
       overflow: hidden;
     `}
-  `}
-`;
-
-const Disclosure = styled.button`
-  ${({ theme }) => css`
-    margin-top: 0.25rem;
-    padding: 0;
-    background: transparent;
-    border: none;
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    text-decoration: underline;
-    cursor: pointer;
-
-    &:hover {
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    &:focus-visible {
-      outline: 1px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
   `}
 `;
 

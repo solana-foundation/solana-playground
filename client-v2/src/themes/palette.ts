@@ -9,10 +9,7 @@ const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, term
   BG_RAISED = "var(--surface-raised)", // cards, inputs, menus
   BG_HOVER = "var(--surface-hover)",
   PRIMARY = "var(--primary)",
-  PRIMARY_HOVER = "var(--accent-fill-hover)",
-  ON_PRIMARY = "var(--primary-foreground)",
   SECONDARY = "var(--track-brand)",
-  GRADIENT = "var(--gradient-product)",
   TEXT_PRIMARY = "var(--text-primary)",
   TEXT_SECONDARY = "var(--text-secondary)",
   BORDER = "var(--border)",
@@ -30,15 +27,15 @@ const BG_BASE = "var(--surface-base)", // chrome: rail, topbar, status bar, term
   SYNTAX_COMMENT = "var(--syntax-comment)";
 
 /**
- * Corner radius of every floating panel: Flow's left/center/right columns
+ * Corner radius of every floating panel: the frame's columns
  * and the cards inside them, which read it back through
  * `theme.default.borderRadius`.
  */
 const PANEL_RADIUS = "12px";
 
-/** Display font for chrome (titles, buttons, topbar); code stays monospace */
-const DISPLAY_FONT = `"Space Grotesk", -apple-system, BlinkMacSystemFont,
-  "Segoe UI", Helvetica, Arial, sans-serif`;
+/** The design system's Stack Sans: headline for titles, text for prose and chrome; code stays monospace */
+const HEADLINE_FONT = "var(--font-headline)",
+  TEXT_FONT = "var(--font-text)";
 
 const PALETTE: ThemeParam = {
   colors: {
@@ -63,7 +60,7 @@ const PALETTE: ThemeParam = {
 
   font: {
     other: {
-      family: DISPLAY_FONT,
+      family: TEXT_FONT,
       size: {
         xsmall: "0.8125rem",
         small: "0.875rem",
@@ -81,25 +78,6 @@ const PALETTE: ThemeParam = {
   },
 
   components: {
-    button: {
-      default: {
-        borderRadius: "9999px",
-        fontFamily: DISPLAY_FONT,
-      },
-      overrides: {
-        primary: {
-          color: ON_PRIMARY,
-          hover: { bg: PRIMARY_HOVER },
-        },
-        outline: {
-          border: `1px solid ${BORDER_STRONG}`,
-          hover: {
-            bg: BG_HOVER,
-            borderColor: BORDER_STRONG,
-          },
-        },
-      },
-    },
     editor: {
       default: {
         bg: "transparent",
@@ -121,22 +99,6 @@ const PALETTE: ThemeParam = {
       bg: BG_RAISED,
       borderColor: BORDER,
       padding: "0.4375rem 0.75rem",
-    },
-    menu: {
-      default: {
-        bg: BG_RAISED,
-        border: `1px solid ${BORDER}`,
-      },
-    },
-    modal: {
-      default: {
-        bg: "color-mix(in srgb, var(--surface-raised) 90%, transparent)",
-        border: `1px solid ${BORDER}`,
-        boxShadow: "var(--shadow-modal-value)",
-      },
-    },
-    progressbar: {
-      indicator: { bg: GRADIENT },
     },
     skeleton: {
       bg: BG_RAISED,
@@ -166,21 +128,11 @@ const PALETTE: ThemeParam = {
     terminal: {
       default: { bg: BG_BASE },
     },
-    toast: {
-      default: {
-        bg: BG_RAISED,
-        border: `1px solid ${BORDER}`,
-        // react-toastify's 64px min-height inflates a single-line toast
-        minHeight: "3rem",
-        padding: "0.5rem 0.75rem",
-      },
-      progress: { bg: GRADIENT },
-    },
     topbar: {
       bg: BG_BASE,
       boxShadow: "none",
       borderBottom: `1px solid ${BORDER}`,
-      fontFamily: DISPLAY_FONT,
+      fontFamily: TEXT_FONT,
     },
     tooltip: {
       bg: BG_RAISED,
@@ -226,10 +178,10 @@ const PALETTE: ThemeParam = {
           overflow: "hidden",
         },
         home: {
-          // Home is a content surface - prose belongs to the display font
-          default: { bg: BG_SURFACE, fontFamily: DISPLAY_FONT },
+          // Home is a content surface - prose belongs to the text font
+          default: { bg: BG_SURFACE, fontFamily: TEXT_FONT },
           title: {
-            fontFamily: DISPLAY_FONT,
+            fontFamily: HEADLINE_FONT,
             fontSize: "2.25rem",
             fontWeight: 700,
             letterSpacing: "-0.01em",
@@ -307,14 +259,15 @@ const PALETTE: ThemeParam = {
           border: `1px solid ${BORDER}`,
           borderRadius: PANEL_RADIUS,
           overflow: "hidden",
-          // The wrapper hardcodes `calc(100vh - bottom)` before this block;
+          // The wrapper hardcodes `calc(100vh - bottom)` before this block (dvh
+          // here: the visible height on iPad Safari too);
           // subtract the 2x0.5rem vertical gutters the Side wrapper adds
-          height: "calc(100vh - 1.5rem - 1rem)",
+          height: "calc(100dvh - 1.5rem - 1rem)",
         },
         title: {
           // 40px panel header on the 8px rhythm
           height: "2.5rem",
-          fontFamily: DISPLAY_FONT,
+          fontFamily: HEADLINE_FONT,
           fontSize: "1rem",
           fontWeight: 500,
           letterSpacing: "0.04em",
@@ -360,18 +313,3 @@ const PALETTE: ThemeParam = {
 };
 
 export default PALETTE;
-
-if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
-
-  describe("themes/palette", () => {
-    describe("palette", () => {
-      it("writes on a primary fill with the design system's on-primary colour", () => {
-        // `--text-primary` is near-black in Light: about 3:1 on the purple fill
-        expect(PALETTE.components?.button?.overrides?.primary?.color).toBe(
-          "var(--primary-foreground)"
-        );
-      });
-    });
-  });
-}

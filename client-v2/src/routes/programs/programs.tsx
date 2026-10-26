@@ -1,28 +1,8 @@
-import {
-  PgCommon,
-  PgFramework,
-  PgRouter,
-  TUTORIAL_CATEGORIES,
-} from "../../utils";
-import { handleRoute } from "../common";
+import { PgRouter } from "../../utils";
+import { openPageFromLink } from "../open-page-from-link";
 
 export const programs = PgRouter.create({
   path: "/programs",
-  handle: () => {
-    const programs = {
-      name: "Programs",
-      props: async () => ({
-        programs: await PgCommon.fetchJSON("/programs/programs.json"),
-        filters: [
-          { param: "framework", filters: PgFramework.all.map((f) => f.name) },
-          { param: "categories", filters: TUTORIAL_CATEGORIES },
-        ],
-      }),
-    };
-    return handleRoute({
-      main: programs,
-      sidebar: programs,
-      minimizeSecondaryMainView: true,
-    });
-  },
+  // The list is a page now: open it, over the work or Home on `/`
+  handle: () => openPageFromLink("programs"),
 });

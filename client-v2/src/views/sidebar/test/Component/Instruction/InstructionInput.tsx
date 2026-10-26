@@ -1,14 +1,14 @@
 import { FC, useEffect, useMemo, useRef, useState } from "react";
-import styled from "styled-components";
 
 import FromSeed from "./FromSeed";
 import Label from "../InputLabel";
-import Button from "../../../../../components/Button";
 import SearchBar, {
   SearchBarItem,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
 import { PgCommon, PgWallet, PgWeb3 } from "../../../../../utils";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   GeneratableInstruction,
   Idl,
@@ -157,15 +157,15 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
   }, [value, error, selectedItems, updateInstruction, setInstruction]);
 
   return (
-    <Wrapper>
+    <div className="flex flex-col">
       {!noLabel && (
-        <Row>
+        <div className="flex">
           <Label name={name} type={typeName} {...accountProps} />
-        </Row>
+        </div>
       )}
 
-      <Row>
-        <InputWithCopyButtonWrapper>
+      <div className="flex">
+        <div className="flex w-full items-center gap-1 [&>*:first-child]:flex-1">
           <SearchBar
             id={instruction.name + prefix + name}
             value={value}
@@ -185,39 +185,14 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
             )}
             {...searchBarProps}
           />
-          <CopyButtonWrapper>
-            <Button.Copy copyText={value} />
-          </CopyButtonWrapper>
-        </InputWithCopyButtonWrapper>
-      </Row>
-    </Wrapper>
+          <div className="flex h-8 items-center">
+            <CopyButton value={value} onError={reportButtonFailure("copy")} />
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-`;
-
-const Row = styled.div`
-  display: flex;
-`;
-
-const InputWithCopyButtonWrapper = styled.div`
-  width: 100%;
-  display: flex;
-
-  & > *:first-child {
-    flex: 1;
-    margin-right: 0.25rem;
-  }
-`;
-
-const CopyButtonWrapper = styled.div`
-  height: 2rem;
-  display: flex;
-  align-items: center;
-`;
 
 const getSearchBarProps = (
   name: string,

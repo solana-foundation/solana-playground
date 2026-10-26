@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
 
-import { test } from "./fixtures";
+import { HELP_TAIL, home, runInTerminal, test } from "./fixtures";
 
 /** The computed style property of the first element matching `selector` */
 const computed = (
@@ -16,7 +16,7 @@ const computed = (
 const isDark = (page: Page) =>
   page.evaluate(() => document.documentElement.classList.contains("dark"));
 
-/** The theme select in the Settings panel, opened */
+/** The theme select on the Settings page, opened */
 const openThemeSelect = async (page: Page) => {
   await page.locator("[data-settings-trigger]").first().click();
   const row = page
@@ -30,19 +30,25 @@ const openThemeSelect = async (page: Page) => {
 const pickTheme = async (page: Page, name: "Dark" | "Light") => {
   await openThemeSelect(page);
   await page.getByRole("option", { name, exact: true }).click();
+  // Back to the app, which the page covers, to read its colours
+  await page.getByRole("button", { name: "Back to app" }).click();
 };
 
-/** Open the console drawer and run `help`, so the terminal holds output */
+/**
+ * Open the console drawer and run `help`, so the terminal holds output.
+ *
+ * Takes a `seededPage`: the editor focuses itself when it opens the first
+ * file, and the fixture waits for that, so it cannot land after the click on
+ * the terminal and take the typing.
+ */
 const runHelp = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Console", exact: true });
+  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }
-  await page.getByLabel("Terminal input").first().click();
-  await page.keyboard.type("help");
-  await page.keyboard.press("Enter");
+  await runInTerminal(page, "help");
   const terminal = page.locator(".xterm-rows").first();
-  await expect(terminal).toContainText("rustfmt");
+  await expect(terminal).toContainText(HELP_TAIL);
   return terminal;
 };
 
@@ -59,6 +65,12 @@ test.describe("client-v2-themes", () => {
   test("client-v2-themes: First visit", async ({ seededPage: page }) => {
     await expect.poll(() => isDark(page)).toBe(true);
 
+    // The editor focuses itself when it opens the first file, at a moment
+    // that varies with the machine; landing after the select took focus, it
+    // takes the ArrowDown that opens the select
+    await expect(
+      page.locator(".monaco-editor textarea.inputarea")
+    ).toBeFocused();
     await openThemeSelect(page);
     await expect(page.getByRole("option")).toHaveText(["Dark", "Light"]);
   });
@@ -85,7 +97,7 @@ test.describe("client-v2-themes", () => {
   test("client-v2-themes: A saved Dracula theme", async ({
     seededPage: page,
   }) => {
-    // A returning user: a project open, so no gallery covers the notice, and
+    // A returning user: a project open, so Home does not cover the notice, and
     // the removed theme still in storage from before the token bridge
     await page.evaluate(() => localStorage.setItem("theme", "Dracula"));
     await page.reload();
@@ -95,7 +107,7 @@ test.describe("client-v2-themes", () => {
       "The Dracula theme was removed. Playground now uses Dark; Light is in Settings."
     );
     await expect(notice).toBeVisible();
-    await expect(page.locator("[data-gallery-modal]")).toBeHidden();
+    await expect(home(page)).toBeHidden();
 
     await page.reload();
     await expect.poll(() => isDark(page)).toBe(true);
@@ -152,6 +164,6 @@ test.describe("client-v2-themes", () => {
       .not.toBe(terminalBefore);
     // The terminal re-coloured in place: what `help` printed is still there,
     // where a rebuilt terminal would show only its welcome text
-    await expect(terminal).toContainText("rustfmt");
+    await expect(terminal).toContainText(HELP_TAIL);
   });
 });

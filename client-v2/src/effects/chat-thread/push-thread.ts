@@ -13,7 +13,7 @@ import { openThread } from "./open-thread";
  * flight. Pushing straight away uploaded the reply short of it. Ordinarily the
  * write has long landed and the wait costs a microtask.
  *
- * Shared by the end-of-turn push in `Chat` and the chat effect's flush. Its
+ * Shared by the end-of-turn push in `useTurn` and the chat effect's flush. Its
  * own file, outside the `index.ts` barrel: every export there is mounted as
  * an effect.
  *

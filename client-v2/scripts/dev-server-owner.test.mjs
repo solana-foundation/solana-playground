@@ -12,6 +12,7 @@ import {
   DevServerRefusal,
   decideDevServer,
   foreignServerMessage,
+  portHolderPid,
   silentServerMessage,
   whoseServer,
   whoseServerSync,
@@ -51,6 +52,9 @@ const freePort = async () => {
   return port;
 };
 
+/** Port -> pid of the process `serveInChild` started on it. */
+const childPids = new Map();
+
 /** The same kind of server in another process, so the parent's event loop
  * may block on `whoseServerSync` without starving it. */
 const serveInChild = async (t, value) => {
@@ -75,7 +79,11 @@ const serveInChild = async (t, value) => {
     child.once("exit", (code) =>
       reject(new Error(`server child exited (${code}) before printing a port`))
     );
-    child.stdout.once("data", (data) => resolve(Number(data.toString())));
+    child.stdout.once("data", (data) => {
+      const port = Number(data.toString());
+      childPids.set(port, child.pid);
+      resolve(port);
+    });
   });
 };
 
@@ -152,6 +160,38 @@ test("decideDevServer refuses a foreign server, naming port, root and remedy", a
       error.message.includes(OTHER_ROOT) &&
       error.message.includes("PORT=")
   );
+});
+
+test("decideDevServer names the pid holding a foreign server's port", async (t) => {
+  const port = await serveInChild(t, OTHER_ROOT);
+  assert.throws(
+    () => decideDevServer({ port, root: ROOT }),
+    (error) => error.message.includes(`pid ${childPids.get(port)}`)
+  );
+});
+
+test("decideDevServer names the pid holding a silent server's port", async (t) => {
+  // In this process: the probe blocks our event loop, so it never answers.
+  const port = await serve(t, () => {});
+  assert.throws(
+    () => decideDevServer({ port, root: ROOT, timeoutMs: 300 }),
+    (error) => error.message.includes(`pid ${process.pid}`)
+  );
+});
+
+test("on a queue port, the refusal calls the holder a leftover to stop", async (t) => {
+  const port = await serveInChild(t, OTHER_ROOT);
+  assert.throws(
+    () => decideDevServer({ port, root: ROOT, fromQueue: true }),
+    (error) =>
+      error.message.includes("left over from an earlier run") &&
+      error.message.includes(`kill ${childPids.get(port)}`) &&
+      !error.message.includes("PORT=")
+  );
+});
+
+test("portHolderPid is null for a free port", async () => {
+  assert.equal(portHolderPid(await freePort()), null);
 });
 
 test("foreignServerMessage with an unknown root says it is no dev server of this worktree", () => {

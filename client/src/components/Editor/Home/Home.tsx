@@ -186,10 +186,17 @@ const Tutorial: FC<TutorialProps> = ({ title, url }) => {
 };
 
 const getSrc = (url: string) => {
+  let hostname: string; // foundation: match the parsed hostname, not url.includes() (CodeQL js/incomplete-url-substring-sanitization)
+  try {
+    hostname = new URL(url).hostname;
+  } catch {
+    return; // foundation: an unparsable URL gets no icon rather than breaking the render
+  }
+
   let src = "";
 
-  if (url.includes("youtube.com")) src = "youtube.png";
-  else if (url.includes("dev.to")) src = "devto.png";
+  if (/(^|\.)youtube\.com$/.test(hostname)) src = "youtube.png"; // foundation
+  else if (/(^|\.)dev\.to$/.test(hostname)) src = "devto.png"; // foundation
 
   if (src) return "/icons/platforms/" + src;
 };

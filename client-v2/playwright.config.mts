@@ -9,18 +9,24 @@ import {
   DEFAULT_MAX_RUNS,
   acquireSlot,
   describeHolders,
+  queuePort,
 } from "./scripts/e2e-queue.mjs";
+import { fullSuiteRefusal } from "./scripts/e2e-scope.mjs";
 
 // `craco start` binds `PORT`, so the same variable picks the server the run
-// uses. Locally, give each worktree its own (docs/testing.md section 8).
-const port = Number(process.env.PORT ?? 3000);
-if (!(Number.isInteger(port) && port > 0 && port < 65536)) {
-  console.error(
-    `PORT must be an integer from 1 to 65535, got "${process.env.PORT}".`
-  );
-  process.exit(1);
-}
-const origin = `http://localhost:${port}`;
+// uses. Unset locally, the queue below picks it from the run's slot.
+const portFromEnv = (): number | undefined => {
+  if (process.env.PORT === undefined) return undefined;
+  const value = Number(process.env.PORT);
+  if (!(Number.isInteger(value) && value > 0 && value < 65536)) {
+    console.error(
+      `PORT must be an integer from 1 to 65535, got "${process.env.PORT}".`
+    );
+    process.exit(1);
+  }
+  return value;
+};
+const ownPort = portFromEnv();
 
 const positiveIntegerFromEnv = (name: string, fallback: number): number => {
   const value = Number(process.env[name] ?? fallback);
@@ -46,25 +52,45 @@ const workers = process.env.CI
 // again, skip the queue.
 const QUEUE_SLOT_ENV = "E2E_QUEUE_SLOT";
 
+// `--list`, `--list=...` and the short `-l` only print test titles.
+const listing = process.argv.some(
+  (arg) => arg === "-l" || arg.startsWith("--list")
+);
+const queued = !process.env.CI && !listing && !process.env[QUEUE_SLOT_ENV];
+
+// Three full suites at once ran the machine out of memory, and a session
+// needs only the specs it touched; the full suite is CI's. A config that
+// imports this one inherits the refusal.
+const refuseFullSuite = () => {
+  const refusal = fullSuiteRefusal({
+    args: process.argv.slice(2),
+    env: process.env,
+    cwd: process.cwd(),
+    testDir: path.join(import.meta.dirname, "e2e"),
+  });
+  if (refusal === null) return;
+  console.error(refusal);
+  process.exit(1);
+};
+if (queued) refuseFullSuite();
+
 const takeQueueSlot = () => {
-  // `--list`, `--list=...` and the short `-l` only print test titles.
-  const listing = process.argv.some(
-    (arg) => arg === "-l" || arg.startsWith("--list")
-  );
-  if (process.env.CI || listing) return;
-  if (process.env[QUEUE_SLOT_ENV]) return;
   const max = positiveIntegerFromEnv("E2E_MAX_RUNS", DEFAULT_MAX_RUNS);
   const dir =
     process.env.E2E_QUEUE_DIR ??
     path.join(os.homedir(), ".cache", "solana-playground-e2e");
+  // A run without a `PORT` of its own takes its slot's, so two runs never
+  // pick the same one; `PORT` set here is what workers and the dev server see.
   const slot = acquireSlot({
     dir,
     max,
-    owner: { pid: process.pid, worktree: import.meta.dirname, port },
+    owner: { pid: process.pid, worktree: import.meta.dirname, port: ownPort },
+    portForSlot: ownPort === undefined ? queuePort : undefined,
     onWait: (holders) => console.error(describeHolders(holders, max)),
   });
   process.env[QUEUE_SLOT_ENV] = String(slot.slot);
-  console.error(`e2e queue: got slot ${slot.slot}`);
+  process.env.PORT = String(slot.port);
+  console.error(`e2e queue: got slot ${slot.slot}, port ${slot.port}`);
   process.on("exit", slot.release);
   // Release first, then let the signal take its usual course: our listener
   // is removed, so the re-raised signal ends the process as it would have.
@@ -76,8 +102,12 @@ const takeQueueSlot = () => {
     };
     process.on(signal, onSignal);
   }
+  return slot.port;
 };
-takeQueueSlot();
+// A worker reads the `PORT` its runner set; CI and `--list` take `PORT` or
+// 3000 and no slot.
+const port = queued ? takeQueueSlot() : ownPort ?? 3000;
+const origin = `http://localhost:${port}`;
 
 // Playwright evaluates this config again in every worker, where our own dev
 // server is already up. The runner's first evaluation probes the port and
@@ -89,7 +119,11 @@ const devServerDecision = (): "start" | "reuse" => {
   const cached = process.env[DEV_SERVER_DECISION_ENV];
   if (cached === "start" || cached === "reuse") return cached;
   try {
-    const decision = decideDevServer({ port, root: import.meta.dirname });
+    const decision = decideDevServer({
+      port,
+      root: import.meta.dirname,
+      fromQueue: ownPort === undefined,
+    });
     process.env[DEV_SERVER_DECISION_ENV] = decision;
     return decision;
   } catch (error) {
@@ -153,10 +187,10 @@ export default defineConfig({
         ["json", { outputFile: "test-results/report.json" }],
       ]
     : "line",
-  // Under the job's 30-minute limit, so Playwright itself ends a hung run
+  // Under the job's 40-minute limit, so Playwright itself ends a hung run
   // and still prints its summary; a GitHub cancel keeps the traces but not
   // the line saying which test was running.
-  globalTimeout: process.env.CI ? 25 * 60_000 : 0,
+  globalTimeout: process.env.CI ? 35 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every failed attempt keeps its trace, a flaky test's first attempt
@@ -185,8 +219,10 @@ export default defineConfig({
     // CRA prints "Failed to compile" to stdout, which Playwright drops by
     // default. A broken bundle still serves index.html, so without this
     // every test fails at its first locator with the cause nowhere in the
-    // job log.
-    stdout: process.env.CI ? "pipe" : "ignore",
+    // job log. Locally too: "Something is already running on port N" also
+    // goes to stdout, and without it a start that fails says only "exited
+    // early".
+    stdout: "pipe",
     stderr: "pipe",
     env: { BROWSER: "none", PORT: String(port) },
   },

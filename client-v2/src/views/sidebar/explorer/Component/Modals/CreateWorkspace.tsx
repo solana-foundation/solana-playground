@@ -3,7 +3,7 @@ import styled, { css } from "styled-components";
 
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import {
   Fn,
   Framework as FrameworkType,
@@ -23,7 +23,8 @@ export const CreateWorkspace = () => {
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="create-workspace"
       buttonProps={{
         text: "Create",
         onSubmit: createWorkspace,
@@ -60,7 +61,7 @@ export const CreateWorkspace = () => {
           </FrameworksWrapper>
         </FrameworkSectionWrapper>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

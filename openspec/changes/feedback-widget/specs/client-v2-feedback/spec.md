@@ -3,43 +3,47 @@
 ## Purpose
 
 How a person using `client-v2` sends the team feedback from inside the
-product: the floating trigger, its menu, the form, what reaches Sentry, and
+product: its entries in the account menu, the form, what reaches Sentry, and
 the events `features/feedback` sends.
 
 ## ADDED Requirements
 
-### Requirement: A floating trigger opens the feedback menu
+### Requirement: The account menu offers feedback
 
-The page SHALL show a round button with the `aria-label` "Feedback", fixed at
-the bottom left just above the project panel's "+ New file" control, with a
-1px ring of the product gradient. Pressing it SHALL open a menu above it,
-aligned to its start. An open modal, and a toast, SHALL cover the trigger.
+The account menu at the foot of the navigation (and beside its rail) SHALL
+carry the feedback entries, after "Settings" and "Docs": "Share feedback"
+where feedback can be sent, and "Report a bug". It SHALL NOT carry
+"Suggest an idea", which only the form offers. There
+SHALL be no separate feedback button. The form, its draft and its send SHALL
+be held above the navigation, so they outlive the menu: below 768 px the
+footer is on the menu page, and the rail swaps the footer for its own. A
+send in flight SHALL show on the account row and on the rail's "Account".
+An open modal SHALL cover the account row.
 
 #### Scenario: The menu opens
 
-- **WHEN** the user presses the "Feedback" button
-- **THEN** a menu opens with "Suggest an idea" and "Report a bug", and with
-  "Share feedback" first where feedback can be sent
+- **WHEN** the user opens the account menu
+- **THEN** it holds "Report a bug", with "Share feedback" before it where
+  feedback can be sent, and no "Suggest an idea"
 
-#### Scenario: A modal covers the trigger (manual)
+#### Scenario: A modal covers the account row (manual)
 
 - **WHEN** the feedback form, or any other modal, is open
-- **THEN** the "Feedback" button is under the modal's overlay and cannot be
+- **THEN** the account row is under the modal's overlay and cannot be
   pressed
 
 ### Requirement: Share feedback is offered only where feedback can be sent
 
 The menu SHALL offer "Share feedback" only in a build that carries Sentry: a
 DSN is set and the build reports (production, or a preview with
-`SENTRY_PREVIEW_ENABLED=true`). Every other build SHALL show the trigger with
-the two GitHub links only.
+`SENTRY_PREVIEW_ENABLED=true`). Every other build SHALL show the account
+menu with "Report a bug" only.
 
 #### Scenario: A local build
 
 - **WHEN** the app runs locally with `REACT_APP_SENTRY_DSN` set and no
   `VERCEL_ENV`
-- **THEN** the menu shows "Suggest an idea" and "Report a bug" and no "Share
-  feedback"
+- **THEN** the menu shows "Report a bug" and no "Share feedback"
 
 #### Scenario: A production build (manual)
 
@@ -48,14 +52,14 @@ the two GitHub links only.
 
 ### Requirement: The GitHub links open the Foundation's issue list
 
-"Suggest an idea" and "Report a bug" SHALL each open
+"Report a bug" in the menu, and "Suggest an idea" and "Report a bug" under
+the form's submit button, SHALL each open
 `https://github.com/solana-foundation/solana-playground/issues` in a new tab
-with `rel="noopener noreferrer"`. The form SHALL carry the same two links
-under its submit button.
+with `rel="noopener noreferrer"`.
 
-#### Scenario: Suggest an idea from the menu
+#### Scenario: Report a bug from the menu
 
-- **WHEN** the user picks "Suggest an idea"
+- **WHEN** the user picks "Report a bug" in the menu
 - **THEN** a new tab opens on the issue list
 
 #### Scenario: Report a bug from the form (manual)
@@ -70,9 +74,9 @@ message and a contact field. The modal is a dialog on a wide screen and a
 page of its own on a phone. What the user typed and the stars they chose
 SHALL be kept, across closing and opening the form, until a send succeeds.
 While a send is in progress, Submit SHALL be disabled and the fields SHALL
-be read-only; the form MAY be closed, and the "Feedback" button SHALL then
-show a spinner labelled "Sending feedback", inside a halo that pulses where
-the user allows motion, until the send ends.
+be read-only; the form MAY be closed, and the account row (on the rail,
+"Account") SHALL then show a spinner labelled "Sending feedback", inside a
+halo that pulses where the user allows motion, until the send ends.
 
 - Rating: a `radiogroup` with the `aria-label` "Rating" of five radios, each
   labelled "N of 5 stars"; optional; the chosen star and those before it are
@@ -86,8 +90,8 @@ the user allows motion, until the send ends.
 
 - **WHEN** the user presses Escape or the close button while a send is in
   progress
-- **THEN** the form closes, focus returns to the "Feedback" button, and the
-  button shows the spinner and the pulsing halo until the send ends
+- **THEN** the form closes, focus returns to the account row, and the row
+  shows the spinner and the pulsing halo until the send ends
 
 #### Scenario: An empty message (manual)
 
@@ -104,6 +108,14 @@ the user allows motion, until the send ends.
 - **WHEN** the user picks three stars, types a message, closes the form and
   opens it again
 - **THEN** the three stars and the message are as the user left them
+
+#### Scenario: A draft outlives the menu page (manual)
+
+- **WHEN** on a 375 px window the user opens "Menu", opens the form from the
+  account menu, types a message, closes the form, goes back to Work, and
+  opens the menu and the form again
+- **THEN** the message is as the user left it, and a send still in flight
+  shows on the account row
 
 ### Requirement: One browser module imports the Sentry SDK
 

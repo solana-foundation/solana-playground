@@ -1,9 +1,19 @@
-import { useMemo } from "react";
 import styled from "styled-components";
+import { InfoIcon } from "lucide-react";
 
-import Button from "../../../../components/Button";
-import Select from "../../../../components/Select";
-import Text from "../../../../components/Text";
+import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/shared/ui/select";
 import {
   CreateWorkspace,
   RenameWorkspace,
@@ -19,7 +29,6 @@ import {
   Github,
   ImportFile,
   ImportWorkspace,
-  Info,
   Plus,
   Trash,
 } from "../../../../components/Icons";
@@ -50,104 +59,145 @@ const WorkspaceButtons = () => {
 
   return (
     <ButtonsWrapper>
-      <Button onClick={handleCreate} kind="icon" title="Create">
+      <WorkspaceButton
+        onClick={handleCreate}
+        title="Create"
+        failureAction="create a project"
+      >
         <Plus />
-      </Button>
+      </WorkspaceButton>
 
-      <Button onClick={handleRename} kind="icon" title="Rename">
+      <WorkspaceButton
+        onClick={handleRename}
+        title="Rename"
+        failureAction="rename the project"
+      >
         <Edit />
-      </Button>
+      </WorkspaceButton>
 
-      <Button
+      <WorkspaceButton
         onClick={handleDelete}
-        kind="icon"
-        hoverColor="error"
         title="Delete"
+        failureAction="delete the project"
+        className="hover:text-destructive"
       >
         <Trash />
-      </Button>
+      </WorkspaceButton>
 
-      <Button onClick={handleGithub} kind="icon" title="Import from Github">
+      <WorkspaceButton
+        onClick={handleGithub}
+        title="Import from Github"
+        failureAction="open the GitHub import"
+      >
         <Github />
-      </Button>
+      </WorkspaceButton>
 
-      <Button
+      <WorkspaceButton
         onClick={handleFsImport}
-        kind="icon"
         title="Import from local file system"
+        failureAction="open the file import"
       >
         <ImportFile />
-      </Button>
+      </WorkspaceButton>
 
-      <Button onClick={handleFsExport} kind="icon" title="Export">
+      <WorkspaceButton
+        onClick={handleFsExport}
+        title="Export"
+        failureAction="export the project"
+      >
         <ExportFile />
-      </Button>
+      </WorkspaceButton>
     </ButtonsWrapper>
   );
 };
 
-const WorkspaceSelect = () => {
+/** An icon button whose click opens a modal and waits for it to close.
+    While it waits the spinner takes the icon's place, and the title stays
+    its accessible name. */
+export const WorkspaceButton = (
+  props: Omit<
+    React.ComponentProps<typeof AsyncButton>,
+    "onError" | "variant" | "size" | "loadingText"
+  > & {
+    title: string;
+    /** What did not happen when the click fails, completing "Could not …" */
+    failureAction: string;
+  }
+) => {
+  const { failureAction, ...rest } = props;
+  return (
+    <AsyncButton
+      variant="ghost"
+      size="icon-sm"
+      onError={reportButtonFailure(failureAction)}
+      loadingText={<span className="sr-only">{props.title}</span>}
+      {...rest}
+    />
+  );
+};
+
+const log = createLogger("explorer:workspaces");
+
+export const WorkspaceSelect = () => {
   const explorer = useExplorer();
 
-  const options = useMemo(() => {
-    const [tutorials, projects] = PgCommon.filterWithRemaining(
-      explorer.allWorkspaceNames!,
-      PgTutorial.isWorkspaceTutorial
-    );
+  const [tutorials, projects] = PgCommon.filterWithRemaining(
+    explorer.allWorkspaceNames!,
+    PgTutorial.isWorkspaceTutorial
+  );
 
-    const options = [
-      {
-        label: "Projects",
-        options: projects.map((name) => ({ label: name, value: name })),
-      },
-    ];
-    if (tutorials.length) {
-      options.push({
-        label: "Tutorials",
-        options: tutorials.map((name) => ({ label: name, value: name })),
-      });
-    }
+  const switchWorkspace = async (name: string) => {
+    if (name === explorer.currentWorkspaceName) return;
 
-    return options;
-
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [explorer.allWorkspaceNames!.length]);
-
-  const value = useMemo(() => {
-    for (const option of options) {
-      const val = option.options.find(
-        (option) => option.value === explorer.currentWorkspaceName
-      );
-      if (val) return val;
-    }
-  }, [explorer.currentWorkspaceName, options]);
+    // Calling `PgExplorer.switchWorkspace` for both tutorial and
+    // non-tutorial workspaces would be enough here, but we're manually
+    // opening the tutorial when needed to avoid editor flickering i.e.
+    // there is a small window just after the workspace switch, when the
+    // editor has just enough time to open the new workspace, but the
+    // `PgTutorial.open` has not yet run, which results in the user
+    // briefly seeing the last opened file of the tutorial before the
+    // loading screen kicks in.
+    //
+    // NOTE: If we ever add a loading transition for switching between
+    // workspaces, or even a delay before opening new workspace files in
+    // the editor, this check will no longer be necessary.
+    if (PgTutorial.isWorkspaceTutorial(name)) await PgTutorial.open(name);
+    else await PgExplorer.switchWorkspace(name);
+  };
 
   return (
-    <SelectWrapper>
-      <Select
-        options={options}
-        value={value}
-        onChange={async (props) => {
-          const name = props?.value!;
-          if (name === value?.value) return;
-
-          // Calling `PgExplorer.switchWorkspace` for both tutorial and
-          // non-tutorial workspaces would be enough here, but we're manually
-          // opening the tutorial when needed to avoid editor flickering i.e.
-          // there is a small window just after the workspace switch, when the
-          // editor has just enough time to open the new workspace, but the
-          // `PgTutorial.open` has not yet run, which results in the user
-          // briefly seeing the last opened file of the tutorial before the
-          // loading screen kicks in.
-          //
-          // NOTE: If we ever add a loading transition for switching between
-          // workspaces, or even a delay before opening new workspace files in
-          // the editor, this check will no longer be necessary.
-          if (PgTutorial.isWorkspaceTutorial(name)) await PgTutorial.open(name);
-          else await PgExplorer.switchWorkspace(name);
-        }}
-      />
-    </SelectWrapper>
+    <Select
+      value={explorer.currentWorkspaceName ?? ""}
+      onValueChange={(name) => {
+        switchWorkspace(name).catch((e) =>
+          log.error(e, { report: true, context: { workspace: name } })
+        );
+      }}
+    >
+      <SelectTrigger aria-label="Project" className="w-full">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent position="popper">
+        <SelectGroup>
+          <SelectLabel>Projects</SelectLabel>
+          {projects.map((name) => (
+            <SelectItem key={name} value={name}>
+              {name}
+            </SelectItem>
+          ))}
+        </SelectGroup>
+        {tutorials.length > 0 && (
+          <SelectGroup>
+            <SelectLabel>Tutorials</SelectLabel>
+            {tutorials.map((name) => (
+              <SelectItem key={name} value={name}>
+                {name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        )}
+      </SelectContent>
+    </Select>
   );
 };
 
@@ -180,23 +230,26 @@ const ButtonsWrapper = styled.div`
   gap: 0 0.5rem;
 `;
 
-const SelectWrapper = styled.div`
-  & > select {
-    width: 100%;
-  }
-`;
-
 const TemporaryWarning = () => {
   const handleImport = () => PgView.setModal(ImportTemporary);
 
   return (
     <TemporaryWarningWrapper>
-      <Text icon={<Info color="info" />}>
-        This is a temporary project, import it to persist changes.
-      </Text>
-      <Button onClick={handleImport} leftIcon={<ImportWorkspace />} fullWidth>
+      <Callout variant="info">
+        <InfoIcon />
+        <CalloutDescription>
+          This is a temporary project, import it to persist changes.
+        </CalloutDescription>
+      </Callout>
+      <AsyncButton
+        variant="outline"
+        onClick={handleImport}
+        onError={reportButtonFailure("import the project")}
+        className="w-full"
+      >
+        <ImportWorkspace data-icon="inline-start" />
         Import
-      </Button>
+      </AsyncButton>
     </TemporaryWarningWrapper>
   );
 };

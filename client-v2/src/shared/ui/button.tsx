@@ -1,6 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { Slot } from "radix-ui";
 
 const buttonVariants = cva(
@@ -33,6 +33,15 @@ const buttonVariants = cva(
         "icon-lg": "size-9",
       },
     },
+    compoundVariants: [
+      // An icon on its own reads as chrome, so it rests muted, as in the
+      // prototype; the ghost hover still lifts it to the foreground.
+      {
+        variant: "ghost",
+        size: ["icon", "icon-xs", "icon-sm", "icon-lg"],
+        className: "text-muted-foreground",
+      },
+    ],
     defaultVariants: {
       variant: "default",
       size: "default",

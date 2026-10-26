@@ -1,4 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, home, homeRegion, startProject, test } from "./fixtures";
+
+import { openGallery } from "./fixtures";
 
 /**
  * D16: opening a tutorial that has never been started, while a real
@@ -14,38 +16,22 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 
   await page.goto("/");
 
-  // The gallery opens by itself when there are no workspaces. It has no
-  // `role="dialog"` -- `components/Modal` renders plain divs -- so anchor
-  // on its title text instead.
-  const gallery = page.getByText("What do you want to build?");
-  await expect(gallery).toBeVisible();
-
   // Make a real project the active workspace first -- D16 only shows up
   // when a project is already active, not on the very first, empty-state
-  // open (`views/flow/gallery/StartFromScratch.tsx`: default framework,
-  // default name, "Start").
-  await page.getByRole("button", { name: "Start →" }).click();
-  await expect(gallery).toHaveCount(0);
+  // open (Home's New project tile unfolds `StartFromScratch`).
+  await startProject(page, "d16-project");
 
-  // Reopen the gallery from the header's project switcher
-  // (`views/flow/header/ProjectSwitcher.tsx`) now that a project is active.
-  // The switcher opens a popover of plain buttons (no `role="menu"`, same
-  // pattern as `StatusChips.tsx`'s profile popover); `Browse gallery` is
-  // the item that opens the gallery itself.
-  await page.locator('button[aria-haspopup="true"]').click();
-  await page.getByRole("button", { name: "Browse gallery" }).click();
+  // The gallery as a dialog named by its title, for the steps below.
+  const gallery = page.getByRole("dialog", {
+    name: "What do you want to build?",
+  });
+
+  // Reopen the gallery from the navigation now that a project is active
+  await openGallery(page);
   await expect(gallery).toBeVisible();
 
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-
-  // The tutorial card's title has no click handler of its own; only the
-  // "Open" button inside the same card does
-  // (`views/flow/gallery/TutorialsTab.tsx`). Scope to that card by walking
-  // up from the title text: `Title` -> `Body` -> `Card`.
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
+  await gallery.getByRole("radio", { name: /^Tutorials/ }).click();
+  await gallery.getByRole("button", { name: "Open Hello Anchor" }).click();
 
   // The tutorial's own editor must appear, and the app must not have
   // fallen back to the home route.
@@ -69,22 +55,20 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // default.
   test.setTimeout(120_000);
 
+  // No default backend, so the ask below has no model to go to whatever the
+  // dev server is configured with
+  await page.route("**/api/agent", (route) =>
+    route.fulfill({ json: { configured: false, model: null } })
+  );
   await page.goto("/");
 
-  // Same anchor as the test above -- `components/Modal` renders no
-  // `role="dialog"`, so the gallery has to be found by its title text.
-  const gallery = page.getByText("What do you want to build?");
-  await expect(gallery).toBeVisible();
-
-  await page.getByRole("tab", { name: /tutorials/i }).click();
-
-  // Only the "Open" button inside a tutorial card has a click handler;
-  // the title text itself does not (`views/flow/gallery/TutorialsTab.tsx`).
-  const card = page
-    .getByText("Hello Anchor", { exact: true })
-    .locator("xpath=../..");
-  await card.getByRole("button", { name: "Open" }).click();
-  await expect(gallery).toHaveCount(0);
+  // Home's tutorial cards: only the "Open <name>" button has a click handler;
+  // the title text itself does not.
+  await expect(home(page)).toBeVisible();
+  await homeRegion(page)
+    .getByRole("button", { name: "Open Hello Anchor" })
+    .click();
+  await expect(home(page)).toBeHidden();
 
   // Open lands on upstream's own About/Start screen for a lesson tutorial
   // that has never been started -- Start is what creates the workspace
@@ -105,16 +89,11 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // branch (`LessonRoute` picking the wrong surface after Start). The
   // assertion right after this block is the one that does: see its own
   // comment.
-  await expect(page.getByRole("tab", { name: "Steps" })).toBeVisible();
-  // "Step 1 of 4" is on the page twice on entry -- the band's eyebrow and
-  // the open reader's -- and the band renders first in DOM order.
-  await expect(page.getByText("Step 1 of 4").first()).toBeVisible();
-
-  // The objective text is rendered more than once -- in the band, in the
-  // step rail's own row for the current step, in the reader's bar -- so
-  // scope to the band's own text block (its eyebrow's parent) to keep
-  // this a single-element locator.
-  const band = page.getByText("Step 1 of 4").first().locator("..");
+  await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
+  // The band is the design system's objective band; scope to it so the
+  // objective is one element (the rail and the reader repeat the text).
+  const band = page.locator('[data-slot="objective-band"]');
+  await expect(band.getByText("Step 1 of 4", { exact: true })).toBeVisible();
   await expect(
     band.getByText("Define the hello instruction and log a message")
   ).toBeVisible();
@@ -171,9 +150,15 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // the prompt text itself is covered by the in-source tests of `hints.ts`. What is
   // deterministic here is the band's own action label: rung zero reads
   // "I'm stuck"; one click with no attempt yet recorded moves it to
-  // "Try it first" (`band-copy.ts`'s `assistantLabel`).
+  // "Try it first" (`band-copy.ts`'s `assistantLabel`). With nothing to
+  // send the hint to, the ask opens Connect a model over the page; closed,
+  // the band is back with its new label.
   await expect(page.getByRole("button", { name: "I'm stuck" })).toBeVisible();
   await page.getByRole("button", { name: "I'm stuck" }).click();
+  const connect = page.getByRole("dialog", { name: "Connect a model" });
+  await expect(connect).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(connect).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Try it first" })
   ).toBeVisible();
@@ -197,8 +182,10 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // stays offered either way.
   await expect(page.getByText("Before you can deploy:")).toBeVisible();
   await expect(page.getByRole("button", { name: "build first" })).toBeVisible();
+  // `exact`: the navigation's Get set up checklist has a "Connect a wallet"
+  // step too
   await expect(
-    page.getByRole("button", { name: "connect a wallet" })
+    page.getByRole("button", { name: "connect a wallet", exact: true })
   ).toBeVisible();
   // ...and says nothing about the cluster, because the profile is already
   // on devnet. Blaming a cluster that is right -- or one the client has
@@ -225,7 +212,9 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
     .getByRole("button", { name: "Mark as read", exact: true })
     .click();
   await expect(sheet).toHaveCount(0);
-  await expect(page.getByText("Step 4 of 4").first()).toBeVisible();
+  await expect(
+    page.getByText("Step 4 of 4", { exact: true }).first()
+  ).toBeVisible();
 
   // Skipping the last step lands past the end: the band sums the path in
   // the record's own vocabulary and offers the gallery as the way on,

@@ -23,6 +23,13 @@ class SignInFailed extends Error {
 const reasonOf = (error: unknown): SignInFailure =>
   error instanceof SignInFailed ? error.reason : "request-failed";
 
+/**
+ * Whether a rejected `PgSession.signIn` ended at a known step (cancelled,
+ * blocked, refused); anything else is an error the team should hear of
+ */
+export const isSignInFailure = (error: unknown) =>
+  error instanceof SignInFailed;
+
 const log = createLogger("auth:session");
 
 /** Distinguishes this flow's reply from anything else on the same-origin bus */
@@ -43,7 +50,7 @@ export interface SessionUser {
   login: string | null;
 }
 
-/** Where a sign-in started, when its listeners must tell it apart from the header's */
+/** Where a sign-in started, when its listeners must tell it apart from the account footer's */
 export type SignInOrigin = "assistant";
 
 /** Local cleanup that runs only after the server has ended the session */
@@ -51,6 +58,18 @@ export type SignOutTeardown = () => Promise<void>;
 
 /** Runs before the sign-out request; see `PgSession.setOnSignOut` */
 export type SignOutHook = () => Promise<SignOutTeardown | undefined>;
+
+/**
+ * Where the last sign-in stands. Held here, not by the control that started
+ * it: the session footer unmounts when the rail swaps it for its own and when
+ * the window crosses `LAYOUT_BREAKPOINTS.phone`, and a sign-in outlives both.
+ */
+export type SignInState =
+  | { status: "idle" }
+  | { status: "pending" }
+  | { status: "failed"; reason: SignInFailure; message: string };
+
+const IDLE: SignInState = { status: "idle" };
 
 /**
  * The signed-in user, from our backend rather than from GitHub.
@@ -75,7 +94,27 @@ export class PgSession {
    * Never throws: a failed read leaves the user signed out, since nobody can be
    * proved signed in, and is logged (reported when it threw or answered 5xx).
    */
-  static async refresh() {
+  static refresh(): Promise<void> {
+    const read = PgSession._read().finally(() => {
+      if (PgSession._reading === read) PgSession._reading = undefined;
+    });
+    PgSession._reading = read;
+    return read;
+  }
+
+  /**
+   * Settles once the session has been read: at once after any read, on the
+   * read in flight if there is one, or on a first read started here. It never
+   * reads again, so a caller deciding on `get()` waits for the page's own read
+   * without turning a later sign-in elsewhere into a change seen here, which
+   * the session effect would take for a sign-in of its own.
+   */
+  static whenRead(): Promise<void> {
+    if (PgSession._hasRead) return Promise.resolve();
+    return PgSession._reading ?? PgSession.refresh();
+  }
+
+  private static async _read() {
     let next: SessionUser | null = null;
 
     try {
@@ -107,6 +146,7 @@ export class PgSession {
       log.error(error, { report: true, context: { step: "refresh" } });
     }
 
+    PgSession._hasRead = true;
     PgSession._set(next);
   }
 
@@ -124,17 +164,39 @@ export class PgSession {
    * rather than per-window, so the reply only has to say "finished" and this
    * side re-reads the session. Rejects when that read finds nobody signed in.
    */
-  static async signIn({ from }: { from?: SignInOrigin } = {}) {
+  static signIn({ from }: { from?: SignInOrigin } = {}): Promise<void> {
+    // One popup and one nonce at a time: a second click while the first flow
+    // waits joins it instead of racing it for the session cookie, and keeps
+    // the first one's origin
+    PgSession._pending ??= PgSession._signIn(from).finally(() => {
+      PgSession._pending = undefined;
+    });
+    return PgSession._pending;
+  }
+
+  /** Where the last sign-in stands; `onDidChange` fires when it moves */
+  static signInState(): SignInState {
+    return PgSession._signInState;
+  }
+
+  private static async _signIn(from: SignInOrigin | undefined) {
     authTelemetry.track("auth_sign_in_started", {});
     PgSession._signingInFrom = from ?? null;
+    PgSession._setSignIn({ status: "pending" });
     try {
       await PgSession._signInThroughPopup();
     } catch (error) {
       authTelemetry.track("auth_sign_in_failed", { reason: reasonOf(error) });
+      PgSession._setSignIn({
+        status: "failed",
+        reason: reasonOf(error),
+        message: error instanceof Error ? error.message : String(error),
+      });
       throw error;
     } finally {
       PgSession._signingInFrom = null;
     }
+    PgSession._setSignIn(IDLE);
     authTelemetry.track("auth_signed_in", {});
   }
 
@@ -233,11 +295,9 @@ export class PgSession {
    * teardowns at once deleted the same workspaces twice.
    */
   static signOut(): Promise<void> {
-    if (!PgSession._signingOut) {
-      PgSession._signingOut = PgSession._signOut().finally(() => {
-        PgSession._signingOut = undefined;
-      });
-    }
+    PgSession._signingOut ??= PgSession._signOut().finally(() => {
+      PgSession._signingOut = undefined;
+    });
     return PgSession._signingOut;
   }
 
@@ -334,6 +394,7 @@ export class PgSession {
 
   /** Test seam: set the user without a network round trip */
   static async refreshWith(user: SessionUser | null) {
+    PgSession._hasRead = true;
     PgSession._set(user);
   }
 
@@ -352,6 +413,10 @@ export class PgSession {
     PgSession._signingInFrom = null;
     PgSession._signingOut = undefined;
     PgSession._ending = false;
+    PgSession._pending = undefined;
+    PgSession._signInState = IDLE;
+    PgSession._hasRead = false;
+    PgSession._reading = undefined;
   }
 
   private static _signingOut: Promise<void> | undefined;
@@ -360,6 +425,12 @@ export class PgSession {
   private static _signingInFrom: SignInOrigin | null = null;
   private static _onSignOut: SignOutHook | null = null;
   private static readonly _listeners = new Set<() => void>();
+
+  private static _pending: Promise<void> | undefined;
+  /** A session read has answered, so `get()` is what the server said */
+  private static _hasRead = false;
+  private static _reading: Promise<void> | undefined;
+  private static _signInState: SignInState = IDLE;
 
   private static _channel: PopupChannel | undefined;
   private static _openChannelImpl: typeof openPopupChannel = openPopupChannel;
@@ -370,6 +441,11 @@ export class PgSession {
   ): PopupChannel | undefined {
     PgSession._channel = PgSession._openChannelImpl(...args);
     return PgSession._channel;
+  }
+
+  private static _setSignIn(state: SignInState) {
+    PgSession._signInState = state;
+    for (const cb of PgSession._listeners) cb();
   }
 
   private static _set(user: SessionUser | null) {
@@ -416,12 +492,51 @@ if (import.meta.vitest) {
         resetLogger();
       });
 
+      it("waits on the read in flight instead of reading again", async () => {
+        let answer!: (user: unknown) => void;
+        const request = vi.spyOn(globalThis, "fetch").mockReturnValue(
+          new Promise<Response>(
+            (resolve) =>
+              (answer = (user) =>
+                resolve({
+                  ok: true,
+                  json: async () => ({ user }),
+                } as Response))
+          )
+        );
+        const read = PgSession.refresh();
+        let settled = false;
+        const waited = PgSession.whenRead().then(() => (settled = true));
+        await Promise.resolve();
+        expect(settled).toBe(false);
+
+        answer({ id: "u1", name: null, image: null });
+        await Promise.all([read, waited]);
+
+        expect(PgSession.get()?.id).toBe("u1");
+        expect(request).toHaveBeenCalledTimes(1);
+      });
+
+      it("reads once when nothing has read the session yet", async () => {
+        const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+          ok: true,
+          json: async () => ({ user: null }),
+        } as Response);
+
+        await PgSession.whenRead();
+        await PgSession.whenRead();
+
+        expect(request).toHaveBeenCalledTimes(1);
+      });
+
       it("is signed out before any refresh", () => {
         expect(PgSession.get()).toBeNull();
       });
 
       it("reads the user from the session endpoint", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
 
         await PgSession.refresh();
 
@@ -438,10 +553,12 @@ if (import.meta.vitest) {
       });
 
       it("treats an empty session body as signed out", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => null,
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => null,
+          }) as unknown as typeof fetch
+        );
 
         await PgSession.refresh();
 
@@ -475,7 +592,9 @@ if (import.meta.vitest) {
       );
 
       it("notifies subscribers when the user changes", async () => {
-        global.fetch = signedIn({ id: "u1", name: null, image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: null, image: null })
+        );
         const seen: unknown[] = [];
         const sub = PgSession.onDidChange(() => seen.push(PgSession.get()));
 
@@ -488,7 +607,9 @@ if (import.meta.vitest) {
       });
 
       it("does not notify when the user is unchanged", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
         await PgSession.refresh();
 
         let calls = 0;
@@ -503,19 +624,23 @@ if (import.meta.vitest) {
         // `sign-in/social` is POST-only and answers with the authorize URL rather
         // than redirecting, which is what lets us open a popup instead of
         // navigating away and losing everything the page holds in memory
-        global.fetch = vi.fn().mockImplementation((url: string) =>
-          url === "/api/auth/sign-in/social"
-            ? Promise.resolve({
-                ok: true,
-                json: async () => ({ url: "https://github.com/login/oauth/x" }),
-              })
-            : Promise.resolve({
-                ok: true,
-                json: async () => ({
-                  user: { id: "u1", name: "Ada", image: null, login: "ada" },
-                }),
-              })
-        ) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string) =>
+            url === "/api/auth/sign-in/social"
+              ? Promise.resolve({
+                  ok: true,
+                  json: async () => ({
+                    url: "https://github.com/login/oauth/x",
+                  }),
+                })
+              : Promise.resolve({
+                  ok: true,
+                  json: async () => ({
+                    user: { id: "u1", name: "Ada", image: null, login: "ada" },
+                  }),
+                })
+          ) as unknown as typeof fetch
+        );
 
         let opened: { url: string; broadcastName?: string } | undefined;
         PgSession.setOpenChannel((opts) => {
@@ -542,9 +667,8 @@ if (import.meta.vitest) {
 
       it("sends the popup to the completion route carrying a nonce", async () => {
         let body: string | undefined;
-        global.fetch = vi
-          .fn()
-          .mockImplementation((url: string, init: RequestInit) => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string, init: RequestInit) => {
             if (url === "/api/auth/sign-in/social") {
               body = init.body as string;
               return Promise.resolve({
@@ -556,7 +680,8 @@ if (import.meta.vitest) {
               ok: true,
               json: async () => ({ user: { id: "u1" } }),
             });
-          }) as unknown as typeof fetch;
+          }) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => ({
           receive: async () => ({ delivered: true as const, data: {} }),
           cancel: () => {},
@@ -572,9 +697,8 @@ if (import.meta.vitest) {
       });
 
       it("only accepts a reply carrying this flow's nonce", async () => {
-        global.fetch = vi
-          .fn()
-          .mockImplementation((url: string, init: RequestInit) =>
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string, init: RequestInit) =>
             url === "/api/auth/sign-in/social"
               ? Promise.resolve({
                   ok: true,
@@ -584,7 +708,8 @@ if (import.meta.vitest) {
                   ok: true,
                   json: async () => ({ user: { id: "u1" } }),
                 })
-          ) as unknown as typeof fetch;
+          ) as unknown as typeof fetch
+        );
 
         let accept!: (data: unknown) => boolean;
         let nonce!: string;
@@ -630,20 +755,24 @@ if (import.meta.vitest) {
       });
 
       it("reports a blocked popup distinctly from a failed sign-in", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({ url: "https://x/" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => undefined);
 
         await expect(PgSession.signIn()).rejects.toThrow(/allow popups/i);
       });
 
       it("surfaces a cancelled popup as a cancellation", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({ url: "https://x/" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
         PgSession.setOpenChannel(() => ({
           receive: async () => ({
             delivered: false as const,
@@ -657,11 +786,13 @@ if (import.meta.vitest) {
       });
 
       it("throws rather than opening a popup when sign-in cannot start", async () => {
-        global.fetch = vi.fn().mockResolvedValue({
-          ok: false,
-          status: 503,
-          json: async () => ({ error: "Authentication is not configured" }),
-        }) as unknown as typeof fetch;
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: false,
+            status: 503,
+            json: async () => ({ error: "Authentication is not configured" }),
+          }) as unknown as typeof fetch
+        );
         const open = vi.fn();
         PgSession.setOpenChannel(open as never);
 
@@ -669,8 +800,112 @@ if (import.meta.vitest) {
         expect(open).not.toHaveBeenCalled();
       });
 
+      /** A popup that answers only when the test says, and how many were opened */
+      const heldPopup = () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
+        let answer!: (receipt: {
+          delivered: false;
+          reason: "cancelled";
+        }) => void;
+        const open = vi.fn(() => ({
+          receive: () =>
+            new Promise<{ delivered: false; reason: "cancelled" }>(
+              (resolve) => (answer = resolve)
+            ),
+          cancel: () => {},
+        }));
+        PgSession.setOpenChannel(open as never);
+        return {
+          open,
+          cancel: () => answer({ delivered: false, reason: "cancelled" }),
+        };
+      };
+
+      it("holds a pending sign-in and its failure, so they outlive whatever rendered them", async () => {
+        const popup = heldPopup();
+        const changed = vi.fn();
+        PgSession.onDidChange(changed);
+        expect(PgSession.signInState()).toEqual({ status: "idle" });
+
+        const pending = PgSession.signIn();
+        expect(PgSession.signInState()).toEqual({ status: "pending" });
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        await expect(pending).rejects.toThrow(/cancelled/i);
+
+        expect(PgSession.signInState()).toEqual({
+          status: "failed",
+          reason: "cancelled",
+          message: "Sign-in cancelled.",
+        });
+        expect(changed).toHaveBeenCalledTimes(2);
+      });
+
+      it("tells a sign-in that ended at a known step from any other error", async () => {
+        const popup = heldPopup();
+        const pending = PgSession.signIn();
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        const known = await pending.catch((error: unknown) => error);
+
+        expect(isSignInFailure(known)).toBe(true);
+        expect(isSignInFailure(new TypeError("fetch failed"))).toBe(false);
+      });
+
+      it("does not start a second sign-in while one is pending", async () => {
+        const popup = heldPopup();
+
+        const first = PgSession.signIn();
+        const second = PgSession.signIn();
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        await expect(first).rejects.toThrow(/cancelled/i);
+        await expect(second).rejects.toThrow(/cancelled/i);
+
+        expect(popup.open).toHaveBeenCalledTimes(1);
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      it("clears a failed sign-in when the next one starts, and settles idle on success", async () => {
+        const popup = heldPopup();
+        const failed = PgSession.signIn();
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalled());
+        popup.cancel();
+        await expect(failed).rejects.toThrow();
+
+        // The sign-in reads the session once the popup is done, and fails
+        // without a user there
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn((input: unknown) =>
+            Promise.resolve({
+              ok: true,
+              json: async () =>
+                input === "/api/auth/get-session"
+                  ? { user: { id: "u1" } }
+                  : { url: "https://x/" },
+            })
+          ) as unknown as typeof fetch
+        );
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({ delivered: true as const, data: {} }),
+          cancel: () => {},
+        }));
+        const next = PgSession.signIn();
+        expect(PgSession.signInState()).toEqual({ status: "pending" });
+        await next;
+
+        expect(PgSession.signInState()).toEqual({ status: "idle" });
+      });
+
       it("signs out and clears the user", async () => {
-        global.fetch = signedIn({ id: "u1", name: "Ada", image: null });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          signedIn({ id: "u1", name: "Ada", image: null })
+        );
         await PgSession.refresh();
         expect(PgSession.get()).not.toBeNull();
 

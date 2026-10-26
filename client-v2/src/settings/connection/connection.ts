@@ -15,6 +15,9 @@ export const connection = [
   }),
   createSetting({
     id: "connection.endpoint",
+    // Not "Endpoint": `server.endpoint` would share it, and a control is
+    // named by its setting
+    name: "RPC endpoint",
     description:
       "RPC URL that lets you interact with a specific Solana cluster",
     values: [

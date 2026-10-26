@@ -89,7 +89,11 @@ and the level set and error handling of its
    logger's own `error` and `unhandledrejection` listeners and the root
    `LoggerErrorBoundary` call `Logger.panic`, and the Sentry provider marks
    those `mechanism: { handled: false }`. _Rejected:_ Sentry's handlers (two
-   paths; console and tests never see unhandled errors).
+   paths; console and tests never see unhandled errors). The `error` listener
+   drops the browser's ResizeObserver loop notice, matched by its exact
+   message and the absence of an `error`: the panel layout raises it on load,
+   it means only that a resize was delivered a frame late, and each would
+   reach Sentry once a DSN is set (HOO-2125).
 
 10. **One widget owns initialisation, behind a typed contract.**
     `widgets/observability` exports `<Observability sentry googleAnalytics

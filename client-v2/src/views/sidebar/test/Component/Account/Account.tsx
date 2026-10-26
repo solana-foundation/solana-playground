@@ -1,26 +1,29 @@
 import { FC, useState } from "react";
-import styled from "styled-components";
 
 import CodeResult from "../CodeResult";
 import InputLabel from "../InputLabel";
 import Interaction from "../Interaction";
-import Button from "../../../../../components/Button";
-import Foldable from "../../../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 import SearchBar from "../../../../../components/SearchBar";
-import Text from "../../../../../components/Text";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { SpinnerWithBg } from "../../../../../components/Loading";
 import { PgCommon, PgWeb3 } from "../../../../../utils";
 import { PgProgramInteraction } from "../../../../../utils/program-interaction";
 import { useWallet } from "../../../../../hooks";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 interface AccountProps {
   accountName: string;
-  index: number;
 }
 
 const Account: FC<React.PropsWithChildren<AccountProps>> = ({
   accountName,
-  index,
 }) => {
   const [address, setAddress] = useState("");
   const [addressError, setAddressError] = useState(false);
@@ -70,8 +73,8 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
   );
 
   return (
-    <Interaction name={accountName} index={index}>
-      <InputWrapper>
+    <Interaction name={accountName}>
+      <div className="my-2">
         <InputLabel name="address" type="publicKey" />
         <SearchBar
           value={address}
@@ -80,60 +83,50 @@ const Account: FC<React.PropsWithChildren<AccountProps>> = ({
           setError={setAddressError}
           validator={PgCommon.isPk}
         />
-      </InputWrapper>
+      </div>
 
-      <ButtonsWrapper>
-        <Button
+      <div className="flex flex-wrap gap-2">
+        <AsyncButton
+          variant="outline"
           onClick={fetchOne}
+          onError={reportButtonFailure("fetch the account")}
           disabled={!wallet || fetchAllLoading || !address || addressError}
         >
           Fetch
-        </Button>
-        <Button onClick={fetchAll} disabled={!wallet || fetchOneLoading}>
+        </AsyncButton>
+        <AsyncButton
+          variant="outline"
+          onClick={fetchAll}
+          onError={reportButtonFailure("fetch the accounts")}
+          disabled={!wallet || fetchOneLoading}
+        >
           Fetch All
-        </Button>
-      </ButtonsWrapper>
+        </AsyncButton>
+      </div>
 
       {(fetchedData || fetchError) && (
-        <ResultWrapper>
-          <Foldable
-            element="Result"
-            isOpen={resultOpen}
-            setIsOpen={setResultOpen}
-          >
-            <SpinnerWithBg loading={fetchOneLoading || fetchAllLoading}>
-              {fetchError ? (
-                <FetchError kind="error">{fetchError}</FetchError>
-              ) : (
-                <CodeResult index={index}>
-                  {PgCommon.prettyJSON(fetchedData!)}
-                </CodeResult>
-              )}
-            </SpinnerWithBg>
-          </Foldable>
-        </ResultWrapper>
+        <div className="mt-4 w-full">
+          <Collapsible open={resultOpen} onOpenChange={setResultOpen}>
+            <CollapsibleHeading>
+              <CollapsibleChevron />
+              Result
+            </CollapsibleHeading>
+            <CollapsibleContent className="mt-2">
+              <SpinnerWithBg loading={fetchOneLoading || fetchAllLoading}>
+                {fetchError ? (
+                  <Callout variant="error">
+                    <CalloutDescription>{fetchError}</CalloutDescription>
+                  </Callout>
+                ) : (
+                  <CodeResult>{PgCommon.prettyJSON(fetchedData!)}</CodeResult>
+                )}
+              </SpinnerWithBg>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
       )}
     </Interaction>
   );
 };
-
-const InputWrapper = styled.div`
-  margin: 0.5rem 0;
-`;
-
-const ButtonsWrapper = styled.div`
-  display: flex;
-  flex-direction: row;
-  gap: 0.75rem;
-`;
-
-const ResultWrapper = styled.div`
-  margin-top: 1rem;
-  width: 100%;
-`;
-
-const FetchError = styled(Text)`
-  width: 100%;
-`;
 
 export default Account;

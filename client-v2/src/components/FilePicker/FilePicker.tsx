@@ -1,16 +1,8 @@
-import {
-  ChangeEvent,
-  Dispatch,
-  FC,
-  SetStateAction,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-} from "react";
+import { Dispatch, FC, SetStateAction, useCallback, useMemo } from "react";
 import styled, { css } from "styled-components";
 
-import Checkbox from "../Checkbox";
+import { Checkbox } from "@/shared/ui/checkbox";
+import { Label } from "@/shared/ui/label";
 import LangIcon from "../LangIcon";
 import { PgCommon, PgExplorer } from "../../utils";
 import { useDifferentBackground } from "../../hooks";
@@ -28,21 +20,13 @@ const FilePicker: FC<React.PropsWithChildren<FilePickerProps>> = ({
 }) => {
   const ref = useDifferentBackground();
 
-  // Handle checkbox `checked`
-  useEffect(() => {
-    const checkboxes = ref.current!.getElementsByTagName("input");
-    for (const checkbox of checkboxes) {
-      const dataPath = PgExplorer.getItemPathFromEl(checkbox);
-      if (!dataPath) continue;
-
-      const checked = filePaths.some((path) => path.startsWith(dataPath));
-      checkbox.checked = checked;
-    }
-  }, [filePaths, ref]);
-
   return (
     <Wrapper ref={ref}>
-      <RecursiveFolder path={path} setFilePaths={setFilePaths} />
+      <RecursiveFolder
+        path={path}
+        filePaths={filePaths}
+        setFilePaths={setFilePaths}
+      />
     </Wrapper>
   );
 };
@@ -52,10 +36,22 @@ const Wrapper = styled.div`
   border-radius: ${({ theme }) => theme.default.borderRadius};
 `;
 
-type RecursiveFolderProps = Omit<FilePickerProps, "filePaths">;
+type RecursiveFolderProps = FilePickerProps;
+
+/** Get the paths of every file in the folder, subfolders included */
+const getFilePathsIn = (folderPath: string): string[] => {
+  const { files, folders } = PgExplorer.getFolderContent(folderPath);
+  return [
+    ...files.map((name) => PgCommon.joinPaths(folderPath, name)),
+    ...folders.flatMap((name) =>
+      getFilePathsIn(PgCommon.joinPaths(folderPath, name, "/"))
+    ),
+  ];
+};
 
 const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
   path,
+  filePaths,
   setFilePaths,
 }) => {
   const folderName = useMemo(
@@ -73,48 +69,39 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
     [path]
   );
 
-  const toggleCheck = useCallback(
-    (ev: ChangeEvent<HTMLInputElement>) => {
-      const paths: string[] = [];
-      const startEl = PgExplorer.getItemTypeFromEl(ev.target)?.file
-        ? ev.target.parentElement!.parentElement!
-        : wrapperRef.current!;
+  // A folder reads as checked while any file under it is
+  const isChecked = (itemPath: string) =>
+    filePaths.some((filePath) => filePath.startsWith(itemPath));
 
-      const recursivelyGetPaths = (el: Element) => {
-        for (const childEl of el.children) {
-          if (childEl.getAttribute("type") === "checkbox") {
-            const path = PgExplorer.getItemPathFromEl(childEl);
-            if (path) paths.push(path);
-          } else {
-            recursivelyGetPaths(childEl);
-          }
-        }
-      };
-      recursivelyGetPaths(startEl);
+  const toggleCheck = useCallback(
+    (itemPath: string, checked: boolean) => {
+      const paths = PgExplorer.getItemTypeFromPath(itemPath).file
+        ? [itemPath]
+        : getFilePathsIn(itemPath);
 
       setFilePaths((previousPaths) => {
-        const filePaths = paths.filter(
-          (path) => PgExplorer.getItemTypeFromPath(path).file
-        );
-        if (ev.target.checked) return [...previousPaths, ...filePaths];
-        return previousPaths.filter((path) => !filePaths.includes(path));
+        if (checked) {
+          return [
+            ...previousPaths,
+            ...paths.filter((p) => !previousPaths.includes(p)),
+          ];
+        }
+        return previousPaths.filter((p) => !paths.includes(p));
       });
     },
     [setFilePaths]
   );
 
-  const wrapperRef = useRef<HTMLDivElement>(null);
-
   return (
-    <Folder ref={wrapperRef}>
+    <Folder>
       <FolderName>
-        <StyledCheckbox
-          depth={depth}
-          label={folderName}
-          onChange={toggleCheck}
-          defaultChecked
-          data-path={path}
-        />
+        <StyledLabel $depth={depth}>
+          <Checkbox
+            checked={isChecked(path)}
+            onCheckedChange={(checked) => toggleCheck(path, checked === true)}
+          />
+          {folderName}
+        </StyledLabel>
       </FolderName>
 
       {folders
@@ -127,6 +114,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
           <RecursiveFolder
             key={name}
             path={PgCommon.joinPaths(path, name, "/")}
+            filePaths={filePaths}
             setFilePaths={setFilePaths}
           />
         ))}
@@ -135,18 +123,18 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
         .sort((a, b) => a.localeCompare(b))
         .map((name) => (
           <File key={name}>
-            <StyledCheckbox
-              depth={depth + 1}
-              label={
-                <FileNameWrapper>
-                  <LangIcon path={name} />
-                  <FileName>{name}</FileName>
-                </FileNameWrapper>
-              }
-              onChange={toggleCheck}
-              defaultChecked
-              data-path={PgCommon.joinPaths(path, name)}
-            />
+            <StyledLabel $depth={depth + 1}>
+              <Checkbox
+                checked={isChecked(PgCommon.joinPaths(path, name))}
+                onCheckedChange={(checked) =>
+                  toggleCheck(PgCommon.joinPaths(path, name), checked === true)
+                }
+              />
+              <FileNameWrapper>
+                <LangIcon path={name} />
+                <FileName>{name}</FileName>
+              </FileNameWrapper>
+            </StyledLabel>
           </File>
         ))}
     </Folder>
@@ -185,8 +173,8 @@ const FileName = styled.span`
   margin-left: 0.25rem;
 `;
 
-const StyledCheckbox = styled(Checkbox)<{ depth: number }>`
-  margin-left: ${({ depth }) => depth + 1}rem;
+const StyledLabel = styled(Label)<{ $depth: number }>`
+  margin-left: ${({ $depth }) => $depth + 1}rem;
   padding: 0.375rem 0.5rem;
   height: 2rem;
 `;

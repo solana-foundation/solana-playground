@@ -1,6 +1,6 @@
 import * as React from "react"
 import { Plus, Square } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* Where you ask the assistant for something: a note above it, the files it
    will read, the words, then the tools. Enter sends; Shift and Enter make a
@@ -57,21 +57,50 @@ function ComposerChip({ className, ...props }: React.ComponentProps<"span">) {
   return (
     <span
       data-slot="composer-chip"
-      className={cn("inline-flex h-6 items-center gap-1.5 rounded-md border border-border bg-surface-raised px-2 font-mono text-xs text-muted-foreground [&_svg]:size-3.5", className)}
+      className={cn("inline-flex h-[22px] items-center gap-1.5 rounded-full border border-border px-2 py-px text-xs text-muted-foreground [&_svg]:size-3.5", className)}
       {...props}
     />
   )
 }
 
-function ComposerInput({ className, onKeyDown, onInput, ...props }: React.ComponentProps<"textarea">) {
+function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React.ComponentProps<"textarea">) {
   const { setEmpty } = React.useContext(ComposerContext)
+  const ref = React.useRef<HTMLTextAreaElement>(null)
+  // The width the height was last measured at; null until it first is
+  const measuredAt = React.useRef<number | null>(null)
   const grow = (el: HTMLTextAreaElement) => {
     el.style.height = "auto"
     el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+    measuredAt.current = el.clientWidth
     setEmpty(!el.value.trim())
   }
+  // A controlled value can change without an input event (a prompt the
+  // product puts in, a send that clears it), so emptiness follows it too.
+  // `grow` is left out of the deps: it only uses the stable setEmpty and the ref
+  React.useLayoutEffect(() => {
+    if (value === undefined || !ref.current) return
+    grow(ref.current)
+  }, [value])
+  // The height follows the width too. An input measured in a narrow column
+  // (a panel that mounts it while still folded, then opens) wraps its
+  // placeholder per character and would keep that height once the column
+  // grows. Only a width other than the measured one re-grows, so the height
+  // this sets never feeds back into the observer; its first call, on
+  // observe, catches a width that changed before this effect ran.
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(() => {
+      if (measuredAt.current === null || measuredAt.current === el.clientWidth) return
+      grow(el)
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
   return (
     <textarea
+      ref={ref}
+      value={value}
       data-slot="composer-input"
       rows={1}
       aria-label="Message"
@@ -88,7 +117,7 @@ function ComposerInput({ className, onKeyDown, onInput, ...props }: React.Compon
         }
       }}
       className={cn(
-        "max-h-[200px] min-h-12 w-full resize-none bg-transparent px-4 pt-3.5 pb-1 text-[0.9375rem] font-[350] text-foreground outline-none placeholder:text-muted-foreground",
+        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle",
         className
       )}
       {...props}
@@ -97,7 +126,7 @@ function ComposerInput({ className, onKeyDown, onInput, ...props }: React.Compon
 }
 
 function ComposerToolbar({ className, ...props }: React.ComponentProps<"div">) {
-  return <div data-slot="composer-toolbar" className={cn("flex items-center gap-1.5 p-2", className)} {...props} />
+  return <div data-slot="composer-toolbar" className={cn("flex items-center gap-1.5 px-3 pt-1.5 pb-2.5", className)} {...props} />
 }
 
 /* Add a file, a selection, a program */
@@ -195,7 +224,7 @@ function ComposerSend({ className, children, ...props }: React.ComponentProps<"b
       aria-label="Send"
       disabled={empty}
       className={cn(
-        "ml-auto grid size-8 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground transition-[filter,opacity,transform] outline-none hover:bg-(--accent-fill-hover) focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4",
+        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-foreground hover:not-disabled:not-aria-disabled:text-white active:not-disabled:not-aria-disabled:text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4",
         className
       )}
       {...props}

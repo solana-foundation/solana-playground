@@ -1,8 +1,9 @@
 import { useRef } from "react";
 import type { CSSProperties, FormEvent, RefObject } from "react";
-import { cn } from "cn";
+import { cn } from "@/shared/lib/utils";
 import { ExternalLink } from "lucide-react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { brandButtonVariants } from "@/shared/ui/brand-button";
 import { Input } from "@/shared/ui/input";
@@ -162,6 +163,7 @@ export const BaseFeedbackForm = ({
             <AsyncButton
               type="submit"
               loading={sending}
+              onError={reportButtonFailure("send your feedback")}
               className={brandButtonVariants({ variant: "accent" })}
             >
               Submit

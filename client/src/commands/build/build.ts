@@ -293,12 +293,16 @@ const improveOutput = (output: string) => {
   startIndex = output.indexOf("Finished release");
   if (startIndex !== -1) {
     const whiteSpaceStartIndex = startIndex - 7; // 7 is the most amount of whitespace
+    const fromTime = output.substring(output.indexOf(" in", startIndex)); // foundation: time passed, held apart for the full stop
+    const newlineIndex = fromTime.indexOf("\n"); // foundation: "." before the first newline only, by index, not replace("\n", ".\n") (CodeQL js/incomplete-sanitization)
     output =
       output.substring(0, whiteSpaceStartIndex) + // Until whitespace start
       output.substring(whiteSpaceStartIndex, startIndex).replaceAll(" ", "") +
       PgTerminal.success("Build successful. ") +
       "Completed" +
-      output.substring(output.indexOf(" in", startIndex)).replace("\n", ".\n"); // Time passed
+      (newlineIndex === -1 // foundation
+        ? fromTime
+        : fromTime.slice(0, newlineIndex) + "." + fromTime.slice(newlineIndex));
   }
 
   output = output.substring(0, output.length - 1);

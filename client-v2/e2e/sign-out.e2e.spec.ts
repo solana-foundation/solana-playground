@@ -2,15 +2,21 @@ import { expect, json, LONG, seedWorkspace, test } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
- * Signing out from the header chip.
+ * Signing out from the account menu.
  *
  * The session cookie is HttpOnly, so it survives a refused sign-out, and a
- * header that showed signed out anyway was undone by the next reload. Sync is
+ * footer that showed signed out anyway was undone by the next reload. Sync is
  * stubbed off, so the sign-out uploads nothing first: what is under test is
- * the header chip, not the hand-over.
+ * the account control and its dialog, not the hand-over.
  */
 
 const USER = { id: "u1", name: "Tester", image: null, login: "t" };
+
+/** The footer's account row, or the rail's "Account", whatever the session */
+const account = (page: Page) =>
+  page
+    .locator('[data-slot="sidebar"] [data-slot="sidebar-footer"]')
+    .getByRole("button", { name: /^Account/ });
 
 /**
  * A signed-in browser whose sign-out request is answered by `answer`. Once a
@@ -34,75 +40,67 @@ const signedInWith = async (
   });
 
   await seedWorkspace(page);
-  const chip = page.getByRole("button", { name: "GitHub profile: t" });
-  await expect(chip).toBeVisible(LONG);
+  await expect(account(page)).toHaveAccessibleName("Account: t", LONG);
 
+  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
+  const confirm = dialog.getByRole("button", { name: "Sign out" });
+
+  /** Opens the dialog from the menu, if it is not open already, and confirms */
   const signOut = async () => {
-    await chip.click();
-    // The row that opens the confirmation, then the confirmation itself
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await page.getByRole("button", { name: "Sign out" }).click();
+    if (!(await dialog.isVisible())) {
+      await account(page).click();
+      await page.getByRole("menuitem", { name: "Sign out" }).click();
+    }
+    await confirm.click();
   };
 
-  // Monaco keeps empty `alert` regions of its own, so the chip's is found by its text
-  const failure = page
-    .getByRole("alert")
-    .filter({ hasText: "Could not sign out" });
-
-  return { chip, signOut, failure };
+  return { dialog, confirm, signOut };
 };
 
 test("client-v2-auth: A sign-out", async ({ page }) => {
   test.setTimeout(120_000);
   // Held until the in-progress state is checked: the upload and the request
-  // can take seconds, and the chip says so meanwhile
+  // can take seconds, and the dialog's button says so meanwhile
   let accept: () => void = () => {};
   const accepted = new Promise<void>((resolve) => {
     accept = resolve;
   });
-  const { signOut, failure } = await signedInWith(page, async () => {
+  const { dialog, confirm, signOut } = await signedInWith(page, async () => {
     await accepted;
     return "accepted";
   });
 
   await signOut();
 
-  const busy = page.getByRole("button", { name: "Signing out of GitHub" });
-  await expect(busy).toBeVisible(LONG);
-  await expect(busy).toHaveAttribute("aria-busy", "true");
+  await expect(confirm).toHaveAttribute("aria-busy", "true", LONG);
+  // Still signed in until the server answers
+  await expect(account(page)).toHaveAccessibleName("Account: t");
 
   accept();
 
-  await expect(
-    page.getByRole("button", { name: "Sign in with GitHub" }).first()
-  ).toBeVisible(LONG);
-  await expect(
-    page.getByRole("button", { name: /^GitHub profile/ })
-  ).toBeHidden();
-  await expect(failure).toBeHidden();
+  await expect(account(page)).toHaveAccessibleName("Account, signed out", LONG);
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Could not sign out.")).toBeHidden();
 });
 
 test("client-v2-auth: A sign-out that fails", async ({ page }) => {
   test.setTimeout(120_000);
   let refuse = true;
-  const { chip, signOut, failure } = await signedInWith(page, async () =>
+  const { dialog, signOut } = await signedInWith(page, async () =>
     refuse ? "refused" : "accepted"
   );
 
   await signOut();
 
-  await expect(failure).toHaveText("Could not sign out. Try again.", LONG);
-  await expect(chip).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Sign in with GitHub" })
-  ).toBeHidden();
+  await expect(page.getByText("Could not sign out.")).toBeVisible(LONG);
+  // The dialog stays: the user is still signed in, and can try again
+  await expect(dialog).toBeVisible();
+  await expect(account(page)).toHaveAccessibleName("Account: t");
 
-  // A retry the server accepts signs out, and the failure is no longer shown
+  // A retry the server accepts signs out
   refuse = false;
   await signOut();
 
-  await expect(
-    page.getByRole("button", { name: "Sign in with GitHub" }).first()
-  ).toBeVisible(LONG);
-  await expect(failure).toBeHidden();
+  await expect(account(page)).toHaveAccessibleName("Account, signed out", LONG);
+  await expect(dialog).toBeHidden();
 });

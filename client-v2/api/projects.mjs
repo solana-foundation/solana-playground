@@ -9,8 +9,10 @@
  * long.
  */
 import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
-import { warnAboutMissingObservabilityIds } from "../src/features/api/server/observability.mjs";
-import { withObservability } from "../src/features/api/server/with-observability.mjs";
+import {
+  warnAboutMissingObservabilityIds,
+  withObservability,
+} from "../src/features/api/server.mjs";
 import {
   deleteProject,
   getProject,

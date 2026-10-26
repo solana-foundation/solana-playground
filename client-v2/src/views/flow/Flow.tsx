@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import Chevron from "./Chevron";
 import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
-import Header from "./header/Header";
+import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
+import { keepTab } from "./left/kept-column";
 import ObjectiveBand from "./lessons/ObjectiveBand";
 import Reader from "./lessons/Reader";
 // The barrel registers every lesson path as a side effect, so importing
@@ -18,38 +18,98 @@ import {
   PgLesson,
 } from "./lessons";
 import type { LessonState } from "./lessons";
-import GearSidebar from "./settings/GearSidebar";
-import type { SettingsFocus } from "./settings/GearSidebar";
 import StageRouter from "./stages/StageRouter";
 import { PgDeployHistory } from "./state/deploy-history";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import type { FlowState } from "./state/stage";
 import { GAP } from "./tokens";
-import { FeedbackWidget } from "@/features/feedback";
+import { FeedbackHost } from "@/features/feedback";
+import {
+  SETTINGS_TRIGGER_ATTR,
+  type SettingsFocus,
+  type SettingsExit,
+  type SettingsRequest,
+} from "@/shared/lib/settings-request";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
-import Assistant from "@/views/sidebar/assistant/Component";
-import ModalBackdrop from "@/components/ModalBackdrop";
-import Toast from "@/components/Toast";
+import { openConnectDialog } from "@/app/ConnectDialog";
 import Wallet from "@/components/Wallet";
+import { useKeybind } from "@/hooks";
+import { closeOpenLayers } from "@/shared/lib/close-open-layers";
+import { createLogger } from "@/shared/lib/logger";
+import { LogoLockup } from "@/shared/ui/logo";
 import { PgExplorer, PgView } from "@/utils";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { AppNav, ProjectList } from "@/widgets/app-nav";
+import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
+import { Assistant } from "@/widgets/assistant";
+import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
-import type { Disposable } from "@/utils/types";
+import { ModalHost, ToastHost } from "@/widgets/overlays";
+import { RailFooter, SessionFooter } from "@/widgets/session-footer";
+import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
+import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
 
 /**
- * The Flow layout: header, left project/file tabs, the stage router in the
- * center with a collapsible console beneath it, and the assistant on the
- * right, all placed by `LayoutShell`.
+ * The Flow layout, with no header: `LayoutShell` places four columns, the
+ * navigation (`AppNav`, holding the logo, the project list, and the
+ * session footer, `SessionFooter`: the cluster row, and the account row that
+ * opens the account menu; on the rail that footer gives way to `RailFooter`'s
+ * cluster dot and account button), the assistant, the files
+ * column, and the stage router over its collapsible console, with the shell's
+ * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
+ * last two. The sync banner sits above all four, full width. On `/` with no
+ * project, `useStartView` hands the shell `homeSlot`, and Home stands where
+ * the assistant and the work go.
+ *
+ * The feedback form and its state sit in `FeedbackHost`, above the frame, not
+ * in the footer with the account menu: below `LAYOUT_BREAKPOINTS.phone` the
+ * footer is on the pager's menu page, and crossing that width swaps it for
+ * the rail, so a draft or a send held in the footer would go with it.
  */
-const Flow = () => {
+const Flow = () => (
+  <FeedbackHost>
+    <FlowFrame />
+  </FeedbackHost>
+);
+
+const log = createLogger("flow:settings");
+
+/**
+ * Whether focus can land on `el`: on screen, and not inside an `inert` part,
+ * such as a phone page out of view, where `focus()` does nothing
+ */
+const canTakeFocus = (el: HTMLElement) =>
+  el.isConnected &&
+  el.getClientRects().length > 0 &&
+  el.closest("[inert]") === null;
+
+/**
+ * Where focus goes back when the control that opened the settings is gone or
+ * out of reach: a checklist step that the pick ticked, a footer the rail
+ * swapped out, a cluster row on the phone's menu page once Work shows. The
+ * first control that opens the settings still in reach, else the control
+ * that opens the navigation.
+ */
+const fallbackFocus = () =>
+  [
+    ...document.querySelectorAll<HTMLElement>(
+      `[${SETTINGS_TRIGGER_ATTR}], [data-sidebar="trigger"]`
+    ),
+  ].find(canTakeFocus);
+
+/** Open, the settings page remembers where focus was, to give it back */
+type SettingsState =
+  | { open: false }
+  | { open: true; focus: SettingsFocus; returnTo: HTMLElement | null };
+
+const FlowFrame = () => {
   const [state, setState] = useState<FlowState>(INITIAL_FLOW_STATE);
   const [lesson, setLesson] = useState<LessonState>(INITIAL_LESSON_STATE);
   const [reading, setReading] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // Lives here, not in `LeftPanel`: below `LAYOUT_BREAKPOINTS.left` the shell
-  // puts it in a Sheet that unmounts it on close, and crossing that width swaps
-  // the rail for the Sheet, so anything `LeftPanel` held goes with it.
-  const [pendingCreate, setPendingCreate] = useState(false);
-  const [settingsFocus, setSettingsFocus] = useState<SettingsFocus>("panel");
+  const [settings, setSettings] = useState<SettingsState>({ open: false });
+  const settingsOpen = settings.open;
+  const viewport = useViewport();
+  const phone = viewport === "phone";
 
   useEffect(() => {
     const subs = [
@@ -63,57 +123,87 @@ const Flow = () => {
   }, []);
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
-  // Toggles rather than opens: the header controls are the only way in, so a
-  // second click on one has to be the way out.
-  const toggleSettings = (focus: SettingsFocus = "panel") => {
-    setSettingsFocus(focus);
-    setSettingsOpen((open) => !open);
-  };
-
-  // Whether the empty-workspace gallery has already been opened once for
-  // this mount of `Flow`.
-  const openedGalleryOnInit = useRef(false);
-  /** Watches for the account's projects to land under an auto-opened gallery */
-  const imported = useRef<Disposable | null>(null);
-
+  // Back to the control that opened them, once the shell is no longer inert,
+  // or, when that is gone or out of reach, to `fallbackFocus`. Only when they
+  // close: on load, with the settings never opened, focus stays where the
+  // browser puts it, not on a trigger whose tooltip opens on focus (HOO-2240)
+  const refocus = useRef<HTMLElement | null>(null);
+  const wasOpen = useRef(false);
   useEffect(() => {
-    // `PgExplorer` initializes asynchronously (`routes/common.tsx`), so
-    // `allWorkspaceNames` may still be `undefined` on the first render --
-    // only decide once it has actually settled, otherwise every cold start
-    // would flash the gallery before we know whether there are projects.
-    //
-    // `PgExplorer.init()` reruns on every route navigation, so `onDidInit`
-    // fires more than once for the lifetime of `Flow`. Open the gallery at
-    // most once: dispose the subscription right after it fires so later
-    // navigations (e.g. into and out of a tutorial) never stack a second
-    // modal on top of one the user already interacted with.
-    const openIfEmpty = () => {
-      if (openedGalleryOnInit.current) return;
-      if (PgExplorer.allWorkspaceNames?.length === 0) {
-        openedGalleryOnInit.current = true;
-        sub.dispose();
-        openGallery();
-        // "You have no projects" is a guess until the account has answered.
-        // A browser signed in to an account with work on it is empty only for
-        // as long as the sync takes, and the gallery was landing on top of
-        // projects that arrived a moment later. Waiting for the sync instead
-        // would delay the gallery for everyone who genuinely is new, so it
-        // opens on time and stands down if it turns out to be wrong.
-        imported.current = PgExplorer.onDidCreateWorkspace(() => {
-          if (PgExplorer.allWorkspaceNames?.length) {
-            imported.current?.dispose();
-            PgView.closeModal();
-          }
-        });
-      }
+    const closed = wasOpen.current && !settings.open;
+    wasOpen.current = settings.open;
+    if (!closed) return;
+    if (refocus.current && canTakeFocus(refocus.current)) {
+      refocus.current.focus();
+    } else fallbackFocus()?.focus();
+    refocus.current = null;
+  }, [settings.open]);
+  const closeSettings = (via: SettingsExit) => {
+    if (!settings.open) return;
+    // The page covers the app, so every open dialog (an import, a Custom
+    // value, and any opened over it) came from it and goes with it
+    for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
+    settingsTelemetry.track("settings_closed", { via });
+    refocus.current = settings.returnTo;
+    setSettings({ open: false });
+  };
+  // The settings page covers the app, so of the ways in only ⌘, can still be
+  // used while it is open: that is the one request that closes it. Opening
+  // leaves the navigation (`closeSheet`): on a phone the footer sits on the
+  // menu page, and the settings show over Work.
+  const toggleSettings =
+    (closeSheet: () => void) =>
+    ({ from, focus, returnTo }: SettingsRequest) => {
+      if (settings.open) return closeSettings("key");
+      const active = document.activeElement;
+      closeSheet();
+      // A menu, popover or tooltip still open would float over the page;
+      // closed first, and its trigger stands in for the item focus was on
+      closeOpenLayers()
+        .then((trigger) => {
+          settingsTelemetry.track("settings_opened", { from });
+          setSettings({
+            open: true,
+            focus,
+            returnTo:
+              returnTo ??
+              trigger ??
+              (active instanceof HTMLElement && active !== document.body
+                ? active
+                : null),
+          });
+        })
+        .catch((error) =>
+          log.error(error, {
+            report: true,
+            context: { step: "close open layers", from },
+          })
+        );
     };
-    const sub = PgExplorer.onDidInit(openIfEmpty);
-    if (PgExplorer.allWorkspaceNames) openIfEmpty();
-    return () => {
-      sub.dispose();
-      imported.current?.dispose();
+
+  // Opens, never toggles: the checklist's "Choose a network" must not shut
+  // settings that are already open
+  const openSettings =
+    (closeSheet: () => void) =>
+    (focus: SettingsFocus = "page") => {
+      if (settings.open) return;
+      toggleSettings(closeSheet)({ from: "setup", focus });
     };
-  }, []);
+
+  // `PgKeybind` reads Meta as Ctrl, so this is ⌘, on a Mac and Ctrl+,
+  // elsewhere. The key has no way of its own to leave the navigation, so it
+  // takes the one the navigation last handed over: on a phone the menu page
+  // may be in view.
+  const closeNavSheet = useRef<() => void>(() => undefined);
+  useKeybind(
+    "Ctrl+,",
+    () => toggleSettings(closeNavSheet.current)({ from: "key", focus: "page" }),
+    [settings]
+  );
+
+  const page = useStartView();
+  // The Tutorials or Programs page shown, if any (`widgets/catalog`)
+  const catalog = useCatalogPage();
 
   const described = describeStep(lesson);
 
@@ -141,86 +231,166 @@ const Flow = () => {
 
   return (
     <Wrapper>
-      <Header
-        onOpenGallery={openGallery}
-        onToggleSettings={toggleSettings}
-        settingsOpen={settingsOpen}
-      />
-      {/* In flow, not floating: it is a blocking question, and the file it
+      {/* The app stays mounted under the settings page, invisible and inert
+          (design.md, "Settings as a full page (5.20)"): `Write` must never
+          unmount, and with `display: contents` and `visibility` the shell
+          keeps its boxes, so no panel sees a resize and folds on its own */}
+      <div
+        className={settings.open ? "contents invisible" : "contents"}
+        inert={settings.open}
+      >
+        {/* In flow, not floating: it is a blocking question, and the file it
           names has to stay visible beneath it */}
-      <BannerSlot>
-        <SyncBanner />
-      </BannerSlot>
-      <LayoutShell
-        left={({ collapsed, toggle }) => (
-          <LeftPanel
-            collapsed={collapsed}
-            onToggle={toggle}
-            pendingCreate={pendingCreate}
-            onPendingCreateChange={setPendingCreate}
-          />
-        )}
-        stage={
-          <Center>
-            <ObjectiveBand
-              state={lesson}
-              flow={state}
-              onRead={read}
-              onOpenGallery={openGallery}
-            />
-            <Stage>
-              <StageRouter stage={state.stage} />
-              {reading && described && (
-                <Reader
-                  key={described.step.id}
-                  step={described.step}
-                  position={described.number}
-                  criterion={described.verifiedBy}
-                  offersAttest={
-                    described.offersPrimary &&
-                    graderClass(described.step.verify) === "attestation"
+        <BannerSlot>
+          <SyncBanner />
+        </BannerSlot>
+        <LayoutShell
+          home={homeSlot(
+            page.view,
+            viewport,
+            () => page.leaveHome("continue"),
+            (p) => catalogPage.open(p, "home")
+          )}
+          keepWork={page.workKept}
+          cover={catalogSlot(catalog)}
+          nav={({ collapsed, toggle, closeSheet }) => {
+            closeNavSheet.current = closeSheet;
+            return (
+              <AppNav
+                // Home and the open project show in place of the work, which
+                // a phone's menu page covers
+                onHome={() => {
+                  closeSheet();
+                  // A page makes way: over Home that is all Home asks for,
+                  // over the work Home follows
+                  if (catalog) {
+                    catalogPage.close();
+                    if (page.view === "home") return;
                   }
-                  onLoaded={() => PgLesson.opened(described.step.id)}
-                  onClose={() => setReading(false)}
-                  onAttest={() => {
-                    PgLesson.attest();
-                    setReading(false);
-                  }}
+                  page.showHome("nav");
+                }}
+                current={catalog ?? undefined}
+                homeShown={page.view === "home"}
+                onOpenPage={(p) => {
+                  catalogPage.open(p, "nav");
+                  // A phone's menu page would cover the page it just opened
+                  closeSheet();
+                }}
+                onClosePage={catalogPage.close}
+                closeSheet={closeSheet}
+                collapsed={collapsed}
+                onToggle={toggle}
+                logo={<LogoLockup aria-hidden="true" />}
+                projects={
+                  <ProjectList
+                    onPicked={catalogPage.close}
+                    onPickCurrent={() => {
+                      page.leaveHome("current-project");
+                      closeSheet();
+                    }}
+                  />
+                }
+                footer={
+                  <SessionFooter
+                    settingsOpen={settingsOpen}
+                    onToggleSettings={toggleSettings(closeSheet)}
+                  />
+                }
+                railFooter={
+                  <RailFooter
+                    settingsOpen={settingsOpen}
+                    onToggleSettings={toggleSettings(closeSheet)}
+                  />
+                }
+                setup={
+                  <SetupList
+                    onConnectAssistant={() => openConnectDialog("setup")}
+                    onChooseNetwork={() => openSettings(closeSheet)("network")}
+                  />
+                }
+              />
+            );
+          }}
+          stageTabs={<StageBar />}
+          files={({ collapsed }) => <LeftPanel collapsed={collapsed} />}
+          stage={({ openFiles }) => (
+            <Center>
+              <ObjectiveBand
+                state={lesson}
+                flow={state}
+                onRead={read}
+                onOpenGallery={openGallery}
+                compact={
+                  phone
+                    ? {
+                        // Below `LAYOUT_BREAKPOINTS.phone`, where the band is
+                        // compact, the Files sheet mounts the column fresh, and
+                        // it reads its tab from the per-project memory
+                        // (`kept-column.ts`)
+                        onOpenSteps: () => {
+                          keepTab(PgExplorer.currentWorkspaceId, "steps");
+                          openFiles();
+                        },
+                      }
+                    : undefined
+                }
+              />
+              <Stage>
+                <StageRouter stage={state.stage} />
+                {reading && described && (
+                  <Reader
+                    key={described.step.id}
+                    step={described.step}
+                    position={described.number}
+                    criterion={described.verifiedBy}
+                    offersAttest={
+                      described.offersPrimary &&
+                      graderClass(described.step.verify) === "attestation"
+                    }
+                    onLoaded={() => PgLesson.opened(described.step.id)}
+                    onClose={() => setReading(false)}
+                    onAttest={() => {
+                      PgLesson.attest();
+                      setReading(false);
+                    }}
+                  />
+                )}
+              </Stage>
+            </Center>
+          )}
+          console={({ open, toggle }) => (
+            <ConsoleDrawer open={open} onToggle={toggle} />
+          )}
+          assistant={({ open, toggle, ...widen }) => (
+            <Right>
+              {/* The head carries "Collapse assistant", and Widen while the
+                shell says it can widen. Hidden, the column takes no width and
+                the stage bar carries "Expand assistant" (design.md, "Frame
+                chrome (5.25)") */}
+              {open && (
+                <Assistant
+                  widen={widen}
+                  onHide={toggle}
+                  openConnect={openConnectDialog}
                 />
               )}
-            </Stage>
-          </Center>
-        }
-        console={({ open, toggle }) => (
-          <ConsoleDrawer open={open} onToggle={toggle} />
-        )}
-        assistant={({ open, toggle }) => (
-          <Right $open={open}>
-            <Collapse
-              type="button"
-              aria-label={open ? "Collapse assistant" : "Expand assistant"}
-              onClick={toggle}
-            >
-              <Chevron $flip={!open} />
-            </Collapse>
-            {open && <Assistant />}
-          </Right>
-        )}
-      />
+            </Right>
+          )}
+        />
 
-      <GearSidebar
-        open={settingsOpen}
-        focus={settingsFocus}
-        onClose={() => setSettingsOpen(false)}
-      />
+        <Wallet />
+      </div>
 
-      <Wallet />
-      <FeedbackWidget />
-      <PortalAbove id={PgView.ids.PORTAL_ABOVE} />
-      <StyledModalBackdrop />
-      <PortalBelow id={PgView.ids.PORTAL_BELOW}>
-        <Toast />
-      </PortalBelow>
+      {settings.open && (
+        <SettingsPage
+          focus={settings.focus}
+          onClose={closeSettings}
+          onChooseNetwork={markNetworkChosen}
+        />
+      )}
+
+      <ModalHost />
+      <ToastHost />
     </Wrapper>
   );
 };
@@ -237,6 +407,9 @@ const Wrapper = styled.div.attrs({
   ${({ theme }) => css`
     width: 100vw;
     height: 100vh;
+    /* The visible height: on iPad and iPhone Safari 100vh is the height with
+       the toolbar hidden, so the foot of the navigation started under it */
+    height: 100dvh;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -254,9 +427,8 @@ const BannerSlot = styled.div`
   }
 `;
 
-// The floating center panel holding the stage. It is open at the bottom: the
-// console panel under it carries the sides and bottom border, so the two read
-// as one surface.
+// The stage's column. The frame is flush (design.md, "Frame chrome (5.25)"):
+// no card edges, the page's background; the shell draws the dividers.
 const Center = styled.div`
   ${({ theme }) => css`
     display: flex;
@@ -264,11 +436,7 @@ const Center = styled.div`
     flex: 1;
     min-width: 0;
     min-height: 0;
-    background: ${theme.colors.default.bgSecondary};
-    border: 1px solid ${theme.colors.default.border};
-    border-bottom: none;
-    border-radius: ${theme.default.borderRadius} ${theme.default.borderRadius} 0
-      0;
+    background: ${theme.colors.default.bgPrimary};
     overflow: hidden;
   `}
 `;
@@ -288,65 +456,14 @@ const Stage = styled.div`
   position: relative;
 `;
 
-const Right = styled.aside<{ $open: boolean }>`
-  ${({ theme, $open }) => css`
+const Right = styled.aside`
+  ${({ theme }) => css`
     position: relative;
-    --flow-handle-inset: ${$open ? "1rem" : "0px"};
     width: 100%;
     height: 100%;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    background: ${theme.colors.default.bgSecondary};
+    background: ${theme.colors.default.bgPrimary};
     display: flex;
     flex-direction: column;
     overflow: hidden;
   `}
-`;
-
-const Collapse = styled.button`
-  ${({ theme }) => css`
-    /* The handle owns the panel's left gutter; the assistant header reads
-       --flow-handle-inset (set on Right) and starts after it. */
-    position: absolute;
-    /* Centre on the assistant header row (its eyebrow and chips sit
-       ~20px below the panel top): 4px offset + 32px tall = 20px centre. */
-    top: 0.25rem;
-    left: 0;
-    width: 1.5rem;
-    height: 2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    color: ${theme.colors.default.textSecondary};
-    cursor: pointer;
-    z-index: 1;
-
-    &:focus-visible {
-      outline: 2px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
-  `}
-`;
-
-// Above everything the shell draws: the stock Sidebar (z-10), the header
-// (z-20) and the Sheets (z-50), which portal to `body` beside these. The
-// explorer's context menu opens here from inside the project Sheet, so it
-// must sit over that Sheet; a modal closes the Sheet as it opens
-// (`LayoutShell`), since the Sheet traps focus. A modal Sheet also turns off
-// pointer events on `body`, so each portal turns them back on for itself.
-const PortalAbove = styled.div`
-  z-index: 62;
-  pointer-events: auto;
-`;
-const StyledModalBackdrop = styled(ModalBackdrop)`
-  z-index: 61;
-  pointer-events: auto;
-`;
-// Toasts open at the bottom left, over the left panel and its Sheet, and
-// below the modal backdrop so a modal still covers them.
-const PortalBelow = styled.div`
-  z-index: 60;
-  pointer-events: auto;
 `;

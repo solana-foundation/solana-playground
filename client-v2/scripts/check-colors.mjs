@@ -24,6 +24,8 @@ const ALLOWED = [
   /^shared\/lib\/css-color\//,
   // Third-party logos keep their own colours on every ground
   /^languages\//,
+  // The page icon, drawn by the browser outside the page, where no token reaches
+  /^app\/favicon\.svg$/,
 ];
 
 const EXTENSIONS = new Set([

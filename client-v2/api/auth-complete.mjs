@@ -14,12 +14,14 @@
  * Every outcome must post and close: a response that does nothing leaves the
  * popup open and the app waiting until its timeout.
  */
-import { warnAboutMissingObservabilityIds } from "../src/features/api/server/observability.mjs";
-import { withObservability } from "../src/features/api/server/with-observability.mjs";
+import {
+  warnAboutMissingObservabilityIds,
+  withObservability,
+} from "../src/features/api/server.mjs";
 import {
   AUTH_CHANNEL_NAME,
   AUTH_MESSAGE_TYPE,
-} from "../src/features/auth/config.mjs";
+} from "../src/features/auth/server.mjs";
 
 /** Bounds what can be echoed back into the page */
 const NONCE_PATTERN = /^[0-9a-f]{1,64}$/;

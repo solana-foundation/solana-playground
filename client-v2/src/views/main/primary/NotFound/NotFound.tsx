@@ -1,9 +1,10 @@
 import type { FC } from "react";
-import styled from "styled-components";
 
-import Button from "../../../../components/Button";
-import Text from "../../../../components/Text";
-import { Error } from "../../../../components/Icons";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { CircleXIcon } from "lucide-react";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Empty, EmptyContent } from "@/shared/ui/empty";
 import { PgRouter } from "../../../../utils";
 
 interface NotFoundProps {
@@ -18,25 +19,23 @@ const NotFound: FC<React.PropsWithChildren<NotFoundProps>> = ({
   text,
   navigate,
 }) => (
-  <Wrapper>
-    <Text kind="error" icon={<Error />}>
-      {text ?? `URL path not found: ${PgRouter.location.pathname}`}
-    </Text>
-    <Button
-      kind="primary-transparent"
-      onClick={() => PgRouter.navigate(navigate?.path)}
-    >
-      {navigate?.name ?? "Go home"}
-    </Button>
-  </Wrapper>
+  <Empty>
+    <Callout variant="error" className="w-fit">
+      <CircleXIcon />
+      <CalloutDescription className="wrap-anywhere">
+        {text ?? `URL path not found: ${PgRouter.location.pathname}`}
+      </CalloutDescription>
+    </Callout>
+    <EmptyContent>
+      <AsyncButton
+        variant="ghost"
+        onClick={() => PgRouter.navigate(navigate?.path)}
+        onError={reportButtonFailure("open the page")}
+      >
+        {navigate?.name ?? "Go home"}
+      </AsyncButton>
+    </EmptyContent>
+  </Empty>
 );
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  gap: 1rem;
-`;
 
 export default NotFound;

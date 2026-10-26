@@ -1,32 +1,25 @@
-// The legacy form controls pull in the utils barrel, whose generated globals
-// exist only once the app has booted. Which backend the picker reconnects to
-// is all that is under test, so plain elements stand in.
-vi.mock("../../../../components/GradientButton", () => ({
-  default: (props: { children: React.ReactNode; onClick?: () => void }) => (
-    <button onClick={props.onClick}>{props.children}</button>
-  ),
-}));
-vi.mock("../../../../components/Input", () => ({
-  default: (props: { id?: string }) => <input id={props.id} />,
-}));
+// The footer link reaches the utils barrel, whose generated globals exist only
+// once the app has booted; what it draws is not under test
 vi.mock("../../../../components/Link", () => ({
   default: (props: { children: React.ReactNode }) => (
     <span>{props.children}</span>
   ),
 }));
-vi.mock("../../../../components/Select", () => ({ default: () => null }));
 
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import Connect from "./Connect";
-import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 import { PgSession } from "../../../../features/auth";
+import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+import type { ConnectAction, ConnectProps } from "./Connect";
+import { PROVIDERS } from "../model/types";
 import { PgAssistant, type Connection } from "../store";
 
 /**
- * A theme that answers every key: the picker reads deep theme keys for its
+ * A theme that answers every key: the form reads deep theme keys for its
  * styles, none of which matters here, and the real theme needs the utils
  * barrel.
  */
@@ -40,120 +33,293 @@ const anyTheme: DefaultTheme = new Proxy(
   }
 ) as unknown as DefaultTheme;
 
-const KEY = "sk-test-connect-0123456789";
 const OWN: Connection = {
   id: "openai",
-  apiKey: KEY,
+  apiKey: "sk-test-connect-0123456789",
   endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
 };
 
-/** Answer the default-backend probe with this body and status */
-const probeAnswers = (body: string, status = 200) =>
-  vi
-    .spyOn(globalThis, "fetch")
-    .mockResolvedValue(
-      new Response(body, { status, headers: { "content-type": "json" } })
-    );
+/** What the form handed its host last, as the dialog's footer would draw it */
+let action: ConnectAction | null;
 
-const renderConnect = () =>
+const renderConnect = (props: Omit<ConnectProps, "frame">) =>
   render(
     <ThemeProvider theme={anyTheme}>
-      <Connect />
+      <Connect
+        defaultBackend={props.defaultBackend}
+        preset={props.preset}
+        frame={(parts) => {
+          action = parts.action;
+          return <>{parts.form}</>;
+        }}
+      />
     </ThemeProvider>
   );
 
+/**
+ * A real known-step failure ("Allow popups for this site to sign in."): the
+ * popup is blocked. Made once per test, before the spy replaces `signIn`.
+ */
+const blockedPopup = async () => {
+  vi.spyOn(globalThis, "fetch").mockResolvedValue({
+    ok: true,
+    json: async () => ({ url: "https://github.example/authorize" }),
+  } as Response);
+  PgSession.setOpenChannel(() => undefined);
+  return PgSession.signIn().catch((error: unknown) => error);
+};
+
+const checked = () =>
+  screen
+    .getAllByRole("radio")
+    .find((radio) => radio.getAttribute("aria-checked") === "true");
+
 describe("Connect", () => {
   beforeEach(() => {
-    // Disconnecting forgets both stores, so it comes before the seeding
+    action = null;
     PgAssistant.disconnect();
-    localStorage.clear();
-    sessionStorage.clear();
-    void PgSession.refreshWith(null);
-  });
-  afterEach(() => {
-    vi.restoreAllMocks();
-    resetLogger();
-  });
-
-  it("reconnects this tab's key-based backend over a remembered default", async () => {
-    sessionStorage.setItem("assistant.connection", JSON.stringify(OWN));
-    localStorage.setItem("assistant.backend", "default");
-    // Signed in, or the default could never reconnect and the test proves nothing
+    // The default backend answers only a signed-in user
     void PgSession.refreshWith({
       id: "u1",
       name: null,
       image: null,
       login: null,
     });
-    const probe = probeAnswers(JSON.stringify({ configured: true }));
-
-    renderConnect();
-
-    // The default's description shows once the probe has said yes, which is
-    // when the default's own reconnect gets its chance
-    await screen.findByText(/The agentic backend this playground/);
-    expect(probe).toHaveBeenCalled();
-    expect(PgAssistant.connection).toMatchObject({ id: "openai", apiKey: KEY });
-    expect(sessionStorage.getItem("assistant.connection")).toContain(KEY);
+  });
+  afterEach(() => {
+    PgAssistant.disconnect();
+    PgSession.reset();
+    vi.restoreAllMocks();
   });
 
-  it("logs a probe the server refused, and offers no default", async () => {
-    const logged = memoryProvider();
-    initLogger({ providers: [logged] });
-    probeAnswers("upstream down", 503);
+  it("offers a signed-in user the default with Start", () => {
+    renderConnect({ defaultBackend: "present" });
 
-    renderConnect();
-
-    await screen.findByText(/Not configured on this deployment/);
-    expect(logged.entries).toContainEqual(
-      expect.objectContaining({
-        ns: "assistant:connect",
-        level: "warn",
-        context: { status: 503 },
-        report: false,
-      })
-    );
+    expect(screen.getByText("no key needed")).toBeTruthy();
+    expect(screen.queryByText("sign-in needed")).toBeNull();
+    expect(action?.text).toBe("Start");
   });
 
-  it("treats a probe that answers JSON null as no default", async () => {
-    probeAnswers("null");
+  describe("signed out", () => {
+    beforeEach(() => PgSession.refreshWith(null));
 
-    renderConnect();
+    it("offers sign-in for the default instead of Start", () => {
+      renderConnect({ defaultBackend: "present" });
 
-    await screen.findByText(/Not configured on this deployment/);
-    await waitFor(() => expect(PgAssistant.connection).toBeNull());
-  });
-
-  it("shows why a sign-in from the panel failed", async () => {
-    probeAnswers(JSON.stringify({ configured: true }));
-    vi.spyOn(PgSession, "signIn").mockRejectedValue(
-      new Error("Allow popups for this site to sign in.")
-    );
-
-    renderConnect();
-    fireEvent.click(
-      await screen.findByRole("button", { name: "Sign in with GitHub" })
-    );
-
-    expect((await screen.findByRole("alert")).textContent).toBe(
-      "Allow popups for this site to sign in."
-    );
-  });
-
-  it("clears the failure when the next sign-in starts", async () => {
-    probeAnswers(JSON.stringify({ configured: true }));
-    vi.spyOn(PgSession, "signIn")
-      .mockRejectedValueOnce(new Error("Sign-in cancelled."))
-      .mockReturnValueOnce(new Promise(() => {}));
-
-    renderConnect();
-    const button = await screen.findByRole("button", {
-      name: "Sign in with GitHub",
+      expect(
+        screen.getByText(
+          "Sign in with GitHub to use it, or bring your own key below."
+        )
+      ).toBeTruthy();
+      // The tag would otherwise call the backend ready to use
+      expect(screen.getByText("sign-in needed")).toBeTruthy();
+      expect(screen.queryByText("no key needed")).toBeNull();
+      expect(action).toMatchObject({
+        text: "Sign in with GitHub",
+        ready: true,
+      });
     });
-    fireEvent.click(button);
-    await screen.findByRole("alert");
-    fireEvent.click(button);
 
-    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    it("signs in from the assistant when the action is pressed", async () => {
+      const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue();
+      renderConnect({ defaultBackend: "present" });
+
+      await act(async () => action!.connect());
+
+      expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+      expect(PgAssistant.connection).toBeNull();
+    });
+
+    it("shows why a sign-in failed", async () => {
+      const failure = await blockedPopup();
+      vi.spyOn(PgSession, "signIn").mockRejectedValue(failure);
+      renderConnect({ defaultBackend: "present" });
+
+      await act(async () => action!.connect());
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Allow popups for this site to sign in."
+      );
+    });
+
+    it("reports a sign-in that failed for a reason it does not know", async () => {
+      const logged = memoryProvider();
+      initLogger({ providers: [logged] });
+      vi.spyOn(PgSession, "signIn").mockRejectedValue(
+        new TypeError("Failed to fetch")
+      );
+      renderConnect({ defaultBackend: "present" });
+
+      await act(async () => action!.connect());
+
+      expect((await screen.findByRole("alert")).textContent).toBe(
+        "Sign-in failed. Try again."
+      );
+      expect(logged.entries).toEqual([
+        expect.objectContaining({ level: "error", report: true }),
+      ]);
+      resetLogger();
+    });
+
+    it("holds the action while the sign-in runs", async () => {
+      vi.spyOn(PgSession, "signInState").mockReturnValue({ status: "pending" });
+      renderConnect({ defaultBackend: "present" });
+
+      expect(action).toMatchObject({
+        text: "Sign in with GitHub",
+        ready: false,
+      });
+    });
+
+    it("clears the failure when the next sign-in starts", async () => {
+      const failure = await blockedPopup();
+      vi.spyOn(PgSession, "signIn")
+        .mockRejectedValueOnce(failure)
+        .mockReturnValueOnce(new Promise(() => {}));
+      renderConnect({ defaultBackend: "present" });
+      await act(async () => action!.connect());
+      await screen.findByRole("alert");
+
+      await act(async () => action!.connect());
+
+      expect(screen.queryByRole("alert")).toBeNull();
+    });
+
+    it("offers Start once the user signs in", async () => {
+      renderConnect({ defaultBackend: "present" });
+      expect(action?.text).toBe("Sign in with GitHub");
+
+      await act(() =>
+        PgSession.refreshWith({
+          id: "u1",
+          name: null,
+          image: null,
+          login: null,
+        })
+      );
+
+      expect(action?.text).toBe("Start");
+      expect(screen.getByText("no key needed")).toBeTruthy();
+      expect(screen.queryByText("sign-in needed")).toBeNull();
+    });
+
+    it("connects a key-based backend as before", () => {
+      renderConnect({
+        defaultBackend: "present",
+        preset: { provider: "openai" },
+      });
+
+      expect(action?.text).toBe("Connect");
+    });
+  });
+
+  it("offers no default the deployment does not serve, and falls back to a key", () => {
+    renderConnect({ defaultBackend: "absent" });
+
+    expect(screen.getByText(/Not configured on this deployment/)).toBeTruthy();
+    expect(checked()?.getAttribute("value")).toBe("anthropic");
+  });
+
+  it("neither offers nor rules out the default while the probe is out", () => {
+    renderConnect({ defaultBackend: "checking" });
+
+    expect(
+      screen.getByText("Checking this deployment for a default backend…")
+    ).toBeTruthy();
+    expect(checked()).toBeUndefined();
+  });
+
+  it("opens on the connected backend with its own key and endpoint", () => {
+    PgAssistant.connect(OWN);
+
+    renderConnect({ defaultBackend: "present" });
+
+    expect(checked()?.getAttribute("value")).toBe("openai");
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")?.value
+    ).toBe(OWN.apiKey);
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-model")?.value
+    ).toBe("gpt-x");
+  });
+
+  it("opens on a preset backend without the connected one's key", () => {
+    PgAssistant.connect(OWN);
+
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: "anthropic" },
+    });
+
+    expect(checked()?.getAttribute("value")).toBe("anthropic");
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")?.value
+    ).toBe("");
+  });
+
+  it("opens on the backend's default model for a preset model it does not list", async () => {
+    const user = userEvent.setup();
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: "anthropic", model: "claude-unknown-9" },
+    });
+    await user.type(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")!,
+      "sk-ant-fake"
+    );
+
+    act(() => action!.connect());
+
+    const anthropic = PROVIDERS.find((p) => p.id === "anthropic")!;
+    expect(PgAssistant.connection?.settings?.model).toBe(
+      anthropic.modelSettings!.defaults.model
+    );
+  });
+
+  it("puts a preset model into an endpoint's model field", () => {
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: "openrouter", model: "vendor/model-x" },
+    });
+
+    expect(checked()?.getAttribute("value")).toBe("openrouter");
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-model")?.value
+    ).toBe("vendor/model-x");
+  });
+
+  it("hands its host the action, ready once the key is in, and connects", async () => {
+    const user = userEvent.setup();
+    renderConnect({ defaultBackend: "absent" });
+    expect(action).toMatchObject({ text: "Connect", ready: false });
+    expect(screen.queryByRole("button", { name: "Connect" })).toBeNull();
+
+    await user.type(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")!,
+      "sk-ant-fake"
+    );
+    expect(action).toMatchObject({ text: "Connect", ready: true });
+    act(() => action!.connect());
+    expect(PgAssistant.connection).toMatchObject({
+      id: "anthropic",
+      apiKey: "sk-ant-fake",
+    });
+  });
+
+  it("names the action Start for the keyless default, Switch over a connection", () => {
+    const { unmount } = renderConnect({ defaultBackend: "present" });
+    expect(action).toMatchObject({ text: "Start", ready: true });
+    unmount();
+
+    PgAssistant.connect(OWN);
+    renderConnect({ defaultBackend: "present" });
+    expect(action?.text).toBe("Switch");
+  });
+
+  it("brings no title or way back of its own: the dialog has them", () => {
+    renderConnect({ defaultBackend: "present" });
+
+    expect(screen.queryByRole("heading")).toBeNull();
+    expect(screen.queryByText("Back to chat")).toBeNull();
   });
 });

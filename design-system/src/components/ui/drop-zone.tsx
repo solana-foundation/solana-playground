@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* Where a file lands: an IDL, a keypair, a program to import. It is also a
    button to browse for one, since not everyone can drag. */
@@ -47,7 +47,12 @@ function DropZone({
         accept={accept}
         multiple={multiple}
         disabled={disabled}
-        onChange={(e) => onFiles?.([...(e.target.files ?? [])])}
+        onChange={(e) => {
+          onFiles?.([...(e.target.files ?? [])])
+          // A browser fires no change for the file the input already holds;
+          // letting go of it lets a file fixed on disk be picked again
+          e.target.value = ""
+        }}
       />
       {children}
     </label>

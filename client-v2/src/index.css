@@ -1,4 +1,9 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&display=swap");
+/* The webfont import of design-system/src/styles/inject.css, copied as is.
+ * A browser applies an @import only ahead of every rule but @charset and
+ * @layer statements; client-v2/scripts/fonts.build-test.mjs checks that the
+ * built CSS still leads with this one and that it loads the families
+ * --font-headline and --font-text name. */
+@import url("https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@400..700&family=Stack+Sans+Text:wght@300..700&display=swap");
 
 /*
  * Tailwind 4 without preflight: its reset would fight the styled-components
@@ -64,7 +69,6 @@
   }
   :where([data-slot]) {
     font-family: var(--font-text);
-    -webkit-font-smoothing: antialiased;
   }
   :where([data-slot] button, [data-slot]
       input, button[data-slot], input[data-slot]) {
@@ -73,6 +77,27 @@
     letter-spacing: inherit;
     background-color: transparent;
     border-radius: 0;
+  }
+  /* The Sidebar's menus are lists; their bullets showed beside the rail's
+     footer icons, where no `overflow` clips them as it does in the content */
+  :where(ul[data-slot], ol[data-slot]) {
+    list-style: none;
+  }
+}
+
+/*
+ * A browser gives a button the arrow; the prototype gives buttons and links
+ * the hand, and a disabled one (`disabled` or `aria-disabled`) the arrow.
+ * Unlike the reset above, this reaches every button and link on the page,
+ * the styled-components ones too; anything that sets its own cursor (a
+ * utility, a styled component) still wins over this layer.
+ */
+@layer base {
+  :where(button, [role="button"], a[href]) {
+    cursor: pointer;
+  }
+  :where(button:disabled, button[aria-disabled="true"], [role="button"][aria-disabled="true"]) {
+    cursor: default;
   }
 }
 
@@ -92,6 +117,16 @@
     box-sizing: border-box;
     margin: 0;
     padding: 0;
+  }
+
+  /* The document never scrolls; only the app's own panes do. With the shell
+     at 100dvh, a page taller than the window (Safari's 100vh under its
+     toolbar) cannot push the header out of view */
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
   }
 
   body {
