@@ -28,25 +28,32 @@ Google Cloud region, so it cannot be the way there.
   environment. The instance gains IAM authentication, connector enforcement,
   and encrypted-only connections; authorised networks stay empty.
 - **Previews stay on Neon by default.** A PR labelled `preview` keeps getting
-  a Neon branch. A PR labelled `preview:cloud-sql` instead gets its own
-  database `solpg_preview_<id>` on a second, small Cloud SQL instance,
-  `solpg-preview`, deployed with `DB_PROVIDER=cloud-sql`. That is how the
-  production connection path is exercised on a deployment before production
-  depends on it, and how it is re-tested after.
+  a Neon branch cut from `main` of the preview Neon project. A PR labelled
+  `preview:cloud-sql` instead gets its own database `solpg_preview_pr_<number>`
+  on a second, small Cloud SQL instance, `solpg-preview`, cloned from the
+  template database `solpg_preview_base` there, so it starts with the base's
+  schema and rows as a Neon branch starts with `main`'s, and is deployed with
+  `DB_PROVIDER=cloud-sql`. That is how the production connection path is
+  exercised on a deployment before production depends on it, and how it is
+  re-tested after.
 - **Previews never reach the production database.** Four gates, each enforced
-  by a different party: the federation binding (a preview deployment's token
-  maps to a service account with no role on `solpg`), Postgres grants on
-  `solpg` (`CONNECT` revoked from `PUBLIC`), the `cloud-sql` provider's refusal
-  to open database `solpg` outside the Production environment, and a preview
-  database name the workflows derive from the branch with no input to override.
-- **Migrations.** `migrate-production-db` migrates two targets: `solpg` on
-  Cloud SQL, through the Cloud SQL Auth Proxy with federated credentials, and
-  Neon `main`, which stays the parent of Neon preview branches. Nothing
-  migrates from a serverless function, as before.
-- **Cutover.** `SYNC_ENABLED=false` freezes writes, the Neon data is restored
-  into `solpg`, the Production environment switches provider, `/api/sync`
-  reports `db: "ok"`, and `SYNC_ENABLED=true` reopens writes. Rollback before
-  the last step is restoring `DATABASE_URL`.
+  by a different party: the federation bindings (neither a preview
+  deployment's token nor a CI job's maps to a service account with a role on
+  `solpg`), Postgres grants on `solpg` (`CONNECT` revoked from `PUBLIC`), the
+  `cloud-sql` provider's refusal to open database `solpg` outside the
+  Production environment, and a preview database name the workflows derive
+  from the PR number with no input to override.
+- **Migrations.** Previews are migrated by `preview.yml` on every deploy, as
+  today. `migrate-production-db` stays a person's step and migrates the one
+  database production reads: the production Neon project until the cutover,
+  `solpg` after it, through the Cloud SQL Auth Proxy as the operator's own
+  Google identity. No CI identity holds a role on `solpg`. Nothing migrates
+  from a serverless function, as before.
+- **Cutover.** `SYNC_ENABLED=false` freezes writes, the production Neon
+  project's data is restored into the empty `solpg`, the Production
+  environment switches provider, `/api/sync` reports `db: "ok"`, and
+  `SYNC_ENABLED=true` reopens writes. Rollback before the last step is
+  restoring `DATABASE_URL`.
 - **Telemetry.** The change touches `features/persistence` and
   `features/auth` on their server side only (`.mjs` modules the functions
   load). It adds, renames, and removes no telemetry event. A provider that
@@ -66,7 +73,8 @@ Google Cloud region, so it cannot be the way there.
   teardown, and the sweep.
 - `client-v2-production-database`: production's database on Cloud SQL, the
   identity it connects with, the instance settings that keep Postgres's port
-  closed, the two migration targets, and the cutover and rollback.
+  closed, who migrates it and where, the cutover and rollback, and the
+  maintainer guide that sets the pipeline up from nothing.
 
 ### Modified Capabilities
 
@@ -89,23 +97,29 @@ how the functions reach Postgres.
 - Dependencies: `@google-cloud/cloud-sql-connector`, `google-auth-library`,
   `@vercel/oidc` in `client-v2/package.json`; `cloud-sql-proxy` on the runner
   and on a laptop that migrates production.
-- Google Cloud, by hand and documented: instance `solpg-preview`; a Workload
-  Identity Federation pool and provider trusting Vercel's issuer, with one
-  service account per Vercel environment; a pool and provider trusting GitHub
-  Actions for the preview and migration jobs, since `cicd.yml` is the only
+- Google Cloud, by hand and documented: instance `solpg-preview` and its
+  template database `solpg_preview_base`; a Workload Identity Federation pool
+  and provider trusting Vercel's issuer, with one service account per Vercel
+  environment; a pool and provider trusting GitHub Actions for the preview
+  jobs, with a role on `solpg-preview` only, since `cicd.yml` is the only
   workflow that reaches Google Cloud today and it does so with a stored JSON
-  key, which this change does not reuse; IAM database users; the `solpg`
+  key, which this change does not reuse; IAM database users for the
+  applications, CI, and the operators who migrate production; the `solpg`
   instance flags.
 - Vercel: `DB_PROVIDER`, `CLOUD_SQL_INSTANCE`, `CLOUD_SQL_DATABASE`,
   `CLOUD_SQL_USER`, and the `GCP_*` federation variables per environment;
   `DATABASE_URL` removed from Production.
-- Docs: `client-v2/docs/cloud-sql.md` (new), `client-v2/docs/neon.md`,
+- Docs: `client-v2/docs/cloud-sql.md` (new), a guide for maintainers of
+  `solana-foundation/solana-playground`: the design of the pipeline, then
+  every step to set it up in Google Cloud, Vercel, and GitHub, and the
+  cutover and rollback runbook; `client-v2/docs/neon.md`,
   `client-v2/docs/deploy-client-vercel.md`, the root `CLAUDE.md` "Gotchas"
   entry on the production database.
 - User-visible: during the cutover's write freeze, sync is off and the app is
   local-only, as it is on any deployment without a database; a preview
-  labelled `preview:cloud-sql` starts with an empty database instead of a copy
-  of production's rows. Otherwise nothing changes for a user.
+  labelled `preview:cloud-sql` starts with the rows of `solpg_preview_base`,
+  which are preview data, as a Neon preview starts with the preview project's
+  `main`. Otherwise nothing changes for a user.
 - Out of scope: a query or repository abstraction over SQL (both providers are
   Postgres); moving the default `preview` label off Neon; a copy of production
   data into Cloud SQL previews; an external connection pooler (the Enterprise
