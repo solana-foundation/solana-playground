@@ -48,6 +48,22 @@ export const databaseEnv = () => ({
   // refuse it by name, never guessed from which variables happen to be set
   DB_PROVIDER: read("DB_PROVIDER") || "url",
   DATABASE_URL: read("DATABASE_URL"),
+  // `cloud-sql`: `<project>:<region>:<instance>`, the database, and the IAM
+  // database user (a service account's e-mail without `.gserviceaccount.com`)
+  CLOUD_SQL_INSTANCE: read("CLOUD_SQL_INSTANCE"),
+  CLOUD_SQL_DATABASE: read("CLOUD_SQL_DATABASE"),
+  CLOUD_SQL_USER: read("CLOUD_SQL_USER"),
+  // `cloud-sql`: Workload Identity Federation, which trades the deployment's
+  // Vercel OIDC token for the service account below
+  GCP_PROJECT_NUMBER: read("GCP_PROJECT_NUMBER"),
+  GCP_WORKLOAD_IDENTITY_POOL_ID: read("GCP_WORKLOAD_IDENTITY_POOL_ID"),
+  GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: read(
+    "GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID"
+  ),
+  GCP_SERVICE_ACCOUNT_EMAIL: read("GCP_SERVICE_ACCOUNT_EMAIL"),
+  // Vercel's own; the `cloud-sql` provider keeps everything but production off
+  // the production database by it
+  VERCEL_ENV: read("VERCEL_ENV"),
   // Only the exact string enables sync; anything else keeps it off
   SYNC_ENABLED: process.env.SYNC_ENABLED === "true",
 });

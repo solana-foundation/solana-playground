@@ -8,9 +8,10 @@
  * knows which one is behind the pool.
  */
 import { databaseEnv } from "../../../shared/config/server-env.mjs";
+import * as cloudSql from "./providers/cloud-sql.mjs";
 import * as url from "./providers/url.mjs";
 
-const PROVIDERS = { url };
+const PROVIDERS = { url, "cloud-sql": cloudSql };
 
 /** @type {Promise<import("pg").Pool> | null} */
 let pool = null;
