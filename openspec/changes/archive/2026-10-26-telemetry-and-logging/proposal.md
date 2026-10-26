@@ -31,11 +31,16 @@ those slices exist, not after.
   GA4 when a measurement id is configured.
 - A logger in `shared/lib/logger`: levels, a namespace on every entry
   (`[slice:module]`), and providers behind one interface. Console is the
-  default provider; Sentry is a second provider and the only code that
-  imports the Sentry SDK.
+  default provider; Sentry is a second provider and the only code in the
+  browser logger that imports the Sentry SDK.
 - Sentry for the browser bundle: errors with readable stack traces (source
-  maps uploaded in CI and not served publicly), tagged by namespace, release,
-  and environment. Unhandled errors and render errors go through the logger.
+  maps uploaded by the Vercel build and not served publicly), tagged by
+  namespace, release, and environment. Unhandled errors and render errors go
+  through the logger.
+- A server logger for `client-v2/api/*.mjs` and the slices' server-side
+  `.mjs` modules (HOO-2107): the same levels and namespaces, printed to the
+  function log, with entries marked `report: true` sent to Sentry where the
+  API functions report to it.
 - `features/persistence` reports its failures through the logger, so they
   reach Sentry.
 - A `widgets/observability` widget initialises the logger, Sentry, and
@@ -65,7 +70,10 @@ changes archive independently.
 ## Impact
 
 - `client-v2/package.json`: `@sentry/react`; `@sentry/cli` as a development
-  dependency with task 2.3.
+  dependency (HOO-2041).
+- `client-v2/src/shared/lib/logger/server.mjs`, `client-v2/api/*.mjs` and
+  `client-v2/src/features/api/server/with-observability.mjs`: the server
+  logger, its callers, and its Sentry provider's registration (HOO-2107).
 - `client-v2/src/shared/lib/telemetry/`, `client-v2/src/shared/lib/logger/`:
   new.
 - `client-v2/src/widgets/observability/`: new; `client-v2/src/index.tsx`
@@ -76,19 +84,17 @@ changes archive independently.
 - `openspec/config.yaml`: two rules on describing events.
 - `client-v2/CLAUDE.md`: the slice layout gains `model/telemetry.ts`; the rule
   "A `catch` is never empty" names the logger.
-- CI (`client-v2.yml`): source-map upload to Sentry and removal of the maps
-  before deploy.
+- The Vercel build (`build:bundle`, `scripts/upload-sourcemaps.mjs`):
+  source-map upload to Sentry and removal of the maps before deploy.
 - Vercel and CI configuration: `REACT_APP_SENTRY_DSN`, `REACT_APP_LOG_LEVEL`,
   `REACT_APP_GA_MEASUREMENT_ID`, `SENTRY_AUTH_TOKEN`, `SENTRY_ORG`,
   `SENTRY_PROJECT`. A person with access sets them; no agent handles them.
 - Users: an error in their browser reaches the team with a stack trace, and
   their use of the product is sent to GA4 without a consent prompt. The bundle
-  grows by the Sentry SDK; the size is measured in task 2.2.
+  grows by the Sentry SDK.
 - Until the GA4 measurement id and the Sentry DSN are configured, both
   providers do nothing; the code ships first and the ids follow.
 - Out of scope:
-  - Logging and Sentry for `client-v2/api/*.mjs`. Those routes cannot import
-    `src/`, so they need their own module (ticket to file).
   - A consent prompt or consent gate. Events are sent without one; adding one
     is a separate change.
   - Session replay and performance tracing in Sentry.

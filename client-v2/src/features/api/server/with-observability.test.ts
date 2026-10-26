@@ -93,4 +93,40 @@ describe("withObservability", () => {
     expect(sentry.captureException).toHaveBeenCalledWith(error);
     expect(sentry.flush).toHaveBeenCalled();
   });
+
+  it("attaches no request body, cookie or header to what it sends", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { withObservability } = await load();
+
+    await withObservability("agent", async () => "done")(req, res);
+
+    expect(sentry.init.mock.calls[0][0].dataCollection).toEqual({
+      httpBodies: [],
+      cookies: false,
+      httpHeaders: false,
+    });
+  });
+
+  it("sends the server logger's reported entries to Sentry once Sentry loads, and still prints them", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const print = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { withObservability } = await load();
+    const { createServerLogger } = await import(
+      "../../../shared/lib/logger/server.mjs"
+    );
+    const error = new Error("insert failed");
+
+    await withObservability("projects", async () =>
+      createServerLogger("api:projects").error(error, { report: true })
+    )(req, res);
+
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      error,
+      expect.anything()
+    );
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(print.mock.calls[0][0]).toBe("[api:projects]");
+  });
 });

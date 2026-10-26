@@ -37,6 +37,9 @@ import {
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
 import { agentEnv } from "../src/shared/config/server-env.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:agent");
 
 /** Request fields forwarded upstream; everything else is the server's to decide */
 const FORWARDED = ["messages", "tools", "tool_choice"];
@@ -228,17 +231,24 @@ async function handler(req, res) {
       }),
     });
   } catch (e) {
+    // A closed tab aborts the fetch too, and that is not the upstream's failure
+    log.error(e, { report: !abortUpstream.signal.aborted });
     return sendJson(res, 502, { error: `Upstream unreachable: ${e.message}` });
   }
 
   if (!response.ok) {
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch((e) => {
+      log.warn(`upstream ${response.status} body unreadable: ${e.message}`);
+      return "";
+    });
     // Our key was refused: relayed, it would read as this route refusing the caller
     if (response.status === 401 || response.status === 403) {
-      console.error("agent: upstream refused the key", {
-        status: response.status,
-        body: text.slice(0, 300),
+      log.error(new Error("upstream refused the key"), {
+        report: true,
+        context: { status: response.status },
       });
+      // Kept out of Sentry: a refusal's text can quote part of the key
+      log.warn(`upstream ${response.status} body: ${text.slice(0, 300)}`);
       return sendJson(res, 502, {
         error: `The default backend's key was refused upstream (${response.status}).`,
       });
