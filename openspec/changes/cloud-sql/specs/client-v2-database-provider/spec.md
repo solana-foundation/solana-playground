@@ -120,6 +120,23 @@ in `client-v2/src/features/persistence/model/db.test.mjs`.
 Checked by the unit test "allows a preview database outside production" in
 `client-v2/src/features/persistence/model/db.test.mjs`.
 
+### Requirement: A pool that failed to build is built again
+
+The functions SHALL build the pool once per instance and reuse it, and SHALL
+forget a build that failed, so the next database-backed request builds it
+again. A failure of the token exchange, the certificate fetch, or the
+provider's own refusal SHALL NOT be kept for the life of the instance.
+
+#### Scenario: A transient failure clears on the next request (manual)
+
+- **WHEN** the first request on a warm instance cannot build the pool and the
+  next one can
+- **THEN** the first request's `GET /api/sync` answers `db: "unreachable"` and
+  the next answers `db: "ok"`, with no redeploy
+
+Checked by the unit test "retries a pool that failed to build" in
+`client-v2/src/features/persistence/model/db.test.mjs`.
+
 ### Requirement: Routes read the provider through one entry point
 
 Every database-backed route and the session store SHALL obtain the pool

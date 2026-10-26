@@ -45,7 +45,10 @@ database `postgres`, one built-in user `postgres`.
 - **`getPool()` becomes async and delegates to a provider.** The Cloud SQL
   connector's `getOptions()` resolves an ephemeral client certificate and the
   instance's address, which takes a network round trip, so a pool cannot be
-  built synchronously. `getPool()` memoises the promise; `query`,
+  built synchronously. `getPool()` memoises the promise, and drops it when it
+  rejects, so one failed token exchange or certificate fetch is retried by the
+  next request instead of failing every query for the life of a warm
+  instance; `query`,
   `transaction`, and `conversations.mjs` await it; `getAuth()` awaits it and
   turns async, and `api/auth.mjs` and `readSession` await `getAuth()`. The
   alternative, a synchronous `pg.Pool` with a `stream` factory that connects
@@ -146,13 +149,18 @@ database `postgres`, one built-in user `postgres`.
   Neon. No database is migrated that production does not read: the preview
   Neon project's `main` and `solpg_preview_base` are preview infrastructure,
   and the preview that clones them applies whatever they lack.
-- **The cutover restores into an empty database.** `solpg` is created empty
-  and stays empty until the cutover, when a `pg_dump` of the production Neon
-  project is restored into it with `--no-owner` under the production user's
-  role. The dump carries the schema and `schema_migrations`, so the first
-  `migrate-production-db` against `solpg` afterwards reports nothing to apply.
-  Migrating `solpg` ahead of time would make the restore collide with tables
-  that already exist.
+- **The cutover copies no data.** Production has no users yet (confirmed with
+  the team, 2026-10-27), so the production Neon project holds only test rows
+  and nothing is moved from it. `solpg` is migrated from zero through
+  `migration-url production` as an operator, under the production user's
+  role, while Production still reads Neon; then Production's variables
+  switch. With nothing copied there is no window in which two databases hold
+  the same data, so no write freeze: `SYNC_ENABLED` stays `true`. The
+  alternative, `pg_dump` and `pg_restore` behind a freeze, protects data that
+  does not exist; and a freeze on `SYNC_ENABLED` alone would not hold,
+  because Better Auth writes sessions on sign-in and on session refresh. A
+  deployment that already has users needs that copy, and this change does
+  not specify it.
 - **The smoke check is `GET /api/sync`, not a new route.** It already runs
   `select 1` and already hides detail. A job in `client-v2.yml` on push to
   `master` waits for the Vercel deployment of that commit (the Vercel CLI
@@ -184,9 +192,12 @@ database `postgres`, one built-in user `postgres`.
   connection where the Neon sweep needed only an API key] → the sweep runs
   the proxy under the CI federation; a sweep that cannot connect fails and
   deletes nothing, as the Neon sweep does on an API error.
-- [The production Neon project outlives the cutover] → it is the rollback
-  until the cutover's last redeploy, and a read-only copy after. Deleting it
-  is a later decision, outside this change.
+- [The production Neon project outlives the cutover] → it is the rollback:
+  nothing writes to it once Production reads `solpg`, so switching back finds
+  it as it was. Deleting it is a later decision, outside this change.
+- [Users arrive before the cutover] → the cutover then copies data it no
+  longer specifies; task 3.2 starts by confirming with the team that
+  production still has no users, and stops if it has.
 
 ## Migration Plan
 
@@ -199,20 +210,26 @@ database `postgres`, one built-in user `postgres`.
 3. A PR labelled `preview:cloud-sql` deploys against `solpg-preview`;
    `GET /api/sync` answers `db: "ok"`; sign-in and a two-browser project edit
    work. Recorded in that PR.
-4. `migrate-production-db` rewritten; empty database `solpg` created on
-   instance `solpg`; `CONNECT` revoked from `PUBLIC`; the operators' IAM
-   users added; `dbmate status` through the proxy as an operator lists every
-   migration pending.
-5. Cutover, in one sitting: `SYNC_ENABLED=false` on Production, redeploy;
-   `pg_dump` the production Neon project, `pg_restore` into `solpg` through
-   the proxy; row counts compared; `DB_PROVIDER=cloud-sql` and the
-   `CLOUD_SQL_*` and `GCP_*` variables set on Production, `DATABASE_URL`
-   removed; redeploy; `GET /api/sync` answers `db: "ok"`;
-   `migrate-production-db` names `solpg` and reports nothing to apply;
-   `SYNC_ENABLED=true`, redeploy.
-6. Rollback before step 5's last redeploy: restore `DATABASE_URL` and
-   `DB_PROVIDER=url` on Production and redeploy. Nothing was written since the
-   freeze, so the production Neon project is current.
+4. `migrate-production-db` rewritten; `vercel-production` granted Cloud SQL
+   Client and Instance User on `solpg` and added as its IAM database user;
+   empty database `solpg` created on instance `solpg`, owned by that user;
+   `CONNECT` revoked from `PUBLIC`; the operators' IAM users added; a staged
+   production deployment (`--prod --skip-domain`, no domain, sync off) answers
+   `db: "ok"` on `GET /api/sync`, which proves the production identity's whole
+   path before any data depends on it; `dbmate status` through the proxy as an
+   operator lists every migration pending.
+5. Cutover, in one sitting, with sync on throughout: confirm production still
+   has no users; apply every migration to `solpg` through
+   `migration-url production` as an operator; `DB_PROVIDER=cloud-sql` and the
+   `CLOUD_SQL_*` and `GCP_*` variables set on Production, `DATABASE_URL` and
+   `DATABASE_URL_UNPOOLED` removed; redeploy; `GET /api/sync` answers
+   `{ "enabled": true, "db": "ok" }`; `migrate-production-db` names `solpg`
+   and reports nothing to apply; a sign-in and a project edit on the
+   production domain land in `solpg`.
+6. Rollback at any point after the switch: restore `DATABASE_URL` and
+   `DB_PROVIDER=url` on Production and redeploy. The production Neon project
+   was not written since the switch, so it is as it was; rows written to
+   `solpg` meanwhile are test data.
 
 ## Open Questions
 
