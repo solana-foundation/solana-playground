@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Create (or reuse) a preview's database on the preview instance, cloned from
+# the template `solpg_preview_base` and owned by the application's user, and
+# print what its deployment needs, one KEY=VALUE per line.
+#
+# The clone carries the base's schema, rows and `schema_migrations`, so dbmate
+# then applies only what the base lacks, as on a Neon branch. The login user
+# needs CREATEDB and membership of CLOUD_SQL_USER's role (the OWNER clause);
+# see docs/cloud-sql.md.
+#
+#   create-preview-db --pr <number> | --branch <name>
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+parse_target "" "$@"
+name=$(preview_db_name)
+. "$DB_SCRIPTS/cloud-sql/proxy.sh"
+
+start_proxy
+trap stop_proxy EXIT
+
+exists() {
+  [ -n "$(admin_sql "select 1 from pg_database where datname = '$name'")" ]
+}
+
+if exists; then
+  echo "reusing database $name on $CLOUD_SQL_INSTANCE" >&2
+# A second run racing this one may create it between the check and here
+elif admin_sql "create database \"$name\" template solpg_preview_base owner \"$CLOUD_SQL_USER\"" || exists; then
+  echo "created database $name on $CLOUD_SQL_INSTANCE from solpg_preview_base" >&2
+else
+  exit 1
+fi
+
+printf 'DB_PROVIDER=cloud-sql\n'
+printf 'CLOUD_SQL_DATABASE=%s\n' "$name"

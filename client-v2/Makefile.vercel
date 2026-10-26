@@ -14,7 +14,28 @@ CLIENT_DIR := client-v2
 # Targets verified against this CLI version; bump only after re-running them.
 VERCEL_CLI := vercel@62.7.0
 
-NEON_BRANCH_URL := $(CLIENT_DIR)/scripts/neon-preview-branch.sh
+# Where a laptop preview's database lives: `url` (a Neon branch of the preview
+# project, the default) or `cloud-sql` (a database on the preview Cloud SQL
+# instance). The targets below call the same script names in either provider's
+# directory, and each script takes the git branch, never a database name. See
+# $(CLIENT_DIR)/docs/preview-databases.md.
+DB_PROVIDER ?= url
+DB_SCRIPTS = $(CLIENT_DIR)/scripts/db/$(DB_PROVIDER)
+GIT_BRANCH = $$(git rev-parse --abbrev-ref HEAD)
+
+define check_provider
+	@case "$(DB_PROVIDER)" in url|cloud-sql) ;; *) \
+		echo "DB_PROVIDER must be url or cloud-sql, not \"$(DB_PROVIDER)\"" >&2; exit 1;; esac
+endef
+
+# The cloud-sql scripts need the preview instance and the preview application's
+# IAM database user, which live in Vercel's Preview environment (`make
+# vercel-link-preview` pulls it). Read by name and passed to those scripts
+# only, never exported to every recipe: production targets must not inherit
+# preview values. The url scripts ignore both.
+previewenv = $(shell sed -n 's/^$(1)=//p' .vercel/.env.preview.local 2>/dev/null | head -1 | tr -d '"'"'"'"')
+PREVIEW_CLOUD_SQL = CLOUD_SQL_INSTANCE="$${CLOUD_SQL_INSTANCE:-$(call previewenv,CLOUD_SQL_INSTANCE)}" \
+	CLOUD_SQL_USER="$${CLOUD_SQL_USER:-$(call previewenv,CLOUD_SQL_USER)}"
 
 # Secrets live in $(CLIENT_DIR)/.env, which dbmate reads by itself. Make does not,
 # so the Neon values are lifted out here and exported to every recipe. `?=` leaves
@@ -99,13 +120,18 @@ vercel-link-preview: ## Pull preview env vars from Vercel
 vercel-link-production: ## Pull production env vars from Vercel
 	$(call vercel_link,production)
 
-deploy-client-to-vercel-preview: vercel-link-preview ## Build + deploy a unique preview URL
+# create-preview-db prints the deployment's database variables as KEY=VALUE
+# lines (DATABASE_URL for url; DB_PROVIDER and CLOUD_SQL_DATABASE for
+# cloud-sql), each passed as one `-e`. `set -f`: a URL's `?` is a glob.
+deploy-client-to-vercel-preview: vercel-link-preview ## Build + deploy a unique preview URL (DB_PROVIDER=url|cloud-sql)
+	$(check_provider)
 	$(VERCEL_IDS) && \
 		set -a && . ./.vercel/.env.preview.local && set +a && \
-		db=$$($(NEON_BRANCH_URL) --pooled) && \
+		db_env=$$($(DB_SCRIPTS)/create-preview-db --branch "$(GIT_BRANCH)") && \
+		set -f && set -- && for kv in $$db_env; do set -- "$$@" -e "$$kv"; done && set +f && \
 		npx $(VERCEL_CLI) build $(VERCEL_TOKEN_ARG) && \
 		npx $(VERCEL_CLI) deploy --prebuilt --archive=tgz \
-		-e DATABASE_URL="$$db" $(VERCEL_TOKEN_ARG)
+		"$$@" $(VERCEL_TOKEN_ARG)
 
 # Builds locally because a Vercel build with no cache exceeds the build time limit.
 deploy-client-to-vercel-production: vercel-link-production ## Build locally + deploy to PRODUCTION
@@ -190,16 +216,16 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 		[ "$$reply" = yes ] || { echo "aborted" >&2; exit 1; }; \
 		DATABASE_URL="$$url" dbmate --no-dump-schema up
 
-preview-db-branch: ## Create (or reuse) this git branch's Neon branch
-	@url=$$($(NEON_BRANCH_URL)) || exit 1; \
-		printf '%s\n' "$$url" | sed -E 's#^[^@]*@([^/?]*).*#preview database: \1#'
+preview-db-branch: ## Create (or reuse) this git branch's preview database (DB_PROVIDER=url|cloud-sql)
+	$(check_provider)
+	@$(PREVIEW_CLOUD_SQL) $(DB_SCRIPTS)/create-preview-db --branch "$(GIT_BRANCH)" >/dev/null
 
-# No confirmation here, unlike migrate-production-db: this branch belongs to one
-# git branch and nothing else reads it, so a wrong migration costs a `neon
-# branches delete` and not an incident.
-migrate-preview-db: ## Apply pending migrations to this git branch's own Neon branch
+# No confirmation here, unlike migrate-production-db: this database belongs to
+# one git branch and nothing else reads it, so a wrong migration costs a drop
+# and not an incident. Created first if missing, as the Neon branch always was.
+migrate-preview-db: ## Apply pending migrations to this git branch's own preview database (DB_PROVIDER=url|cloud-sql)
+	$(check_provider)
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
-	@url=$$($(NEON_BRANCH_URL)) || exit 1; \
-		cd $(CLIENT_DIR) || exit 1; \
-		DATABASE_URL="$$url" dbmate status; \
-		DATABASE_URL="$$url" dbmate --no-dump-schema up
+	@$(PREVIEW_CLOUD_SQL) $(DB_SCRIPTS)/create-preview-db --branch "$(GIT_BRANCH)" >/dev/null
+	@cd $(CLIENT_DIR) && $(PREVIEW_CLOUD_SQL) scripts/db/$(DB_PROVIDER)/migration-url --branch "$(GIT_BRANCH)" -- \
+		sh -c 'dbmate status; dbmate --no-dump-schema up'
