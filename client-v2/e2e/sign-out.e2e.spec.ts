@@ -45,12 +45,10 @@ const signedInWith = async (
   const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
   const confirm = dialog.getByRole("button", { name: "Sign out" });
 
-  /** Opens the dialog from the menu, if it is not open already, and confirms */
+  /** Opens the dialog from the account menu and confirms */
   const signOut = async () => {
-    if (!(await dialog.isVisible())) {
-      await account(page).click();
-      await page.getByRole("menuitem", { name: "Sign out" }).click();
-    }
+    await account(page).click();
+    await page.getByRole("menuitem", { name: "Sign out" }).click();
     await confirm.click();
   };
 
@@ -72,9 +70,8 @@ test("client-v2-auth: A sign-out", async ({ page }) => {
 
   await signOut();
 
+  // Busy, and the dialog open, until the server answers
   await expect(confirm).toHaveAttribute("aria-busy", "true", LONG);
-  // Still signed in until the server answers
-  await expect(account(page)).toHaveAccessibleName("Account: t");
 
   accept();
 
@@ -93,8 +90,12 @@ test("client-v2-auth: A sign-out that fails", async ({ page }) => {
   await signOut();
 
   await expect(page.getByText("Could not sign out.")).toBeVisible(LONG);
-  // The dialog stays: the user is still signed in, and can try again
+  // The dialog stays, and behind it the user is still signed in. The page
+  // under a modal dialog is hidden from the accessibility tree, so the
+  // account is read once the dialog is dismissed.
   await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
   await expect(account(page)).toHaveAccessibleName("Account: t");
 
   // A retry the server accepts signs out
