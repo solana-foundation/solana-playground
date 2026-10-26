@@ -68,7 +68,7 @@ describe("readSession", () => {
   ]) {
     // eslint-disable-next-line jest/valid-title -- a table test, titled by its row
     test(label, async () => {
-      mock.method(getAuth().api, "getSession", getSession);
+      mock.method((await getAuth()).api, "getSession", getSession);
       mock.method(console, "error", () => {});
       assert.deepEqual(await readSession(req()), expected);
     });
@@ -127,9 +127,9 @@ describe("GitHub profile fields", () => {
 
   // Better Auth runs the mapped profile through this before creating the user,
   // and drops every field declared `input: false`: `login` was never stored
-  test("survives Better Auth's parsing into the created user", () => {
+  test("survives Better Auth's parsing into the created user", async () => {
     const created = parseAdditionalUserInputFromProviderProfile(
-      getAuth().options,
+      (await getAuth()).options,
       mapGithubProfile(PROFILE),
       "create"
     );
@@ -140,7 +140,9 @@ describe("GitHub profile fields", () => {
   // `input: true` above is safe only while no endpoint lets a user write their
   // own fields: `githubCreatedAt` decides their spend on `/api/agent`
   test("answers 404 to update-user, so a user cannot set their own fields", async () => {
-    const res = await getAuth().handler(
+    const res = await (
+      await getAuth()
+    ).handler(
       new Request("http://localhost:3000/api/auth/update-user", {
         method: "POST",
         headers: { "content-type": "application/json" },

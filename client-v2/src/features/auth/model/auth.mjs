@@ -243,12 +243,15 @@ export const mapGithubProfile = (profile) => {
 /**
  * The auth instance, created on first use.
  *
- * @returns {ReturnType<typeof betterAuth> | null} the instance, or `null` when
- * the database or the GitHub credentials are missing
+ * Async because the pool is: a provider may need a network round trip before
+ * it has one, and rejects when it cannot build one.
+ *
+ * @returns {Promise<ReturnType<typeof betterAuth> | null>} the instance, or
+ * `null` when the database or the GitHub credentials are missing
  */
-export const getAuth = () => {
+export const getAuth = async () => {
   if (missingConfig().length) return null;
-  const pool = getPool();
+  const pool = await getPool();
 
   if (!instance) {
     const env = authEnv();
@@ -324,7 +327,7 @@ export const readSession = async (req) => {
   try {
     // Inside the `try`: building the instance opens the pool, and a route such
     // as `/api/mcp` must keep serving signed-out callers when that throws
-    const auth = getAuth();
+    const auth = await getAuth();
     if (!auth) return { status: "unconfigured" };
 
     const { fromNodeHeaders } = await import("better-auth/node");

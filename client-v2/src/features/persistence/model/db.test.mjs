@@ -12,6 +12,7 @@ describe("db", () => {
   // Cleared before each case, not after: `yarn test-api` loads `.env`, so the
   // environment these cases assert is absent would otherwise be present.
   beforeEach(() => {
+    delete process.env.DB_PROVIDER;
     delete process.env.DATABASE_URL;
     delete process.env.SYNC_ENABLED;
   });
@@ -19,7 +20,43 @@ describe("db", () => {
   it("reports unconfigured when DATABASE_URL is absent", async () => {
     const db = await load();
     assert.equal(db.isConfigured(), false);
-    assert.equal(db.getPool(), null);
+    assert.equal(await db.getPool(), null);
+  });
+
+  it("defaults to the url provider", async () => {
+    process.env.DATABASE_URL = "postgres://x/y";
+    const db = await load();
+    assert.equal(db.isConfigured(), true);
+    assert.equal(
+      (await db.getPool()).options.connectionString,
+      "postgres://x/y"
+    );
+  });
+
+  it("refuses an unknown provider rather than falling back", async () => {
+    // A misspelling beside a stray DATABASE_URL must not quietly connect
+    // through it: the deployment reads as configured-but-broken, and every
+    // attempt names the value
+    process.env.DB_PROVIDER = "cloudsql";
+    process.env.DATABASE_URL = "postgres://x/y";
+    const db = await load();
+    assert.equal(db.isConfigured(), true);
+    await assert.rejects(() => db.getPool(), /"cloudsql"/);
+    await assert.rejects(() => db.query("select 1"), /"cloudsql"/);
+  });
+
+  it("retries a pool that failed to build", async () => {
+    // A failed build must not be cached for the life of a warm instance: the
+    // first call fails on a provider name, the next finds it fixed
+    process.env.DB_PROVIDER = "cloudsql";
+    process.env.DATABASE_URL = "postgres://x/y";
+    const db = await load();
+    await assert.rejects(() => db.getPool(), /"cloudsql"/);
+    process.env.DB_PROVIDER = "url";
+    const pool = await db.getPool();
+    assert.equal(pool.options.connectionString, "postgres://x/y");
+    // Built once it succeeds: the next call reuses it
+    assert.equal(await db.getPool(), pool);
   });
 
   it("is disabled unless SYNC_ENABLED is exactly true", async () => {
@@ -44,7 +81,9 @@ describe("db", () => {
     // local container opts out.
     process.env.DATABASE_URL = "postgres://x/y";
     const db = await load();
-    assert.deepEqual(db.getPool().options.ssl, { rejectUnauthorized: true });
+    assert.deepEqual((await db.getPool()).options.ssl, {
+      rejectUnauthorized: true,
+    });
   });
 
   /**
@@ -64,7 +103,7 @@ describe("db", () => {
       },
       release: (err) => released.push(err),
     };
-    db.getPool().connect = async () => client;
+    (await db.getPool()).connect = async () => client;
     return { db, released };
   };
 
