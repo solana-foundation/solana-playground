@@ -11,16 +11,19 @@ set -euo pipefail
 base_ref="${1:-master}"
 # CI passes the pull request's head: its checkout is the merge commit, which no reviewer sees
 head_sha="${2:-$(git rev-parse HEAD)}"
-snapshot="client-v2/bench/BUNDLE.md"
-
-node scripts/bundle-info.mjs build/BUNDLE.fresh.md
+snapshot="$(node --input-type=module -e 'import { SNAPSHOT_PATH } from "./scripts/lib/bundle/snapshot.mjs"; console.log(SNAPSHOT_PATH);')"
 
 git fetch origin "$base_ref"
-# A base branch from before the snapshot existed has none; the report says so instead of failing the job
+# A base branch from before the snapshot existed has none; the report says so instead of failing the job.
+# ls-tree prints nothing for a missing path and fails on any other error, which `set -e` then reports.
 rm -f build/BUNDLE.base.md
-if git cat-file -e "FETCH_HEAD:$snapshot" 2>/dev/null; then
+listed="$(git ls-tree --full-tree --name-only FETCH_HEAD -- "$snapshot")"
+if [ -n "$listed" ]; then
   git show "FETCH_HEAD:$snapshot" > build/BUNDLE.base.md
 fi
 
-node scripts/bundle-info-diff.mjs report build/BUNDLE.base.md build/BUNDLE.fresh.md "$base_ref" "$head_sha" bench/BUNDLE.md > build/bundle-report.md
+# Written aside and moved, so a failed run leaves no empty report for CI to upload
+rm -f build/bundle-report.md
+node scripts/bundle-info-diff.mjs build/BUNDLE.base.md "$base_ref" "$head_sha" > build/bundle-report.md.tmp
+mv build/bundle-report.md.tmp build/bundle-report.md
 cat build/bundle-report.md

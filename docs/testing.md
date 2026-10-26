@@ -825,9 +825,8 @@ Build with `REACT_APP_SENTRY_DSN` and `REACT_APP_GA_MEASUREMENT_ID` unset, as CI
 base. `build-fast` writes `client-v2/build-stats/bundle-modules.json`, outside `build/` so no deployment serves it: the
 module list `BundleModulesPlugin` in `client-v2/craco.config.js` takes from webpack. `test-build` runs
 `scripts/bundle-modules.build-test.mjs` over that list and `scripts/bundle-info.build-test.mjs` against
-`client-v2/bench/BUNDLE.md`. The pure functions behind both (`bundle-info.test.mjs`, `bundle-info-diff.test.mjs`,
-`bundle-modules.test.mjs`) and the comment workflow's pull request lookup (`bundle-info-locate-pr.test.mjs`) run under
-`test-api`.
+`client-v2/bench/BUNDLE.md`. The pure functions behind both (`scripts/lib/bundle/snapshot.test.mjs`, `diff.test.mjs`,
+`modules.test.mjs`) and the comment workflow's pull request lookup (`locate-pr.test.mjs`) run under `test-api`.
 
 Expect:
 
@@ -838,9 +837,8 @@ Expect:
       `client-v2/src/index.tsx`, rebuild, and run `test-build`; the failure lists `./src/test-utils/stored-values.ts`.
       The call matters: webpack drops a bare `import "...";` of a module with no side effects, and nothing ships.
       Revert the plant and rebuild.
-- [ ] a stale snapshot makes `bundle-info.build-test.mjs` fail naming `yarn bundle:info` and the row: change the
-      `main` row's gzipped cell in `bench/BUNDLE.md` to a value more than 11 KiB away (`170 kB` to `200 kB`) and run
-      `test-build`. Restore the file.
+- [ ] a stale snapshot makes `bundle-info.build-test.mjs` fail naming `yarn bundle:info` and the row: raise the
+      `main` row's gzipped cell in `bench/BUNDLE.md` by 30 kB and run `test-build`. Restore the file.
 - [ ] `test-build` without a `client-v2/build/` fails instead of passing.
 - [ ] on a pull request to `master`, the build job's "Bundle change report" step summary holds the report, and one
       comment headed "Bundle change vs `master`" appears on the pull request, naming the pull request's head commit

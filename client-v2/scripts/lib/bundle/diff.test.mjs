@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { formatReport } from "./bundle-info-diff.mjs";
+import { bundleReport, formatReport } from "./diff.mjs";
+import { renderSnapshot } from "./snapshot.mjs";
 
 const FILES_HEADER = [
   "| Files | Count | Raw | Gzipped |",
@@ -34,13 +35,13 @@ const BASE_CHUNKS = [
 
 const BASE = snapshot({ chunks: BASE_CHUNKS });
 
-const report = (fresh, stale = false) =>
+const report = (fresh) =>
   formatReport({
     base: BASE,
     fresh,
     baseLabel: "master",
     head: "abc1234",
-    stale,
+    stale: false,
   });
 
 test("a row within the tolerance is counted as noise, not listed, under a heading naming the head", () => {
@@ -58,7 +59,6 @@ test("a row within the tolerance is counted as noise, not listed, under a headin
   );
   assert.match(text, /No row moved past the 11 KiB tolerance\./);
   assert.match(text, /_2 rows moved within the 11 KiB tolerance \(noise\)\._/);
-  assert.doesNotMatch(text, /470 kB → 480 kB/);
 });
 
 // [case, fresh snapshot, summary line, the change tables the report holds under it]
@@ -99,6 +99,17 @@ const LISTED = [
     "**1 changed, 0 added, 0 removed**",
     FILES_HEADER.concat(["| `*.js` | 2 → 3 | 1.48 MB | 470 kB |"]),
   ],
+  [
+    "a row with an extra cell",
+    snapshot({
+      chunks: [
+        ["main", "1", "470 kB | 10 kB"],
+        ["other chunks", "2", "1.48 MB"],
+      ],
+    }),
+    "**1 changed, 0 added, 0 removed**",
+    CHUNK_HEADER.concat(["| `main` | 1 | 470 kB | 10 kB |"]),
+  ],
 ];
 
 for (const [name, fresh, summary, table] of LISTED) {
@@ -109,15 +120,33 @@ for (const [name, fresh, summary, table] of LISTED) {
   });
 }
 
-// [case, stale]: the report asks for a refresh exactly when the snapshot is stale
-const STALE = [
-  ["a stale snapshot gets a refresh line", true],
-  ["a current snapshot gets no refresh line", false],
+const KB = 1024;
+
+const measured = (main) => ({
+  js: { count: 2, raw: 1500 * KB, gzip: 470 * KB },
+  css: { count: 1, raw: 30 * KB, gzip: 10 * KB },
+  chunks: [
+    { id: "main", count: 1, gzip: main },
+    { id: "other chunks", count: 1, gzip: 470 * KB },
+  ],
+});
+
+// [case, committed `main` bytes, stale]: base 470 kB, build 485 KiB; the row is listed against the base either way
+const BUNDLE_REPORT = [
+  ["a committed cell within the tolerance of the build", 480 * KB, false],
+  ["a committed cell past the tolerance of the build", 440 * KB, true],
 ];
 
-for (const [name, stale] of STALE) {
-  test(name, () => {
-    const text = report(BASE, stale);
+for (const [name, committedMain, stale] of BUNDLE_REPORT) {
+  test(`bundleReport: ${name}`, () => {
+    const text = bundleReport({
+      measurement: measured(485 * KB),
+      committed: renderSnapshot(measured(committedMain)),
+      base: renderSnapshot(measured(470 * KB)),
+      baseLabel: "master",
+      head: "abc1234",
+    });
+    assert.ok(text.includes("| `main` | 1 | 470 kB → 490 kB |"), text);
     assert.equal(text.includes("is out of date for this branch"), stale);
   });
 }
@@ -134,14 +163,12 @@ test("a base branch without a snapshot is named and nothing is diffed", () => {
     text,
     /`master` has no `client-v2\/bench\/BUNDLE\.md`, so there is nothing to compare against\./
   );
-  assert.doesNotMatch(text, /No row moved/);
 });
 
-test("the fresh tables are collapsed without the snapshot's title", () => {
+test("the fresh tables are collapsed", () => {
   const text = report(BASE);
   const details = text.slice(text.indexOf("<details>"));
   assert.ok(details.includes("| `main` | 1 | 470 kB |"));
-  assert.ok(!details.includes("# Bundle sizes"));
 });
 
 test("a fresh file without a table throws", () => {

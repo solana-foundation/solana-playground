@@ -4,9 +4,10 @@ import test from "node:test";
 import {
   chunkRows,
   formatBytes,
+  parseRows,
   renderSnapshot,
   stabiliseCell,
-} from "./bundle-info.mjs";
+} from "./snapshot.mjs";
 
 const KB = 1024;
 const MB = 1024 * 1024;
@@ -40,6 +41,13 @@ const HYSTERESIS = [
     "475 kB",
     "480 kB",
   ],
+  // Within the tolerance in bytes, past it in displayed cells, which exceedsTolerance compares
+  [
+    "a cell two steps up takes the fresh cell",
+    480 * KB + 1,
+    "470 kB",
+    "490 kB",
+  ],
 ];
 
 for (const [name, bytes, committed, expected] of HYSTERESIS) {
@@ -48,11 +56,13 @@ for (const [name, bytes, committed, expected] of HYSTERESIS) {
   });
 }
 
-test("chunkRows gives a named chunk and a worker a row each and sums the other chunks", () => {
+// `web3` comes before `main` and carries a digit: the rows are sorted, and only an all-digit id is summed
+test("chunkRows gives a named chunk and a worker a row each, sorted, and sums the other chunks", () => {
   const file = (name, gzip) => ({ name, raw: gzip, gzip });
   assert.deepEqual(
     chunkRows(
       [
+        file("web3.5a6b7c8d.chunk.js", 5),
         file("9859.0f4e9123.chunk.js", 10),
         file("main.c7d1e66b.js", 20),
         file("12.ab34cd56.chunk.js", 30),
@@ -61,6 +71,7 @@ test("chunkRows gives a named chunk and a worker a row each and sums the other c
     ),
     [
       { id: "main", count: 1, gzip: 20 },
+      { id: "web3", count: 1, gzip: 5 },
       { id: "worker:ts", count: 1, gzip: 40 },
       { id: "other chunks", count: 2, gzip: 40 },
     ]
@@ -97,19 +108,12 @@ test("renderSnapshot reproduces the committed file when every cell moved within 
   assert.equal(renderSnapshot(fresh, COMMITTED), COMMITTED);
 });
 
-test("renderSnapshot changes only the row that moved past the tolerance", () => {
-  const fresh = measurement({
-    jsRaw: 1.48 * MB,
-    jsGzip: 470 * KB,
-    cssGzip: 10 * KB,
-    other: 490 * KB,
-    main: 1.48 * MB,
-  });
-  assert.equal(
-    renderSnapshot(fresh, COMMITTED),
-    COMMITTED.replace(
-      "| `other chunks` | 1 | 470 kB |",
-      "| `other chunks` | 1 | 490 kB |"
-    )
+test("parseRows skips a backticked row outside a table", () => {
+  const rows = parseRows(
+    "| `stray` | 1 | 2 |\n\n| Chunk | Count | Gzipped |\n| --- | --- | --- |\n| `main` | 1 | 10 kB |\n"
+  );
+  assert.deepEqual(
+    rows.map((row) => row.key),
+    ["main"]
   );
 });

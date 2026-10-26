@@ -4,11 +4,12 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { MODULES_FILE, offendingModules } from "./bundle-modules.mjs";
+import {
+  MODULES_FILE as FILE,
+  offendingModules,
+} from "./lib/bundle/modules.mjs";
 
-const ROOT = path.join(import.meta.dirname, "..");
-const FILE = path.join(ROOT, MODULES_FILE);
-const INDEX = path.join(ROOT, "build", "index.html");
+const INDEX = path.join(import.meta.dirname, "..", "build", "index.html");
 
 test("the bundle holds no test helper or test runner module", async () => {
   const text = await fs.readFile(FILE, "utf8").catch((e) => {
@@ -25,10 +26,10 @@ test("the bundle holds no test helper or test runner module", async () => {
     list.mtimeMs >= index.mtimeMs,
     `${FILE} is older than ${INDEX}: the last production build did not write it (BundleModulesPlugin in craco.config.js)`
   );
-  const modules = JSON.parse(text);
-  assert.notEqual(modules.length, 0, `${FILE} lists no module`);
+  const names = JSON.parse(text);
+  assert.notEqual(names.length, 0, `${FILE} lists no module`);
 
-  const offenders = offendingModules(modules);
+  const offenders = offendingModules(names);
   assert.equal(
     offenders.length,
     0,

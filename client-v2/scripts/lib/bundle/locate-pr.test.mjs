@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
 import test from "node:test";
 
-import { locatePullRequest } from "./bundle-info-locate-pr.mjs";
+import { locatePullRequest } from "./locate-pr.mjs";
 
 const REPOSITORY = "solana-foundation/solana-playground";
 
@@ -56,22 +57,30 @@ const locate = async ({
   return { outputs, warnings };
 };
 
-test("a run without the report artifact is skipped with a warning", async () => {
+test("the module imports nothing local, since the comment workflow checks it out alone", async () => {
+  const source = await fs.readFile(
+    new URL("./locate-pr.mjs", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(source, /(?:from|import)\s*\(?\s*["']\.{1,2}\//);
+});
+
+test("a run without the report artifact names the pull request and warns", async () => {
   const { outputs, warnings } = await locate({
     artifacts: [{ name: "other" }],
   });
-  assert.deepEqual(outputs, {});
+  assert.deepEqual(outputs, { pr: "77", has_report: "false" });
   assert.match(warnings[0], /No bundle-info-comment artifact on run 42/);
 });
 
 const SKIPPED = {};
 
-// [case, the pull requests holding the run's head commit, outputs]
+// [case, the pull requests holding the run's head commit, outputs]; a skip warns
 const PULL_REQUESTS = [
   [
     "the matching pull request gets the comment past one whose head moved on",
     [pullRequest({ number: 76, sha: "newer" }), pullRequest({ number: 78 })],
-    { found: "true", pr: "78" },
+    { pr: "78", has_report: "true" },
   ],
   [
     "a closed pull request is skipped",
@@ -92,7 +101,15 @@ const PULL_REQUESTS = [
 
 for (const [name, prs, expected] of PULL_REQUESTS) {
   test(name, async () => {
-    const { outputs } = await locate({ prs });
+    const { outputs, warnings } = await locate({ prs });
     assert.deepEqual(outputs, expected);
+    assert.deepEqual(
+      warnings,
+      expected === SKIPPED
+        ? [
+            "No open pull request has abc123 as its current head; no comment posted.",
+          ]
+        : []
+    );
   });
 }

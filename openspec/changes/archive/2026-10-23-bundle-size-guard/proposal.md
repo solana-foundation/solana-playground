@@ -31,7 +31,8 @@ Out of scope:
 
 ## Impact
 
-- `client-v2/scripts/bundle-*`, `client-v2/craco.config.js`,
+- `client-v2/scripts/bundle-*`, `client-v2/scripts/lib/bundle/`,
+  `client-v2/craco.config.js`,
   `client-v2/bench/BUNDLE.md`, `client-v2/package.json`, the root
   `.gitignore` (`client-v2/build-stats/`).
 - The Vercel build runs `BundleModulesPlugin` too, but publishes nothing from

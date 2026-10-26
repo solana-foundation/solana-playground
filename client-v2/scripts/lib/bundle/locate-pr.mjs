@@ -1,21 +1,12 @@
-// Finds the bundle report artifact and the pull request of a completed client-v2 run; .github/workflows/bundle-info-comment.yml runs it through actions/github-script
+// Loaded alone: bundle-info-comment.yml sparse-checks out only this file, so it imports nothing local
 const ARTIFACT = "bundle-info-comment";
 
+/**
+ * Sets `pr` to the open pull request whose head is the completed run's head, and `has_report` to whether the run
+ * saved the {@link ARTIFACT} artifact; sets nothing and warns when no pull request matches.
+ */
 export async function locatePullRequest({ github, context, core }) {
   const run = context.payload.workflow_run;
-  const {
-    data: { artifacts },
-  } = await github.rest.actions.listWorkflowRunArtifacts({
-    ...context.repo,
-    run_id: run.id,
-  });
-  // A warning, not info: the pull request's sticky comment still shows an older head's report
-  if (!artifacts.some((artifact) => artifact.name === ARTIFACT)) {
-    return core.warning(
-      `No ${ARTIFACT} artifact on run ${run.id}: the build job saved no report; no comment posted.`
-    );
-  }
-
   const { data: prs } =
     await github.rest.repos.listPullRequestsAssociatedWithCommit({
       ...context.repo,
@@ -35,6 +26,18 @@ export async function locatePullRequest({ github, context, core }) {
     );
   }
 
-  core.setOutput("found", "true");
+  const {
+    data: { artifacts },
+  } = await github.rest.actions.listWorkflowRunArtifacts({
+    ...context.repo,
+    run_id: run.id,
+  });
+  const hasReport = artifacts.some((artifact) => artifact.name === ARTIFACT);
+  if (!hasReport) {
+    core.warning(
+      `No ${ARTIFACT} artifact on run ${run.id}: the build job saved no report; the comment says so.`
+    );
+  }
   core.setOutput("pr", String(pr.number));
+  core.setOutput("has_report", String(hasReport));
 }

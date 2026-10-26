@@ -1,10 +1,15 @@
 // Hysteresis reproduces every committed cell while the fresh cell stays within DISPLAY_STEP_TOLERANCE_BYTES of it, so any difference is a real size change or a hand edit
 import assert from "node:assert/strict";
-import fs from "node:fs/promises";
 import test from "node:test";
 
-import { diffSnapshots } from "./bundle-info-diff.mjs";
-import { freshSnapshot, parseRows, SNAPSHOT } from "./bundle-info.mjs";
+import { diffSnapshots } from "./lib/bundle/diff.mjs";
+import {
+  isStale,
+  measure,
+  parseRows,
+  readSnapshot,
+  renderSnapshot,
+} from "./lib/bundle/snapshot.mjs";
 
 const changeLine = ({ kind, key, before = [], after = [] }) =>
   `  ${key}: ${kind} ${before.join(" / ") || "-"} -> ${
@@ -12,16 +17,14 @@ const changeLine = ({ kind, key, before = [], after = [] }) =>
   }`;
 
 test("bench/BUNDLE.md matches the build byte for byte", async () => {
-  const fresh = await freshSnapshot();
-  const committed = await fs.readFile(SNAPSHOT, "utf8").catch((e) => {
-    if (e.code === "ENOENT") return "";
-    throw e;
-  });
-  if (committed === fresh) return;
+  const measurement = await measure();
+  const committed = await readSnapshot();
+  if (!isStale(measurement, committed)) return;
 
-  const rows = diffSnapshots(parseRows(committed), parseRows(fresh)).map(
-    changeLine
-  );
+  const rows = diffSnapshots(
+    parseRows(committed ?? ""),
+    parseRows(renderSnapshot(measurement, committed))
+  ).map(changeLine);
   const detail = rows.length
     ? rows.join("\n")
     : "  (only the text outside the tables differs)";

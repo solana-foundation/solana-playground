@@ -29,6 +29,9 @@ Linear: [HOO-](https://linear.app/solana-fndn/issue/HOO-)
 - **Failed before the fix:** <!-- the test's failing output, or the commit it
      failed at, before the change. "n/a" when the PR adds no fix. -->
 - **Screenshots:** <!-- before / after for anything visible. "n/a" otherwise. -->
+- **Bundle size:** <!-- from the "Bundle change vs `master`" comment: "no row
+     moved", or each row that moved, with its old and new size and why it
+     grew. -->
 
 ## Checklist
 
@@ -39,6 +42,7 @@ Linear: [HOO-](https://linear.app/solana-fndn/issue/HOO-)
 - [ ] Task ticked in `tasks.md`; if it was the last, asked whether to close the change ("Specs and changes" 4-5)
 - [ ] Ids, `aria-label`s, test ids unchanged across any move ("What survives every move")
 - [ ] One migration, this PR's own ("What review keeps finding")
+- [ ] `yarn bundle:info` run and `bench/BUNDLE.md` committed if a row moved; every row that grew explained under Evidence ("Before a PR")
 
 ## Not in this PR
 

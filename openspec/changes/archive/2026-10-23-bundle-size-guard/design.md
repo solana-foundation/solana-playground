@@ -14,7 +14,8 @@ build test, not shell in a workflow.
 
 `scripts/bundle-info.build-test.mjs` and
 `scripts/bundle-modules.build-test.mjs` run under `yarn test-build` and fail
-when their input in `build/` is absent. A workflow step only produces output.
+when their input, `build/` or `build-stats/bundle-modules.json`, is absent. A
+workflow step only produces output.
 Locally and on CI, `yarn test-build` fails the same way.
 
 - Rejected: the Explorer's `check` subcommand run as a workflow step.
@@ -23,9 +24,8 @@ Locally and on CI, `yarn test-build` fails the same way.
 
 `bench/BUNDLE.md` holds JavaScript and CSS totals (count, raw, gzipped) and a
 chunk table with a count and a gzipped cell per row. The JavaScript files are
-`build/static/js/*.js` and the Monaco workers at the root of `build/`
-(`ts.worker.js` alone is over 5 MB raw); the two `*.module.wasm` files are
-left out. `chunkRows` gives a row to each named chunk (`main`, or any name a
+`build/static/js/*.js` and the Monaco workers at the root of `build/`; the
+`*.module.wasm` files are left out. `chunkRows` gives a row to each named chunk (`main`, or any name a
 `webpackChunkName` adds) and to each worker (`worker:<name>`): a named row
 says which part of the app moved. Every other chunk is summed into one
 `other chunks` row: webpack names those by a numeric id, which says nothing
@@ -42,28 +42,29 @@ form `formatBytes` would not produce fails the freshness test; a hand edit to
 another valid cell within the tolerance passes it.
 
 - Rejected: totals only (a regression hides in a total of every file), one row
-  per chunk (193 rows keyed by ids that name nothing), and exact bytes (a
+  per chunk (most rows keyed by ids that name nothing), and exact bytes (a
   rebuild of one commit must leave the file unchanged).
 
 ### The module test reads a module list written by craco
 
 `BundleModulesPlugin` in `craco.config.js` writes
 `client-v2/build-stats/bundle-modules.json` on `compiler.hooks.done` from
-`stats.toJson({ all: false, modules: true, nestedModules: true, ids: true,
-cachedModules: true })`, flattened by `slimModules`. Only the module list names
-a test helper: a helper has no test title for `in-source-tests.build-test.mjs`
-to find.
+`stats.toJson({ all: false, modules: true, nestedModules: true,
+cachedModules: true })`, flattened by `slimModules` into module names. Only the
+module list names a test helper: a helper has no test title for
+`in-source-tests.build-test.mjs` to find.
 
-- Outside `build/`: the list (about 600 KB, every module path) would otherwise
-  be served by every deployment, while `upload-sourcemaps.mjs` deletes the
-  `.map` files so module paths do not ship.
+- Outside `build/`: the list (every module path) would otherwise be served by
+  every deployment, while `upload-sourcemaps.mjs` deletes the `.map` files so
+  module paths do not ship.
 - The plugin runs on every production build, Vercel's included, and removes
   the list when the build starts. A write or stats-shape error is logged, not
   thrown, so it cannot fail a deployment; the build test then fails on the
   missing file. It also fails on a list older than `build/index.html`, which a
   build without the plugin leaves.
 - `slimModules` throws on a module without a string name, which
-  `offendingModules` would otherwise pass as clean.
+  `offendingModules` would otherwise pass as clean, and on a dropped group that
+  holds modules.
 
 - `nestedModules: true`: in production, a module concatenated into another
   appears only inside it.
@@ -79,13 +80,18 @@ The build job, on pull requests only and before "Build tests", writes
 summary and uploads it as the `bundle-info-comment` artifact. The steps come
 before "Build tests" so the report reaches the pull request when the snapshot
 is stale; the report then says so. Both steps continue on error with a warning,
-so a report failure never skips "Build tests". The report names the pull
-request's head commit, since a later run that saves no report leaves the
-earlier comment in place.
+so a report failure never skips "Build tests". The report measures `build/`
+without anchoring on the committed `bench/BUNDLE.md`, so the tolerance applies
+once, against the base branch's cells, and its full table can differ from the
+committed file; the stale line comes from a separate comparison of the build
+with the committed file. The report names the pull request's head commit, and a
+run that saves no report replaces the comment with one naming the head and the
+run.
 `.github/workflows/bundle-info-comment.yml` runs on `workflow_run` of
-`client-v2`, finds the pull request with `bundle-info-locate-pr.mjs` (open,
-same head sha, branch, and repository), downloads the artifact outside the
-workspace, and posts it under the sticky header `bundle-info`. A fork's pull
+`client-v2`, finds the pull request with `scripts/lib/bundle/locate-pr.mjs`
+(open, same head sha, branch, and repository; the workflow checks out that file
+alone, so it imports nothing local), downloads the artifact outside
+the workspace, and posts it under the sticky header `bundle-info`. A fork's pull
 request runs CI with a read-only token, so the build job cannot post.
 `workflow_run` runs the copy of the workflow on the default branch, so the
 first comment appears on the first pull request after this change merges.
