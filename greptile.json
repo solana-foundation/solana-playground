@@ -24,7 +24,7 @@
       },
       {
         "path": "client-v2/AGENTS.md",
-        "description": "client-v2 test rule: no spread when building a new fixture shape",
+        "description": "client-v2 agent rules: where the sync gotchas live, and the test rules",
         "scope": ["client-v2/**"]
       },
       {
