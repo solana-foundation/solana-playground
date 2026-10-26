@@ -1,5 +1,21 @@
 import type { McpServerEntry } from "./types";
 
+/**
+ * Extra MCP servers, added from the client.
+ *
+ * **Not the source of truth.** The gateway (`api/mcp.mjs`) owns the list and
+ * the panel asks it at startup, so enabling an upstream is a deploy plus an
+ * env var rather than a client change — that is how an operator turns Explorer
+ * on without shipping anything. Why the gateway withholds Explorer from a
+ * request is `explorerWithheld` in `api/mcp.mjs`, with `EXPLORER_HINTS` saying
+ * what to do about each reason.
+ *
+ * This list is only for servers wanted *in addition*: something CORS-open a
+ * page can reach directly. Empty by default, and deliberately not a mirror of
+ * what the gateway serves, since two lists would disagree.
+ */
+export const LOCAL_MCP_SERVERS: McpServerEntry[] = [];
+
 /** The id prefixes tool names, which every provider restricts to these characters */
 const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -44,15 +60,19 @@ const readStringMap = (
  * Parse the JSON the user typed into a server list.
  *
  * Validation is deliberately strict about the things that fail *later* and
- * confusingly — a duplicate id is rejected by the API mid-turn, and a blank
+ * confusingly — a duplicate id makes one server's tools replace the other's, and a blank
  * credential on an enabled server reads as "MCP is broken" rather than
  * "you left a field empty".
  *
  * @param text the editor's contents
+ * @param gatewayIds the ids the gateway serves, which a local entry may not reuse
  * @returns the parsed servers
  * @throws with a message naming the entry and field at fault
  */
-export const parseServers = (text: string): McpServerEntry[] => {
+export const parseServers = (
+  text: string,
+  gatewayIds: readonly string[] = []
+): McpServerEntry[] => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
@@ -78,8 +98,18 @@ export const parseServers = (text: string): McpServerEntry[] => {
     if (typeof id !== "string" || !ID_PATTERN.test(id)) {
       fail(`${where}: "id" must be letters, digits, dashes or underscores.`);
     }
+    // Tool names are prefixed with the id, so one server's tools would replace the other's
     if (seen.has(id as string)) {
-      fail(`${where}: duplicate id "${id}" — the API rejects repeated names.`);
+      fail(
+        `${where}: duplicate id "${id}". Two servers with one id would have ` +
+          "one server's tools replace the other's."
+      );
+    }
+    if (gatewayIds.includes(id as string)) {
+      fail(
+        `${where}: id "${id}" is a server the gateway already serves. Pick ` +
+          "another id, or one server's tools would replace the other's."
+      );
     }
     seen.add(id as string);
 
@@ -128,3 +158,35 @@ export const parseServers = (text: string): McpServerEntry[] => {
     };
   });
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("features/mcp/model/config", () => {
+    it("loads an entry that still names the server executor as a browser server", () => {
+      const servers = parseServers(
+        JSON.stringify([
+          { id: "remote", url: "https://mcp.test/mcp", executor: "server" },
+        ])
+      );
+
+      expect(servers).toEqual([
+        {
+          id: "remote",
+          name: "remote",
+          url: "https://mcp.test/mcp",
+          enabled: true,
+        },
+      ]);
+    });
+
+    it("rejects a local entry whose id the gateway serves", () => {
+      expect(() =>
+        parseServers(
+          JSON.stringify([{ id: "explorer", url: "https://mcp.test/mcp" }]),
+          ["explorer"]
+        )
+      ).toThrow('id "explorer" is a server the gateway already serves');
+    });
+  });
+}

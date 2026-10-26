@@ -52,6 +52,44 @@ describe("toSdkTools", () => {
     expect(JSON.stringify(sent[1].body.messages)).toContain("approved");
   });
 
+  it("passes the SDK's abort signal to run", async () => {
+    const run = vi.fn(() => "ok");
+    const { stop } = toSdkTools([
+      {
+        name: "stop",
+        description: "Stop",
+        schema: { type: "object", properties: {}, additionalProperties: false },
+        run,
+      },
+    ]);
+    const controller = new AbortController();
+
+    await stop.execute?.(
+      {},
+      {
+        toolCallId: "c1",
+        messages: [],
+        abortSignal: controller.signal,
+        context: undefined,
+      }
+    );
+
+    expect(run).toHaveBeenCalledWith({}, { signal: controller.signal });
+  });
+
+  it("throws on two tools with one name", () => {
+    const named = (description: string): ToolDefinition => ({
+      name: "explorer__search",
+      description,
+      schema: { type: "object", properties: {}, additionalProperties: false },
+      run: () => description,
+    });
+
+    expect(() => toSdkTools([named("gateway"), named("local")])).toThrow(
+      'Two tools are named "explorer__search"'
+    );
+  });
+
   it("sends a zod schema as JSON Schema", async () => {
     const { fetch, sent } = fakeFetch(openAiText("ok"));
     const read: ToolDefinition<z.ZodObject<{ path: z.ZodString }>> = {

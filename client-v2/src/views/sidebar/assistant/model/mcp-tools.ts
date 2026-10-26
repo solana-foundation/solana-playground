@@ -1,6 +1,6 @@
 import { PgAssistant } from "../store";
-import { callTool } from "../grounding";
-import type { McpServerEntry, McpTool } from "../grounding";
+import { callTool } from "@/features/mcp";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
 import type { ToolDefinition, ToolSchema } from "@/shared/lib/ai";
 
 /** Separates the server from the tool, and is legal in every provider's names */
@@ -37,14 +37,26 @@ const define = (server: McpServerEntry, tool: McpTool): ToolDefinition => ({
     ? `${tool.description} (from the ${server.name} MCP server)`
     : `The ${tool.name} tool on the ${server.name} MCP server.`,
   schema: schemaFor(tool),
-  run: async (input) => {
-    PgAssistant.addToolCall(`${tool.name} on ${server.name}`);
+  run: async (input, options) => {
+    // The entry as it is now: one edited mid-turn must not be called with its old URL or token
+    const current = PgAssistant.enabledMcpServers.find(
+      (entry) => entry.id === server.id
+    );
+    if (!current) {
+      return `Could not call ${tool.name}: the ${server.name} MCP server was removed or turned off.`;
+    }
+    PgAssistant.addToolCall(`${tool.name} on ${current.name}`);
     try {
-      const { text, isError } = await callTool(server, tool.name, input);
+      const { text, isError } = await callTool(current, tool.name, input, {
+        signal: options?.signal,
+      });
       return isError ? `The tool reported an error: ${text}` : text;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      PgAssistant.addToolCall(`${tool.name} on ${server.name} failed`);
+      // Stop ended the call, which is not the server failing
+      if (!options?.signal?.aborted) {
+        PgAssistant.addToolCall(`${tool.name} on ${current.name} failed`);
+      }
       return `Could not call ${tool.name}: ${message}`;
     }
   },

@@ -6,12 +6,12 @@ import { Label } from "@/shared/ui/label";
 import ServerConsole from "./ServerConsole";
 import { useRenderOnChange } from "../../../../hooks";
 import { PgAssistant } from "../store";
+import { SKILLS } from "../grounding";
 import {
   LOCAL_MCP_SERVERS,
   parseServers,
   serializeServers,
-  SKILLS,
-} from "../grounding";
+} from "@/features/mcp";
 import { PROVIDERS } from "../model/types";
 
 const Grounding = () => {
@@ -32,7 +32,10 @@ const Grounding = () => {
 
   const apply = () => {
     try {
-      const parsed = parseServers(draft);
+      const parsed = parseServers(
+        draft,
+        PgAssistant.gatewayMcpServers.map((server) => server.id)
+      );
       PgAssistant.setMcpServers(parsed);
       // Show the normalised result, so defaults the parser filled in are visible
       setDraft(serializeServers(parsed));
@@ -109,6 +112,14 @@ const Grounding = () => {
           The gateway above owns its own list — these are extra entries, and
           they are the only ones this editor changes.
         </Active>
+
+        {PgAssistant.shadowedMcpServers.map((server) => (
+          <Active key={server.id} role="status">
+            Not used: the gateway serves a server with the id{" "}
+            <code>{server.id}</code>, which replaces this entry. Rename the
+            entry to use both.
+          </Active>
+        ))}
 
         <Json
           value={draft}

@@ -4,8 +4,8 @@ import styled, { css } from "styled-components";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
-import { callTool, listTools } from "../grounding";
-import type { McpServerEntry, McpTool } from "../grounding";
+import { callTool, listTools } from "@/features/mcp";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
 
 interface ServerConsoleProps {
   server: McpServerEntry;

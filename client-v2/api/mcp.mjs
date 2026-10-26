@@ -101,12 +101,24 @@ const explorerWithheld = async (req) => {
   return session.status === "signed-in" ? null : session.status;
 };
 
-const rpcError = (res, id, code, message) =>
-  sendJson(res, 200, {
-    jsonrpc: "2.0",
-    id: id ?? null,
-    error: { code, message },
-  });
+const rpcResult = (id, result) => ({ jsonrpc: "2.0", id, result });
+
+const rpcError = (id, code, message) => ({
+  jsonrpc: "2.0",
+  id: id ?? null,
+  error: { code, message },
+});
+
+// The gateway sends one request per upstream connection, so a fixed id is enough
+const rpcRequest = (method, params) => ({
+  jsonrpc: "2.0",
+  id: 1,
+  method,
+  ...(params === undefined ? {} : { params }),
+});
+
+const sendRpcError = (res, id, code, message) =>
+  sendJson(res, 200, rpcError(id, code, message));
 
 /**
  * Which upstreams this request is for, defaulting to all of them.
@@ -172,10 +184,8 @@ const call = async (upstream, payload) => {
 };
 
 /** `initialize` is answered here: there is no single upstream to forward it to */
-const initialize = (id, ids) => ({
-  jsonrpc: "2.0",
-  id,
-  result: {
+const initialize = (id, ids) =>
+  rpcResult(id, {
     protocolVersion: PROTOCOL_VERSION,
     capabilities: { tools: { listChanged: false } },
     serverInfo: { name: "solana-playground-gateway", version: "0.1.0" },
@@ -184,19 +194,17 @@ const initialize = (id, ids) => ({
       (ids.length > 1
         ? ` Names are prefixed with the upstream id and "${SEPARATOR}".`
         : ""),
-  },
-});
+  });
 
 /** Merge every selected upstream's tools, prefixing only when disambiguation is needed */
 const listTools = async (id, ids, configured) => {
   const prefix = ids.length > 1;
   const lists = await Promise.all(
     ids.map(async (serverId) => {
-      const payload = await call(configured[serverId], {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/list",
-      });
+      const payload = await call(
+        configured[serverId],
+        rpcRequest("tools/list")
+      );
       const tools = payload.result?.tools ?? [];
       return prefix
         ? tools.map((tool) => ({
@@ -207,7 +215,7 @@ const listTools = async (id, ids, configured) => {
     })
   );
 
-  return { jsonrpc: "2.0", id, result: { tools: lists.flat() } };
+  return rpcResult(id, { tools: lists.flat() });
 };
 
 /** Route a call by its name prefix when several upstreams are in play */
@@ -225,12 +233,10 @@ const callTool = async (id, ids, configured, params) => {
       throw new Error(`Unknown upstream "${serverId}"`);
   }
 
-  const payload = await call(configured[serverId], {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { ...params, name },
-  });
+  const payload = await call(
+    configured[serverId],
+    rpcRequest("tools/call", { ...params, name })
+  );
 
   return { ...payload, id };
 };
@@ -291,11 +297,11 @@ async function handler(req, res) {
       case "tools/call":
         return sendJson(res, 200, await callTool(id, ids, configured, params));
       default:
-        return rpcError(res, id, -32601, `Method not supported: ${method}`);
+        return sendRpcError(res, id, -32601, `Method not supported: ${method}`);
     }
   } catch (e) {
     // An upstream failure is the model's business, not a transport error
-    return rpcError(res, id, -32603, e.message);
+    return sendRpcError(res, id, -32603, e.message);
   }
 }
 

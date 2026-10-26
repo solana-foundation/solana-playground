@@ -14,10 +14,10 @@ import { redactKey } from "./redact";
 const log = createLogger("ai:run-turn");
 
 /** Model requests one turn may send, not counting resumes of a paused turn */
-export const DEFAULT_MAX_STEPS = 12;
+const FALLBACK_MAX_STEPS = 12;
 
 /** Times one turn may resume after the provider paused it */
-export const DEFAULT_MAX_RESUMES = 3;
+const FALLBACK_MAX_RESUMES = 3;
 
 /** Anthropic's raw stop reason for a turn it stopped early and expects resumed */
 const PAUSE_TURN = "pause_turn";
@@ -70,9 +70,9 @@ export interface RunTurnOptions {
   maxOutputTokens?: number;
   /** Aborts the turn; the turn rejects with the signal's reason */
   signal?: AbortSignal;
-  /** Defaults to {@link DEFAULT_MAX_STEPS} */
+  /** Defaults to {@link FALLBACK_MAX_STEPS} */
   maxSteps?: number;
-  /** Defaults to {@link DEFAULT_MAX_RESUMES} */
+  /** Defaults to {@link FALLBACK_MAX_RESUMES} */
   maxResumes?: number;
   /** The connection's key, replaced in every error message */
   apiKey?: string;
@@ -164,8 +164,8 @@ export const runTurn = async ({
   providerOptions,
   maxOutputTokens,
   signal,
-  maxSteps = DEFAULT_MAX_STEPS,
-  maxResumes = DEFAULT_MAX_RESUMES,
+  maxSteps = FALLBACK_MAX_STEPS,
+  maxResumes = FALLBACK_MAX_RESUMES,
   apiKey,
   onText,
   onReasoning,

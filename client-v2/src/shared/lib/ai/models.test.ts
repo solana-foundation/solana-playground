@@ -7,7 +7,6 @@ import {
   openAiText,
   openAiToolCall,
 } from "./fake-provider";
-import { DEFAULT_BACKEND_URL } from "./default-backend";
 import { createModel } from "./models";
 import { runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";
@@ -102,37 +101,44 @@ describe("createModel", () => {
     }
   );
 
-  it("sends every default-backend request to /api/agent with no key", async () => {
-    const { fetch, sent } = fakeFetch(
-      openAiToolCall("c1", "ping", {}),
-      openAiText("pong")
-    );
-    vi.spyOn(globalThis, "fetch").mockImplementation(fetch);
+  it.each([
+    { name: "its url", url: "/api/other", expected: "/api/other" },
+    {
+      name: "/api/agent without a url",
+      url: undefined,
+      expected: "/api/agent",
+    },
+  ])(
+    "sends every default-backend request to $name with no key",
+    async ({ url, expected }) => {
+      const { fetch, sent } = fakeFetch(
+        openAiToolCall("c1", "ping", {}),
+        openAiText("pong")
+      );
+      vi.spyOn(globalThis, "fetch").mockImplementation(fetch);
 
-    await runTurn({
-      model: createModel({ provider: "default" }),
-      messages: USER,
-      tools: toSdkTools([
-        {
-          name: "ping",
-          description: "Ping",
-          schema: {
-            type: "object",
-            properties: {},
-            additionalProperties: false,
+      await runTurn({
+        model: createModel({ provider: "default", url }),
+        messages: USER,
+        tools: toSdkTools([
+          {
+            name: "ping",
+            description: "Ping",
+            schema: {
+              type: "object",
+              properties: {},
+              additionalProperties: false,
+            },
+            run: () => "pong",
           },
-          run: () => "pong",
-        },
-      ]),
-    });
+        ]),
+      });
 
-    expect(sent.map((request) => request.url)).toEqual([
-      DEFAULT_BACKEND_URL,
-      DEFAULT_BACKEND_URL,
-    ]);
-    for (const request of sent) {
-      expect(request.headers.get("authorization")).toBeNull();
-      expect(request.headers.get("x-api-key")).toBeNull();
+      expect(sent.map((request) => request.url)).toEqual([expected, expected]);
+      for (const request of sent) {
+        expect(request.headers.get("authorization")).toBeNull();
+        expect(request.headers.get("x-api-key")).toBeNull();
+      }
     }
-  });
+  );
 });

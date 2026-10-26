@@ -26,7 +26,16 @@ export interface ToolDefinition<S extends ToolSchema | z.ZodType = ToolSchema> {
   schema: S;
   // Method syntax keeps the parameter bivariant, so a zod-typed tool fits AnyToolDefinition
   /** @returns what the model should see as the result */
-  run(input: ToolRunInput<S>): Promise<string> | string;
+  run(
+    input: ToolRunInput<S>,
+    options?: ToolRunOptions
+  ): Promise<string> | string;
+}
+
+/** What a tool's `run` may honour besides its input */
+export interface ToolRunOptions {
+  /** Aborted when the turn stops; a tool that cannot cancel may ignore it */
+  signal?: AbortSignal;
 }
 
 /** A tool declared with either kind of schema */
@@ -56,6 +65,8 @@ export type ModelConnection =
   | {
       /** The same-origin backend, whose model and key live server-side */
       provider: "default";
+      /** Same-origin path that receives every request */
+      url?: string;
       model?: string;
       fetch?: typeof fetch;
     }

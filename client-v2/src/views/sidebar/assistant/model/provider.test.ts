@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { loadAi } from "@/shared/lib/ai";
 import {
   anthropicText,
   fakeFetch,
@@ -12,6 +11,15 @@ import {
 import { createProvider } from "./provider";
 import { PgAssistant, type ChatItem } from "../store";
 import { PgSession } from "../../../../features/auth";
+import { DEFAULT_BACKEND_URL, MAX_RESUMES, MAX_STEPS } from "../config";
+
+// Values unlike run-turn's and createModel's fallbacks, so a provider that forgets to pass them fails
+vi.mock("../config", () => ({
+  MAX_STEPS: 2,
+  MAX_RESUMES: 1,
+  ANTHROPIC_MAX_OUTPUT_TOKENS: 64000,
+  DEFAULT_BACKEND_URL: "/api/agent-under-test",
+}));
 
 vi.mock("./prompt", () => ({
   systemPrompt: () => "system",
@@ -48,23 +56,26 @@ const frame = (data: unknown) => `data: ${JSON.stringify(data)}\n\n`;
 
 /** A chat-completions stream of these deltas, ending as given */
 const chatStream = (deltas: Record<string, unknown>[], finish: string) =>
-  sse([
-    ...deltas.map((delta) =>
-      frame({
-        id: "chatcmpl-1",
-        created: 0,
-        model: "m",
-        choices: [{ index: 0, delta, finish_reason: null }],
-      })
-    ),
-    frame({
-      id: "chatcmpl-1",
-      created: 0,
-      model: "m",
-      choices: [{ index: 0, delta: {}, finish_reason: finish }],
-    }),
-    "data: [DONE]\n\n",
-  ]);
+  sse(
+    deltas
+      .map((delta) =>
+        frame({
+          id: "chatcmpl-1",
+          created: 0,
+          model: "m",
+          choices: [{ index: 0, delta, finish_reason: null }],
+        })
+      )
+      .concat(
+        frame({
+          id: "chatcmpl-1",
+          created: 0,
+          model: "m",
+          choices: [{ index: 0, delta: {}, finish_reason: finish }],
+        }),
+        "data: [DONE]\n\n"
+      )
+  );
 
 /** An Anthropic stream of a thinking block followed by a text block */
 const anthropicThinkingThenText = (thinking: string, text: string) =>
@@ -245,16 +256,36 @@ describe("the assistant's provider", () => {
   });
 
   it("says so when the model is still calling tools at the step limit", async () => {
-    const { DEFAULT_MAX_STEPS } = await loadAi();
     respond(
-      ...Array.from({ length: DEFAULT_MAX_STEPS }, (_, i) =>
+      ...Array.from({ length: MAX_STEPS }, (_, i) =>
         openAiToolCall(`c${i}`, "write_file", {})
       )
     );
 
     await expect(defaultBackend().send("loop")).rejects.toThrow(
-      `The model was still calling tools after ${DEFAULT_MAX_STEPS} rounds.`
+      `The model was still calling tools after ${MAX_STEPS} rounds.`
     );
+  });
+
+  it("stops resuming a paused turn after the assistant's resume limit", async () => {
+    const sent = respond(
+      ...Array.from({ length: MAX_RESUMES + 2 }, () =>
+        anthropicText("", "pause_turn")
+      )
+    );
+
+    await expect(anthropic().send("hi")).rejects.toMatchObject({
+      kind: "paused",
+    });
+    expect(sent).toHaveLength(MAX_RESUMES + 1);
+  });
+
+  it("sends the default backend's requests to the assistant's route", async () => {
+    const sent = respond(openAiText("Hi."));
+
+    await defaultBackend().send("hi");
+
+    expect(sent[0].url).toBe(DEFAULT_BACKEND_URL);
   });
 
   it("words a refusal for the user, keeping its category", async () => {

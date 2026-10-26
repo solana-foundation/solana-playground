@@ -94,7 +94,8 @@ the browser, behind the same approval gates. See `decisions.md` → D19.
   module of the client built on the Vercel `ai` SDK (`@ai-sdk/anthropic` and
   `@ai-sdk/openai-compatible`); the differences between backends are settings
   passed to that one loop, not separate code. The SDK is loaded on the first
-  turn, not when the page opens. The Anthropic provider is implemented but has
+  turn, or when the panel opens if an MCP server is enabled, since the panel
+  then lists that server's tools. The Anthropic provider is implemented but has
   not yet been exercised against a live key.
 - MCP servers are called from the browser, through `@ai-sdk/mcp` in the same
   module: directly when the host allows a browser to call it, otherwise

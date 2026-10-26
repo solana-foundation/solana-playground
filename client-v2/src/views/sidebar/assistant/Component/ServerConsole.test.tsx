@@ -7,7 +7,7 @@ import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { PgAssistant } from "../store";
-import type { McpServerEntry } from "../grounding";
+import type { McpServerEntry } from "@/features/mcp";
 import ServerConsole from "./ServerConsole";
 
 // A theme that answers every key: the console's styled rules read deep tokens

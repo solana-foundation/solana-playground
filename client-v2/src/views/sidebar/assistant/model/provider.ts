@@ -2,123 +2,19 @@ import { loadAi } from "@/shared/lib/ai";
 import { createTools } from "./tools";
 import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
-import { PgSession, SIGNED_OUT_REASON } from "../../../../features/auth";
-import { isDefaultBackend, PROVIDERS } from "./types";
-import type { JSONValue, LanguageModel, ModelMessage } from "ai";
-import type {
-  AiTurnError,
-  ModelConnection,
-  ModelProvider,
-} from "@/shared/lib/ai";
+import { MAX_RESUMES, MAX_STEPS } from "../config";
+import { PgSession } from "../../../../features/auth";
+import { BACKENDS } from "./backends";
+import type { LanguageModel, ModelMessage } from "ai";
+import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
-import type { Effort, Provider } from "./types";
+import type { BackendInput } from "./backends";
+import type { Provider } from "./types";
 
 /** What a provider needs to be built: structurally the store's `Connection` */
-export interface ProviderConnection {
+export interface ProviderConnection extends BackendInput {
   id: ModelProvider;
-  apiKey: string;
-  /** Base URL and model, for OpenAI-compatible backends */
-  endpoint?: { baseUrl: string; model: string };
-  /** Model and effort, for backends that pick them without a base URL */
-  settings?: { model: string; effort: Effort };
 }
-
-type ProviderOptions = Record<string, Record<string, JSONValue>>;
-
-/** Everything that differs between backends, as data for the one turn loop */
-interface Backend {
-  connection: ModelConnection;
-  /** Shown in the panel footer and in the empty-response error */
-  label: string;
-  /** Whether the model's reasoning reaches the reply bubble */
-  showsReasoning: boolean;
-  providerOptions?: ProviderOptions;
-  /** Set on the first system message, which is stable across turns */
-  promptOptions?: ProviderOptions;
-  maxOutputTokens?: number;
-}
-
-const defaultsOf = (id: ModelProvider) => PROVIDERS.find((p) => p.id === id)!;
-
-/**
- * The backend profile for a connection. Anthropic drops thinking blocks whose prefix
- * changed (the project snapshot moves between turns); `updates` returns the progress notes.
- */
-const backendFor = ({
-  id,
-  apiKey,
-  endpoint,
-  settings,
-}: ProviderConnection): Backend => {
-  switch (id) {
-    // The model is the server's to pick, so none is sent and none is shown
-    case "default":
-      return {
-        connection: { provider: "default" },
-        label: "default backend",
-        showsReasoning: false,
-      };
-    case "anthropic": {
-      const { model, effort } =
-        settings ?? defaultsOf(id).modelSettings!.defaults;
-      return {
-        connection: { provider: "anthropic", apiKey, model },
-        label: model,
-        showsReasoning: true,
-        providerOptions: {
-          anthropic: {
-            thinking: {
-              type: "adaptive",
-              display: "updates",
-              blockBinding: { prefixMismatchBehavior: "drop_block" },
-            },
-            effort,
-            // A classifier decline is retried on the model Anthropic picks for it
-            fallbacks: "default",
-          },
-        },
-        // Stable across turns, so it is a cache read after the first
-        promptOptions: { anthropic: { cacheControl: { type: "ephemeral" } } },
-        // Thinking counts toward this even though its text is not returned
-        maxOutputTokens: 64000,
-      };
-    }
-    case "openai":
-    case "openrouter":
-    case "gemini": {
-      const { baseUrl, model } = endpoint ?? defaultsOf(id).endpoint!;
-      return {
-        connection: { provider: id, apiKey, baseUrl, model },
-        label: model,
-        showsReasoning: false,
-      };
-    }
-  }
-};
-
-/**
- * The sentence `/api/agent` refuses a signed-out turn with, or `undefined` for
- * any other failure. Read only from our own backend, so another endpoint can
- * never put its text in front of the user this way.
- */
-const signedOutRefusal = (
-  id: ModelProvider,
-  error: AiTurnError
-): string | undefined => {
-  if (!isDefaultBackend(id) || error.status !== 401 || !error.body) {
-    return undefined;
-  }
-  try {
-    const parsed = JSON.parse(error.body);
-    return parsed?.reason === SIGNED_OUT_REASON &&
-      typeof parsed.error === "string"
-      ? parsed.error
-      : undefined;
-  } catch {
-    // Not JSON, so not our backend's refusal: the caller shows the SDK's message
-    return undefined;
-  }
-};
 
 /**
  * The reply bubbles of one turn, one per model request. A bubble opens on the first text,
@@ -159,7 +55,7 @@ export const createProvider = (
   /** Prior turns, text only, when reopening a stored thread (`toReplayMessages`) */
   seed: readonly ReplayMessage[] = []
 ): Provider => {
-  const backend = backendFor(connection);
+  const backend = BACKENDS[connection.id].profile(connection);
   let history: ModelMessage[] = seed.map((m) => ({
     role: m.role,
     content: m.content,
@@ -199,6 +95,8 @@ export const createProvider = (
           providerOptions: backend.providerOptions,
           maxOutputTokens: backend.maxOutputTokens,
           signal,
+          maxSteps: MAX_STEPS,
+          maxResumes: MAX_RESUMES,
           apiKey: connection.apiKey,
           onText: (delta) => replies.write("text", delta),
           onReasoning: backend.showsReasoning
@@ -214,7 +112,7 @@ export const createProvider = (
         if (e.kind === "refusal") {
           throw new Error(`${e.message} Rephrase it, or switch backends.`);
         }
-        const refusal = signedOutRefusal(connection.id, e);
+        const refusal = backend.signedOutRefusal?.(e);
         if (!refusal) throw e;
         // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
         void PgSession.refresh();
@@ -224,7 +122,7 @@ export const createProvider = (
       history = result.messages;
       if (result.reachedStepLimit) {
         throw new Error(
-          `The model was still calling tools after ${ai.DEFAULT_MAX_STEPS} rounds. Stopped it.`
+          `The model was still calling tools after ${MAX_STEPS} rounds. Stopped it.`
         );
       }
       // A turn that did its work and had nothing to add ends quietly: a retry would rerun the tools

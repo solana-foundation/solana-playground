@@ -13,9 +13,20 @@ const isJsonSchema = (
  *
  * Each tool's `run` is its `execute`, so the next model request waits for it,
  * including a `run` that awaits the user's approval.
+ *
+ * @throws when two tools share a name, since the set would keep only the last
  */
-export const toSdkTools = (defs: readonly AnyToolDefinition[]): ToolSet =>
-  Object.fromEntries(
+export const toSdkTools = (defs: readonly AnyToolDefinition[]): ToolSet => {
+  const seen = new Set<string>();
+  for (const { name } of defs) {
+    if (seen.has(name)) {
+      throw new Error(
+        `Two tools are named "${name}", so one would replace the other.`
+      );
+    }
+    seen.add(name);
+  }
+  return Object.fromEntries(
     defs.map((def) => [
       def.name,
       tool({
@@ -23,7 +34,9 @@ export const toSdkTools = (defs: readonly AnyToolDefinition[]): ToolSet =>
         inputSchema: isJsonSchema(def.schema)
           ? jsonSchema(def.schema as JSONSchema7)
           : def.schema,
-        execute: (input) => def.run(input),
+        execute: (input, { abortSignal }) =>
+          def.run(input, { signal: abortSignal }),
       }),
     ])
   );
+};

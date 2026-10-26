@@ -1,9 +1,10 @@
+import { DEFAULT_SKILL_IDS } from "./grounding";
 import {
-  DEFAULT_SKILL_IDS,
+  closeConnection,
   listGatewayServers,
   listTools,
   LOCAL_MCP_SERVERS,
-} from "./grounding";
+} from "@/features/mcp";
 import { redactKey } from "@/shared/lib/ai";
 import { forgetBackend, rememberBackend } from "./model/remembered-backend";
 import { PgSession } from "../../../features/auth";
@@ -19,7 +20,7 @@ import {
 import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
 import type { Disposable } from "../../../utils";
-import type { McpServerEntry, McpTool } from "./grounding";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
 import type { ModelProvider } from "@/shared/lib/ai";
 import { isDefaultBackend, type Effort } from "./model/types";
 
@@ -426,9 +427,22 @@ export class PgAssistant {
    * what it serves and the client cannot edit that; a local entry is an
    * addition. Merging them into one editable list would let Apply silently
    * delete a server the gateway still offers.
+   *
+   * Ids are unique: a local entry whose id the gateway serves is left out,
+   * because tool names and connections are keyed by id.
    */
   static get mcpServers(): readonly McpServerEntry[] {
-    return [...PgAssistant._gatewayServers, ...PgAssistant._localServers];
+    const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
+    return [
+      ...PgAssistant._gatewayServers,
+      ...PgAssistant._localServers.filter((s) => !gatewayIds.has(s.id)),
+    ];
+  }
+
+  /** Local entries the gateway took over by serving the same id; kept for when it stops */
+  static get shadowedMcpServers(): readonly McpServerEntry[] {
+    const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
+    return PgAssistant._localServers.filter((s) => gatewayIds.has(s.id));
   }
 
   /** The gateway's own upstreams, as it reported them */
@@ -448,8 +462,30 @@ export class PgAssistant {
 
   /** Replace the local additions — edited as one JSON document */
   static setMcpServers(servers: readonly McpServerEntry[]) {
-    PgAssistant._localServers = servers;
+    PgAssistant._replaceServers(() => {
+      PgAssistant._localServers = servers;
+    });
     PgAssistant._emit();
+  }
+
+  /**
+   * Apply a change to either server list, closing the connection of every id
+   * it removes or points at another URL, and dropping that id's cached tools.
+   */
+  private static _replaceServers(change: () => void) {
+    const before = PgAssistant.mcpServers;
+    change();
+    const after = new Map(PgAssistant.mcpServers.map((s) => [s.id, s.url]));
+    // A new URL under the same id (an edit, or the gateway taking over a local id) is another server's session and tools
+    const gone = before
+      .filter((server) => after.get(server.id) !== server.url)
+      .map((server) => server.id);
+    for (const id of gone) closeConnection(id);
+    if (gone.length) {
+      const tools = { ...PgAssistant._mcpTools };
+      for (const id of gone) delete tools[id];
+      PgAssistant._mcpTools = tools;
+    }
   }
 
   /**
@@ -461,7 +497,10 @@ export class PgAssistant {
    */
   static async loadMcpServers() {
     try {
-      PgAssistant._gatewayServers = await listGatewayServers();
+      const gateway = await listGatewayServers();
+      PgAssistant._replaceServers(() => {
+        PgAssistant._gatewayServers = gateway;
+      });
       PgAssistant._emit();
     } catch (err) {
       console.warn("MCP gateway unavailable; using local servers only", err);
