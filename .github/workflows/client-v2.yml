@@ -171,12 +171,13 @@ jobs:
     runs-on: ubuntu-latest
     # Measured on run 40369790881 (2026-10-26, 278 tests): about 4 minutes
     # from checkout to the first test (install, browser, dev-server compile),
-    # and the slowest of four shards holds about 7 minutes of tests. A
-    # genuine hang still fails, just later: Playwright's `globalTimeout`
-    # (playwright.config.mts) starts with the dev-server boot and ends a hung
-    # shard first while the steps before `Browser tests` stay under the
-    # difference between the two limits.
-    timeout-minutes: 20
+    # and the slowest of four shards holds about 7 minutes of tests. The
+    # steps before `Browser tests` vary far more than the tests: on run
+    # 40379245789 the apt downloads of `install-deps` took 11 minutes on one
+    # shard and 20 seconds on another. This limit holds that variance;
+    # Playwright's `globalTimeout` (playwright.config.mts) is what bounds the
+    # tests, and a shard hung there still prints its summary.
+    timeout-minutes: 30
 
     strategy:
       # A red shard leaves the others running, so one run reports every
