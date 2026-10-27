@@ -350,7 +350,9 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
   in CI's order, minus the production build. Opt in to running it on every
-  push with `git config core.hooksPath .githooks` once per clone.
+  push with `git config core.hooksPath .githooks` once per clone. To run a
+  CI job itself, in its runner image, see
+  [`.github/local-ci-with-act.md`](../.github/local-ci-with-act.md).
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
   `client-v2.yml`, one shard per matrix entry) on every PR (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
