@@ -1,5 +1,4 @@
 // @vitest-environment node
-// `@types/mocha` also declares a global `it` and `describe`, without `each`
 import { describe, it } from "vitest";
 import type { Mock } from "vitest";
 import handler from "../../../api/agent.mjs";

@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/importMeta"]
+  },
+  "exclude": [
+    "/**/*.raw.d.ts",
+    "/**/declarations/packages/",
+    "src/**/*.test.*",
+    "src/**/*.spec.*",
+    "src/**/__tests__/**",
+    "src/setupTests.ts",
+    "src/test-utils/**"
+  ]
+}
