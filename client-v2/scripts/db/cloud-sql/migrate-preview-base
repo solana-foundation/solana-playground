@@ -15,17 +15,15 @@ set -euo pipefail
 command -v dbmate >/dev/null 2>&1 || { echo "dbmate required: see client-v2/db/README.md" >&2; exit 1; }
 . "$DB_SCRIPTS/cloud-sql/proxy.sh"
 
-BASE=solpg_preview_base
-
 start_proxy
 close_base() {
-  admin_sql "alter database $BASE with allow_connections false" ||
-    echo "WARNING: $BASE still accepts connections; previews cannot clone it until: alter database $BASE with allow_connections false" >&2
+  admin_sql "alter database $PREVIEW_BASE with allow_connections false" ||
+    echo "WARNING: $PREVIEW_BASE still accepts connections; previews cannot clone it until: alter database $PREVIEW_BASE with allow_connections false" >&2
   stop_proxy
 }
 trap close_base EXIT
 
-url=$(proxy_url "$BASE" "$CLOUD_SQL_USER")
-admin_sql "alter database $BASE with allow_connections true"
+url=$(proxy_url "$PREVIEW_BASE" "$CLOUD_SQL_USER")
+admin_sql "alter database $PREVIEW_BASE with allow_connections true"
 cd "$CLIENT_V2"
 DATABASE_URL=$url dbmate --no-dump-schema up
