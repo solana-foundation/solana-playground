@@ -128,8 +128,9 @@ const HEAD_BUTTON =
   "h-12 min-w-12 rounded-xl text-control font-act [&_svg:not([class*='size-'])]:size-5";
 
 /**
- * Names the open file and opens Files: its folder quiet and cut short, its
- * name whole
+ * Names the open file and opens Files: its folder quiet and cut short first,
+ * its name cut short only when it alone is too long. The label names the
+ * file whole
  */
 const FilePicker = ({
   file,
@@ -151,11 +152,11 @@ const FilePicker = ({
     {file ? (
       <>
         {file.dir && (
-          <span className="min-w-0 truncate font-read text-muted-foreground">
+          <span className="min-w-0 shrink-[999] truncate font-read text-muted-foreground">
             {file.dir}
           </span>
         )}
-        <span className="shrink-0 whitespace-nowrap">{file.name}</span>
+        <span className="min-w-0 truncate">{file.name}</span>
       </>
     ) : (
       <span className="shrink-0 whitespace-nowrap">Files</span>
