@@ -76,9 +76,9 @@ cmd_ensure() {
   local name=$1 id parent
   id=$(branch_id "$name")
   if [ -z "$id" ]; then
-    # Cut from `main`, so the preview starts with production's schema and
-    # `schema_migrations` and dbmate applies only what the PR adds: see
-    # client-v2/docs/neon.md.
+    # Cut from `main` of the preview Neon project, so the preview starts with
+    # its schema and `schema_migrations` and dbmate applies only what `main`
+    # lacks: see client-v2/docs/neon.md.
     parent=$(branch_id "$BASE_BRANCH")
     [ -n "$parent" ] || { echo "neon: no parent branch $BASE_BRANCH" >&2; return 1; }
     id=$(api -X POST "$API/branches" -d "$(jq -n --arg name "$name" --arg parent "$parent" \

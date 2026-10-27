@@ -69,12 +69,13 @@ export const sentryEnv = () => ({
 
 /**
  * Better Auth's secret and GitHub credentials, and the origins it can build
- * URLs from. `VERCEL_URL` is Vercel's own hostname for the deployment,
- * without a scheme.
+ * URLs from. `VERCEL_URL` is Vercel's own hostname for the deployment and
+ * `VERCEL_BRANCH_URL` its branch alias, both without a scheme.
  */
 export const authEnv = () => ({
   AUTH_BASE_URL: read("AUTH_BASE_URL"),
   VERCEL_URL: read("VERCEL_URL"),
+  VERCEL_BRANCH_URL: read("VERCEL_BRANCH_URL"),
   AUTH_SECRET: read("AUTH_SECRET"),
   GITHUB_CLIENT_ID: read("GITHUB_CLIENT_ID"),
   GITHUB_CLIENT_SECRET: read("GITHUB_CLIENT_SECRET"),

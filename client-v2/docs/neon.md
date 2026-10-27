@@ -1,15 +1,16 @@
 # Neon preview databases
 
 A PR labelled `preview`, whatever its base branch, in the repository the `PREVIEW_REPOSITORY` variable names, gets a
-preview deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the project's default branch. A
-preview deployed by hand from a laptop gets `preview/<git-branch>`. Production uses the project's default branch
-through the project-level `DATABASE_URL`; see [Deploy the client to Vercel](deploy-client-vercel.md).
+preview deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the default branch of the preview
+Neon project. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production's database is in a Neon
+project of its own, which no preview reads; production reaches it through the Production-scoped `DATABASE_URL`, see
+[Deploy the client to Vercel](deploy-client-vercel.md).
 
 ## Previews from a PR label
 
 The Neon project caps its branch count. The Vercel integration's own option, a branch for every preview
-deployment, created one for every pushed git branch: Vercel creates the deployment, and the integration its
-branch, before the Ignored Build Step cancels the build. So that option is off, and
+deployment, creates one for every pushed git branch, since the Git integration deploys every push. So that
+option is off, a preview the Git integration deploys runs with the project's Preview-scoped variables, and
 [`preview.yml`](../../.github/workflows/preview.yml) owns preview branches instead:
 
 | PR event | What happens |
@@ -19,12 +20,13 @@ branch, before the Ignored Build Step cancels the build. So that option is off, 
 
 A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs that
 Dependabot triggers get no deploy secrets and are skipped, and a Dependabot PR never gets a preview, even
-labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, so the project's
-Ignored Build Step (which cancels every preview build) does not apply, and `vercel-install.sh` takes the wasm
-packages from Remote Cache with the runner's `VERCEL_TOKEN`.
+labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, and
+`vercel-install.sh` takes the wasm packages from Remote Cache with the runner's `VERCEL_TOKEN`.
 
 The deployment gets only `DATABASE_URL` from the workflow. The app reads no other `DATABASE_*` variable, so the
-integration's project-level ones, if still set for Preview, are unused.
+integration's project-level ones are unused there. A preview the Git integration deploys does read the Preview-scoped
+`DATABASE_URL`, which must name a database in the preview Neon project, never production's
+([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)).
 
 [`preview-sweep.yml`](../../.github/workflows/preview-sweep.yml) is the safety net for a teardown that was
 cancelled or failed. Daily, it deletes every `preview/pr-<n>` older than its `MIN_AGE_MINUTES` whose PR is no
@@ -51,7 +53,7 @@ REPO=<owner>/<name>   # the repository whose PRs get previews
 | Name | Where to get it |
 | --- | --- |
 | `NEON_API_KEY` | Neon console → the org that owns the project below → Settings → API keys → Create new → Project-scoped, for the project below. Only org Admins can mint one, and it is shown once |
-| `NEON_PROJECT_ID` | Neon console → the project behind the Vercel Marketplace store `neon-solana-playground` → Settings → General → Project ID |
+| `NEON_PROJECT_ID` | Neon console → the preview Neon project, not production's → Settings → General → Project ID |
 
 Both go in two places:
 
@@ -95,10 +97,14 @@ way in.
 
 ## The parent branch
 
-Every preview branch is cut from `main`, the default branch production uses (`NEON_BASE_BRANCH` overrides it).
+Every preview branch is cut from `main`, the default branch of the preview Neon project (`NEON_BASE_BRANCH`
+overrides it). The preview project is separate from production's so that no preview holds production's data: every
+preview holds `AUTH_OAUTH_PROXY_SECRET`, and whoever holds one preview's environment can forge a session on any
+preview ([Sign-in on previews](deploy-client-vercel.md#sign-in-on-previews)). A branch carries `main`'s rows, and
+those are preview data.
+
 A copy-on-write branch carries `main`'s schema and its `schema_migrations`, so dbmate applies only the migrations
-the PR adds. It carries `main`'s rows too: a preview database holds a copy of production's data as of the moment
-the branch was cut. A `--schema-only` branch is no way around that: it carries the tables but leaves
+`main` lacks, the PR's among them. A `--schema-only` branch would not do: it carries the tables but leaves
 `schema_migrations` empty, so dbmate would try to create tables that already exist.
 
 The empty `preview-base` parent this replaced is no longer read by anything. Delete it from the Neon project once
@@ -115,10 +121,10 @@ name comes from the local branch checked out where `make` runs. Three targets ca
 | `migrate-preview-db` | Applies pending migrations to it, with no confirmation prompt |
 | `deploy-client-to-vercel-preview` | Passes its pooled URL as the deployment's `DATABASE_URL` |
 
-`migrate-preview-db` applies the migrations the git branch adds over `main`'s. The branch belongs to one git branch and
+`migrate-preview-db` applies the migrations the git branch has and `main` lacks. The branch belongs to one git branch and
 nothing else reads it, so a bad migration costs a `neon branches delete`, not an incident, and two people testing
-two migrations cannot corrupt each other. Before previews had their own branches, preview and production shared a
-single database.
+two migrations cannot corrupt each other. A Git-triggered preview has no branch of its own: it shares the database
+the Preview-scoped `DATABASE_URL` names with every other Git-triggered preview.
 
 ## Cleanup
 

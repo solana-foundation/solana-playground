@@ -3,9 +3,9 @@
 # branch on first use. One isolated database per preview, so two people testing
 # migrations on two branches cannot corrupt each other.
 #
-# Previews are cut from `main`, the project's default branch. A copy-on-write
-# branch carries its schema and `schema_migrations`, so dbmate applies only the
-# migrations this git branch adds. `--schema-only` would not do: it copies the
+# Previews are cut from `main`, the default branch of the preview Neon project,
+# which is not production's. A copy-on-write branch carries its schema and
+# `schema_migrations`, so dbmate applies only the migrations `main` lacks. `--schema-only` would not do: it copies the
 # tables but leaves `schema_migrations` empty, which makes dbmate try to create
 # tables that are already there.
 #
