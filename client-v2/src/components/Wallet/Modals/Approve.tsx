@@ -1,7 +1,7 @@
 import { FC } from "react";
 import styled from "styled-components";
 
-import Modal from "../../Modal";
+import { ModalFrame } from "@/widgets/overlays";
 
 interface ApproveProps {}
 
@@ -10,9 +10,13 @@ const Approve: FC<React.PropsWithChildren<ApproveProps>> = ({}) => {
   const handleApprove = () => {};
 
   return (
-    <Modal title buttonProps={{ text: "Approve", onSubmit: handleApprove }}>
+    <ModalFrame
+      name="wallet-approve"
+      title
+      buttonProps={{ text: "Approve", onSubmit: handleApprove }}
+    >
       <Content>Approve tx</Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

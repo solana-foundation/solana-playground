@@ -1,6 +1,6 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* The open files over the editor. The current one sits on the editor's own
    ground with a purple line along its top. A tab whose menu is open keeps

@@ -1,10 +1,13 @@
-/** Shared layout/color constants for the Flow canvas (panels, header). */
+/** Shared layout/color constants for the Flow canvas (panels, stage bar). */
 
-/** Gutter between the black page ground and each floating panel. */
+/**
+ * The sync banner slot's side and bottom padding (`Flow`'s `BannerSlot`); the
+ * frame itself is flush (design.md, "Frame chrome (5.25)")
+ */
 export const GAP = "8px";
 
 /**
- * Height of the bar pinned to a panel's bottom edge -- the console handle and
+ * Height of the bar pinned to a panel's bottom edge -- the console's bar and
  * the left panel's new-file action. Shared so their top borders read as one
  * line across the canvas.
  */
@@ -16,7 +19,7 @@ export const BOTTOM_BAR_PX = 28;
 export const BOTTOM_BAR_HEIGHT = `${BOTTOM_BAR_PX}px`;
 
 /**
- * The product's gradient token, the same one `GradientButton` paints with
+ * The product's gradient token, the same one `BrandButton`'s ring paints with
  * (logomark, stepper active dot, the one decisive CTA per view).
  */
 export const GRADIENT = "var(--gradient-product)";

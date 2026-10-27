@@ -2,41 +2,20 @@ import {
   Disposable,
   PgCommon,
   PgExplorer,
-  PgFramework,
-  PgLanguage,
   PgRouter,
   PgTutorial,
   PgView,
   TutorialFullData,
-  TUTORIAL_LEVELS,
-  TUTORIAL_PROGRESS,
 } from "../../utils";
 import { handleRoute } from "../common";
+import { openPageFromLink } from "../open-page-from-link";
 
 export const tutorials = PgRouter.create({
   path: "/tutorials/{name}/{page}",
   handle: ({ name, page }) => {
     if (name) return handleTutorial(name, page);
-
-    const tutorials = {
-      name: "Tutorials",
-      props: async () => ({
-        tutorials: await getAllTutorials(),
-        filters: [
-          { param: "progress", filters: TUTORIAL_PROGRESS },
-          { param: "level", filters: TUTORIAL_LEVELS },
-          { param: "framework", filters: PgFramework.all.map((f) => f.name) },
-          { param: "languages", filters: PgLanguage.all.map((l) => l.name) },
-          // TODO: Enable once there are more tutorials with various categories
-          // { param: "categories", filters: TUTORIAL_CATEGORIES },
-        ],
-      }),
-    };
-    return handleRoute({
-      main: tutorials,
-      sidebar: tutorials,
-      minimizeSecondaryMainView: true,
-    });
+    // The bare list is a page now: open it, over the work or Home on `/`
+    openPageFromLink("tutorials");
   },
 });
 

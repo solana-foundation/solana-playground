@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import styled, { css } from "styled-components";
+import { TriangleAlertIcon } from "lucide-react";
 
-import Button from "../../../components/Button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ConflictResolver } from "../ui/ConflictResolver";
 import { PgProjectSync } from "../model/project-sync";
 import { persistenceTelemetry } from "../model/telemetry";
@@ -191,34 +194,29 @@ const SyncBanner = () => {
     const at = named ? message.indexOf(named) : -1;
 
     return (
-      <Wrapper role="alert">
-        <Icon viewBox="0 0 24 24" width="18" height="18" aria-hidden>
-          <path
-            d="M12 3.5L2.5 20h19L12 3.5zM12 10v4.5M12 17.25v.01"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </Icon>
-        <Body>
-          <Message>
+      <Callout variant="warning">
+        <TriangleAlertIcon />
+        {/* Message left, buttons right; the buttons drop below when it gets
+            narrow. Full opacity: the message is the point of the banner */}
+        <CalloutDescription className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 opacity-100">
+          <p className="m-0 flex-[1_1_20rem] text-foreground wrap-anywhere">
             {named && at >= 0 ? (
               <>
                 {message.slice(0, at)}
-                <Path>{named}</Path>
+                <code className="rounded-sm bg-background px-1.5 py-px font-mono text-xs">
+                  {named}
+                </code>
                 {message.slice(at + named.length)}
               </>
             ) : (
               message
             )}
-          </Message>
-          <Actions>
+          </p>
+          <div className="flex flex-wrap gap-2">
             {resolvable && (
               <Button
-                kind="outline"
-                size="small"
+                variant="outline"
+                size="sm"
                 disabled={busy || !!resolving}
                 onClick={() => setResolving(conflict.projectId)}
               >
@@ -226,19 +224,20 @@ const SyncBanner = () => {
               </Button>
             )}
             {prompt.actions.map((action) => (
-              <Button
+              <AsyncButton
                 key={action.resolution}
-                kind={action.primary ? "primary" : "outline"}
-                size="small"
+                variant={action.primary ? "default" : "outline"}
+                size="sm"
                 disabled={busy}
-                onClick={() => void answer(action.resolution)}
+                onClick={() => answer(action.resolution)}
+                onError={reportButtonFailure("apply your choice")}
               >
                 {action.label}
-              </Button>
+              </AsyncButton>
             ))}
-          </Actions>
-        </Body>
-      </Wrapper>
+          </div>
+        </CalloutDescription>
+      </Callout>
     );
   };
 
@@ -253,60 +252,5 @@ const SyncBanner = () => {
     </>
   );
 };
-
-/** A card in the layout's flow; the mount point supplies the page gutters */
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 0.625rem 1rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-left: 3px solid ${theme.colors.state.warning.color};
-    border-radius: ${theme.default.borderRadius};
-    background: ${theme.colors.default.bgSecondary};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.other.family};
-    font-size: ${theme.font.other.size.small};
-    line-height: 1.4;
-  `}
-`;
-
-const Icon = styled.svg`
-  flex-shrink: 0;
-  color: ${({ theme }) => theme.colors.state.warning.color};
-`;
-
-/** Message left, buttons right; the buttons drop below when it gets narrow */
-const Body = styled.div`
-  flex: 1;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem 1rem;
-  min-width: 0;
-`;
-
-const Message = styled.p`
-  flex: 1 1 20rem;
-  margin: 0;
-  overflow-wrap: anywhere;
-`;
-
-const Path = styled.code`
-  ${({ theme }) => css`
-    padding: 0.0625rem 0.375rem;
-    background: ${theme.colors.default.bgPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.small};
-  `}
-`;
-
-const Actions = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-`;
 
 export default SyncBanner;

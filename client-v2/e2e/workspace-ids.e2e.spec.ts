@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { seedWorkspace } from "./fixtures";
+import { currentProject, projectRow, seedWorkspace } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -22,14 +22,9 @@ import type { Page } from "@playwright/test";
  * observable in a profile that predates the change.
  */
 
-const switcher = (page: Page) => page.locator('[aria-haspopup="true"]').first();
-
-const openMenu = async (page: Page) => {
-  await switcher(page).click();
-  const menu = page.getByLabel("Projects and lessons");
-  await expect(menu).toBeVisible();
-  return menu;
-};
+/** The navigation's list of projects */
+const projectList = (page: Page) =>
+  page.getByRole("group", { name: "Projects" });
 
 test("a project survives an immediate reload", async ({ page }) => {
   await seedWorkspace(page, "alpha");
@@ -37,7 +32,7 @@ test("a project survives an immediate reload", async ({ page }) => {
   await page.reload();
 
   await expect(page.locator("#root-dir")).toBeVisible();
-  await expect(switcher(page)).toContainText("alpha");
+  await expect(currentProject(page)).toHaveText("alpha");
 });
 
 test("the project is still listed after a reload", async ({ page }) => {
@@ -46,8 +41,9 @@ test("the project is still listed after a reload", async ({ page }) => {
   await page.reload();
   await expect(page.locator("#root-dir")).toBeVisible();
 
-  const menu = await openMenu(page);
-  await expect(menu.getByText("alpha", { exact: true })).toBeVisible();
+  await expect(
+    projectList(page).getByText("alpha", { exact: true })
+  ).toBeVisible();
 });
 
 test("its files are still there after a reload", async ({ page }) => {
@@ -61,16 +57,15 @@ test("its files are still there after a reload", async ({ page }) => {
   await expect(page.locator("#root-dir")).not.toBeEmpty();
 });
 
-test("reopening the project from the switcher still works", async ({
+test("reopening the project from the project list still works", async ({
   page,
 }) => {
   await seedWorkspace(page, "alpha");
   await page.reload();
   await expect(page.locator("#root-dir")).toBeVisible();
 
-  const menu = await openMenu(page);
-  await menu.getByText("alpha", { exact: true }).click();
+  await projectRow(page, "alpha").click();
 
   await expect(page.locator("#root-dir")).toBeVisible();
-  await expect(switcher(page)).toContainText("alpha");
+  await expect(currentProject(page)).toHaveText("alpha");
 });

@@ -3,6 +3,10 @@
 // once the machine swaps (HOO-2106). A run takes one of a few slot directories
 // before it starts its dev server and gives it back when it ends, so only
 // `max` runs load the machine at a time and the rest wait their turn.
+//
+// A run that names no port of its own gets its slot's, `queuePort(slot)`. Two
+// runs that each picked the "first free" port by hand picked the same one
+// seconds apart, and the later dev server failed to start.
 // `playwright.config.mts` is the only caller, and its API is synchronous
 // because the config loads synchronously.
 //
@@ -15,7 +19,15 @@
 import fs from "node:fs";
 import path from "node:path";
 
-export const DEFAULT_MAX_RUNS = 2;
+// One run (dev server plus two Chromiums, ~3-4 GB) is what a 24 GB laptop
+// already near its memory at idle can spare; two swapped it.
+export const DEFAULT_MAX_RUNS = 1;
+
+/** Slot N's port is `QUEUE_BASE_PORT + N`: 139xx belongs to the queue. */
+export const QUEUE_BASE_PORT = 13900;
+
+/** @param {number} slot */
+export const queuePort = (slot) => QUEUE_BASE_PORT + slot;
 
 /**
  * A slot directory exists a moment before its `owner.json` does. A directory
@@ -28,9 +40,13 @@ export const OWNERLESS_SLOT_STALE_MS = 10_000;
 const OWNER_FILE = "owner.json";
 
 /**
- * @typedef {{ pid: number, worktree: string, port: number }} Owner
- * @typedef {Owner & { slot: number, since: string }} Holder
- * @typedef {{ slot: number, release: () => void }} Slot
+ * `port` is left out when `portForSlot` picks it.
+ *
+ * @typedef {{ pid: number, worktree: string, port?: number }} Owner
+ * @typedef {{ pid: number, worktree: string, port: number, slot: number,
+ *   since: string }} Holder
+ * @typedef {{ slot: number, port: number, release: () => void }} Slot
+ * @typedef {(slot: number) => number} PortForSlot
  * @typedef {{ kind: "acquired", slot: Slot }
  *   | { kind: "busy", holders: Holder[] }
  *   | { kind: "retry" }} TryResult
@@ -81,12 +97,17 @@ const removeDir = (dirPath) => {
   fs.rmSync(dirPath, { recursive: true, force: true });
 };
 
-const makeSlot = (dir, n, owner) => {
+const makeSlot = (dir, n, owner, portForSlot) => {
   const slotDir = slotPath(dir, n);
+  const port = portForSlot ? portForSlot(n) : owner.port;
+  if (!Number.isInteger(port)) {
+    removeDir(slotDir);
+    throw new TypeError("A slot needs owner.port or portForSlot.");
+  }
   try {
     fs.writeFileSync(
       path.join(slotDir, OWNER_FILE),
-      JSON.stringify({ ...owner, since: new Date().toISOString() })
+      JSON.stringify({ ...owner, port, since: new Date().toISOString() })
     );
   } catch (error) {
     // A slot without an owner would look taken until it went stale; give it
@@ -97,6 +118,7 @@ const makeSlot = (dir, n, owner) => {
   let released = false;
   return {
     slot: n,
+    port,
     release() {
       if (released) return;
       released = true;
@@ -110,14 +132,14 @@ const makeSlot = (dir, n, owner) => {
 };
 
 // mkdir is atomic: of several runs racing for a slot, one succeeds.
-const claimFreeSlot = (dir, n, owner) => {
+const claimFreeSlot = (dir, n, owner, portForSlot) => {
   try {
     fs.mkdirSync(slotPath(dir, n));
   } catch (error) {
     if (error.code === "EEXIST") return null;
     throw error;
   }
-  return makeSlot(dir, n, owner);
+  return makeSlot(dir, n, owner, portForSlot);
 };
 
 /** @returns {SlotState} */
@@ -142,7 +164,7 @@ const inspectSlot = (slotDir, staleMs) => {
  *
  * @returns {Slot | null} null when the slot was not ours to take after all
  */
-const reclaimSlot = (dir, n, owner, staleMs) => {
+const reclaimSlot = (dir, n, owner, staleMs, portForSlot) => {
   const slotDir = slotPath(dir, n);
   const lockDir = `${slotDir}.reclaim`;
   try {
@@ -155,7 +177,7 @@ const reclaimSlot = (dir, n, owner, staleMs) => {
   try {
     if (inspectSlot(slotDir, staleMs).kind !== "abandoned") return null;
     removeDir(slotDir);
-    return claimFreeSlot(dir, n, owner);
+    return claimFreeSlot(dir, n, owner, portForSlot);
   } finally {
     removeDir(lockDir);
   }
@@ -166,7 +188,8 @@ const reclaimSlot = (dir, n, owner, staleMs) => {
  * them. `retry` means a slot changed under us (its holder vanished, or
  * another run was reclaiming it); ask again at once.
  *
- * @param {{ dir: string, max: number, owner: Owner, staleMs?: number }} options
+ * @param {{ dir: string, max: number, owner: Owner, staleMs?: number,
+ *   portForSlot?: PortForSlot }} options
  * @returns {TryResult}
  */
 export const tryAcquireSlot = ({
@@ -174,18 +197,19 @@ export const tryAcquireSlot = ({
   max,
   owner,
   staleMs = OWNERLESS_SLOT_STALE_MS,
+  portForSlot,
 }) => {
   fs.mkdirSync(dir, { recursive: true });
   const holders = [];
   let changing = false;
   for (let n = 1; n <= max; n++) {
-    const fresh = claimFreeSlot(dir, n, owner);
+    const fresh = claimFreeSlot(dir, n, owner, portForSlot);
     if (fresh !== null) return { kind: "acquired", slot: fresh };
     const state = inspectSlot(slotPath(dir, n), staleMs);
     if (state.kind === "vanished") {
       changing = true;
     } else if (state.kind === "abandoned") {
-      const reclaimed = reclaimSlot(dir, n, owner, staleMs);
+      const reclaimed = reclaimSlot(dir, n, owner, staleMs, portForSlot);
       if (reclaimed !== null) return { kind: "acquired", slot: reclaimed };
       changing = true;
     } else {
@@ -212,7 +236,8 @@ const RETRY_PAUSE_MS = 20;
  * per change of who they are, not on every poll.
  *
  * @param {{ dir: string, max: number, owner: Owner, pollMs?: number,
- *   staleMs?: number, onWait?: (holders: Holder[]) => void }} options
+ *   staleMs?: number, portForSlot?: PortForSlot,
+ *   onWait?: (holders: Holder[]) => void }} options
  * @returns {Slot}
  */
 export const acquireSlot = ({
@@ -221,11 +246,12 @@ export const acquireSlot = ({
   owner,
   pollMs = 2000,
   staleMs,
+  portForSlot,
   onWait,
 }) => {
   let announced = "";
   for (;;) {
-    const result = tryAcquireSlot({ dir, max, owner, staleMs });
+    const result = tryAcquireSlot({ dir, max, owner, staleMs, portForSlot });
     if (result.kind === "acquired") return result.slot;
     if (result.kind === "retry") {
       sleep(RETRY_PAUSE_MS);

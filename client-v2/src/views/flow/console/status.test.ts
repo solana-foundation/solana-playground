@@ -54,14 +54,14 @@ describe("describeConsoleStatus", () => {
   it("shows building while a build runs", () => {
     expect(describeConsoleStatus(state({ build: "running" }))).toEqual({
       text: "building...",
-      tone: "idle",
+      tone: "running",
     });
   });
 
   it("shows deploying while a deploy runs, after a build succeeded", () => {
     expect(
       describeConsoleStatus(state({ build: "done", deploy: "running" }))
-    ).toEqual({ text: "deploying...", tone: "idle" });
+    ).toEqual({ text: "deploying...", tone: "running" });
   });
 
   it("shows the last build's time and result once it finishes", () => {

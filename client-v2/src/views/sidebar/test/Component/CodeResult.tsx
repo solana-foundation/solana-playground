@@ -1,27 +1,33 @@
-import styled, { css } from "styled-components";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockContent,
+  CodeBlockHeader,
+  CodeBlockTitle,
+} from "@/shared/ui/code-block";
+import { CopyButton } from "@/shared/ui/copy-button";
 
-import CodeBlock, { CodeBlockProps } from "../../../../components/CodeBlock";
-
-interface CodeResultProps extends CodeBlockProps {
-  index: number;
+interface CodeResultProps {
+  children: string;
 }
 
-const CodeResult = (props: CodeResultProps) => (
-  <StyledCodeBlock lang="json" {...props} />
+/** A fetched account or received events, as JSON the user can copy whole */
+const CodeResult = ({ children }: CodeResultProps) => (
+  <CodeBlock>
+    <CodeBlockHeader>
+      <CodeBlockTitle>JSON</CodeBlockTitle>
+      <CodeBlockActions>
+        <CopyButton
+          value={children}
+          onError={reportButtonFailure("copy the JSON")}
+        />
+      </CodeBlockActions>
+    </CodeBlockHeader>
+    <CodeBlockContent className="max-h-80 overflow-auto select-text">
+      {children}
+    </CodeBlockContent>
+  </CodeBlock>
 );
-
-const StyledCodeBlock = styled(CodeBlock)<CodeResultProps>`
-  ${({ theme, index }) => css`
-    width: 100%;
-    user-select: text;
-
-    & pre {
-      padding: 1rem 0.5rem;
-      background: ${index % 2 === 1
-        ? theme.views.sidebar.right.default.otherBg
-        : theme.views.sidebar.right.default.bg} !important;
-    }
-  `}
-`;
 
 export default CodeResult;

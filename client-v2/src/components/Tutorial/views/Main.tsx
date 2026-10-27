@@ -1,7 +1,7 @@
 import { FC, useEffect, useRef } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../../Button";
+import { Button } from "@/shared/ui/button";
 import EditorWithTabs from "../../EditorWithTabs";
 import Markdown from "../../Markdown";
 import Resizable from "../../Resizable";
@@ -115,37 +115,39 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
               {pageNumber !== 1 && (
                 <PreviousWrapper>
                   <PreviousText>Previous</PreviousText>
-                  <NavigationButton
+                  <Button
                     onClick={previousPage}
-                    kind="no-border"
-                    leftIcon={<PointedArrow rotate="180deg" />}
+                    variant="ghost"
+                    className={NAVIGATION_BUTTON}
                   >
+                    <PointedArrow data-icon="inline-start" rotate="180deg" />
                     {pages[pageNumber - 2].title ??
                       `${pageNumber - 1}/${pages.length}`}
-                  </NavigationButton>
+                  </Button>
                 </PreviousWrapper>
               )}
 
               <NextWrapper>
                 <NextText>Next</NextText>
                 {pageNumber === pages.length ? (
-                  <NavigationButton
+                  <Button
                     onClick={finishTutorial}
-                    kind="no-border"
-                    color="success"
-                    rightIcon={<span>{Emoji.CHECKMARK}</span>}
+                    variant="ghost"
+                    className={`${NAVIGATION_BUTTON} text-success`}
                   >
                     Finish
-                  </NavigationButton>
+                    <span data-icon="inline-end">{Emoji.CHECKMARK}</span>
+                  </Button>
                 ) : (
-                  <NavigationButton
+                  <Button
                     onClick={nextPage}
-                    kind="no-border"
-                    rightIcon={<PointedArrow />}
+                    variant="ghost"
+                    className={NAVIGATION_BUTTON}
                   >
                     {pages[pageNumber].title ??
                       `${pageNumber + 1}/${pages.length}`}
-                  </NavigationButton>
+                    <PointedArrow data-icon="inline-end" />
+                  </Button>
                 )}
               </NextWrapper>
             </NavigationButtonsInsideWrapper>
@@ -191,18 +193,8 @@ const NavigationButtonsInsideWrapper = styled.div`
   `}
 `;
 
-const NavigationButton = styled(Button)`
-  ${({ theme }) => css`
-    margin-top: 0.5rem;
-    font-size: ${theme.font.other.size.medium};
-    font-weight: bold;
-
-    & svg {
-      width: 1.25rem;
-      height: 1.25rem;
-    }
-  `}
-`;
+const NAVIGATION_BUTTON =
+  "mt-2 text-base font-bold [&_svg:not([class*='size-'])]:size-5";
 
 const PreviousWrapper = styled.div`
   width: 100%;

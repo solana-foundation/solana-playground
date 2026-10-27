@@ -1,11 +1,14 @@
 import { FC, useCallback, useEffect, useReducer, useState } from "react";
-import styled from "styled-components";
 
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
 import Interaction from "../Interaction";
-import Button from "../../../../../components/Button";
-import Foldable from "../../../../../components/Foldable";
+import {
+  Collapsible,
+  CollapsibleChevron,
+  CollapsibleContent,
+  CollapsibleHeading,
+} from "@/shared/ui/collapsible";
 import { Emoji } from "../../../../../constants";
 import {
   PgCommand,
@@ -15,6 +18,9 @@ import {
   PgTerminal,
   PgTx,
 } from "../../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   IdlInstruction,
   PgProgramInteraction,
@@ -24,11 +30,9 @@ import { useIdl } from "../IdlProvider";
 
 interface InstructionProps {
   idlInstruction: IdlInstruction;
-  index: number;
 }
 
 const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
-  index,
   idlInstruction,
 }) => {
   const [instruction, setInstruction] = useState(() =>
@@ -141,104 +145,94 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
       instruction={instruction}
       setInstruction={setInstruction}
     >
-      <Interaction name={instruction.name} index={index}>
-        <ArgsAndAccountsWrapper>
+      <Interaction name={instruction.name}>
+        <div className="flex flex-col gap-4">
           {instruction.values.args.length > 0 && (
-            <Foldable element="Args" isOpen>
-              <InstructionInputsWrapper>
-                {instruction.values.args.map((arg) => (
-                  <InstructionInput
-                    key={arg.name + refreshCount}
-                    prefix="args"
-                    updateInstruction={({
-                      updateGenerator,
-                      updateRefs,
-                      checkErrors,
-                    }) => {
-                      updateGenerator(arg);
-                      updateRefs(arg, "Arguments");
-                      setDisabled(checkErrors());
-                      refresh();
-                    }}
-                    {...arg}
-                  />
-                ))}
-              </InstructionInputsWrapper>
-            </Foldable>
+            <Collapsible defaultOpen>
+              <CollapsibleHeading>
+                <CollapsibleChevron />
+                Args
+              </CollapsibleHeading>
+              <CollapsibleContent className="mt-2">
+                <div className="flex flex-col gap-3 text-xs">
+                  {instruction.values.args.map((arg) => (
+                    <InstructionInput
+                      key={arg.name + refreshCount}
+                      prefix="args"
+                      updateInstruction={({
+                        updateGenerator,
+                        updateRefs,
+                        checkErrors,
+                      }) => {
+                        updateGenerator(arg);
+                        updateRefs(arg, "Arguments");
+                        setDisabled(checkErrors());
+                        refresh();
+                      }}
+                      {...arg}
+                    />
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
           {instruction.values.accounts.length > 0 && (
-            <Foldable element="Accounts" isOpen>
-              <InstructionInputsWrapper>
-                {instruction.values.accounts.map((acc) => (
-                  <InstructionInput
-                    key={acc.name + refreshCount}
-                    prefix="accounts"
-                    type="publicKey"
-                    updateInstruction={({
-                      updateGenerator,
-                      updateRefs,
-                      checkErrors,
-                    }) => {
-                      updateGenerator(acc);
-                      updateRefs(acc, "Accounts");
-                      setDisabled(checkErrors());
-                      refresh();
-                    }}
-                    {...acc}
-                  />
-                ))}
-              </InstructionInputsWrapper>
-            </Foldable>
+            <Collapsible defaultOpen>
+              <CollapsibleHeading>
+                <CollapsibleChevron />
+                Accounts
+              </CollapsibleHeading>
+              <CollapsibleContent className="mt-2">
+                <div className="flex flex-col gap-3 text-xs">
+                  {instruction.values.accounts.map((acc) => (
+                    <InstructionInput
+                      key={acc.name + refreshCount}
+                      prefix="accounts"
+                      type="publicKey"
+                      updateInstruction={({
+                        updateGenerator,
+                        updateRefs,
+                        checkErrors,
+                      }) => {
+                        updateGenerator(acc);
+                        updateRefs(acc, "Accounts");
+                        setDisabled(checkErrors());
+                        refresh();
+                      }}
+                      {...acc}
+                    />
+                  ))}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
           )}
-        </ArgsAndAccountsWrapper>
+        </div>
 
-        <ButtonWrapper>
-          <Button
-            kind="primary"
+        <div className="mt-4 flex flex-wrap gap-2">
+          <AsyncButton
             onClick={handleTest}
+            onError={reportButtonFailure("run the test")}
             disabled={!wallet || disabled}
           >
             Test
-          </Button>
+          </AsyncButton>
 
           {(instruction.values.accounts.length > 0 ||
             instruction.values.args.length > 0) && (
             <>
-              <Button onClick={fillRandom}>Fill</Button>
-              <Button onClick={reset}>Reset</Button>
+              <Button variant="outline" onClick={fillRandom}>
+                Fill
+              </Button>
+              <Button variant="outline" onClick={reset}>
+                Reset
+              </Button>
             </>
           )}
-        </ButtonWrapper>
+        </div>
       </Interaction>
     </InstructionProvider>
   );
 };
-
-const ArgsAndAccountsWrapper = styled.div`
-  padding-left: 0.25rem;
-
-  & > div {
-    margin-top: 1rem;
-  }
-`;
-
-const InstructionInputsWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  font-size: ${({ theme }) => theme.font.code.size.small};
-`;
-
-const ButtonWrapper = styled.div`
-  display: flex;
-  justify-content: center;
-  margin-top: 1rem;
-  gap: 1rem;
-
-  & > button {
-    padding: 0.5rem 1.5rem;
-  }
-`;
 
 export default Instruction;

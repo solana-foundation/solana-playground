@@ -1,16 +1,26 @@
 import { FC } from "react";
 import styled from "styled-components";
 
-import Button from "../../../../components/Button";
 import Img from "../../../../components/Img";
 import { PgExplorer, PgRouter } from "../../../../utils";
 import { CreateItem } from "./Modals";
 import { useCreateItem } from "./useCreateItem";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const ExplorerButtons = () => (
   <ButtonsWrapper>
-    <NewItemButton imageName="new_file.png" title="New file" />
-    <NewItemButton imageName="new_folder.png" title="New folder" />
+    <NewItemButton
+      imageName="new_file.png"
+      title="New file"
+      failureAction="add a file"
+    />
+    <NewItemButton
+      imageName="new_folder.png"
+      title="New folder"
+      failureAction="add a folder"
+    />
     <CreateItem />
     <CollapseAllButton />
     {PgExplorer.isTemporary && <GoBackButton />}
@@ -24,63 +34,79 @@ const ButtonsWrapper = styled.div`
 
   & button {
     margin: 0.5rem 0;
-    padding: 0 0.5rem;
   }
 
   & button img {
     filter: invert(0.5);
   }
 
-  & button:hover {
-    color: initial;
-    background: initial;
-
-    & img {
-      filter: invert(${({ theme }) => (theme.isDark ? 1 : 0)});
-    }
+  & button:hover img {
+    filter: invert(${({ theme }) => (theme.isDark ? 1 : 0)});
   }
 `;
 
 interface ButtonProps {
   imageName: string;
   title: string;
+  /** What did not happen when the click fails, completing "Could not …" */
+  failureAction: string;
 }
 
 const NewItemButton: FC<React.PropsWithChildren<ButtonProps>> = ({
   imageName,
   title,
+  failureAction,
 }) => {
   const { createItem } = useCreateItem();
 
   return (
-    <Button onClick={createItem} kind="icon" title={title}>
-      <Img src={getExplorerIconsPath(imageName)} alt={title} />
-    </Button>
+    <AsyncButton
+      onClick={createItem}
+      onError={reportButtonFailure(failureAction)}
+      variant="ghost"
+      size="icon-sm"
+      title={title}
+      loadingText={<span className="sr-only">{title}</span>}
+    >
+      <Img
+        src={getExplorerIconsPath(imageName)}
+        alt={title}
+        className="size-4"
+      />
+    </AsyncButton>
   );
 };
 
 const CollapseAllButton = () => (
   <Button
     onClick={() => PgExplorer.collapseAllFolders()}
-    kind="icon"
+    variant="ghost"
+    size="icon-sm"
     title="Collapse folders"
   >
-    <Img src={getExplorerIconsPath("collapse.png")} alt="Collapse folders" />
+    <Img
+      src={getExplorerIconsPath("collapse.png")}
+      alt="Collapse folders"
+      className="size-4"
+    />
   </Button>
 );
 
 const GoBackButton = () => (
-  <Button
+  <AsyncButton
     onClick={() => PgRouter.navigate()}
-    kind="icon"
+    onError={reportButtonFailure("go back to your projects")}
+    variant="ghost"
+    size="icon-sm"
     title="Go back to projects"
+    loadingText={<span className="sr-only">Go back to your project</span>}
   >
     <Img
       src={getExplorerIconsPath("back.png")}
       alt="Go back to your project"
-      style={{ height: "0.875rem", width: "0.875rem" }}
+      className="size-4"
     />
-  </Button>
+  </AsyncButton>
 );
 
 const getExplorerIconsPath = (name: string) => "/icons/explorer/" + name;

@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 /* A note inside a page or a form: a tint and a hairline, calm enough to read
    past. Alert is for the page as a whole; a callout is for the place it sits. */

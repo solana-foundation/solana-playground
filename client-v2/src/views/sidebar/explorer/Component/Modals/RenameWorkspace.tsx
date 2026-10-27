@@ -2,7 +2,7 @@ import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
 
 import Input from "../../../../../components/Input";
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import { PgCommon, PgExplorer, PgView } from "../../../../../utils";
 
 interface RenameWorkspaceProps {
@@ -39,13 +39,13 @@ export const RenameWorkspace: FC<RenameWorkspaceProps> = ({ name }) => {
   }, []);
 
   return (
-    <Modal
+    <ModalFrame
+      name="rename-workspace"
       title={`Rename workspace '${workspaceName}'`}
       buttonProps={{
         text: "Rename",
         onSubmit: renameWorkspace,
         disabled: !!error,
-        size: "small",
       }}
     >
       <Input
@@ -56,6 +56,6 @@ export const RenameWorkspace: FC<RenameWorkspaceProps> = ({ name }) => {
         error={error}
         setError={setError}
       />
-    </Modal>
+    </ModalFrame>
   );
 };

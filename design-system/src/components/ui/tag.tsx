@@ -1,6 +1,6 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
 /* A tinted label that sorts a thing: its level, its framework, its language.
@@ -15,7 +15,7 @@ const tagVariants = cva(
         warning: "bg-warning/12 text-warning",
         info: "bg-info/12 text-info",
         error: "bg-error/12 text-error",
-        brand: "bg-brand-purple/14 text-[#c9a6ff]",
+        brand: "bg-brand-purple/14 text-[color-mix(in_oklab,var(--brand-purple)_55%,var(--foreground))]",
       },
     },
     defaultVariants: {

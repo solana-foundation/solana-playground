@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { seedWorkspace } from "./fixtures";
+import { currentProject, openGallery, seedWorkspace } from "./fixtures";
 import type { Page } from "@playwright/test";
 
 /**
@@ -13,8 +13,6 @@ import type { Page } from "@playwright/test";
  * No backend is involved -- these pass with sync disabled and nobody signed in,
  * which is the point of doing the local half first.
  */
-
-const switcher = (page: Page) => page.locator('[aria-haspopup="true"]').first();
 
 /** Chat files live beside the code, keyed by the stable workspace id */
 const readThreads = (page: Page) =>
@@ -228,14 +226,13 @@ test("each project keeps its own conversation", async ({ page }) => {
   await addMessage(page, "about alpha");
   const alpha = await threadId(page);
 
-  await switcher(page).click();
-  await page.getByRole("button", { name: "Browse gallery" }).click();
+  await openGallery(page);
   const gallery = page.locator("[data-gallery-modal]");
   await expect(gallery).toBeVisible();
   await gallery.getByLabel("Project name").fill("beta");
   await gallery.getByRole("button", { name: /^Start/ }).click();
   await expect(gallery).toBeHidden();
-  await expect(switcher(page)).toContainText("beta");
+  await expect(currentProject(page)).toHaveText("beta");
 
   await addMessage(page, "about beta", { notThread: alpha });
 

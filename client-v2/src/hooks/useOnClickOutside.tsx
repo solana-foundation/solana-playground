@@ -1,6 +1,6 @@
 import { RefObject, useEffect } from "react";
 
-import { PgCommon, PgView } from "../utils";
+import { isInsideToast } from "@/shared/lib/toast-layer";
 
 /**
  * Run the given callback when the user clicks outside of the given element.
@@ -30,14 +30,10 @@ export const useOnClickOutside = (
       if (el.contains(targetEl)) return;
       if (ignoreSelector && targetEl.closest(ignoreSelector)) return;
 
-      // Account for portals (they're not actually inside current ref)
-      const isPortalChild = [PgView.ids.PORTAL_ABOVE, PgView.ids.PORTAL_BELOW]
-        .map((id) => document.getElementById(id))
-        .filter(PgCommon.isNonNullish)
-        .some((el) => el.contains(targetEl));
-
-      // TODO: Make this more robust (portal children don't have to be inside)
-      if (isPortalChild) return;
+      // A toast portals to `body` and floats over everything, so a press on
+      // it (its close button, a "change endpoint" action) is not the user
+      // leaving the element; it must not close a panel or drop an input.
+      if (isInsideToast(targetEl)) return;
 
       cb();
     };

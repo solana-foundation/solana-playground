@@ -39,9 +39,28 @@ Two rules on top of the direction:
   `auth` and `persistence` import each other (`auth`'s server module uses
   `persistence`'s pool; `persistence` reads the session). It is recorded as
   the exception in the `client-v2-layers` spec and is broken by task 1.4 of
-  `ui-migration`; the boundary check (HOO-1859) exempts these two until then.
+  `ui-migration`; the boundary check exempts these two by name until then.
 - **Entities do not import each other.** FSD's `@x` cross-imports are not
   enabled.
+
+**The boundary check** is `eslint-plugin-boundaries`, configured in
+`eslint-layers.js`, which `eslintConfig` extends. It fails an import that
+points up a layer, one between two slices of a layer, one past a slice's
+public API, browser code importing a `server.mjs`, and a route in `api/`
+reaching a slice other than through its `server.mjs` (`shared` it may
+import by path), relative paths included, with an error from
+`boundaries/dependencies` that names the rule broken. `yarn lint` (CI, `yarn run check`) runs it, and so does the
+production build: CRA's in-build lint is dropped there to save memory, so
+`build:bundle` and `build-fast` start with `yarn lint:layers`, ESLint with
+the whole config over the five layers and `api/`, which fails the build on
+any lint error there, not only this one. Tests get two allowances and no
+more: a test file may reach past a slice's entry, so a `vi.mock` can rebuild
+the entry from the modules behind it
+(`app/ConnectDialog/ConnectDialog.test.tsx`), and a slice's integration spec
+may import the route it drives. The layer direction holds for tests too, and
+production code gets neither. `scripts/eslint-layers.test.mjs`
+(`yarn test-api`) lints a probe of each kind against the real slices, so a
+check that stopped resolving imports, and so passed everything, fails there.
 
 A slice's segments: `ui/` for React, `model/` for logic, `lib/` for leaf
 helpers. Its public API is `index.ts` for browser code and `server.mjs` for
@@ -65,7 +84,7 @@ The two existing features with a React folder, `auth` and `persistence`, keep
 **Legacy roots.** `components/`, `views/`, `utils/`, `hooks/`, `providers/`,
 `commands/`, `effects/` and the other pre-existing roots sit outside the
 layers. New code may import from them. Do not add new UI to them. The
-boundary check ignores them.
+boundary check ignores them, both what they import and what imports them.
 
 ## Components
 
@@ -102,9 +121,13 @@ or from `ui.shadcn.com`: the stock shadcn parts are registry items too, and
 `@playground/`. The components' npm dependencies are added to
 `package.json` from npm.
 
-The hand-written `GradientButton` is not in `shared/ui`: it lives in
-`components/GradientButton`, beside the legacy `Button` it wraps, until the
-design system's brand button replaces both.
+Buttons come from `shared/ui`: `Button`, `BrandButton` (the one call to
+action of a view), `AsyncButton` (an action that waits on a promise) and
+`CopyButton`. Every `AsyncButton` and `CopyButton` passes
+`onError={reportButtonFailure("<what did not happen>")}`, which logs the
+failure and toasts "Could not <what did not happen>." unless the terminal has
+already printed it; a plain click path whose promise can reject catches into
+the same handler. A file input behind a button is `components/ImportButton`.
 
 One exception: the design system's components named after product parts
 (the catalogue lists them: composer, console drawer, step rail and the rest)
@@ -181,7 +204,7 @@ counts.
    "Before a PR") still applies to every task.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
-   before the review agents run and before the PR is opened; it never runs
+   before the sx review runs and before the PR is opened; it never runs
    `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
    `tasks.md`, then `/opsx:archive` merges the deltas into `openspec/specs/`
    and moves the folder to `changes/archive/<date>-<name>/`, all committed in
@@ -223,18 +246,20 @@ either a Playwright test in `e2e/` whose title is
 `client-v2-themes: A saved Dracula theme`), or a line in a manual checklist
 marked `(manual)` in the spec. A manual gate (the React 19 walk-through, a
 release check) is the list of scenarios, not a separate document. The
-`spec:coverage` script prints every scenario that has neither; `--strict`
-makes that an exit code (HOO-1856).
+`spec:coverage` script prints every scenario that has neither. CI runs it as
+a report and never fails on it; `--strict` makes the list an exit code, for
+when it is empty.
 
 ## What review keeps finding
 
 Each rule here came back in review more than once. The first three are
-ESLint errors (`package.json` `eslintConfig`, run by `yarn lint`) in the
+ESLint errors (`package.json` `eslintConfig`, run by `yarn lint`, and by the
+build's `lint:layers` in the layers and `api/`) in the
 layers, `src/{app,widgets,features,entities,shared}/`; the legacy roots are
 exempt until code moves out of them, except that `crypto.randomUUID` is an
 error across all of `src/` and `e2e/`, and the id rule holds in `e2e/`. The
 lint catches the common spellings, not every one. The fourth is the boundary
-check's job (HOO-1859); the rest hold by review.
+check's job (Layers, "The boundary check"); the rest hold by review.
 
 - **Ids come from `src/shared/lib/ids`.** `uuid()` mints one, `isUuid()`
   checks one. Never `crypto.randomUUID()`, never a
@@ -276,12 +301,18 @@ check's job (HOO-1859); the rest hold by review.
   utilities sit in `@layer utilities` and lose the cascade. Do not patch a
   styled component with a utility; change the styled rule, or move the
   component by the UI move rule.
-- **Build configuration is not unit-tested.** Guard the outcome instead: CI
-  greps the built CSS (or bundle) for what the configuration must produce,
-  Tailwind's `.flex` rule and the `_Pg*` class names, and the build tests
+- **Build configuration is not unit-tested; its outcome is.** CI greps the
+  built CSS (or bundle) for what the configuration must produce, Tailwind's
+  `.flex` rule and the `_Pg*` class names, and the build tests
   (`yarn test-build`) read `build/`: `scripts/in-source-tests.build-test.mjs`
-  fails when a chunk holds an in-source test title. A test that asserts the
-  shape of `craco.config.js` passes while the build is wrong.
+  fails when a chunk holds an in-source test title. A test that runs the real
+  build tool, with the production options, on representative input and
+  asserts on its output is allowed: `scripts/esbuild-minify.test.mjs` (run by
+  `yarn test-api`, no build needed) minifies two small chunks with
+  `esbuildMinifyOptions()` and runs them, guarding the cause of a crash only
+  the production minifier produced (`keepNames` helpers leaking into the
+  global scope). A test that asserts the shape of `craco.config.js` is not:
+  it passes while the build is wrong.
 
 ## Before a PR
 
@@ -294,17 +325,27 @@ check's job (HOO-1859); the rest hold by review.
   a fallback or a migration for a problem someone reported, reproduce it
   live (a probe, a curl, a screenshot, dated) and put that in the PR. A PR
   that solves a problem the repository does not have is closed, not fixed.
-- **Archiving is a human's call, asked before the review agents.** If the
+- **Archiving is a human's call, asked before the sx review.** If the
   PR ticks the change's last task, ask whether to close the change before
-  running `/pr-review-toolkit:review-pr` and opening the PR. On a yes,
+  the first `/sx:review-pr` run and before opening the PR. On a yes,
   confirm every task is ticked, delete `tasks.md`, run `/opsx:archive` and
   commit the deletion and the archive in this PR; on a no, the PR
   description says `OpenSpec: <change> stays open (<who answered>, <date>)`.
   Never archive unasked.
-- **Run the review agents.** `/pr-review-toolkit:review-pr` before
-  `gh pr create`. Its agents (the toolkit's README lists them) cover the
-  headings every human review here has used: silent failures, type design,
-  test coverage, comments. What they find is fixed in the same PR.
+- **The author runs the sx review.** `/sx:review-pr full`, then
+  `/sx:review-pr`, on every PR and before `gh pr create`; the skill comes
+  from the `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills).
+  `full` hands the review to the pr-review-toolkit plugin, which must be
+  installed too; the default run checks the plugin's built-in rules and this
+  repository's, plus the governing OpenSpec change and the Solana guidance
+  where they apply. Human reviewers read the diff and click through the
+  preview; they do not re-run the review, so the author's run is the gate.
+  Fix every critical finding in the same PR, and every important one the PR
+  needs; an important you defer gets a `TODO` at the site naming why or the
+  follow-up, so the next run reads it as acknowledged. A finding outside the
+  PR's scope goes to its existing Linear issue, or a new one when none fits;
+  a gap the review keeps missing becomes a Linear issue too, closed later
+  through agent rules or tooling.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
@@ -315,13 +356,11 @@ check's job (HOO-1859); the rest hold by review.
   merge commit; see the root `CLAUDE.md`, "This is a fork"), and a red spec
   fails the PR's checks. It needs no server and no Postgres: every spec
   stubs the account endpoints with `page.route`, and the dev server serves
-  `api/*.mjs` itself.
-  Two tests connect to the keyless default backend and skip themselves where
-  `/api/agent` reports none configured (CI included); they run only on a
-  machine with the default backend configured. Two sync tests ("switching
+  `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,
+  so none depends on the machine's default backend. Two sync tests ("switching
   tabs mid-debounce raises no conflict", "reloading a project the account
   already has writes nothing") are `test.fixme` on the runner, where the
-  load's timing differs and the sync races they guard show. The four are
+  load's timing differs and the sync races they guard show. The two are
   listed by title in `e2e/known-skips.txt`; the job fails on any skip that
   is not in the list and warns on an entry that no longer skips. CI retries a
   failed spec once, because the runner is three times slower than a laptop and
@@ -329,16 +368,17 @@ check's job (HOO-1859); the rest hold by review.
   run's annotations, and is work to do, not a pass. Locally `retries` is 0,
   so a flake fails where it gets fixed. Quarantine is an explicit
   `test.skip` or `test.fixme` with the reason in the call, never a retry.
-  Locally, run `PORT=<port> yarn test-e2e` with a free slot port
-  (`docs/testing.md` section 8). The run reuses only this worktree's own dev
-  server on that port and stops before any test, with a message, when another
-  worktree's server or anything else holds it, and when the server does not
-  answer within 15 s. Locally run only the specs your change touches
-  (`PORT=<slot port> yarn test-e2e e2e/<spec>.e2e.spec.ts`); the full suite is
-  CI's. Stop your own dev server when the run is done. A local run uses 2
-  workers (`E2E_WORKERS`) and queues machine-wide before it starts its dev
-  server: at most `E2E_MAX_RUNS` runs (default 2) go at once, across every
-  worktree.
+  Locally, run only the specs your change touches:
+  `yarn test-e2e e2e/<spec>.e2e.spec.ts`, with no `PORT`. The full suite is
+  CI's; a local run without a spec stops with a message unless `E2E_FULL=1`.
+  A local run queues machine-wide before it starts its dev server, and the
+  queue picks its port: slot N runs on `13900 + N`. At most `E2E_MAX_RUNS`
+  runs (default 1) go at once across every worktree, each with 2 workers
+  (`E2E_WORKERS`). The run reuses only this worktree's own dev server on its
+  port and stops before any test, with the pid where `lsof` finds it, when
+  another worktree's server or anything else holds it, or when the server does
+  not answer within 15 s; on a queue port that holder is a leftover to stop. A hand-set `PORT` still works and gets the same check. Stop your own
+  dev server when the run is done.
 - **A runtime upgrade still gets the manual walk-through** from the UI
   migration spec ("The React 19 gate"), in development and in the production
   build, because the suite runs against the dev server only.

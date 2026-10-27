@@ -1,7 +1,6 @@
 import { assistant } from "./assistant";
 import { buildDeploy } from "./build-deploy";
 import { explorer } from "./explorer";
-import { programs } from "./programs";
 import { test } from "./test";
 import { tutorials } from "./tutorials";
 
@@ -9,11 +8,4 @@ import { tutorials } from "./tutorials";
 export const DEFAULT_SIDEBAR_PAGE: SidebarPageName = "Assistant";
 
 /** All sidebar pages in order */
-export const SIDEBAR = [
-  assistant,
-  explorer,
-  buildDeploy,
-  test,
-  tutorials,
-  programs,
-];
+export const SIDEBAR = [assistant, explorer, buildDeploy, test, tutorials];

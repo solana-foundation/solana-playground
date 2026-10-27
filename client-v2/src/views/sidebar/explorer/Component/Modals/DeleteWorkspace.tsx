@@ -1,7 +1,7 @@
 import type { FC } from "react";
 import styled, { css } from "styled-components";
 
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import { Warning } from "../../../../../components/Icons";
 import { PgExplorer } from "../../../../../utils";
 
@@ -18,11 +18,12 @@ export const DeleteWorkspace: FC<
   const workspaceName = name ?? PgExplorer.currentWorkspaceName;
 
   return (
-    <Modal
+    <ModalFrame
+      name="delete-workspace"
       title
       buttonProps={{
         text: "Delete",
-        kind: "error",
+        variant: "destructive",
         onSubmit: () => PgExplorer.deleteWorkspace(workspaceName),
       }}
     >
@@ -42,7 +43,7 @@ export const DeleteWorkspace: FC<
           {isLesson && <Desc>- Your progress through the lesson is lost.</Desc>}
         </ContentText>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

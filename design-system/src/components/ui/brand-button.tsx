@@ -1,18 +1,20 @@
 import * as React from "react"
 import { cva, type VariantProps } from "class-variance-authority"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 import { Slot } from "radix-ui"
 
 /* The one call to action a screen has. ring is the brand action: a hairline
-   of Solana's two colours that fills with them on hover. accent is the flat
-   purple, for where the ring would be too loud. */
+   of Solana's two colours that fills with them on hover. Its label takes the
+   theme's text colour at rest (the fill is the surface, light in the light
+   theme) and white over the gradient. accent is the flat purple, for where
+   the ring would be too loud. */
 const brandButtonVariants = cva(
-  "group/brand-button inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap text-white outline-none select-none transition-[transform,filter,opacity] duration-200 ease-[cubic-bezier(0.22,0.61,0.36,1)] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "group/brand-button inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap outline-none select-none transition-[transform,filter,opacity] duration-200 ease-[cubic-bezier(0.22,0.61,0.36,1)] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
-        ring: "rounded-full brand-action [--stroke-fill:var(--surface-hover)] hover:not-disabled:-translate-y-px",
-        accent: "rounded-lg bg-primary font-act hover:brightness-[1.12]",
+        ring: "rounded-full brand-action text-foreground [--stroke-fill:var(--surface-hover)] hover:not-disabled:-translate-y-px hover:not-disabled:text-white active:not-disabled:text-white",
+        accent: "rounded-lg bg-primary text-white font-act hover:brightness-[1.12]",
       },
       size: {
         default: "h-10 pr-4 pl-5 font-heading text-[0.9375rem] [&_svg:not([class*='size-'])]:size-[1.15em]",

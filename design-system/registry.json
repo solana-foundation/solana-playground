@@ -25,6 +25,21 @@
       ]
     },
     {
+      "name": "utils",
+      "type": "registry:lib",
+      "title": "cn",
+      "description": "Joins and merges class names, with the theme type scale (text-control, font-act and the rest) known to the merge, so a later text colour or font family does not drop them.",
+      "dependencies": [
+        "cn"
+      ],
+      "files": [
+        {
+          "path": "src/lib/utils.ts",
+          "type": "registry:lib"
+        }
+      ]
+    },
+    {
       "name": "use-indicator",
       "type": "registry:hook",
       "title": "useIndicator",
@@ -60,9 +75,11 @@
         }
       ],
       "dependencies": [
-        "cn",
         "class-variance-authority",
         "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -77,8 +94,10 @@
         }
       ],
       "dependencies": [
-        "cn",
         "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -93,8 +112,10 @@
         }
       ],
       "dependencies": [
-        "cn",
         "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -109,8 +130,10 @@
         }
       ],
       "dependencies": [
-        "cn",
         "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -124,8 +147,8 @@
           "type": "registry:ui"
         }
       ],
-      "dependencies": [
-        "cn"
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -139,8 +162,50 @@
           "type": "registry:ui"
         }
       ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "input-group",
+      "type": "registry:ui",
+      "title": "Input group",
+      "description": "Stock shadcn input group: an input or textarea with addons and buttons inside its border.",
+      "registryDependencies": [
+        "@playground/button",
+        "@playground/input",
+        "@playground/textarea",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/input-group.tsx",
+          "type": "registry:ui"
+        }
+      ],
       "dependencies": [
-        "cn"
+        "class-variance-authority"
+      ]
+    },
+    {
+      "name": "command",
+      "type": "registry:ui",
+      "title": "Command",
+      "description": "Stock shadcn command (cmdk): a list that searches and acts from the keyboard.",
+      "registryDependencies": [
+        "@playground/dialog",
+        "@playground/input-group",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/command.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "cmdk",
+        "lucide-react"
       ]
     },
     {
@@ -155,8 +220,85 @@
         }
       ],
       "dependencies": [
-        "cn",
         "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "select",
+      "type": "registry:ui",
+      "title": "Select",
+      "description": "Stock shadcn select, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/select.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "native-select",
+      "type": "registry:ui",
+      "title": "Native Select",
+      "description": "Stock shadcn native-select, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/native-select.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "radio-group",
+      "type": "registry:ui",
+      "title": "Radio Group",
+      "description": "Stock shadcn radio-group, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/radio-group.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "field",
+      "type": "registry:ui",
+      "title": "Field",
+      "description": "Stock shadcn field, as the design system ships it.",
+      "registryDependencies": [
+        "@playground/label",
+        "@playground/separator",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/field.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority"
       ]
     },
     {
@@ -171,9 +313,11 @@
         }
       ],
       "dependencies": [
-        "cn",
         "radix-ui",
         "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -187,8 +331,8 @@
           "type": "registry:ui"
         }
       ],
-      "dependencies": [
-        "cn"
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -197,7 +341,8 @@
       "title": "Sheet",
       "description": "Stock shadcn sheet, as the design system ships it.",
       "registryDependencies": [
-        "@playground/button"
+        "@playground/button",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -206,7 +351,6 @@
         }
       ],
       "dependencies": [
-        "cn",
         "radix-ui",
         "lucide-react"
       ]
@@ -223,8 +367,10 @@
         }
       ],
       "dependencies": [
-        "cn",
         "react-resizable-panels"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
       ]
     },
     {
@@ -239,7 +385,8 @@
         "@playground/separator",
         "@playground/sheet",
         "@playground/skeleton",
-        "@playground/tooltip"
+        "@playground/tooltip",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -248,7 +395,6 @@
         }
       ],
       "dependencies": [
-        "cn",
         "class-variance-authority",
         "radix-ui",
         "lucide-react"
@@ -258,18 +404,31 @@
       "name": "logo",
       "type": "registry:ui",
       "title": "Logo",
-      "description": "The Playground mark beside its name. The mark takes the colour of its text.",
+      "description": "The Playground lockup (the triangle-and-circle mark with its name, drawn), and the ring mark beside its name. Both take the colour of their text.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/logo.tsx",
           "type": "registry:ui"
         }
+      ]
+    },
+    {
+      "name": "brand-icon",
+      "type": "registry:ui",
+      "title": "Brand icon",
+      "description": "The product's icons cut from the mark: home, new, tutorial, programs, search and profile. Filled with the colour of their text.",
+      "registryDependencies": [
+        "@playground/utils"
       ],
-      "dependencies": [
-        "cn"
+      "files": [
+        {
+          "path": "src/components/ui/brand-icon.tsx",
+          "type": "registry:ui"
+        }
       ]
     },
     {
@@ -278,7 +437,8 @@
       "title": "Status dot",
       "description": "The product's one sign for state: idle, success, warning, error, info, running (pulsing) and target.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -287,8 +447,7 @@
         }
       ],
       "dependencies": [
-        "class-variance-authority",
-        "cn"
+        "class-variance-authority"
       ]
     },
     {
@@ -297,7 +456,8 @@
       "title": "Brand button",
       "description": "The one call to action a screen has: a ring of Solana's two colours that fills on hover, or the flat accent.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -307,7 +467,6 @@
       ],
       "dependencies": [
         "class-variance-authority",
-        "cn",
         "radix-ui"
       ]
     },
@@ -336,7 +495,8 @@
       "registryDependencies": [
         "@playground/button",
         "@playground/tooltip",
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -345,8 +505,7 @@
         }
       ],
       "dependencies": [
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
@@ -356,16 +515,14 @@
       "description": "A small question mark with a large place to press, and the answer in a tooltip.",
       "registryDependencies": [
         "@playground/tooltip",
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/help-tip.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "cn"
       ]
     },
     {
@@ -374,7 +531,8 @@
       "title": "Callout",
       "description": "A tinted note in a page or form: default, info, warning, success, error.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -383,8 +541,7 @@
         }
       ],
       "dependencies": [
-        "class-variance-authority",
-        "cn"
+        "class-variance-authority"
       ]
     },
     {
@@ -393,7 +550,8 @@
       "title": "Tag",
       "description": "A tinted label for a kind: level, framework, language. levelVariant() maps a level to its colour.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -403,7 +561,6 @@
       ],
       "dependencies": [
         "class-variance-authority",
-        "cn",
         "radix-ui"
       ]
     },
@@ -414,7 +571,8 @@
       "description": "Write, Build, Deploy, Interact as one switch, with a sliding gradient thumb and a status per stage. Built on Tabs.",
       "registryDependencies": [
         "@playground/use-indicator",
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -424,7 +582,6 @@
       ],
       "dependencies": [
         "lucide-react",
-        "cn",
         "radix-ui"
       ]
     },
@@ -435,7 +592,8 @@
       "description": "One choice of a few, always one: thumb, boxed with a count, gradient, chips. Built on ToggleGroup.",
       "registryDependencies": [
         "@playground/use-indicator",
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -445,7 +603,6 @@
       ],
       "dependencies": [
         "class-variance-authority",
-        "cn",
         "radix-ui"
       ]
     },
@@ -455,7 +612,8 @@
       "title": "Composer",
       "description": "The assistant's prompt box: banner, context chips, a growing input, add, model, effort ring, send and stop.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -464,17 +622,17 @@
         }
       ],
       "dependencies": [
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
       "name": "console-drawer",
       "type": "registry:ui",
       "title": "Console drawer",
-      "description": "A frosted strip under the stage and a well that opens by height, so the terminal stays mounted. \u2318J.",
+      "description": "A frosted strip under the stage and a well that opens by height, so the terminal stays mounted. ⌘J.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -483,8 +641,7 @@
         }
       ],
       "dependencies": [
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
@@ -493,7 +650,8 @@
       "title": "Terminal",
       "description": "Terminal lines by kind (prompt, output, info, success, warning, error) and the green block caret.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -502,8 +660,7 @@
         }
       ],
       "dependencies": [
-        "class-variance-authority",
-        "cn"
+        "class-variance-authority"
       ]
     },
     {
@@ -512,16 +669,14 @@
       "title": "Code block",
       "description": "Code with a header, actions that show on hover and line numbers drawn by CSS.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/code-block.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "cn"
       ]
     },
     {
@@ -530,16 +685,14 @@
       "title": "Diagnostic",
       "description": "A build error said plainly, with the source excerpt and the faulty line marked.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/diagnostic.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "cn"
       ]
     },
     {
@@ -548,7 +701,8 @@
       "title": "Diff",
       "description": "A suggested change: added and removed lines, each with its own mark, and the counts.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -557,8 +711,84 @@
         }
       ],
       "dependencies": [
+        "class-variance-authority"
+      ]
+    },
+    {
+      "name": "message",
+      "type": "registry:ui",
+      "title": "Message",
+      "description": "One message in the assistant's conversation: who sent it, its content, a header and a footer.",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/message.tsx",
+          "type": "registry:ui"
+        }
+      ]
+    },
+    {
+      "name": "message-scroller",
+      "type": "registry:ui",
+      "title": "Message scroller",
+      "description": "The conversation's scrolling list: with autoScroll it follows the end while you are there, and offers a way back when you are not.",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/button",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/message-scroller.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "@shadcn/react",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "bubble",
+      "type": "registry:ui",
+      "title": "Bubble",
+      "description": "A message's body, in one of seven variants (default, secondary, muted, tinted, outline, ghost, destructive), on the end side with align=\"end\".",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/bubble.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
         "class-variance-authority",
-        "cn"
+        "radix-ui"
+      ]
+    },
+    {
+      "name": "marker",
+      "type": "registry:ui",
+      "title": "Marker",
+      "description": "A line in the conversation that is not a message: a day, a tool the assistant used.",
+      "registryDependencies": [
+        "@playground/playground-tokens",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/marker.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "radix-ui"
       ]
     },
     {
@@ -567,7 +797,8 @@
       "title": "Action card",
       "description": "A card you open, with a link stretched over it. default, or frame with the brand ring and lift.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -577,7 +808,6 @@
       ],
       "dependencies": [
         "class-variance-authority",
-        "cn",
         "radix-ui"
       ]
     },
@@ -587,7 +817,8 @@
       "title": "Setup list",
       "description": "The sidebar's Get set up checklist: count in the title, fold, dismiss, and a status per step.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -597,7 +828,6 @@
       ],
       "dependencies": [
         "lucide-react",
-        "cn",
         "radix-ui"
       ]
     },
@@ -607,7 +837,8 @@
       "title": "Step rail",
       "description": "A lesson's steps as a vertical line: done, skipped, current, locked.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -616,8 +847,7 @@
         }
       ],
       "dependencies": [
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
@@ -626,7 +856,8 @@
       "title": "Objective band",
       "description": "A lesson's frosted band: a gradient meter, the objective, back and on, and actions.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -635,8 +866,7 @@
         }
       ],
       "dependencies": [
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
@@ -645,16 +875,14 @@
       "title": "Stage empty",
       "description": "What a stage says before it has anything: media, title, meta, description, notice, actions, footer.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/stage-empty.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "cn"
       ]
     },
     {
@@ -663,7 +891,8 @@
       "title": "Modal",
       "description": "The product's dialog: a card on a desk, a page of its own on a phone, and a wide size.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -673,8 +902,135 @@
       ],
       "dependencies": [
         "lucide-react",
-        "cn",
         "radix-ui"
+      ]
+    },
+    {
+      "name": "dialog",
+      "type": "registry:ui",
+      "title": "Dialog",
+      "description": "Stock shadcn dialog, as the design system ships it.",
+      "registryDependencies": [
+        "@playground/button",
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/dialog.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui",
+        "lucide-react"
+      ]
+    },
+    {
+      "name": "dropdown-menu",
+      "type": "registry:ui",
+      "title": "Dropdown menu",
+      "description": "Stock shadcn dropdown-menu, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/dropdown-menu.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "context-menu",
+      "type": "registry:ui",
+      "title": "Context menu",
+      "description": "Stock shadcn context-menu, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/context-menu.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui",
+        "lucide-react"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "popover",
+      "type": "registry:ui",
+      "title": "Popover",
+      "description": "Stock shadcn popover, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/popover.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "hover-card",
+      "type": "registry:ui",
+      "title": "Hover card",
+      "description": "Stock shadcn hover-card, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/hover-card.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "drawer",
+      "type": "registry:ui",
+      "title": "Drawer",
+      "description": "Stock shadcn drawer, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/drawer.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "vaul"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "sonner",
+      "type": "registry:ui",
+      "title": "Sonner",
+      "description": "Stock shadcn sonner, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/sonner.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "sonner",
+        "lucide-react"
       ]
     },
     {
@@ -683,7 +1039,8 @@
       "title": "Menu extras",
       "description": "Parts for shadcn's menus: a line under an item, a note, and rows that fold open in place.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -693,7 +1050,6 @@
       ],
       "dependencies": [
         "lucide-react",
-        "cn",
         "radix-ui"
       ]
     },
@@ -703,7 +1059,8 @@
       "title": "Editor tabs",
       "description": "The open files over the editor, the current one marked with a purple top line.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -712,8 +1069,7 @@
         }
       ],
       "dependencies": [
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
@@ -722,16 +1078,14 @@
       "title": "Drop zone",
       "description": "Where a file lands, and a button to browse for one.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/drop-zone.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "cn"
       ]
     },
     {
@@ -740,16 +1094,14 @@
       "title": "Achievement",
       "description": "An achievement for a profile: a gradient ring when earned, grey until then.",
       "registryDependencies": [
-        "@playground/playground-tokens"
+        "@playground/playground-tokens",
+        "@playground/utils"
       ],
       "files": [
         {
           "path": "src/components/ui/achievement.tsx",
           "type": "registry:ui"
         }
-      ],
-      "dependencies": [
-        "cn"
       ]
     },
     {
@@ -759,7 +1111,8 @@
       "description": "Two devices' changes to the same lines, after IDEA's merge dialog: this device, the result and the other device, joined by ribbons, with take and dismiss on each hunk and one pane at a time at phone width. It draws; the editors in the panes are the app's.",
       "registryDependencies": [
         "@playground/playground-tokens",
-        "@playground/segmented"
+        "@playground/segmented",
+        "@playground/utils"
       ],
       "files": [
         {
@@ -769,8 +1122,7 @@
       ],
       "dependencies": [
         "class-variance-authority",
-        "lucide-react",
-        "cn"
+        "lucide-react"
       ]
     },
     {
@@ -809,6 +1161,132 @@
         "@playground/merge"
       ],
       "files": []
+    },
+    {
+      "name": "badge",
+      "type": "registry:ui",
+      "title": "Badge",
+      "description": "Stock shadcn badge, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/badge.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority",
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "checkbox",
+      "type": "registry:ui",
+      "title": "Checkbox",
+      "description": "Stock shadcn checkbox, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/checkbox.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "lucide-react",
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "collapsible",
+      "type": "registry:ui",
+      "title": "Collapsible",
+      "description": "Stock shadcn collapsible plus CollapsibleChevron, the fold's mark that turns 90 degrees when open.",
+      "files": [
+        {
+          "path": "src/components/ui/collapsible.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "lucide-react",
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "kbd",
+      "type": "registry:ui",
+      "title": "Kbd",
+      "description": "Stock shadcn kbd, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/kbd.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "empty",
+      "type": "registry:ui",
+      "title": "Empty",
+      "description": "Stock shadcn empty state, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/empty.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "class-variance-authority"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "avatar",
+      "type": "registry:ui",
+      "title": "Avatar",
+      "description": "Stock shadcn avatar, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/avatar.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
+    },
+    {
+      "name": "switch",
+      "type": "registry:ui",
+      "title": "Switch",
+      "description": "Stock shadcn switch, as the design system ships it.",
+      "files": [
+        {
+          "path": "src/components/ui/switch.tsx",
+          "type": "registry:ui"
+        }
+      ],
+      "dependencies": [
+        "radix-ui"
+      ],
+      "registryDependencies": [
+        "@playground/utils"
+      ]
     }
   ]
 }

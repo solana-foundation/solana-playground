@@ -1,20 +1,47 @@
 import * as React from "react"
 import { Check, Copy } from "lucide-react"
-import { cn } from "cn"
+import { cn } from "@/lib/utils"
 
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 /* Copies one value: a program id, a signature, a command. Its tooltip turns
-   from Copy to Copied, in green, and back. */
+   from Copy to Copied, in green, and back. A clipboard that refuses (or a
+   browser with none) goes to onError, rethrown without one so it surfaces
+   as an unhandled rejection, and never shows Copied. */
 function CopyButton({
   value,
   label = "Copy",
+  onError,
   className,
   ...props
-}: Omit<React.ComponentProps<typeof Button>, "value" | "onClick"> & { value: string; label?: string }) {
+}: Omit<
+  React.ComponentProps<typeof Button>,
+  "value" | "onClick" | "onError" | "aria-label"
+> & {
+  value: string
+  /** its accessible name until a copy succeeds, when it says Copied */
+  label?: string
+  /** where a refused copy goes */
+  onError?: (error: unknown) => void
+}) {
   const [open, setOpen] = React.useState(false)
   const [copied, setCopied] = React.useState(false)
+  const timer = React.useRef<number | undefined>(undefined)
+  React.useEffect(() => () => window.clearTimeout(timer.current), [])
+  const copy = async () => {
+    try {
+      if (!navigator.clipboard) throw new Error("No clipboard in this browser")
+      await navigator.clipboard.writeText(value)
+    } catch (error) {
+      if (!onError) throw error
+      onError(error)
+      return
+    }
+    setCopied(true)
+    window.clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => setCopied(false), 1400)
+  }
   return (
     <Tooltip open={open || copied} onOpenChange={setOpen}>
       <TooltipTrigger asChild>
@@ -24,12 +51,7 @@ function CopyButton({
           size="icon-xs"
           aria-label={copied ? "Copied" : label}
           className={cn("text-muted-foreground hover:text-foreground", className)}
-          onClick={() => {
-            navigator.clipboard?.writeText(value).then(() => {
-              setCopied(true)
-              setTimeout(() => setCopied(false), 1400)
-            })
-          }}
+          onClick={copy}
           {...props}
         >
           {copied ? <Check className="text-success" /> : <Copy />}

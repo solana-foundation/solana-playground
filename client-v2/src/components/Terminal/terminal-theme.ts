@@ -7,12 +7,16 @@ type XtermStyles = Theme["components"]["terminal"]["xterm"];
 /**
  * xterm's colours from the theme. xterm paints on its own and cannot read
  * CSS variables, so every value goes through `resolve` (`resolveColor` in
- * the app) against the current `<html>`.
+ * the app) against the current `<html>`. The ground is the console well
+ * (`--surface-well`) and the cursor is `--success`, both from the design
+ * system rather than the theme's `terminal.xterm` block, whose `cursor.color`
+ * and `cursor.accentColor` are therefore inert.
  */
 export const xtermTheme = (
   xterm: XtermStyles,
   resolve: (value: string) => string
 ): ITheme => ({
+  background: resolve("var(--surface-well)"),
   foreground: resolve(xterm.textPrimary),
   brightBlack: resolve(xterm.textSecondary),
   black: resolve(xterm.textSecondary),
@@ -23,8 +27,8 @@ export const xtermTheme = (
   brightYellow: resolve(xterm.warning),
   brightBlue: resolve(xterm.info),
   selection: resolve(xterm.selectionBg),
-  cursor: resolve(xterm.cursor.color),
-  cursorAccent: resolve(xterm.cursor.accentColor),
+  cursor: resolve("var(--success)"),
+  cursorAccent: resolve("var(--surface-well)"),
 });
 
 if (import.meta.vitest) {
@@ -54,6 +58,7 @@ if (import.meta.vitest) {
         const resolve = vi.fn((v: string) => `resolved(${v})`);
 
         expect(xtermTheme(xterm, resolve)).toEqual({
+          background: "resolved(var(--surface-well))",
           foreground: "resolved(var(--text-primary))",
           brightBlack: "resolved(var(--text-secondary))",
           black: "resolved(var(--text-secondary))",
@@ -64,8 +69,8 @@ if (import.meta.vitest) {
           brightYellow: "resolved(var(--warning))",
           brightBlue: "resolved(var(--info))",
           selection: "resolved(var(--surface-hover))",
-          cursor: "resolved(var(--text-primary))",
-          cursorAccent: "resolved(var(--surface-base))",
+          cursor: "resolved(var(--success))",
+          cursorAccent: "resolved(var(--surface-well))",
         });
       });
     });

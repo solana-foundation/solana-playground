@@ -18,6 +18,7 @@ import { INITIAL_FLOW_STATE } from "../state/stage";
 import type { FlowState } from "../state/stage";
 import type { LessonPath } from "./types";
 import { PgExplorer, PgTutorial, PgView } from "../../../utils";
+import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 import type { Idl } from "@coral-xyz/anchor";
 
 const hints: [string, string, string] = ["a", "b", "c"];
@@ -317,34 +318,44 @@ describe("PgLesson.init -- real PgTutorialStorage default semantics", () => {
   });
 
   it("says so when progress cannot be saved, and toasts once", async () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
     (PgTutorial.getStorage as Mock).mockImplementation(() => ({
       getItem: async () => undefined,
       setItem: async () => {
         throw new Error("quota exceeded");
       },
     }));
-    explorer.currentWorkspaceName = PATH.tutorial;
-    const sub = PgLesson.init();
-    await flush();
+    let sub: ReturnType<typeof PgLesson.init> | undefined;
+    try {
+      explorer.currentWorkspaceName = PATH.tutorial;
+      sub = PgLesson.init();
+      await flush();
 
-    PgLesson.opened("one");
-    await flush();
-    PgLesson.opened("two");
-    await flush();
+      PgLesson.opened("one");
+      await flush();
+      PgLesson.opened("two");
+      await flush();
 
-    // Every failed write is in the console; the learner is told once
-    expect(warn).toHaveBeenCalledWith(
-      expect.stringMatching(/could not be saved/),
-      expect.objectContaining({ message: "quota exceeded" })
-    );
-    expect(warn.mock.calls.length).toBeGreaterThanOrEqual(2);
-    // The toast component is imported lazily, so it can land after `flush`
-    await vi.waitFor(() => expect(PgView.setToast).toHaveBeenCalled());
-    await flush();
-    expect(PgView.setToast).toHaveBeenCalledTimes(1);
-    sub.dispose();
-    warn.mockRestore();
+      // Every failed write is reported to the team; the learner is told once
+      expect(logged.entries.length).toBeGreaterThanOrEqual(2);
+      for (const entry of logged.entries) {
+        expect(entry.ns).toBe("lessons:store");
+        expect(entry.level).toBe("error");
+        expect(entry.error?.message).toBe("quota exceeded");
+        expect(entry.report).toBe(true);
+      }
+      // The toast component is imported lazily, so it can land after `flush`
+      await vi.waitFor(() => expect(PgView.setToast).toHaveBeenCalled());
+      await flush();
+      expect(PgView.setToast).toHaveBeenCalledTimes(1);
+      expect(
+        (PgView.setToast as ReturnType<typeof vi.fn>).mock.calls[0][1]
+      ).toEqual({ options: { name: "lesson-save-failed" } });
+    } finally {
+      sub?.dispose();
+      resetLogger();
+    }
   });
 
   it("does not leak one lesson's record into the next workspace's load", async () => {

@@ -107,14 +107,11 @@ interface SortableItemProps<P> {
 }
 
 const SortableItem = <P,>(props: SortableItemProps<P> & P) => {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id: props.id, data: props });
+  // `attributes` (role=button, tabIndex, aria-*) are left off: they serve a
+  // keyboard sensor, and the context's sensor is the mouse alone, so they
+  // would only make every item a focusable button around its own controls
+  const { listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: props.id, data: props });
 
   return (
     <props.Item
@@ -127,7 +124,6 @@ const SortableItem = <P,>(props: SortableItemProps<P> & P) => {
         cursor: isDragging ? "grabbing" : "pointer",
       }}
       isDragging={isDragging}
-      {...attributes}
       {...listeners}
       {...props}
     />

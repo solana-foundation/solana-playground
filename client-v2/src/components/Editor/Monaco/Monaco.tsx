@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import styled, { useTheme } from "styled-components";
 import * as monaco from "monaco-editor";
 
-import { applyReadOnly, executeProductEdits } from "./read-only";
 import { editorBuffersOf } from "./editor-buffers";
 import { initLanguages } from "./languages";
 import { SpinnerWithBg } from "../../Loading";
@@ -18,6 +17,7 @@ import {
   PgSettings,
   PgTerminal,
   PgTheme,
+  PgView,
   resolveTextMateTheme,
 } from "../../../utils";
 import {
@@ -27,22 +27,11 @@ import {
   useSendAndReceiveCustomEvent,
 } from "../../../hooks";
 import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
-import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { createMountOpen } from "./mount-open";
+import { leavesFocusElsewhere } from "./open-focus";
 import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("editor:monaco");
-
-/**
- * A format the editor refused. Said whatever started it: a format from
- * Ctrl+S that does nothing otherwise leaves the user no sign of why.
- */
-const reportRefusedFormat = (lang: string) => {
-  log.error(new Error("The editor refused a format"), {
-    report: true,
-    context: { lang },
-  });
-  PgTerminal.println(PgTerminal.error("Format failed."));
-};
 
 /**
  * Monaco paints its own canvas and cannot read CSS variables, so the theme's
@@ -218,6 +207,9 @@ const Monaco = () => {
       monaco.editor.create(monacoRef.current, {
         automaticLayout: true,
         fontLigatures: true,
+        // Hovers and suggestions escape the stage panel that holds the
+        // editor, which clips the editor's own overflow at the tab row
+        fixedOverflowWidgets: true,
       })
     );
   }, [editor, isThemeSet]);
@@ -226,14 +218,6 @@ const Monaco = () => {
   useEffect(() => {
     if (editor) return () => editor.dispose();
   }, [editor]);
-
-  // Phones read; from 600 px the editor edits (the client-v2-layout spec)
-  const viewport = useViewport();
-  useEffect(() => {
-    if (!editor) return;
-    const d = applyReadOnly(editor, { readOnly: viewport === "phone" });
-    return () => d.dispose();
-  }, [editor, viewport]);
 
   // Set font
   useEffect(() => {
@@ -307,8 +291,13 @@ const Monaco = () => {
   useEffect(() => {
     if (!editor) return;
     let positionDataIntervalId: NodeJS.Timer;
+    // `onDidOpenFile` replays the current file as it subscribes: the open
+    // this mount makes, which must not take focus from a field
+    const mountOpen = createMountOpen();
 
     const switchFile = PgExplorer.onDidOpenFile((curFile) => {
+      const isMountOpen = mountOpen(curFile);
+
       // Clear previous state
       if (positionDataIntervalId) clearInterval(positionDataIntervalId);
 
@@ -379,8 +368,24 @@ const Monaco = () => {
         endColumn: endPosition.column,
       });
 
-      // Focus the editor
-      editor.focus();
+      // An open the user did not start -- a late mount's, sync re-opening
+      // the workspace -- leaves focus in a field they are typing in; the
+      // file opens, focus stays. One started from the explorer's tree
+      // (creating a file) still ends in the editor; see `leavesFocusElsewhere`.
+      const open = isMountOpen ? "mount" : "later";
+      if (
+        leavesFocusElsewhere({
+          open,
+          editor: editor.getContainerDomNode(),
+          tree: document.getElementById(PgView.ids.ROOT_DIR),
+        })
+      ) {
+        log.debug("Left focus in a field the user is typing in", {
+          context: { path: curFile.path, open },
+        });
+      } else {
+        editor.focus();
+      }
 
       // Save position data
       positionDataIntervalId = setInterval(() => {
@@ -550,7 +555,7 @@ const Monaco = () => {
           const endColumn = model.getLineContent(endLineNumber).length + 1;
 
           // Execute edits pushes the changes to the undo stack
-          const applied = executeProductEdits(editor, [
+          editor.executeEdits(null, [
             {
               text: formattedCode,
               range: {
@@ -561,10 +566,6 @@ const Monaco = () => {
               },
             },
           ]);
-          if (!applied) {
-            reportRefusedFormat(lang.name);
-            return;
-          }
 
           const resultPos = model.getPositionAt(cursorOffset);
           editor.setPosition(resultPos);
@@ -601,7 +602,7 @@ const Monaco = () => {
           const endColumn = model.getLineContent(endLineNumber).length + 1;
 
           // Execute edits pushes the changes to the undo stack
-          const applied = executeProductEdits(editor, [
+          editor.executeEdits(null, [
             {
               text: result.formatted,
               range: {
@@ -612,10 +613,6 @@ const Monaco = () => {
               },
             },
           ]);
-          if (!applied) {
-            reportRefusedFormat(lang.name);
-            return;
-          }
 
           const resultPos = model.getPositionAt(result.cursorOffset);
           editor.setPosition(resultPos);
@@ -669,7 +666,7 @@ const Monaco = () => {
           const endColumn = model.getLineContent(endLineNumber).length + 1;
 
           // Execute edits pushes the changes to the undo stack
-          const applied = executeProductEdits(editor, [
+          editor.executeEdits(null, [
             {
               text: formattedCode,
               range: {
@@ -680,10 +677,6 @@ const Monaco = () => {
               },
             },
           ]);
-          if (!applied) {
-            reportRefusedFormat(lang.name);
-            return;
-          }
 
           const resultPos = model.getPositionAt(cursorOffset);
           editor.setPosition(resultPos);
@@ -806,7 +799,7 @@ const Monaco = () => {
       // Reported: a program id left unwritten builds the old id, and the
       // deploy that then fails has no other clue
       try {
-        if (!executeProductEdits(editor, [{ range, text: programPkStr }])) {
+        if (!editor.executeEdits(null, [{ range, text: programPkStr }])) {
           log.error(new Error("The editor refused the program id edit"), {
             report: true,
           });

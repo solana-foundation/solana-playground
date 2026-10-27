@@ -1,3 +1,4 @@
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Mock } from "vitest";
 // The band's wiring, tested without a rendered tree. Mocked at the
 // module boundary the same way the other lesson tests mock `../../../utils`
@@ -20,8 +21,31 @@ vi.mock("../../../constants", () => ({
   DEFAULT_ENDPOINT: "https://devnet.example/rpc",
 }));
 
+// The outcomes a user chose: a sign-in they cancelled or a popup they
+// blocked, and a wallet setup they closed
+const { knownSignIn, dismissedSetup } = vi.hoisted(() => ({
+  knownSignIn: new Error("popup blocked"),
+  dismissedSetup: new Error("setup rejected"),
+}));
 vi.mock("../../../features/auth", () => ({
   PgSession: { signIn: vi.fn() },
+  isSignInFailure: (error: unknown) => error === knownSignIn,
+}));
+vi.mock("@/commands/connect/setup-rejected", () => ({
+  isSetupRejected: (error: unknown) => error === dismissedSetup,
+}));
+
+// Each `reportButtonFailure` call: the action that did not happen, the error
+// it got, and whether it was marked as already shown (logged, not toasted)
+const told = vi.hoisted(
+  () => [] as { action: string; error: unknown; shown: boolean }[]
+);
+const shown = vi.hoisted(() => new Set<unknown>());
+vi.mock("@/shared/lib/report-button-failure", () => ({
+  markFailureShown: (error: unknown) => shown.add(error),
+  reportButtonFailure: (action: string) => (error: unknown) => {
+    told.push({ action, error, shown: shown.has(error) });
+  },
 }));
 
 import { remedy } from "./readiness-remedy";
@@ -36,6 +60,14 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 beforeEach(() => {
   vi.clearAllMocks();
+  told.length = 0;
+  for (const command of [
+    PgCommand.build,
+    PgCommand.connect,
+    PgCommand.airdrop,
+  ]) {
+    (command.execute as Mock).mockResolvedValue(undefined);
+  }
   signIn.mockResolvedValue(undefined);
   PgSettings.connection.endpoint = "http://localhost:8899";
 });
@@ -51,7 +83,7 @@ describe("remedy", () => {
     expect(PgCommand.build.execute).toHaveBeenCalledTimes(1);
   });
 
-  it("runs the same connect the header chip runs", () => {
+  it("runs the same connect the account menu's Connect wallet runs", () => {
     remedy({ kind: "needs-wallet" })();
     expect(PgCommand.connect.execute).toHaveBeenCalledTimes(1);
   });
@@ -77,23 +109,58 @@ describe("remedy", () => {
     expect(PgCommand.airdrop.execute).not.toHaveBeenCalled();
   });
 
-  it("says so in the terminal when sign-in fails", async () => {
-    // A blocked popup rejects; without this the click would do nothing
-    // visible at all, which is the unlabelled click one level down
-    signIn.mockRejectedValue(new Error("Allow popups for this site"));
+  // With no terminal mounted a command cannot run at all; the click
+  // must say so rather than leave an unhandled rejection
+  it.each([
+    [{ kind: "needs-build", running: false }, "build", "build"],
+    [{ kind: "needs-rebuild" }, "build", "build"],
+    [{ kind: "needs-wallet" }, "connect", "connect a wallet"],
+    [{ kind: "needs-sol", signedIn: true }, "airdrop", "airdrop"],
+  ] as const)(
+    "tells the user when %o fails",
+    async (blocker, command, action) => {
+      const failure = new Error("The terminal is not open.");
+      (PgCommand[command].execute as Mock).mockRejectedValue(failure);
+
+      remedy(blocker)();
+      await flush();
+
+      expect(told).toEqual([{ action, error: failure, shown: false }]);
+    }
+  );
+
+  it("tells the user when sign-in fails", async () => {
+    // Without this the click would do nothing visible at all, which is the
+    // unlabelled click one level down. Not in the terminal: one that is
+    // folded or not mounted shows it to nobody
+    const failure = new Error("network down");
+    signIn.mockRejectedValue(failure);
     remedy({ kind: "needs-sol", signedIn: false })();
     await flush();
 
-    expect(println).toHaveBeenCalledTimes(1);
-    expect(println.mock.calls[0][0]).toContain("Allow popups for this site");
-    expect(println.mock.calls[0][0]).toContain("Sign-in failed");
+    expect(told).toEqual([{ action: "sign in", error: failure, shown: false }]);
+    expect(println).not.toHaveBeenCalled();
   });
 
-  it("survives a rejection that is not an Error", async () => {
-    signIn.mockRejectedValue("nope");
+  // `PgSession.signInState` holds a known failure and the account row shows
+  // it: logged as a failed click, never toasted a second time
+  it("leaves a cancelled or blocked sign-in to the account row", async () => {
+    signIn.mockRejectedValue(knownSignIn);
     remedy({ kind: "needs-sol", signedIn: false })();
     await flush();
 
-    expect(println.mock.calls[0][0]).toContain("nope");
+    expect(told).toEqual([
+      { action: "sign in", error: knownSignIn, shown: true },
+    ]);
+  });
+
+  it("does not toast a wallet setup the user closed", async () => {
+    (PgCommand.connect.execute as Mock).mockRejectedValue(dismissedSetup);
+    remedy({ kind: "needs-wallet" })();
+    await flush();
+
+    expect(told).toEqual([
+      { action: "connect a wallet", error: dismissedSetup, shown: true },
+    ]);
   });
 });

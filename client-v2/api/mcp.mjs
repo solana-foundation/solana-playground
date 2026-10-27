@@ -19,10 +19,12 @@
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
  */
 
-import { readJson } from "../src/features/api/server/read-json.mjs";
+import {
+  readJson,
+  warnAboutMissingObservabilityIds,
+  withObservability,
+} from "../src/features/api/server.mjs";
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
-import { warnAboutMissingObservabilityIds } from "../src/features/api/server/observability.mjs";
-import { withObservability } from "../src/features/api/server/with-observability.mjs";
 import { mcpExplorerEnv } from "../src/shared/config/server-env.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";

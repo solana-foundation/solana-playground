@@ -83,7 +83,7 @@ import { Field, FieldContent, FieldDescription, FieldLabel } from "@/components/
 import { HelpTip } from "@/components/ui/help-tip"
 import { Input } from "@/components/ui/input"
 import { Kbd } from "@/components/ui/kbd"
-import { Logo, LogoMark, LogoText } from "@/components/ui/logo"
+import { Logo, LogoLockup, LogoMark, LogoText } from "@/components/ui/logo"
 import { MenuFold, MenuFoldChevron, MenuFoldContent, MenuFoldTrigger, MenuItemDescription, MenuItemText, MenuNote } from "@/components/ui/menu-extras"
 import {
   Merge,
@@ -977,7 +977,8 @@ function PlaygroundComponents() {
         </Achievement>
       </Block>
 
-      <Block id="logo" title="Logo" source="playground" registry="logo" note="The mark beside the name, as the product's header sets it. The mark takes the colour of its text.">
+      <Block id="logo" title="Logo" source="playground" registry="logo" note="The lockup heads the navigation, as the prototype's header sets it; the ring mark stays the send glyph and the phone's Home. Both take the colour of their text.">
+        <LogoLockup />
         <Logo>
           <LogoMark />
           <LogoText>Playground</LogoText>

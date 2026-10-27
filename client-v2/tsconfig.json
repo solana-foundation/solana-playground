@@ -18,7 +18,11 @@
     "experimentalDecorators": true,
     "types": ["vitest/globals", "node", "vitest/importMeta"],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shadcn/react/message-scroller": [
+        "./node_modules/@shadcn/react/dist/message-scroller/index.d.ts"
+      ],
+      "cn/config": ["./node_modules/cn/dist/config.d.ts"]
     }
   },
   "include": ["src"],

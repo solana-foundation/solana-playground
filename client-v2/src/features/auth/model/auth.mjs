@@ -192,7 +192,7 @@ export const getAuth = async () => {
       user: {
         additionalFields: {
           // The @handle. Better Auth's core schema has `name` and `image` but
-          // not the login, and the profile chip renders it. Never an identity
+          // not the login, and the account row and menu render it. Never an identity
           // key -- a login can be changed; ownership keys off `user.id`.
           login: { type: "string", required: false, input: false },
         },

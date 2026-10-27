@@ -1,12 +1,12 @@
 import { Component, ErrorInfo, ReactNode, type JSX } from "react";
 import styled, { css } from "styled-components";
 
-import Button from "../Button";
-import Tooltip from "../Tooltip";
 import Fallback from "./Fallback";
 import ThrowError from "./ThrowError";
 import { Refresh } from "../Icons";
 import type { Fn } from "../../utils";
+import { Button } from "@/shared/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 interface Props {
   /** Node to render as children */
@@ -94,10 +94,18 @@ class ErrorBoundary extends Component<Props, State> {
           <Wrapper iconOnly>
             {FbElement}
 
-            <Tooltip element="Refresh">
-              <Button kind="icon" onClick={refresh}>
-                <Refresh color="error" />
-              </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Refresh"
+                  onClick={refresh}
+                >
+                  <Refresh color="error" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Refresh</TooltipContent>
             </Tooltip>
           </Wrapper>
         );
@@ -107,11 +115,8 @@ class ErrorBoundary extends Component<Props, State> {
         <Wrapper>
           {FbElement}
 
-          <Button
-            kind="secondary-transparent"
-            leftIcon={<Refresh />}
-            onClick={refresh}
-          >
+          <Button variant="ghost" onClick={refresh}>
+            <Refresh data-icon="inline-start" />
             Refresh
           </Button>
         </Wrapper>

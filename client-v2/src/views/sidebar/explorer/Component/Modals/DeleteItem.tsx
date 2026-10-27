@@ -1,7 +1,7 @@
 import { FC } from "react";
 import styled, { css } from "styled-components";
 
-import Modal from "../../../../../components/Modal";
+import { ModalFrame } from "@/widgets/overlays";
 import { Warning } from "../../../../../components/Icons";
 import { PgCommon, PgExplorer } from "../../../../../utils";
 
@@ -33,11 +33,12 @@ export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
   };
 
   return (
-    <Modal
+    <ModalFrame
+      name="delete-item"
       title
       buttonProps={{
         text: "Delete",
-        kind: "error",
+        variant: "destructive",
         onSubmit: deleteItem,
       }}
     >
@@ -50,7 +51,7 @@ export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
           <Desc>This action is irreversable.</Desc>
         </ContentText>
       </Content>
-    </Modal>
+    </ModalFrame>
   );
 };
 

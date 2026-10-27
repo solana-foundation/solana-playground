@@ -13,4 +13,8 @@ export {
   readSession,
   requireUser,
 } from "./model/auth.mjs";
-export { SIGNED_OUT_REASON } from "./config.mjs";
+export {
+  AUTH_CHANNEL_NAME,
+  AUTH_MESSAGE_TYPE,
+  SIGNED_OUT_REASON,
+} from "./config.mjs";

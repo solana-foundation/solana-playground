@@ -1,26 +1,25 @@
 import { FC, useState } from "react";
+import { InfoIcon } from "lucide-react";
 import styled, { css } from "styled-components";
 
-import Button from "../../../../../components/Button";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
-import Modal from "../../../../../components/Modal";
-import Text from "../../../../../components/Text";
-import {
-  Eye,
-  Github,
-  ImportWorkspace,
-  Info,
-} from "../../../../../components/Icons";
+import { ModalFrame, SubmitCancelled, useModalId } from "@/widgets/overlays";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
 import {
   Framework,
   PgCommon,
   PgFramework,
+  ImportCancelledError,
   PgGithub,
   PgRouter,
   PgView,
 } from "../../../../../utils";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 export const ImportGithub = () => {
   // Handle user input
@@ -28,14 +27,22 @@ export const ImportGithub = () => {
   const [error, setError] = useState("");
 
   return (
-    <Modal
+    <ModalFrame
+      name="import-github"
       title
       buttonProps={{
         text: "Import",
-        onSubmit: () => PgCommon.transition(PgGithub.import(url)),
+        onSubmit: async () => {
+          try {
+            await PgCommon.transition(PgGithub.import(url));
+          } catch (e) {
+            // Closing the program choice is the user changing their mind,
+            // not a failure: the import dialog stays, quietly
+            if (e instanceof ImportCancelledError) throw new SubmitCancelled();
+            throw e;
+          }
+        },
         disabled: !!error,
-        loading: { text: "Importing..." },
-        rightIcon: <ImportWorkspace />,
       }}
     >
       <Wrapper>
@@ -65,19 +72,22 @@ export const ImportGithub = () => {
           </ExamplesWrapper>
         </ExamplesSectionWrapper>
 
-        <Text icon={<Info color="info" />}>
-          <p>
-            Program repositories can be viewed in playground by combining the
-            playground URL with their GitHub URL. For example, from{" "}
-            <Link href={GITHUB_PROGRAM_URL}>this repository</Link>:
-          </p>
+        <Callout variant="info">
+          <InfoIcon />
+          <CalloutDescription className="[&_p+p]:mt-4">
+            <p>
+              Program repositories can be viewed in playground by combining the
+              playground URL with their GitHub URL. For example, from{" "}
+              <Link href={GITHUB_PROGRAM_URL}>this repository</Link>:
+            </p>
 
-          <p style={{ wordBreak: "break-all" }}>
-            <Link href={VIEW_URL}>{VIEW_URL}</Link>
-          </p>
-        </Text>
+            <p style={{ wordBreak: "break-all" }}>
+              <Link href={VIEW_URL}>{VIEW_URL}</Link>
+            </p>
+          </CalloutDescription>
+        </Callout>
       </Wrapper>
-    </Modal>
+    </ModalFrame>
   );
 };
 
@@ -122,42 +132,63 @@ interface ExampleProps {
   framework: Framework;
 }
 
-const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => (
-  <ExampleWrapper>
-    <FrameworkWrapper>
-      <FrameworkImage src={framework.icon} $circle={framework.circleImage} />
-      <FrameworkName>
-        {framework.name} - {framework.githubExample.name}
-      </FrameworkName>
-    </FrameworkWrapper>
+const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
+  const id = useModalId();
+  return (
+    <ExampleWrapper>
+      <FrameworkWrapper>
+        <FrameworkImage src={framework.icon} $circle={framework.circleImage} />
+        <FrameworkName>
+          {framework.name} - {framework.githubExample.name}
+        </FrameworkName>
+      </FrameworkWrapper>
 
-    <ExampleButtonsWrapper>
-      <Button
-        onClick={async () => {
-          await PgGithub.import(framework.githubExample.url);
-          PgView.closeModal();
-        }}
-        rightIcon={<ImportWorkspace />}
-      >
-        Import
-      </Button>
+      <ExampleButtonsWrapper>
+        <AsyncButton
+          type="button"
+          variant="outline"
+          onClick={async () => {
+            try {
+              await PgGithub.import(framework.githubExample.url);
+            } catch (e) {
+              // Closing the program selection is a choice, not a failure
+              if (e instanceof ImportCancelledError) return;
+              throw e;
+            }
+            PgView.closeModal(null, id);
+          }}
+          onError={reportButtonFailure("import the program")}
+        >
+          Import
+          <ImportWorkspace data-icon="inline-end" />
+        </AsyncButton>
 
-      <Button
-        onClick={() => {
-          PgRouter.navigate("/" + framework.githubExample.url);
-          PgView.closeModal();
-        }}
-        rightIcon={<Eye />}
-      >
-        Open
-      </Button>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => {
+            PgRouter.navigate("/" + framework.githubExample.url);
+            PgView.closeModal(null, id);
+          }}
+        >
+          Open
+          <Eye data-icon="inline-end" />
+        </Button>
 
-      <Link href={framework.githubExample.url}>
-        <Button rightIcon={<Github />}>Open in GitHub</Button>
-      </Link>
-    </ExampleButtonsWrapper>
-  </ExampleWrapper>
-);
+        <Button asChild variant="outline">
+          <a
+            href={framework.githubExample.url}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Open in GitHub
+            <Github data-icon="inline-end" />
+          </a>
+        </Button>
+      </ExampleButtonsWrapper>
+    </ExampleWrapper>
+  );
+};
 
 const ExampleWrapper = styled.div`
   margin: 1rem 0;
