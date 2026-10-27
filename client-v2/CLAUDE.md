@@ -38,11 +38,11 @@ Two rules on top of the direction:
   they meet in a widget that imports both. One named exception holds until
   `ui-migration` task 1.4 breaks it: `auth` and `persistence` import each
   other (`auth`'s server module uses `persistence`'s pool; `persistence`
-  reads the session), as the `client-v2-layers` spec records. The pair's 8
+  reads the session), as the `client-v2-layers` spec records. The pair's
   existing imports, each marked `TODO(ui-migration 1.4)`, are warnings from
   `layers/recorded-exception`, and only through the other slice's entry; the
   same import from any file outside `RECORDED_EXCEPTION` (`eslint-layers.js`)
-  is an error. `scripts/eslint-layers.test.mjs` pins the 8 imports, so CI
+  is an error. `scripts/eslint-layers.test.mjs` pins those imports, so CI
   fails on a new one, or on one that is gone without the list shrinking.
 - **Entities do not import each other.** FSD's `@x` cross-imports are not
   enabled.

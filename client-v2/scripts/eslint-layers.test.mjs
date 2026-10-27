@@ -16,6 +16,7 @@ const RECORDED_IMPORTS = {
   "src/features/persistence/model/chat-sync.ts": "@/features/auth",
   "src/features/persistence/model/project-sync.ts": "@/features/auth",
   "src/features/persistence/model/sync-base.ts": "@/features/auth",
+  "src/features/persistence/model/sync-claim.ts": "@/features/auth",
   "src/features/persistence/model/sync-mark.ts": "@/features/auth",
   "src/features/persistence/model/project-restore.test.ts": "@/features/auth",
   "src/features/persistence/model/project-sync.test.ts": "@/features/auth",

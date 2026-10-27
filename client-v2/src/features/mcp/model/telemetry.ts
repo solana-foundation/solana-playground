@@ -1,4 +1,4 @@
-import { createTracker } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
 
 /** `gateway` for an entry reached through `/api/mcp`, `user` for any other */
 export type McpServerKind = "gateway" | "user";

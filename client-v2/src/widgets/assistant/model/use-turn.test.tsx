@@ -22,7 +22,7 @@ import { rememberBackend } from "../../../views/sidebar/assistant/model/remember
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
-import { PgChatStorage } from "../../../features/persistence/model/chat-storage";
+import { PgChatStorage } from "@/features/persistence/model/chat-storage";
 import { resetDefaultBackendProbe } from "./default-backend";
 import { useTurn } from "./use-turn";
 import type { ConnectOpener } from "./use-turn";

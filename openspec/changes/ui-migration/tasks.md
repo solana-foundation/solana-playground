@@ -19,7 +19,7 @@ in HOO-1859's PR (Lead's sweep, 2026-10-22).
       [plans/1.3-layer-check.md](plans/1.3-layer-check.md))
 - [ ] 1.4 Break the `auth` <-> `persistence` cycle: `auth`'s server module
       stops importing `persistence`'s pool, or the pool moves to `shared/`;
-      then remove the exception (ticket to file): the 8 imports between the
+      then remove the exception (ticket to file): the imports between the
       pair and their `TODO(ui-migration 1.4)` lines; in
       `client-v2/eslint-layers.js`, `RECORDED_EXCEPTION`, the
       `layers/recorded-exception` rule and the allow policy for those files;

@@ -77,7 +77,7 @@ const PAIR_ENTRIES = [
  */
 const RECORDED_EXCEPTION = [
   "src/features/auth/model/auth.mjs",
-  "src/features/persistence/model/{chat-sync,project-sync,sync-base,sync-mark}.ts",
+  "src/features/persistence/model/{chat-sync,project-sync,sync-base,sync-claim,sync-mark}.ts",
   "src/features/persistence/model/{project-restore,project-sync,two-devices}.test.ts",
 ];
 
