@@ -5,14 +5,17 @@
 #   CLOUD_SQL_USER        the application's IAM database user: the owner of a
 #                         preview database, and the role every migration sets,
 #                         so the application owns every table it creates
-#   CLOUD_SQL_LOGIN_USER  optional; the IAM database user the proxy logs in as.
-#                         Defaults to gcloud's active account, a service
-#                         account's without `.gserviceaccount.com`
+#   CLOUD_SQL_LOGIN_USER  optional; the IAM database user the proxy logs in as,
+#                         on Application Default Credentials, which must belong
+#                         to it (google-github-actions/auth's in CI). Unset, the
+#                         proxy logs in as gcloud's active account on gcloud's
+#                         credentials, a service account without
+#                         `.gserviceaccount.com`
 #   CLOUD_SQL_PROXY_PORT  optional; 5434, clear of the compose Postgres
 #
-# The proxy runs with `--auto-iam-authn` on the caller's Google credentials
-# (gcloud's on a laptop, google-github-actions/auth's in CI). It carries the
-# TLS, so the URLs below say `sslmode=disable` to a listener on 127.0.0.1.
+# The proxy runs with `--auto-iam-authn`, so its credentials and the user name
+# in the URL must be the same identity. It carries the TLS, so the URLs below
+# say `sslmode=disable` to a listener on 127.0.0.1.
 
 : "${CLOUD_SQL_INSTANCE:?CLOUD_SQL_INSTANCE is unset: the instance to reach, <project>:<region>:<instance>}"
 : "${CLOUD_SQL_USER:?CLOUD_SQL_USER is unset: the IAM database user the application connects as}"
@@ -78,8 +81,11 @@ start_proxy() {
     return 1
   }
   command -v psql >/dev/null 2>&1 || { echo "psql required" >&2; return 1; }
+  # The credentials of the identity login_user names
+  local auth=()
+  [ -n "${CLOUD_SQL_LOGIN_USER:-}" ] || auth=(--gcloud-auth)
   PROXY_LOG=$(mktemp)
-  cloud-sql-proxy --auto-iam-authn --port "$PROXY_PORT" "$CLOUD_SQL_INSTANCE" >"$PROXY_LOG" 2>&1 &
+  cloud-sql-proxy --auto-iam-authn ${auth[@]+"${auth[@]}"} --port "$PROXY_PORT" "$CLOUD_SQL_INSTANCE" >"$PROXY_LOG" 2>&1 &
   PROXY_PID=$!
   for _ in $(seq 1 60); do
     grep -q 'ready for new connections' "$PROXY_LOG" && return 0
