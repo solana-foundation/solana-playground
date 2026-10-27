@@ -1,11 +1,11 @@
-# act configuration for client-v2.yml. act reads this file from the directory it is launched
-# in, so run from client-v2 (docs/local-ci-with-act.md says how). Lines that do not start
-# with "-" are ignored by act.
+# act configuration for client-v2.yml, for an x86-64 host. act reads this file from the directory
+# it is launched in, so run from client-v2 (docs/local-ci-with-act.md says how). On an arm64 host
+# add the lines of .arm64.actrc to the command line; they come after this file and win. Lines that
+# do not start with "-" are ignored by act.
 
-# The host's own architecture: the catthehacker images are multi-arch and emulation is several
-# times slower. The build job needs amd64 (wasm-pack 0.10.3 ships no arm64 wasm-opt): on an
-# arm64 host run it with --container-architecture=linux/amd64 on the command line.
---container-architecture=linux/arm64
+# GitHub's runners are amd64, and the build job needs it on every host (wasm-pack 0.10.3 ships no
+# arm64 wasm-opt).
+--container-architecture=linux/amd64
 
 # catthehacker's full Ubuntu 24.04 image: rustup, cargo, node and yarn preinstalled.
 -P ubuntu-latest=catthehacker/ubuntu:full-24.04
