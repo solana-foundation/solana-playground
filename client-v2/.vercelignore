@@ -1,0 +1,4 @@
+# Every file under api/ becomes a function, tests included: deployed,
+# `GET /api/projects.test` would run a case that writes to the database.
+# `yarn test-api` runs them in CI; the deployment never needs them.
+api/**/*.test.mjs
