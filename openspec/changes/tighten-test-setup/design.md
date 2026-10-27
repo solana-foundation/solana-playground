@@ -52,18 +52,22 @@ carries the globals differs. Explicit imports of the test API in every test
 file would avoid a second program but touch every test file for no
 behavioural gain.
 
-### Mocha: drop `@types/mocha`, type the slice `js-runtime.ts` uses
+### Mocha: `paths` points the client's import at a local declaration
 
-`@types/mocha` is removed from `devDependencies`. A local `mocha.d.ts` beside
-`js-runtime.ts` declares `module "mocha"` with only the members it uses
-(`_state`, `suite`, `setup`, `run`). The BDD functions it hands to user code
-are read off `globalThis` after `mocha.setup()`, typed by a local interface,
-instead of as ambient globals. Runtime behaviour is unchanged: the same values
-are read from the same place.
+`@types/mocha` stays installed: `scripts/generate-packages.mjs` copies it into
+the editor's type definitions for user test programs, and `yarn generate`
+fails without it. `tsconfig.json` `paths` maps `"mocha"` to
+`src/utils/js-runtime/mocha.d.ts`, a module that declares only what
+`js-runtime.ts` uses (`_state`, `suite`, `setup`, `run`). `types` is explicit,
+so nothing else loads `@types/mocha` into either program. webpack and vitest
+resolve modules without `paths`, so the runtime import is untouched. The BDD
+functions `js-runtime.ts` hands to user code are read off `globalThis` after
+`mocha.setup()`, typed by a local list of their names, instead of as ambient
+globals: the same values from the same place.
 
-Alternative: keep `@types/mocha` and map `"mocha"` to a local file through
-`paths`. Rejected: it keeps an unused dependency and makes the mapping a
-second source of truth beside `vitest.config.ts`'s aliases.
+Alternative: remove `@types/mocha` and type the import with an ambient
+`declare module`. Tried first and rejected: it breaks `yarn generate`, and an
+ambient declaration loses to a resolvable package anyway.
 
 ### `BroadcastChannel`
 
@@ -74,10 +78,15 @@ real one gets a fake of its own.
 
 ### `PgFs` mock
 
-`mockFsModule`'s object is declared with `satisfies Pick<typeof PgFs, ...>`
-over the real members it provides (the test-only `__files` stays outside the
-`Pick`), with `PgFs` imported as a type from the real module so the check does
-not load it. The drift the check reports is fixed in the mock.
+`mockFsModule`'s object is checked against `Pick<typeof PgFs, ...>` over the
+real members it provides, plus the test-only `__files`, with `PgFs` imported as
+a type so the check does not load it. The keyword `satisfies` would do it, but
+prettier 2.7.1 cannot parse it, so a two-line `satisfies<T>()(value)` helper
+does the same check and keeps the mock's own type. The drift the check reports
+is fixed in the mock, and so is the drift no signature shows: paths resolve
+through `PgExplorer.convertToFullPath` (imported on call, to avoid a cycle),
+and `removeDir` refuses a non-empty directory unless `recursive`, and no
+longer removes a directory's namesake siblings.
 
 ## Risks / Trade-offs
 
