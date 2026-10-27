@@ -178,7 +178,7 @@ describe("the assistant's provider", () => {
         display: "updates",
         block_binding: { prefix_mismatch_behavior: "drop_block" },
       },
-      output_config: { effort: "medium" },
+      output_config: { effort: "high" },
       fallbacks: "default",
       system: [
         { text: "system", cache_control: { type: "ephemeral" } },
