@@ -161,8 +161,13 @@ export default defineConfig({
   // was not enough for the first assertion in a spec: that one waits on the
   // explorer's async init, which on a loaded machine running the suite
   // sequentially takes longer than everything that follows it.
-  expect: { timeout: 20_000 },
-  fullyParallel: false,
+  //   E2E_EXPECT_TIMEOUT=40000 yarn test-e2e
+  expect: { timeout: positiveIntegerFromEnv("E2E_EXPECT_TIMEOUT", 20_000) },
+  // CI's `--shard` splits by test; with a file as one group, the biggest
+  // spec alone is 11 minutes on one worker, whatever the shard count. The
+  // flag is unconditional, so a test that depends on its file's order fails
+  // locally, where it gets fixed, not only on the runner.
+  fullyParallel: true,
   // A committed `.only` runs just the focused tests; the rest never reach the
   // report, so the known-skips check cannot flag them.
   forbidOnly: !!process.env.CI,
@@ -171,14 +176,14 @@ export default defineConfig({
   // laptop and reorders what lands first, so a spec can fail there on timing
   // alone; red on every such run would block unrelated PRs and train people
   // to ignore the job. A pass on the retry is not a pass: Playwright reports
-  // it as "flaky", the trace of the failed attempt is kept, and the job's
-  // count step names it in the annotations as work to do. Locally a flake
+  // it as "flaky", the trace of the failed attempt is kept, and the
+  // `e2e-report` job names it in the annotations as work to do. Locally a flake
   // fails outright, which is where it gets fixed. Quarantine is still an
   // explicit `test.skip`/`test.fixme` with the reason, never a retry.
   retries: process.env.CI ? 1 : 0,
   // `github` turns each failure into a PR annotation (Checks tab, inline
   // when the line is in the diff); `list` is the log a reviewer reads in
-  // the job output; `json` is what the job's skip-count step reads, since
+  // the job output; `json` is what the `e2e-report` job reads, since
   // neither of the other two prints a skip's reason.
   reporter: process.env.CI
     ? [
@@ -187,14 +192,15 @@ export default defineConfig({
         ["json", { outputFile: "test-results/report.json" }],
       ]
     : "line",
-  // Under the job's 40-minute limit, so Playwright itself ends a hung run
-  // and still prints its summary; a GitHub cancel keeps the traces but not
-  // the line saying which test was running.
-  globalTimeout: process.env.CI ? 35 * 60_000 : 0,
+  // Under the `e2e` shard job's `timeout-minutes` (client-v2.yml), so
+  // Playwright itself ends a hung shard and still prints its summary; a
+  // GitHub cancel keeps the traces but not the line saying which test was
+  // running.
+  globalTimeout: process.env.CI ? 15 * 60_000 : 0,
   use: {
     baseURL: origin,
     // Every failed attempt keeps its trace, a flaky test's first attempt
-    // included; CI uploads them as the job's artifact, and locally
+    // included; CI uploads them as the shard job's artifact, and locally
     // `yarn playwright show-trace test-results/<test>/trace.zip` opens one.
     trace: "retain-on-failure",
     // Without this, an action inherits the whole test timeout and reports a

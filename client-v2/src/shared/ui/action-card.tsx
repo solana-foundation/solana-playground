@@ -100,7 +100,11 @@ function ActionCardEyebrow({
   );
 }
 
-function ActionCardTitle({ className, ...props }: React.ComponentProps<"h3">) {
+function ActionCardTitle({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"h3">) {
   return (
     <h3
       data-slot="action-card-title"
@@ -109,7 +113,9 @@ function ActionCardTitle({ className, ...props }: React.ComponentProps<"h3">) {
         className
       )}
       {...props}
-    />
+    >
+      {children}
+    </h3>
   );
 }
 

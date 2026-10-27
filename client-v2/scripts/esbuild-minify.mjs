@@ -22,7 +22,7 @@ const compareVersions = (a, b) => {
 };
 
 /**
- * The production `browserslist` floor as esbuild targets: the lowest version
+ * The `browserslist` floor as esbuild targets: the lowest version
  * per engine. Throws on a family with no esbuild engine: that browser would be
  * missing from the target and could get syntax it cannot parse.
  */
@@ -30,7 +30,6 @@ const esbuildTarget = () => {
   const lowest = new Map();
   const entries = browserslist(undefined, {
     path: path.join(import.meta.dirname, ".."),
-    env: "production",
   });
   for (const entry of entries) {
     const [family, range] = entry.split(" ");
@@ -38,7 +37,7 @@ const esbuildTarget = () => {
     if (!engine) {
       throw new Error(
         `craco: browserslist family "${family}" has no esbuild engine; ` +
-          "map it in ESBUILD_ENGINES or drop it from the production list"
+          "map it in ESBUILD_ENGINES or drop it from the list"
       );
     }
     const version = range.split("-")[0];

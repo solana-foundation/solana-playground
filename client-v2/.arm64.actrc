@@ -1,0 +1,7 @@
+# Overrides for an arm64 host (Apple Silicon), applied on the command line after .actrc:
+#   act $(grep '^-' .arm64.actrc) pull_request -C .. -W .github/workflows/client-v2.yml -j checks
+# Only key=value lines: a value with a space would split on the command line.
+
+# Native arm64: the catthehacker images are multi-arch and emulation is several times slower.
+# Leave this out for the build job, which needs amd64.
+--container-architecture=linux/arm64

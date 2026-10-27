@@ -69,19 +69,21 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
   const ref = React.useRef<HTMLTextAreaElement>(null)
   // The width the height was last measured at; null until it first is
   const measuredAt = React.useRef<number | null>(null)
-  const grow = (el: HTMLTextAreaElement) => {
-    el.style.height = "auto"
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`
-    measuredAt.current = el.clientWidth
-    setEmpty(!el.value.trim())
-  }
+  const grow = React.useCallback(
+    (el: HTMLTextAreaElement) => {
+      el.style.height = "auto"
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`
+      measuredAt.current = el.clientWidth
+      setEmpty(!el.value.trim())
+    },
+    [setEmpty]
+  )
   // A controlled value can change without an input event (a prompt the
   // product puts in, a send that clears it), so emptiness follows it too.
-  // `grow` is left out of the deps: it only uses the stable setEmpty and the ref
   React.useLayoutEffect(() => {
     if (value === undefined || !ref.current) return
     grow(ref.current)
-  }, [value])
+  }, [value, grow])
   // The height follows the width too. An input measured in a narrow column
   // (a panel that mounts it while still folded, then opens) wraps its
   // placeholder per character and would keep that height once the column
@@ -97,7 +99,7 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
     })
     observer.observe(el)
     return () => observer.disconnect()
-  }, [])
+  }, [grow])
   return (
     <textarea
       ref={ref}

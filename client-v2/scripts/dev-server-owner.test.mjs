@@ -68,7 +68,7 @@ const serveInChild = async (t, value) => {
          )}: ${JSON.stringify(encodeURIComponent(value))} });
          r.end();
        });
-       s.listen(0, () => console.log(s.address().port));`,
+       s.listen(0, () => process.stdout.write(String(s.address().port)));`,
     ],
     { stdio: ["ignore", "pipe", "inherit"] }
   );
