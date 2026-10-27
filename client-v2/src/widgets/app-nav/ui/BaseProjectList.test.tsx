@@ -28,20 +28,18 @@ const project = (name: string, pinned = false): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: false,
-  progress: null,
   pinned,
 });
-const lesson = (name: string, progress: string): ProjectEntry => ({
+const lesson = (name: string): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: true,
-  progress,
   pinned: false,
 });
 
 const alpha = project("alpha");
 const beta = project("beta", true);
-const hello = lesson("Hello Anchor", "3 of 4");
+const hello = lesson("Hello Anchor");
 
 type Handlers = Pick<
   BaseProjectListProps,
@@ -61,8 +59,7 @@ const draw = (
     <TooltipProvider>
       <SidebarProvider>
         <BaseProjectList
-          projects={[beta, alpha]}
-          lessons={[hello]}
+          projects={[beta, alpha, hello]}
           current="alpha"
           renaming={overrides.renaming ?? null}
           renameError={overrides.renameError ?? null}
@@ -86,16 +83,16 @@ const openMenu = (name: string) => {
 };
 
 describe("BaseProjectList", () => {
-  it("lists projects and lessons in their groups, the open one marked", () => {
+  it("lists lessons among the projects, with no count, the open one marked", () => {
     draw();
     const projects = screen.getByRole("group", { name: "Projects" });
-    const lessons = screen.getByRole("group", { name: "Lessons" });
+    expect(screen.queryByRole("group", { name: "Lessons" })).toBeNull();
     expect(
       within(projects)
-        .getAllByRole("button", { name: /^(alpha|beta)$/ })
+        .getAllByRole("button", { name: /^(alpha|beta|Hello Anchor)$/ })
         .map((b) => b.textContent)
-    ).toEqual(["beta", "alpha"]);
-    expect(within(lessons).getByText("3 of 4")).toBeTruthy();
+    ).toEqual(["beta", "alpha", "Hello Anchor"]);
+    expect(within(projects).queryByText(/of 4/)).toBeNull();
     expect(
       within(projects)
         .getByRole("button", { name: "alpha" })

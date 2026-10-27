@@ -21,12 +21,12 @@
 
 ## 2. Rail, Skip and the navigation (PR 2, stacked on PR 1)
 
-- [ ] 2.1 `step-rail` in `design-system/`: wrapping titles, muted status,
+- [x] 2.1 `step-rail` in `design-system/`: wrapping titles, muted status,
       16 px grid, the arrow mark; `yarn ds-add step-rail` (HOO-2262)
-- [ ] 2.2 The full-width Skip footer, underlined wide and plain on a
+- [x] 2.2 The full-width Skip footer, underlined wide and plain on a
       phone; the status copy ("aiming at", "locked") landed with 1.2, which
       removed the label it was built from (HOO-2262; after 2.1)
-- [ ] 2.3 A started lesson is a Projects row with the folder glyph and no
+- [x] 2.3 A started lesson is a Projects row with the folder glyph and no
       count; edit ui-migration's "The navigation lists the projects" in
       place; update the e2e specs this breaks (HOO-2262)
 
