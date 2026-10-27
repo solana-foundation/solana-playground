@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Delete a preview's Neon branch. Absence is a pass, as in neon.sh.
+#
+#   drop-preview-db --pr <number> | --branch <name>
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+parse_target "" "$@"
+bash "$NEON_SH" delete "$(neon_branch)"

@@ -26,6 +26,32 @@ const build = ({ ci, target, key, signIn, authSecret, baseUrl }) => ({
 
 const ORIGIN = "https://beta.solpg.io";
 
+/**
+ * A production build on Vercel's machine with sign-in through the `cloud-sql`
+ * provider and no DATABASE_URL; `omit` leaves one variable unset
+ */
+const cloudSqlProduction = ({ provider = "cloud-sql", omit }) => {
+  const env = {
+    CI: "1",
+    VERCEL_ENV: "production",
+    AGENT_API_KEY: "k",
+    DB_PROVIDER: provider,
+    CLOUD_SQL_INSTANCE: "p:r:solpg",
+    CLOUD_SQL_DATABASE: "solpg",
+    CLOUD_SQL_USER: "vercel-production@p.iam",
+    GCP_PROJECT_NUMBER: "1",
+    GCP_WORKLOAD_IDENTITY_POOL_ID: "vercel",
+    GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: "vercel",
+    GCP_SERVICE_ACCOUNT_EMAIL: "vercel-production@p.iam.gserviceaccount.com",
+    GITHUB_CLIENT_ID: "s",
+    GITHUB_CLIENT_SECRET: "s",
+    AUTH_SECRET: "s",
+    AUTH_BASE_URL: ORIGIN,
+  };
+  if (omit) delete env[omit];
+  return env;
+};
+
 for (const [label, env, expected] of [
   ["fails when the key is absent", {}, 1],
   [
@@ -88,6 +114,22 @@ for (const [label, env, expected] of [
       baseUrl: ORIGIN,
     }),
     0,
+  ],
+  // Production on Cloud SQL carries no DATABASE_URL, and must still build
+  [
+    "passes a production key on Cloud SQL without DATABASE_URL",
+    cloudSqlProduction({}),
+    0,
+  ],
+  [
+    "fails a production key on Cloud SQL without one of its variables",
+    cloudSqlProduction({ omit: "CLOUD_SQL_USER" }),
+    1,
+  ],
+  [
+    "fails a production key whose DB_PROVIDER names no provider",
+    cloudSqlProduction({ provider: "cloudsql" }),
+    1,
   ],
   // A preview may run without sign-in; GET /api/agent then reports no backend
   [

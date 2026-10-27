@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+# The URL dbmate migrates through: the proxy on 127.0.0.1, logged in as the
+# caller's IAM database user, with the session role set to CLOUD_SQL_USER so
+# every table a migration creates is owned by the application's user.
+#
+# A preview's database comes from preview-name.mjs. `production` migrates
+# CLOUD_SQL_DATABASE, which `make migrate-production-db` reads from Vercel's
+# Production environment, as an operator: no CI identity holds a role on the
+# production instance.
+#
+#   migration-url (--pr <number> | --branch <name> | production) [-- <command>...]
+#
+# With a command, runs it with DATABASE_URL set and stops the proxy after.
+# Without, prints the URL and leaves the proxy running, naming its pid.
+set -euo pipefail
+. "$(dirname "$0")/../lib.sh"
+
+split_command "$@"
+parse_target production ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}
+
+if [ "$TARGET_KIND" = production ]; then
+  name=${CLOUD_SQL_DATABASE:?CLOUD_SQL_DATABASE is unset: no Production database to migrate}
+else
+  name=$(preview_db_name)
+fi
+. "$DB_SCRIPTS/cloud-sql/proxy.sh"
+
+start_proxy
+trap stop_proxy EXIT
+url=$(proxy_url "$name" "$CLOUD_SQL_USER")
+
+if [ "${#COMMAND[@]}" -eq 0 ]; then
+  trap - EXIT
+  echo "cloud-sql-proxy left running as pid $PROXY_PID; stop it with: kill $PROXY_PID" >&2
+  printf '%s\n' "$url"
+else
+  DATABASE_URL=$url "${COMMAND[@]}"
+fi

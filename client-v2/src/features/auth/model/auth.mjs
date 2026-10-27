@@ -14,7 +14,11 @@ import { betterAuth } from "better-auth";
 import { oAuthProxy } from "better-auth/plugins";
 
 import { authEnv } from "../../../shared/config/server-env.mjs";
-import { getPool, isConfigured } from "../../persistence/server.mjs";
+import {
+  getPool,
+  isConfigured,
+  missingDatabaseEnv,
+} from "../../persistence/server.mjs";
 import { SIGN_IN_ENV } from "../config.mjs";
 
 let instance = null;
@@ -138,9 +142,14 @@ export const isAllowedOrigin = (req) => {
  */
 export const missingConfig = () => {
   const env = authEnv();
-  // `DATABASE_URL` is read by the persistence slice, the rest by `authEnv`
+  // The database's variables depend on `DB_PROVIDER` and belong to the
+  // persistence slice. A provider `isConfigured` accepts reports none: an
+  // unknown `DB_PROVIDER` counts as configured there, so the pool can refuse
+  // it by name rather than sign-in calling it absent.
+  const database = isConfigured()
+    ? []
+    : missingDatabaseEnv((name) => !!process.env[name]);
   const present = {
-    DATABASE_URL: isConfigured(),
     GITHUB_CLIENT_ID: !!env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: !!env.GITHUB_CLIENT_SECRET,
     // Signs the session cookie; a deployment must never fall back to a default
@@ -150,6 +159,7 @@ export const missingConfig = () => {
   // half-set or malformed proxy is reported
   const proxyURL = env.AUTH_OAUTH_PROXY_URL;
   return [
+    ...database,
     ...SIGN_IN_ENV.filter((name) => !present[name]),
     // A proxy URL alone leaves the proxy off, and the preview then sends GitHub
     // its own callback, which GitHub rejects with nothing said here
@@ -162,12 +172,15 @@ export const missingConfig = () => {
 /**
  * The auth instance, created on first use.
  *
- * @returns {ReturnType<typeof betterAuth> | null} the instance, or `null` when
- * the database or the GitHub credentials are missing
+ * Async because the pool is: a provider may need a network round trip before
+ * it has one, and rejects when it cannot build one.
+ *
+ * @returns {Promise<ReturnType<typeof betterAuth> | null>} the instance, or
+ * `null` when the database or the GitHub credentials are missing
  */
-export const getAuth = () => {
+export const getAuth = async () => {
   if (missingConfig().length) return null;
-  const pool = getPool();
+  const pool = await getPool();
 
   if (!instance) {
     const env = authEnv();
@@ -226,7 +239,7 @@ export const readSession = async (req) => {
   try {
     // Inside the `try`: building the instance opens the pool, and a route such
     // as `/api/mcp` must keep serving signed-out callers when that throws
-    const auth = getAuth();
+    const auth = await getAuth();
     if (!auth) return { status: "unconfigured" };
 
     const { fromNodeHeaders } = await import("better-auth/node");

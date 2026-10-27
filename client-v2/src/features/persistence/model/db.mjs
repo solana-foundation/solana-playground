@@ -1,58 +1,85 @@
 /**
  * The one Postgres entry point for every API route.
  *
- * Plain `pg` against a pooled connection string, deliberately: the target
- * instance is client-managed and its flavour is not confirmed, so nothing here
- * may depend on a vendor driver. `max` is small because a serverless platform
- * runs many instances -- the real pooling happens in front of the database,
- * not here.
+ * Plain `pg`, whichever provider builds the pool: every statement is
+ * Postgres, so nothing here or above may depend on a vendor driver.
+ * `DB_PROVIDER` names the provider (`providers/<name>.mjs`); each exports
+ * `isConfigured(env)` and `createPool(env)`, and nothing outside this file
+ * knows which one is behind the pool.
  */
-import pg from "pg";
-
 import { databaseEnv } from "../../../shared/config/server-env.mjs";
+import * as cloudSql from "./providers/cloud-sql.mjs";
+import * as url from "./providers/url.mjs";
 
+const PROVIDERS = { url, "cloud-sql": cloudSql };
+
+/** @type {Promise<import("pg").Pool> | null} */
 let pool = null;
 
-/** Whether a connection string is present at all */
-export const isConfigured = () => !!databaseEnv().DATABASE_URL;
+/**
+ * The provider `DB_PROVIDER` names, or `undefined` for a value that names
+ * none. `Object.hasOwn` so `constructor` and the like are not providers.
+ */
+const provider = () => {
+  const name = databaseEnv().DB_PROVIDER;
+  return Object.hasOwn(PROVIDERS, name) ? PROVIDERS[name] : undefined;
+};
+
+/**
+ * Whether a database is configured at all.
+ *
+ * An unknown `DB_PROVIDER` counts as configured: somebody chose a provider,
+ * and the deployment must report that choice as broken (`getPool` rejects
+ * naming it) rather than as absent, which would read as "sync was never set
+ * up here".
+ */
+export const isConfigured = () => {
+  const chosen = provider();
+  return chosen ? chosen.isConfigured(databaseEnv()) : true;
+};
 
 /** Whether sync should serve traffic. The kill switch is opt-in. */
 export const isEnabled = () => isConfigured() && databaseEnv().SYNC_ENABLED;
 
 /**
+ * Build the pool through the chosen provider. Never falls back to another
+ * provider: a misspelled `DB_PROVIDER` beside a stray `DATABASE_URL` would
+ * otherwise connect somewhere nobody chose.
+ */
+const open = async () => {
+  const env = databaseEnv();
+  const chosen = provider();
+  if (!chosen) {
+    throw new Error(
+      `DB_PROVIDER "${env.DB_PROVIDER}" names no database provider; ` +
+        `expected one of: ${Object.keys(PROVIDERS).join(", ")}`
+    );
+  }
+  const created = await chosen.createPool(env);
+  // Without a listener, an error on an idle client is an unhandled 'error'
+  // event, which takes the whole function down rather than the one query
+  created.on("error", () => {});
+  return created;
+};
+
+/**
  * The shared pool, created on first use.
  *
- * @returns {import("pg").Pool | null} the pool, or `null` when no connection
- * string is configured
+ * Async because a provider may need a network round trip before a pool can
+ * exist (the Cloud SQL connector fetches a certificate and the instance's
+ * address). The promise is memoised so a warm instance pays that once; a
+ * rejected one is forgotten, so a transient failure is retried by the next
+ * request rather than kept for the life of the instance.
+ *
+ * @returns {Promise<import("pg").Pool | null>} the pool, or `null` when no
+ * database is configured
  */
-export const getPool = () => {
+export const getPool = async () => {
   if (!isConfigured()) return null;
-  if (!pool) {
-    pool = new pg.Pool({
-      connectionString: databaseEnv().DATABASE_URL,
-      // Encrypted and verified unless the connection string says otherwise.
-      //
-      // node-postgres connects in the clear when the URL mentions no
-      // `sslmode`, where dbmate refuses -- so the same URL that a migration
-      // rejects would have been used by the app to send credentials in
-      // plaintext, silently. Production is the case that matters, and a URL
-      // there will be pasted from a provider's dashboard with no thought about
-      // this flag, so the default has to be the safe one.
-      //
-      // A `sslmode` in the URL overrides this, which is how the local and CI
-      // containers -- which serve no TLS at all -- opt out with
-      // `?sslmode=disable`. `rejectUnauthorized` rather than bare `true`
-      // because unverified TLS is the footgun this is meant to close: a
-      // provider needing a looser mode says so in its URL, where it is visible.
-      ssl: { rejectUnauthorized: true },
-      max: 3,
-      idleTimeoutMillis: 10_000,
-      connectionTimeoutMillis: 5_000,
-    });
-    // Without a listener, an error on an idle client is an unhandled 'error'
-    // event, which takes the whole function down rather than the one query
-    pool.on("error", () => {});
-  }
+  pool ??= open().catch((e) => {
+    pool = null;
+    throw e;
+  });
   return pool;
 };
 
@@ -97,8 +124,8 @@ export const run = async (client, text, params) => {
  * @param {unknown[]} [params] bound values
  */
 export const query = async (text, params) => {
-  const p = getPool();
-  if (!p) throw new Error("DATABASE_URL is not configured");
+  const p = await getPool();
+  if (!p) throw new Error("the database is not configured");
   return run(p, text, params);
 };
 
@@ -115,8 +142,8 @@ export const query = async (text, params) => {
  * @returns {Promise<T>}
  */
 export const transaction = async (fn) => {
-  const p = getPool();
-  if (!p) throw new Error("DATABASE_URL is not configured");
+  const p = await getPool();
+  if (!p) throw new Error("the database is not configured");
 
   const client = await p.connect();
   // Set when the rollback itself fails. The connection is then in a state

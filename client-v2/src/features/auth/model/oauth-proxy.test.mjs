@@ -147,7 +147,7 @@ describe("oauthProxyPlugins", () => {
     async () => {
       asPreview();
       const { getAuth } = await load();
-      const res = await signIn(getAuth(), PREVIEW);
+      const res = await signIn(await getAuth(), PREVIEW);
       assert.equal(res.status, 200);
 
       const github = new URL((await res.json()).url);
@@ -165,7 +165,7 @@ describe("oauthProxyPlugins", () => {
     async () => {
       asPreview();
       const { getAuth } = await load();
-      const res = await complete(getAuth(), PREVIEW);
+      const res = await complete(await getAuth(), PREVIEW);
       assert.notEqual(res.status, 404);
     }
   );
@@ -176,7 +176,7 @@ describe("oauthProxyPlugins", () => {
     async () => {
       asHost();
       const { getAuth } = await load();
-      const res = await complete(getAuth(), HOST);
+      const res = await complete(await getAuth(), HOST);
       assert.equal(res.status, 404);
     }
   );

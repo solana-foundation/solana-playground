@@ -51,7 +51,7 @@ export const restorePath = (req) => {
  */
 async function handler(req, res) {
   warnAboutMissingObservabilityIds();
-  const auth = getAuth();
+  const auth = await getAuth();
   if (!auth) {
     // `missing` names the variables this deployment lacks. Every deployment
     // carries its own environment and none of it is visible from the outside,
