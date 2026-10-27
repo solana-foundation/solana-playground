@@ -174,7 +174,10 @@ const sheetOverlay = () =>
 
 // Only what the shell reads: the font a portaled Sheet is set in
 const theme = {
-  font: { code: { family: "monospace", size: { medium: "13px" } } },
+  font: {
+    code: { family: "monospace", size: { medium: "13px" } },
+    other: { family: "sans-serif" },
+  },
 } as unknown as DefaultTheme;
 
 /** The shell's tree, for `render` and for a `rerender` that adds or drops Home */
@@ -213,16 +216,7 @@ const shellTree = (
             Files column control
           </button>
         )}
-        stage={({ openFiles }) =>
-          work.stage ?? (
-            <main>
-              stage
-              <button type="button" onClick={openFiles}>
-                Show the steps
-              </button>
-            </main>
-          )
-        }
+        stage={() => work.stage ?? <main>stage</main>}
         console={({ open, toggle }) => (
           <button
             type="button"
@@ -625,14 +619,15 @@ it("should open the assistant Sheet on Ctrl+R after the window narrows", () => {
   expect(toggled()).toEqual([{ panel: "assistant", open: true, via: "key" }]);
 });
 
-it("should set the assistant Sheet in the theme's font and draw no stock close button over its header", () => {
+it("should set the assistant Sheet in the theme's text font, not its code font, and draw no stock close button over its header", () => {
   resizeTo(800);
   shell();
   fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
   const sheet = document.querySelector<HTMLElement>(
     '[data-slot="sheet-content"]'
   )!;
-  expect(sheet.style.fontFamily).toBe("monospace");
+  // The code face leaked into every button of a Sheet, which inherit it
+  expect(sheet.style.fontFamily).toBe("sans-serif");
   expect(sheet.querySelector('[data-slot="sheet-close"]')).toBeNull();
 });
 
@@ -1095,16 +1090,6 @@ describe("on a phone", () => {
       { panel: "files", open: true, via: "button" },
       { panel: "files", open: false, via: "key" },
     ]);
-  });
-
-  it("opens the Files sheet from the stage, reported as a button", () => {
-    phoneShell();
-    tap(screen.getByRole("button", { name: "Show the steps" }));
-    expect(
-      document.querySelector('[data-slot="sheet-content"]')
-    ).not.toBeNull();
-    expect(screen.getByRole("dialog", { name: "Files" })).toBeTruthy();
-    expect(toggled()).toEqual([{ panel: "files", open: true, via: "button" }]);
   });
 
   it("reports a tap on the Files sheet's overlay as a button", async () => {

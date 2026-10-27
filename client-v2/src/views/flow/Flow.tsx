@@ -5,18 +5,12 @@ import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
-import { keepTab } from "./left/kept-column";
+import LessonBar from "./lessons/LessonBar";
 import ObjectiveBand from "./lessons/ObjectiveBand";
 import Reader from "./lessons/Reader";
 // The barrel registers every lesson path as a side effect, so importing
 // it here is also what populates the registry for the whole app.
-import {
-  describeStep,
-  entryReading,
-  graderClass,
-  INITIAL_LESSON_STATE,
-  PgLesson,
-} from "./lessons";
+import { describeStep, INITIAL_LESSON_STATE, PgLesson } from "./lessons";
 import type { LessonState } from "./lessons";
 import StageRouter from "./stages/StageRouter";
 import { PgDeployHistory } from "./state/deploy-history";
@@ -38,7 +32,7 @@ import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { createLogger } from "@/shared/lib/logger";
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
-import { PgExplorer, PgView } from "@/utils";
+import { PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
@@ -242,20 +236,6 @@ const FlowFrame = () => {
     setReading(false);
   }, [described?.step.id]);
 
-  // Entering the lesson lands on the page -- once (D34). Declared after
-  // the effect above so that, on the commit where both fire (a load
-  // moves the cursor too), open wins. The record learns `opened` from
-  // the Reader once the page content actually loads, which moves the
-  // record's tail off `enter` -- so the next state returns null here and
-  // the effect is inert; closing the sheet by hand does not reopen it,
-  // while a page that failed to load gets another chance on re-entry.
-  const entryStep = entryReading(lesson);
-  useEffect(() => {
-    if (entryStep) read();
-    // `read` is recreated every render; the step id is the real trigger
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entryStep?.id]);
-
   return (
     <Wrapper>
       {/* One ground for the whole window, as the prototype lays it, so the
@@ -361,29 +341,16 @@ const FlowFrame = () => {
             <LeftPanel
               collapsed={collapsed}
               onHide={phone ? undefined : toggle}
+              startOn={phone ? "files" : undefined}
             />
           )}
-          stage={({ openFiles }) => (
+          stage={() => (
             <Center>
               <ObjectiveBand
                 state={lesson}
-                flow={state}
                 onRead={read}
                 onOpenGallery={openGallery}
-                compact={
-                  phone
-                    ? {
-                        // Below `LAYOUT_BREAKPOINTS.phone`, where the band is
-                        // compact, the Files sheet mounts the column fresh, and
-                        // it reads its tab from the per-project memory
-                        // (`kept-column.ts`)
-                        onOpenSteps: () => {
-                          keepTab(PgExplorer.currentWorkspaceId, "steps");
-                          openFiles();
-                        },
-                      }
-                    : undefined
-                }
+                phone={phone}
               />
               <Stage>
                 <StageRouter stage={state.stage} />
@@ -391,21 +358,20 @@ const FlowFrame = () => {
                   <Reader
                     key={described.step.id}
                     step={described.step}
-                    position={described.number}
-                    criterion={described.verifiedBy}
-                    offersAttest={
-                      described.offersPrimary &&
-                      graderClass(described.step.verify) === "attestation"
-                    }
                     onLoaded={() => PgLesson.opened(described.step.id)}
                     onClose={() => setReading(false)}
-                    onAttest={() => {
-                      PgLesson.attest();
-                      setReading(false);
-                    }}
                   />
                 )}
               </Stage>
+              {/* On a phone the step's controls sit at the foot of the code,
+                  under the thumb; the band above folds to the ask */}
+              {phone && (
+                <LessonBar
+                  state={lesson}
+                  onRead={read}
+                  onOpenGallery={openGallery}
+                />
+              )}
             </Center>
           )}
           console={({ open, toggle }) => (

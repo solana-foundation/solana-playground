@@ -14,27 +14,10 @@ export type ReaderBody =
   | { kind: "failed" }
   | { kind: "none" };
 
-export type ReaderFooterKind = "attest" | "back";
-
-/** The footer's one way on: attesting is the primary, going back is not */
-const FOOTER: Record<
-  ReaderFooterKind,
-  { label: string; variant: "default" | "outline" }
-> = {
-  attest: { label: "Mark as read", variant: "default" },
-  back: { label: "Back to the code", variant: "outline" },
-};
-
 export interface BaseReaderProps {
   /** The step objective; also the dialog's accessible name */
   title: string;
-  /** "Step 2 of 4" */
-  position: string;
-  /** The band's criterion line, so the page and the band agree */
-  criterion: string;
   body: ReaderBody;
-  /** The one way on: "Mark as read" (`attest`) or "Back to the code" */
-  footer: { kind: ReaderFooterKind; onClick: () => void };
   onClose: () => void;
 }
 
@@ -46,14 +29,7 @@ export interface BaseReaderProps {
  * focus on close only to a trigger, and this dialog has none, so
  * `onCloseAutoFocus` gives focus back to the opener by hand.
  */
-export const BaseReader: FC<BaseReaderProps> = ({
-  title,
-  position,
-  criterion,
-  body,
-  footer,
-  onClose,
-}) => {
+export const BaseReader: FC<BaseReaderProps> = ({ title, body, onClose }) => {
   const opener = useRef<Element | null>(null);
   return (
     <Dialog open modal={false} onOpenChange={(open) => !open && onClose()}>
@@ -71,33 +47,27 @@ export const BaseReader: FC<BaseReaderProps> = ({
         }}
         className="absolute inset-0 z-[2] flex flex-col bg-card text-card-foreground outline-none"
       >
+        {/* The objective alone, as the prototype's page heads itself: the
+            band above already says which step this is */}
         <div className="flex items-center justify-between gap-4 border-b px-4 py-3">
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <span className="text-xs tracking-wider text-muted-foreground uppercase">
-              {position}
-            </span>
-            <DialogTitle>{title}</DialogTitle>
-          </div>
+          <DialogTitle className="min-w-0 font-sans text-sm font-medium">
+            {title}
+          </DialogTitle>
           <DialogPrimitive.Close asChild>
-            <Button variant="ghost" size="icon-sm" aria-label="Close the page">
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Close the page"
+              className="rounded-xl text-muted-foreground [&_svg:not([class*='size-'])]:size-5"
+            >
               <XIcon />
             </Button>
           </DialogPrimitive.Close>
         </div>
+        {/* No footer: Esc or the close goes back to the code, and the band
+            above carries the step's way on */}
         <div className="flex-1 overflow-y-auto p-6">
           <ReaderBodyView body={body} />
-        </div>
-        {/* Always visible under the page: what proves this step, and the one
-          way on. Esc and the close button still work. */}
-        <div className="flex items-center justify-between gap-4 border-t px-4 py-3">
-          <span className="text-xs text-muted-foreground">{criterion}</span>
-          <Button
-            type="button"
-            variant={FOOTER[footer.kind].variant}
-            onClick={footer.onClick}
-          >
-            {FOOTER[footer.kind].label}
-          </Button>
         </div>
       </DialogPrimitive.Content>
     </Dialog>

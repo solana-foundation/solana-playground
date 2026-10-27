@@ -871,18 +871,19 @@ Kept: `flow-stage-panel-*`, `flow-stage-tab-*` and the texts the e2e reads.
 ## Lessons (5.19)
 
 Decided with Slava on 2026-10-16 (HOO-2076). Only placement and look change:
-master-2.0's lesson logic (the ledger, the entry, verify, readiness) stays as
-it is.
+master-2.0's lesson logic (the ledger, verify) stays as it is; the entry's
+page and the readiness line went with lesson-prototype-polish.
 
 **Objective band** (`objective-band`, installed). Compact, over the editor in
-the stage. Row one: "Step n of m", the gradient meter, the objective. Row two:
-back and on (`ObjectiveNav`, "Previous step" and "Next step"), "Read the page"
-(or "Read step n first" with the unread dot), "I'm stuck" as the band's one
-`BrandButton` (the prototype's choice, Slava 2026-10-16), and the proving
-action ("Build to prove this", "Deploy to prove this", "Mark as read") as an
-outline `Button`. The readiness line and its remedies sit under the band as a
-`Callout`, only while something blocks the proving action. At the path's end
-the band says "done" and offers Browse gallery.
+the stage. Its look follows the original prototype (change
+lesson-prototype-polish, HOO-2262): one row of "Step n of m", the gradient
+meter, the objective and a check that shows how the step is checked, then
+back and on (`ObjectiveNav`, "Previous step" and "Next step"), "Read the
+page" and the step's one action: "Continue" on a step proved by reading,
+else "I'm stuck" (the prototype's choice, Slava 2026-10-16). There is no
+proving action and no readiness line (Slava, 2026-10-26); the stepper's dot
+marks the stage that proves the step. At the path's end the band says
+"done" and offers Browse gallery.
 
 **Step rail** (`step-rail`, installed), in the files column behind a Steps |
 Files `Segmented` that keeps the `flow-left-tab-*` ids. Marks map: proved and
@@ -896,16 +897,15 @@ frontier only.
 
 **Reader.** The design system's `Dialog` with `modal={false}`, placed inside
 the stage under the band, so it covers the editor and not the band. Esc closes
-it and focus goes back to what opened it. It keeps "Close the page", the
-criterion and "Mark as read" or "Back to the code" in its footer, and the
-once-on-entry opening (D34).
+it and focus goes back to what opened it. Its head is the objective and
+"Close the page"; it has no footer and opens only from "Read the page"
+(lesson-prototype-polish).
 
-**Phone** (below `LAYOUT_BREAKPOINTS.phone`). The band folds to one row ("n/m",
-the objective, a chevron); the chevron opens the Files sheet on Steps. The
-Steps | Files choice is kept per project with the column's scroll
-(`kept-column.ts`, 5.26), and the chevron writes Steps into that memory
-before opening the Files sheet, which mounts the column fresh. Until the designer's LessonBar exists (HOO-2057), the
-band's actions stay in a row under it; they move to the foot when it lands.
+**Phone** (below `LAYOUT_BREAKPOINTS.phone`). The band folds to one row ("n/m"
+over the meter, the objective, a caret) that opens in place to show how the
+step is checked; the band's actions sit in `LessonBar` at the foot of the
+code (lesson-prototype-polish). The files row opens the Files sheet on Files,
+with Steps one tap away.
 
 **Structure.** As in 5.11: `BaseObjectiveBand`, `BaseStepRail` and
 `BaseReader` sit beside the connected ones in `views/flow/lessons/` and draw

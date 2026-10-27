@@ -29,6 +29,12 @@ interface LeftPanelProps {
    * phone's Files sheet has its own close).
    */
   onHide?: () => void;
+  /**
+   * The tab to open on, over the kept one. The phone's Files sheet opens
+   * from the files row, so in a lesson it lands on Files, with Steps one
+   * tap away, as the prototype's sheet does.
+   */
+  startOn?: Tab;
 }
 
 /** The head's way to hide the column */
@@ -55,6 +61,7 @@ const HideButton = ({ onHide }: { onHide: () => void }) => (
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
   onHide,
+  startOn,
 }) => {
   // From the first commit, not from the subscription's first call: a commit
   // without the lesson draws the tree, and the scroll put back below would
@@ -63,7 +70,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
 
   const [tab, setTab] = useState<Tab>(
-    () => keptColumn(PgExplorer.currentWorkspaceId)?.tab ?? "steps"
+    () => startOn ?? keptColumn(PgExplorer.currentWorkspaceId)?.tab ?? "steps"
   );
 
   // Hidden, the column unmounts (design.md, "Frame chrome (5.25)"), so its
@@ -71,6 +78,9 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   // tracked as they change, for a body already out of the document, where
   // its scroll reads 0.
   const kept = useRef({ tab, scrollTop: 0 });
+  // A column told where to open (the phone's sheet) keeps nothing: it is
+  // mounted fresh each time, and its tab must not become the wide column's
+  const told = useRef(startOn !== undefined);
   useLayoutEffect(() => {
     kept.current.tab = tab;
   }, [tab]);
@@ -81,6 +91,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   useLayoutEffect(() => {
     // The one object `onScroll` and the tab effect write to
     const memory = kept.current;
+    const keeps = !told.current;
     const body = bodyRef.current;
     const restored = keptColumn(PgExplorer.currentWorkspaceId);
     if (body && restored) {
@@ -91,7 +102,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
       // Read now, not at mount: a lesson mounts the column before the
       // explorer has opened its project
       const workspace = PgExplorer.currentWorkspaceId;
-      if (!workspace) return;
+      if (!workspace || !keeps) return;
       // Read from the body while it is still in the document: `scroll`
       // arrives a frame late, so ⌘E right after a scroll would otherwise
       // keep the scroll before it

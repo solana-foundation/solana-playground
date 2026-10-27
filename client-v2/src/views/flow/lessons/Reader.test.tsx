@@ -37,12 +37,8 @@ describe("Reader", () => {
     render(
       <Reader
         step={step(() => Promise.resolve("Hello from the page"))}
-        position="Step 1 of 4"
-        criterion="The build passes."
-        offersAttest={false}
         onLoaded={onLoaded}
         onClose={() => {}}
-        onAttest={() => {}}
       />
     );
     await waitFor(() =>
@@ -59,12 +55,8 @@ describe("Reader", () => {
     render(
       <Reader
         step={step(() => Promise.resolve("Hello from the page"))}
-        position="Step 1 of 4"
-        criterion="The build passes."
-        offersAttest={false}
         onLoaded={onLoaded}
         onClose={() => {}}
-        onAttest={() => {}}
       />
     );
     await waitFor(() => expect(error).toHaveBeenCalledTimes(1));
@@ -79,12 +71,8 @@ describe("Reader", () => {
     render(
       <Reader
         step={step(() => Promise.reject(new Error("gone")))}
-        position="Step 1 of 4"
-        criterion="The build passes."
-        offersAttest={false}
         onLoaded={onLoaded}
         onClose={() => {}}
-        onAttest={() => {}}
       />
     );
     await waitFor(() =>

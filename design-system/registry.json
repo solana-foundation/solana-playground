@@ -854,8 +854,9 @@
       "name": "objective-band",
       "type": "registry:ui",
       "title": "Objective band",
-      "description": "A lesson's frosted band: a gradient meter, the objective, back and on, and actions.",
+      "description": "A lesson's frosted band: a gradient meter, the objective, back and on, and actions; on a phone a fold and a foot bar.",
       "registryDependencies": [
+        "@playground/brand-button",
         "@playground/playground-tokens",
         "@playground/utils"
       ],
