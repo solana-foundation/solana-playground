@@ -116,8 +116,12 @@ how the functions reach Postgres.
   entry on the production database.
 - User-visible: the cutover starts production on an empty `solpg`, so the
   team's test accounts and their synced rows on the production Neon project
-  stay behind; a test account signs in again, and its browser's local
-  projects upload to the new, empty account. A preview labelled `preview:cloud-sql` starts with the rows of `solpg_preview_base`,
+  stay behind. A test account that signs in again gets a new, empty account
+  with a new user id. Its browser uploads only local projects it never
+  synced. A project it synced before keeps a sync mark under the old user id,
+  so `pushNeverSynced` treats it as another account's and leaves it in the
+  browser only. To carry one over, export it (Export workspace) and import it
+  under a new name, which makes a new project with a new id. A preview labelled `preview:cloud-sql` starts with the rows of `solpg_preview_base`,
   which are preview data, as a Neon preview starts with the preview project's
   `main`. Otherwise nothing changes for a user.
 - Out of scope: a query or repository abstraction over SQL (both providers are
