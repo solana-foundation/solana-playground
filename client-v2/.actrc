@@ -1,5 +1,5 @@
 # act configuration for client-v2.yml. act reads this file from the directory it is launched
-# in, so run from client-v2 (.github/local-ci-with-act.md says how). Lines that do not start
+# in, so run from client-v2 (docs/local-ci-with-act.md says how). Lines that do not start
 # with "-" are ignored by act.
 
 # The host's own architecture: the catthehacker images are multi-arch and emulation is several

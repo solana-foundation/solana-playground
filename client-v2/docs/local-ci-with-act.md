@@ -3,7 +3,7 @@
 See the [`act` docs](https://github.com/nektos/act) for installation and usage.
 This covers only the project-specific setup.
 
-The configuration is [`client-v2/.actrc`](../client-v2/.actrc): the runner
+The configuration is [`client-v2/.actrc`](../.actrc): the runner
 image, host networking, the tool-cache directory, and the artifact server
 the `e2e-report` job needs. act reads `.actrc` from the directory it is
 launched in, so every command below runs from `client-v2`, with `-C ..`
