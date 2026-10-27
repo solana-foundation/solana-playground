@@ -23,3 +23,8 @@
 # upload-artifact and download-artifact need a local artifact server (the e2e-report job).
 # It listens on 34567, so one act run at a time.
 --artifact-server-path $HOME/.cache/act/artifacts
+
+# The job runs as the image's `runner` user and `db-dump.sh` runs pg_dump through `docker run`:
+# the mounted daemon socket is root-owned with group read-write, so the root group is added.
+# A --container-options on the command line replaces this one; repeat the --group-add there.
+--container-options --group-add 0
