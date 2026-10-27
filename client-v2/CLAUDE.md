@@ -372,9 +372,11 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
 - **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**
   Rebase onto the base branch first: CI measures the merge commit. Then run
-  `yarn build-fast` with `REACT_APP_SENTRY_DSN` and
-  `REACT_APP_GA_MEASUREMENT_ID` unset (a tracker adds code CI's build lacks),
-  then `yarn bundle:info`, and commit the file; `yarn test-build` fails while
+  `REACT_APP_GA_MEASUREMENT_ID= yarn build-fast`: CI's build has no GA id, and
+  the empty value keeps CRA from taking one from `client-v2/.env`, since
+  dotenv does not override a variable already set. Sentry needs no override:
+  `sentryEnabled` (`scripts/sentry-gate.mjs`) keeps it out of a build without
+  `VERCEL_ENV`. Then run `yarn bundle:info` and commit the file; `yarn test-build` fails while
   the snapshot differs from the build. A fresh cell within
   `DISPLAY_STEP_TOLERANCE_BYTES` of the committed cell keeps the committed value,
   so a rebuild of the same commit leaves the file as it is. CI posts the

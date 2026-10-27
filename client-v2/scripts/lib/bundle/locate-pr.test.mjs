@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
 
-import { locatePullRequest } from "./locate-pr.mjs";
+import { ARTIFACT, locatePullRequest } from "./locate-pr.mjs";
 
 const REPOSITORY = "solana-foundation/solana-playground";
 
@@ -26,7 +26,7 @@ const pullRequest = ({
 });
 
 const locate = async ({
-  artifacts = [{ name: "bundle-info-comment" }],
+  artifacts = [{ name: ARTIFACT }],
   prs = [pullRequest()],
 } = {}) => {
   const outputs = {};
@@ -70,8 +70,27 @@ test("a run without the report artifact names the pull request and warns", async
     artifacts: [{ name: "other" }],
   });
   assert.deepEqual(outputs, { pr: "77", has_report: "false" });
-  assert.match(warnings[0], /No bundle-info-comment artifact on run 42/);
+  assert.ok(warnings[0].startsWith(`No ${ARTIFACT} artifact on run 42`));
 });
+
+// [workflow, the `uses:` of the step that names the artifact]; a rename in one file alone leaves every pull request without a report
+const ARTIFACT_STEPS = [
+  ["reusable-client-v2-build.yml", "actions/upload-artifact"],
+  ["bundle-info-comment.yml", "actions/download-artifact"],
+];
+
+for (const [workflow, action] of ARTIFACT_STEPS) {
+  test(`${workflow} names the artifact ARTIFACT in its ${action} step`, async () => {
+    const source = await fs.readFile(
+      new URL(`../../../../.github/workflows/${workflow}`, import.meta.url),
+      "utf8"
+    );
+    const step = source.match(
+      new RegExp(`uses: ${action}@.*\\n\\s+with:\\n\\s+name: (\\S+)`)
+    );
+    assert.equal(step?.[1], ARTIFACT);
+  });
+}
 
 const SKIPPED = {};
 

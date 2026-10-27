@@ -1,10 +1,15 @@
 import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
+import zlib from "node:zlib";
 
 import {
   chunkRows,
   formatBytes,
+  measure,
   parseRows,
+  readSnapshot,
   renderSnapshot,
   stabiliseCell,
 } from "./snapshot.mjs";
@@ -106,6 +111,48 @@ test("renderSnapshot reproduces the committed file when every cell moved within 
     main: 1.487 * MB,
   });
   assert.equal(renderSnapshot(fresh, COMMITTED), COMMITTED);
+});
+
+const FIXTURES = path.join(import.meta.dirname, "fixtures");
+
+/** Raw and gzipped bytes of a file under `build`, gzipped as `measure` does */
+const fileSize = async (build, file) => {
+  const bytes = await fs.readFile(path.join(FIXTURES, build, file));
+  return { raw: bytes.length, gzip: zlib.gzipSync(bytes).length };
+};
+
+// `service-worker.js` sits at the root without the `.worker.js` suffix, so it is not a Monaco worker
+test("measure counts the chunks and the root workers in *.js, and nothing else at the root", async () => {
+  const main = await fileSize("measured-build", "static/js/main.c7d1e66b.js");
+  const other = await fileSize(
+    "measured-build",
+    "static/js/9859.0f4e9123.chunk.js"
+  );
+  const worker = await fileSize("measured-build", "ts.worker.js");
+  const css = await fileSize("measured-build", "static/css/main.5e8a1b2c.css");
+  assert.deepEqual(await measure(path.join(FIXTURES, "measured-build")), {
+    js: {
+      count: 3,
+      raw: main.raw + other.raw + worker.raw,
+      gzip: main.gzip + other.gzip + worker.gzip,
+    },
+    css: { count: 1, raw: css.raw, gzip: css.gzip },
+    chunks: [
+      { id: "main", count: 1, gzip: main.gzip },
+      { id: "worker:ts", count: 1, gzip: worker.gzip },
+      { id: "other chunks", count: 1, gzip: other.gzip },
+    ],
+  });
+});
+
+test("measure throws on a build whose static/js holds no .js file", async () => {
+  await assert.rejects(measure(path.join(FIXTURES, "no-chunks")), {
+    message: /^no \.js files under /,
+  });
+});
+
+test("readSnapshot of a missing file is null", async () => {
+  assert.equal(await readSnapshot(path.join(FIXTURES, "BUNDLE.md")), null);
 });
 
 test("parseRows skips a backticked row outside a table", () => {

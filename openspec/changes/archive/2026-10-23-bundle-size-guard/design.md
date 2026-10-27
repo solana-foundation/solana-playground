@@ -57,10 +57,11 @@ module list names a test helper: a helper has no test title for
 - Outside `build/`: the list (every module path) would otherwise be served by
   every deployment, while `upload-sourcemaps.mjs` deletes the `.map` files so
   module paths do not ship.
-- The plugin runs on every production build, Vercel's included, and removes
-  the list when the build starts. A write or stats-shape error is logged, not
-  thrown, so it cannot fail a deployment; the build test then fails on the
-  missing file. It also fails on a list older than `build/index.html`, which a
+- The plugin runs on every production build except Vercel's (`VERCEL` set),
+  and removes the list when the build starts. A deployment runs no build test,
+  so on Vercel the stats object would only add memory under the build
+  machine's limit. A write or stats-shape error is logged, not thrown, so it
+  cannot fail the build; the build test then fails on the missing file. It also fails on a list older than `build/index.html`, which a
   build without the plugin leaves.
 - `slimModules` throws on a module without a string name, which
   `offendingModules` would otherwise pass as clean, and on a dropped group that
@@ -108,8 +109,10 @@ first comment appears on the first pull request after this change merges.
   rebased onto its base. Two pull requests that each move a cell within the
   tolerance can merge green and together move it past it: the push run on
   `master` then fails "Build tests" until someone commits a refreshed snapshot.
-- A developer build with `REACT_APP_SENTRY_DSN` or
-  `REACT_APP_GA_MEASUREMENT_ID` set carries tracker code CI's build lacks, so
-  its snapshot fails in CI; the docs say to build with both unset.
+- A developer build with `REACT_APP_GA_MEASUREMENT_ID` set, on the command
+  line or in `client-v2/.env`, carries tracker code CI's build lacks, so its
+  snapshot fails in CI; the docs say to build with the variable set empty,
+  which dotenv does not override. Sentry adds no code to a build without
+  `VERCEL_ENV`.
 - The fork path of `bundle-info-comment.yml` is unverified until a pull
   request from a fork runs it.

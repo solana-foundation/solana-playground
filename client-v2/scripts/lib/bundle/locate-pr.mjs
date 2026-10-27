@@ -1,5 +1,6 @@
 // Loaded alone: bundle-info-comment.yml sparse-checks out only this file, so it imports nothing local
-const ARTIFACT = "bundle-info-comment";
+/** The report artifact's name, as reusable-client-v2-build.yml uploads it and bundle-info-comment.yml downloads it */
+export const ARTIFACT = "bundle-info-comment";
 
 /**
  * Sets `pr` to the open pull request whose head is the completed run's head, and `has_report` to whether the run

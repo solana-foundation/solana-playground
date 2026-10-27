@@ -35,9 +35,9 @@ Out of scope:
   `client-v2/craco.config.js`,
   `client-v2/bench/BUNDLE.md`, `client-v2/package.json`, the root
   `.gitignore` (`client-v2/build-stats/`).
-- The Vercel build runs `BundleModulesPlugin` too, but publishes nothing from
-  it: the module list is written outside `build/`, and an error writing it is
-  logged without failing the deployment.
+- The Vercel build does not run `BundleModulesPlugin`: no build test reads the
+  module list there. Elsewhere the list is written outside `build/`, and an
+  error writing it is logged without failing the build.
 - `.github/workflows/reusable-client-v2-build.yml` and
   `.github/workflows/bundle-info-comment.yml`.
 - `client-v2/CLAUDE.md`, `client-v2/README.md`, `docs/testing.md`, the root

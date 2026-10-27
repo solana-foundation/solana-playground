@@ -81,7 +81,7 @@ class BundleModulesPlugin {
         fs.mkdirSync(path.dirname(MODULES_FILE), { recursive: true });
         fs.writeFileSync(MODULES_FILE, JSON.stringify(slimModules(modules)));
       } catch (e) {
-        // Only a build test reads the list, so a failure here must not fail a deployment
+        // Only a build test reads the list, so a failure here must not fail the build
         console.error(
           `BundleModulesPlugin: wrote no ${MODULES_FILE}, so yarn test-build will fail: ${e.message}`
         );
@@ -186,7 +186,10 @@ module.exports = {
         webpackConfig.plugins = webpackConfig.plugins.filter(
           (plugin) => !BUILD_ONLY_CHECKS.includes(plugin.constructor.name)
         );
-        webpackConfig.plugins.push(new BundleModulesPlugin());
+        // Only `yarn test-build` reads the module list, and a deployment runs no build test
+        if (!process.env.VERCEL) {
+          webpackConfig.plugins.push(new BundleModulesPlugin());
+        }
       }
 
       // `build:bundle` passes GENERATE_SOURCEMAP=false, so CRA emits none; hidden maps

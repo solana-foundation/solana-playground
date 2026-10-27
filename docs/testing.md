@@ -815,14 +815,15 @@ Expect:
 ### M-7. the bundle snapshot is current and carries no test code
 
 ```sh
-yarn --cwd client-v2 build-fast
+REACT_APP_GA_MEASUREMENT_ID= yarn --cwd client-v2 build-fast
 yarn --cwd client-v2 test-build
 yarn --cwd client-v2 bundle:info
 git -C client-v2 diff --exit-code -- bench/BUNDLE.md
 ```
 
-Build with `REACT_APP_SENTRY_DSN` and `REACT_APP_GA_MEASUREMENT_ID` unset, as CI does, on a branch rebased onto its
-base. `build-fast` writes `client-v2/build-stats/bundle-modules.json`, outside `build/` so no deployment serves it: the
+Run it on a branch rebased onto its base. CI's build has no GA id, and the empty `REACT_APP_GA_MEASUREMENT_ID` keeps
+CRA from taking one from `client-v2/.env` (dotenv does not override a variable already set). Sentry stays out of a build without `VERCEL_ENV` (`sentryEnabled` in
+`client-v2/scripts/sentry-gate.mjs`). `build-fast` writes `client-v2/build-stats/bundle-modules.json`, outside `build/` so no deployment serves it: the
 module list `BundleModulesPlugin` in `client-v2/craco.config.js` takes from webpack. `test-build` runs
 `scripts/bundle-modules.build-test.mjs` over that list and `scripts/bundle-info.build-test.mjs` against
 `client-v2/bench/BUNDLE.md`. The pure functions behind both (`scripts/lib/bundle/snapshot.test.mjs`, `diff.test.mjs`,
