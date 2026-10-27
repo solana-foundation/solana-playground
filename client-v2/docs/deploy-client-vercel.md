@@ -394,8 +394,8 @@ A preview answers on two hostnames Vercel generates, and both sign in:
 
 | Hostname | Variable | Example |
 | --- | --- | --- |
-| Per-deployment: one commit, never moves | `VERCEL_URL` | `solana-playground-<hash>-hoodies.vercel.app` |
-| Branch alias: follows the branch's latest deployment | `VERCEL_BRANCH_URL` | `solana-playground-git-new-face-hoodies.vercel.app` |
+| Per-deployment: one commit, never moves | `VERCEL_URL` | `solana-playground-<hash>-<team>.vercel.app` |
+| Branch alias: follows the branch's latest deployment | `VERCEL_BRANCH_URL` | `solana-playground-git-new-face-<team>.vercel.app` |
 
 With no `AUTH_BASE_URL`, `resolveBaseURL()` hands Better Auth a dynamic base
 URL: `{ allowedHosts: [VERCEL_BRANCH_URL, VERCEL_URL], protocol: "https",

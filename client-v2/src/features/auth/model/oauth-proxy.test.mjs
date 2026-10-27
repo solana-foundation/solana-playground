@@ -28,11 +28,11 @@ const load = async () => {
 const needsDatabase = process.env.DATABASE_URL ? false : "needs DATABASE_URL";
 
 const HOST = "https://solana-playground-teal.vercel.app";
-const PREVIEW_HOST = "solana-playground-abc123-hoodies.vercel.app";
+const PREVIEW_HOST = "solana-playground-abc123-my-team.vercel.app";
 const PREVIEW = `https://${PREVIEW_HOST}`;
-const BRANCH_HOST = "solana-playground-git-new-face-hoodies.vercel.app";
+const BRANCH_HOST = "solana-playground-git-new-face-my-team.vercel.app";
 const BRANCH = `https://${BRANCH_HOST}`;
-const OTHER = "https://solana-playground-evil-hoodies.vercel.app";
+const OTHER = "https://solana-playground-evil-my-team.vercel.app";
 const PROXY_SECRET = "proxy-secret-proxy-secret-proxy-secret";
 
 /**
