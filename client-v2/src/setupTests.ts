@@ -77,3 +77,10 @@ Object.defineProperty(globalThis, "fetch", {
 createRequire(import.meta.url).extensions[".md"] = (module, filename) => {
   module.exports = readFileSync(filename, "utf8");
 };
+
+// Node 22 has a real `BroadcastChannel`, and vitest's jsdom environment
+// exposes it, so the `typeof BroadcastChannel` checks in `effects/tab-sync`
+// and `features/auth/lib/popup-channel.ts` opened real channels in every test
+// that brought no fake. Deleted, as in a browser without one: a test that
+// exercises cross-tab messaging installs its own on the global and says so.
+delete (globalThis as { BroadcastChannel?: unknown }).BroadcastChannel;
