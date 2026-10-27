@@ -161,11 +161,12 @@ export default defineConfig({
   // was not enough for the first assertion in a spec: that one waits on the
   // explorer's async init, which on a loaded machine running the suite
   // sequentially takes longer than everything that follows it.
-  expect: { timeout: 20_000 },
+  //   E2E_EXPECT_TIMEOUT=40000 yarn test-e2e
+  expect: { timeout: positiveIntegerFromEnv("E2E_EXPECT_TIMEOUT", 20_000) },
   // CI's `--shard` splits by test; with a file as one group, the biggest
-  // spec alone is 11 minutes on one worker, whatever the shard count. On
-  // locally as well, so a test that depends on its file's order fails where
-  // it gets fixed, not only on the runner.
+  // spec alone is 11 minutes on one worker, whatever the shard count. The
+  // flag is unconditional, so a test that depends on its file's order fails
+  // locally, where it gets fixed, not only on the runner.
   fullyParallel: true,
   // A committed `.only` runs just the focused tests; the rest never reach the
   // report, so the known-skips check cannot flag them.
