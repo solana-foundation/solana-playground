@@ -1,0 +1,30 @@
+# act configuration for client-v2.yml, for an x86-64 host. act reads this file from the directory
+# it is launched in, so run from client-v2 (docs/local-ci-with-act.md says how). On an arm64 host
+# add the lines of .arm64.actrc to the command line; they come after this file and win. Lines that
+# do not start with "-" are ignored by act.
+
+# GitHub's runners are amd64, and the build job needs it on every host (wasm-pack 0.10.3 ships no
+# arm64 wasm-opt).
+--container-architecture=linux/amd64
+
+# catthehacker's full Ubuntu 24.04 image: rustup, cargo, node and yarn preinstalled.
+-P ubuntu-latest=catthehacker/ubuntu:full-24.04
+
+# Actions cloned once under ~/.cache/act are reused instead of re-cloned per run.
+--action-offline-mode
+
+# Host networking: no per-job Docker network, which collides when a run is interrupted, and a
+# job's services publish on localhost, which is where client-v2.yml's DATABASE_URL points.
+--network host
+
+# /opt/hostedtoolcache is root-owned in the image; setup-node fails with EACCES without this.
+--env RUNNER_TOOL_CACHE=/tmp/runner-tool-cache
+
+# upload-artifact and download-artifact need a local artifact server (the e2e-report job).
+# It listens on 34567, so one act run at a time.
+--artifact-server-path $HOME/.cache/act/artifacts
+
+# The job runs as the image's `runner` user and `db-dump.sh` runs pg_dump through `docker run`:
+# the mounted daemon socket is root-owned with group read-write, so the root group is added.
+# A --container-options on the command line replaces this one; repeat the --group-add there.
+--container-options --group-add 0
