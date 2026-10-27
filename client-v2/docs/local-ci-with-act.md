@@ -1,6 +1,12 @@
 # Running CI locally with `act`
 
-Config: [`client-v2/.actrc`](../.actrc), read from the directory act is launched in. Run from `client-v2`, with `-C ..` for the workflows at the repository root.
+From the repository root, the `checks` job of `client-v2.yml` on the current tree:
+
+```sh
+cd client-v2 && act pull_request -C .. -W .github/workflows/client-v2.yml -j checks
+```
+
+Config: [`client-v2/.actrc`](../.actrc), read from the directory act is launched in, hence the `cd`; `-C ..` points act at the workflows in the repository root.
 
 | Job | Command, from `client-v2` |
 | --- | --- |
