@@ -283,6 +283,21 @@ test.describe("client-v2-lessons", () => {
     }
   });
 
+  test("client-v2-lessons: Suggestions in a lesson", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await startHelloAnchor(page);
+    for (const name of [
+      "Explain this step",
+      "Give me a hint",
+      "Why did my build fail?",
+    ]) {
+      await expect(page.getByRole("button", { name })).toBeVisible();
+    }
+    // Each chip is its tooltip's trigger, which takes over its data-slot
+    const chips = page.locator('[data-slot="composer-context"] > *');
+    await expect(chips).toHaveText(["Step 1 of 4", "lib.rs", "1 file"]);
+  });
+
   test("client-v2-lessons: The band and the bar on a phone", async ({
     page,
   }) => {
