@@ -121,7 +121,7 @@ vercel-link-production: ## Pull production env vars from Vercel
 	$(call vercel_link,production)
 
 # create-preview-db prints the deployment's database variables as KEY=VALUE
-# lines (DATABASE_URL for url; DB_PROVIDER and CLOUD_SQL_DATABASE for
+# lines (DB_PROVIDER, then DATABASE_URL for url or CLOUD_SQL_DATABASE for
 # cloud-sql), each passed as one `-e`. `set -f`: a URL's `?` is a glob.
 deploy-client-to-vercel-preview: vercel-link-preview ## Build + deploy a unique preview URL (DB_PROVIDER=url|cloud-sql)
 	$(check_provider)
