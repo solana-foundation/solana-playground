@@ -96,9 +96,10 @@ started, or "<name> completed. Open it" once completed, drawn as a square in
 the card's corner holding ↗, or a green tick once completed. A started
 tutorial SHALL show "<n> of <m>" (its page of its pages) beside its name. On
 a screen under 768 px the corner square SHALL give way to a chevron at the
-card's end. A failed open SHALL say why on the card. The cover SHALL be the
-brand mark in white on a ground chosen by the tutorial's framework, the same
-for a tutorial on every load, and decorative (`alt=""`). The New project
+card's end, except that a completed tutorial's card keeps its tick. A failed
+open SHALL say why on the card. The cover SHALL be the brand mark in white
+on a ground chosen by the tutorial's framework, the same for a tutorial on
+every load, and decorative (hidden from assistive technology). The New project
 dialog's Tutorials list SHALL use the same card, with the "<level> ·
 <framework>" caption.
 

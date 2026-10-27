@@ -16,6 +16,7 @@ const deps = vi.hoisted(() => ({
       thumbnail: string;
       level: string;
       framework?: string;
+      authors: { name: string }[];
     }[],
   },
 }));
@@ -24,6 +25,12 @@ vi.mock("@/entities/program", () => ({
   PROGRAMS_URL: "/programs/programs.json",
 }));
 vi.mock("@/utils", () => ({ PgTutorial: deps.PgTutorial }));
+// Each tutorial's progress, by name: new unless a test says otherwise
+const progress = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("@/entities/tutorial", () => ({
+  useTutorialProgress: () => (name: string) =>
+    progress.get(name) ?? { state: "new" },
+}));
 
 import { useProgramList } from "./use-program-list";
 import { useTutorialList } from "./use-tutorial-list";
@@ -34,6 +41,7 @@ const tutorial = (name: string) => ({
   thumbnail: `/${name}.png`,
   level: "Beginner",
   framework: "Anchor",
+  authors: [{ name: "acheron" }],
 });
 const program = (name: string, categories = ["DeFi"]) => ({
   name,
@@ -48,6 +56,7 @@ const noOpen = () => undefined;
 let logged: ReturnType<typeof memoryLogs>;
 beforeEach(() => {
   deps.PgTutorial.all = [tutorial("Hello Anchor"), tutorial("Escrow")];
+  progress.clear();
   deps.fetchPrograms
     .mockReset()
     .mockResolvedValue([program("drift"), program("bubblegum")]);
@@ -63,6 +72,23 @@ it("counts every tutorial whatever the query", () => {
   expect(result.current.list).toEqual({
     state: "ready",
     cards: [expect.objectContaining({ id: "Escrow" })],
+  });
+});
+
+it("carries each tutorial's progress and what its caption needs", () => {
+  progress.set("Escrow", { state: "completed" });
+  const { result } = renderHook(() => useTutorialList("", noOpen));
+
+  const list = result.current.list;
+  expect(list.state === "ready" && list.cards[1]).toEqual({
+    id: "Escrow",
+    title: "Escrow",
+    description: "About Escrow",
+    framework: "Anchor",
+    level: "Beginner",
+    authors: [{ name: "acheron" }],
+    progress: { state: "completed" },
+    open: undefined,
   });
 });
 

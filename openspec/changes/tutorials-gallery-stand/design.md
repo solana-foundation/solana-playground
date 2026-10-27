@@ -60,8 +60,11 @@ in `widgets/assistant/ui/Assistant.tsx`); the files column shows
 - **The art is ours, in the slice.** The voxel mark (`IsoVoxels`, an SVG of
   cubes from the stand) and the framework cover are product art, not
   design-system parts: they go into `widgets/catalog/ui/art/` rewritten
-  without styled-components, colours from the theme's brand tokens. If the
-  review wants them in the design system, that is a follow-up, not a block.
+  without styled-components. Their colours are the brand deck's own grounds,
+  the same on every theme, which no design-system token describes: they stay
+  constants in the art file, and `scripts/check-colors.mjs` allows that
+  folder. If the review wants them in the design system, that is a
+  follow-up, not a block.
 - **Filter as a `DropdownMenu`** from `shared/ui` with radio items, behind a
   ghost icon button with a dot while a framework is picked, as the stand
   draws it. No new DS component.

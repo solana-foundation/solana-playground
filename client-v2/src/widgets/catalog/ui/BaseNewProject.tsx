@@ -9,6 +9,8 @@ import type { ListCount } from "../model/lists";
 import type { CatalogPage } from "../model/telemetry";
 import BaseCatalogGrid from "./BaseCatalogGrid";
 import type { BaseCatalogGridProps } from "./BaseCatalogGrid";
+import BaseTutorialGrid from "./BaseTutorialGrid";
+import type { BaseTutorialGridProps } from "./BaseTutorialGrid";
 import CatalogSearch from "./CatalogSearch";
 
 export interface BaseNewProjectProps {
@@ -19,7 +21,9 @@ export interface BaseNewProjectProps {
   counts: Record<CatalogPage, ListCount>;
   query: string;
   onQuery: (query: string) => void;
-  /** The chosen list's cards */
+  /** The tutorials, drawn on the Tutorials tab */
+  tutorials: Omit<BaseTutorialGridProps, "query">;
+  /** The programs' cards, drawn on the Programs tab */
   grid: Omit<BaseCatalogGridProps, "label" | "query">;
 }
 
@@ -48,6 +52,7 @@ const BaseNewProject = ({
   counts,
   query,
   onQuery,
+  tutorials,
   grid,
 }: BaseNewProjectProps) => (
   <div data-gallery-modal className="flex flex-col gap-4">
@@ -89,7 +94,11 @@ const BaseNewProject = ({
       />
     </div>
 
-    <BaseCatalogGrid label={tab} query={query} {...grid} />
+    {tab === "tutorials" ? (
+      <BaseTutorialGrid query={query} {...tutorials} />
+    ) : (
+      <BaseCatalogGrid label={tab} query={query} {...grid} />
+    )}
 
     {/* Sticks to the foot of the dialog's scroll area while the list runs
         past it, so a cut-off card reads as "more below". Scrolled to the
