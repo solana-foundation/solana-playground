@@ -1,5 +1,5 @@
-import { createTracker } from "../../../shared/lib/telemetry";
-import type { NoParams } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
+import type { NoParams } from "@/shared/lib/telemetry";
 import type { PopupChannelFailure } from "../lib/popup-channel";
 
 /** Why a sign-in ended without a session */

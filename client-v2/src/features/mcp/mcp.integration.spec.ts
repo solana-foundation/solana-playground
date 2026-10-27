@@ -9,8 +9,10 @@ const session = vi.hoisted(() => ({
   state: "signed-out" as "signed-in" | "signed-out" | "unavailable",
 }));
 
-vi.mock("../auth/server.mjs", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../auth/server.mjs")>();
+vi.mock("@/features/auth/server.mjs", async (importOriginal) => {
+  const real = await importOriginal<
+    typeof import("@/features/auth/server.mjs")
+  >();
   return {
     isAllowedOrigin: real.isAllowedOrigin,
     readSession: async () =>

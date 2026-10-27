@@ -17,12 +17,9 @@
     "jsx": "react-jsx",
     "experimentalDecorators": true,
     "types": ["vitest/globals", "node", "vitest/importMeta"],
+    // Webpack and vitest resolve runtime imports through `paths`; type-only mappings go in src/types/package-exports.d.ts
     "paths": {
-      "@/*": ["./src/*"],
-      "@shadcn/react/message-scroller": [
-        "./node_modules/@shadcn/react/dist/message-scroller/index.d.ts"
-      ],
-      "cn/config": ["./node_modules/cn/dist/config.d.ts"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"],

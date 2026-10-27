@@ -21,7 +21,6 @@ import {
 } from "../../../features/persistence/model/chat-storage";
 import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
-import { createLogger } from "../../../shared/lib/logger";
 import type { Disposable } from "../../../utils";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import type { ModelProvider } from "@/shared/lib/ai";
@@ -208,8 +207,6 @@ export type AssistantStatus =
   | "running"
   /** A turn is in flight but blocked on an approval */
   | "awaiting";
-
-const log = createLogger("assistant:store");
 
 /**
  * How long a cut turn may take to unwind before it is reported. Long enough
@@ -1497,9 +1494,7 @@ if (import.meta.vitest) {
       ({ truncationNoticeId } = await import(
         "../../../features/persistence/model/chat-storage"
       ));
-      // Through `@/` on purpose: the alias is mapped in `tsconfig.json`'s `paths`, in
-      // craco's webpack alias and in `vitest.config.ts`'s `resolve.alias`, and this
-      // dynamic import is what fails when the vitest mapping drifts from the other two.
+      // Through `@/` on purpose: this dynamic import fails if vitest stops resolving `@/` through tsconfig `paths`
       ({ PgFs } = await import("@/utils/explorer/fs"));
       ({ storedValues } = await import("../../../test-utils/stored-values"));
     });

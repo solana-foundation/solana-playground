@@ -6,7 +6,8 @@ import { PgSyncMark } from "./sync-mark";
 import * as tabReload from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { clearFailures, getFailures } from "./diagnostics";
-import { PgSession } from "../../auth";
+// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { PgSession } from "@/features/auth";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { ServerProject } from "./project-sync";

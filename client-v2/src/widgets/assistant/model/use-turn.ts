@@ -1,11 +1,10 @@
-import { APIUserAbortError } from "@anthropic-ai/sdk";
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
-import { PgSession } from "../../../features/auth";
-import { report, toReplayMessages } from "../../../features/persistence";
+import { PgSession } from "@/features/auth";
+import { report, toReplayMessages } from "@/features/persistence";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import {
   isDefaultBackendRemembered,
@@ -18,7 +17,7 @@ import type {
   PromptRequest,
 } from "../../../views/sidebar/assistant/store";
 import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
-import { reportButtonFailure } from "../../../shared/lib/report-button-failure";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 // Deep import rather than the `utils` barrel, as `effects/chat-thread` does
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { DEFAULT_CONNECTION } from "./connection";
@@ -33,15 +32,13 @@ const connectLog = createLogger("assistant:connect");
 
 /**
  * The rejection an aborted fetch or stream ends with. By name: a
- * `DOMException` is not an `Error` everywhere (jsdom's is not). The Anthropic
- * SDK throws its own class, whose name is the plain `Error`.
+ * `DOMException` is not an `Error` everywhere (jsdom's is not).
  */
 const isAbort = (error: unknown) =>
-  error instanceof APIUserAbortError ||
-  (typeof error === "object" &&
-    error !== null &&
-    "name" in error &&
-    error.name === "AbortError");
+  typeof error === "object" &&
+  error !== null &&
+  "name" in error &&
+  error.name === "AbortError";
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];

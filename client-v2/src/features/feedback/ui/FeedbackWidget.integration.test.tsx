@@ -10,7 +10,7 @@ import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import {
   DropdownMenu,
   DropdownMenuContent,

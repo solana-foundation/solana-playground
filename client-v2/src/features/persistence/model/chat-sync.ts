@@ -5,7 +5,8 @@ import { report } from "./diagnostics";
 import { sha256 } from "./snapshot";
 import { PgSyncClient } from "./sync-client";
 import { PgThreadIndex } from "./thread-index";
-import { PgSession } from "../../auth";
+// TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
+import { PgSession } from "@/features/auth";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
 /**
@@ -450,10 +451,10 @@ if (import.meta.vitest) {
   type BackendParams =
     import("../../../views/sidebar/assistant/store").BackendParams;
   describe("features/persistence/model/chat-sync", () => {
-    let uuid: typeof import("../../../shared/lib/ids").uuid;
+    let uuid: typeof import("@/shared/lib/ids").uuid;
     let PgFs: typeof import("../../../utils/explorer/fs").PgFs;
     beforeAll(async () => {
-      ({ uuid } = await import("../../../shared/lib/ids"));
+      ({ uuid } = await import("@/shared/lib/ids"));
       ({ PgFs } = await import("../../../utils/explorer/fs"));
     });
     /**

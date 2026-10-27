@@ -35,11 +35,15 @@ app -> widgets -> features -> entities -> shared
 Two rules on top of the direction:
 
 - **A feature never imports another feature.** When two features must meet,
-  they meet in a widget that imports both. One named exception exists today:
-  `auth` and `persistence` import each other (`auth`'s server module uses
-  `persistence`'s pool; `persistence` reads the session). It is recorded as
-  the exception in the `client-v2-layers` spec and is broken by task 1.4 of
-  `ui-migration`; the boundary check exempts these two by name until then.
+  they meet in a widget that imports both. One named exception holds until
+  `ui-migration` task 1.4 breaks it: `auth` and `persistence` import each
+  other (`auth`'s server module uses `persistence`'s pool; `persistence`
+  reads the session), as the `client-v2-layers` spec records. The pair's
+  existing imports, each marked `TODO(ui-migration 1.4)`, are warnings from
+  `layers/recorded-exception`, and only through the other slice's entry; the
+  same import from any file outside `RECORDED_EXCEPTION` (`eslint-layers.js`)
+  is an error. `scripts/eslint-layers.test.mjs` pins those imports, so CI
+  fails on a new one, or on one that is gone without the list shrinking.
 - **Entities do not import each other.** FSD's `@x` cross-imports are not
   enabled.
 
@@ -61,6 +65,15 @@ may import the route it drives. The layer direction holds for tests too, and
 production code gets neither. `scripts/eslint-layers.test.mjs`
 (`yarn test-api`) lints a probe of each kind against the real slices, so a
 check that stopped resolving imports, and so passed everything, fails there.
+
+**An import from one module of the layers into another is written
+`@/...`.** A module is a slice or a first-level folder of `app` or `shared`,
+and the files at the top of a layer form one module; inside a module,
+relative paths stay. Imports to or from the legacy roots are not checked.
+`layers/alias-across-modules` (`eslint-plugin-layers/`) fails, in a `.ts`,
+`.tsx` or `.mts` file, a relative path that leaves its module, and `--fix`
+rewrites it; `scripts/eslint-plugin-layers.test.mjs` tests it. `.mjs` files are
+exempt, because plain Node runs them and cannot resolve `@/`.
 
 A slice's segments: `ui/` for React, `model/` for logic, `lib/` for leaf
 helpers. Its public API is `index.ts` for browser code and `server.mjs` for

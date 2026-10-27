@@ -1,5 +1,5 @@
-import { uuid } from "../../../shared/lib/ids";
-import { timeoutSignal } from "../../../shared/lib/timeout-signal";
+import { uuid } from "@/shared/lib/ids";
+import { timeoutSignal } from "@/shared/lib/timeout-signal";
 import { DELETED_REASON } from "./deleted.mjs";
 import { report } from "./diagnostics";
 import {
@@ -18,7 +18,8 @@ import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
-import { PgSession } from "../../auth";
+// TODO(ui-migration 1.4): a feature importing a feature; project sync runs only for a signed-in session
+import { PgSession } from "@/features/auth";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
 // tests could not load this module.

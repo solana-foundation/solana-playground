@@ -1,5 +1,5 @@
-import { createTracker } from "../../../shared/lib/telemetry";
-import type { NoParams } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
+import type { NoParams } from "@/shared/lib/telemetry";
 
 /** Which device's lines a hunk decision was about; `none` for typing */
 export type HunkSideParam = "this-device" | "other-device" | "none";

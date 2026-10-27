@@ -1,4 +1,4 @@
-import { observabilityEnv } from "../../../config/client-env";
+import { observabilityEnv } from "@/shared/config/client-env";
 import { atLeast, isLevel } from "../severity";
 import type { Level } from "../severity";
 import type { LogEntry, LogProvider } from "../types";

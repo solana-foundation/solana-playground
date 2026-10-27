@@ -1,5 +1,6 @@
 import { isMissing, report } from "./diagnostics";
-import { PgSession } from "../../auth";
+// TODO(ui-migration 1.4): a feature importing a feature; a claim is kept per signed-in account
+import { PgSession } from "@/features/auth";
 import { PgFs } from "../../../utils/explorer/fs";
 
 /**

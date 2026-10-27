@@ -5,16 +5,15 @@ import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
-import * as reportModule from "../../../shared/lib/report-button-failure";
-import { PgSession } from "../../../features/auth";
+} from "@/shared/lib/telemetry";
+import * as reportModule from "@/shared/lib/report-button-failure";
+import { PgSession } from "@/features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { APIUserAbortError } from "@anthropic-ai/sdk";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
@@ -22,7 +21,7 @@ import { rememberBackend } from "../../../views/sidebar/assistant/model/remember
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
-import { PgChatStorage } from "../../../features/persistence/model/chat-storage";
+import { PgChatStorage } from "@/features/persistence/model/chat-storage";
 import { resetDefaultBackendProbe } from "./default-backend";
 import { useTurn } from "./use-turn";
 import type { ConnectOpener } from "./use-turn";
@@ -819,29 +818,6 @@ describe("useTurn's failures and races", () => {
         new Promise<void>((_resolve, reject) => {
           signal?.addEventListener("abort", () =>
             reject(new DOMException("The user aborted", "AbortError"))
-          );
-        })
-    );
-    const { result } = renderHook(() => useTestTurn());
-    act(() => {
-      void result.current.send("hi");
-    });
-
-    act(() => result.current.stop());
-
-    await waitFor(() => expect(result.current.busy).toBe(false));
-    expect(logged()).toEqual([["assistant:turn", "debug", false]]);
-  });
-
-  it("logs the Anthropic SDK's abort at debug only", async () => {
-    // Its abort error is named a plain `Error`, so it read as a stopped turn
-    // ending on a bug, and every stop was reported
-    PgAssistant.connect({ id: "default", apiKey: "" });
-    provider.send.mockImplementation(
-      (_: string, signal?: AbortSignal) =>
-        new Promise<void>((_resolve, reject) => {
-          signal?.addEventListener("abort", () =>
-            reject(new APIUserAbortError())
           );
         })
     );

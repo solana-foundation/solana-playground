@@ -105,7 +105,7 @@ existing code moves.
   (`features/`, `shared/`, `widgets/`, `entities/`), `src/themes/` (three
   themes removed), `utils/theme/theme.ts` (the `dark` class), `Monaco.tsx`
   and `Terminal.tsx` (resolved colours), `app/` (the shell).
-- `client-v2/craco.config.js`, `tsconfig.paths.json`: Tailwind through
+- `client-v2/craco.config.js`, `client-v2/tsconfig.json`: Tailwind through
   PostCSS, the `@/` alias.
 - `design-system/`: new top-level package, catalogue site, registry build.
 - CI: `client-v2.yml` gains the layer check (`eslint-plugin-boundaries`) and

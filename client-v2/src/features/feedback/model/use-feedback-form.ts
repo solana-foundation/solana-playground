@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
-import { createLogger } from "../../../shared/lib/logger";
+import { createLogger } from "@/shared/lib/logger";
 import type { FeedbackProvider, Rating } from "./provider";
 import { feedbackTelemetry } from "./telemetry";
 
