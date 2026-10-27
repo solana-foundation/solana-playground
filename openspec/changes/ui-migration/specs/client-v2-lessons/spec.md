@@ -70,7 +70,7 @@ position and the objective, which opens in place to show how the step is
 checked; the band's actions SHALL sit in a bar at the foot of the code
 (change lesson-prototype-polish, "The phone's lesson bar").
 
-#### Scenario: The band on a phone
+#### Scenario: The band and the bar on a phone
 
 - **WHEN** a tutorial is started on a 393 px wide screen
 - **THEN** the band shows "1/4" and the objective on one row
