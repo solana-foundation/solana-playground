@@ -163,6 +163,11 @@ jobs:
           . ./.vercel/.env.preview.local
           set +a
           npx --yes "$cli" build --token="$VERCEL_TOKEN"
+          # Every file under api/ becomes a public function unless
+          # client-v2/.vercelignore drops it, and a test there writes to the
+          # database it is given (HOO-2175).
+          tests=$(find .vercel/output/functions -name '*.test.func')
+          [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
           # --archive=tgz: the prebuilt output is over the upload API's 15000-file cap.
           url=$(npx --yes "$cli" deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" \
             -e DATABASE_URL="$db" --meta githubPrId="$PR" --meta githubCommitSha="$SHA")
