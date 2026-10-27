@@ -16,23 +16,23 @@ it as squashed sync commits, each a chunk of upstream functionality, named
 forks `solana-foundation/solana-playground`; `master` is the default branch
 of both.
 
-The integration branches are `master` and `new-face`. Feature branches come
-off `master`, the default, and PRs go against `master`; redesign branches
-(section 5, "Screens", of the OpenSpec change `ui-migration`) come off
-`new-face` and PRs go against `new-face`.
+Feature work is collected in hoodieshq before it reaches `master`: each plan
+stage has an integration branch `scope/<stage>`, design polish has
+`new-face-polish-2`, and each lands in foundation `master` as a whole through
+one PR. A feature branch comes off its integration branch and its PR goes
+against it; dev-process changes go straight to `master`.
 
 `ci.yml` checks formatting for `client/`, `server/`, and `wasm/` and clippy
 for `server/` and `wasm/`, but not `client/`'s build or tests;
 `client-v2.yml` guards `client-v2/`, with its production build and the
 checks on what that build emits in `reusable-client-v2-build.yml`. `ci.yml`
-and `client-v2.yml` run on pushes to `master` (`client-v2.yml` also on
-pushes to `new-face`) and on every PR: a `pull_request` run reads the
-workflow from the PR's merge commit, and no `pull_request` workflow runs
-while the PR has a merge conflict. `preview.yml` deploys a labelled PR's
-preview and `preview-sweep.yml` cleans up after it on a schedule; both run
-only in the repository the `PREVIEW_REPOSITORY` variable names, once
-`NEON_PROJECT_ID` is set there. GitHub runs scheduled workflows only from
-the default branch.
+and `client-v2.yml` run on pushes to `master` and on every PR: a
+`pull_request` run reads the workflow from the PR's merge commit, and no
+`pull_request` workflow runs while the PR has a merge conflict.
+`preview.yml` deploys a labelled PR's preview and `preview-sweep.yml`
+cleans up after it on a schedule; both run only in the repository the
+`PREVIEW_REPOSITORY` variable names, once `NEON_PROJECT_ID` is set there.
+GitHub runs scheduled workflows only from the default branch.
 
 `cicd.yml` deploys App Engine from a tagged commit on `master`. A push to
 `master` also deploys `client-v2` to Vercel production, so run
