@@ -753,7 +753,7 @@ Run from `client-v2/`.
 
 Expect:
 
-- [ ] the target lists the lowest version per browser of the `production` `browserslist` in `client-v2/package.json`
+- [ ] the target lists the lowest version per browser of the `browserslist` in `client-v2/package.json`
       (`chrome111`, `edge111`, `firefox128`, `opera97`, `safari16.4` at `bf729fa1`).
 - [ ] optional, where a Safari 16.4 device is available: the production build loads every JavaScript chunk with no
       syntax error in the console. The `browserslist` target check is the gate; this step only confirms it.
