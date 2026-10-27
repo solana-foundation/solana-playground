@@ -1,9 +1,11 @@
 name: pr-ticket-link
 
-# Every pull request links its Linear ticket in the description
-# (`.github/pull_request_template.md`, first line). The check reads the event
-# payload only, so it runs no code from the PR beyond its own script and needs
-# no secrets; that is why `pull_request`, not `pull_request_target`.
+# Every pull request links its Linear ticket in the description; the
+# template (`.github/pull_request_template.md`) has the line for it. The
+# check reads only the event payload and needs no secrets, so it runs on
+# `pull_request` with a read-only token. Like every check here it runs the
+# PR's own copy of its script, so a PR that edits `.github/scripts/` can
+# change it: review such a diff for that.
 #
 # `labeled` and `unlabeled` are here so adding or removing `no-ticket` re-runs
 # the check without an edit to the description.
@@ -43,4 +45,4 @@ jobs:
         with:
           sparse-checkout: .github
           persist-credentials: false
-      - run: node --test .github/scripts/pr-ticket-link.test.mjs
+      - run: node --test .github/scripts/ticket-link.test.mjs
