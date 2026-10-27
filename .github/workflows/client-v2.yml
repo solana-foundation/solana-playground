@@ -3,8 +3,10 @@ name: client-v2
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
 # `client/`'s build or tests; this one guards `client-v2/` and never touches
 # the Rust workspaces. A pull_request run reads this file from the PR's
-# merge commit (CLAUDE.md, "This is a fork"). Every action is pinned to a
-# commit, the version tag beside it: a tag can be moved, a commit cannot.
+# merge commit.
+#
+# Every action is pinned to a commit, the version tag beside it: a tag can
+# be moved, a commit cannot.
 on:
   push:
     branches: ["master"]
