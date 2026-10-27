@@ -26,12 +26,13 @@ fi
 . "$DB_SCRIPTS/cloud-sql/proxy.sh"
 
 start_proxy
+trap stop_proxy EXIT
 url=$(proxy_url "$name" "$CLOUD_SQL_USER")
 
 if [ "${#COMMAND[@]}" -eq 0 ]; then
+  trap - EXIT
   echo "cloud-sql-proxy left running as pid $PROXY_PID; stop it with: kill $PROXY_PID" >&2
   printf '%s\n' "$url"
 else
-  trap stop_proxy EXIT
   DATABASE_URL=$url "${COMMAND[@]}"
 fi
