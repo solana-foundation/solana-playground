@@ -9,6 +9,7 @@ import { PgLanguage } from "../language";
 import { PgView } from "../view";
 import type { Disposable } from "../types";
 import type {
+  CreatedWorkspace,
   EditorBuffers,
   Explorer,
   TupleFiles,
@@ -581,7 +582,10 @@ export class PgExplorer {
       defaultOpenFile: opts?.defaultOpenFile,
     });
 
-    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_WORKSPACE);
+    PgCommon.createAndDispatchCustomEvent<CreatedWorkspace>(
+      this.events.ON_DID_CREATE_WORKSPACE,
+      { id: this.workspaceIdOf(name), imported: false }
+    );
   }
 
   /**
@@ -666,7 +670,10 @@ export class PgExplorer {
     this._workspace.add(name, opts.id);
     await this._saveWorkspaces();
 
-    PgCommon.createAndDispatchCustomEvent(this.events.ON_DID_CREATE_WORKSPACE);
+    PgCommon.createAndDispatchCustomEvent<CreatedWorkspace>(
+      this.events.ON_DID_CREATE_WORKSPACE,
+      { id: opts.id, imported: true }
+    );
   }
 
   /**
@@ -1371,12 +1378,12 @@ export class PgExplorer {
   }
 
   /**
-   * Runs after creating a workspace.
+   * Runs after creating a workspace, or importing one from the account.
    *
    * @param cb callback function to run
    * @returns a dispose function to clear the event
    */
-  static onDidCreateWorkspace(cb: () => unknown) {
+  static onDidCreateWorkspace(cb: (created: CreatedWorkspace) => unknown) {
     return PgCommon.onDidChange(PgExplorer.events.ON_DID_CREATE_WORKSPACE, cb);
   }
 

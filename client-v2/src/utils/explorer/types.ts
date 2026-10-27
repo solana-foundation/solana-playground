@@ -89,3 +89,11 @@ export interface EditorBuffers {
   /** Drop the buffer of a file that no longer exists */
   discard(path: string): void;
 }
+
+/** What `PgExplorer.onDidCreateWorkspace` carries */
+export interface CreatedWorkspace {
+  /** The new workspace's id, or `undefined` when the registry has none */
+  id: string | undefined;
+  /** Imported from the account by sync, rather than created by the user */
+  imported: boolean;
+}

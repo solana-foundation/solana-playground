@@ -69,6 +69,17 @@ when a session reads a file matching the `paths` in the frontmatter.
   about as a whole, never merged on a guess. The sync-base store sits outside
   `/.config/sync/` because `PgSyncMark.projectIds()` treats every file there as
   a mark.
+- **Another account's leftover project is never uploaded.** Workspaces
+  outlive a sign-out, so `PgSyncMark.belongsToAnotherAccount` (no mark of
+  this account's, no claim, another account's mark present) gates `_push`,
+  `pushNeverSynced` and `settleDivergence`. A tutorial's id is shared across
+  accounts, so a workspace created while signed in is _claimed_
+  (`model/sync-claim.ts`, `/.config/sync-claims/<userId>/`, outside
+  `/.config/sync/` for the same reason as the bases); without the claim, a
+  tutorial started after another account's copy was released never uploads.
+  `PgSyncMark.write`/`remove` drop the claim, and `settleLocalDeletes` drops
+  a deleted workspace's for every account, signed in or not, so no claim
+  outlives its workspace.
 - **Projects are stored one row per file** (`project_files`). A `jsonb`
   snapshot was rewritten whole on every save: ~55x the WAL of a row per file
   for a one-file edit. `PUT /api/projects` takes either `files` (whole set;

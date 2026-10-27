@@ -4,12 +4,14 @@ import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import * as restore from "../../features/persistence/model/project-restore";
 import * as snapshot from "../../features/persistence/model/snapshot";
 import { PgSyncBase } from "../../features/persistence/model/sync-base";
+import { PgSyncClaim } from "../../features/persistence/model/sync-claim";
 import { PgSyncMark } from "../../features/persistence/model/sync-mark";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgCommon } from "../../utils/common";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import { PgFs } from "../../utils/explorer/fs";
 import { PgWorkspace } from "../../utils/explorer/workspace";
+import type { CreatedWorkspace } from "../../utils/explorer/types";
 import type { Disposable } from "../../utils/types";
 
 /**
@@ -76,6 +78,24 @@ describe("the project-sync effect", () => {
     vi.advanceTimersByTime(3000);
 
     expect(push).toHaveBeenCalled();
+  });
+
+  it("claims a workspace the user creates, not one sync imports", () => {
+    // A tutorial started here has the id another account's copy had; the
+    // claim is what lets its pushes go up. An import gets a mark from sync.
+    const claim = vi.spyOn(PgSyncClaim, "claim").mockResolvedValue(undefined);
+    effect = projectSync();
+
+    PgCommon.createAndDispatchCustomEvent<CreatedWorkspace>(
+      PgExplorer.events.ON_DID_CREATE_WORKSPACE,
+      { id: "tut:hello", imported: false }
+    );
+    PgCommon.createAndDispatchCustomEvent<CreatedWorkspace>(
+      PgExplorer.events.ON_DID_CREATE_WORKSPACE,
+      { id: "p9", imported: true }
+    );
+
+    expect(claim.mock.calls).toEqual([["tut:hello"]]);
   });
 
   it("collapses a burst of edits into one upload", () => {
@@ -503,6 +523,32 @@ describe("deleting a workspace here", () => {
     expect(remove).toHaveBeenCalledWith("deleted-here");
     expect(remove).not.toHaveBeenCalledWith("made-next-door");
     expect(forget).not.toHaveBeenCalledWith("made-next-door");
+  });
+
+  it("drops the claim of a workspace deleted before its first upload", async () => {
+    // Claimed and never uploaded, so it has no mark for the loop over marks
+    // to find; left behind, the claim would vouch for another account's
+    // project that later turns up under the same id
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue([]);
+    vi.spyOn(PgSyncClaim, "projectIds").mockResolvedValue([
+      "tut:gone",
+      "tut:here",
+      "made-next-door",
+    ]);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockImplementation((id: string) =>
+      id === "tut:here" ? "Here" : undefined
+    );
+    const forget = vi.spyOn(PgSyncClaim, "forget").mockResolvedValue(undefined);
+    registered([
+      { id: "tut:here", name: "Here" },
+      { id: "made-next-door", name: "Next Door" },
+    ]);
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(forget.mock.calls).toEqual([["tut:gone"]]);
   });
 
   it("deletes nothing when the store cannot say what it lists", async () => {

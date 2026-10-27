@@ -44,3 +44,10 @@ export const SIGN_IN_ENV = [
  * ways the wait ends without an answer.
  */
 export const FLOW_MAX_AGE_SECONDS = 600;
+
+/**
+ * How long the browser waits for a sign-out to answer, in milliseconds.
+ *
+ * Long enough for a slow network; a hung request otherwise never answers.
+ */
+export const SIGN_OUT_TIMEOUT_MS = 15_000;
