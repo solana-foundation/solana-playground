@@ -1,0 +1,46 @@
+name: pr-ticket-link
+
+# Every pull request links its Linear ticket in the description
+# (`.github/pull_request_template.md`, first line). The check reads the event
+# payload only, so it runs no code from the PR beyond its own script and needs
+# no secrets; that is why `pull_request`, not `pull_request_target`.
+#
+# `labeled` and `unlabeled` are here so adding or removing `no-ticket` re-runs
+# the check without an edit to the description.
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+jobs:
+  ticket-link:
+    name: Linear ticket link
+    # Only the latest description counts. Scoped to this job, so an edit
+    # never cancels a code change's script tests.
+    concurrency:
+      group: pr-ticket-link-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+      - run: node .github/scripts/pr-ticket-link.mjs
+
+  # The script's own tests, kept apart so a broken test never reads as a
+  # missing link. Only a code change can break them, not an edit or a label.
+  script-tests:
+    name: Ticket link script tests
+    if: github.event.action != 'edited' && github.event.action != 'labeled' && github.event.action != 'unlabeled'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: .github
+          persist-credentials: false
+      - run: node --test .github/scripts/pr-ticket-link.test.mjs

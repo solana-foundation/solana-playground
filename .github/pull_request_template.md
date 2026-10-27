@@ -1,6 +1,8 @@
 Linear: [HOO-](https://linear.app/solana-fndn/issue/HOO-)
 
-<!-- The issue number goes in both places: [HOO-123](https://linear.app/solana-fndn/issue/HOO-123). Use only this short form; never the long URL with the title after the ID. -->
+<!-- The issue number goes in both places: [HOO-123](https://linear.app/solana-fndn/issue/HOO-123). Use only this short form; never the long URL with the title after the ID.
+     CI fails a PR without this link. No ticket at all (an upstream sync, a
+     trivial chore)? Add the `no-ticket` label instead; dependabot is exempt. -->
 
 ## TLDR
 
