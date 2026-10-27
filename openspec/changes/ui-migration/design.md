@@ -1704,9 +1704,10 @@ they are answered. One PR.
     Custom value with no `custom`) no longer unmounts the app beneath the
     page: `SettingsBoundary` puts a notice and "Back to app" in its place and
     reports the error through the logger's `panic`.
-  - `connection.endpoint` is named "RPC endpoint" and `server.endpoint`
-    "Build server" in the registry, so the two selects no longer share the
-    name "Endpoint".
+  - `server.endpoint` is named "Build server" in the registry, so the two
+    selects no longer share a name. `connection.endpoint` was "RPC endpoint"
+    here; Settings' polish (HOO-2261) returned it to "Endpoint", as the
+    prototype names it.
   - A menu, popover or tooltip open when the page opens closes: they portal
     to `body`, outside the hidden shell, and a modal menu's focus trap would
     pull focus back from the page. `closeOpenLayers` (`shared/lib`) sends an

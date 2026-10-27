@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   // What reading a started tutorial's metadata throws when none is set
   unreadable: new Error("ENOENT: no such file") as Error,
   listeners: new Map<string, Set<() => void>>(),
+  // Reads of saved progress that wait to be released, oldest first
+  held: [] as Promise<void>[],
 }));
 const warn = vi.hoisted(() => vi.fn());
 const error = vi.hoisted(() => vi.fn());
@@ -37,6 +39,8 @@ vi.mock("../../../utils/tutorial/tutorial", () => ({
     },
     getMetadata: async (name: string) => {
       const meta = state.metadata.get(name);
+      const hold = state.held.shift();
+      if (hold) await hold;
       if (!meta) throw state.unreadable;
       return meta;
     },
@@ -64,6 +68,7 @@ describe("useTutorialProgress", () => {
     state.workspaces = undefined;
     state.metadata.clear();
     state.listeners.clear();
+    state.held = [];
     state.unreadable = new Error("ENOENT: no such file");
     warn.mockClear();
     error.mockClear();
@@ -141,5 +146,36 @@ describe("useTutorialProgress", () => {
     );
     expect(warn).toHaveBeenCalledTimes(1);
     expect(error).not.toHaveBeenCalled();
+  });
+  it("keeps the latest read when an earlier one finishes after it", async () => {
+    state.workspaces = ["Hello Anchor"];
+    state.metadata.set("Hello Anchor", { pageNumber: 2, completed: false });
+    let release = () => {};
+    state.held.push(new Promise<void>((r) => (release = r)));
+    const { result } = renderHook(() => useTutorialProgress());
+
+    state.metadata.set("Hello Anchor", { pageNumber: 5, completed: false });
+    fire("list");
+    await waitFor(() =>
+      expect(result.current("Hello Anchor")).toMatchObject({ page: 5 })
+    );
+
+    await act(async () => release());
+    expect(result.current("Hello Anchor")).toMatchObject({ page: 5 });
+  });
+
+  it("sets nothing once unmounted with a read in flight", async () => {
+    state.workspaces = ["Hello Anchor"];
+    state.metadata.set("Hello Anchor", { pageNumber: 2, completed: false });
+    let release = () => {};
+    state.held.push(new Promise<void>((r) => (release = r)));
+    const { unmount } = renderHook(() => useTutorialProgress());
+    const consoleError = vi.spyOn(console, "error");
+
+    unmount();
+    await act(async () => release());
+    expect(consoleError).not.toHaveBeenCalled();
+    expect(state.listeners.get("list")?.size ?? 0).toBe(0);
+    consoleError.mockRestore();
   });
 });
