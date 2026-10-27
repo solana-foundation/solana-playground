@@ -172,6 +172,14 @@ error: aborting due to previous error
 error: could not compile \`hello\` due to previous error`;
     expect(countErrors(stderr)).toBe(1);
   });
+
+  it.each([
+    ["an error with a code", "error[E0308]: mismatched types", 1],
+    ["an error without one", "error: unresolved import `foo`", 1],
+    ["the summary alone", "error: could not compile `hello`", 0],
+  ])("counts %s", (_, stderr, count) => {
+    expect(countErrors(stderr)).toBe(count);
+  });
 });
 
 describe("PgFlow.init wiring", () => {

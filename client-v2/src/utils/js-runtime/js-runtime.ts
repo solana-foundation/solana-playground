@@ -23,6 +23,22 @@ interface ExecuteParams {
   isTest: boolean;
 }
 
+/** The globals `mocha.setup({ ui: "bdd" })` defines, handed to test code */
+const BDD_GLOBALS = [
+  "after",
+  "afterEach",
+  "before",
+  "beforeEach",
+  "context",
+  "describe",
+  "it",
+  "specify",
+  "xcontext",
+  "xdescribe",
+  "xit",
+  "xspecify",
+] as const;
+
 export class PgJsRuntime {
   /**
    * Run or test JS/TS code.
@@ -111,7 +127,6 @@ export class PgJsRuntime {
         return new Promise<void>((res) => {
           if (isTest) {
             const intervalId = setInterval(() => {
-              // @ts-ignore
               if (mocha._state === "init") {
                 clearInterval(intervalId);
                 res();
@@ -151,7 +166,6 @@ export class PgJsRuntime {
       if (isTest) throw new Error("Please wait for client to finish.");
       throw new Error("Client is already running!");
     }
-    // @ts-ignore
     if (mocha._state === "running") {
       if (!isTest) throw new Error("Please wait for tests to finish.");
       throw new Error("Tests are already running!");
@@ -263,18 +277,20 @@ export class PgJsRuntime {
     if (isTest) {
       endCode = "_run()";
 
-      // Setup mocha
-      try {
-        if (describe !== undefined) {
-          // Reset suite
-          // @ts-ignore
-          mocha.suite.suites = [];
-          // @ts-ignore
-          mocha.suite.tests = [];
-        }
-      } catch {}
+      // Mocha's BDD functions, which `mocha.setup` defines on the global
+      // object (see `mocha.d.ts` for why they are not typed as globals)
+      const bdd = globalThis as unknown as Record<
+        typeof BDD_GLOBALS[number],
+        object | undefined
+      >;
 
-      // @ts-ignore
+      // Setup mocha
+      if (bdd.describe !== undefined) {
+        // Reset suite
+        mocha.suite.suites = [];
+        mocha.suite.tests = [];
+      }
+
       mocha.setup({
         ui: "bdd",
         timeout: "30000",
@@ -286,18 +302,7 @@ export class PgJsRuntime {
 
       // Set mocha globals
       globals.push(
-        ["after", after],
-        ["afterEach", afterEach],
-        ["before", before],
-        ["beforeEach", beforeEach],
-        ["context", context],
-        ["describe", describe],
-        ["it", it],
-        ["specify", specify],
-        ["xcontext", xcontext],
-        ["xdescribe", xdescribe],
-        ["xit", xit],
-        ["xspecify", xspecify],
+        ...BDD_GLOBALS.map((name): [string, object] => [name, bdd[name]!]),
         ["_run", mocha.run]
       );
     } else {
