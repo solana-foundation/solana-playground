@@ -3,7 +3,8 @@ name: client-v2
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
 # `client/`'s build or tests; this one guards `client-v2/` and never touches
 # the Rust workspaces. A pull_request run reads this file from the PR's
-# merge commit (CLAUDE.md, "This is a fork").
+# merge commit (CLAUDE.md, "This is a fork"). Every action is pinned to a
+# commit, the version tag beside it: a tag can be moved, a commit cannot.
 on:
   push:
     branches: ["master"]
@@ -60,12 +61,12 @@ jobs:
       # it out of the `client/public` submodule and dates each tutorial
       # from that submodule's history, so the submodule is checked out
       # with full history.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
           cache: "yarn"
@@ -197,12 +198,12 @@ jobs:
     steps:
       # Same checkout as `checks`: `client-v2/public` is generated out of the
       # `client/public` submodule, dated from its history.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
           cache: "yarn"
@@ -226,7 +227,7 @@ jobs:
         id: playwright
         run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -236,7 +237,7 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: yarn playwright install --with-deps chromium
 
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         with:
           path: ~/.cache/ms-playwright
@@ -256,7 +257,7 @@ jobs:
       # not `failure()`: a run that `timeout-minutes` cancels is the one whose
       # trace matters most, and `failure()` does not fire for it. On a green
       # run the directory holds the json report and little else.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
           name: playwright-test-results-${{ matrix.shard }}
@@ -267,7 +268,9 @@ jobs:
   # The skip check, once over every shard's report: run per shard, it would
   # warn "stale known skip" from every shard that does not hold the listed
   # test. `always()`, so a red shard's report is still read, and a shard
-  # whose report never arrived fails here instead of passing by absence.
+  # whose report never arrived fails here instead of passing by absence. The
+  # checks are `scripts/e2e-report.mjs`, tested by `scripts/e2e-report.test.mjs`
+  # (`yarn test-api`).
   e2e-report:
     name: e2e-report
     runs-on: ubuntu-latest
@@ -280,15 +283,23 @@ jobs:
         working-directory: client-v2
 
     steps:
-      # `e2e/known-skips.txt` is all this job reads from the repository.
-      - uses: actions/checkout@v6
+      # The script, its list and the Node pin are all this job reads from
+      # the repository; nothing is installed.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          sparse-checkout: client-v2/e2e/known-skips.txt
+          sparse-checkout: |
+            client-v2/e2e/known-skips.txt
+            client-v2/scripts/e2e-report.mjs
+            client-v2/.nvmrc
           sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
 
       # One directory per shard, named after its artifact, so a shard that
       # uploaded nothing is a missing directory rather than a quiet merge.
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: playwright-test-results-*
           merge-multiple: false
@@ -297,46 +308,14 @@ jobs:
       # Playwright writes `config.shard` as `{ total, current }` into the
       # json report. The reports must agree on `total` and cover 1..total: a
       # cancelled shard, a shard that never reached a report, or a lost
-      # upload is a slice nobody checked, not a pass. `pipefail`, because the
-      # default shell drops a jq failure behind `sort`.
-      - name: Every shard reported
-        run: |
-          set -o pipefail
-          shopt -s nullglob
-          reports=(shard-reports/*/report.json)
-          [ "${#reports[@]}" -gt 0 ] || { echo "::error::no shard-reports/*/report.json -- no shard ran to a report"; exit 1; }
-          for report in "${reports[@]}"; do
-            jq -e . "$report" > /dev/null \
-              || { echo "::error::$report is not JSON -- the upload is truncated or the run died mid-write"; exit 1; }
-            jq -e '.config.shard | type == "object"' "$report" > /dev/null \
-              || { echo "::error::$report has no config.shard -- the run was not sharded"; exit 1; }
-          done
-          total=$(jq -r '.config.shard.total' "${reports[@]}" | sort -u)
-          [ "$(echo "$total" | wc -l)" -eq 1 ] || { echo "::error::the shards disagree on their total:" $total; exit 1; }
-          reported=$(jq -r '.config.shard.current' "${reports[@]}" | sort -n | tr '\n' ' ')
-          echo "shards reported: ${reported}of $total"
-          [ "$reported" = "$(seq 1 "$total" | tr '\n' ' ')" ] \
-            || { echo "::error::shards ${reported}of $total reported -- every one of 1..$total must"; exit 1; }
-
-      # A skipped test is green to Playwright, and so is one that passed on
-      # its retry; the reporters name neither. Both are read from the json
-      # reports: a skip outside `e2e/known-skips.txt` fails the job, a listed
-      # test that no longer skips is a warning to prune the list, and a
-      # flaky test is a warning with its title -- work to do, not a pass.
-      # `pipefail`, so a jq failure inside `titles` fails the step instead of
-      # passing a truncated list; `sed` rather than `grep -v`, which exits 1
-      # on a list that holds only comments.
-      - name: Check skips against the known list
-        run: |
-          set -o pipefail
-          [ -f e2e/known-skips.txt ] || { echo "::error::e2e/known-skips.txt not checked out -- the sparse-checkout path in this job is stale"; exit 1; }
-          titles() { jq -r --arg s "$1" '.. | objects | select(has("tests")) | select(any(.tests[]; .status == $s)) | .title' shard-reports/*/report.json | sort; }
-          sed '/^#/d; /^$/d' e2e/known-skips.txt | sort > /tmp/known-skips
-          titles skipped > /tmp/skipped
-          comm -13 /tmp/known-skips /tmp/skipped | while read -r t; do echo "::error title=unexpected e2e skip::$t -- not in e2e/known-skips.txt"; done
-          comm -23 /tmp/known-skips /tmp/skipped | while read -r t; do echo "::warning title=stale known skip::$t -- listed in e2e/known-skips.txt but ran"; done
-          titles flaky | while read -r t; do echo "::warning title=flaky e2e test::$t -- failed once on this runner, passed on retry; its trace is in the shard's artifact"; done
-          [ -z "$(comm -13 /tmp/known-skips /tmp/skipped)" ]
+      # upload is a slice nobody checked, not a pass. A skipped test is green
+      # to Playwright, and so is one that passed on its retry; the reporters
+      # name neither. Both are read from the json reports: a skip outside
+      # `e2e/known-skips.txt` fails the job, a listed test that no longer
+      # skips is a warning to prune the list, and a flaky test is a warning
+      # with its title -- work to do, not a pass.
+      - name: Check the shards and their skips
+        run: node scripts/e2e-report.mjs shard-reports e2e/known-skips.txt
 
   # The status context the default branch's ruleset names (`client-v2`), so
   # a job added to or renamed in this workflow needs no ruleset edit: list it
