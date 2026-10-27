@@ -25,6 +25,9 @@ const cachedNames: Map<string, "full" | "empty"> = new Map();
 /** Rust Analyzer world state */
 let state: AsyncMethods<WorldState>;
 
+/** Generated crates that load only as a dependency of another crate, such as proc macros */
+let transitiveCrates: string[] = [];
+
 /**
  * Initialize Rust Analyzer WASM.
  *
@@ -51,6 +54,8 @@ export const initRustAnalyzer = async (): Promise<Disposable> => {
   // The try interval should take into account the initial download time of the
   // Rust Analyzer WASM files(~9MB) on slower connections.
   state = await PgCommon.tryUntilSuccess(createWorker, 10000);
+
+  transitiveCrates = await fetchTransitiveCrates();
 
   // Initialize and load the default crates
   await state.loadDefaultCrates(
@@ -160,6 +165,35 @@ const createWorker = () => {
   });
 };
 
+/**
+ * Fetch the transitive crate names `generate-crates.mjs` writes.
+ *
+ * @returns the names, or an empty list when the file is missing or malformed
+ */
+const fetchTransitiveCrates = async (): Promise<string[]> => {
+  const url = "/crates/transitive.json";
+  let names: unknown;
+  try {
+    names = JSON.parse(await PgCommon.fetchText(url));
+  } catch (e) {
+    // The SPA fallback answers a missing file with `index.html`
+    console.warn(
+      `Rust Analyzer: ${url} did not load, proc macros stay unresolved`,
+      e
+    );
+    return [];
+  }
+
+  if (!Array.isArray(names)) {
+    console.warn(
+      `Rust Analyzer: ${url} is not a JSON array, proc macros stay unresolved`
+    );
+    return [];
+  }
+
+  return names;
+};
+
 /** Load all local Rust files in the workspace. */
 const loadLocalFiles = async () => {
   const files = Object.keys(PgExplorer.files)
@@ -238,7 +272,7 @@ const loadDependency = async (
     .map((crate) => {
       if (CRATES.importable.includes(crate)) {
         return loadDependency(crate);
-      } else if (CRATES.transitive.includes(crate)) {
+      } else if (transitiveCrates.includes(crate)) {
         return loadDependency(crate, { transitive: true });
       } else {
         return null;

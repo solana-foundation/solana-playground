@@ -1,10 +1,13 @@
+import { DEFAULT_SKILL_IDS } from "./grounding";
 import {
-  DEFAULT_SKILL_IDS,
+  closeConnection,
   listGatewayServers,
   listTools,
   LOCAL_MCP_SERVERS,
-} from "./grounding";
-import { redactKey } from "./model/redact-key";
+  sameConnection,
+} from "@/features/mcp";
+import { redactKey } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 import { forgetBackend, rememberBackend } from "./model/remembered-backend";
 import { PgSession } from "../../../features/auth";
 import {
@@ -20,8 +23,11 @@ import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
 import { createLogger } from "../../../shared/lib/logger";
 import type { Disposable } from "../../../utils";
-import type { McpServerEntry, McpTool } from "./grounding";
-import { isDefaultBackend, type Effort, type ProviderId } from "./model/types";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
+import type { ModelProvider } from "@/shared/lib/ai";
+import { isDefaultBackend, type Effort } from "./model/types";
+
+const log = createLogger("assistant:store");
 
 /** A change the assistant wants to make, waiting on the user */
 export interface PatchApproval {
@@ -85,7 +91,7 @@ interface ChatItemBase {
  * four characters. A thread is synced to the account; the key never is.
  */
 export interface BackendParams {
-  provider: ProviderId;
+  provider: ModelProvider;
   /** Absent only on a backend that picks its own model server-side */
   model?: string;
   /** Only the OpenAI-compatible providers have one */
@@ -180,7 +186,7 @@ type ThreadWrites = "open" | "reading" | "unreadable";
 
 /** Which backend the panel is talking to, and what it needs to reach it */
 export interface Connection {
-  id: ProviderId;
+  id: ModelProvider;
   apiKey: string;
   endpoint?: { baseUrl: string; model: string };
   /** Model and effort, for backends that pick them without a base URL */
@@ -449,9 +455,22 @@ export class PgAssistant {
    * what it serves and the client cannot edit that; a local entry is an
    * addition. Merging them into one editable list would let Apply silently
    * delete a server the gateway still offers.
+   *
+   * Ids are unique: a local entry whose id the gateway serves is left out,
+   * because tool names and connections are keyed by id.
    */
   static get mcpServers(): readonly McpServerEntry[] {
-    return [...PgAssistant._gatewayServers, ...PgAssistant._localServers];
+    const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
+    return [
+      ...PgAssistant._gatewayServers,
+      ...PgAssistant._localServers.filter((s) => !gatewayIds.has(s.id)),
+    ];
+  }
+
+  /** Local entries the gateway took over by serving the same id; kept for when it stops */
+  static get shadowedMcpServers(): readonly McpServerEntry[] {
+    const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
+    return PgAssistant._localServers.filter((s) => gatewayIds.has(s.id));
   }
 
   /** The gateway's own upstreams, as it reported them */
@@ -471,8 +490,33 @@ export class PgAssistant {
 
   /** Replace the local additions — edited as one JSON document */
   static setMcpServers(servers: readonly McpServerEntry[]) {
-    PgAssistant._localServers = servers;
+    PgAssistant._replaceServers(() => {
+      PgAssistant._localServers = servers;
+    });
     PgAssistant._emit();
+  }
+
+  /**
+   * Apply a change to either server list, closing the connection of every id
+   * it removes or points at another URL, and dropping that id's cached tools.
+   */
+  private static _replaceServers(change: () => void) {
+    const before = PgAssistant.mcpServers;
+    change();
+    const after = new Map(PgAssistant.mcpServers.map((s) => [s.id, s]));
+    // Another connection under the same id (an edit, or the gateway taking over a local id) is another server's session and tools
+    const gone = before
+      .filter((server) => {
+        const next = after.get(server.id);
+        return !next || !sameConnection(next, server);
+      })
+      .map((server) => server.id);
+    for (const id of gone) closeConnection(id);
+    if (gone.length) {
+      const tools = { ...PgAssistant._mcpTools };
+      for (const id of gone) delete tools[id];
+      PgAssistant._mcpTools = tools;
+    }
   }
 
   /**
@@ -484,7 +528,10 @@ export class PgAssistant {
    */
   static async loadMcpServers() {
     try {
-      PgAssistant._gatewayServers = await listGatewayServers();
+      const gateway = await listGatewayServers();
+      PgAssistant._replaceServers(() => {
+        PgAssistant._gatewayServers = gateway;
+      });
       PgAssistant._emit();
     } catch (err) {
       console.warn("MCP gateway unavailable; using local servers only", err);
@@ -498,7 +545,7 @@ export class PgAssistant {
   }
 
   /**
-   * Tools discovered from browser-executed servers, by server id.
+   * Tools discovered from each server, by server id.
    *
    * Cached because discovery is a network round trip and `createTools()` is
    * synchronous — a server missing from here contributes no tools this turn
@@ -508,13 +555,31 @@ export class PgAssistant {
     return PgAssistant._mcpTools;
   }
 
-  static setMcpTools(serverId: string, tools: readonly McpTool[]) {
-    PgAssistant._mcpTools = { ...PgAssistant._mcpTools, [serverId]: tools };
+  /**
+   * Discover one server's tools and cache them under its id.
+   *
+   * The result is dropped when the id now names another connection or is off,
+   * so a discovery that outlived a takeover or an edit cannot restore the old tools.
+   *
+   * @throws what {@link listTools} throws
+   */
+  static async discoverToolsOf(server: McpServerEntry) {
+    const tools = await listTools(server);
+    const current = PgAssistant.enabledMcpServers.find(
+      (s) => s.id === server.id
+    );
+    if (!current || !sameConnection(current, server)) {
+      log.debug("Dropped tools discovered on a replaced MCP server", {
+        context: { server: server.id },
+      });
+      return;
+    }
+    PgAssistant._mcpTools = { ...PgAssistant._mcpTools, [server.id]: tools };
     PgAssistant._emit();
   }
 
   /**
-   * Discover tools for every enabled browser-executed server.
+   * Discover tools for every enabled server.
    *
    * Called when the panel mounts, not only from the Sources tab: `createTools`
    * reads this cache, so a model connected before discovery ran would simply
@@ -527,15 +592,13 @@ export class PgAssistant {
    */
   static async discoverMcpTools(force = false) {
     const servers = PgAssistant.enabledMcpServers.filter(
-      (server) =>
-        server.executor === "browser" &&
-        (force || !PgAssistant._mcpTools[server.id])
+      (server) => force || !PgAssistant._mcpTools[server.id]
     );
 
     await Promise.all(
       servers.map(async (server) => {
         try {
-          PgAssistant.setMcpTools(server.id, await listTools(server));
+          await PgAssistant.discoverToolsOf(server);
         } catch (err) {
           console.warn(`MCP server ${server.id}: tool discovery failed`, err);
         }
@@ -753,16 +816,6 @@ export class PgAssistant {
     if (item?.kind === "assistant") {
       item.text += delta;
       stamp(item);
-      PgAssistant._emit();
-    }
-  }
-
-  /** Drop an assistant message that never received any text */
-  static discardIfEmpty(id: string) {
-    const index = PgAssistant._items.findIndex((i) => i.id === id);
-    const item = PgAssistant._items[index];
-    if (item?.kind === "assistant" && !item.text) {
-      PgAssistant._items.splice(index, 1);
       PgAssistant._emit();
     }
   }
@@ -1427,8 +1480,8 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
     import.meta.vitest;
   describe("views/sidebar/assistant/store", () => {
-    let MIN_REDACTED_KEY_LENGTH: typeof import("./model/redact-key").MIN_REDACTED_KEY_LENGTH;
-    let REDACTED_KEY: typeof import("./model/redact-key").REDACTED_KEY;
+    let MIN_REDACTED_KEY_LENGTH: typeof import("@/shared/lib/ai").MIN_REDACTED_KEY_LENGTH;
+    let REDACTED_KEY: typeof import("@/shared/lib/ai").REDACTED_KEY;
     let isDefaultBackendRemembered: typeof import("./model/remembered-backend").isDefaultBackendRemembered;
     let rememberedConnection: typeof import("./model/remembered-backend").rememberedConnection;
     let truncationNoticeId: typeof import("../../../features/persistence/model/chat-storage").truncationNoticeId;
@@ -1436,7 +1489,7 @@ if (import.meta.vitest) {
     let storedValues: typeof import("../../../test-utils/stored-values").storedValues;
     beforeAll(async () => {
       ({ MIN_REDACTED_KEY_LENGTH, REDACTED_KEY } = await import(
-        "./model/redact-key"
+        "@/shared/lib/ai"
       ));
       ({ isDefaultBackendRemembered, rememberedConnection } = await import(
         "./model/remembered-backend"
@@ -2185,7 +2238,7 @@ if (import.meta.vitest) {
         ]);
 
         const loading = PgAssistant.loadThread("t1");
-        PgAssistant.setMcpTools("probe", []);
+        PgAssistant.keepBackend();
         await loading;
         await settled();
 

@@ -185,12 +185,18 @@ impl WorldState {
         let files = serde_wasm_bindgen::from_value::<Vec<[String; 2]>>(files).unwrap();
         let mut change = Change::new();
         let mut file_set = FileSet::default();
+        // `next_file_id` reads `source_roots`, which this loop does not update until it ends
+        let mut next_file_id = self.next_file_id();
 
         for [path, content] in files {
             let path = VfsPath::new_virtual_path(path);
             let file_id = match path.name_and_extension() {
                 Some((name, _)) if name == "lib" => Self::LOCAL_FILE_ID,
-                _ => self.file_id_from_path(&path).unwrap_or(self.next_file_id()),
+                _ => self.file_id_from_path(&path).unwrap_or_else(|| {
+                    let file_id = next_file_id;
+                    next_file_id = FileId(file_id.0 + 1);
+                    file_id
+                }),
             };
             file_set.insert(file_id, path);
             change.change_file(file_id, Some(Arc::new(content)));

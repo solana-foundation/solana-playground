@@ -327,19 +327,12 @@ module.exports = {
           })(),
 
           /** All supported crates(Rust Analyzer) */
-          CRATES: defineFromPublicDir("crates", (dirItems) => {
-            const importable = Object.keys(
+          CRATES: JSON.stringify({
+            importable: Object.keys(
               JSON.parse(
                 fs.readFileSync(path.join("..", "supported-crates.json"))
               )
-            ).map((name) => name.replaceAll("-", "_"));
-
-            const transitive = dirItems
-              .filter((name) => name.endsWith(".toml"))
-              .map((name) => name.replace(".toml", ""))
-              .filter((name) => !importable.includes(name));
-
-            return { importable, transitive };
+            ).map((name) => name.replaceAll("-", "_")),
           }),
 
           /** Supported packages(TypeScript) */

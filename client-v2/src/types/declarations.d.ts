@@ -7,15 +7,15 @@ import { ROUTES } from "../routes";
 import { MAIN_SECONDARY, SIDEBAR } from "../views";
 import { SETTINGS } from "../settings";
 import {
-  Arrayable,
-  Disposable,
   JsRuntimePackageName,
   OrString,
   Settings,
-  SyncOrAsync,
   Theme,
   TutorialDataParam,
 } from "../utils";
+
+// The rule cannot see uses of the globals declared below; the imports above stay checked
+/* eslint-disable @typescript-eslint/no-unused-vars */
 
 /** Global overrides */
 global {
@@ -32,7 +32,7 @@ global {
   };
 
   /** Rust Analyzer crates */
-  const CRATES: { importable: string[]; transitive: string[] };
+  const CRATES: { importable: string[] };
 
   /** Supported client packages */
   const PACKAGES: {

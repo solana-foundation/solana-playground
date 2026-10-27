@@ -104,7 +104,25 @@ export const leaveEditor = async (page: Page) => {
   await expect(editor).not.toBeFocused();
 };
 
+/**
+ * Starts every page of a fresh profile on the public devnet, the cluster the
+ * specs stub and name, whatever default `REACT_APP_DEVNET_RPC_URL` gives the
+ * build. A profile that already holds settings keeps them.
+ */
+const startOnPublicDevnet = (context: BrowserContext) =>
+  context.addInitScript(() => {
+    if (localStorage.getItem("settings") !== null) return;
+    localStorage.setItem(
+      "settings",
+      JSON.stringify({ connection: { endpoint: { option: "devnet" } } })
+    );
+  });
+
 export const test = base.extend<{ seededPage: Page }>({
+  context: async ({ context }, use) => {
+    await startOnPublicDevnet(context);
+    await use(context);
+  },
   // `E2E_CPU_THROTTLE=<n>` slows the test's page `n` times, to show a race
   // that only the runner hits (`docs/testing.md`, "Parallel runs")
   page: async ({ page }, use) => {

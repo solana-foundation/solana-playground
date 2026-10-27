@@ -1,19 +1,16 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
-import { Badge } from "@/shared/ui/badge";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
-import { callTool, listTools, McpUnreachableError } from "../grounding";
-import type { McpServerEntry, McpTool } from "../grounding";
+import { callTool } from "@/features/mcp";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
 
 interface ServerConsoleProps {
   server: McpServerEntry;
   /** The connected backend's name, when one is connected */
   providerName?: string;
-  /** Whether that backend can execute a `server`-executor entry for us */
-  hasServerExecutor: boolean;
 }
 
 /** Descriptions past this many characters start collapsed */
@@ -55,15 +52,8 @@ const skeletonFor = (tool: McpTool, cluster: string) => {
   );
 };
 
-/**
- * One MCP server: what can reach it, and — when the browser can — a console
- * for calling its tools with no backend connected at all.
- */
-const ServerConsole = ({
-  server,
-  providerName,
-  hasServerExecutor,
-}: ServerConsoleProps) => {
+/** One MCP server, with a console for calling its tools with no backend connected at all */
+const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
   const tools = PgAssistant.mcpTools[server.id] ?? [];
 
   const [busy, setBusy] = useState(false);
@@ -78,17 +68,14 @@ const ServerConsole = ({
   // Long enough to bury the argument box: some servers write a page here
   const descriptionIsLong = description.length > LONG_DESCRIPTION;
 
-  const explain = (e: unknown) => {
-    if (e instanceof McpUnreachableError) return e.message;
-    return e instanceof Error ? e.message : String(e);
-  };
+  const explain = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
   const discover = async () => {
     setBusy(true);
     setError(null);
     setResult(null);
     try {
-      PgAssistant.setMcpTools(server.id, await listTools(server));
+      await PgAssistant.discoverToolsOf(server);
     } catch (e) {
       setError(explain(e));
     } finally {
@@ -155,89 +142,69 @@ const ServerConsole = ({
     <Card>
       <Head>
         <Name>{server.name || server.id}</Name>
-        <Badge variant="outline" className="shrink-0 font-mono">
-          {server.executor}
-        </Badge>
       </Head>
 
-      {server.executor === "server" ? (
-        <Note>
-          {hasServerExecutor
-            ? `This server has no CORS headers, so a page cannot call it. ` +
-              `${providerName} executes it for us.`
-            : `This server has no CORS headers, so a page cannot call it, and ` +
-              `${
-                providerName ?? "the backend you connect"
-              } provides no executor for it. Its tools are unavailable until ` +
-              `one does.`}
-        </Note>
-      ) : (
+      <Note>Callable straight from here — no backend, no key, no tokens.</Note>
+
+      <Actions>
+        <Action onClick={discover} disabled={busy}>
+          {busy ? "Working…" : tools.length ? "Refresh tools" : "Connect"}
+        </Action>
+      </Actions>
+
+      {tools.length > 0 && (
         <>
-          <Note>
-            Callable straight from here — no backend, no key, no tokens.
-          </Note>
+          <Label htmlFor={`mcp-tool-${server.id}`}>TOOL</Label>
+          <NativeSelect
+            size="sm"
+            className="w-full [&_select]:font-mono [&_select]:text-xs"
+            id={`mcp-tool-${server.id}`}
+            value={selected ?? ""}
+            onChange={(ev) => pick(ev.target.value)}
+          >
+            <NativeSelectOption value="">Pick a tool…</NativeSelectOption>
+            {tools.map((tool) => (
+              <NativeSelectOption key={tool.name} value={tool.name}>
+                {tool.name}
+              </NativeSelectOption>
+            ))}
+          </NativeSelect>
 
-          <Actions>
-            <Action onClick={discover} disabled={busy}>
-              {busy ? "Working…" : tools.length ? "Refresh tools" : "Connect"}
-            </Action>
-          </Actions>
-
-          {tools.length > 0 && (
+          {selected && (
             <>
-              <Label htmlFor={`mcp-tool-${server.id}`}>TOOL</Label>
-              <NativeSelect
-                size="sm"
-                className="w-full [&_select]:font-mono [&_select]:text-xs"
-                id={`mcp-tool-${server.id}`}
-                value={selected ?? ""}
-                onChange={(ev) => pick(ev.target.value)}
-              >
-                <NativeSelectOption value="">Pick a tool…</NativeSelectOption>
-                {tools.map((tool) => (
-                  <NativeSelectOption key={tool.name} value={tool.name}>
-                    {tool.name}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-
-              {selected && (
-                <>
-                  <Description $clamped={!descriptionOpen && descriptionIsLong}>
-                    {description}
-                  </Description>
-                  {descriptionIsLong && (
-                    <button
-                      type="button"
-                      aria-expanded={descriptionOpen}
-                      onClick={() => setDescriptionOpen((open) => !open)}
-                      className="mt-1 cursor-pointer p-0 text-xs text-muted-foreground underline hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    >
-                      {descriptionOpen ? "Show less" : "Show more"}
-                    </button>
-                  )}
-
-                  <Label htmlFor={`mcp-args-${server.id}`}>ARGUMENTS</Label>
-                  <Json
-                    id={`mcp-args-${server.id}`}
-                    value={args}
-                    onChange={(ev) => setArgs(ev.target.value)}
-                    spellCheck={false}
-                    rows={5}
-                  />
-
-                  <Actions>
-                    <Action onClick={call} disabled={busy}>
-                      {busy ? "Calling…" : "Call"}
-                    </Action>
-                    {PgAssistant.isConnected && (
-                      <Action onClick={askAssistant} disabled={busy}>
-                        Ask {providerName ?? "the assistant"}
-                      </Action>
-                    )}
-                  </Actions>
-                </>
+              <Description $clamped={!descriptionOpen && descriptionIsLong}>
+                {description}
+              </Description>
+              {descriptionIsLong && (
+                <button
+                  type="button"
+                  aria-expanded={descriptionOpen}
+                  onClick={() => setDescriptionOpen((open) => !open)}
+                  className="mt-1 cursor-pointer p-0 text-xs text-muted-foreground underline hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                >
+                  {descriptionOpen ? "Show less" : "Show more"}
+                </button>
               )}
+
+              <Label htmlFor={`mcp-args-${server.id}`}>ARGUMENTS</Label>
+              <Json
+                id={`mcp-args-${server.id}`}
+                value={args}
+                onChange={(ev) => setArgs(ev.target.value)}
+                spellCheck={false}
+                rows={5}
+              />
+
+              <Actions>
+                <Action onClick={call} disabled={busy}>
+                  {busy ? "Calling…" : "Call"}
+                </Action>
+                {PgAssistant.isConnected && (
+                  <Action onClick={askAssistant} disabled={busy}>
+                    Ask {providerName ?? "the assistant"}
+                  </Action>
+                )}
+              </Actions>
             </>
           )}
         </>

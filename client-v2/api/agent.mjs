@@ -108,7 +108,7 @@ const pipeStream = async (res, body) => {
     }
   } catch (e) {
     if (!res.writableEnded && !res.destroyed) {
-      // The shape the panel's provider loop already reads (`openai.ts`)
+      // The error frame `@ai-sdk/openai-compatible` reads; `runTurn` (shared/lib/ai) raises it as `AiTurnError`
       const message = `Upstream stream failed: ${e.message}`;
       // The leading blank line closes whatever frame the upstream left
       // unfinished; glued onto it, the error would be one malformed line

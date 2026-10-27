@@ -118,6 +118,18 @@ await fs.writeFile(
   JSON.stringify(crates)
 );
 
+// Read at runtime, so a dev server started before this run still loads the proc macros
+const importable = Object.keys(crates).map((name) => name.replaceAll("-", "_"));
+await fs.writeFile(
+  path.join(CRATES_PATH, "transitive.json"),
+  JSON.stringify(
+    cachedCrates
+      .map((name) => name.replaceAll("-", "_"))
+      .filter((name) => !importable.includes(name))
+      .sort()
+  )
+);
+
 // Written last, so an interrupted run never looks current
 await fs.writeFile(KEY_PATH, `${key}\n`);
 

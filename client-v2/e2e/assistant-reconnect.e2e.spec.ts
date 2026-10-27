@@ -117,7 +117,7 @@ const OWN = {
   apiKey: KEY,
   endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
 };
-/** Where the openai provider posts a turn, as `model/openai.ts` builds it */
+/** Where the openai provider posts a turn: `@ai-sdk/openai-compatible` appends the path */
 const COMPLETIONS_URL = `${OWN.endpoint.baseUrl}/chat/completions`;
 const REPLY = "stubbed provider reply";
 
@@ -449,10 +449,9 @@ test.describe("assistant-own-key", () => {
       return route.fulfill({
         status: 200,
         contentType: "text/event-stream",
-        body:
-          `data: ${JSON.stringify({
-            choices: [{ delta: { content: REPLY } }],
-          })}\n\n` + "data: [DONE]\n\n",
+        body: `data: ${JSON.stringify({
+          choices: [{ delta: { content: REPLY } }],
+        })}\n\ndata: [DONE]\n\n`,
       });
     });
     const leaks: string[] = [];
