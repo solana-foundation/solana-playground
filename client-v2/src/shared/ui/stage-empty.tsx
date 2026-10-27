@@ -31,7 +31,11 @@ function StageEmptyMedia({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function StageEmptyTitle({ className, ...props }: React.ComponentProps<"h2">) {
+function StageEmptyTitle({
+  className,
+  children,
+  ...props
+}: React.ComponentProps<"h2">) {
   return (
     <h2
       data-slot="stage-empty-title"
@@ -40,7 +44,9 @@ function StageEmptyTitle({ className, ...props }: React.ComponentProps<"h2">) {
         className
       )}
       {...props}
-    />
+    >
+      {children}
+    </h2>
   );
 }
 

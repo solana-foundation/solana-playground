@@ -25,13 +25,15 @@ function StageEmptyMedia({ className, ...props }: React.ComponentProps<"div">) {
   )
 }
 
-function StageEmptyTitle({ className, ...props }: React.ComponentProps<"h2">) {
+function StageEmptyTitle({ className, children, ...props }: React.ComponentProps<"h2">) {
   return (
     <h2
       data-slot="stage-empty-title"
       className={cn("font-heading text-[clamp(1.75rem,2.4vw,2.5rem)] leading-[1.1] font-headline tracking-tight text-foreground", className)}
       {...props}
-    />
+    >
+      {children}
+    </h2>
   )
 }
 
