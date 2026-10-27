@@ -156,11 +156,6 @@ describe("PgFlow.reduce", () => {
 
 describe("countErrors", () => {
   it("counts real diagnostics, not the summary lines", async () => {
-    // The factory's identity function: `mockReset` (see `vitest.config.ts`)
-    // restores it before each test anyway; restated so the test reads alone.
-    const { stripKnownNoise } = await mockedBuildOutput();
-    vi.mocked(stripKnownNoise).mockImplementation((s: string) => s);
-
     const stderr = `error[E0308]: mismatched types
   --> src/lib.rs:12:18
    |
@@ -183,16 +178,6 @@ error: could not compile \`hello\` due to previous error`;
 });
 
 describe("PgFlow.init wiring", () => {
-  // Every subscription `init` makes has to hand back a disposable, whatever
-  // an earlier test set its mock to. These tests are about the build and
-  // deploy events, so the restore subscription just needs to not throw.
-  beforeEach(async () => {
-    const { PgProgramInfo } = await import("../../../utils");
-    vi.mocked(PgProgramInfo.onDidChangeOnChain).mockReturnValue({
-      dispose: vi.fn(),
-    });
-  });
-
   it("deploy-finish detects success and failure via result shape", async () => {
     const { PgCommand, PgExplorer, PgGlobal } = await import("../../../utils");
     PgGlobal.deployState = "ready";
