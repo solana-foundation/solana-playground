@@ -188,7 +188,12 @@ changes. Asked to build something in the client, look there first.
   It goes through the explorer's editor-buffer seam (`registerEditorBuffers`),
   because Monaco reuses an existing model on re-open and its autosave would
   otherwise write the pre-merge text back; keystrokes typed during the merge
-  are folded in with `merge3`.
+  are folded in with `merge3`. `_catchUp` does it twice, before the re-open
+  and after it: the editor registers its buffers only once its lazy chunk and
+  `initLanguages` are done, so under load it can mount mid-sync, build its
+  model from memory not yet re-read, and have the re-open reuse it -- the pane
+  kept the replaced file (HOO-2119). The second pass also sets memory, which
+  the re-open has already read.
 - **`dirty` is a hint, never a decision.** It only lets reconcile skip
   re-hashing a project; `mark.files` + `name` decide whether anything is owed. It
   was load-bearing twice and wrong both times: a workspace switch sets it on
@@ -228,9 +233,10 @@ changes. Asked to build something in the client, look there first.
   when the metadata names none, so re-reading a workspace always lands
   somewhere.
 - **Typing folded in by sync has its base kept on the spot.** A merge or an
-  adoption folds typing into the files it rewrote (`_catchUp`), then re-opens
-  the workspace -- and the sync effect re-takes the shadow from that folded
-  copy, which no longer hashes to the mark. So `_adopt` and `_mergeWithServer`
+  adoption folds typing into the files it rewrote (`_catchUp`), before the
+  re-open or, for an editor that mounted meanwhile, after it -- and the sync
+  effect re-takes the shadow from memory, which then holds the folded copy and
+  no longer hashes to the mark. So `_adopt` and `_mergeWithServer`
   call `PgSyncBase.capture(..., from)` with what they wrote; without it the
   folded file had no base and the next exchange asked about the whole file.
   Tests that stub `switchWorkspace` (`captureWrites`) never fire the switch

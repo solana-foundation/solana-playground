@@ -400,7 +400,11 @@ describe("a tutorial started on one browser, opened on another", () => {
 
 describe("work that never reached the server", () => {
   beforeEach(setUp);
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    editor?.dispose();
+    editor = null;
+    vi.restoreAllMocks();
+  });
 
   /**
    * The sequence the old code lost an afternoon to: this device pushes, then
@@ -467,6 +471,31 @@ describe("work that never reached the server", () => {
       "src/lib.rs": "the other device",
     });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+  });
+
+  it("brings an editor that mounted while the other device's copy was taken up to that copy", async () => {
+    await diverge();
+    await reconcile();
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    // The editor finishes loading during the re-open, before memory is
+    // re-read, so it builds its model from the text just replaced. The
+    // re-open then reuses that model, and the pane goes on showing it.
+    let buffers: Map<string, string> | null = null;
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers = editorHolds({
+        [`/${HELLO.name}/src/lib.rs`]: "an afternoon of work",
+      });
+    });
+
+    expect(await PgProjectSync.resolve(HELLO.id, "take-server")).toBe(true);
+
+    expect(buffers!.get(`/${HELLO.name}/src/lib.rs`)).toBe("the other device");
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "the other device"
+    );
   });
 });
 
@@ -875,6 +904,129 @@ describe("both devices changed it", () => {
     expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\ne\n");
   });
 
+  it("folds in what was typed into an editor that mounted while the other device's copy was taken", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    // Mounted during the re-open, from memory not yet re-read, and typed into
+    // before the re-open was done
+    let buffers: Map<string, string> | null = null;
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers = editorHolds({
+        [`/${HELLO.name}/src/lib.rs`]: "a\nb\nc\nd\nE\n",
+      });
+    });
+    const toMemory = vi
+      .spyOn(PgExplorer, "saveFileToState")
+      .mockImplementation(() => {});
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    expect(buffers!.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\nE\n");
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "A\nb\nc\nd\nE\n"
+    );
+    // ...and memory, which the re-open has read already: a build reads it
+    expect(toMemory).toHaveBeenCalledWith(
+      `/${HELLO.name}/src/lib.rs`,
+      "A\nb\nc\nd\nE\n"
+    );
+    // On this device alone, so the project still owes it to the account
+    expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
+  });
+
+  it("leaves alone what was typed during the re-open into a buffer it had already caught up", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    const buffers = editorHolds({ [`/${HELLO.name}/src/lib.rs`]: base });
+    // Typed beside the line sync changed, once the buffer had the account's
+    // copy: ordinary typing for autosave, not something to merge again
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers.set(`/${HELLO.name}/src/lib.rs`, "A\nB\nc\nd\ne\n");
+    });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nB\nc\nd\ne\n");
+    expect(getFailures()).toEqual([]);
+  });
+
+  it("brings up a model the re-open built from the replaced text in an editor already mounted", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    // Mounted, with no model for the file until the re-open opened it
+    const buffers = editorHolds({});
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers.set(`/${HELLO.name}/src/lib.rs`, base);
+    });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\ne\n");
+  });
+
+  it("writes nothing for a model the re-open built from the copy it took", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    const buffers = editorHolds({});
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers.set(`/${HELLO.name}/src/lib.rs`, "A\nb\nc\nd\ne\n");
+    });
+    const write = vi.spyOn(PgFs, "writeFile");
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    // A write announces a change to the other tabs, which reload for it
+    expect(
+      write.mock.calls.filter(([path]) => path === `/${HELLO.name}/src/lib.rs`)
+    ).toEqual([]);
+  });
+
+  it("drops the model of a file the other device removed from an editor that mounted while its copy was taken", async () => {
+    await startFrom(
+      { "src/lib.rs": base, "tests/t.rs": "test" },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    let buffers: Map<string, string> | null = null;
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers = editorHolds({ [`/${HELLO.name}/tests/t.rs`]: "test" });
+    });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    // Left in place, autosave would write the file back and the next push
+    // would undo the other device's delete
+    expect(buffers!.has(`/${HELLO.name}/tests/t.rs`)).toBe(false);
+    expect(storedFiles().has(`/${HELLO.name}/tests/t.rs`)).toBe(false);
+  });
+
   it("does not take the other device's copy over what was typed and saved while it was being fetched", async () => {
     // Reconcile found the copy clean and adopted. The user typed during the
     // adoption's round trip and autosave stored it, so a copy of the local
@@ -932,6 +1084,32 @@ describe("both devices changed it", () => {
       "A\nb\nC\nd\nE\n"
     );
     expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
+  });
+
+  it("still keeps the base of folded typing, and says so, when the re-open fails", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    vi.spyOn(PgExplorer, "switchWorkspace").mockRejectedValue(
+      new Error("re-open failed")
+    );
+    editorHolds({ [`/${HELLO.name}/src/lib.rs`]: "a\nb\nC\nd\nE\n" });
+
+    await PgProjectSync.pushCurrent();
+
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "A\nb\nC\nd\nE\n"
+    );
+    // Without the base, the next exchange asks about the whole file; without
+    // the mark, reconcile's cheap path skips the typing until the next edit
+    expect(await PgSyncBase.read(HELLO.id)).toHaveProperty("src/lib.rs");
+    expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
+    expect(getFailures().map((f) => f.what)).toEqual([
+      expect.stringContaining("re-open"),
+    ]);
   });
 
   it("merges an edit no push has sent yet, when a reconcile gets there first", async () => {
