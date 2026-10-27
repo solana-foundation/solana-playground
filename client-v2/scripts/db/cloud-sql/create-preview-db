@@ -26,8 +26,8 @@ exists() {
 if exists; then
   echo "reusing database $name on $CLOUD_SQL_INSTANCE" >&2
 # A second run racing this one may create it between the check and here
-elif admin_sql "create database \"$name\" template solpg_preview_base owner \"$CLOUD_SQL_USER\"" || exists; then
-  echo "created database $name on $CLOUD_SQL_INSTANCE from solpg_preview_base" >&2
+elif admin_sql "create database \"$name\" template $PREVIEW_BASE owner \"$CLOUD_SQL_USER\"" || exists; then
+  echo "created database $name on $CLOUD_SQL_INSTANCE from $PREVIEW_BASE" >&2
 else
   exit 1
 fi

@@ -18,6 +18,10 @@
 : "${CLOUD_SQL_USER:?CLOUD_SQL_USER is unset: the IAM database user the application connects as}"
 PROXY_PORT=${CLOUD_SQL_PROXY_PORT:-5434}
 
+# The template every preview database is cloned from, and that
+# migrate-preview-base keeps migrated
+PREVIEW_BASE=solpg_preview_base
+
 # Every name below is interpolated into SQL as a quoted identifier
 [[ "$CLOUD_SQL_USER" =~ ^[A-Za-z0-9@._-]+$ ]] || {
   echo "CLOUD_SQL_USER is not an IAM database user name: \"$CLOUD_SQL_USER\"" >&2
