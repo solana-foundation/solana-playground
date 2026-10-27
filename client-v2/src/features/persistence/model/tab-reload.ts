@@ -160,10 +160,11 @@ if (PgExplorer.isInitialized && !PgExplorer.isTemporary) recordOpen();
  * Whether a workspace's directory holds anything a delete would have taken.
  *
  * Not merely whether it exists: the editor runs `saveMeta` on an interval
- * while its tab has focus, and the write of `.workspace/metadata.json`
- * creates its parents. A tab that has not yet heard of a delete made
- * elsewhere recreates the directory around that one file -- and read as
- * "still there", that undid the delete in every tab.
+ * while its tab has focus, and a tab that has not yet heard of a delete made
+ * elsewhere writes `.workspace/metadata.json` into whatever is left of the
+ * directory. `saveMeta` no longer makes a missing workspace folder again, but
+ * one that is there holding only that file still reads as "still there" --
+ * which undid the delete in every tab.
  */
 const holdsFiles = async (root: string): Promise<boolean> => {
   const walk = async (dir: string): Promise<boolean> => {

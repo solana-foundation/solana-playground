@@ -1,5 +1,6 @@
 import { PgFs } from "./fs";
 import { PgWorkspace } from "./workspace";
+import { forgetFlushed, writeWorkspaceFile } from "./workspace-file";
 import {
   isMissing,
   report,
@@ -7,6 +8,7 @@ import {
 import { PgCommon } from "../common";
 import { PgLanguage } from "../language";
 import { PgView } from "../view";
+import { createLogger } from "../../shared/lib/logger";
 import type { Disposable } from "../types";
 import type {
   EditorBuffers,
@@ -18,6 +20,8 @@ import type {
   ExplorerFiles,
   Position,
 } from "./types";
+
+const log = createLogger("explorer:explorer");
 
 export class PgExplorer {
   /** Internal state */
@@ -263,7 +267,8 @@ export class PgExplorer {
   /**
    * If the project is not temporary(default):
    * - Name and path checks
-   * - Create new item in `indexedDB`
+   * - Create new item in `indexedDB`, and save the folder tree at once for a
+   *   new file or folder (`_saveTree`), so a reload right after keeps it
    * - If create is successful, also create the item in the state
    *
    * If the project is temporary:
@@ -306,6 +311,9 @@ export class PgExplorer {
     if (itemType.file) {
       if (!this.isTemporary) {
         await this.fs.writeFile(fullPath, content, { createParents: true });
+        // A new file is a change to the folder tree; replacing a file's
+        // content is not
+        if (!files[fullPath]) await this._saveTree("a create");
       }
 
       files[fullPath] = {
@@ -325,7 +333,10 @@ export class PgExplorer {
     }
     // Folder
     else {
-      if (!this.isTemporary) await this.fs.createDir(fullPath);
+      if (!this.isTemporary) {
+        await this.fs.createDir(fullPath);
+        await this._saveTree("a create");
+      }
 
       files[fullPath] = {};
     }
@@ -338,7 +349,8 @@ export class PgExplorer {
   /**
    * If the project is not temporary(default):
    * - Name and path checks
-   * - Rename in `indexedDB`
+   * - Rename in `indexedDB`, and save the folder tree at once (`_saveTree`),
+   *   so a reload right after keeps the new name
    * - If rename is successful also rename item in the state
    *
    * If the project is temporary:
@@ -385,8 +397,12 @@ export class PgExplorer {
       if (newPathExists) throw new Error(PgExplorer.errors.ALREADY_EXISTS);
     }
 
-    // Rename in `indexedDB`
-    if (!this.isTemporary) await this.fs.rename(oldPath, newPath);
+    // Rename in `indexedDB`. A rename changes only the folder tree, so a
+    // reload before it is saved brings the old name back
+    if (!this.isTemporary) {
+      await this.fs.rename(oldPath, newPath);
+      await this._saveTree("a rename");
+    }
 
     // Rename in state
     const files = this.files;
@@ -450,7 +466,8 @@ export class PgExplorer {
 
   /**
    * If the project is not temporary(default):
-   * - Delete from `indexedDB`(recursively)
+   * - Delete from `indexedDB`(recursively), and save the folder tree at once
+   *   (`_saveTree`), so a reload right after does not list it again
    * - If delete is successful, delete from state
    *
    * If the project is temporary:
@@ -468,6 +485,9 @@ export class PgExplorer {
       const metadata = await this.fs.getMetadata(fullPath);
       if (metadata.isFile()) await this.fs.removeFile(fullPath);
       else await this.fs.removeDir(fullPath, { recursive: true });
+      // The content goes at once, the tree entry only when the tree is saved:
+      // a reload before that lists a file that can no longer be read
+      await this._saveTree("a delete");
     }
 
     // If we are deleting current file's parent(s), we need to set the current
@@ -712,6 +732,9 @@ export class PgExplorer {
       // registered but whose directory never landed; the writes below are
       // what matter
     }
+    // Cleared, so a workspace file the snapshot lacks is created again by
+    // its next write, which must flush -- even if a write below fails
+    forgetFlushed(PgCommon.appendSlash(dir));
 
     for (const [path, content] of Object.entries(files)) {
       await this.fs.writeFile(PgCommon.joinPaths(dir, path), content, {
@@ -887,7 +910,8 @@ export class PgExplorer {
   /**
    * Saves file metadata to `indexedDB`
    *
-   * NOTE: Only runs when the project is not temporary.
+   * NOTE: Only runs when the project is not temporary. Saves nothing when the
+   * current workspace's folder is gone, and never makes it again.
    */
   static async saveMeta() {
     if (this.isTemporary) return;
@@ -937,12 +961,41 @@ export class PgExplorer {
       })
       .map((meta) => ({ ...meta, path: this.getRelativePath(meta.path) }));
 
-    // Save file
-    await this.fs.writeFile(
-      PgWorkspace.METADATA_PATH,
-      JSON.stringify(metaFile),
-      { createParents: true }
-    );
+    // Through `writeWorkspaceFile`: the write that creates this file changes
+    // the folder tree (a new workspace, or one whose files sync replaced), and
+    // a workspace whose folder is gone must not get it back
+    try {
+      await writeWorkspaceFile(
+        PgWorkspace.METADATA_PATH,
+        JSON.stringify(metaFile)
+      );
+    } catch (e) {
+      if (!isMissing(e)) throw e;
+      // Deleted or renamed in another tab, which this one has not yet heard
+      // of: there is nothing to save to, and the switch that follows a save
+      // must still be able to leave
+      log.debug("no metadata saved: the workspace's folder is gone", {
+        context: { workspacePath },
+      });
+    }
+  }
+
+  /**
+   * Save the folder tree now rather than 500 ms after the last write, after a
+   * change to the tree a reload must not lose.
+   *
+   * A failed save is reported and does not fail the caller: the change itself
+   * is on disk, and failing would leave the state behind the store. The tree
+   * is still saved on lightning-fs's own schedule.
+   *
+   * @param what the change, for the report ("a rename")
+   */
+  private static async _saveTree(what: string) {
+    try {
+      await this.fs.flush();
+    } catch (e) {
+      report(`save the folder tree after ${what}`, e);
+    }
   }
 
   /* ----------------------------- State methods ---------------------------- */

@@ -176,9 +176,11 @@ export class PgFs {
    * never created -- the project's files exist but nothing can find them, and
    * the explorer reports the workspace as missing.
    *
-   * Content writes do not need this. Structural changes -- creating,
-   * renaming or deleting a workspace, or creating a file -- do; a file the
-   * workspace keeps under `.workspace/` goes through `writeWorkspaceFile`,
+   * A content write to an existing file does not need this. Anything that
+   * changes the tree does: creating, renaming or deleting a file, a folder or
+   * a workspace (`PgExplorer.createItem`, `renameItem`, `deleteItem` and the
+   * workspace methods call it). A file a workspace keeps beside its code
+   * (`.workspace/*`, `.tutorial.json`) goes through `writeWorkspaceFile`,
    * which flushes on its first write. It rewrites the whole tree, so never
    * call it per write.
    */

@@ -3,6 +3,7 @@ import { PgExplorer, TupleFiles } from "../explorer";
 import { PgWorkspace } from "../explorer/workspace";
 import { writeWorkspaceFile } from "../explorer/workspace-file";
 import { PgRouter } from "../router";
+import { createLogger } from "../../shared/lib/logger";
 import {
   createDerivable,
   declareDecorator,
@@ -16,6 +17,8 @@ import type {
   TutorialState,
   TutorialStorageData,
 } from "./types";
+
+const log = createLogger("tutorial:storage");
 
 const defaultState: TutorialState = {
   pageNumber: null,
@@ -47,7 +50,18 @@ const storage = {
       return;
     }
 
-    await PgExplorer.fs.writeFile(this.PATH, JSON.stringify(state));
+    // Through `writeWorkspaceFile`: `PgTutorial.start` creates this file,
+    // right after `createWorkspace` saved the folder tree or for a synced
+    // tutorial that came without it, and a reload before the next save of the
+    // tree would lose it.
+    //
+    // `updatable` calls this without awaiting it, so a failure is logged
+    // here; rethrown, it would be an unhandled rejection naming nothing
+    try {
+      await writeWorkspaceFile(this.PATH, JSON.stringify(state));
+    } catch (e) {
+      log.error(e, { report: true });
+    }
   },
 };
 
