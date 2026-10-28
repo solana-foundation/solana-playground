@@ -1,5 +1,5 @@
 import { ScriptTarget, transpile } from "typescript";
-import * as mocha from "mocha";
+import * as mocha from "mocha/browser-entry";
 import * as util from "util";
 import * as anchor from "@coral-xyz/anchor";
 

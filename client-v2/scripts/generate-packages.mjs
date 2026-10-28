@@ -62,6 +62,13 @@ await fs.writeFile(
 );
 
 // Sync client package imports
+//
+// An import path per package where it differs from the name. "mocha" itself
+// would type the import with `@types/mocha`, whose global `it` (no `each`)
+// shadows vitest's in the client's tests; `mocha/browser-entry` is the file
+// webpack picks for "mocha" anyway (its `browser` field), and it has no types,
+// so `src/utils/js-runtime/mocha.d.ts` applies.
+const IMPORT_PATHS = { mocha: "mocha/browser-entry" };
 const packageImportFile = await fs.readFile(
   pathModule.join(CLIENT_PATH, "scripts", "package-import-template.ts.raw"),
   "utf8"
@@ -76,7 +83,8 @@ await fs.writeFile(
     .replace(
       "<IMPORTS>",
       packages.importable.reduce((acc, cur) => {
-        return acc + `\n      case "${cur}":\n        return import("${cur}");`;
+        const path = IMPORT_PATHS[cur] ?? cur;
+        return acc + `\n      case "${cur}":\n        return import("${path}");`;
       }, "")
     )
 );
