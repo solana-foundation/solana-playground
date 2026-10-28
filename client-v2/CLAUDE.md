@@ -351,14 +351,16 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   `full` hands the review to the pr-review-toolkit plugin, which must be
   installed too; the default run checks the plugin's built-in rules and this
   repository's, plus the governing OpenSpec change and the Solana guidance
-  where they apply. Human reviewers read the diff and click through the
-  preview; they do not re-run the review, so the author's run is the gate.
-  Fix every critical finding in the same PR, and every important one the PR
-  needs; an important you defer gets a `TODO` at the site naming why or the
-  follow-up, so the next run reads it as acknowledged. A finding outside the
-  PR's scope goes to its existing Linear issue, or a new one when none fits;
-  a gap the review keeps missing becomes a Linear issue too, closed later
-  through agent rules or tooling.
+  where they apply. Human reviewers read the diff; they do not re-run the
+  review, so the author's run is the gate. A ticket branch gets no Vercel
+  preview, only the integration branches do
+  (`scripts/vercel-ignore-build.mjs`), so a PR that changes the UI shows it
+  in its screenshots. Fix every critical finding in the same PR, and every
+  important one the PR needs; an important you defer gets a `TODO` at the
+  site naming why or the follow-up, so the next run reads it as acknowledged.
+  A finding outside the PR's scope goes to its existing Linear issue, or a
+  new one when none fits; a gap the review keeps missing becomes a Linear
+  issue too, closed later through agent rules or tooling.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
