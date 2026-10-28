@@ -279,6 +279,55 @@ test("client-v2-layout: Folding the console", async ({ seededPage: page }) => {
   await expect(page.locator(".xterm-rows")).toContainText("echo-marker");
 });
 
+// The terminal was a grid item as wide as its own content, so when the stage
+// narrowed after it mounted (as it does while the layout settles on load) it
+// overhung the console and shrank one scrollbar per throttled fit, 15 fits on
+// a load here. On the runner a `help` sent in that window once printed with
+// the view left at the top of the buffer (HOO-2370); that xterm step is not
+// reproduced, so this guards the overhang, the condition it ran in
+test("the terminal never overhangs the console while it opens and runs a command", async ({
+  page,
+}) => {
+  // How far the terminal reaches past the console, every frame from the load
+  await page.addInitScript(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    w.overhang = 0;
+    w.samples = 0;
+    const sample = () => {
+      const terminal = document.querySelector(".xterm");
+      const well = document.querySelector(
+        '[data-slot="console-drawer-content"]'
+      );
+      if (terminal && well) {
+        w.samples++;
+        w.overhang = Math.max(
+          w.overhang,
+          terminal.getBoundingClientRect().width -
+            well.getBoundingClientRect().width
+        );
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await seedWorkspace(page);
+
+  // Typed and sent while the drawer is still opening: no wait for it
+  await consoleHandle(page).click();
+  await page.getByLabel("Terminal input").first().focus();
+  await page.keyboard.type("help");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".xterm-rows")).toContainText(HELP_TAIL);
+
+  const { overhang, samples } = await page.evaluate(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    return { overhang: w.overhang, samples: w.samples };
+  });
+  // A renamed selector would measure nothing and pass
+  expect(samples).toBeGreaterThan(0);
+  expect(overhang).toBeLessThanOrEqual(0);
+});
+
 // React's StrictMode runs an effect twice in dev; opening the terminal on
 // both runs printed the welcome twice and left `$ $` as the prompt
 test("client-v2-layout: The terminal greets once", async ({
