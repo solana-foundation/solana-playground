@@ -217,8 +217,8 @@ counts.
    "Before a PR") still applies to every task.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
-   before the sx review runs and before the PR is opened; it never runs
-   `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
+   before the PR is opened (and before the sx review, if it runs); it never
+   runs `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
    `tasks.md`, then `/opsx:archive` merges the deltas into `openspec/specs/`
    and moves the folder to `changes/archive/<date>-<name>/`, all committed in
    that same PR. On a no, the PR description says
@@ -338,27 +338,44 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   a fallback or a migration for a problem someone reported, reproduce it
   live (a probe, a curl, a screenshot, dated) and put that in the PR. A PR
   that solves a problem the repository does not have is closed, not fixed.
-- **Archiving is a human's call, asked before the sx review.** If the
+- **Archiving is a human's call, asked before the PR is opened.** If the
   PR ticks the change's last task, ask whether to close the change before
-  the first `/sx:review-pr` run and before opening the PR. On a yes,
-  confirm every task is ticked, delete `tasks.md`, run `/opsx:archive` and
-  commit the deletion and the archive in this PR; on a no, the PR
+  opening the PR, and before the first `/sx:review-pr` run if there is one.
+  On a yes, confirm every task is ticked, delete `tasks.md`, run
+  `/opsx:archive` and commit the deletion and the archive in this PR; on a
+  no, the PR
   description says `OpenSpec: <change> stays open (<who answered>, <date>)`.
   Never archive unasked.
-- **The author runs the sx review.** `/sx:review-pr full`, then
-  `/sx:review-pr`, on every PR and before `gh pr create`; the skill comes
-  from the `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills).
-  `full` hands the review to the pr-review-toolkit plugin, which must be
-  installed too; the default run checks the plugin's built-in rules and this
-  repository's, plus the governing OpenSpec change and the Solana guidance
-  where they apply. Human reviewers read the diff and click through the
-  preview; they do not re-run the review, so the author's run is the gate.
-  Fix every critical finding in the same PR, and every important one the PR
-  needs; an important you defer gets a `TODO` at the site naming why or the
-  follow-up, so the next run reads it as acknowledged. A finding outside the
-  PR's scope goes to its existing Linear issue, or a new one when none fits;
-  a gap the review keeps missing becomes a Linear issue too, closed later
-  through agent rules or tooling.
+- **The author runs the sx review when they have it.** An author with the
+  `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills) runs
+  `/sx:review-pr full`, then `/sx:review-pr`, on every PR and before
+  `gh pr create`. `full` hands the review to the pr-review-toolkit plugin,
+  which must be installed too; the default run checks the plugin's built-in
+  rules and this repository's, plus the governing OpenSpec change and the
+  Solana guidance where they apply. An author without the plugin skips the
+  run, and the human review is the gate. Human reviewers read the diff and
+  click through the preview; they do not re-run the review. Fix every
+  critical finding in the same PR, and every important one the PR needs; an
+  important you defer gets a `TODO` at the site naming why or the follow-up,
+  so the next run reads it as acknowledged. A finding outside the PR's scope
+  goes to its existing Linear issue, or a new one when none fits; a gap the
+  review keeps missing becomes a Linear issue too, closed later through agent
+  rules or tooling. The PR description may carry the line
+  `sx:review-pr (full + default) @ <sha>: <n> critical open`, where `<sha>`
+  is the head both runs read; write it only when both runs read that head,
+  and update it after each re-run. The line is optional: a PR without it is
+  reviewed and merged the usual way, with a human approval. With it, a PR
+  into a `scope/*` branch or `new-face-polish-2` merges without a human
+  approval once it has no conflict, no human has requested changes, CI is
+  green and the line names the PR's current head with 0 critical open.
+  Green means every check the `ci.yml` and `client-v2.yml`
+  workflows report on that head passed, except `ci.yml`'s `checks / Build`,
+  which is always skipped because `ci.yml` passes `build: false`; any other
+  skipped check, and any pending, cancelled or missing one, is not green. A
+  red Vercel preview does not hold the merge. The fleet's Dispatcher (the
+  agent session that merges ready PRs) merges these PRs, never their author.
+  Without the line, with a stale one or with any critical open, and for any
+  other base, a human approves.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
