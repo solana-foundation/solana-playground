@@ -3,7 +3,7 @@ import { expect, home, homeRegion, startProject, test } from "./fixtures";
 import { openGallery } from "./fixtures";
 
 /**
- * D16: opening a tutorial that has never been started, while a real
+ * Opening a tutorial that has never been started, while a real
  * project is the active workspace, used to throw
  * `Current tutorial has not been set` or bounce back to `/`. An
  * already-started tutorial always worked, so the regression only shows
@@ -16,10 +16,10 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 
   await page.goto("/");
 
-  // Make a real project the active workspace first -- D16 only shows up
+  // Make a real project the active workspace first -- the crash only shows up
   // when a project is already active, not on the very first, empty-state
   // open (Home's New project tile unfolds `StartFromScratch`).
-  await startProject(page, "d16-project");
+  await startProject(page, "active-project");
 
   // The gallery as a dialog named by its title, for the steps below.
   const gallery = page.getByRole("dialog", {
@@ -122,7 +122,7 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // is on the page; if `LessonSurface` is mounted, it is not.
   await expect(page.getByText("Next", { exact: true })).toHaveCount(0);
 
-  // Entering the lesson lands on its page (D34): the sheet is open with
+  // Entering the lesson lands on its page: the sheet is open with
   // no click, its footer names the way on, and closing it leaves the
   // band pointing at the code with the plain label -- the record now
   // knows the page was opened, so the "read first" signpost has rested.

@@ -2,15 +2,14 @@
 
 This is what the in-product assistant knows about **itself and this project**.
 It is loaded into the assistant's context so that questions like "what is this?",
-"how does it work?", "what's the status?" and "what did you decide and why?" are
-answered from maintained documents rather than invented.
+"how does it work?", "what's the status?" and "why is it built this way?" are
+answered from a maintained document rather than invented.
 
 The panel does not render it: it is context the assistant answers from, not a
 page to read.
 
 > **Maintained by hand, for now.** Keep it short and keep it true. When it
-> disagrees with `decisions.md`, `product-brief.md` or `codebase-map.yaml`,
-> those win and this file is wrong. See `decisions.md` → D6.
+> disagrees with the code, the code wins and this file is wrong.
 
 ---
 
@@ -84,7 +83,7 @@ else — no model calls, no key, no quota, no state. The default backend
 (`client-v2/api/agent.mjs`) is where a model call does leave the browser: it
 forwards a chat-completions turn to an upstream configured server-side, so the
 key stays off the client. Every tool that touches your project still runs in
-the browser, behind the same approval gates. See `decisions.md` → D19.
+the browser, behind the same approval gates.
 
 - The providers share one vendor-neutral tool set (`createTools()`) and one
   turn loop: the default backend (whatever this deployment configured, reached
@@ -123,12 +122,12 @@ the browser, behind the same approval gates. See `decisions.md` → D19.
   in prose instead of writing it, **Make this change** asks for the same edit as
   a patch — which still arrives as a diff you accept or reject. Inside a lesson
   step it reads **Write it for me**, because taking it skips the rest of the
-  hints. See `decisions.md` → D14.
+  hints.
 
 **One gap we had to close.** The client did not keep the compiler's output
 anywhere — the raw `stderr` was printed to the terminal and discarded, leaving
 only a `lastBuildFailed` boolean. Explaining a real error needs the compiler's
-real words, so the build command now stores it. See `decisions.md` → D4.
+real words, so the build command now stores it.
 
 ## Status
 
@@ -139,9 +138,8 @@ milestone demo works end to end.
 
 Done:
 
-- Repository mapped and verified — `codebase-map.yaml` records how the client
-  actually works, with file paths, and was checked by running it, not by reading
-  alone.
+- Repository mapped and verified — how the client actually works was checked
+  by running it, not by reading alone.
 - Local development unblocked: the client would not install until six Rust→WASM
   packages were compiled (~1 hour). They are behind lazy imports and none are on
   the UI boot path, so `wasm/stub-packages.sh` stands them in and setup is now
@@ -149,7 +147,8 @@ Done:
 - Verified the client runs standalone against the public build server
   (`https://api.solpg.io`) — CORS allows `http://localhost:3000` and a real build
   returned in 3.5 seconds. No Docker, no Rust toolchain needed.
-- Runtime and architecture decided and written down (`decisions.md`).
+- Runtime and architecture decided: the assistant runs in the browser, with
+  two small routes deployed alongside the client.
 - The assistant panel: the default backend needs no key, only a GitHub
   sign-in, and is preselected when the deployment configured one; Anthropic,
   and OpenAI-compatible with
@@ -159,8 +158,8 @@ Done:
   from solana.com, `Solana V2` as the fork's default), the floating-panel
   layout (anatomy and navigation built on top of it; the classic layout, since
   removed), then **Flow** —
-  re-anatomizing the UI around the Write → Build → Deploy → Interact loop
-  (`decisions.md` → D10, D17). Flow is the only layout, a frame of four
+  re-anatomizing the UI around the Write → Build → Deploy → Interact loop.
+  Flow is the only layout, a frame of four
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
   footer: a cluster row, which opens the settings on the cluster, and an
@@ -294,12 +293,11 @@ Honesty rule for the demo — never present a mocked step as working.
 ## Answering questions about this project
 
 When someone asks what this is, what is planned, how it works, or why it was
-built this way, answer from this file and from `decisions.md` — those are the
-maintained sources.
+built this way, answer from this file — it is the maintained source.
 
 Lead with the outcome, then the supporting detail. Be concrete: name the actual
 mechanism rather than gesturing at it. If something is not built yet, say so
 plainly — the credibility of the whole demo rests on not overclaiming.
 
-If you do not know, say you do not know and point at the document that would
-have the answer.
+Answer "why" only from what this file states. If it does not say, say you do
+not know rather than reconstructing a reason.

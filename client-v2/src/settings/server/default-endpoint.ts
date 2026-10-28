@@ -6,9 +6,10 @@ export const FOUNDATION_ENDPOINT =
   "https://playground-server-dot-analytics-324114.de.r.appspot.com";
 
 /**
- * Upstream's original backend. Reachable on purpose and never a default
- * (D30): a user who picks it accepts that it is Acheron's capacity, not
- * Solana's, and the label says which one it is.
+ * Upstream's original backend. Reachable on purpose and never a default:
+ * Solana serves its users from infrastructure it operates, so a user who
+ * picks this one accepts that it is Acheron's capacity, not Solana's, and
+ * the label says which one it is.
  */
 export const SOLPG_ENDPOINT = "https://api.solpg.io";
 
@@ -88,7 +89,7 @@ if (import.meta.vitest) {
         }
       });
 
-      it("never defaults to api.solpg.io (D30)", () => {
+      it("never defaults to api.solpg.io", () => {
         for (const NODE_ENV of ["production", "development", "test"]) {
           expect(defaultServerEndpoint({ NODE_ENV })).not.toBe(SOLPG_ENDPOINT);
         }

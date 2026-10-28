@@ -898,7 +898,7 @@ frontier only.
 the stage under the band, so it covers the editor and not the band. Esc closes
 it and focus goes back to what opened it. It keeps "Close the page", the
 criterion and "Mark as read" or "Back to the code" in its footer, and the
-once-on-entry opening (D34).
+once-on-entry opening, so the learner reads the step before the code.
 
 **Phone** (below `LAYOUT_BREAKPOINTS.phone`). The band folds to one row ("n/m",
 the objective, a chevron); the chevron opens the Files sheet on Steps. The
@@ -1655,7 +1655,7 @@ they are answered. One PR.
   whole window, so nothing of the shell's tree changes.
 - **The sections**, in order: Network, Project, Block Explorer, Build,
   Connection, Editor, Notification, Server, Test UI, UI, Wallet, and a twelfth,
-  Experimental, for `experimental.unstable` (D37; Slava, 2026-10-20: a setting
+  Experimental, for `experimental.unstable` (off by default; Slava, 2026-10-20: a setting
   is not dropped for want of a section in the prototype). Network and Project
   are the overlay's own (the network chips; Export, From GitHub, From files);
   the rest come from `PgSettings.all`, grouped by the id's prefix as before.

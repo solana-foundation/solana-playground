@@ -51,7 +51,7 @@ interface ObjectiveBandProps {
  * Slava 2026-10-16). The proving action is an outline button labelled by
  * what proves the step, dispatching the same command the stage bar's
  * stepper does. The page comes first among the actions, and until it has
- * been opened its unread dot is the band's signpost (D34).
+ * been opened its unread dot is the band's signpost to read it first.
  */
 const ObjectiveBand: FC<React.PropsWithChildren<ObjectiveBandProps>> = ({
   state,

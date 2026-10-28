@@ -28,7 +28,8 @@ export const primaryLabel = (c: VerifyCondition): string => {
 
 /**
  * The read button's label. Until the page has been opened it is the
- * signpost D34 asked for -- the one thing that says "read first".
+ * lesson's signpost -- the one thing that says "read first", since a page
+ * that only looks like a clickable tab is easy to skip.
  */
 export const readLabel = (position: number, opened: boolean): string =>
   opened ? "Read the page" : `Read step ${position} first`;

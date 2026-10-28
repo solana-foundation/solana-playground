@@ -4,7 +4,8 @@ import type { LessonStep } from "./types";
 
 /**
  * The one rule for opening the page by itself: only on entering the
- * lesson, and only when the learner has never opened that page (D34).
+ * lesson, and only when the learner has never opened that page, so the
+ * step is read before the code without the page ever reopening uninvited.
  *
  * "Entering" is read off the record rather than off a mount: the store
  * appends `enter` on every load, and every later event moves the tail
