@@ -1179,8 +1179,10 @@ widgets/assistant
   targets and a diff scrolls inside `min(15rem, 40dvh)`, so a pending card's
   question and its answer fit above the keyboard. The scroller follows new
   content only while the reader is at the end; once they scroll up by wheel,
-  touch or keys it stays put and offers "Scroll to end". There is no scroll
-  anchor, so a send made while scrolled up does not move the thread.
+  touch or keys it stays put and offers "Scroll to end". Sending takes the
+  thread back to the end, so a reply sent while scrolled up is followed;
+  a message folded in from another device leaves the reader where they are
+  (HOO-2293).
 - **What survives.** The log "Conversation", "Assistant is working", "Make
   this change", "Write it for me", "Skip this step", Apply, Reject, Allow,
   Deny, and the status words, now in sentence case (Proposed, Applied,

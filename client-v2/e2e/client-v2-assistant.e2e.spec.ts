@@ -559,6 +559,48 @@ test.describe("The thread", () => {
     await expect(thread(page).getByText(/more more/)).toBeInViewport(LONG);
   });
 
+  // HOO-2293: a reader who scrolled up and then sent saw the reply stream
+  // off-screen, since a new message did not turn following back on
+  test("a message sent while scrolled up brings the reply into view", async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          'data: {"choices":[{"delta":{"content":"The reply you sent for"}}]}\n\n' +
+          "data: [DONE]\n\n",
+      })
+    );
+    await openProject(page, "thread-send-scrolled-up");
+
+    await storeReady(page);
+    await page.evaluate(() => {
+      const store = (window as ThreadWindow).__pgAssistant!;
+      for (let i = 0; i < 30; i++) store.addUserMessage(`Message ${i}`);
+    });
+    await expect(thread(page).getByText("Message 29")).toBeInViewport(LONG);
+
+    const viewport = page.locator("[data-slot=message-scroller-viewport]");
+    await viewport.hover();
+    await page.mouse.wheel(0, -100_000);
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollTop))
+      .toBeLessThan(10);
+
+    await input(page).fill("Where is my reply");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+
+    await expect(
+      thread(page).getByText("The reply you sent for")
+    ).toBeInViewport(LONG);
+    await expect(
+      page.getByRole("button", { name: "Scroll to end" })
+    ).toHaveAttribute("data-active", "false");
+  });
+
   test("client-v2-assistant: Reloading with a card pending", async ({
     page,
   }) => {
