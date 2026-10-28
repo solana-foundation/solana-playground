@@ -35,7 +35,8 @@ the `types` setup.
   before asserting.
 - Mock answers that restate what `mockReset` restores are dropped from
   `stage.test.ts`, `tab-sync.test.ts`, `project-sync.test.ts`,
-  `tab-reload.test.ts`; `deploy-history.test.ts` holds none on this base.
+  `tab-reload.test.ts` and `workspace-refresh.test.ts`; `deploy-history.test.ts`
+  holds none on this base.
 - The comments and the `AGENTS.md` rule that blame `@types/mocha` for the
   missing `it.each` are corrected.
 
