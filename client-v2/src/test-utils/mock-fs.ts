@@ -157,13 +157,14 @@ export const mockFsModule = () => {
       const isDirectory = [...files.keys()].some((key) =>
         key.startsWith(dir(path) + "/")
       );
-      if (!isDirectory && !files.has(path)) {
+      const content = files.get(path);
+      if (!isDirectory && content === undefined) {
         throw fsError("ENOENT", path);
       }
       return {
         type: isDirectory ? "dir" : "file",
         mode: isDirectory ? 0o777 : 0o666,
-        size: isDirectory ? 0 : files.get(path)!.length,
+        size: isDirectory ? 0 : content?.length ?? 0,
         ino: 0,
         mtimeMs: 0,
         ctimeMs: 0,
