@@ -268,7 +268,13 @@ const toasterTheme = () =>
     .getAttribute("data-sonner-theme");
 
 describe("the toaster's theme", () => {
-  afterEach(() => document.documentElement.classList.remove("dark"));
+  // The host is still mounted here and its observer reports in a microtask
+  afterEach(async () => {
+    await act(async () => {
+      document.documentElement.classList.remove("dark");
+      await Promise.resolve();
+    });
+  });
 
   it("should be light when the app is in a light theme", () => {
     render(<ToastHost />);

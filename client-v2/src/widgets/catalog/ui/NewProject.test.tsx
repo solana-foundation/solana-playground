@@ -304,6 +304,8 @@ it("holds every card while Start makes a project", async () => {
   expect(
     screen.getByRole("button", { name: "Open Hello Anchor" })
   ).toHaveProperty("disabled", true);
+  // The program count lands after the listing's fetch, past the last assertion
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
 it("keeps the dialog for a cancelled import, and says nothing", async () => {
