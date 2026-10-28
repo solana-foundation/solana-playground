@@ -31,6 +31,7 @@ jobs:
           sparse-checkout: |
             client-v2/scripts/lib/bundle/locate-pr.mjs
           sparse-checkout-cone-mode: false
+          persist-credentials: false
 
       # The pull request comes from the head commit, since `workflow_run.pull_requests` is empty for a fork's pull request.
       - name: Locate report and pull request
