@@ -100,12 +100,30 @@ export const loadReference = async (skill: SkillEntry, path: string) => {
   return fetchText(resolveReference(skill.source.baseUrl, path));
 };
 
-/** Look a skill up by the id the model supplied */
-export const requireSkill = (id: string) => {
+/**
+ * Look a skill up by the id the model supplied, refusing one the user turned
+ * off. The catalogue omits an unticked skill, but the model can still name it:
+ * from an earlier turn, before the untick, or by guessing.
+ *
+ * @param id skill id from the model
+ * @param enabledIds the skills the user has ticked
+ * @throws if the id is unknown or not among `enabledIds`
+ */
+export const requireEnabledSkill = (
+  id: string,
+  enabledIds: readonly string[]
+) => {
   const skill = findSkill(id);
   if (!skill) {
     throw new Error(
       `There is no skill with id "${id}". Call list_skills to see what exists.`
+    );
+  }
+  if (!enabledIds.includes(skill.id)) {
+    throw new Error(
+      "the skill is disabled: the user unticked it in Sources and tools. " +
+        "Do not retry; go on without it, or tell the user they can tick it " +
+        "there."
     );
   }
   return skill;
