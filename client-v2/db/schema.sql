@@ -382,6 +382,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20260915124433
 20260916032901
 20260929120000
+20261028000000
 \.
 
 

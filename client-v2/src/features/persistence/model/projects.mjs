@@ -299,7 +299,7 @@ export const writeProject = async (q, userId, input) => {
 };
 
 /**
- * Tombstone a project.
+ * Tombstone a project and erase what its chat said.
  *
  * The row stays so another device's next sync sees "deleted" rather than
  * "missing" and does not push its local copy back up. Its files go: a
@@ -311,6 +311,16 @@ export const writeProject = async (q, userId, input) => {
  * conversation left live here was handed to the new run as the previous
  * run's chat. Scoped by user as well as project: a tutorial's id is the same
  * string in every account that started it.
+ *
+ * What the conversations said goes too: their messages are deleted and their
+ * titles cleared, for every conversation under the project, including one a
+ * previous run of a tutorial left tombstoned. The conversation rows stay,
+ * holding only ids, owner, project and timestamps. While the project is
+ * deleted its own tombstone refuses every push; once a tutorial is started
+ * again under the same id, the conversation's tombstone is what answers a
+ * device still holding the old run's thread with `ThreadDeleted("thread")`
+ * instead of taking its push as a new thread. A push in flight during the
+ * delete is ordered against it by the lock `ensureThread` takes.
  */
 export const deleteProject = async (userId, id) => {
   await transaction(async (q) => {
@@ -326,6 +336,17 @@ export const deleteProject = async (userId, id) => {
     await q(
       `update conversations set deleted_at = now()
         where user_id = $1 and project_id = $2 and deleted_at is null`,
+      [userId, id]
+    );
+    await q(
+      `delete from messages m using conversations c
+        where m.conversation_id = c.id
+          and c.user_id = $1 and c.project_id = $2`,
+      [userId, id]
+    );
+    await q(
+      `update conversations set title = null
+        where user_id = $1 and project_id = $2 and title is not null`,
       [userId, id]
     );
   });
