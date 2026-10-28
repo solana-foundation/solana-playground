@@ -59,7 +59,7 @@ export type BuildSurface =
  * unreachable build server fails in milliseconds, and swapping surfaces for
  * that round trip reads as a blink (failed -> building -> failed). While a
  * run is in flight the previous surface stays put and only its action shows
- * "Building...".
+ * "Building…".
  */
 export const buildSurface = ({
   flow,
@@ -93,7 +93,7 @@ export const buildSurface = ({
     return { kind: "unreached", failure: flow.buildFailure };
   }
   // Also reached while the very first build is in flight: there is no
-  // previous surface to hold onto, so the empty state says "Building...".
+  // previous surface to hold onto, so the empty state says "Building…".
   if (!own) return { kind: "empty" };
   if (!own.failed) return { kind: "succeeded" };
   return { kind: "failed", stderr: own.stderr };

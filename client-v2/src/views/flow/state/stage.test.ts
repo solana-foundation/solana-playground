@@ -378,6 +378,62 @@ describe("PgFlow.init wiring", () => {
     sub.dispose();
   });
 
+  it("names an empty program file the build never sent (Spec 09)", async () => {
+    const { PgCommand, PgExplorer, PgGlobal } = await import("../../../utils");
+    PgGlobal.deployState = "ready";
+    const buildOutputModule = await mockedBuildOutput();
+    buildOutputModule.PgBuildOutput.latest = null;
+
+    let buildStartCallback:
+      | Parameters<typeof PgCommand.build.onDidStart>[0]
+      | undefined;
+    let buildFinishCallback:
+      | Parameters<typeof PgCommand.build.onDidFinish>[0]
+      | undefined;
+
+    vi.mocked(PgCommand.build.onDidStart).mockImplementation((cb) => {
+      buildStartCallback = cb;
+      return { dispose: vi.fn() };
+    });
+    vi.mocked(PgCommand.build.onDidFinish).mockImplementation((cb) => {
+      buildFinishCallback = cb;
+      return { dispose: vi.fn() };
+    });
+    vi.mocked(buildOutputModule.PgBuildOutput.onDidChange).mockReturnValueOnce({
+      dispose: vi.fn(),
+    });
+    vi.mocked(PgCommand.deploy.onDidStart).mockReturnValueOnce({
+      dispose: vi.fn(),
+    });
+    vi.mocked(PgCommand.deploy.onDidFinish).mockReturnValueOnce({
+      dispose: vi.fn(),
+    });
+    vi.mocked(PgExplorer.onDidSwitchWorkspace).mockReturnValueOnce({
+      dispose: vi.fn(),
+    });
+
+    const sub = PgFlow.init();
+
+    buildStartCallback!(null);
+    expect(PgFlow.state.build).toBe("running");
+
+    // As the `build` command throws it before any request
+    buildFinishCallback!({
+      err: Object.assign(new Error("lib.rs is empty."), {
+        emptyFile: "src/lib.rs",
+      }),
+    });
+    expect(PgFlow.state.build).toBe("failed");
+    expect(PgFlow.state.buildErrorCount).toBe(0);
+    expect(PgFlow.state.buildFailure).toEqual({
+      kind: "empty-source",
+      file: "src/lib.rs",
+      message: "lib.rs is empty.",
+    });
+
+    sub.dispose();
+  });
+
   it("ignores build.onDidFinish's err when real output already arrived", async () => {
     const { PgCommand, PgExplorer, PgGlobal } = await import("../../../utils");
     PgGlobal.deployState = "ready";

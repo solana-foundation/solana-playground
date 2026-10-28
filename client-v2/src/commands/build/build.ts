@@ -12,12 +12,21 @@ import {
   TupleFiles,
 } from "../../utils";
 import { createCmd } from "../create";
+import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 
 export const build = createCmd({
   name: "build",
   description: "Build your program",
   handle: async () => {
+    // Spec 09: an empty program file is named and nothing is sent. The
+    // refusal counts as a failed build, so Deploy does not go on with the
+    // binary of the program that file used to hold.
+    if (isEmptyProgram(PgExplorer.getFileContent(PROGRAM_FILE))) {
+      PgProgramInfo.update({ lastBuildFailed: true });
+      throw emptySourceError(PROGRAM_FILE);
+    }
+
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 

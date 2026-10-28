@@ -54,27 +54,44 @@ describe("describeConsoleStatus", () => {
 
   it("shows building while a build runs", () => {
     expect(describeConsoleStatus(state({ build: "running" }))).toEqual({
-      text: "building...",
+      text: "Building…",
       tone: "running",
     });
+  });
+
+  // Spec 13: the strip counts the run's seconds
+  it("adds the seconds a run has taken", () => {
+    expect(describeConsoleStatus(state({ build: "running" }), 12_400)).toEqual({
+      text: "Building… \u00b7 12 s",
+      tone: "running",
+    });
+    expect(
+      describeConsoleStatus(state({ build: "done", deploy: "running" }), 4_000)
+    ).toEqual({ text: "Deploying… \u00b7 4 s", tone: "running" });
+  });
+
+  it("counts no seconds once the run is over", () => {
+    expect(
+      describeConsoleStatus(state({ build: "done", buildMs: 3400 }), 9_000)
+    ).toEqual({ text: "Built in 3.4 s", tone: "success" });
   });
 
   it("shows deploying while a deploy runs, after a build succeeded", () => {
     expect(
       describeConsoleStatus(state({ build: "done", deploy: "running" }))
-    ).toEqual({ text: "deploying...", tone: "running" });
+    ).toEqual({ text: "Deploying…", tone: "running" });
   });
 
   it("shows the last build's time and result once it finishes", () => {
     expect(
       describeConsoleStatus(state({ build: "done", buildMs: 3400 }))
-    ).toEqual({ text: "last build \u00b7 3.4s \u00b7 ok", tone: "success" });
+    ).toEqual({ text: "Built in 3.4 s", tone: "success" });
   });
 
   it("falls back to no time when buildMs is unknown", () => {
     expect(
       describeConsoleStatus(state({ build: "done", buildMs: null }))
-    ).toEqual({ text: "last build \u00b7 ok", tone: "success" });
+    ).toEqual({ text: "Built", tone: "success" });
   });
 
   it("shows the first diagnostic code on a failed build", () => {
@@ -82,22 +99,22 @@ describe("describeConsoleStatus", () => {
       stderr: "error[E0308]: mismatched types\n --> src/lib.rs:11:22",
     };
     expect(describeConsoleStatus(state({ build: "failed" }))).toEqual({
-      text: "build failed \u00b7 E0308",
+      text: "Build failed \u00b7 E0308",
       tone: "error",
     });
   });
 
-  it("falls back to a bare 'build failed' without a diagnostic code", () => {
+  it("falls back to a bare 'Build failed' without a diagnostic code", () => {
     buildOutput.PgBuildOutput.latest = { stderr: "error: could not compile" };
     expect(describeConsoleStatus(state({ build: "failed" }))).toEqual({
-      text: "build failed",
+      text: "Build failed",
       tone: "error",
     });
   });
 
-  it("falls back to 'build failed' with no build output yet", () => {
+  it("falls back to 'Build failed' with no build output yet", () => {
     expect(describeConsoleStatus(state({ build: "failed" }))).toEqual({
-      text: "build failed",
+      text: "Build failed",
       tone: "error",
     });
   });
@@ -107,12 +124,12 @@ describe("describeConsoleStatus", () => {
       describeConsoleStatus(
         state({ build: "done", buildMs: 1000, deploy: "done" })
       )
-    ).toEqual({ text: "deploy ok", tone: "success" });
+    ).toEqual({ text: "Deployed", tone: "success" });
 
     expect(
       describeConsoleStatus(
         state({ build: "done", buildMs: 1000, deploy: "failed" })
       )
-    ).toEqual({ text: "deploy failed", tone: "error" });
+    ).toEqual({ text: "Deploy failed", tone: "error" });
   });
 });

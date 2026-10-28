@@ -365,7 +365,7 @@ it("should keep toggling from the current value on repeated keys", () => {
   expect(toggled()).toHaveLength(3);
 });
 
-it("should open the assistant on 'Fix with assistant', as auto", () => {
+it("should open the assistant on a build error's Explain, as auto", () => {
   shell();
   press({ key: "r", ctrlKey: true });
   act(() => PgAssistant.requestPrompt("fix this"));
@@ -602,7 +602,7 @@ it("should report a tap on the assistant Sheet's overlay as a button", async () 
   });
 });
 
-it("should open the assistant Sheet on 'Fix with assistant' after the window narrows", () => {
+it("should open the assistant Sheet on a build error's Explain after the window narrows", () => {
   shell();
   act(() => resizeTo(800));
   act(() => PgAssistant.requestPrompt("fix this"));

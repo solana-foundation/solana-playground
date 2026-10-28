@@ -291,7 +291,7 @@ test("client-v2-layout: The terminal greets once", async ({
   await expect(consoleHandle(page)).toHaveAttribute("aria-expanded", "true");
   await drag(page, consoleSeparator(page), 0, -600);
   const rows = page.locator(".xterm-rows");
-  await expect(rows).toContainText("Type help to see all commands");
+  await expect(rows).toContainText("Type help to see commands");
   await expect
     .poll(() =>
       page
@@ -305,7 +305,9 @@ test("client-v2-layout: The terminal greets once", async ({
       (row.textContent ?? "").replace(/\u00a0/g, " ").trimEnd()
     ).filter((line) => line !== "")
   );
-  expect(lines.filter((line) => line.includes("Welcome to"))).toHaveLength(1);
+  expect(
+    lines.filter((line) => line.includes("Output from Build"))
+  ).toHaveLength(1);
   expect(lines.at(-1)).toBe("$");
 });
 

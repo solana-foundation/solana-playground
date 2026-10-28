@@ -121,9 +121,11 @@ test.describe("client-v2-stages", () => {
     const fault = diagnostic.locator("[data-fault]");
     await expect(fault.locator("span").first()).toHaveText("5");
     await expect(fault).toContainText("expected u32, found &str");
+    // Spec 04: Explain and Fix on every error card
     await expect(
-      diagnostic.getByRole("button", { name: "Fix with assistant" })
+      diagnostic.getByRole("button", { name: "Explain" })
     ).toBeVisible();
+    await expect(diagnostic.getByRole("button", { name: "Fix" })).toBeVisible();
   });
 
   test("client-v2-stages: A deployment shows its program id to copy", async ({

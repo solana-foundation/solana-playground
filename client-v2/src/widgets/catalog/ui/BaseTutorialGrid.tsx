@@ -35,7 +35,7 @@ const BaseTutorialGrid = ({
       <div role="alert" className="flex items-center gap-3 text-control">
         <span className="text-error">{items.message}</span>
         <Button variant="outline" onClick={items.onRetry}>
-          Retry
+          Try again
         </Button>
       </div>
     );
