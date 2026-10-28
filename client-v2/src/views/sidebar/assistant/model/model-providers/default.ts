@@ -17,7 +17,32 @@ const signedOutRefusal = (error: AiTurnError): string | undefined => {
       ? parsed.error
       : undefined;
   } catch {
-    // Not JSON, so not our backend's refusal: the caller shows the SDK's message
+    // Not JSON, so not our backend's refusal: the caller shows Spec 08's words
+    return undefined;
+  }
+};
+
+/**
+ * How `/api/agent` prefixes an upstream failure it relays. Its text is the
+ * upstream's, status and body included, so it is never shown.
+ */
+const UPSTREAM_RELAY = "Upstream ";
+
+/**
+ * The sentence `/api/agent` turns a turn away with while it cannot serve one
+ * (no default backend, sign-in off or unavailable): a 503 written for people.
+ * A relayed upstream 503 is not one of them.
+ */
+const ownRefusal = (error: AiTurnError): string | undefined => {
+  if (error.status !== 503 || !error.body) return undefined;
+  try {
+    const parsed = JSON.parse(error.body);
+    return typeof parsed?.error === "string" &&
+      !parsed.error.startsWith(UPSTREAM_RELAY)
+      ? parsed.error
+      : undefined;
+  } catch {
+    // Not JSON, so not our backend's sentence: Spec 08's words are shown
     return undefined;
   }
 };
@@ -29,5 +54,6 @@ export const defaultProfile: ModelProviderProfile = {
     label: "default backend",
     showsReasoning: false,
     signedOutRefusal,
+    ownRefusal,
   }),
 };

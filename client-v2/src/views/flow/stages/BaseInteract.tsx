@@ -45,6 +45,16 @@ interface EmptyCopy {
   notice?: string;
 }
 
+/**
+ * Spec 03's "Interact with nothing to call" (Spec 08's EMPTY-04). Before a
+ * build and before a deploy Interact asks for the same step, a deploy, so the
+ * two surfaces share it.
+ */
+const NOTHING_TO_CALL: EmptyCopy = {
+  title: "Nothing to call yet",
+  description: () => "Deploy the program, and its instructions show up here.",
+};
+
 const COPY: Record<EmptySurface, EmptyCopy> = {
   "no-project": {
     title: "No project open",
@@ -52,11 +62,7 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
   },
   // Interact's own missing piece is a deployment, as the prototype says it;
   // Deploy then asks for the build
-  "not-built": {
-    title: "Nothing to call yet",
-    description: (cluster) =>
-      `Deploy the program first. Once it is on ${cluster}, its instructions show up here, ready to call.`,
-  },
+  "not-built": NOTHING_TO_CALL,
   "no-idl": {
     title: "No IDL yet",
     description: () =>
@@ -82,11 +88,7 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
     notice:
       "Connection error. Please try changing the RPC endpoint from the settings.",
   },
-  "not-deployed": {
-    title: "Nothing to call yet",
-    description: (cluster) =>
-      `Deploy the program first. Once it is on ${cluster}, its instructions show up here, ready to call.`,
-  },
+  "not-deployed": NOTHING_TO_CALL,
 };
 
 /** The step that supplies what an empty surface lacks, if there is one */

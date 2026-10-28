@@ -143,23 +143,69 @@ describe("runTurn", () => {
     expect(logged.filter((line) => line.includes("test-key"))).toEqual([]);
   });
 
-  it("puts the status and the redacted body in the message when the body has no error object", async () => {
-    const { fetch } = fakeFetch(
-      new Response(
-        JSON.stringify({ error: "Sign-in is off; test-key-123 was not used." }),
-        { status: 503, statusText: "Service Unavailable" }
-      )
-    );
+  describe("a failed request reads as Spec 08 words, never its status or body", () => {
+    const failOn = async (response: Response) => {
+      const { fetch } = fakeFetch(response);
+      return (await runTurn({
+        model: openAi(fetch),
+        messages: USER,
+        apiKey: "test-key-123",
+      }).catch((e: unknown) => e)) as AiTurnError;
+    };
 
-    const failure = await runTurn({
-      model: openAi(fetch),
-      messages: USER,
-      apiKey: "test-key-123",
-    }).catch((e: AiTurnError) => e);
+    it("keeps the status and the redacted body in the detail, not the message", async () => {
+      const failure = await failOn(
+        new Response(
+          JSON.stringify({ error: "Upstream 500: test-key-123 was not used." }),
+          { status: 502, statusText: "Bad Gateway" }
+        )
+      );
 
-    expect((failure as AiTurnError).message).toBe(
-      '503 Service Unavailable — {"error":"Sign-in is off; [your key] was not used."}'
-    );
+      expect(failure).toBeInstanceOf(AiTurnError);
+      expect(failure.kind).toBe("provider");
+      expect(failure.message).toBe(
+        "Could not get an answer from the model. Send your message again."
+      );
+      expect(failure.detail).toBe(
+        '502 Bad Gateway — {"error":"Upstream 500: [your key] was not used."}'
+      );
+    });
+
+    it("a 429 is busy, with the server's wait in seconds", async () => {
+      const failure = await failOn(
+        new Response(JSON.stringify({ error: "Upstream 429: slow down" }), {
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: { "retry-after": "7" },
+        })
+      );
+
+      expect(failure.kind).toBe("busy");
+      expect(failure.message).toBe("The model is busy.");
+      expect(failure.retryAfter).toBe(7);
+    });
+
+    it("a 429 with no wait leaves the wait to the caller", async () => {
+      const failure = await failOn(openAiError(429, "Rate limit reached"));
+
+      expect(failure.kind).toBe("busy");
+      expect(failure.retryAfter).toBeUndefined();
+      expect(failure.detail).toContain("Rate limit reached");
+    });
+
+    it("a refused key says so, with no 401 in sight", async () => {
+      const failure = await failOn(
+        openAiError(401, "Incorrect API key provided: test-key-123")
+      );
+
+      expect(failure.kind).toBe("key-refused");
+      expect(failure.message).toBe(
+        "The model's provider did not accept this key. Check it in Settings, or use the hosted model."
+      );
+      expect(failure.detail).toContain(
+        "Incorrect API key provided: [your key]"
+      );
+    });
   });
 
   it("rejects with the abort reason mid-stream and sends nothing more", async () => {
@@ -222,8 +268,13 @@ describe("runTurn", () => {
 
     const turn = runTurn({ model: openAi(fetch), messages: USER });
 
-    await expect(turn).rejects.toThrow(AiTurnError);
-    await expect(turn).rejects.toThrow(/overloaded/);
+    // Spec 08's words on screen; the provider's own, "overloaded", in the detail
+    const failure = (await turn.catch((e: unknown) => e)) as AiTurnError;
+    expect(failure).toBeInstanceOf(AiTurnError);
+    expect(failure.message).toBe(
+      "Could not get an answer from the model. Send your message again."
+    );
+    expect(failure.detail).toMatch(/overloaded/);
   });
 
   it("rejects a refusal with its category", async () => {

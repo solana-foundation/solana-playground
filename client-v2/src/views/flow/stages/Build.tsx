@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import BaseBuild from "./BaseBuild";
 import IdlActions from "./IdlActions";
 import { buildSurface, ownOutput } from "./build-surface";
+import { toldByStage } from "./stage-failure";
 import { failedView } from "./build-view";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
@@ -59,8 +60,10 @@ const Build = () => {
       }
       building={flow.build === "running"}
       host={serverHost()}
+      serverUrl={PgSettings.server.endpoint}
       ms={flow.buildMs}
-      onBuild={() => PgCommand.build.execute()}
+      // The stage's catch rethrows; BaseBuild's buttons report what is left
+      onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}
       onExport={() => PgFramework.exportWorkspace()}
       onFix={(prompt) => PgAssistant.requestPrompt(prompt)}

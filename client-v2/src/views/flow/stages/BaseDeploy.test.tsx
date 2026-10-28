@@ -130,7 +130,7 @@ describe("BaseDeploy", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Deploy failed - see the console."
+      "Deploy failed — see the terminal."
     );
   });
 

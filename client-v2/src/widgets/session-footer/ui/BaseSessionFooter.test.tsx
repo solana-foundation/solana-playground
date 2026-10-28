@@ -74,11 +74,13 @@ it("opens the settings on the cluster from the cluster row", async () => {
   expect(onOpenCluster).toHaveBeenCalledOnce();
 });
 
-it("names a cluster that is down and colours its dot", () => {
+// Spec 08's NET-02 chip, which replaced the "Switch to localnet?" toast
+it("says a cluster that is down is not answering, and colours its dot", () => {
   draw({ account: view({ cluster: { name: "devnet", down: true } }) });
   const row = screen.getByRole("button", {
-    name: "Change cluster, currently devnet, down",
+    name: "Change cluster, currently devnet, not answering",
   });
+  expect(row.textContent).toBe("devnet · not answering");
   expect(
     row.querySelector('[data-slot="status-dot"]')?.getAttribute("data-variant")
   ).toBe("error");

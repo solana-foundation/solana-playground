@@ -632,7 +632,7 @@ here. One PR, stacked on 5.6's.
 | `color`, `bg`, `hoverColor`, `fontWeight`, `fullWidth`, `size` | a variant, or a class |
 
 The brand buttons: the Build stage's four ("Continue to Deploy" twice and
-"Fix with assistant" twice; its Build, Retry build and Rebuild are
+"Fix with assistant" twice; its Build, Try again and Rebuild are
 `AsyncButton`s), Deploy, the assistant's "Allow", Connect and Start from
 scratch. 5.21 adds the tutorial page's START and CONTINUE, after the
 prototype; its COMPLETED stays a ghost `AsyncButton`.
@@ -815,7 +815,7 @@ the workspace's own report:
 | Surface | When | Shows |
 |---|---|---|
 | `empty` | no build yet, or the first one running | "Nothing built yet" / "Building...", Build |
-| `unreached` | a build settled in this session with no report from the compiler | the build server named, Retry build |
+| `unreached` | a build settled in this session with no report from the compiler | Spec 08 BUILD-04: "Build did not start", Try again; the build server and the raw error behind Show details |
 | `restored` | a verdict kept from before a reload, and no build settled since (a rebuild in flight keeps it) | "Built earlier" / "Last build failed", Build |
 | `succeeded` | the report has no error | "Build succeeded", Continue to Deploy, Download IDL, Export project |
 | `failed` | the report has errors | one `Diagnostic` per error, the compiler's output behind a toggle, Rebuild |
@@ -844,7 +844,7 @@ failure after the file was accepted is ours and is reported. Interact's
 toolbar keeps a compact "Load IDL file" button (`IdlActions mode="button"`)
 until its own screen moves (5.12).
 
-**One accent action per screen.** Build, Retry build and Rebuild stay
+**One accent action per screen.** Build, Try again and Rebuild stay
 `AsyncButton`s (5.4), so the empty Build stage has no brand button; Continue to
 Deploy, the first Fix with assistant and Deploy are the brand ones.
 
@@ -1422,9 +1422,10 @@ Decided with Slava on 2026-10-16 (HOO-2070), from the prototype's sidebar
   its state above the frame and gives the menu its actions; a send in flight
   shows on the account row and on the rail's "Account". The requirement is
   revised in `feedback-widget`'s delta, which is not yet archived.
-- **The cluster that is down** turns the dot red, adds ", down" to the names,
-  and puts a warning first in the menu that opens the settings on the
-  cluster.
+- **The cluster that is down** turns the dot red, adds ", not answering" to
+  the names and " · not answering" to the cluster row (Spec 08's NET-02 chip,
+  which replaced the "Switch to localnet?" toast), and puts a warning first
+  in the menu that opens the settings on the cluster.
 - **⌘, toggles the settings** (Ctrl+, off macOS) from anywhere, through the
   same `toggleSettings` the rows use.
 - **A widget, `widgets/session-footer`**: `BaseSessionFooter` and
@@ -1606,7 +1607,11 @@ only logged (5.4), and nothing on screen said the action did not happen.
   rethrowing it, and `reportButtonFailure`
   only logs a marked failure. Only while the console is open: the console
   drawer tells the terminal whether it can be seen, and a failure printed
-  into a folded console is still toasted, since the user saw nothing. An
+  into a folded console is still toasted, since the user saw nothing. The
+  Build and Deploy stages mark their own run's failure shown (`toldByStage`)
+  when the run left the stage failed, since the stage then shows it in place
+  whether the console is open or not; a run that never started (no terminal
+  mounted) keeps its toast. An
   object is matched by identity, a thrown string by value (`Send` throws
   `txResult.err`, which can be a string) and only once, so a later failure
   with the same text is told; `null` and `undefined` are never marked.

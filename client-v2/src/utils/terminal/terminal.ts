@@ -156,7 +156,8 @@ export class PgTerminal {
       // `PgTerm.process` has shown `Process error: …` in the terminal by now,
       // so a button that started this must not show the failure a second
       // time. Only while the console is open: printed into a folded one, the
-      // user saw nothing, and the button's toast is all they get
+      // user saw nothing here, so the button's toast tells them, unless the
+      // place they clicked shows it itself (`toldByStage`)
       if (PgTerminal._consoleOpen) markFailureShown(e);
       throw e;
     }
