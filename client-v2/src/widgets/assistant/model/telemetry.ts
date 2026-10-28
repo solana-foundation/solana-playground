@@ -23,6 +23,8 @@ export type AssistantEvents = {
   };
   /** The user picked one of the empty thread's suggestions, which sends it (or, with nothing connected, opens Connect a model). */
   assistant_suggestion_picked: NoParams;
+  /** The user pressed "Sign in with GitHub" on the line a signed-out thread ends in; the sign-in's outcome is `auth`'s events. */
+  assistant_sign_in_offered_clicked: NoParams;
   /** The user asked for a described change as a patch ("Make this change" or "Write it for me"). */
   assistant_make_change_requested: NoParams;
 };

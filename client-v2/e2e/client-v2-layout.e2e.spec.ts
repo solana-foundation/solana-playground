@@ -1452,7 +1452,7 @@ test("client-v2-layout: Signing out asks first", async ({ page }) => {
 
   await account(page).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
+  const dialog = page.getByRole("dialog", { name: "Sign out of Playground?" });
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   expect(signedOut).toBe(false);

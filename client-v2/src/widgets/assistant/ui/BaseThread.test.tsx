@@ -11,6 +11,16 @@ vi.mock("../../../components/Markdown", () => ({
 }));
 
 const CREATED = "2026-10-19T00:00:00.000Z";
+const SIGN_IN_TO_KEEP =
+  "Sign in to keep this conversation on your other devices.";
+
+const userMessage = (text: string): ChatItem => ({
+  kind: "user",
+  id: `user-${text}`,
+  createdAt: CREATED,
+  text,
+});
+
 const SUGGESTIONS = ["What does this program do?", "Why did my build fail?"];
 
 const renderThread = (
@@ -18,6 +28,7 @@ const renderThread = (
   overrides: {
     working?: boolean;
     unsaved?: boolean;
+    signIn?: { pending: boolean; onSignIn: () => void } | null;
     project?: string | null;
     onSuggestion?: (text: string) => void;
   } = {}
@@ -27,6 +38,7 @@ const renderThread = (
       items={items}
       working={overrides.working ?? false}
       unsaved={overrides.unsaved ?? false}
+      signIn={overrides.signIn ?? null}
       project={overrides.project === undefined ? "Counter" : overrides.project}
       suggestions={SUGGESTIONS}
       onSuggestion={overrides.onSuggestion ?? vi.fn()}
@@ -67,6 +79,46 @@ describe("BaseThread", () => {
   it("a readable thread says nothing about saving", () => {
     renderThread([]);
     expect(screen.queryByText(THREAD_NOT_SAVED)).toBeNull();
+  });
+
+  it("a signed-out thread ends in an offer to sign in", () => {
+    const onSignIn = vi.fn();
+    renderThread([userMessage("Hi")], {
+      signIn: { pending: false, onSignIn },
+    });
+    const line = screen.getByText(SIGN_IN_TO_KEEP);
+    const log = screen.getByRole("log", { name: "Conversation" });
+    expect(log.contains(line)).toBe(true);
+    // At the foot: after the conversation's last item
+    expect(
+      screen.getByText("Hi").compareDocumentPosition(line) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with GitHub" })
+    );
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("the offer's button waits while a sign-in is pending", () => {
+    renderThread([userMessage("Hi")], {
+      signIn: { pending: true, onSignIn: vi.fn() },
+    });
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Sign in with GitHub",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+  });
+
+  it("no offer, no sign-in line", () => {
+    renderThread([userMessage("Hi")]);
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Sign in with GitHub" })
+    ).toBeNull();
   });
 
   it("a suggestion sends itself", () => {

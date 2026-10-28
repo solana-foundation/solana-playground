@@ -149,7 +149,7 @@ test("assistant-own-key: Signing out while connected to the default backend", as
   await account.click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await page
-    .getByRole("dialog", { name: "Sign out of GitHub?" })
+    .getByRole("dialog", { name: "Sign out of Playground?" })
     .getByRole("button", { name: "Sign out" })
     .click();
   await expect(

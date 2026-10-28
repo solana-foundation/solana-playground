@@ -27,10 +27,12 @@ const BaseSignOutDialog = ({
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent className="sm:max-w-sm">
       <DialogHeader>
-        <DialogTitle>Sign out of GitHub?</DialogTitle>
+        <DialogTitle>Sign out of Playground?</DialogTitle>
+        {/* Sign-out removes from this browser what the server confirms it
+            holds (`relinquish` in effects/session); the rest stays */}
         <DialogDescription>
-          Your projects and chats stay in this browser and stop syncing until
-          you sign in again.
+          Projects saved to your account leave this browser. Anything not saved
+          stays here.
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>

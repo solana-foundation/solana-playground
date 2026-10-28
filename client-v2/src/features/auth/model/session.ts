@@ -106,6 +106,26 @@ export class PgSession {
     return PgSession._reading ?? PgSession.refresh();
   }
 
+  /**
+   * Settles once the session has been read, without ever reading it.
+   *
+   * For a view that only decides what to draw and may mount before the
+   * session effect. `whenRead` would start the page's first read there, and
+   * the effect, finding the user already signed in, would never adopt the
+   * account -- which leaves every push held, and sign-out waiting on them.
+   */
+  static afterRead(): Promise<void> {
+    if (PgSession._hasRead) return Promise.resolve();
+    return new Promise((resolve) => PgSession._readWaiters.push(resolve));
+  }
+
+  /** A read has answered: `get()` is now what the server said */
+  private static _markRead() {
+    PgSession._hasRead = true;
+    const waiters = PgSession._readWaiters.splice(0);
+    for (const resolve of waiters) resolve();
+  }
+
   private static async _read() {
     let next: SessionUser | null = null;
 
@@ -138,7 +158,7 @@ export class PgSession {
       log.error(error, { report: true, context: { step: "refresh" } });
     }
 
-    PgSession._hasRead = true;
+    PgSession._markRead();
     PgSession._set(next);
   }
 
@@ -336,7 +356,7 @@ export class PgSession {
 
   /** Test seam: set the user without a network round trip */
   static async refreshWith(user: SessionUser | null) {
-    PgSession._hasRead = true;
+    PgSession._markRead();
     PgSession._set(user);
   }
 
@@ -357,6 +377,7 @@ export class PgSession {
     PgSession._signInState = IDLE;
     PgSession._hasRead = false;
     PgSession._reading = undefined;
+    PgSession._readWaiters.length = 0;
   }
 
   private static _user: SessionUser | null = null;
@@ -368,6 +389,8 @@ export class PgSession {
   /** A session read has answered, so `get()` is what the server said */
   private static _hasRead = false;
   private static _reading: Promise<void> | undefined;
+  /** `afterRead` callers waiting for the first read */
+  private static readonly _readWaiters: (() => void)[] = [];
   private static _signInState: SignInState = IDLE;
 
   private static _channel: PopupChannel | undefined;
@@ -465,6 +488,31 @@ if (import.meta.vitest) {
         await PgSession.whenRead();
 
         expect(request).toHaveBeenCalledTimes(1);
+      });
+
+      it("waits for the page's read without starting one", async () => {
+        const request = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+          ok: true,
+          json: async () => ({ user: null }),
+        } as Response);
+        let settled = false;
+        const waited = PgSession.afterRead().then(() => (settled = true));
+        await Promise.resolve();
+        expect(request).not.toHaveBeenCalled();
+        expect(settled).toBe(false);
+
+        // A signed-out answer changes nothing, so no listener hears it
+        await PgSession.refresh();
+        await waited;
+
+        expect(request).toHaveBeenCalledTimes(1);
+      });
+
+      it("settles at once after a read", async () => {
+        await PgSession.refreshWith(null);
+        let settled = false;
+        await PgSession.afterRead().then(() => (settled = true));
+        expect(settled).toBe(true);
       });
 
       it("is signed out before any refresh", () => {

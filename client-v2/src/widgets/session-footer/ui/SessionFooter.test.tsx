@@ -188,18 +188,18 @@ it("asks before signing out, and signs out only on the confirmation", async () =
 
   await pick("Sign out");
   const dialog = await screen.findByRole("dialog", {
-    name: "Sign out of GitHub?",
+    name: "Sign out of Playground?",
   });
   await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(dialog.isConnected).toBe(false));
   expect(signOut).not.toHaveBeenCalled();
 
   await pick("Sign out");
-  await screen.findByRole("dialog", { name: "Sign out of GitHub?" });
+  await screen.findByRole("dialog", { name: "Sign out of Playground?" });
   await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() =>
     expect(
-      screen.queryByRole("dialog", { name: "Sign out of GitHub?" })
+      screen.queryByRole("dialog", { name: "Sign out of Playground?" })
     ).toBeNull()
   );
   expect(signOut).toHaveBeenCalledOnce();
@@ -223,7 +223,7 @@ it("keeps the dialog busy while signing out, so it cannot run twice", async () =
   finish();
   await waitFor(() =>
     expect(
-      screen.queryByRole("dialog", { name: "Sign out of GitHub?" })
+      screen.queryByRole("dialog", { name: "Sign out of Playground?" })
     ).toBeNull()
   );
 });
