@@ -5,7 +5,7 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
 import {
   StageEmpty,
@@ -17,7 +17,8 @@ import {
 } from "@/shared/ui/stage-empty";
 import { StatusDot } from "@/shared/ui/status-dot";
 import {
-  MAINNET_DEPLOY_WARNING,
+  MAINNET_DEPLOY_WARNING_BODY,
+  MAINNET_DEPLOY_WARNING_TITLE,
   warnsOnDeploy,
 } from "../../../commands/deploy/mainnet-warning";
 import type { DeployRecord } from "../state/deploy-history";
@@ -72,8 +73,12 @@ const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
   return redeploy ? `Redeploy to ${where}` : `Deploy to ${where}`;
 };
 
-/** The cluster for prose; "the network" until the endpoint has been read */
-const clusterName = (p: BaseDeployProps) => p.cluster ?? "the network";
+/**
+ * The cluster in the deploy button's label and the stage's prose: "mainnet"
+ * for mainnet-beta; "the network" until the endpoint has been read
+ */
+const clusterName = (p: BaseDeployProps) =>
+  p.cluster === "mainnet-beta" ? "mainnet" : p.cluster ?? "the network";
 
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
@@ -248,7 +253,10 @@ const BaseDeploy = (p: BaseDeployProps) => {
         {warnsOnDeploy(p.cluster) && (
           <Callout variant="warning" aria-label="Mainnet deploy warning">
             <TriangleAlert />
-            <CalloutDescription>{MAINNET_DEPLOY_WARNING}</CalloutDescription>
+            <CalloutTitle>{MAINNET_DEPLOY_WARNING_TITLE}</CalloutTitle>
+            <CalloutDescription>
+              {MAINNET_DEPLOY_WARNING_BODY}
+            </CalloutDescription>
           </Callout>
         )}
         {latest && <DeployResult latest={latest} p={p} />}

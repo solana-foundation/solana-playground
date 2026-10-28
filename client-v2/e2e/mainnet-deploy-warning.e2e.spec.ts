@@ -43,6 +43,9 @@ test("mainnet-deploy-warning: Deploy stage on mainnet shows the warning", async 
   await expect(warning).toBeVisible(LONG);
   await expect(warning).toContainText("Playground wallet");
   await expect(warning).toContainText("your own machine");
+  await expect(
+    panel.getByRole("button", { name: "Deploy to mainnet" })
+  ).toBeVisible();
 });
 
 test("mainnet-deploy-warning: Deploy stage on devnet shows no warning", async ({
@@ -52,6 +55,44 @@ test("mainnet-deploy-warning: Deploy stage on devnet shows no warning", async ({
 
   // The stage names its cluster once the endpoint is read; only then is
   // the warning's absence an answer
+  await expect(
+    panel.getByRole("button", { name: "Deploy to devnet" })
+  ).toBeVisible(LONG);
+  await expect(
+    panel.getByRole("alert", { name: "Mainnet deploy warning" })
+  ).toHaveCount(0);
+});
+
+test("mainnet-deploy-warning: Mainnet Beta picked in Settings", async ({
+  seededPage: page,
+}) => {
+  await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
+    route.abort("connectionrefused")
+  );
+  const settings = page.getByRole("region", { name: "Settings" });
+  const pick = async (name: string) => {
+    await page.getByRole("button", { name: /^Change cluster/ }).click();
+    await settings
+      .getByRole("radiogroup", { name: "Network" })
+      .getByRole("radio", { name })
+      .click();
+  };
+
+  await pick("Mainnet Beta");
+  await expect(
+    settings.getByRole("radiogroup", {
+      name: "Network",
+      description: "Deploys with real SOL",
+    })
+  ).toBeVisible();
+  await settings.getByRole("button", { name: "Back to app" }).click();
+  const panel = await openDeploy(page);
+  await expect(
+    panel.getByRole("alert", { name: "Mainnet deploy warning" })
+  ).toBeVisible(LONG);
+
+  await pick("Devnet");
+  await settings.getByRole("button", { name: "Back to app" }).click();
   await expect(
     panel.getByRole("button", { name: "Deploy to devnet" })
   ).toBeVisible(LONG);

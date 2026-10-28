@@ -6,8 +6,13 @@
  * first transfers the cost to it. Only the final deploy or upgrade is signed
  * by the connected wallet, so the warning holds for every wallet.
  */
-export const MAINNET_DEPLOY_WARNING =
-  "Mainnet uses real SOL. This deploy moves SOL through the Playground wallet, whose key is kept in this browser where a malicious script could read it. For a program that matters, deploy from your own machine with the Solana CLI or Anchor.";
+export const MAINNET_DEPLOY_WARNING_TITLE = "Mainnet uses real SOL";
+
+export const MAINNET_DEPLOY_WARNING_BODY =
+  "This deploy pays from the Playground wallet. Its key is kept in this browser, where a malicious script could read it. For a program that matters, deploy from your own machine with the Solana CLI or Anchor.";
+
+/** The callout's title and body as one terminal line */
+export const MAINNET_DEPLOY_WARNING = `${MAINNET_DEPLOY_WARNING_TITLE}. ${MAINNET_DEPLOY_WARNING_BODY}`;
 
 /** Whether a deploy to `cluster` gets the warning; `null` is not read yet */
 export const warnsOnDeploy = (cluster: string | null) =>

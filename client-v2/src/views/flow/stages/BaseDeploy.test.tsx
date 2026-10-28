@@ -94,10 +94,11 @@ describe("BaseDeploy", () => {
     );
 
     const warning = mainnetWarning();
+    expect(warning?.textContent).toContain("Mainnet uses real SOL");
     expect(warning?.textContent).toContain("Playground wallet");
     expect(warning?.textContent).toContain("your own machine");
     const deploy = screen.getByRole("button", {
-      name: "Deploy to mainnet-beta",
+      name: "Deploy to mainnet",
     });
     expect(deploy).toHaveProperty("disabled", false);
     expect(lastIsActions(container)).toBe("stage-empty-actions");

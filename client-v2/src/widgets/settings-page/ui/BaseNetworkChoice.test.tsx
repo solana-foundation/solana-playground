@@ -102,6 +102,28 @@ describe("BaseNetworkChoice", () => {
     expect(onPick).not.toHaveBeenCalled();
   });
 
+  it("offers Mainnet Beta, described as deploying with real SOL", () => {
+    render(
+      <BaseNetworkChoice endpoint={Endpoint.MAINNET_BETA} onPick={() => {}} />
+    );
+    expect(
+      screen
+        .getByRole("radio", { name: "Mainnet Beta" })
+        .getAttribute("aria-checked")
+    ).toBe("true");
+    expect(
+      screen.getByRole("radiogroup", {
+        name: "Network",
+        description: "Deploys with real SOL",
+      })
+    ).toBeTruthy();
+  });
+
+  it("says nothing about real SOL on devnet", () => {
+    render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={() => {}} />);
+    expect(screen.queryByText("Deploys with real SOL")).toBeNull();
+  });
+
   it("picks once on a click", async () => {
     const onPick = vi.fn();
     render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={onPick} />);
