@@ -127,11 +127,12 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
       : { ...held, ...(body.changed ?? {}) };
     for (const path of body.removed ?? []) delete files[path];
 
+    // No files reads back as no snapshot, as `getProject` reads no rows
     const stored: StoredProject = {
       id: body.id,
       name: body.name,
       kind: body.kind,
-      snapshot: { files },
+      snapshot: Object.keys(files).length ? { files } : null,
       updatedAt: tick(),
     };
     server.set(stored.id, stored);
@@ -1290,6 +1291,236 @@ describe("two rewrites of one project at once", () => {
     expect(await merging).toBe("merged");
     expect(await adopting).toBeNull();
     expect(replace).toHaveBeenLastCalledWith(HELLO.name, both);
+  });
+});
+
+describe("a workspace whose files are gone from the store", () => {
+  beforeEach(setUp);
+  afterEach(() => vi.restoreAllMocks());
+
+  const puts = () =>
+    (global.fetch as Mock).mock.calls.filter(
+      ([, init]) => (init as RequestInit | undefined)?.method === "PUT"
+    );
+
+  /**
+   * In sync with the account, and then the store holds nothing under the
+   * workspace -- an import or a replace interrupted half way -- while the
+   * workspace is still registered and its mark flagged.
+   */
+  const emptiedAfterSync = async () => {
+    asDevice([HELLO]);
+    await signedIn();
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    writeStored(HELLO.name, {});
+    await PgSyncMark.markDirty(HELLO.id);
+    return server.get(HELLO.id)!.snapshot;
+  };
+
+  it("is not uploaded by reconcile while the account is where it was", async () => {
+    const held = await emptiedAfterSync();
+    (global.fetch as Mock).mockClear();
+
+    await reconcile();
+
+    expect(puts()).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual(held);
+  });
+
+  it("is not uploaded over a row that holds no code", async () => {
+    // The row moved and holds no files, so reconcile has nothing to merge
+    // with and would push this device's copy -- an empty one
+    await emptiedAfterSync();
+    server.set(HELLO.id, {
+      id: HELLO.id,
+      name: HELLO.name,
+      kind: "tutorial",
+      snapshot: null,
+      updatedAt: tick(),
+    });
+    (global.fetch as Mock).mockClear();
+
+    await reconcile();
+
+    expect(puts()).toEqual([]);
+  });
+
+  it("is not merged into a row the other device moved on", async () => {
+    // Merged against the account's files, an empty copy reads as this
+    // device deleting every one of them
+    await emptiedAfterSync();
+    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "the other device" });
+    const replace = captureWrites();
+    (global.fetch as Mock).mockClear();
+
+    const result = await reconcile();
+
+    expect(puts()).toEqual([]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "the other device" },
+    });
+    expect(result.pushed).toEqual([]);
+  });
+
+  it("is not uploaded when the user answers a question with retry", async () => {
+    const held = await emptiedAfterSync();
+    PgProjectSync.raise({ projectId: HELLO.id, kind: "divergent" });
+    (global.fetch as Mock).mockClear();
+
+    expect(await PgProjectSync.resolve(HELLO.id, "retry")).toBe(false);
+
+    expect(puts()).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual(held);
+    // and the question is still up, rather than silently dropped
+    expect(PgProjectSync.conflictFor(HELLO.id)).not.toBeNull();
+  });
+});
+
+describe("a project whose mark is one hash of the whole snapshot", () => {
+  beforeEach(() => {
+    setUp();
+    clearFailures();
+  });
+  afterEach(() => {
+    clearFailures();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * The account holds `files` at one timestamp, and this browser's mark is
+   * the whole-snapshot mark the first sync client wrote when it uploaded them:
+   * one hash of the whole snapshot, none per file.
+   */
+  const syncedUnderAWholeSnapshotMark = async (
+    files: Record<string, string>
+  ) => {
+    asDevice([HELLO]);
+    await signedIn();
+    const updatedAt = tick();
+    server.set(HELLO.id, {
+      id: HELLO.id,
+      name: HELLO.name,
+      kind: "tutorial",
+      snapshot: { files },
+      updatedAt,
+    });
+    storedFiles().set(
+      `/.config/sync/u1/${encodeURIComponent(HELLO.id)}.json`,
+      JSON.stringify({
+        hash: "whole-snapshot-hash",
+        contentHash: "user-files-hash",
+        name: HELLO.name,
+        updatedAt,
+        dirty: true,
+      })
+    );
+    return updatedAt;
+  };
+
+  it("uploads an edit and a delete made under a whole-snapshot mark, asking nothing", async () => {
+    await syncedUnderAWholeSnapshotMark({
+      "src/lib.rs": "as uploaded",
+      "src/old.rs": "deleted here since",
+    });
+    // Never uploaded: an edit to one file, and the other file deleted
+    localFilesAre(HELLO.name, { "src/lib.rs": "edited here since" });
+    const replace = captureWrites();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+    expect(replace).not.toHaveBeenCalled();
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "edited here since" },
+    });
+    expect(result.pushed).toEqual([HELLO.name]);
+  });
+
+  it("merges by line when the other device writes before the upload lands", async () => {
+    await syncedUnderAWholeSnapshotMark({ "src/lib.rs": "a\nb\nc\nd\ne\n" });
+    localFilesAre(HELLO.name, { "src/lib.rs": "A\nb\nc\nd\ne\n" });
+    captureWrites();
+    // Offline for the upload: the agreement is rebuilt, the push fails
+    (global.fetch as Mock).mockImplementation(
+      (url: string, init?: RequestInit) =>
+        init?.method === "PUT"
+          ? Promise.resolve({ ok: false, status: 503, json: async () => ({}) })
+          : fakeFetch(url, init)
+    );
+    expect((await reconcile()).pushed).toEqual([]);
+
+    (global.fetch as Mock).mockImplementation(fakeFetch);
+    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
+    });
+  });
+
+  it("waits for the next pass when the account's copy cannot be read", async () => {
+    await syncedUnderAWholeSnapshotMark({
+      "src/lib.rs": "as uploaded",
+      "src/old.rs": "deleted here since",
+    });
+    localFilesAre(HELLO.name, { "src/lib.rs": "edited here since" });
+    const replace = captureWrites();
+    // The list answers, the project itself does not
+    (global.fetch as Mock).mockImplementation(
+      (url: string, init?: RequestInit) =>
+        url.startsWith("/api/projects?id=")
+          ? Promise.resolve({ ok: false, status: 503, json: async () => ({}) })
+          : fakeFetch(url, init)
+    );
+
+    const first = await reconcile();
+
+    // Not merged against nothing, which would raise the edit and bring the
+    // deleted file back
+    expect(first.conflicts).toEqual([]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(getFailures().map((f) => f.what)).toContain(
+      `rebase whole-snapshot mark ${HELLO.id}: row unreadable`
+    );
+
+    (global.fetch as Mock).mockImplementation(fakeFetch);
+    const second = await reconcile();
+
+    expect(second.conflicts).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "edited here since" },
+    });
+  });
+
+  it("still asks, rather than guess, when the account moved past the mark", async () => {
+    await syncedUnderAWholeSnapshotMark({ "src/lib.rs": "as uploaded" });
+    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "the other device" });
+    localFilesAre(HELLO.name, { "src/lib.rs": "edited here since" });
+    const replace = captureWrites();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("leaves the account alone when nothing changed here", async () => {
+    const before = await syncedUnderAWholeSnapshotMark({
+      "src/lib.rs": "as uploaded",
+    });
+    localFilesAre(HELLO.name, { "src/lib.rs": "as uploaded" });
+    const replace = captureWrites();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(server.get(HELLO.id)!.updatedAt).toBe(before);
+    // and the next exchange is an ordinary one, against a per-file mark
+    expect((await PgSyncMark.read(HELLO.id))?.updatedAt).toBe(before);
   });
 });
 

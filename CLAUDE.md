@@ -146,14 +146,18 @@ changes. Asked to build something in the client, look there first.
   them, and asks the user only about lines both changed. Per account because
   a tutorial's id is derived from its name and so is identical across
   accounts.
-- **There is one in-browser migration: from the pre-sync layout to the
-  current one.** `PgWorkspace.migrate` (workspace ids) and
-  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). No
-  intermediate format between #29 and now reached real users, so none gets
-  compatibility code: a sync mark `read` cannot parse is `null` ("never
-  agreed", merged against an empty base), yet still keeps its project out of
-  `pushNeverSynced` (`PgSyncMark.exists`). A future format change that ships
-  to users adds its own step; it does not chain through dropped ones.
+- **In-browser migration covers the pre-sync layout, plus one read of the
+  first sync client's mark.** `PgWorkspace.migrate` (workspace ids) and
+  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). A
+  sync mark `read` cannot parse is `null` ("never agreed", merged against an
+  empty base), yet still keeps its project out of `pushNeverSynced`
+  (`PgSyncMark.exists`). One older shape is still read on purpose: the
+  whole-snapshot mark the first sync client wrote, which production browsers
+  hold. Where the row still stands at its `updatedAt`, reconcile rebuilds it
+  per file from the server's copy (`rebaseWholeSnapshotMark` in
+  `project-restore.ts`), so unpushed edits push and unpushed deletes stay
+  deleted instead of merging against nothing. A future format change that
+  ships to users adds its own step; it does not chain through dropped ones.
 - **The sync mark holds a hash per file, and that is the merge base.**
   `mark.files` is `path -> sha256` of what the server last accepted from this
   device. `isClean` compares it on _user_ files only (the three generated
@@ -222,9 +226,12 @@ changes. Asked to build something in the client, look there first.
   Nothing inside a pass may await `reconcile`. The effect's `refreshing` flag
   stays too: it drops a switch from its own pass's re-open, so adopt ->
   re-open -> reconcile cannot bounce.
-- **`pushCurrent` refuses an empty snapshot.** The explorer clears its file
-  map before re-reading a workspace, so a push landing in that window would
-  upload nothing over whatever the server holds.
+- **`push` refuses an empty snapshot, whoever calls it.**
+  `replaceWorkspaceFiles` removes the directory before writing the taken copy
+  back, another tab can rename or delete it away, and an interrupted import
+  or replace can leave a registered workspace with no files in the
+  store; a push from that state (the editor's, reconcile's, or a banner's
+  `retry`) would upload nothing over whatever the server holds.
 - **`replaceWorkspaceFiles` preserves `.workspace/metadata.json`.** Which tabs
   are open is local state the snapshot deliberately excludes, so sync must not
   be what deletes it -- and with no tabs there is no current file, so the
