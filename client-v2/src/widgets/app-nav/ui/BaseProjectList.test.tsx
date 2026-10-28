@@ -131,6 +131,7 @@ describe("BaseProjectList", () => {
     ["p", "pin"],
     ["r", "rename"],
     ["e", "export"],
+    ["g", "share-gist"],
     ["Backspace", "delete"],
     ["Delete", "delete"],
   ])("maps %s to %s", (key, action) => {
@@ -172,6 +173,19 @@ describe("BaseProjectList", () => {
     fireEvent.keyDown(menu, { key: "d" });
     fireEvent.keyDown(menu, { key: "r" });
     expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("offers Share as gist to a project and a lesson alike", () => {
+    const { onAction } = draw();
+    fireEvent.click(
+      within(openMenu("alpha")).getByRole("menuitem", {
+        name: "Share alpha as a gist",
+      })
+    );
+    expect(onAction).toHaveBeenLastCalledWith(alpha, "share-gist", "click");
+
+    fireEvent.keyDown(openMenu("Hello Anchor"), { key: "g" });
+    expect(onAction).toHaveBeenLastCalledWith(hello, "share-gist", "key");
   });
 
   it("renames in the row: Enter commits, letters type", () => {
