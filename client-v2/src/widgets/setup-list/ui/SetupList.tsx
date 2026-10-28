@@ -4,6 +4,7 @@ import { isSetupRejected } from "@/commands/connect/setup-rejected";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import { useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
+import { shortAddress } from "@/shared/lib/short-address";
 import { PgCommand, PgConnection, PgView } from "@/utils";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
@@ -14,13 +15,6 @@ import { setupTelemetry } from "../model/telemetry";
 import BaseSetupList from "./BaseSetupList";
 
 const log = createLogger("setup-list:actions");
-
-/**
- * The format of `shortAddress` in `widgets/session-footer`, copied: a widget
- * does not import another
- */
-const shortAddress = (address: string) =>
-  `${address.slice(0, 4)}…${address.slice(-4)}`;
 
 const warnWallet = () =>
   PgView.setToast(

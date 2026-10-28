@@ -38,7 +38,7 @@ export const ReplaceItem: FC<React.PropsWithChildren<ReplaceItemProps>> = ({
         </Icon>
         <ContentText>
           <Main>'{itemName}' already exists. Do you want to replace it?</Main>
-          <Desc>This action is irreversable.</Desc>
+          <Desc>This action is irreversible.</Desc>
         </ContentText>
       </Content>
     </ModalFrame>

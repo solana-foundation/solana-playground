@@ -20,12 +20,12 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { cn } from "@/shared/lib/utils";
+import { shortAddress } from "@/shared/lib/short-address";
 import {
   DOCS_URL,
   formatBalance,
   githubProfileUrl,
   profileName,
-  shortAddress,
 } from "../model/account";
 import type { AccountItem, AccountView } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
