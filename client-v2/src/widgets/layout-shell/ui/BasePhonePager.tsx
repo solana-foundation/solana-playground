@@ -199,9 +199,10 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
   // Covered (Home or a page), the preview has no section: Work shows
   const page = pages.includes(props.page) ? props.page : "work";
   const index = pages.indexOf(page);
-  // Smooth by CSS (`scroll-smooth`). The scroll this causes settles on the
-  // page given, so the settle finds the page already current and `onSwipe`
-  // is not called for it.
+  // Smooth by CSS (`motion-safe:scroll-smooth`: with reduced motion the page
+  // changes at once, and the jump settles the same way). The scroll this
+  // causes settles on the page given, so the settle finds the page already
+  // current and `onSwipe` is not called for it.
   // The first alignment, on load, is instant: arriving is not a move
   const aligned = useRef(false);
   // A move the pager made itself and that has not settled yet. Something can
@@ -292,7 +293,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
       ref={ref}
       data-testid="phone-pager"
       onScroll={armSettle}
-      className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden scroll-smooth [scrollbar-width:none]"
+      className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden motion-safe:scroll-smooth [scrollbar-width:none]"
     >
       <section
         aria-label="Navigation"
