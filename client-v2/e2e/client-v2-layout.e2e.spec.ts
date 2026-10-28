@@ -620,6 +620,46 @@ test.describe("on a phone", () => {
     ).toBeFocused();
   });
 
+  // A swipe made while the editor loads stays. Opening its file must not
+  // focus the editor while it is swiped out of the window, and its tab row
+  // must scroll only itself: either would scroll the pager back to the work
+  // page. The touch stays down until the editor is in, so the pager has not
+  // settled when the editor mounts.
+  test("a swipe made while the editor loads stays on the preview", async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // The editor's chunk (webpack's name for it), held so it mounts under the
+    // swipe; a name that stopped matching would hold nothing and pass for the
+    // wrong reason
+    let heldChunk = false;
+    await page.route(/src_components_Editor_Monaco_index_ts/, async (route) => {
+      heldChunk = true;
+      await held;
+      await route.continue();
+    });
+    await seedThenNarrow(page);
+    const pager = page.getByTestId("phone-pager");
+    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    await pager.evaluate((el) => {
+      el.dispatchEvent(new TouchEvent("touchstart"));
+      el.scrollTo({ left: el.clientWidth * 2, behavior: "instant" });
+    });
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect(preview).toBeInViewport({ ratio: 1 });
+
+    await expect.poll(() => heldChunk).toBe(true);
+    release();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "use anchor_lang"
+    );
+    await pager.evaluate((el) => el.dispatchEvent(new TouchEvent("touchend")));
+
+    await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
+    await expect(preview).toBeInViewport({ ratio: 1 });
+  });
+
   // The gallery is a dialog over the menu page; the project it starts opens
   // on Work, not behind the menu that started it
   test("client-v2-layout: A project started from the phone's menu", async ({

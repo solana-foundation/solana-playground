@@ -372,7 +372,8 @@ const Monaco = () => {
       // An open the user did not start -- a late mount's, sync re-opening
       // the workspace -- leaves focus in a field they are typing in; the
       // file opens, focus stays. One started from the explorer's tree
-      // (creating a file) still ends in the editor; see `leavesFocusElsewhere`.
+      // (creating a file) still ends in the editor. Neither takes focus while
+      // the editor is swiped out of the window; see `leavesFocusElsewhere`.
       const open = isMountOpen ? "mount" : "later";
       if (
         leavesFocusElsewhere({
@@ -381,7 +382,7 @@ const Monaco = () => {
           tree: document.getElementById(PgView.ids.ROOT_DIR),
         })
       ) {
-        log.debug("Left focus in a field the user is typing in", {
+        log.debug("Left focus where it was", {
           context: { path: curFile.path, open },
         });
       } else {

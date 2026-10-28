@@ -84,6 +84,24 @@ const canTakeFocus = (el: HTMLElement) =>
   el.closest("[inert]") === null;
 
 /**
+ * Ends the `visibility` transitions under `root`. The shell's reveal starts
+ * one on every control with `transition-all` (the design system's `Button`),
+ * and until its first frame the control still computes `hidden`, where
+ * `focus()` does nothing: on a slow machine the refocus after the settings
+ * closed landed there, and focus stayed on the body (HOO-2290).
+ */
+const revealAtOnce = (root: Element) => {
+  for (const animation of root.getAnimations({ subtree: true })) {
+    if (
+      animation instanceof CSSTransition &&
+      animation.transitionProperty === "visibility"
+    ) {
+      animation.finish();
+    }
+  }
+};
+
+/**
  * Where focus goes back when the control that opened the settings is gone or
  * out of reach: a checklist step that the pick ticked, a footer the rail
  * swapped out, a cluster row on the phone's menu page once Work shows. The
@@ -123,7 +141,9 @@ const FlowFrame = () => {
   }, []);
 
   const openGallery = () => PgView.setModal(NewWorkspaceModal);
-  // Back to the control that opened them, once the shell is no longer inert,
+  const shell = useRef<HTMLDivElement>(null);
+  // Back to the control that opened them, once the shell is no longer inert
+  // and its reveal's `visibility` transitions are over (`revealAtOnce`),
   // or, when that is gone or out of reach, to `fallbackFocus`. Only when they
   // close: on load, with the settings never opened, focus stays where the
   // browser puts it, not on a trigger whose tooltip opens on focus (HOO-2240)
@@ -133,6 +153,7 @@ const FlowFrame = () => {
     const closed = wasOpen.current && !settings.open;
     wasOpen.current = settings.open;
     if (!closed) return;
+    revealAtOnce(shell.current!);
     if (refocus.current && canTakeFocus(refocus.current)) {
       refocus.current.focus();
     } else fallbackFocus()?.focus();
@@ -236,6 +257,7 @@ const FlowFrame = () => {
           unmount, and with `display: contents` and `visibility` the shell
           keeps its boxes, so no panel sees a resize and folds on its own */}
       <div
+        ref={shell}
         className={settings.open ? "contents invisible" : "contents"}
         inert={settings.open}
       >
