@@ -358,17 +358,20 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   follow-up, so the next run reads it as acknowledged. A finding outside the
   PR's scope goes to its existing Linear issue, or a new one when none fits;
   a gap the review keeps missing becomes a Linear issue too, closed later
-  through agent rules or tooling. The PR description carries the line
+  through agent rules or tooling. The PR description may carry the line
   `sx:review-pr (full + default) @ <sha>: <n> critical open`, where `<sha>`
-  is the head both runs read; update it after each re-run. A PR into a
-  `scope/*` branch or `new-face-polish-2` merges without a human approval
-  once it has no conflict, CI is green and the line names the PR's current
-  head with 0 critical open. Green means every check the `ci.yml` and
-  `client-v2.yml` workflows report on that head passed; a check that is
-  pending, cancelled or missing is not green, and a red Vercel preview does
-  not hold the merge. The fleet's Dispatcher merges these PRs, never their
-  author. A missing or stale line, or any critical open, holds the merge; a
-  PR into any other base still waits for a human approval.
+  is the head both runs read; update it after each re-run. The line is
+  optional and blocks nobody: a PR without it is reviewed and merged the
+  usual way, with a human approval. With it, a PR into a `scope/*` branch or
+  `new-face-polish-2` merges without a human approval once it has no
+  conflict, CI is green and the line names the PR's current head with 0
+  critical open. Green means every check the `ci.yml` and `client-v2.yml`
+  workflows report on that head passed or was skipped by the workflow itself
+  (`checks / Build` always is); a check that is pending, cancelled or missing
+  is not green, and a red Vercel preview does not hold the merge. The
+  fleet's Dispatcher merges these PRs, never their author. A stale line or
+  any critical open sends the PR back to a human approval; a PR into any
+  other base always waits for one.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
