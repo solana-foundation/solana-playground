@@ -326,8 +326,12 @@ check's job (Layers, "The boundary check"); the rest hold by review.
 - **Build configuration is not unit-tested; its outcome is.** CI greps the
   built CSS (or bundle) for what the configuration must produce, Tailwind's
   `.flex` rule and the `_Pg*` class names, and the build tests
-  (`yarn test-build`) read `build/`: `scripts/in-source-tests.build-test.mjs`
-  fails when a chunk holds an in-source test title. A test that runs the real
+  (`yarn test-build`, every `scripts/*.build-test.mjs`) read the build's
+  output. Among them, `scripts/in-source-tests.build-test.mjs` fails when a
+  chunk holds an in-source test title, `scripts/bundle-modules.build-test.mjs`
+  when the bundle holds a module under `src/test-utils/` or from `vitest` or
+  `@vitest/*`, and `scripts/bundle-info.build-test.mjs` when
+  `bench/BUNDLE.md` no longer matches the build. A test that runs the real
   build tool, with the production options, on representative input and
   asserts on its output is allowed: `scripts/esbuild-minify.test.mjs` (run by
   `yarn test-api`, no build needed) minifies two small chunks with
@@ -392,6 +396,28 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   push with `git config core.hooksPath .githooks` once per clone. To run a
   CI job itself, in its runner image, see
   [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
+- **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**
+  Rebase onto the base branch first: CI measures the merge commit. Then run
+  `REACT_APP_GA_MEASUREMENT_ID= yarn build-fast`: CI's build has no GA id, and
+  the empty value keeps CRA from taking one from `client-v2/.env`, since
+  dotenv does not override a variable already set. Sentry needs no override:
+  `sentryEnabled` (`scripts/sentry-gate.mjs`) keeps it out of a build without
+  `VERCEL_ENV`. Then run `yarn bundle:info` and commit the file; `yarn test-build` fails while
+  the snapshot differs from the build. A fresh cell within
+  `DISPLAY_STEP_TOLERANCE_BYTES` of the committed cell keeps the committed value,
+  so a rebuild of the same commit leaves the file as it is. CI posts the
+  change against the base branch's snapshot as a comment on the PR.
+- **Every row that grows is explained in the PR description.** The bundle
+  comment lists each row whose cell moved against the base branch's
+  snapshot; the description's "Bundle size"
+  line names what each one is for, or says that no row moved. A refreshed
+  snapshot only proves the file is current, not that the growth is wanted.
+  Review flags growth the description does not justify: tens of kB on `main`
+  or a worker, `other chunks` growing with no new lazy feature to explain it,
+  or a new named chunk far above its peers. Review does not flag a row the
+  comment leaves out: its movement is below the snapshot's resolution, set by
+  `DISPLAY_STEP_TOLERANCE_BYTES`, where real change of up to about two display
+  steps can stay unrecorded.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
   `client-v2.yml`, one shard per matrix entry) on every PR (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
