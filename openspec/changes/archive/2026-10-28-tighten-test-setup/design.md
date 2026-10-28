@@ -10,9 +10,9 @@ and hooks as globals, and its `it` (a `Mocha.TestFunction`, no `each`) is the
 one TypeScript picks. `js-runtime.ts` itself uses those globals as free
 identifiers after `mocha.setup()` defines them on `window` in the browser.
 
-The webpack build runs no type check of its own over tests, and webpack and
-vitest resolve modules without `tsconfig.json`'s `paths`, so the tsconfig
-split changes type checking only.
+The webpack build runs no type check of its own over tests, and the new
+`tsconfig.app.json` is read by `tsc` alone, so the split changes type
+checking only.
 
 ## Goals / Non-Goals
 
@@ -36,7 +36,8 @@ test files only" takes two programs, one of which leaves the test files out.
 (`eslint-layers.js`) and the dev server's type checker load, and an editor
 opens a test file against the nearest `tsconfig.json` that includes it.
 `tsconfig.app.json` extends it, excludes the test code (`src/**/*.test.*`,
-`src/**/*.spec.*`, `src/**/__tests__/**`, `src/setupTests.ts`,
+`src/**/*.spec.*`, `src/**/__tests__/**`, `src/**/__fixtures__/**`,
+`src/setupTests.ts`,
 `src/test-utils/**`)
 and sets `types` without `vitest/globals`. `test-types` runs
 `tsc --noEmit && tsc --noEmit -p tsconfig.app.json`; the second fails on a
@@ -53,24 +54,27 @@ carries the globals differs. Explicit imports of the test API in every test
 file would avoid a second program but touch every test file for no
 behavioural gain.
 
-### Mocha: `paths` points the client's import at a local declaration
+### Mocha: the client imports `mocha/browser-entry`, typed locally
 
 `@types/mocha` stays installed: `scripts/generate-packages.mjs` copies it into
 the editor's type definitions for user test programs, and `yarn generate`
-fails without it. `tsconfig.json` `paths` maps `"mocha"` to
-`src/utils/js-runtime/mocha.d.ts`, a module that declares only what
-`js-runtime.ts` uses (`_state`, `suite`, `setup`, `run`). `types` is explicit,
-so nothing else loads `@types/mocha` into either program. webpack and vitest
-resolve modules without `paths`, so the runtime import is untouched. The BDD
-functions `js-runtime.ts` hands to user code are read off `globalThis` after
-`mocha.setup()`, typed by a local list of their names, instead of as ambient
-globals: the same values from the same place. A name `mocha.setup` left
-undefined fails the run naming it, where the old free identifier threw a
-`ReferenceError`.
+fails without it. The client's own imports of mocha, in `js-runtime.ts` and in
+the generated `package.ts`, name `mocha/browser-entry`: the file webpack picks
+for `"mocha"` anyway through the package's `browser` field. That path has no
+types, so the ambient `declare module "mocha/browser-entry"` in
+`src/utils/js-runtime/mocha.d.ts` applies, declaring only what `js-runtime.ts`
+uses (`_state`, `suite`, `setup`, `run`), and `@types/mocha` never enters
+either program. The BDD functions `js-runtime.ts` hands to user code are read
+off `globalThis` after `mocha.setup()`, typed by a local list of their names,
+instead of as ambient globals: the same values from the same place. A name
+`mocha.setup` left undefined fails the run naming it, where the old free
+identifier threw a `ReferenceError`.
 
-Alternative: remove `@types/mocha` and type the import with an ambient
-`declare module`. Tried first and rejected: it breaks `yarn generate`, and an
-ambient declaration loses to a resolvable package anyway.
+Alternatives, both tried: removing `@types/mocha` breaks `yarn generate`; a
+`tsconfig.json` `paths` entry for `"mocha"` worked until webpack and vitest
+started resolving runtime imports through `paths`, where it would send the
+runtime import to a declaration file. An ambient `declare module "mocha"`
+loses to the resolvable `@types/mocha`.
 
 ### `BroadcastChannel`
 

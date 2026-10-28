@@ -4,8 +4,8 @@
 
 The type check (`yarn test-types`) SHALL accept vitest's global test API
 (`describe`, `it`, `expect`, `vi` and the hooks) in test code (a file matched
-by the suite's `include` patterns, the suite's setup file and the shared test
-helpers under `src/test-utils/`), and SHALL reject it in any other file under
+by the suite's `include` patterns, the suite's setup file, the shared test
+helpers under `src/test-utils/` and fixtures under a `__fixtures__` folder), and SHALL reject it in any other file under
 `src/`, where it would throw at run time. An in-source block SHALL take the test API
 from `import.meta.vitest`. The global `it` SHALL be vitest's, so `it.each`
 type-checks wherever it runs.
