@@ -18,9 +18,10 @@ the `types` setup.
   programs. A `vi` or `expect`
   in a non-test file fails the check; in-source blocks keep taking the test
   API from `import.meta.vitest`.
-- `tsconfig.json` `paths` points the client's own `"mocha"` import at a local
-  declaration of the part of mocha's browser build `js-runtime.ts` uses, so the
-  type checker never loads `@types/mocha` and no mocha global is ambient. The
+- The client's own imports of mocha (`js-runtime.ts`, the generated
+  `package.ts`) name `mocha/browser-entry`, which has no types, so a local
+  declaration of the part `js-runtime.ts` uses applies, the type checker never
+  loads `@types/mocha`, and no mocha global is ambient. The
   package stays installed: `scripts/generate-packages.mjs` ships its types to
   the editor for user test programs. `js-runtime.ts` reads mocha's BDD
   functions off the global object after `mocha.setup`. The global `it` is
@@ -58,7 +59,7 @@ is added, renamed or removed.
 - Users: none directly. The consequence is for contributors: a stray test
   call in production code fails CI instead of throwing in the browser, and
   `it.each` works where it runs.
-- Code: `client-v2/tsconfig.json` (`paths`), new `client-v2/tsconfig.app.json`,
+- Code: `scripts/generate-packages.mjs`, new `client-v2/tsconfig.app.json`,
   `client-v2/package.json` (`test-types`), `src/utils/js-runtime/js-runtime.ts`
   and its new `mocha.d.ts`, `src/setupTests.ts`,
   `src/test-utils/mock-fs.ts`, the test files named above, `AGENTS.md`.

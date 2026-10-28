@@ -9,6 +9,7 @@
     "src/**/*.test.*",
     "src/**/*.spec.*",
     "src/**/__tests__/**",
+    "src/**/__fixtures__/**",
     "src/setupTests.ts",
     "src/test-utils/**"
   ]
