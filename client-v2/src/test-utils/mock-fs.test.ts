@@ -3,7 +3,9 @@ import { PgFs } from "../utils/explorer/fs";
 
 // `setupTests.ts` replaces `PgFs` with `mockFsModule`'s, so this is the mock.
 // Its signatures are checked against `PgFs` by the compiler (`satisfies` in
-// `mock-fs.ts`); these cover the behaviour the compiler cannot see.
+// `mock-fs.ts`); these cover the behaviour the compiler cannot see. A file of
+// its own, not an in-source block: the cases drive the mock together with
+// `PgExplorer`'s path resolution.
 
 const files = () =>
   (PgFs as unknown as { __files: Map<string, string> }).__files;
