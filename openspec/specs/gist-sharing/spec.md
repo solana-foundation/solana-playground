@@ -303,7 +303,8 @@ opens a repository.
 
 The import SHALL show one message per cause: a gist that is missing or
 was deleted, GitHub's hourly request limit, a gist with more files than
-GitHub lists, a manifest the format refuses, a gist with no program, an
+GitHub lists, a manifest the format refuses, a gist with neither a
+program nor a TypeScript or JavaScript file, an
 answer that is not a gist, and any other failed request with its status. A file GitHub's gist API cuts short SHALL be
 downloaded whole rather than imported cut.
 
@@ -333,3 +334,28 @@ or `request-failed`.
 #### Scenario: A failed import is counted with its reason
 - **WHEN** an import from the dialog fails because the gist does not exist
 - **THEN** `gist_import_failed` is sent with `from: dialog` and `reason: not-found`
+
+### Requirement: A gist with no program opens as a TypeScript project
+
+A gist in which no supported framework finds a program but whose files,
+once placed, include a TypeScript or JavaScript file under `client/` or
+`tests/` SHALL open as a project with no program, in the dialog and
+behind a link alike. A gist with neither SHALL be refused with reason
+`no-program` and the message "This gist holds no Solana program and no
+TypeScript or JavaScript to open."
+
+#### Scenario: A hand-made gist of TypeScript
+- **WHEN** the user imports a gist without `.playground.json` that holds
+  `client.ts` and `client.test.ts`
+- **THEN** a project is created holding `client/client.ts` and
+  `tests/client.test.ts`, and `gist_import_succeeded` is sent with
+  `layout: loose`
+
+#### Scenario: A hand-made gist of TypeScript behind a link
+- **WHEN** the user opens `/gist/<id>` for a gist that holds only `client.ts`
+- **THEN** the view shows `client.ts` and the stepper offers only Write
+
+#### Scenario: A gist with nothing to open
+- **WHEN** the user imports a gist that holds only `notes.md`
+- **THEN** the import fails, and `gist_import_failed` is sent with
+  `reason: no-program`

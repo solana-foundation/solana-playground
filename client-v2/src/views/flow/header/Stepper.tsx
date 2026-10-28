@@ -9,7 +9,7 @@ import {
 import type { StepperStatus } from "@/shared/ui/stepper";
 
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
-import { STAGES } from "../state/stage";
+import { stagesOf } from "../state/stage";
 import type { FlowState, Stage, StageStatus } from "../state/stage";
 
 const LABEL: Record<Stage, string> = {
@@ -61,7 +61,8 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
 };
 
 /**
- * The write -> build -> deploy -> interact loop, drawn with the design
+ * The stages `stagesOf(state)` offers -- the write -> build -> deploy ->
+ * interact loop, or Write alone for a project with no program -- drawn with the design
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
@@ -96,7 +97,7 @@ const Stepper: FC<StepperProps> = ({ state, onSelect, target, fill }) => {
       onValueChange={(v) => onSelect(v as Stage)}
     >
       <StepperList compact={compact} className={fill ? "w-full" : undefined}>
-        {STAGES.map((stage) => {
+        {stagesOf(state).map((stage) => {
           const status = statusOf(state, stage);
           return (
             <StepperItem

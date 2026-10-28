@@ -214,3 +214,76 @@ test("gist-sharing: A failed import is counted with its reason", async ({
     .poll(() => lineOf(lines, "gist_import_failed"), LONG)
     .toMatch(/dialog[\s\S]*not-found/);
 });
+
+/** A gist API answer holding the given files, made by hand */
+const handMade = (files: Record<string, string>) => ({
+  truncated: false,
+  owner: { login: "alice" },
+  files: Object.fromEntries(
+    Object.entries(files).map(([name, content]) => [
+      name,
+      {
+        content,
+        truncated: false,
+        raw_url: `https://gist.githubusercontent.com/alice/${ID}/raw/${name}`,
+      },
+    ])
+  ),
+});
+
+test("gist-sharing: A hand-made gist of TypeScript", async ({
+  seededPage: page,
+}) => {
+  const lines = linesOn(page);
+  await page.route(`https://api.github.com/gists/${ID}`, (r) =>
+    json(
+      r,
+      handMade({
+        "client.ts": "console.log('client');",
+        "client.test.ts": "describe('client', () => {});",
+      })
+    )
+  );
+
+  await importFromDialog(page, `https://gist.github.com/alice/${ID}`);
+
+  await expect(currentProject(page)).toHaveText(`gist-alice/${ID}`, LONG);
+  for (const path of ["client/client.ts", "tests/client.test.ts"]) {
+    await expect(
+      page.locator(`[data-path="/gist-alice/${ID}/${path}"]`)
+    ).toHaveCount(1);
+  }
+  await expect(page.locator("#flow-stage-tab-build")).toHaveCount(0);
+  await expect
+    .poll(() => lineOf(lines, "gist_import_succeeded"), LONG)
+    .toMatch(/loose/);
+});
+
+test("gist-sharing: A gist with nothing to open", async ({
+  seededPage: page,
+}) => {
+  const lines = linesOn(page);
+  await page.route(`https://api.github.com/gists/${ID}`, (r) =>
+    json(r, handMade({ "notes.md": "# notes" }))
+  );
+
+  await importFromDialog(page, `https://gist.github.com/alice/${ID}`);
+
+  await expect
+    .poll(() => lineOf(lines, "gist_import_failed"), LONG)
+    .toMatch(/dialog[\s\S]*no-program/);
+});
+
+test("gist-sharing: A hand-made gist of TypeScript behind a link", async ({
+  page,
+}) => {
+  await page.route(`https://api.github.com/gists/${ID}`, (r) =>
+    json(r, handMade({ "client.ts": "console.log('client');" }))
+  );
+
+  await page.goto(`/gist/${ID}`);
+
+  await expect(page.locator("#root-dir")).toContainText("client.ts", LONG);
+  await expect(page.locator("#flow-stage-tab-write")).toBeVisible();
+  await expect(page.locator("#flow-stage-tab-build")).toHaveCount(0);
+});
