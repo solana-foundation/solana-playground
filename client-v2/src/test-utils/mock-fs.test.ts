@@ -19,7 +19,7 @@ describe("the PgFs mock", () => {
 
     await PgFs.writeFile("src/lib.rs", "fn main() {}");
 
-    expect([...files().keys()]).toEqual(["/ws/src/lib.rs"]);
+    expect(Array.from(files().keys())).toEqual(["/ws/src/lib.rs"]);
     expect(await PgFs.readToString("src/lib.rs")).toBe("fn main() {}");
     expect(await PgFs.exists("/ws/src")).toBe(true);
   });
@@ -29,7 +29,7 @@ describe("the PgFs mock", () => {
       "rename",
       async () => {
         await PgFs.rename("src", "lib");
-        return [...files().keys()];
+        return Array.from(files().keys());
       },
       ["/ws/lib/main.rs"],
     ],
@@ -54,7 +54,7 @@ describe("the PgFs mock", () => {
 
     await PgFs.removeDir("/a/b", { recursive: true });
 
-    expect([...files().keys()]).toEqual(["/a/bc/two"]);
+    expect(Array.from(files().keys())).toEqual(["/a/bc/two"]);
   });
 
   it("refuses to remove a directory that is not empty unless recursive", async () => {
