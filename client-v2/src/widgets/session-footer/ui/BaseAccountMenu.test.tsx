@@ -20,6 +20,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   wallet: fields.wallet ?? null,
   cluster: fields.cluster ?? UP,
   sending: fields.sending ?? false,
+  canFund: fields.canFund ?? false,
 });
 
 const open = async (account: AccountView, onPick = vi.fn()) => {
@@ -207,4 +208,22 @@ it("opens Docs and the profile in a new tab and reports the pick", async () => {
   expect(profile.getAttribute("href")).toBe("https://github.com/t");
   await userEvent.click(docs);
   expect(onPick).toHaveBeenCalledExactlyOnceWith("docs");
+});
+
+it("offers funding in the wallet group once a Playground wallet exists", async () => {
+  const onPick = await open(view({ wallet: WALLET, canFund: true }));
+
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Fund from a wallet" })
+  );
+
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("fund-wallet");
+});
+
+it("offers no funding before the Playground wallet is set up", async () => {
+  await open(view({ canFund: false }));
+
+  expect(
+    screen.queryByRole("menuitem", { name: "Fund from a wallet" })
+  ).toBeNull();
 });

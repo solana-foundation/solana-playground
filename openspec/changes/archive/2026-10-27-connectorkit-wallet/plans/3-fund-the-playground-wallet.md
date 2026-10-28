@@ -18,6 +18,17 @@ only changes where `FundDialog` is mounted. Wallets come from
 **Spec:** `../specs/client-v2-wallet-funding/spec.md`, `../design.md`
 (Decisions 5, 6). Stacked on PR 1 (sections 1 and 2).
 
+## As built (2026-10-27)
+
+The code and the main spec (`openspec/specs/client-v2-wallet-funding`) win where they differ from the tasks below:
+
+- `receiverOf({ current, firstAccount })`; checks report `problem`, not `reason`; `classify` reads name and code before wording and also takes plain objects.
+- `sendFunds` (`model/transfer.ts`) sends, then confirms: `TransferFailedError` (nothing moved, retry is safe) or `TransferNotConfirmedError` (sent with its signature; Send stays off). Review C1 of PR #177.
+- `BaseFundDialog` takes `wallets: FundWalletOption[]`, `payer: FundPayer | null` with `balance: number | "loading" | "unavailable"`, `cluster`, and `failure` with five kinds.
+- The payer is only a wallet picked in the dialog; a connected extension is listed like the rest.
+- `FundDialog` is mounted once, in `session-footer`'s `use-account`.
+- Review Focus 2: surrounding spaces are trimmed; a comma, sign or exponent is invalid. Review Focus 5: `PgTx` reads the cluster at send time; the dialog re-reads the balance on a cluster change.
+
 ## Global Constraints
 
 - Copy is the spec's, verbatim: "Fund from a wallet", "Fund the Playground wallet", `Connect <name>`, "No wallet found", "Amount (SOL)" (id `fund-amount`), `Send <amount> SOL`, `Sent <amount> SOL to <receiver name>.`, "Couldn't send the SOL.".

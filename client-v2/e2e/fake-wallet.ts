@@ -28,6 +28,8 @@ export const installFakeWallet = async (
     name: string;
     keypair?: Keypair;
     sign?: boolean;
+    /** Decline that request, as a user pressing Cancel in the wallet does */
+    reject?: "connect" | "sign";
     /** Defaults to devnet, mainnet and testnet */
     chains?: string[];
     /** Register into the loaded page, as an extension that injects late does */
@@ -55,12 +57,14 @@ export const installFakeWallet = async (
     publicKey,
     sign,
     chains,
+    reject,
   }: {
     name: string;
     address: string;
     publicKey: number[];
     sign: boolean;
     chains: string[];
+    reject: string | null;
   }) => {
     type Account = {
       address: string;
@@ -99,6 +103,9 @@ export const installFakeWallet = async (
           version: "1.0.0",
           connect: async () => {
             state.connects++;
+            if (reject === "connect") {
+              throw new Error("User rejected the request.");
+            }
             accounts = [account];
             listeners.forEach((fn) => fn({ accounts }));
             return { accounts };
@@ -124,6 +131,9 @@ export const installFakeWallet = async (
           version: "1.0.0",
           supportedTransactionVersions: ["legacy", 0],
           signTransaction: async (...inputs: { transaction: Uint8Array }[]) => {
+            if (reject === "sign") {
+              throw new Error("User rejected the request.");
+            }
             if (!sign)
               throw new Error("This fake wallet was set up without signing");
             return Promise.all(
@@ -152,6 +162,7 @@ export const installFakeWallet = async (
     address,
     publicKey: Array.from(keypair.publicKey.toBytes()),
     sign: !!opts.sign,
+    reject: opts.reject ?? null,
     chains: opts.chains ?? [
       "solana:devnet",
       "solana:mainnet",

@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { isSetupRejected } from "@/commands/connect/setup-rejected";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import { FeedbackMenuItems, useFeedbackSend } from "@/features/feedback";
+import { FundDialog } from "@/features/fund-wallet";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
 import { PgCommand, PgCommon, PgView, PgWallet } from "@/utils";
@@ -49,6 +50,7 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
   const balance = useBalance();
   const { sending, triggerRef } = useFeedbackSend();
   const [confirmingSignOut, setConfirmingSignOut] = useState(false);
+  const [funding, setFunding] = useState(false);
   // The dialog's busy button already stops a second click; this stops a
   // second dialog (the footer and the rail swap) from starting another
   const signingOut = useRef<Promise<void> | null>(null);
@@ -73,6 +75,7 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
       : null,
     cluster,
     sending,
+    canFund: PgWallet.accounts.length > 0,
   };
 
   // `connect` toggles: no wallet to the Playground wallet, the Playground
@@ -125,6 +128,8 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
     wallet: () => {
       PgWallet.show = true;
     },
+    // The dialog is mounted beside the menu, so it outlives the menu closing
+    "fund-wallet": () => setFunding(true),
   };
 
   const pick = (item: AccountItem) => {
@@ -162,11 +167,14 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
   );
 
   const dialog = (
-    <BaseSignOutDialog
-      open={confirmingSignOut}
-      onOpenChange={setConfirmingSignOut}
-      onConfirm={signOut}
-    />
+    <>
+      <BaseSignOutDialog
+        open={confirmingSignOut}
+        onOpenChange={setConfirmingSignOut}
+        onConfirm={signOut}
+      />
+      <FundDialog open={funding} onOpenChange={setFunding} />
+    </>
   );
 
   return {

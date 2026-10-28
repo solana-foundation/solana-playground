@@ -12,7 +12,8 @@ export type AccountItem =
   | "cluster-down"
   | "connect-wallet"
   | "wallet"
-  | "disconnect-wallet";
+  | "disconnect-wallet"
+  | "fund-wallet";
 
 /** Where the account menu opens from: the footer's account row, or the rail's "Account" */
 export type AccountSurface = "footer" | "rail";
@@ -46,6 +47,11 @@ export interface AccountView {
   cluster: ClusterStatus;
   /** A feedback send is in flight behind a closed form */
   sending: boolean;
+  /**
+   * A Playground account exists to receive SOL, so the menu offers "Fund from
+   * a wallet" (`features/fund-wallet`); false before the wallet's setup
+   */
+  canFund: boolean;
 }
 
 /** The line under the account's name */
@@ -161,6 +167,7 @@ if (import.meta.vitest) {
       wallet: fields.wallet ?? null,
       cluster: fields.cluster ?? UP,
       sending: fields.sending ?? false,
+      canFund: fields.canFund ?? false,
     });
 
     const TESTER = { name: "Tester", login: "t", image: null };

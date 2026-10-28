@@ -37,7 +37,10 @@ const wallet = vi.hoisted(() => ({
   },
 }));
 const connect = vi.hoisted(() => ({ execute: vi.fn() }));
-const walletWindow = vi.hoisted(() => ({ show: false }));
+const walletWindow = vi.hoisted(() => ({
+  show: false,
+  accounts: [] as unknown[],
+}));
 const balance = vi.hoisted(() => ({ current: 2.4 as number | undefined }));
 const setToast = vi.hoisted(() => vi.fn());
 
@@ -56,6 +59,8 @@ vi.mock("@/utils", () => ({
   PgWallet: walletWindow,
   PgView: { setToast },
 }));
+// The Fund dialog has its own tests; here only the menu item that opens it counts
+vi.mock("@/features/fund-wallet", () => ({ FundDialog: () => null }));
 vi.mock("@/features/feedback", () => ({
   FeedbackMenuItems: () => null,
   useFeedbackSend: () => ({ sending: false, triggerRef: { current: null } }),
