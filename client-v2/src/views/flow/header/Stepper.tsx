@@ -8,6 +8,8 @@ import {
   StepperList,
 } from "@/shared/ui/stepper";
 
+import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
+import { stagesOf } from "../state/stage";
 import type { FlowState, Stage, StageStatus } from "../state/stage";
 import { STAGES } from "../state/stage";
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
@@ -67,7 +69,8 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
 };
 
 /**
- * The write -> build -> deploy -> interact loop, drawn with the design
+ * The stages `stagesOf(state)` offers -- the write -> build -> deploy ->
+ * interact loop, or Write alone for a project with no program -- drawn with the design
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
@@ -100,7 +103,8 @@ const Stepper: FC<StepperProps> = ({
     return () => observer.disconnect();
   }, []);
   const compact = !phone && room !== null && room < STEPPER_FULL_WIDTH_PX;
-  const stages = phone ? STAGES.filter((stage) => stage !== "write") : STAGES;
+  const offered = stagesOf(state);
+  const stages = phone ? offered.filter((stage) => stage !== "write") : offered;
   return (
     <DsStepper
       ref={ref}

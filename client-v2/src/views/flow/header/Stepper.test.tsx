@@ -23,6 +23,7 @@ const failedBuild: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  hasProgram: true,
 };
 
 /** Every element a `ResizeObserver` watches (the fold's stepper root, the
@@ -91,6 +92,14 @@ describe("Stepper", () => {
     expect(
       screen.getByRole("tab", { name }).getAttribute("aria-selected")
     ).toBe("true");
+  });
+
+  it("shows only Write for a project with no program", () => {
+    const noProgram: FlowState = { ...INITIAL_FLOW_STATE, hasProgram: false };
+    render(<Stepper state={noProgram} onSelect={vi.fn()} />);
+    expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
+      "flow-stage-tab-write",
+    ]);
   });
 
   it("selects a stage on click", async () => {
