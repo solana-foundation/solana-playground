@@ -129,7 +129,9 @@ export class PgGithub {
     const { owner, repo, path } = this.parseUrl(url);
     const githubWorkspaceName = `github-${owner}/${repo}/${path}`;
 
-    if (PgExplorer.allWorkspaceNames?.includes(githubWorkspaceName)) {
+    // Read from the store: a repository link's temporary view holds no list
+    const names = await PgExplorer.getAllWorkspaceNames();
+    if (names.includes(githubWorkspaceName)) {
       // Switch to the existing workspace
       await PgExplorer.switchWorkspace(githubWorkspaceName);
     } else {

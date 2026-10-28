@@ -12,6 +12,18 @@ export type GistExportFailure =
   | "rejected"
   | "request-failed";
 
+/** Where a gist import started: the import dialog or a link */
+export type GistImportSource = "dialog" | "link";
+
+/** Why a gist import stopped */
+export type GistImportFailure =
+  | "not-found"
+  | "rate-limited"
+  | "too-large"
+  | "invalid"
+  | "no-program"
+  | "request-failed";
+
 type GistEvents = {
   /**
    * The share dialog started an export: the user pressed create, or the
@@ -28,6 +40,22 @@ type GistEvents = {
    * the user cancelled counts as `sign-in-failed`.
    */
   gist_export_failed: { reason: GistExportFailure };
+  /** An import from the dialog, or a gist link, started reading a gist. */
+  gist_import_started: { from: GistImportSource };
+  /**
+   * The gist's files are read and laid out, before a project is created or a
+   * view opened; `layout` says whether Playground's manifest placed them or
+   * their kind did.
+   */
+  gist_import_succeeded: {
+    from: GistImportSource;
+    layout: "manifest" | "loose";
+  };
+  /**
+   * The import stopped; the user saw the message for `reason`.
+   * `request-failed` also counts a fault of ours, which is reported as well.
+   */
+  gist_import_failed: { from: GistImportSource; reason: GistImportFailure };
 };
 
 export const gistTelemetry = createTracker<GistEvents>();
