@@ -1,9 +1,3 @@
-import type {
-  MessageSignerWalletAdapterProps,
-  SignerWalletAdapterProps,
-  StandardWalletAdapter,
-} from "@solana/wallet-adapter-base";
-
 import type { PgWeb3 } from "../web3";
 
 /** Wallet state */
@@ -63,6 +57,48 @@ type PgWallet = {
 } & NonNullablePublicKeyProp &
   SignerWalletProps;
 
+/** Events a Wallet Standard wallet emits to the app */
+export interface StandardWalletEvents {
+  /** Connected, or the selected account changed while connected */
+  connect(): void;
+  /** Disconnected, by the app or from inside the wallet */
+  disconnect(): void;
+}
+
+/**
+ * What the app reads from a Wallet Standard wallet: the members wallet-adapter's
+ * `StandardWalletAdapter` had and the app used, so the call sites did not
+ * change when discovery moved to ConnectorKit (`entities/external-wallet`).
+ */
+export interface StandardWalletAdapter {
+  /** Wallet Standard name, also the key `PgWallet.standardName` stores */
+  readonly name: string;
+  /** Data URI */
+  readonly icon: string;
+  /** A registered wallet is installed */
+  readonly readyState: "Installed";
+  readonly connected: boolean;
+  readonly connecting: boolean;
+  /** The selected Solana account; `null` while not connected */
+  readonly publicKey: PgWeb3.PublicKey | null;
+  connect(): Promise<void>;
+  disconnect(): Promise<void>;
+  /** Absent when the wallet cannot sign transactions */
+  signTransaction?<T extends AnyTransaction>(tx: T): Promise<T>;
+  /** Absent when the wallet cannot sign transactions */
+  signAllTransactions?<T extends AnyTransaction>(txs: T[]): Promise<T[]>;
+  /** Absent when the wallet cannot sign messages */
+  signMessage?(message: Uint8Array): Promise<Uint8Array>;
+  on<E extends keyof StandardWalletEvents>(
+    event: E,
+    fn: StandardWalletEvents[E]
+  ): void;
+  off<E extends keyof StandardWalletEvents>(
+    event: E,
+    fn: StandardWalletEvents[E]
+  ): void;
+}
+
 /** All wallets other than Playground Wallet */
 export type StandardWallet<C extends boolean = false> = {
   /** The wallet is not Playground Wallet */
@@ -80,10 +116,11 @@ interface NonNullablePublicKeyProp {
 }
 
 /** Signer methods */
-type SignerWalletProps = Pick<
-  SignerWalletAdapterProps & MessageSignerWalletAdapterProps,
-  "signMessage" | "signTransaction" | "signAllTransactions"
->;
+interface SignerWalletProps {
+  signTransaction<T extends AnyTransaction>(tx: T): Promise<T>;
+  signAllTransactions<T extends AnyTransaction>(txs: T[]): Promise<T[]>;
+  signMessage(message: Uint8Array): Promise<Uint8Array>;
+}
 
 /** Optional `wallet` prop */
 export interface WalletOption {
