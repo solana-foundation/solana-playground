@@ -10,8 +10,9 @@ import type {
 
 /**
  * What opened or closed a panel: a click, a key, a drag of its edge, or the
- * product itself (`auto`): a deploy or "Fix with assistant" opening one, or a
- * modal closing the phone's Files Sheet, which would keep focus from the modal
+ * product itself (`auto`): a deploy or a build error's Explain or Fix opening
+ * one, or a modal closing the phone's Files Sheet, which would keep focus from
+ * the modal
  */
 export type ToggleSource = "button" | "key" | "drag" | "auto";
 

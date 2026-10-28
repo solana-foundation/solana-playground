@@ -80,13 +80,13 @@ it("finds a program by its category", async () => {
   ).toBeTruthy();
 });
 
-it("reports a list it cannot read and recovers on Retry", async () => {
+it("reports a list it cannot read and recovers on Try again", async () => {
   utils.PgCommon.fetchJSON
     .mockRejectedValueOnce(new Error("offline"))
     .mockResolvedValueOnce(LISTING);
   render(<ProgramsPage />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "Retry" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
   expect(
     await screen.findByRole("button", { name: "Open drift-v2" })
   ).toBeTruthy();
@@ -95,11 +95,11 @@ it("reports a list it cannot read and recovers on Retry", async () => {
   ]);
 });
 
-it("shows Retry for a listing it cannot read, and reports it", async () => {
+it("shows Try again for a listing it cannot read, and reports it", async () => {
   utils.PgCommon.fetchJSON.mockResolvedValue({ error: "upstream" });
   render(<ProgramsPage />);
 
-  expect(await screen.findByRole("button", { name: "Retry" })).toBeTruthy();
+  expect(await screen.findByRole("button", { name: "Try again" })).toBeTruthy();
   expect(logged.entries.map((e) => [e.ns, e.report])).toEqual([
     ["catalog:programs", true],
   ]);

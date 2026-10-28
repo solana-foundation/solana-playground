@@ -2,7 +2,6 @@ import { FC, useEffect, useMemo, useRef } from "react";
 import styled, { css, useTheme } from "styled-components";
 import "xterm/css/xterm.css";
 
-import { GITHUB_URL, PROJECT_NAME } from "../../constants";
 import { useExposeStatic, useKeybind } from "../../hooks";
 import {
   CommandManager,
@@ -30,14 +29,11 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
     const xterm = theme.components.terminal.xterm;
 
     return new PgTerm(cmdManager, {
+      // Spec 13's welcome: what the terminal is for, and `help`
       defaultText: [
-        `Welcome to ${PgTerminal.bold(PROJECT_NAME)}.`,
-        `Popular crates for Solana development are available to use.`,
-        `See the list of available crates and request new crates from ${PgTerminal.underline(
-          GITHUB_URL
-        )}`,
-        `Type ${PgTerminal.bold("help")} to see all commands.\n`,
-      ].join("\n\n"),
+        "Output from Build, Deploy and your commands shows here.",
+        `Type ${PgTerminal.bold("help")} to see commands.\n`,
+      ].join("\n"),
       xterm: {
         convertEol: true,
         rendererType: "dom",

@@ -540,9 +540,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     assistantTelemetry.track("assistant_turn_stopped", {});
   };
 
-  // "Fix with assistant" and similar callers outside the panel ask for a
-  // prompt to be sent through `PgAssistant.requestPrompt`; this is the only
-  // place that turns the request into an actual send
+  // A build error's Explain or Fix and similar callers outside the panel ask
+  // for a prompt to be sent through `PgAssistant.requestPrompt`; this is the
+  // only place that turns the request into an actual send
   useEffect(() => {
     /** A prompt the user did not type gets one look before it costs a turn */
     const place = (text: string) => {

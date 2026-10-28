@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { CircleAlert, CircleCheck, CircleX, History } from "lucide-react";
 
@@ -33,6 +33,10 @@ import {
   StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
+import {
+  EMPTY_SOURCE_HINT,
+  fileLabel,
+} from "../../../commands/build/empty-source";
 import { errorMeta, msLabel, warningCount } from "./build-view";
 import type { BuildSurface } from "./build-surface";
 import type { BuildFailure } from "../state/stage";
@@ -53,6 +57,8 @@ export interface BaseBuildProps {
   surface: BuildSurfaceView;
   /** A build is running; the surface stays, its action waits */
   building: boolean;
+  /** The running build is past its slow threshold (Spec 08 BUILD-05) */
+  slow: boolean;
   /** The build server's host, for naming it */
   host: string;
   /** The build server's URL, for BUILD-04's details */
@@ -62,8 +68,8 @@ export interface BaseBuildProps {
   onBuild: () => unknown;
   onContinue: () => void;
   onExport: () => unknown;
-  /** Sends a prompt to the assistant */
-  onFix: (prompt: string) => void;
+  /** Sends a prompt to the assistant: an error card's Explain or Fix */
+  onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
   /** Download IDL, shown with a successful build */
   idlActions: ReactNode;
@@ -81,6 +87,7 @@ const Surface = ({
   description,
   children,
   actions,
+  progress,
   report = false,
 }: {
   icon?: ReactNode;
@@ -89,6 +96,8 @@ const Surface = ({
   description?: ReactNode;
   children?: ReactNode;
   actions: ReactNode;
+  /** The run behind the surface's Build button, for the slow line */
+  progress?: Pick<BaseBuildProps, "building" | "slow">;
   report?: boolean;
 }) => (
   <div className={STAGE_FRAME}>
@@ -100,9 +109,20 @@ const Surface = ({
         <StageEmptyDescription>{description}</StageEmptyDescription>
       )}
       {children}
+      {progress?.building && <SlowLine slow={progress.slow} />}
       <StageEmptyActions className={STAGE_FOOT}>{actions}</StageEmptyActions>
     </StageEmpty>
   </div>
+);
+
+/**
+ * Spec 08 BUILD-05, mounted for the whole run so its polite region is in
+ * place before the words arrive. Never a warning colour: slow is not broken.
+ */
+const SlowLine = ({ slow }: { slow: boolean }) => (
+  <p role="status" className="text-sm text-muted-foreground">
+    {slow ? "This build is taking longer than usual." : ""}
+  </p>
 );
 
 /** The stage's own Build button, under whichever label the surface gives */
@@ -118,7 +138,7 @@ const BuildButton = ({
   <AsyncButton
     variant={variant}
     loading={p.building}
-    loadingText="Building..."
+    loadingText="Building…"
     onClick={p.onBuild}
     onError={reportButtonFailure("build")}
   >
@@ -144,14 +164,14 @@ const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
       Promise.resolve().then(p.onBuild).catch(reportButtonFailure("build"));
     }}
   >
-    {p.building ? "Building..." : "Build"}
+    {p.building ? "Building…" : "Build"}
     {!p.building && <BrandButtonIcon />}
   </BrandButton>
 );
 
 const Empty = (p: BaseBuildProps) => (
   <Surface
-    title={p.building ? "Building..." : "Nothing built yet"}
+    title={p.building ? "Building…" : "Nothing built yet"}
     description={
       // A run in flight names the server and warns about the wait. The
       // Foundation's server took 381s on a cold first build and 2.9s on the
@@ -162,16 +182,21 @@ const Empty = (p: BaseBuildProps) => (
         : "Build compiles your program on the server. Nothing leaves your browser except the source."
     }
     actions={<FirstBuildButton p={p} />}
+    progress={p}
   />
 );
 
 /**
  * A build that never reached the compiler. A build server that never replied
- * is Spec 08's BUILD-04; anything else is its ANY-00 for Build. The server
+ * is Spec 08's BUILD-04; an empty program file the build refused to send is
+ * Spec 09's, drawn by `EmptySource`; anything else is Spec 08's ANY-00. The server
  * and the raw error sit behind "Show details"; the terminal has the full
  * text.
  */
 const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
+  if (p.failure?.kind === "empty-source") {
+    return <EmptySource {...p} file={p.failure.file} />;
+  }
   const noAnswer = p.failure?.kind === "no-answer";
   return (
     <Surface
@@ -179,6 +204,7 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
       title={noAnswer ? "Build did not start" : "Could not build"}
       meta={msLabel(p.ms)}
       actions={<BuildButton p={p} label="Try again" />}
+      progress={p}
     >
       <StageEmptyNotice>
         <Callout variant="error">
@@ -191,6 +217,29 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
       </StageEmptyNotice>
       <Details serverUrl={p.serverUrl} failure={p.failure?.message ?? null} />
     </Surface>
+  );
+};
+
+/**
+ * Spec 09: the program file is empty, so the build sent nothing. Writing the
+ * program comes first, so opening the file is the brand action.
+ */
+const EmptySource = (p: BaseBuildProps & { file: string }) => {
+  const name = fileLabel(p.file);
+  return (
+    <Surface
+      title={`${name} is empty`}
+      description={EMPTY_SOURCE_HINT}
+      actions={
+        <>
+          <BrandButton onClick={() => p.onOpenFile(p.file)}>
+            Open {name}
+          </BrandButton>
+          <BuildButton p={p} label="Build" variant="outline" />
+        </>
+      }
+      progress={p}
+    />
   );
 };
 
@@ -232,6 +281,7 @@ const Restored = (p: BaseBuildProps & { failed: boolean }) => (
         {!p.failed && <ContinueButton p={p} />}
       </>
     }
+    progress={p}
   />
 );
 
@@ -239,7 +289,7 @@ const Succeeded = (p: BaseBuildProps) => (
   <Surface
     icon={<CircleCheck className="text-success" />}
     title="Build succeeded"
-    meta={msLabel(p.ms)}
+    meta={p.ms === null ? null : `Built in ${msLabel(p.ms)}`}
     description="The IDL below reflects this build. Deploy when ready."
     actions={
       <>
@@ -254,25 +304,26 @@ const Succeeded = (p: BaseBuildProps) => (
         </AsyncButton>
       </>
     }
+    progress={p}
   />
 );
 
 /**
- * One compiler error. A screen has one brand action, so only the first
- * error's fix takes it; the rest are outlined.
+ * One compiler error, with Spec 04's Explain and Fix. A screen has one brand
+ * action, so only the first error's Explain takes it; the rest are outlined.
+ * Neither moves focus: the answer arrives in the side panel.
  */
 const ErrorCard = ({
   view,
-  fix,
-  onFix,
+  explain,
+  onAsk,
   onOpenFile,
 }: {
   view: DiagnosticView;
-  fix: "brand" | "outline";
-  onFix: (prompt: string) => void;
+  explain: "brand" | "outline";
+  onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
 }) => {
-  const sendFix = () => onFix(view.prompt);
   const file = view.file;
   return (
     <Diagnostic>
@@ -302,15 +353,26 @@ const ErrorCard = ({
         </DiagnosticSource>
       )}
       <DiagnosticFooter>
-        {fix === "brand" ? (
-          <BrandButton size="sm" onClick={sendFix}>
-            Fix with assistant
+        {explain === "brand" ? (
+          <BrandButton size="sm" onClick={() => onAsk(view.prompts.explain)}>
+            Explain
           </BrandButton>
         ) : (
-          <Button size="sm" variant="outline" onClick={sendFix}>
-            Fix with assistant
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onAsk(view.prompts.explain)}
+          >
+            Explain
           </Button>
         )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onAsk(view.prompts.fix)}
+        >
+          Fix
+        </Button>
         {file && (
           <Button size="sm" variant="ghost" onClick={() => onOpenFile(file)}>
             Open in editor
@@ -343,28 +405,57 @@ const CompilerOutput = ({ raw }: { raw: string }) => {
   );
 };
 
-const Failed = (p: BaseBuildProps & FailedView) => (
-  <Surface
-    icon={<CircleX className="text-error" />}
-    title="Build failed"
-    meta={errorMeta(p.errorCount, p.ms, p.host)}
-    actions={<BuildButton p={p} label="Rebuild" variant="outline" />}
-    report
-  >
-    <div className="flex w-full flex-col gap-3.5">
-      {p.diagnostics.map((view, i) => (
-        <ErrorCard
-          key={i}
-          view={view}
-          fix={i === 0 ? "brand" : "outline"}
-          onFix={p.onFix}
-          onOpenFile={p.onOpenFile}
-        />
-      ))}
-      <CompilerOutput raw={p.raw} />
-    </div>
-  </Surface>
-);
+/** What the failed surface says once Explain or Fix is pressed (Spec 04) */
+const ANSWERING = "The assistant is answering in the side panel.";
+
+/**
+ * The announcement after `asks` presses. A polite region speaks only when
+ * its text changes, so every other ask adds a trailing no-break space.
+ */
+const answeringText = (asks: number) => {
+  if (asks === 0) return "";
+  if (asks % 2 === 1) return ANSWERING;
+  return `${ANSWERING}\u00a0`;
+};
+
+const Failed = (p: BaseBuildProps & FailedView) => {
+  // A rebuild's new errors have not been asked about
+  const [asks, setAsks] = useState(0);
+  useEffect(() => {
+    if (p.building) setAsks(0);
+  }, [p.building]);
+  const ask = (prompt: string) => {
+    setAsks((n) => n + 1);
+    p.onAsk(prompt);
+  };
+  return (
+    <Surface
+      icon={<CircleX className="text-error" />}
+      title="Build failed"
+      meta={errorMeta(p.errorCount, p.ms, p.host)}
+      actions={<BuildButton p={p} label="Try again" variant="outline" />}
+      progress={p}
+      report
+    >
+      <div className="flex w-full flex-col gap-3.5">
+        {p.diagnostics.map((view, i) => (
+          <ErrorCard
+            key={i}
+            view={view}
+            explain={i === 0 ? "brand" : "outline"}
+            onAsk={ask}
+            onOpenFile={p.onOpenFile}
+          />
+        ))}
+        <CompilerOutput raw={p.raw} />
+        {/* Spec 04: focus stays on the card, so say once where the answer is */}
+        <p role="status" className="sr-only">
+          {answeringText(asks)}
+        </p>
+      </div>
+    </Surface>
+  );
+};
 
 /** The Build stage, drawn from props alone; `Build` connects it */
 const BaseBuild = (p: BaseBuildProps) => {
