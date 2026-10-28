@@ -300,10 +300,10 @@ describe("useTurn", () => {
       });
     });
 
-    // Async: the aborted provider rejects and the turn unwinds in a microtask
-    await act(async () => result.current.stop());
-
+    act(() => result.current.stop());
     expect(signal.aborted).toBe(true);
+    // Async: the aborted provider rejects and the turn unwinds in a microtask
+    await act(async () => {});
     expect((await answer).allowed).toBe(false);
     const kinds = PgAssistant.items.map((item) => item.kind);
     expect(kinds).toContain("notice");
