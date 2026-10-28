@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import BaseHome from "./BaseHome";
@@ -124,10 +124,13 @@ it("reports the other tiles", () => {
   expect(p.onTile).toHaveBeenCalledWith("tutorials");
 });
 
-it("opens a tutorial by name", () => {
+it("opens a tutorial by name", async () => {
   const p = props();
   const home = draw(p);
-  fireEvent.click(home.getByRole("button", { name: "Open Hello Anchor" }));
+  // Async: Open is an AsyncButton, which settles once `onTutorial` resolves
+  await act(async () => {
+    fireEvent.click(home.getByRole("button", { name: "Open Hello Anchor" }));
+  });
   expect(p.onTutorial).toHaveBeenCalledWith("Hello Anchor");
 });
 
