@@ -11,8 +11,15 @@ export {
   toGistFiles,
 } from "./lib/format";
 export type { GistFiles, GistFormatReason } from "./lib/format";
+export { isGistUrl, parseGistRef, parseGistUrl } from "./lib/url";
+export type { GistRef } from "./lib/url";
+export { GistImportError, getGistFiles, importGist } from "./model/import";
 export { gistTelemetry } from "./model/telemetry";
-export type { GistExportFailure } from "./model/telemetry";
+export type {
+  GistExportFailure,
+  GistImportFailure,
+  GistImportSource,
+} from "./model/telemetry";
 export { exportProject } from "./model/export";
 export type { ExportFailure, ExportResult } from "./model/export";
 export { default as ShareGist } from "./ui/ShareGist";

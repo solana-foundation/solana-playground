@@ -42,13 +42,22 @@ const utils = vi.hoisted(() => {
         },
       ],
     },
-    PgGithub: { import: vi.fn(), isValidUrl: () => true },
+    PgGithub: {
+      import: vi.fn(),
+      isValidUrl: (url: string) => url.startsWith("https://github.com/"),
+    },
     PgRouter: { getPathUrl: (u: string) => u, navigate: vi.fn() },
     PgView: { closeModal: vi.fn(), classNames: { ERROR: "error" } },
     PgTheme: { convertToCSS: () => "", getColor: () => "inherit" },
   };
 });
 vi.mock("../../../../../utils", () => utils);
+
+const gist = vi.hoisted(() => ({
+  importGist: vi.fn(),
+  isGistUrl: (url: string) => url.startsWith("https://gist.github.com/"),
+}));
+vi.mock("@/features/gist", () => gist);
 
 import { ImportGithub } from "./ImportGithub";
 
@@ -67,6 +76,7 @@ let toast: MockInstance<typeof PgViewDirect.setToast>;
 beforeEach(() => {
   initLogger({ providers: [logMemory()] });
   utils.PgGithub.import.mockReset();
+  gist.importGist.mockReset();
   utils.PgView.closeModal.mockReset();
   toast = vi.spyOn(PgViewDirect, "setToast").mockImplementation(() => {});
 });
@@ -126,5 +136,66 @@ it("tells the user an example that failed to import", async () => {
   importExample();
 
   await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
+  expect(utils.PgView.closeModal).not.toHaveBeenCalled();
+});
+
+/** Type the URL into the dialog's field and press its own Import */
+const submitUrl = (url: string) => {
+  const field = screen.getByPlaceholderText(
+    "https://github.com/... or https://gist.github.com/..."
+  );
+  fireEvent.change(field, { target: { value: url } });
+  const submit = screen
+    .getAllByRole("button", { name: /^import$/i })
+    .find((button) => button.getAttribute("type") === "submit")!;
+  fireEvent.click(submit);
+};
+
+it("asks for a GitHub or gist URL", () => {
+  draw();
+
+  expect(screen.getByText("GitHub or gist URL")).toBeTruthy();
+});
+
+it("imports a gist URL as a gist, from the dialog", async () => {
+  gist.importGist.mockResolvedValue(undefined);
+  draw();
+
+  submitUrl("https://gist.github.com/alice/0123abcd");
+
+  await waitFor(() =>
+    expect(gist.importGist).toHaveBeenCalledWith(
+      "https://gist.github.com/alice/0123abcd",
+      "dialog"
+    )
+  );
+  expect(utils.PgGithub.import).not.toHaveBeenCalled();
+});
+
+it("still imports a repository URL as a repository", async () => {
+  utils.PgGithub.import.mockResolvedValue(undefined);
+  draw();
+
+  submitUrl("https://github.com/alice/repo");
+
+  await waitFor(() =>
+    expect(utils.PgGithub.import).toHaveBeenCalledWith(
+      "https://github.com/alice/repo"
+    )
+  );
+  expect(gist.importGist).not.toHaveBeenCalled();
+});
+
+it("shows why a gist could not be imported and stays open", async () => {
+  gist.importGist.mockRejectedValue(
+    new Error('Gist "0123abcd" was not found on GitHub.')
+  );
+  draw();
+
+  submitUrl("https://gist.github.com/alice/0123abcd");
+
+  expect(
+    await screen.findByText('Gist "0123abcd" was not found on GitHub.')
+  ).toBeTruthy();
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
 });

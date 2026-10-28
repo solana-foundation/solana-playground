@@ -5,6 +5,7 @@ import styled, { css } from "styled-components";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
+import { importGist, isGistUrl } from "@/features/gist";
 import { ModalFrame, SubmitCancelled, useModalId } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
@@ -34,7 +35,9 @@ export const ImportGithub = () => {
         text: "Import",
         onSubmit: async () => {
           try {
-            await PgCommon.transition(PgGithub.import(url));
+            await PgCommon.transition(
+              isGistUrl(url) ? importGist(url, "dialog") : PgGithub.import(url)
+            );
           } catch (e) {
             // Closing the program choice is the user changing their mind,
             // not a failure: the import dialog stays, quietly
@@ -47,20 +50,21 @@ export const ImportGithub = () => {
     >
       <Wrapper>
         <GithubUrlWrapper>
-          <GithubUrlInputLabel>GitHub URL</GithubUrlInputLabel>
+          <GithubUrlInputLabel>GitHub or gist URL</GithubUrlInputLabel>
           <Input
             autoFocus
             value={url}
             onChange={(ev) => setUrl(ev.target.value)}
-            validator={PgGithub.isValidUrl}
+            validator={isImportableUrl}
             error={error}
             setError={setError}
-            placeholder="https://github.com/..."
+            placeholder="https://github.com/... or https://gist.github.com/..."
           />
         </GithubUrlWrapper>
 
         <Description>
-          Projects can be imported or viewed from their GitHub URL.
+          Projects can be imported or viewed from their GitHub URL, or from the
+          URL of a gist.
         </Description>
 
         <ExamplesSectionWrapper>
@@ -90,6 +94,10 @@ export const ImportGithub = () => {
     </ModalFrame>
   );
 };
+
+/** A repository URL goes to repository import, a gist URL to gist import */
+const isImportableUrl = (url: string) =>
+  PgGithub.isValidUrl(url) || isGistUrl(url);
 
 const GITHUB_PROGRAM_URL =
   "https://github.com/solana-developers/program-examples/tree/main/basics/create-account/anchor";
