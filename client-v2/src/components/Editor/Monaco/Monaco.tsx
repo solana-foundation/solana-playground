@@ -441,8 +441,8 @@ const Monaco = () => {
     if (!editor) return;
 
     const save = async (path: string, content: string) => {
-      // A file deleted or renamed inside the delay has its model disposed,
-      // which flushes its edit here: writing it would bring the file back
+      // A file deleted inside the delay has its model disposed, which flushes
+      // its edit here: writing it would bring the file back
       if (!PgExplorer.getFile(path)) return;
 
       try {
@@ -483,12 +483,19 @@ const Monaco = () => {
       autosave.schedule(path, () => model.getValue());
     });
 
+    // A rename of the edited file, or of a folder above it, moves the pending
+    // save's path away, so the edit is saved before it, where the rename picks
+    // it up. Only the write's start is ordered: the fs runs it before the
+    // rename because it runs operations in call order
+    const willRename = PgExplorer.onWillRenameItem(() => autosave.flush());
+
     return () => {
       // Unmounting disposes the models first, which has flushed already; this
       // covers a model that outlives the editor
       autosave.flush();
       modelWillDispose?.dispose();
       content.dispose();
+      willRename.dispose();
     };
   }, [editor]);
 

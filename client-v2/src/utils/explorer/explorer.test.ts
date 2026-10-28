@@ -828,3 +828,73 @@ describe("writes that change the folder tree", () => {
     });
   });
 });
+
+describe("renaming an item", () => {
+  beforeEach(reset);
+
+  // The editor's autosave flushes on this event, so a pending edit is written
+  // at the old path and moved with the file; announced after the move, the
+  // save found its path gone and dropped the edit
+  it("announces the rename before anything moves", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const order: string[] = [];
+    const rename = vi.spyOn(PgExplorer.fs, "rename");
+    rename.mockImplementation(async () => {
+      order.push("fs.rename");
+    });
+    const willRename = PgExplorer.onWillRenameItem((path) => {
+      order.push(`will ${path}`);
+      expect(PgExplorer.getFile(path)).not.toBeNull();
+    });
+
+    await PgExplorer.renameItem("src/lib.rs", "src/main.rs");
+    willRename.dispose();
+    rename.mockRestore();
+
+    expect(order).toEqual([
+      `will ${PgExplorer.convertToFullPath("src/lib.rs")}`,
+      "fs.rename",
+    ]);
+  });
+
+  it("carries a write made on the announcement to the new name", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/client.ts", "before"],
+      ],
+    });
+    const before = PgExplorer.convertToFullPath("client/client.ts");
+    // What the autosave does: state at once, the disk write started and not
+    // awaited, so only the fs's call order puts it ahead of the rename
+    const willRename = PgExplorer.onWillRenameItem(() => {
+      PgExplorer.saveFileToState(before, "edited");
+      void PgExplorer.fs.writeFile(before, "edited");
+    });
+
+    await PgExplorer.renameItem("client", "web");
+    willRename.dispose();
+
+    const moved = PgExplorer.convertToFullPath("web/client.ts");
+    expect(PgExplorer.getFile(moved)?.content).toBe("edited");
+    expect(await PgExplorer.fs.readToString(moved)).toBe("edited");
+  });
+
+  it("announces nothing for a rename it refuses", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "a"],
+        ["/alpha/src/b.rs", "b"],
+      ],
+    });
+    const announced = vi.fn();
+    const willRename = PgExplorer.onWillRenameItem(announced);
+
+    await expect(
+      PgExplorer.renameItem("src/lib.rs", "src/b.rs")
+    ).rejects.toThrow(PgExplorer.errors.ALREADY_EXISTS);
+    willRename.dispose();
+
+    expect(announced).not.toHaveBeenCalled();
+  });
+});

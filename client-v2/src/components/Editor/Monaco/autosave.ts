@@ -14,7 +14,7 @@ interface PendingSave {
  * in. The buffer is read only when the save runs, which spares a full read of
  * it on every keystroke; the price is that the buffer must still exist then,
  * so the caller flushes before it goes away (the model disposed, the editor
- * unmounted) rather than cancelling.
+ * unmounted) rather than cancelling, and before a rename moves the path away.
  *
  * @param opts -
  * - `delay`: how long an edit waits for the next one, in ms
