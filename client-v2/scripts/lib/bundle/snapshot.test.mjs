@@ -113,24 +113,45 @@ test("renderSnapshot reproduces the committed file when every cell moved within 
   assert.equal(renderSnapshot(fresh, COMMITTED), COMMITTED);
 });
 
-const FIXTURES = path.join(import.meta.dirname, "fixtures");
-
-/** Raw and gzipped bytes of a file under `build`, gzipped as `measure` does */
-const fileSize = async (build, file) => {
-  const bytes = await fs.readFile(path.join(FIXTURES, build, file));
+/** Raw and gzipped bytes of `content`, gzipped as `measure` does */
+const sizeOf = (content) => {
+  const bytes = Buffer.from(content);
   return { raw: bytes.length, gzip: zlib.gzipSync(bytes).length };
 };
 
-// `service-worker.js` sits at the root without the `.worker.js` suffix, so it is not a Monaco worker
-test("measure counts the chunks and the root workers in *.js, and nothing else at the root", async () => {
-  const main = await fileSize("measured-build", "static/js/main.c7d1e66b.js");
-  const other = await fileSize(
-    "measured-build",
-    "static/js/9859.0f4e9123.chunk.js"
+/** Serves `tree`, each directory mapped to its files' contents, through the `fs` that `measure` reads */
+const mockBuild = (t, tree) => {
+  t.mock.method(fs, "readdir", async (dir) => {
+    if (!(dir in tree)) {
+      throw Object.assign(new Error(`ENOENT: ${dir}`), { code: "ENOENT" });
+    }
+    return Object.keys(tree[dir]);
+  });
+  t.mock.method(fs, "readFile", async (file) =>
+    Buffer.from(tree[path.dirname(file)][path.basename(file)])
   );
-  const worker = await fileSize("measured-build", "ts.worker.js");
-  const css = await fileSize("measured-build", "static/css/main.5e8a1b2c.css");
-  assert.deepEqual(await measure(path.join(FIXTURES, "measured-build")), {
+};
+
+const MAIN = 'console.log("main chunk");';
+const OTHER = 'console.log("a numbered chunk, summed into other chunks");';
+const WORKER = 'self.onmessage = () => self.postMessage("a Monaco worker");';
+const CSS = ".flex{display:flex}";
+
+// `service-worker.js` sits at the root without the `.worker.js` suffix, so it is not a Monaco worker
+test("measure counts the chunks and the root workers in *.js, and nothing else at the root", async (t) => {
+  mockBuild(t, {
+    "/build": {
+      "ts.worker.js": WORKER,
+      "service-worker.js": "// not a Monaco worker",
+    },
+    "/build/static/js": {
+      "main.c7d1e66b.js": MAIN,
+      "9859.0f4e9123.chunk.js": OTHER,
+    },
+    "/build/static/css": { "main.5e8a1b2c.css": CSS },
+  });
+  const [main, other, worker, css] = [MAIN, OTHER, WORKER, CSS].map(sizeOf);
+  assert.deepEqual(await measure("/build"), {
     js: {
       count: 3,
       raw: main.raw + other.raw + worker.raw,
@@ -145,14 +166,24 @@ test("measure counts the chunks and the root workers in *.js, and nothing else a
   });
 });
 
-test("measure throws on a build whose static/js holds no .js file", async () => {
-  await assert.rejects(measure(path.join(FIXTURES, "no-chunks")), {
+test("measure throws on a build whose static/js holds no .js file", async (t) => {
+  mockBuild(t, {
+    "/build": {},
+    "/build/static/js": { "main.c7d1e66b.js.LICENSE.txt": "a licence file" },
+    "/build/static/css": { "main.5e8a1b2c.css": CSS },
+  });
+  await assert.rejects(measure("/build"), {
     message: /^no \.js files under /,
   });
 });
 
 test("readSnapshot of a missing file is null", async () => {
-  assert.equal(await readSnapshot(path.join(FIXTURES, "BUNDLE.md")), null);
+  assert.equal(
+    await readSnapshot(
+      path.join(import.meta.dirname, "no-such-dir", "BUNDLE.md")
+    ),
+    null
+  );
 });
 
 test("parseRows skips a backticked row outside a table", () => {
