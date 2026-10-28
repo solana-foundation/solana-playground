@@ -1,9 +1,8 @@
 // Renders the change between two bundle snapshots as a pull request comment; ported from the Solana Explorer's scripts/build-info-diff.ts
 import {
-  DISPLAY_STEP_TOLERANCE_BYTES,
   isStale,
-  parseCellBytes,
   parseRows,
+  REFRESH_STEPS,
   renderTables,
   SNAPSHOT_PATH,
   TOLERANCE_LABEL,
@@ -47,21 +46,6 @@ export const diffSnapshots = (base, fresh) => {
   return changes;
 };
 
-/** Whether a change is more than rounding: a size cell more than {@link DISPLAY_STEP_TOLERANCE_BYTES} from its base cell, or any other cell changed */
-export const exceedsTolerance = (change) => {
-  if (change.kind !== "changed") return true;
-  if (change.before.length !== change.after.length) return true;
-  return change.before.some((before, i) => {
-    const after = change.after[i];
-    const beforeBytes = parseCellBytes(before);
-    const afterBytes = parseCellBytes(after);
-    if (beforeBytes === undefined || afterBytes === undefined) {
-      return before !== after;
-    }
-    return Math.abs(afterBytes - beforeBytes) > DISPLAY_STEP_TOLERANCE_BYTES;
-  });
-};
-
 const movement = (before, after) => {
   if (before === undefined) return after;
   if (after === undefined) return before;
@@ -77,17 +61,17 @@ const changeRow = ({ kind, key, before = [], after = [] }) => {
   return `| ${label} | ${cells.join(" | ")} |`;
 };
 
-/** Significant changes as one table per snapshot table, under that table's header */
-const changeTables = (significant) => {
-  const byHeader = Map.groupBy(significant, (change) => change.header);
+/** Changes as one table per snapshot table, under that table's header */
+const changeTables = (changes) => {
+  const byHeader = Map.groupBy(changes, (change) => change.header);
   const lines = [];
-  for (const [header, changes] of byHeader) {
+  for (const [header, tableChanges] of byHeader) {
     const columns = header.split("|").length - 2;
     lines.push(
       "",
       header,
       `|${" --- |".repeat(columns)}`,
-      ...changes.map(changeRow)
+      ...tableChanges.map(changeRow)
     );
   }
   return lines;
@@ -97,8 +81,8 @@ const count = (changes, kind) =>
   changes.filter((change) => change.kind === kind).length;
 
 /**
- * The markdown comment for a pull request at commit `head`: rows of the `fresh` tables past the tolerance, the number
- * of rows within it, and the fresh tables collapsed. `base` is `null` when the base branch has no snapshot.
+ * The markdown comment for a pull request at commit `head`: rows of the `fresh` tables that differ from `base`, and the
+ * fresh tables collapsed. `base` is `null` when the base branch has no snapshot.
  */
 export const formatReport = ({ base, fresh, baseLabel, head, stale }) => {
   const freshRows = parseSnapshot(fresh);
@@ -111,7 +95,7 @@ export const formatReport = ({ base, fresh, baseLabel, head, stale }) => {
   ];
   if (stale) {
     lines.push(
-      `**\`${SNAPSHOT_PATH}\` is out of date for this branch:** run \`yarn build-fast\`, then \`yarn bundle:info\`, and commit the refreshed file.`,
+      `**\`${SNAPSHOT_PATH}\` is out of date for this branch:** ${REFRESH_STEPS}.`,
       ""
     );
   }
@@ -122,25 +106,15 @@ export const formatReport = ({ base, fresh, baseLabel, head, stale }) => {
     );
   } else {
     const changes = diffSnapshots(parseSnapshot(base), freshRows);
-    const significant = changes.filter(exceedsTolerance);
-    if (significant.length === 0) {
+    if (changes.length === 0) {
       lines.push(`No row moved past the ${TOLERANCE_LABEL} tolerance.`);
     } else {
       lines.push(
-        `**${count(significant, "changed")} changed, ${count(
-          significant,
+        `**${count(changes, "changed")} changed, ${count(
+          changes,
           "added"
-        )} added, ${count(significant, "removed")} removed**`,
-        ...changeTables(significant)
-      );
-    }
-    const noise = changes.length - significant.length;
-    if (noise > 0) {
-      lines.push(
-        "",
-        `_${noise} row${
-          noise === 1 ? "" : "s"
-        } moved within the ${TOLERANCE_LABEL} tolerance (noise)._`
+        )} added, ${count(changes, "removed")} removed**`,
+        ...changeTables(changes)
       );
     }
   }
@@ -159,8 +133,8 @@ export const formatReport = ({ base, fresh, baseLabel, head, stale }) => {
 
 /**
  * {@link formatReport} for a measurement of `build/`; `committed` and `base` are snapshots, `null` when absent.
- * The diff renders the measurement unanchored, so the tolerance applies once, against `base`: anchored on `committed`,
- * a cell could sit one tolerance from `committed` and two from `base`. Only the stale check reads `committed`.
+ * The measurement is rendered anchored on `base`, so a row is listed exactly when the snapshot cell moves against the
+ * base branch's. Only the stale check reads `committed`.
  */
 export const bundleReport = ({
   measurement,
@@ -171,7 +145,7 @@ export const bundleReport = ({
 }) =>
   formatReport({
     base,
-    fresh: renderTables(measurement),
+    fresh: renderTables(measurement, base),
     baseLabel,
     head,
     stale: isStale(measurement, committed),

@@ -34,7 +34,8 @@ about their content. A growth in one lazy chunk still moves the sum.
 `formatBytes` rounds as the Explorer does: 10 B under 1 kB, up to the next
 10 kB under 1000 kB, 0.01 MB above. A fresh cell within 11 KiB of the committed
 cell (`DISPLAY_STEP_TOLERANCE_BYTES`) keeps the committed value, so a rebuild
-of the same commit leaves the file unchanged. The diff uses the same constant.
+of the same commit leaves the file unchanged. The report anchors on the base
+branch's cells with the same rule.
 The rule compares rounded cells, not bytes, so real growth of up to about two
 display steps (about 20 KiB for a kB or MB cell) can go unrecorded. A committed
 cell that `formatBytes` would not produce does not anchor, so a hand edit in a
@@ -81,10 +82,12 @@ The build job, on pull requests only and before "Build tests", writes
 summary and uploads it as the `bundle-info-comment` artifact. The steps come
 before "Build tests" so the report reaches the pull request when the snapshot
 is stale; the report then says so. Both steps continue on error with a warning,
-so a report failure never skips "Build tests". The report measures `build/`
-without anchoring on the committed `bench/BUNDLE.md`, so the tolerance applies
-once, against the base branch's cells, and its full table can differ from the
-committed file; the stale line comes from a separate comparison of the build
+so a report failure never skips "Build tests". The report renders `build/`
+anchored on the base branch's snapshot, so a row is listed exactly when its
+cell moves against the base branch's cell, and on a rebased branch the full
+table is the snapshot the pull request commits. Within the tolerance a row
+keeps the base cell and is not listed; it is below the snapshot's resolution,
+not unchanged. The stale line comes from a separate comparison of the build
 with the committed file. The report names the pull request's head commit, and a
 run that saves no report replaces the comment with one naming the head and the
 run.

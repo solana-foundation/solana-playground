@@ -1,9 +1,13 @@
 // Loaded alone: bundle-info-comment.yml sparse-checks out only this file, so it imports nothing local
 /** The report artifact's name, as reusable-client-v2-build.yml uploads it and bundle-info-comment.yml downloads it */
 export const ARTIFACT = "bundle-info-comment";
+/** The step outputs {@link locatePullRequest} sets, as bundle-info-comment.yml reads them */
+export const OUTPUTS = { pr: "pr", hasReport: "has_report" };
+/** The report inside {@link ARTIFACT}, as bundle-info-report.sh writes it and bundle-info-comment.yml posts it */
+export const REPORT_FILE = "bundle-report.md";
 
 /**
- * Sets `pr` to the open pull request whose head is the completed run's head, and `has_report` to whether the run
+ * Sets {@link OUTPUTS} `pr` to the open pull request whose head is the completed run's head, and `hasReport` to whether the run
  * saved the {@link ARTIFACT} artifact; sets nothing and warns when no pull request matches.
  */
 export async function locatePullRequest({ github, context, core }) {
@@ -39,6 +43,6 @@ export async function locatePullRequest({ github, context, core }) {
       `No ${ARTIFACT} artifact on run ${run.id}: the build job saved no report; the comment says so.`
     );
   }
-  core.setOutput("pr", String(pr.number));
-  core.setOutput("has_report", String(hasReport));
+  core.setOutput(OUTPUTS.pr, String(pr.number));
+  core.setOutput(OUTPUTS.hasReport, String(hasReport));
 }

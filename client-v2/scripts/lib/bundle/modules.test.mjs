@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { offendingModules, slimModules } from "./modules.mjs";
+import {
+  offendingModules,
+  slimModules,
+  unlistedConcatenatedRoots,
+} from "./modules.mjs";
 
 const STORED_VALUES = "./src/test-utils/stored-values.ts";
 
@@ -43,6 +47,26 @@ const MALFORMED = [
 for (const [name, modules, error] of MALFORMED) {
   test(`slimModules throws on ${name}`, () => {
     assert.throws(() => slimModules(modules), error);
+  });
+}
+
+// [case, module names, roots reported]
+const CONCATENATED_ROOTS = [
+  [
+    "a list with nested modules",
+    slimModules([concatenated(STORED_VALUES)]),
+    [],
+  ],
+  [
+    "a list of outer names only",
+    ["./src/index.tsx + 2 modules"],
+    ["./src/index.tsx"],
+  ],
+];
+
+for (const [name, names, roots] of CONCATENATED_ROOTS) {
+  test(`unlistedConcatenatedRoots on ${name}`, () => {
+    assert.deepEqual(unlistedConcatenatedRoots(names), roots);
   });
 }
 

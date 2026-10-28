@@ -19,6 +19,9 @@ jobs:
     if: github.event.workflow_run.event == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # Both post steps must name the same comment, or the second adds one instead of replacing it
+      STICKY_HEADER: bundle-info
 
     steps:
       # The default branch's copy of one file only, which is safe in this privileged context.
@@ -52,7 +55,7 @@ jobs:
         if: steps.locate.outputs.pr != '' && steps.locate.outputs.has_report == 'true'
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
-          header: bundle-info
+          header: ${{ env.STICKY_HEADER }}
           path: ${{ runner.temp }}/bundle-info-comment/bundle-report.md
           number_force: ${{ steps.locate.outputs.pr }}
 
@@ -61,6 +64,6 @@ jobs:
         if: steps.locate.outputs.pr != '' && steps.locate.outputs.has_report == 'false'
         uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
         with:
-          header: bundle-info
+          header: ${{ env.STICKY_HEADER }}
           message: "No bundle report for ${{ github.event.workflow_run.head_sha }}: the build job saved none (run ${{ github.event.workflow_run.html_url }})."
           number_force: ${{ steps.locate.outputs.pr }}

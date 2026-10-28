@@ -22,8 +22,10 @@ if [ -n "$listed" ]; then
   git show "FETCH_HEAD:$snapshot" > build/BUNDLE.base.md
 fi
 
+# REPORT_FILE in scripts/lib/bundle/locate-pr.mjs; the build workflow uploads it from here
+report="build/bundle-report.md"
 # Written aside and moved, so a failed run leaves no empty report for CI to upload
-rm -f build/bundle-report.md
-node scripts/bundle-info-diff.mjs build/BUNDLE.base.md "$base_ref" "$head_sha" > build/bundle-report.md.tmp
-mv build/bundle-report.md.tmp build/bundle-report.md
-cat build/bundle-report.md
+rm -f "$report"
+node scripts/bundle-info-diff.mjs build/BUNDLE.base.md "$base_ref" "$head_sha" > "$report.tmp"
+mv "$report.tmp" "$report"
+cat "$report"

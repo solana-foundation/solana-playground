@@ -44,21 +44,14 @@ const report = (fresh) =>
     stale: false,
   });
 
-test("a row within the tolerance is counted as noise, not listed, under a heading naming the head", () => {
-  const text = report(
-    snapshot({
-      chunks: [
-        ["main", "1", "480 kB"],
-        ["other chunks", "2", "1.49 MB"],
-      ],
-    })
-  );
+test("an unchanged table says no row moved, under a heading naming the head", () => {
+  const text = report(BASE);
   assert.ok(
-    text.startsWith("### Bundle change vs `master`\n\nHead: abc1234\n"),
+    text.startsWith(
+      "### Bundle change vs `master`\n\nHead: abc1234\n\nNo row moved past the 11 KiB tolerance.\n"
+    ),
     text
   );
-  assert.match(text, /No row moved past the 11 KiB tolerance\./);
-  assert.match(text, /_2 rows moved within the 11 KiB tolerance \(noise\)\._/);
 });
 
 // [case, fresh snapshot, summary line, the change tables the report holds under it]
@@ -131,17 +124,26 @@ const measured = (main) => ({
   ],
 });
 
-// [case, committed `main` bytes, stale]: base 470 kB, build 485 KiB; the row is listed against the base either way
+// [case, committed snapshot, stale]: base 470 kB, build 485 KiB; the row is listed against the base either way
 const BUNDLE_REPORT = [
-  ["a committed cell within the tolerance of the build", 480 * KB, false],
-  ["a committed cell past the tolerance of the build", 440 * KB, true],
+  [
+    "a committed cell within the tolerance of the build",
+    renderSnapshot(measured(480 * KB)),
+    false,
+  ],
+  [
+    "a committed cell past the tolerance of the build",
+    renderSnapshot(measured(440 * KB)),
+    true,
+  ],
+  ["no committed snapshot", null, true],
 ];
 
-for (const [name, committedMain, stale] of BUNDLE_REPORT) {
+for (const [name, committed, stale] of BUNDLE_REPORT) {
   test(`bundleReport: ${name}`, () => {
     const text = bundleReport({
       measurement: measured(485 * KB),
-      committed: renderSnapshot(measured(committedMain)),
+      committed,
       base: renderSnapshot(measured(470 * KB)),
       baseLabel: "master",
       head: "abc1234",
@@ -150,6 +152,23 @@ for (const [name, committedMain, stale] of BUNDLE_REPORT) {
     assert.equal(text.includes("is out of date for this branch"), stale);
   });
 }
+
+// Base `main` holds 470 kB over 479.5 KiB; 478 KiB renders 480 kB alone, and anchored on the base it keeps 470 kB
+test("bundleReport renders a cell within the tolerance of the base as the base cell", () => {
+  const base = renderSnapshot(
+    measured(479.5 * KB),
+    renderSnapshot(measured(470 * KB))
+  );
+  const text = bundleReport({
+    measurement: measured(478 * KB),
+    committed: base,
+    base,
+    baseLabel: "master",
+    head: "abc1234",
+  });
+  assert.match(text, /No row moved past the 11 KiB tolerance\.\n\n<details>/);
+  assert.ok(text.includes("| `main` | 1 | 470 kB |"), text);
+});
 
 test("a base branch without a snapshot is named and nothing is diffed", () => {
   const text = formatReport({

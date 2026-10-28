@@ -46,3 +46,13 @@ export const offendingModules = (names) =>
   [
     ...new Set(names.filter((name) => TEST_ONLY.some((p) => p.test(name)))),
   ].sort();
+
+const CONCATENATED = /^(.+) \+ \d+ modules$/;
+
+/** The root of each concatenated module (`<root> + N modules`) missing from `names` by its own name, so its nested modules are missing too */
+export const unlistedConcatenatedRoots = (names) => {
+  const listed = new Set(names);
+  return names
+    .map((name) => name.match(CONCATENATED)?.[1])
+    .filter((root) => root !== undefined && !listed.has(root));
+};

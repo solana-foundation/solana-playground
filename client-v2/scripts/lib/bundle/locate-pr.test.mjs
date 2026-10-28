@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import test from "node:test";
 
-import { ARTIFACT, locatePullRequest } from "./locate-pr.mjs";
+import {
+  ARTIFACT,
+  locatePullRequest,
+  OUTPUTS,
+  REPORT_FILE,
+} from "./locate-pr.mjs";
 
 const REPOSITORY = "solana-foundation/solana-playground";
 
@@ -73,22 +78,106 @@ test("a run without the report artifact names the pull request and warns", async
   assert.ok(warnings[0].startsWith(`No ${ARTIFACT} artifact on run 42`));
 });
 
-// [workflow, the `uses:` of the step that names the artifact]; a rename in one file alone leaves every pull request without a report
-const ARTIFACT_STEPS = [
-  ["reusable-client-v2-build.yml", "actions/upload-artifact"],
-  ["bundle-info-comment.yml", "actions/download-artifact"],
+const readText = (relative) =>
+  fs.readFile(new URL(relative, import.meta.url), "utf8");
+const workflow = (name) => readText(`../../../../.github/workflows/${name}`);
+
+/** The value of `key` under the first step of `source` that uses `action`, whatever the order of its keys */
+const stepValue = (source, action, key) =>
+  source
+    .split(/\n(?=\s+- )/)
+    .find((step) => step.includes(`uses: ${action}@`))
+    ?.match(new RegExp(`\\n\\s+${key}: (.+)`))?.[1];
+
+// [contract, () => [actual, expected]]; a rename on one side alone makes the comment workflow skip or fail outside the PR's checks
+const CONTRACT = [
+  [
+    "reusable-client-v2-build.yml uploads the artifact ARTIFACT",
+    async () => [
+      stepValue(
+        await workflow("reusable-client-v2-build.yml"),
+        "actions/upload-artifact",
+        "name"
+      ),
+      ARTIFACT,
+    ],
+  ],
+  [
+    "bundle-info-comment.yml downloads the artifact ARTIFACT",
+    async () => [
+      stepValue(
+        await workflow("bundle-info-comment.yml"),
+        "actions/download-artifact",
+        "name"
+      ),
+      ARTIFACT,
+    ],
+  ],
+  [
+    "bundle-info-report.sh writes REPORT_FILE under build/",
+    async () => [
+      (await readText("../../bundle-info-report.sh")).match(
+        /^report="(.+)"$/m
+      )?.[1],
+      `build/${REPORT_FILE}`,
+    ],
+  ],
+  [
+    "reusable-client-v2-build.yml uploads REPORT_FILE from build/",
+    async () => [
+      stepValue(
+        await workflow("reusable-client-v2-build.yml"),
+        "actions/upload-artifact",
+        "path"
+      ),
+      `client-v2/build/${REPORT_FILE}`,
+    ],
+  ],
+  [
+    "bundle-info-comment.yml posts REPORT_FILE from where it downloads the artifact",
+    async () => {
+      const source = await workflow("bundle-info-comment.yml");
+      return [
+        stepValue(source, "marocchino/sticky-pull-request-comment", "path"),
+        `${stepValue(
+          source,
+          "actions/download-artifact",
+          "path"
+        )}/${REPORT_FILE}`,
+      ];
+    },
+  ],
+  [
+    "bundle-info-comment.yml reads exactly the OUTPUTS locatePullRequest sets",
+    async () => [
+      [
+        ...new Set(
+          Array.from(
+            (await workflow("bundle-info-comment.yml")).matchAll(
+              /steps\.locate\.outputs\.(\w+)/g
+            ),
+            (match) => match[1]
+          )
+        ),
+      ].sort(),
+      Object.values(OUTPUTS).sort(),
+    ],
+  ],
+  [
+    "bundle-info-comment.yml runs on the workflow client-v2.yml names",
+    async () => [
+      (await workflow("bundle-info-comment.yml")).match(
+        /workflow_run:\n\s+workflows: \[(.+)\]/
+      )?.[1],
+      (await workflow("client-v2.yml")).match(/^name: (.+)$/m)?.[1],
+    ],
+  ],
 ];
 
-for (const [workflow, action] of ARTIFACT_STEPS) {
-  test(`${workflow} names the artifact ARTIFACT in its ${action} step`, async () => {
-    const source = await fs.readFile(
-      new URL(`../../../../.github/workflows/${workflow}`, import.meta.url),
-      "utf8"
-    );
-    const step = source.match(
-      new RegExp(`uses: ${action}@.*\\n\\s+with:\\n\\s+name: (\\S+)`)
-    );
-    assert.equal(step?.[1], ARTIFACT);
+for (const [name, read] of CONTRACT) {
+  test(name, async () => {
+    const [actual, expected] = await read();
+    assert.deepEqual(actual, expected);
   });
 }
 

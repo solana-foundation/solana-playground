@@ -8,6 +8,7 @@ import {
   measure,
   parseRows,
   readSnapshot,
+  REFRESH_STEPS,
   renderSnapshot,
 } from "./lib/bundle/snapshot.mjs";
 
@@ -29,6 +30,6 @@ test("bench/BUNDLE.md matches the build byte for byte", async () => {
     ? rows.join("\n")
     : "  (only the text outside the tables differs)";
   assert.fail(
-    `bench/BUNDLE.md is out of date with this build: run yarn bundle:info and commit the refreshed file\n${detail}`
+    `bench/BUNDLE.md is out of date with this build: ${REFRESH_STEPS}\n${detail}`
   );
 });

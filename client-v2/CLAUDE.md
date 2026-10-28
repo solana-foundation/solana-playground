@@ -382,13 +382,16 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   so a rebuild of the same commit leaves the file as it is. CI posts the
   change against the base branch's snapshot as a comment on the PR.
 - **Every row that grows is explained in the PR description.** The bundle
-  comment lists each row past the tolerance; the description's "Bundle size"
+  comment lists each row whose cell moved against the base branch's
+  snapshot; the description's "Bundle size"
   line names what each one is for, or says that no row moved. A refreshed
   snapshot only proves the file is current, not that the growth is wanted.
   Review flags growth the description does not justify: tens of kB on `main`
   or a worker, `other chunks` growing with no new lazy feature to explain it,
-  or a new named chunk far above its peers. Review does not flag a row within
-  `DISPLAY_STEP_TOLERANCE_BYTES`: that movement is rounding.
+  or a new named chunk far above its peers. Review does not flag a row the
+  comment leaves out: its movement is below the snapshot's resolution, set by
+  `DISPLAY_STEP_TOLERANCE_BYTES`, where real change of up to about two display
+  steps can stay unrecorded.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
   `client-v2.yml`, one shard per matrix entry) on every PR (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a

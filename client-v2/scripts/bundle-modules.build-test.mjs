@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   MODULES_FILE as FILE,
   offendingModules,
+  unlistedConcatenatedRoots,
 } from "./lib/bundle/modules.mjs";
 
 const INDEX = path.join(import.meta.dirname, "..", "build", "index.html");
@@ -28,6 +29,14 @@ test("the bundle holds no test helper or test runner module", async () => {
   );
   const names = JSON.parse(text);
   assert.notEqual(names.length, 0, `${FILE} lists no module`);
+  const unlisted = unlistedConcatenatedRoots(names);
+  assert.equal(
+    unlisted.length,
+    0,
+    `${FILE} lists concatenated modules without their nested modules (nestedModules in BundleModulesPlugin, craco.config.js), so a concatenated test helper would pass unseen:\n${unlisted.join(
+      "\n"
+    )}`
+  );
 
   const offenders = offendingModules(names);
   assert.equal(

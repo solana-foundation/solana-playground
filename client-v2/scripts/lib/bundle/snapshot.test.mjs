@@ -46,7 +46,7 @@ const HYSTERESIS = [
     "475 kB",
     "480 kB",
   ],
-  // Within the tolerance in bytes, past it in displayed cells, which exceedsTolerance compares
+  // Within the tolerance in bytes, past it in displayed cells, which stabiliseCell compares
   [
     "a cell two steps up takes the fresh cell",
     480 * KB + 1,

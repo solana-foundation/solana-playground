@@ -137,8 +137,9 @@ measurement, naming `yarn bundle:info`, which regenerates it, and when
 On a pull request, the build workflow SHALL render the difference between the
 base branch's committed snapshot and the pull request's fresh measurement,
 under a heading that names the pull request's head commit, listing every added
-or removed row, every row with a changed non-size cell, and every row with a
-size cell more than 11 KiB from the base branch's cell.
+or removed row and every row with a changed cell. Each fresh size cell SHALL be
+rendered with the base branch's cell as its committed value, so a size cell
+changes only when it moves more than 11 KiB from the base branch's cell.
 A workflow that runs on the completed CI run SHALL post it as one comment on
 the pull request, updated in place by later runs, including for a pull request
 from a fork.
