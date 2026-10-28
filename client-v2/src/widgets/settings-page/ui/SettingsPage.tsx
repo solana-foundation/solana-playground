@@ -41,8 +41,6 @@ interface SettingsPageProps {
   focus: SettingsFocus;
   /** ⌘, is the key's own, handled where it is bound */
   onClose: (via: Exclude<SettingsExit, "key">) => void;
-  /** Any network pick, the current one included (the Get set up checklist) */
-  onChooseNetwork?: () => void;
 }
 
 const subscribeToModals = (onChange: () => void) =>
@@ -53,11 +51,7 @@ const subscribeToModals = (onChange: () => void) =>
  * export and imports, then every group of `PgSettings.all`. Mounted only
  * while the settings are open.
  */
-const LiveSettingsPage = ({
-  focus,
-  onClose,
-  onChooseNetwork,
-}: SettingsPageProps) => {
+const LiveSettingsPage = ({ focus, onClose }: SettingsPageProps) => {
   const phone = useViewport() === "phone";
   const [current, setCurrent] = useState<string>(NETWORK);
 
@@ -80,7 +74,6 @@ const LiveSettingsPage = ({
         <BaseNetworkChoice
           endpoint={PgSettings.connection.endpoint}
           onPick={(endpoint) => (PgSettings.connection.endpoint = endpoint)}
-          onChoose={onChooseNetwork}
         />
       ),
     },

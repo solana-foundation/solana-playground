@@ -1553,29 +1553,30 @@ Decided with Slava on 2026-10-19 (HOO-2075), from the prototype's sidebar
   session footer, through a new `setup` slot in `BaseAppNav`. The rail has
   no room for it and shows none; the phone's menu page shows it.
 - **Four steps, in this order.** "Connect the assistant" is done while a
-  model is connected (`PgAssistant.isConnected`); "Choose a network" once
-  the user has picked a network in the settings, the current one included;
+  model is connected (`PgAssistant.isConnected`); "Choose a network" always,
+  since the default network counts (HOO-2330);
   "Sign in with GitHub" while signed in (`PgSession`); "Connect a wallet"
   while a wallet is connected. A done step shows its value at the right (the
   cluster's name, the login, the wallet's short address); a step to do shows
   a chevron and runs its action when clicked: Connect a model
-  (`openConnectDialog`), the settings on the network, the GitHub sign-in,
-  the wallet's connect.
+  (`openConnectDialog`), the GitHub sign-in, the wallet's connect.
 - **The title counts.** "Get set up · n of 4", folding the list, with the
-  design system's dismiss beside it.
+  design system's dismiss beside it. The fold is kept per device (HOO-2330,
+  #126 Q7): one fold per device, wherever it was made; until there is one,
+  a phone's menu page starts folded.
 - **It goes for good, on this device.** Dismissing it hides it; so does the
   first moment all four steps are done together. Live state alone would not
   do: the assistant's connection is held per tab, so a new tab would bring
   "3 of 4" back to a user who has finished. One `localStorage` key,
-  `setup-list`, holds `{dismissed, completed, networkChosen}`, read like
+  `setup-list`, holds `{dismissed, completed, folded?}`, read like
   the navigation's pins. Each mark only ever turns true and merges with
   what storage holds, so a tab that read the marks earlier cannot undo
-  another tab's dismissal; a refused write is reported once and the mark
-  still holds for the page.
-- **Open with the designer** (q-20261015-12): whether the network counts as
-  done by default (the prototype shows it so), and whether dismissal belongs
-  to the device or the account. Until they answer, the network counts once
-  chosen and dismissal is per device; either answer changes one rule here.
+  another tab's dismissal; the fold is the last one any tab stored. A
+  refused write is reported once and the change still holds for the page.
+- **Open with the designer** (q-20261015-12): whether dismissal belongs to
+  the device or the account; until they answer it is per device. The other
+  half, the network done by default, was settled by #126's "Already
+  answered" table and the prototype (HOO-2330).
 - **A widget, `widgets/setup-list`**: `BaseSetupList` draws the design
   system's `setup-list` from props; `SetupList` reads the four states and
   runs the actions. It meets `features/auth` and the assistant's widget,
@@ -1587,10 +1588,6 @@ Decided with Slava on 2026-10-19 (HOO-2075), from the prototype's sidebar
   account menu does, while a failed sign-in shows in the account row
   (`PgSession.signInState`). A wallet setup the user closed and a sign-in
   that failed at a known step are only logged.
-- **The network step is a settings trigger.** The settings close on a
-  mousedown outside them except on their triggers, so the step carries the
-  trigger attribute and opens them without toggling: settings already open
-  stay open.
 
 ## Failed clicks (5.27)
 
@@ -1680,9 +1677,7 @@ they are answered. One PR.
   (an arrow) and the title.
 - **Open and close.** The triggers stay what they are: the cluster row, the
   rail's dot, the account menu's Settings and cluster warning, ⌘,
-  (Ctrl+, off macOS), and the Get set up checklist's "Choose a network"
-  (5.16), which only opens: a pick of any chip, the current one included,
-  marks that step done (`onChooseNetwork`). `focus: "network"` lands on the chosen network, any
+  (Ctrl+, off macOS). `focus: "network"` lands on the chosen network, any
   other open on the page's heading. "Back to app", Escape (not while a modal
   is open, nor one an open select already took) and ⌘, close it and give
   focus back to the control that opened it; the account menu names its
@@ -1722,13 +1717,13 @@ they are answered. One PR.
     assistant's Sheet as a key's, not the product's). The page opens once
     they are closed, and the trigger of the layer focus was in stands in as
     the control to give focus back to.
-  - When the control that opened the page is gone on close (a checklist step
-    the pick ticked, a footer the phone's menu page took with it), focus
+  - When the control that opened the page is gone on close (a footer the
+    phone's menu page took with it), focus
     goes to the first control that opens the settings still on screen, else
     to the one that opens the navigation. The failure notice closes on
     Escape too, its own listener in place of the page's.
 - **Telemetry**, prefix `settings`: `settings_opened {from: cluster | rail |
-  menu | key | setup}`, `settings_closed {via: back | escape | key}` and
+  menu | key}`, `settings_closed {via: back | escape | key}` and
   `settings_section_picked {section}`. Export and import failures keep going
   through `reportButtonFailure`; the widget logs under `settings-page:*`.
 

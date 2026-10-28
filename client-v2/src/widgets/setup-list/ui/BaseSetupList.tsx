@@ -11,7 +11,7 @@ import {
   SetupListTrigger,
   SetupListValue,
 } from "@/shared/ui/setup-list";
-import type { SetupStep, StepView } from "../model/steps";
+import type { SetupStep, StepView, TodoStep } from "../model/steps";
 
 const STEP_LABELS: Record<SetupStep, string> = {
   assistant: "Connect the assistant",
@@ -23,15 +23,12 @@ const STEP_LABELS: Record<SetupStep, string> = {
 export interface BaseSetupListProps {
   steps: readonly StepView[];
   /** A step to do was clicked; its action runs */
-  onPick: (step: SetupStep) => void;
+  onPick: (step: TodoStep) => void;
   onDismiss: () => void;
-  /** Extra attributes for a step's button, such as a settings trigger's */
-  stepAttrs?: Partial<Record<SetupStep, Record<`data-${string}`, string>>>;
-  /**
-   * Starts folded to its title, "Get set up · n of 4 ›": the phone's menu is
-   * the whole screen, so the prototype keeps the list to one line there
-   */
-  folded?: boolean;
+  /** Folded to its title, "Get set up · n of 4 ›" */
+  folded: boolean;
+  /** The title was clicked to fold or unfold the list */
+  onFold: (folded: boolean) => void;
 }
 
 /** "Get set up · n of total": a done step shows its value, a step to do runs its action */
@@ -39,10 +36,14 @@ const BaseSetupList = ({
   steps,
   onPick,
   onDismiss,
-  stepAttrs,
-  folded = false,
+  folded,
+  onFold,
 }: BaseSetupListProps) => (
-  <SetupList defaultOpen={!folded} className="px-2 pb-2">
+  <SetupList
+    open={!folded}
+    onOpenChange={(open) => onFold(!open)}
+    className="px-2 pb-2"
+  >
     <SetupListHeader>
       <SetupListTrigger
         done={steps.filter((s) => s.done).length}
@@ -53,27 +54,26 @@ const BaseSetupList = ({
       <SetupListDismiss onClick={onDismiss} />
     </SetupListHeader>
     <SetupListContent>
-      {steps.map(({ step, done, value }) =>
-        done ? (
-          <SetupListItem key={step} status="done">
+      {steps.map((view) =>
+        view.done ? (
+          <SetupListItem key={view.step} status="done">
             <SetupListIndicator />
             <SetupListLabel>
-              {STEP_LABELS[step]}
+              {STEP_LABELS[view.step]}
               {/* The tick is drawn, and hidden from screen readers */}
               <span className="sr-only">, done</span>
             </SetupListLabel>
-            {value && <SetupListValue>{value}</SetupListValue>}
+            {view.value && <SetupListValue>{view.value}</SetupListValue>}
           </SetupListItem>
         ) : (
-          <SetupListItem key={step} className="p-0">
+          <SetupListItem key={view.step} className="p-0">
             <button
               type="button"
-              {...stepAttrs?.[step]}
-              onClick={() => onPick(step)}
+              onClick={() => onPick(view.step)}
               className="flex size-full items-center gap-2.5 rounded-md px-2 text-left outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring"
             >
               <SetupListIndicator />
-              <SetupListLabel>{STEP_LABELS[step]}</SetupListLabel>
+              <SetupListLabel>{STEP_LABELS[view.step]}</SetupListLabel>
               <SetupListValue>
                 <ChevronRight />
               </SetupListValue>

@@ -8,30 +8,50 @@ const log = createLogger("setup-list:storage");
  * Where the checklist keeps what only this device knows: whether it was
  * dismissed, whether all four steps were once done together (the assistant
  * connection is per tab, so the live state alone would bring "3 of 4" back
- * in a new tab), and whether a network was ever chosen.
+ * in a new tab), and whether the user last left it folded.
  */
 export const SETUP_LIST_KEY = "setup-list";
 
 export interface SetupMarks {
   dismissed: boolean;
   completed: boolean;
-  networkChosen: boolean;
+  /**
+   * How the user last left the list, folded or not; absent until they first
+   * fold or unfold it, when the list starts as its place draws it
+   */
+  folded?: boolean;
 }
+
+/** The marks that only ever turn true */
+type Mark = "dismissed" | "completed";
 
 const nothingDone = (): SetupMarks => ({
   dismissed: false,
   completed: false,
-  networkChosen: false,
 });
 
-const isMarks = (value: unknown): value is SetupMarks => {
-  if (typeof value !== "object" || value === null) return false;
-  const marks = value as Record<string, unknown>;
-  return (
-    typeof marks.dismissed === "boolean" &&
-    typeof marks.completed === "boolean" &&
-    typeof marks.networkChosen === "boolean"
-  );
+/**
+ * The marks of a parsed value, or `null` when they are not booleans. Only the
+ * marks decide: a `folded` that is not a boolean is dropped, so a bad fold
+ * never brings back a list the user dismissed, and any other key (such as
+ * the `networkChosen` older builds stored) is ignored and gone on the next
+ * write.
+ */
+const parseMarks = (value: unknown): SetupMarks | null => {
+  if (typeof value !== "object" || value === null) return null;
+  const stored = value as Record<string, unknown>;
+  if (
+    typeof stored.dismissed !== "boolean" ||
+    typeof stored.completed !== "boolean"
+  ) {
+    return null;
+  }
+  const marks: SetupMarks = {
+    dismissed: stored.dismissed,
+    completed: stored.completed,
+  };
+  if (typeof stored.folded === "boolean") marks.folded = stored.folded;
+  return marks;
 };
 
 /**
@@ -58,7 +78,8 @@ export const readMarks = (storage?: Storage): SetupMarks => {
     log.warn("marks unreadable: not JSON", { context: { e } });
     return nothingDone();
   }
-  if (isMarks(value)) return value;
+  const marks = parseMarks(value);
+  if (marks) return marks;
 
   log.warn("marks unreadable: wrong shape");
   return nothingDone();
@@ -67,9 +88,10 @@ export const readMarks = (storage?: Storage): SetupMarks => {
 /**
  * The marks held in memory, read from storage once. Each mark only ever turns
  * true, so a mark merges with what storage holds now (another tab may have
- * dismissed the list since this one read it) and never undoes it. A mark takes
- * effect on this page before it is written, so a refused write (reported once
- * per page) still hides a dismissed checklist until the next load.
+ * dismissed the list since this one read it) and never undoes it; the fold is
+ * the last one stored, from any tab. A change takes effect on this page before
+ * it is written, so a refused write (reported once per page) still hides a
+ * dismissed checklist until the next load.
  */
 export const createSetupMarks = (storage?: Storage) => {
   let marks: SetupMarks | null = null;
@@ -82,12 +104,33 @@ export const createSetupMarks = (storage?: Storage) => {
   };
   const notify = () => listeners.forEach((listener) => listener());
 
-  /** `current` with every mark `stored` holds too: a mark never turns back */
-  const merged = (current: SetupMarks, stored: SetupMarks): SetupMarks => ({
-    dismissed: current.dismissed || stored.dismissed,
-    completed: current.completed || stored.completed,
-    networkChosen: current.networkChosen || stored.networkChosen,
-  });
+  /**
+   * `current` with every mark `stored` holds too: a mark never turns back. The
+   * fold is the stored one, the latest any tab wrote, unless none was.
+   */
+  const merged = (current: SetupMarks, stored: SetupMarks): SetupMarks => {
+    const marks: SetupMarks = {
+      dismissed: current.dismissed || stored.dismissed,
+      completed: current.completed || stored.completed,
+    };
+    const folded = stored.folded ?? current.folded;
+    if (folded !== undefined) marks.folded = folded;
+    return marks;
+  };
+
+  /** Writes `next` to memory at once, then to storage */
+  const keep = (next: SetupMarks, which: Mark | "folded") => {
+    marks = next;
+    notify();
+    try {
+      (storage ?? localStorage).setItem(SETUP_LIST_KEY, JSON.stringify(marks));
+    } catch (e) {
+      // Blocked or full storage refuses every write; once tells the team
+      if (writeReported) return;
+      writeReported = true;
+      log.error(e, { report: true, context: { which } });
+    }
+  };
 
   // Another tab stored a mark: take it, so an open list hides there too. A
   // `null` key is the site's storage cleared, which starts the list over.
@@ -112,31 +155,25 @@ export const createSetupMarks = (storage?: Storage) => {
         listeners.delete(listener);
       };
     },
-    mark(which: keyof SetupMarks) {
+    mark(which: Mark) {
       const current = get();
       if (current[which]) return;
-      marks = merged(current, readMarks(storage));
-      marks[which] = true;
-      notify();
-      try {
-        (storage ?? localStorage).setItem(
-          SETUP_LIST_KEY,
-          JSON.stringify(marks)
-        );
-      } catch (e) {
-        // Blocked or full storage refuses every write; once tells the team
-        if (writeReported) return;
-        writeReported = true;
-        log.error(e, { report: true, context: { which } });
-      }
+      const next = merged(current, readMarks(storage));
+      next[which] = true;
+      keep(next, which);
+    },
+    /** The user folded or unfolded the list: kept for the next load */
+    fold(folded: boolean) {
+      const current = get();
+      if (current.folded === folded) return;
+      const next = merged(current, readMarks(storage));
+      next.folded = folded;
+      keep(next, "folded");
     },
   };
 };
 
 export const setupMarks = createSetupMarks();
-
-/** Counts "Choose a network": any pick in the settings, the current one too */
-export const markNetworkChosen = () => setupMarks.mark("networkChosen");
 
 export const useSetupMarks = () =>
   useSyncExternalStore(setupMarks.subscribe, setupMarks.get);
@@ -153,11 +190,7 @@ if (import.meta.vitest) {
         "@/shared/lib/logger"
       ));
     });
-    const NOTHING_DONE = {
-      dismissed: false,
-      completed: false,
-      networkChosen: false,
-    };
+    const NOTHING_DONE = { dismissed: false, completed: false };
 
     /** A `Storage` whose every call throws, as where site data is blocked */
     const refusingStorage = (): Storage => {
@@ -193,13 +226,32 @@ if (import.meta.vitest) {
       it("reads back what is stored", () => {
         localStorage.setItem(
           SETUP_LIST_KEY,
-          '{"dismissed":true,"completed":false,"networkChosen":true}'
+          '{"dismissed":true,"completed":false,"folded":true}'
         );
         expect(readMarks()).toEqual({
           dismissed: true,
           completed: false,
-          networkChosen: true,
+          folded: true,
         });
+      });
+
+      it("reads a value stored before the fold was kept, its network mark dropped", () => {
+        localStorage.setItem(
+          SETUP_LIST_KEY,
+          '{"dismissed":true,"completed":false,"networkChosen":true}'
+        );
+        const marks = readMarks();
+        expect(marks).toEqual({ dismissed: true, completed: false });
+        expect("folded" in marks).toBe(false);
+        expect("networkChosen" in marks).toBe(false);
+      });
+
+      it("drops a fold that is not a boolean and keeps the marks", () => {
+        localStorage.setItem(
+          SETUP_LIST_KEY,
+          '{"dismissed":true,"completed":false,"folded":1}'
+        );
+        expect(readMarks()).toEqual({ dismissed: true, completed: false });
       });
 
       it.each(["{", "[]", '{"dismissed":"yes"}'])(
@@ -230,22 +282,100 @@ if (import.meta.vitest) {
 
     describe("setupMarks", () => {
       it("writes a mark and reads it back on the next load", () => {
-        createSetupMarks().mark("networkChosen");
+        createSetupMarks().mark("completed");
         expect(createSetupMarks().get()).toEqual({
           dismissed: false,
-          completed: false,
-          networkChosen: true,
+          completed: true,
         });
       });
 
-      it("writes nothing and notifies no one for a mark already set", () => {
+      it("keeps a fold, and an unfold, for the next load", () => {
+        createSetupMarks().fold(true);
+        expect(createSetupMarks().get().folded).toBe(true);
+        createSetupMarks().fold(false);
+        expect(createSetupMarks().get().folded).toBe(false);
+      });
+
+      it("writes nothing and notifies no one for a fold already kept", () => {
         const marks = createSetupMarks();
-        marks.mark("networkChosen");
+        marks.fold(true);
         const listener = vi.fn();
         marks.subscribe(listener);
         const write = vi.spyOn(Storage.prototype, "setItem");
         try {
-          marks.mark("networkChosen");
+          marks.fold(true);
+          expect(write).not.toHaveBeenCalled();
+          expect(listener).not.toHaveBeenCalled();
+        } finally {
+          write.mockRestore();
+        }
+      });
+
+      it("keeps another tab's dismissal when this tab folds the list", () => {
+        const stale = createSetupMarks();
+        stale.get();
+        createSetupMarks().mark("dismissed");
+
+        stale.fold(true);
+
+        expect(createSetupMarks().get()).toEqual({
+          dismissed: true,
+          completed: false,
+          folded: true,
+        });
+      });
+
+      it("keeps the fold when a mark is set after it", () => {
+        createSetupMarks().fold(true);
+        createSetupMarks().mark("completed");
+        expect(createSetupMarks().get()).toEqual({
+          dismissed: false,
+          completed: true,
+          folded: true,
+        });
+      });
+
+      it("keeps this page's fold when another tab stores marks with none", () => {
+        const storage = refusingStorage();
+        const marks = createSetupMarks(storage);
+        marks.subscribe(() => {});
+        marks.fold(true);
+        // The write was refused; another tab then stores marks without a fold
+        vi.spyOn(storage, "getItem").mockReturnValue(
+          '{"dismissed":false,"completed":true}'
+        );
+
+        window.dispatchEvent(
+          new StorageEvent("storage", { key: SETUP_LIST_KEY })
+        );
+
+        expect(marks.get().folded).toBe(true);
+      });
+
+      it("takes another tab's fold as soon as it is stored", () => {
+        const marks = createSetupMarks();
+        marks.subscribe(() => {});
+        marks.fold(true);
+        localStorage.setItem(
+          SETUP_LIST_KEY,
+          '{"dismissed":false,"completed":false,"folded":false}'
+        );
+
+        window.dispatchEvent(
+          new StorageEvent("storage", { key: SETUP_LIST_KEY })
+        );
+
+        expect(marks.get().folded).toBe(false);
+      });
+
+      it("writes nothing and notifies no one for a mark already set", () => {
+        const marks = createSetupMarks();
+        marks.mark("completed");
+        const listener = vi.fn();
+        marks.subscribe(listener);
+        const write = vi.spyOn(Storage.prototype, "setItem");
+        try {
+          marks.mark("completed");
           expect(write).not.toHaveBeenCalled();
           expect(listener).not.toHaveBeenCalled();
         } finally {
@@ -259,12 +389,11 @@ if (import.meta.vitest) {
         stale.get();
         createSetupMarks().mark("dismissed");
 
-        stale.mark("networkChosen");
+        stale.mark("completed");
 
         expect(createSetupMarks().get()).toEqual({
           dismissed: true,
-          completed: false,
-          networkChosen: true,
+          completed: true,
         });
       });
 
@@ -275,7 +404,7 @@ if (import.meta.vitest) {
         marks.get();
         localStorage.setItem(
           SETUP_LIST_KEY,
-          '{"dismissed":true,"completed":false,"networkChosen":false}'
+          '{"dismissed":true,"completed":false}'
         );
 
         window.dispatchEvent(
@@ -293,7 +422,7 @@ if (import.meta.vitest) {
         marks.mark("dismissed");
         // The write was refused; another tab then stores its own marks
         vi.spyOn(storage, "getItem").mockReturnValue(
-          '{"dismissed":false,"completed":false,"networkChosen":true}'
+          '{"dismissed":false,"completed":true}'
         );
 
         window.dispatchEvent(
@@ -302,8 +431,7 @@ if (import.meta.vitest) {
 
         expect(marks.get()).toEqual({
           dismissed: true,
-          completed: false,
-          networkChosen: true,
+          completed: true,
         });
       });
 
@@ -326,10 +454,10 @@ if (import.meta.vitest) {
         marks.subscribe(listener);
 
         marks.mark("dismissed");
-        marks.mark("networkChosen");
+        marks.fold(true);
 
         expect(marks.get().dismissed).toBe(true);
-        expect(marks.get().networkChosen).toBe(true);
+        expect(marks.get().folded).toBe(true);
         expect(listener).toHaveBeenCalledTimes(2);
         expect(memory.entries.filter((entry) => entry.report)).toEqual([
           expect.objectContaining({ ns: "setup-list:storage", level: "error" }),

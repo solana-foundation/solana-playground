@@ -2,10 +2,10 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 
-import type { SetupStep, StepView } from "../model/steps";
+import type { SetupStep, StepView, TodoStep } from "../model/steps";
 import BaseSetupList from "./BaseSetupList";
 
-const todo = (step: SetupStep): StepView => ({ step, done: false });
+const todo = (step: TodoStep): StepView => ({ step, done: false });
 const done = (step: SetupStep, value: string): StepView => ({
   step,
   done: true,
@@ -19,11 +19,20 @@ const TWO_DONE: StepView[] = [
   todo("wallet"),
 ];
 
-const renderList = (steps: StepView[]) => {
+const renderList = (steps: StepView[], folded = false) => {
   const onPick = vi.fn();
   const onDismiss = vi.fn();
-  render(<BaseSetupList steps={steps} onPick={onPick} onDismiss={onDismiss} />);
-  return { onPick, onDismiss };
+  const onFold = vi.fn();
+  render(
+    <BaseSetupList
+      steps={steps}
+      onPick={onPick}
+      onDismiss={onDismiss}
+      folded={folded}
+      onFold={onFold}
+    />
+  );
+  return { onPick, onDismiss, onFold };
 };
 
 it("counts the done steps in its title", () => {
@@ -56,35 +65,10 @@ it("dismisses itself from the dismiss button", async () => {
   expect(onDismiss).toHaveBeenCalledTimes(1);
 });
 
-it("folds and unfolds from its title", async () => {
-  renderList(TWO_DONE);
-  const title = screen.getByRole("button", { name: /^Get set up/ });
-  await userEvent.click(title);
-  expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
-  await userEvent.click(title);
-  expect(screen.getByRole("button", { name: "Connect a wallet" })).toBeTruthy();
-});
-
-it("puts a step's extra attributes on its button", () => {
-  const onPick = vi.fn();
-  render(
-    <BaseSetupList
-      steps={TWO_DONE}
-      onPick={onPick}
-      onDismiss={vi.fn()}
-      stepAttrs={{ wallet: { "data-marker": "" } }}
-    />
-  );
-  expect(
-    screen
-      .getByRole("button", { name: "Connect a wallet" })
-      .hasAttribute("data-marker")
-  ).toBe(true);
-  expect(
-    screen
-      .getByRole("button", { name: "Connect the assistant" })
-      .hasAttribute("data-marker")
-  ).toBe(false);
+it("asks to fold from its title", async () => {
+  const { onFold } = renderList(TWO_DONE);
+  await userEvent.click(screen.getByRole("button", { name: /^Get set up/ }));
+  expect(onFold).toHaveBeenCalledExactlyOnceWith(true);
 });
 
 it("says a step is done in words, not only with the tick", () => {
@@ -98,18 +82,11 @@ it("says a step is done in words, not only with the tick", () => {
   ]);
 });
 
-it("starts folded to its one line when told to, as on a phone's menu", async () => {
-  render(
-    <BaseSetupList
-      steps={TWO_DONE}
-      onPick={vi.fn()}
-      onDismiss={vi.fn()}
-      folded
-    />
-  );
+it("shows only its title while folded, and asks to unfold from it", async () => {
+  const { onFold } = renderList(TWO_DONE, true);
   const title = screen.getByRole("button", { name: /^Get set up/ });
   expect(title.getAttribute("aria-expanded")).toBe("false");
   expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
   await userEvent.click(title);
-  expect(screen.getByRole("button", { name: "Connect a wallet" })).toBeTruthy();
+  expect(onFold).toHaveBeenCalledExactlyOnceWith(false);
 });

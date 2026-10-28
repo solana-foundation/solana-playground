@@ -37,32 +37,11 @@ describe("BaseNetworkChoice", () => {
     );
   });
 
-  it("counts a click on the network already chosen as a choice, though it changes nothing", async () => {
+  it("picks nothing on a click on the network already chosen", async () => {
     const onPick = vi.fn();
-    const onChoose = vi.fn();
-    render(
-      <BaseNetworkChoice
-        endpoint={Endpoint.DEVNET}
-        onPick={onPick}
-        onChoose={onChoose}
-      />
-    );
+    render(<BaseNetworkChoice endpoint={Endpoint.DEVNET} onPick={onPick} />);
     await userEvent.click(screen.getByRole("radio", { name: "Devnet" }));
-    expect(onChoose).toHaveBeenCalledExactlyOnceWith(Endpoint.DEVNET);
     expect(onPick).not.toHaveBeenCalled();
-  });
-
-  it("counts a switch to another network as one choice", async () => {
-    const onChoose = vi.fn();
-    render(
-      <BaseNetworkChoice
-        endpoint={Endpoint.DEVNET}
-        onPick={() => {}}
-        onChoose={onChoose}
-      />
-    );
-    await userEvent.click(screen.getByRole("radio", { name: "Testnet" }));
-    expect(onChoose).toHaveBeenCalledExactlyOnceWith(Endpoint.TESTNET);
   });
 
   it("leaves every chip unchecked for an endpoint it does not list, and Tab still enters the group", async () => {
