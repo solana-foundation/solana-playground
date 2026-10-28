@@ -59,11 +59,10 @@ test.describe.serial("the editor", () => {
   });
 
   test("completes and checks TypeScript", async () => {
-    // Workaround: the editor's autosave debounce (500 ms) is cancelled, not
-    // flushed, when the editor unmounts, so closing the last tab right after
-    // an edit drops it (Monaco.tsx autosave effect). Remove this wait when
-    // that is fixed.
-    await page.waitForTimeout(1000);
+    // Opened inside the autosave's delay: the edit is saved to the file it
+    // was made in, not to the one the editor shows when the timer fires
+    await focusEditor(page);
+    await page.keyboard.type(" // switched");
     await item(page, "client").click();
     await page
       .locator("#root-dir")
@@ -91,6 +90,23 @@ test.describe.serial("the editor", () => {
     await expect(page.locator(".monaco-editor")).toHaveCount(1);
     await focusEditor(page);
     await expect.poll(() => editorText(page)).toMatch(/fn ugly\(\)/);
+    await expect.poll(() => editorText(page)).toContain("// switched");
+  });
+
+  test("keeps an edit made just before the last tab closes", async () => {
+    const tabs = page.locator('#tabs [data-slot="editor-tab"][id^="/"]');
+    await expect(tabs).toHaveCount(1);
+    await focusEditor(page);
+    await page.keyboard.type(" // kept");
+    // Closed inside the autosave's delay: the edit is saved as the editor
+    // unmounts, not dropped with its timer
+    const tab = tabs.first();
+    await tab.hover({ force: true });
+    await tab.getByRole("button", { name: /^Close / }).click({ force: true });
+    await expect(page.locator(".monaco-editor")).toHaveCount(0);
+    await item(page, "lib.rs").click();
+    await focusEditor(page);
+    await expect.poll(() => editorText(page)).toContain("// kept");
   });
 
   test("keeps the edit across a reload", async () => {
@@ -113,5 +129,25 @@ test.describe.serial("the editor", () => {
     await runInTerminal(page, "help");
     await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
     await expect(page.locator(".xterm")).toHaveCount(1);
+  });
+
+  test("keeps a file deleted just after an edit deleted", async () => {
+    await item(page, "lib.rs").click();
+    await focusEditor(page);
+    await page.keyboard.type(" // gone");
+    // Deleted inside the autosave's delay: disposing its model flushes the
+    // edit, which must not write the file back
+    await item(page, "lib.rs").click({ button: "right" });
+    await page.getByRole("menuitem", { name: /Delete/ }).click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(item(page, "lib.rs")).toBeHidden();
+    // Past the delay, so a save the delete left behind has run by the reload
+    await page.waitForTimeout(1000);
+    await page.reload();
+    await expect(item(page, "src")).toBeVisible();
+    // Whether the reload drew `src` open or closed, `lib.rs` is in neither
+    await expect(item(page, "lib.rs")).toBeHidden();
+    await item(page, "src").click();
+    await expect(item(page, "lib.rs")).toBeHidden();
   });
 });

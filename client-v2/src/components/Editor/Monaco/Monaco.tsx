@@ -27,6 +27,7 @@ import {
   useSendAndReceiveCustomEvent,
 } from "../../../hooks";
 import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
+import { createAutosave } from "./autosave";
 import { createMountOpen } from "./mount-open";
 import { leavesFocusElsewhere } from "./open-focus";
 import { createLogger } from "@/shared/lib/logger";
@@ -438,38 +439,55 @@ const Monaco = () => {
   useEffect(() => {
     if (!editor) return;
 
-    let timeoutId: NodeJS.Timeout;
+    const save = async (path: string, content: string) => {
+      // A file deleted or renamed inside the delay has its model disposed,
+      // which flushes its edit here: writing it would bring the file back
+      if (!PgExplorer.getFile(path)) return;
 
-    const { dispose } = editor.onDidChangeModelContent(() => {
-      timeoutId && clearTimeout(timeoutId);
-      timeoutId = setTimeout(async () => {
-        if (!PgExplorer.currentFilePath) return;
-
-        const args: [string, string] = [
-          PgExplorer.currentFilePath,
-          editor.getValue(),
-        ];
-
+      try {
         // Save to state
-        PgExplorer.saveFileToState(...args);
+        PgExplorer.saveFileToState(path, content);
 
         // Saving to state is enough if it's a temporary project
         if (PgExplorer.isTemporary) return;
 
         // Save to `indexedDB`
-        try {
-          await PgExplorer.fs.writeFile(...args);
-        } catch (e: any) {
-          console.log(
-            `Error saving file ${PgExplorer.currentFilePath}. ${e.message}`
-          );
-        }
-      }, 500);
+        await PgExplorer.fs.writeFile(path, content);
+      } catch (error) {
+        // Nothing awaits a save, the one made as the editor unmounts least of
+        // all, so this is the only place a lost edit can be heard
+        log.error(error, { report: true, context: { path } });
+      }
+    };
+    const autosave = createAutosave({
+      delay: 500,
+      save: (path, content) => void save(path, content),
+    });
+
+    // The pending save reads its model's buffer when it runs, so it runs
+    // before that model goes: opening a JS/TS file disposes the others, and
+    // unmounting the editor disposes every model
+    let watched: monaco.editor.ITextModel | null = null;
+    let modelWillDispose: monaco.IDisposable | undefined;
+    const content = editor.onDidChangeModelContent(() => {
+      const path = PgExplorer.currentFilePath;
+      const model = editor.getModel();
+      if (!path || !model) return;
+
+      if (model !== watched) {
+        modelWillDispose?.dispose();
+        modelWillDispose = model.onWillDispose(autosave.flush);
+        watched = model;
+      }
+      autosave.schedule(path, () => model.getValue());
     });
 
     return () => {
-      clearTimeout(timeoutId);
-      dispose();
+      // Unmounting disposes the models first, which has flushed already; this
+      // covers a model that outlives the editor
+      autosave.flush();
+      modelWillDispose?.dispose();
+      content.dispose();
     };
   }, [editor]);
 
