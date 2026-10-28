@@ -5,6 +5,7 @@ export const EVENT_PREFIXES = {
   assistant: "assistant",
   catalog: "catalog",
   feedback: "feedback",
+  gist: "gist",
   home: "home",
   "layout-shell": "layout",
   mcp: "mcp",

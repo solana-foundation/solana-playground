@@ -9,4 +9,5 @@ export type ProjectAction =
   | "rename"
   | "duplicate"
   | "export"
+  | "share-gist"
   | "delete";

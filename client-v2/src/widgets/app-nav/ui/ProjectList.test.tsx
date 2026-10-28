@@ -95,12 +95,16 @@ const modals = vi.hoisted(() => ({
   ExportWorkspace: () => null,
 }));
 vi.mock("@/views/sidebar/explorer/Component/Modals", () => modals);
-const files = vi.hoisted(() => ({ readWorkspaceFiles: vi.fn() }));
+const files = vi.hoisted(() => ({
+  readWorkspaceFiles: vi.fn(),
+  readProjectFiles: vi.fn(),
+}));
 vi.mock("../model/workspace-files", async (importOriginal) => ({
   rebaseFiles: (
     (await importOriginal()) as typeof import("../model/workspace-files")
   ).rebaseFiles,
   readWorkspaceFiles: files.readWorkspaceFiles,
+  readProjectFiles: files.readProjectFiles,
 }));
 
 import { PINS_KEY } from "../model/pins";
@@ -325,6 +329,29 @@ describe("ProjectList", () => {
     expect(exported.props).toEqual({ name: "alpha" });
     expect(deleted.type).toBe(modals.DeleteWorkspace);
     expect(deleted.props).toEqual({ name: "Hello Anchor", isLesson: true });
+  });
+
+  it("hands Share as gist to the page's opener, with a reader of that project", async () => {
+    const onShareGist = vi.fn().mockResolvedValue(null);
+    files.readProjectFiles.mockResolvedValue({ "src/lib.rs": "x" });
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <ProjectList onShareGist={onShareGist} />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+
+    fireEvent.keyDown(menuOf("alpha"), { key: "g" });
+
+    await waitFor(() => expect(onShareGist).toHaveBeenCalledTimes(1));
+    const [name, readFiles] = onShareGist.mock.calls[0];
+    expect(name).toBe("alpha");
+    expect(await readFiles()).toEqual({ "src/lib.rs": "x" });
+    expect(files.readProjectFiles).toHaveBeenCalledWith(
+      "alpha",
+      app.PgExplorer.fs
+    );
   });
 
   it("follows the explorer: a project created elsewhere appears", () => {
