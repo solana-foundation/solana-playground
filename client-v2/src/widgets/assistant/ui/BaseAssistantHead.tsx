@@ -17,6 +17,9 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+import { headText } from "../model/head-label";
+import type { HeadLabel } from "../model/head-label";
+import { OverflowTooltip } from "./OverflowTooltip";
 
 /**
  * Forget key in More: `none` while no backend holding the user's key is
@@ -26,8 +29,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 export type ForgetKey = "none" | "ready" | "busy";
 
 export interface BaseAssistantHeadProps {
-  /** The open project's name */
-  title: string;
+  /** The model in use, in the head's words (`headLabel`) */
+  label: HeadLabel;
   /** Opens Sources and tools in place of the conversation */
   onSources(): void;
   /** Opens Connect a model */
@@ -51,14 +54,16 @@ export interface BaseAssistantHeadProps {
 }
 
 /**
- * The assistant's head: the project's name, then More, Widen and Hide.
+ * The assistant's head: the model in use, then More, Widen and Hide. Only
+ * the model's name is cut when the column is narrow; the words around it
+ * stay, and the cut name shows whole on hover (`OverflowTooltip`).
  *
  * More's items take S and K while it is open. The shortcuts are shown with
  * `DropdownMenuShortcut`, which only draws them, and the menu's typeahead
  * would take S but never K ("Connect…"), so the keys are read here.
  */
 export function BaseAssistantHead({
-  title,
+  label,
   onSources,
   onConnect,
   focusPicked,
@@ -102,11 +107,27 @@ export function BaseAssistantHead({
 
   return (
     <div className="flex h-11 shrink-0 items-center gap-1 border-b border-border pr-1.5 pl-3">
+      {/* Named whole: the name is computed per span, and would lose the
+          spaces between the parts */}
       <h2
-        className="min-w-0 flex-1 truncate text-sm font-medium text-foreground"
-        title={title}
+        className="flex min-w-0 flex-1 text-sm font-medium whitespace-pre text-foreground"
+        aria-label={headText(label)}
       >
-        {title}
+        {label.kind === "plain" ? (
+          <span className="truncate">{label.text}</span>
+        ) : (
+          <>
+            {label.lead && <span className="shrink-0">{label.lead}</span>}
+            {/* Hover only: the head is no tab stop, and the composer's model
+                button shows the same name on focus */}
+            <OverflowTooltip label={label.model}>
+              <span data-overflow="" className="min-w-0 truncate">
+                {label.model}
+              </span>
+            </OverflowTooltip>
+            <span className="shrink-0">{label.tail}</span>
+          </>
+        )}
       </h2>
       <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
         <DropdownMenuTrigger asChild>

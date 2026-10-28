@@ -320,6 +320,29 @@ describe("AssistantComposer, nothing connected", () => {
     expect(sendBlocked()).toBe(true);
   });
 
+  // With no model, a message waits for one rather than going nowhere
+  it("sends nothing on Enter with no model, keeps the text, and offers Connect a model", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "absent" };
+    const add = vi.spyOn(PgAssistant, "addUserMessage");
+    render(<Harness />);
+    await typeIn();
+    await userEvent.setup().keyboard("{Enter}");
+
+    expect(add).not.toHaveBeenCalled();
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Message the assistant",
+        }) as HTMLTextAreaElement
+      ).value
+    ).toBe("hello");
+    expect(sendBlocked()).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Connect a model" })
+    ).toBeTruthy();
+  });
+
   it.each([
     ["could not be reached, so a send asks again", { state: "unreachable" }],
     ["is still being asked about", { state: "checking" }],
