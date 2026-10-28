@@ -180,6 +180,72 @@ describe("/api/projects", () => {
         error: "too-large",
       });
     });
+
+    it("refuses a body the platform would refuse first", async () => {
+      // Vercel answers a body over 4.5 MB with its own 413 before the handler
+      // runs. Under that, a refusal is ours and says what to do about it.
+      const mod = await load();
+      const mb = Buffer.alloc(1_000_000);
+      const chunks = Array.from({ length: 5 }, () => mb);
+      assert.deepEqual(await mod.readBody(streamOf(...chunks)), {
+        error: "too-large",
+      });
+    });
+  });
+
+  describe("describeProject", () => {
+    const UUID = "4f1c9a52-5d0e-4c55-9a3b-2d6f0b8e7c11";
+
+    it("takes a project and a tutorial whose kinds match their ids", async () => {
+      const mod = await load();
+      assert.deepEqual(
+        mod.describeProject({ id: UUID, name: "mine", kind: "project" }),
+        { id: UUID, name: "mine", kind: "project" }
+      );
+      assert.deepEqual(
+        mod.describeProject({
+          id: "tut:hello-anchor",
+          name: "Hello Anchor",
+          kind: "tutorial",
+        }),
+        { id: "tut:hello-anchor", name: "Hello Anchor", kind: "tutorial" }
+      );
+    });
+
+    it("refuses an empty name, blank included", async () => {
+      const mod = await load();
+      assert.deepEqual(
+        mod.describeProject({ id: UUID, name: "", kind: "project" }),
+        { error: "name must not be empty" }
+      );
+      assert.deepEqual(
+        mod.describeProject({ id: UUID, name: "  ", kind: "project" }),
+        { error: "name must not be empty" }
+      );
+    });
+
+    it("refuses a kind its id contradicts", async () => {
+      const mod = await load();
+      assert.deepEqual(
+        mod.describeProject({ id: "tut:hello", name: "x", kind: "project" }),
+        { error: "kind must be tutorial for this id" }
+      );
+      assert.deepEqual(
+        mod.describeProject({ id: UUID, name: "x", kind: "tutorial" }),
+        { error: "kind must be project for this id" }
+      );
+    });
+
+    it("refuses a missing id, name or kind, and a kind it does not know", async () => {
+      const mod = await load();
+      assert.ok(mod.describeProject({ name: "x", kind: "project" }).error);
+      assert.ok(mod.describeProject({ id: UUID, kind: "project" }).error);
+      assert.ok(mod.describeProject({ id: UUID, name: "x" }).error);
+      assert.deepEqual(
+        mod.describeProject({ id: UUID, name: "x", kind: "program" }),
+        { error: "kind must be one of project, tutorial" }
+      );
+    });
   });
 
   describe("describeDriverError", () => {

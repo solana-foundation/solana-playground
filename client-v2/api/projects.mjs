@@ -18,24 +18,10 @@ import {
   getProject,
   isEnabled,
   listProjects,
+  MAX_PROJECT_BODY_BYTES,
+  projectKindOf,
   saveProject,
 } from "../src/features/persistence/server.mjs";
-
-/**
- * A workspace larger than this is not something we sync silently.
- *
- * Ours, not the platform's. Vercel Functions accept a request body of up to
- * 100 MB, so this sits well under the cap and is a product decision about what
- * a reasonable workspace is -- written down because the figure has already
- * been re-derived once from the old 4.5 MB limit and judged, wrongly, to be
- * over it. Nothing here needs to change if that platform number moves.
- *
- * The rejection carries `reason: "too-large"` for the same reason the name
- * collision below carries one: the client files every failure it cannot name
- * under a silent "skipped", so a workspace that is genuinely too big has to
- * arrive as something it can tell apart and say out loud.
- */
-const MAX_BODY_BYTES = 8_000_000;
 
 /** Matches `projects_kind_check`, so a bad kind is a 400 and not a 500 */
 const KINDS = ["project", "tutorial"];
@@ -48,6 +34,35 @@ const isFileMap = (value) =>
   Object.entries(value).every(
     ([path, content]) => path.length > 0 && typeof content === "string"
   );
+
+/**
+ * The row a write names, or why it names none.
+ *
+ * - `name` must hold something: it is what the project list shows, and a
+ *   blank one is a project no one can find or tell apart.
+ * - `kind` must be the one the id stands for (`projectKindOf`). The client
+ *   derives one from the other, so a mismatch is never a user's choice, and
+ *   stored it is a tutorial listed as a project or the other way round.
+ *
+ * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
+ *
+ * @returns {{id: string, name: string, kind: "project" | "tutorial"}
+ *   | {error: string}}
+ */
+export const describeProject = (body) => {
+  const { id, name, kind } = body;
+  if (typeof id !== "string" || !id || typeof name !== "string") {
+    return { error: "id and name required" };
+  }
+  if (!KINDS.includes(kind)) {
+    return { error: `kind must be one of ${KINDS.join(", ")}` };
+  }
+  if (!name.trim()) return { error: "name must not be empty" };
+  if (kind !== projectKindOf(id)) {
+    return { error: `kind must be ${projectKindOf(id)} for this id` };
+  }
+  return { id, name, kind };
+};
 
 /**
  * Which of the two write shapes a body is, or why it is neither.
@@ -134,7 +149,7 @@ export const readBody = async (req) => {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) return { error: "too-large" };
+    if (size > MAX_PROJECT_BODY_BYTES) return { error: "too-large" };
     chunks.push(chunk);
   }
   try {
@@ -221,22 +236,22 @@ async function handler(req, res) {
 
     if (req.method === "PUT") {
       const read = await readBody(req);
+      // `reason` because the client files every failure it cannot name under
+      // a silent "skipped", so a workspace that is genuinely too big has to
+      // arrive as something it can tell apart and say out loud. The browser
+      // refuses the same size before sending; this is the half for a client
+      // that did not.
       if (read.error === "too-large") {
         return sendJson(res, 413, {
-          error: `A workspace upload must be under ${MAX_BODY_BYTES} bytes`,
+          error: `A workspace upload must be under ${MAX_PROJECT_BODY_BYTES} bytes`,
           reason: "too-large",
         });
       }
       if (read.error) return sendJson(res, 400, { error: "Body must be JSON" });
       const { body } = read;
 
-      if (
-        typeof body.id !== "string" ||
-        typeof body.name !== "string" ||
-        !KINDS.includes(body.kind)
-      ) {
-        return sendJson(res, 400, { error: "id, name and kind required" });
-      }
+      const project = describeProject(body);
+      if (project.error) return sendJson(res, 400, { error: project.error });
 
       const write = describeWrite(body);
       if (write.error) return sendJson(res, 400, { error: write.error });
@@ -256,9 +271,7 @@ async function handler(req, res) {
       // Named fields rather than the body passed through, so nothing a client
       // adds reaches the write without this handler having checked it
       const result = await saveProject(user.id, {
-        id: body.id,
-        name: body.name,
-        kind: body.kind,
+        ...project,
         baseUpdatedAt: body.baseUpdatedAt,
         ...write,
       });

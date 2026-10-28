@@ -293,6 +293,15 @@ before this existed.
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
+**A project write is at most 4 MB of request body**
+(`MAX_PROJECT_BODY_BYTES` in `src/features/persistence/model/project-write.mjs`).
+Vercel refuses a Function request body over 4.5 MB with its own `413`
+([Functions limits](https://vercel.com/docs/functions/limitations)) on every
+plan, before the handler runs. The browser refuses a larger body before
+sending it and `PUT /api/projects` refuses it again, both as `too-large`, so the
+user reads the banner's "over the 4 MB sync limit" and never the platform's
+error.
+
 **Migrations are never applied by a function.** Every preview gets its own Neon
 branch, so its schema is its own problem. A labelled PR's preview is migrated by
 `preview.yml` on every deploy (see
