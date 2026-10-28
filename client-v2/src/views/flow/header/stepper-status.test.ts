@@ -51,6 +51,7 @@ describe("statusOf, for the write stage", () => {
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      hasProgram: true,
     };
     expect(statusOf(restored, "write")).toBe("done");
   });

@@ -36,6 +36,7 @@ const DEFAULT_STATE: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  hasProgram: true,
 };
 
 const state = (overrides: Partial<FlowState>): FlowState => ({

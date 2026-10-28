@@ -3,9 +3,18 @@ import {
   stripKnownNoise,
 } from "../../sidebar/assistant/bridge/build-output";
 import { emptyFileOf } from "../../../commands/build/empty-source";
-import { PgCommand, PgExplorer, PgGlobal, PgProgramInfo } from "../../../utils";
+import {
+  PgCommand,
+  PgExplorer,
+  PgFramework,
+  PgGlobal,
+  PgProgramInfo,
+} from "../../../utils";
 import { isStopped } from "../../../utils/stopped";
 import type { Disposable } from "../../../utils";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("flow:stage");
 
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";
@@ -43,6 +52,9 @@ export interface FlowState {
   /** Which run the person stopped last, for the console strip's words;
    * `null` once the next run starts */
   stopped: RunKind | null;
+  /** Whether the open project has a program to build. Without one, only the
+   * Write stage is offered (`stagesOf`). */
+  hasProgram: boolean;
 }
 
 /**
@@ -75,6 +87,8 @@ export type FlowEvent =
   | { type: "deploy-stop" }
   | { type: "set-stage"; stage: Stage }
   | { type: "workspace-change" }
+  /** What the open project's files say: whether `src/` holds a program */
+  | { type: "program"; has: boolean }
   /**
    * What the workspace already knows about itself, read back after a
    * reload. `built` is `PgProgramInfo.lastBuildFailed`: `null` when this
@@ -95,14 +109,35 @@ export const INITIAL_FLOW_STATE: FlowState = {
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
+  // Nothing hides until the explorer has answered
+  hasProgram: true,
 };
 
+/** Every stage; `stagesOf` gives the ones the open project offers */
 export const STAGES: readonly Stage[] = [
   "write",
   "build",
   "deploy",
   "interact",
 ];
+
+/** The one stage a project with no program offers, shared so it keeps its identity */
+const WRITE_ONLY: readonly Stage[] = ["write"];
+
+/** The stages the given state offers: only Write for a project with no program */
+export const stagesOf = (state: FlowState): readonly Stage[] =>
+  state.hasProgram ? STAGES : WRITE_ONLY;
+
+/**
+ * Hold a project with no program on Write, whatever the event asked for, so
+ * the router never shows a panel whose tab is hidden. The one place this is
+ * enforced: `reduce` passes every result through it. A build started from
+ * the terminal still runs; only the route stays.
+ */
+const onVisibleStage = (state: FlowState): FlowState =>
+  state.hasProgram || state.stage === "write"
+    ? state
+    : { ...state, stage: "write" };
 
 const ERROR_HEADER = /^error(?:\[E\d+\])?: (.+)$/;
 // rustc's own summary lines are not a diagnostic of their own - matches
@@ -157,6 +192,11 @@ export class PgFlow {
   }
 
   static reduce(state: FlowState, ev: FlowEvent): FlowState {
+    return onVisibleStage(PgFlow._step(state, ev));
+  }
+
+  /** The reducer before `onVisibleStage` holds a no-program project on Write */
+  private static _step(state: FlowState, ev: FlowEvent): FlowState {
     switch (ev.type) {
       case "build-start":
         return {
@@ -223,10 +263,24 @@ export class PgFlow {
         };
       case "deploy-finish":
         return ev.ok
-          ? { ...state, stage: "deploy", deploy: "done", interact: "active" }
-          : { ...state, stage: "deploy", deploy: "failed" };
+          ? {
+              ...state,
+              stage: "deploy",
+              deploy: "done",
+              interact: "active",
+            }
+          : {
+              ...state,
+              stage: "deploy",
+              deploy: "failed",
+            };
       case "set-stage":
         return { ...state, stage: ev.stage };
+      case "program":
+        // Unchanged on every other file event: listeners are not woken
+        return state.hasProgram === ev.has
+          ? state
+          : { ...state, hasProgram: ev.has };
       case "workspace-change":
         return INITIAL_FLOW_STATE;
       case "restore": {
@@ -322,9 +376,15 @@ export class PgFlow {
           ok: !("err" in result),
         });
       }),
-      PgExplorer.onDidSwitchWorkspace(() =>
-        PgFlow._dispatch({ type: "workspace-change" })
-      ),
+      PgExplorer.onDidSwitchWorkspace(() => {
+        PgFlow._dispatch({ type: "workspace-change" });
+        // After the reset, which forgets the previous project's answer
+        PgFlow._readProgram();
+      }),
+      PgExplorer.onDidInit(PgFlow._readProgram),
+      PgExplorer.onDidCreateItem(PgFlow._readProgram),
+      PgExplorer.onDidDeleteItem(PgFlow._readProgram),
+      PgExplorer.onDidRenameItem(PgFlow._readProgram),
       // A reload drops this state but not the workspace's own: the build
       // verdict is in `program-info.json` and the deployment is on the
       // cluster. `onChain` is fetched asynchronously and re-derives on a
@@ -341,8 +401,29 @@ export class PgFlow {
     return { dispose: () => subs.forEach((s) => s.dispose()) };
   }
 
+  /** Tell the reducer whether the open project's `src/` holds a program */
+  private static _readProgram() {
+    if (!PgExplorer.isInitialized) return;
+    let paths: string[];
+    try {
+      paths = Object.keys(PgExplorer.files).map((path) =>
+        PgExplorer.getRelativePath(path)
+      );
+    } catch (error) {
+      // A workspace being deleted or switched has no current path for a
+      // moment; the switch that follows reads the files again
+      log.warn("could not read the project's files for its stages", {
+        context: { reason: error instanceof Error ? error.message : "unknown" },
+      });
+      return;
+    }
+    PgFlow._dispatch({ type: "program", has: PgFramework.hasProgram(paths) });
+  }
+
   private static _dispatch(ev: FlowEvent) {
-    PgFlow._state = PgFlow.reduce(PgFlow._state, ev);
+    const next = PgFlow.reduce(PgFlow._state, ev);
+    if (next === PgFlow._state) return;
+    PgFlow._state = next;
     for (const cb of PgFlow._listeners) cb(PgFlow._state);
   }
 

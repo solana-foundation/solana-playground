@@ -19,7 +19,7 @@ const utils = vi.hoisted(() => ({
     createWorkspace: vi.fn(),
     switchWorkspace: vi.fn(),
   },
-  PgFramework: { getFromFiles: vi.fn() },
+  PgFramework: { getFromFiles: vi.fn(), hasRunnableTypeScript: vi.fn() },
 }));
 vi.mock("@/utils", () => utils);
 
@@ -83,6 +83,7 @@ beforeEach(() => {
   utils.PgExplorer.createWorkspace.mockReset();
   utils.PgExplorer.switchWorkspace.mockReset();
   utils.PgFramework.getFromFiles.mockReset().mockResolvedValue({});
+  utils.PgFramework.hasRunnableTypeScript.mockReset().mockReturnValue(false);
   format.fromGistFiles.mockReset().mockReturnValue({
     layout: "manifest",
     files: { "src/lib.rs": LIB },
@@ -431,17 +432,53 @@ describe("getGistFiles", () => {
     expect(utils.PgFramework.getFromFiles).not.toHaveBeenCalled();
   });
 
-  it("refuses a gist no framework recognises", async () => {
-    answers({ [API]: ok(gist({ "client.ts": { content: "x" } })) });
+  it("opens a hand-made gist of TypeScript with no program", async () => {
+    answers({
+      [API]: ok(
+        gist({
+          "client.ts": { content: "x" },
+          "client.test.ts": { content: "y" },
+        })
+      ),
+    });
     format.fromGistFiles.mockReturnValue({
       layout: "loose",
-      files: { "client/client.ts": "x" },
+      files: { "client/client.ts": "x", "tests/client.test.ts": "y" },
     });
     utils.PgFramework.getFromFiles.mockResolvedValue(undefined);
+    utils.PgFramework.hasRunnableTypeScript.mockReturnValue(true);
+
+    const result = await getGistFiles({ id: ID }, "dialog");
+
+    expect(result.files).toEqual([
+      ["client/client.ts", "x"],
+      ["tests/client.test.ts", "y"],
+    ]);
+    expect(utils.PgFramework.hasRunnableTypeScript).toHaveBeenCalledWith([
+      "client/client.ts",
+      "tests/client.test.ts",
+    ]);
+    expect(events().at(-1)).toEqual({
+      name: "gist_import_succeeded",
+      params: { from: "dialog", layout: "loose" },
+    });
+  });
+
+  it("refuses a gist with neither a program nor a script", async () => {
+    answers({ [API]: ok(gist({ "notes.md": { content: "x" } })) });
+    format.fromGistFiles.mockReturnValue({
+      layout: "loose",
+      files: { "notes.md": "x" },
+    });
+    utils.PgFramework.getFromFiles.mockResolvedValue(undefined);
+    utils.PgFramework.hasRunnableTypeScript.mockReturnValue(false);
 
     const error = await failure(getGistFiles({ id: ID }, "dialog"));
 
     expect(error.reason).toBe("no-program");
+    expect(error.message).toBe(
+      "This gist holds no Solana program and no TypeScript or JavaScript to open."
+    );
     expect(events().at(-1)).toEqual({
       name: "gist_import_failed",
       params: { from: "dialog", reason: "no-program" },
