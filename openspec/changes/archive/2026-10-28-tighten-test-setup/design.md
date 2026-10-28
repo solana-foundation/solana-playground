@@ -93,8 +93,9 @@ prettier 2.7.1 cannot parse it, so a two-line `satisfies<T>()(value)` helper
 is fixed in the mock, and so is the drift no signature shows: paths resolve
 through `PgExplorer.convertToFullPath` (imported on call, to avoid a cycle),
 `removeDir` refuses a non-empty directory unless `recursive` and no longer
-removes a directory's namesake siblings, and its errors carry lightning-fs's
-`code` (`ENOENT`, `ENOTEMPTY`), which `PgFs.exists` branches on.
+removes a directory's namesake siblings, `removeDir` on a file fails with
+`ENOTDIR`, and its errors carry lightning-fs's `code` (`ENOENT`, `ENOTDIR`,
+`ENOTEMPTY`), which `PgFs.exists` branches on.
 
 ## Risks / Trade-offs
 
