@@ -4,11 +4,8 @@ export const SETTINGS_TRIGGER_ATTR = "data-settings-trigger";
 /** Which control the settings page puts focus on when it opens */
 export type SettingsFocus = "page" | "network";
 
-/**
- * What opened the settings: the cluster row, the rail's dot, the account
- * menu, ⌘, or the Get set up checklist's "Choose a network"
- */
-export type SettingsEntry = "cluster" | "rail" | "menu" | "key" | "setup";
+/** What opened the settings: the cluster row, the rail's dot, the account menu or ⌘, */
+export type SettingsEntry = "cluster" | "rail" | "menu" | "key";
 
 /** What closed the settings: "Back to app", Escape or ⌘, */
 export type SettingsExit = "back" | "escape" | "key";

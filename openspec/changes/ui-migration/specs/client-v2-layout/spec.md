@@ -317,18 +317,20 @@ entries are measured by `features/feedback`.
 From 768 px wide, and on a phone's menu page, the navigation SHALL show
 "Get set up · <n> of 4" above the session footer, with four steps in order:
 "Connect the assistant", "Choose a network", "Sign in with GitHub" and
-"Connect a wallet". A step SHALL be done while a model is connected, once
-the user has picked a network in the settings (the network already chosen
-included), while signed in, and while a wallet is connected, respectively.
-A done step SHALL show a tick and its value (the cluster's name, the login,
-the wallet's shortened address); a step to do SHALL run its action when
-clicked: open Connect a model, open the settings on the network, start the
-GitHub sign-in, connect the wallet. The title SHALL fold the list.
+"Connect a wallet". The first SHALL be done while a model is connected, the
+second always (the default network counts as chosen), the third while
+signed in, and the fourth while a wallet is connected. A done step SHALL show a tick and its
+value (the cluster's name, the login, the wallet's shortened address); a
+step to do SHALL run its action when clicked: open Connect a model, start
+the GitHub sign-in, connect the wallet. The title SHALL fold the list, and
+the user's last fold SHALL be kept on the device across a reload, one fold
+for the device wherever it was made; until the user has folded or unfolded
+it, a phone's menu page SHALL show it folded.
 "Dismiss the checklist" SHALL hide it for good on the device, and so SHALL
 all four steps being done at once. The rail SHALL show no checklist.
 
 The checklist SHALL send `setup_item_picked` with `item` (`assistant`,
-`network`, `github` or `wallet`) each time a user clicks a step to do,
+`github` or `wallet`) each time a user clicks a step to do,
 `setup_dismissed` with `done` (how many steps were done) when it is
 dismissed, and `setup_completed` the first time all four steps are done
 together on the device.
@@ -337,15 +339,27 @@ together on the device.
 
 - **WHEN** a signed-out user with a wallet connected and no model connected
   opens the product
-- **THEN** the navigation shows "Get set up · 1 of 4", with "Connect a
-  wallet" ticked and the wallet's shortened address beside it
+- **THEN** the navigation shows "Get set up · 2 of 4", with "Choose a
+  network" ticked and the cluster's name beside it, and "Connect a wallet"
+  ticked and the wallet's shortened address beside it
 
-#### Scenario: Choosing a network
+#### Scenario: The default network counts
 
-- **WHEN** a user clicks "Choose a network" in the checklist and picks the
-  network already selected in the settings
-- **THEN** the settings open on the network, and after the pick, back in
-  the app, the step is ticked and the count goes up by one
+- **WHEN** a user opens the product for the first time on a device
+- **THEN** the navigation shows "Get set up · 1 of 4", with "Choose a
+  network" ticked and "devnet" beside it
+
+#### Scenario: The fold survives a reload
+
+- **WHEN** a user clicks "Get set up" to fold the checklist, then reloads
+- **THEN** the checklist shows only its title, folded
+
+#### Scenario: The checklist on a phone's menu page
+
+- **WHEN** a user who has never folded the checklist opens a phone's menu
+  page, unfolds the checklist there, then reloads and opens the menu again
+- **THEN** the checklist shows only its title at first, and is unfolded
+  after the reload
 
 #### Scenario: A step opens its action
 
@@ -445,7 +459,7 @@ the page.
 ### Requirement: The settings page is measured
 
 The product SHALL send `settings_opened` with where it was opened from
-(`cluster`, `rail`, `menu`, `key` or `setup`, the Get set up checklist), `settings_closed` with how it was
+(`cluster`, `rail`, `menu` or `key`), `settings_closed` with how it was
 closed (`back`, `escape` or `key`), and `settings_section_picked` with the
 section, each time a user picks one in the section list.
 

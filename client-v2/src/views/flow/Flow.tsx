@@ -42,7 +42,7 @@ import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
-import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
+import { SetupList } from "@/widgets/setup-list";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -104,8 +104,7 @@ const focusWhenShown = (el: HTMLElement, frames = 30): (() => void) => {
 
 /**
  * Where focus goes back when the control that opened the settings is gone or
- * out of reach: a checklist step that the pick ticked, a footer the rail
- * swapped out, a cluster row on the phone's menu page once Work shows. The
+ * out of reach: a footer the rail swapped out, a cluster row on the phone's menu page once Work shows. The
  * first control that opens the settings still in reach, else the control
  * that opens the navigation.
  */
@@ -200,15 +199,6 @@ const FlowFrame = () => {
             context: { step: "close open layers", from },
           })
         );
-    };
-
-  // Opens, never toggles: the checklist's "Choose a network" must not shut
-  // settings that are already open
-  const openSettings =
-    (closeSheet: () => void) =>
-    (focus: SettingsFocus = "page") => {
-      if (settings.open) return;
-      toggleSettings(closeSheet)({ from: "setup", focus });
     };
 
   // `PgKeybind` reads Meta as Ctrl, so this is ⌘, on a Mac and Ctrl+,
@@ -328,9 +318,8 @@ const FlowFrame = () => {
                 }
                 setup={
                   <SetupList
-                    folded={menuPage}
+                    defaultFolded={menuPage}
                     onConnectAssistant={() => openConnectDialog("setup")}
-                    onChooseNetwork={() => openSettings(closeSheet)("network")}
                   />
                 }
               />
@@ -398,11 +387,7 @@ const FlowFrame = () => {
       </div>
 
       {settings.open && (
-        <SettingsPage
-          focus={settings.focus}
-          onClose={closeSettings}
-          onChooseNetwork={markNetworkChosen}
-        />
+        <SettingsPage focus={settings.focus} onClose={closeSettings} />
       )}
 
       <ModalHost />
