@@ -164,7 +164,7 @@
     "test": "yarn test-types && yarn test-unit && yarn build:bundle",
     "test-types": "tsc --noEmit",
     "test-unit": "vitest run",
-    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\" \"src/shared/**/*.test.mjs\"",
+    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\" \"src/entities/**/model/**/*.test.mjs\" \"src/shared/**/*.test.mjs\"",
     "db-migrate": "dbmate --no-dump-schema up",
     "db-rollback": "dbmate --no-dump-schema down",
     "db-status": "dbmate status",
