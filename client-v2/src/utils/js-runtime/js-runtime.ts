@@ -23,7 +23,10 @@ interface ExecuteParams {
   isTest: boolean;
 }
 
-/** The globals `mocha.setup({ ui: "bdd" })` defines, handed to test code */
+/**
+ * The globals `mocha.setup({ ui: "bdd" })` defines (mocha 10), handed to test
+ * code
+ */
 const BDD_GLOBALS = [
   "after",
   "afterEach",
@@ -281,7 +284,7 @@ export class PgJsRuntime {
       // object (see `mocha.d.ts` for why they are not typed as globals)
       const bdd = globalThis as unknown as Record<
         typeof BDD_GLOBALS[number],
-        object | undefined
+        Function | undefined
       >;
 
       // Setup mocha
@@ -302,7 +305,15 @@ export class PgJsRuntime {
 
       // Set mocha globals
       globals.push(
-        ...BDD_GLOBALS.map((name): [string, object] => [name, bdd[name]!]),
+        ...BDD_GLOBALS.map((name): [string, object] => {
+          // Named here, rather than as "describe is not a function" in the
+          // user's own test
+          const fn = bdd[name];
+          if (typeof fn !== "function") {
+            throw new Error(`mocha.setup did not define \`${name}\``);
+          }
+          return [name, fn];
+        }),
         ["_run", mocha.run]
       );
     } else {

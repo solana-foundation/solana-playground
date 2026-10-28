@@ -10,7 +10,7 @@ import type { PgFs as RealPgFs } from "../utils/explorer/fs";
  * that for every test file; no test needs its own `vi.mock` for it.
  *
  * The members it provides are checked against the real ones' signatures
- * (`satisfies` below), and every path goes through
+ * (`checkedAs` below), and every path goes through
  * `PgExplorer.convertToFullPath` as the real one's does, so a relative path
  * lands under the open workspace. The real filesystem round trip is covered
  * by the browser tests in `e2e/`.
@@ -37,20 +37,25 @@ export const mockFsModule = () => {
       path
     );
 
+  /** A filesystem error carrying lightning-fs's `code`, which callers branch on */
+  const fsError = (code: "ENOENT" | "ENOTEMPTY", path: string) =>
+    Object.assign(new Error(`${code}: ${path}`), { code });
+
   /** Whether `key` is `path` itself or lies beneath it */
   const isUnder = (key: string, path: string) =>
     key === path || key.startsWith(path + "/");
 
   /**
-   * `satisfies`, which prettier 2.7 cannot parse yet: checks the mock against
-   * `T` and keeps the mock's own type, `__files` included
+   * The `satisfies` operator, which prettier 2.7 cannot parse: checks the mock
+   * against `T` and keeps the mock's own type, `__files` included. Replace it
+   * with the operator once prettier is upgraded.
    */
-  const satisfies =
+  const checkedAs =
     <T>() =>
     <U extends T>(value: U) =>
       value;
 
-  const PgFs = satisfies<
+  const PgFs = checkedAs<
     Pick<
       typeof RealPgFs,
       | "events"
@@ -99,7 +104,7 @@ export const mockFsModule = () => {
     async readToString(path: string) {
       path = await full(path);
       const content = files.get(path);
-      if (content === undefined) throw new Error(`ENOENT: ${path}`);
+      if (content === undefined) throw fsError("ENOENT", path);
       return content;
     },
 
@@ -153,7 +158,7 @@ export const mockFsModule = () => {
         key.startsWith(dir(path) + "/")
       );
       if (!isDirectory && !files.has(path)) {
-        throw new Error(`ENOENT: ${path}`);
+        throw fsError("ENOENT", path);
       }
       return {
         type: isDirectory ? "dir" : "file",
@@ -179,7 +184,7 @@ export const mockFsModule = () => {
       path = dir(await full(path));
       const under = [...files.keys()].filter((key) => isUnder(key, path));
       if (under.length && !opts?.recursive) {
-        throw new Error(`ENOTEMPTY: ${path}`);
+        throw fsError("ENOTEMPTY", path);
       }
       for (const key of under) files.delete(key);
     },
@@ -197,7 +202,7 @@ export const mockFsModule = () => {
       );
       // Matches the real thing: a directory that does not exist throws rather
       // than reading as empty, which is what `threadIds` relies on
-      if (!names.size) throw new Error(`ENOENT: ${path}`);
+      if (!names.size) throw fsError("ENOENT", path);
       return [...names];
     },
 

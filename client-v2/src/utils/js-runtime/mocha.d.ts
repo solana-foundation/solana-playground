@@ -1,14 +1,17 @@
 // The part of mocha's browser build that `js-runtime.ts` uses, imported as
-// "mocha/browser-entry", the file webpack picks for "mocha" anyway. That path
-// has no types of its own, so this declaration applies and `@types/mocha` stays
-// out of the program: it declares `describe`, `it` and the hooks as globals of
-// any program that imports "mocha", and its `it` (no `each`) shadowed vitest's
-// in the tests. The package stays installed because
-// `scripts/generate-packages.mjs` ships its types to the editor for user test
-// programs. The BDD functions are read off `globalThis` instead, where
-// `mocha.setup` puts them.
+// "mocha/browser-entry" (here and in the generated `package.ts`), the file
+// webpack picks for "mocha" anyway. That path has no types of its own, so this
+// declaration applies and `@types/mocha` stays out of the program: it declares
+// `describe`, `it` and the hooks as globals of any program that imports
+// "mocha", and its `it` (no `each`) shadowed vitest's in the tests. The package
+// stays installed because `scripts/generate-packages.mjs` ships its types to
+// the editor for user test programs. The BDD functions are read off
+// `globalThis` instead, where `mocha.setup` puts them.
 declare module "mocha/browser-entry" {
-  /** `"init"` once set up, `"running"` while a run is in progress */
+  /**
+   * `"running"` during a run; `"init"` before one and again after it ends,
+   * since `cleanReferencesAfterRun` is off (`js-runtime.ts` polls for that)
+   */
   export const _state: string;
   export const suite: { suites: unknown[]; tests: unknown[] };
   export function setup(options: {

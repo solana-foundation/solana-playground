@@ -24,6 +24,30 @@ describe("the PgFs mock", () => {
     expect(await PgFs.exists("/ws/src")).toBe(true);
   });
 
+  it.each([
+    [
+      "rename",
+      async () => {
+        await PgFs.rename("src", "lib");
+        return [...files().keys()];
+      },
+      ["/ws/lib/main.rs"],
+    ],
+    ["readDir", () => PgFs.readDir("src"), ["main.rs"]],
+    [
+      "getMetadata",
+      async () => (await PgFs.getMetadata("src")).isDirectory(),
+      true,
+    ],
+  ])("resolves %s's paths the way PgFs does", async (_, run, expected) => {
+    vi.spyOn(PgExplorer, "convertToFullPath").mockImplementation(
+      (path: string) => (path.startsWith("/") ? path : `/ws/${path}`)
+    );
+    files().set("/ws/src/main.rs", "fn main() {}");
+
+    expect(await run()).toEqual(expected);
+  });
+
   it("removes a directory, not its namesake siblings", async () => {
     files().set("/a/b/one", "1");
     files().set("/a/bc/two", "2");
@@ -36,7 +60,18 @@ describe("the PgFs mock", () => {
   it("refuses to remove a directory that is not empty unless recursive", async () => {
     files().set("/a/b/one", "1");
 
-    await expect(PgFs.removeDir("/a/b")).rejects.toThrow("ENOTEMPTY");
+    await expect(PgFs.removeDir("/a/b")).rejects.toMatchObject({
+      code: "ENOTEMPTY",
+    });
     expect(files().has("/a/b/one")).toBe(true);
+  });
+
+  it("fails a missing file with ENOENT, as PgFs.exists expects", async () => {
+    await expect(PgFs.readToString("/nowhere")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(PgFs.getMetadata("/nowhere")).rejects.toMatchObject({
+      code: "ENOENT",
+    });
   });
 });

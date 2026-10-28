@@ -35,8 +35,9 @@ test files only" takes two programs, one of which leaves the test files out.
 `vitest/globals`: it is the file the editor, the ESLint import resolver
 (`eslint-layers.js`) and the dev server's type checker load, and an editor
 opens a test file against the nearest `tsconfig.json` that includes it.
-`tsconfig.app.json` extends it, excludes the test files (`**/*.test.*`,
-`**/*.spec.*`, `**/__tests__/**`, `src/setupTests.ts`, `src/test-utils/**`)
+`tsconfig.app.json` extends it, excludes the test code (`src/**/*.test.*`,
+`src/**/*.spec.*`, `src/**/__tests__/**`, `src/setupTests.ts`,
+`src/test-utils/**`)
 and sets `types` without `vitest/globals`. `test-types` runs
 `tsc --noEmit && tsc --noEmit -p tsconfig.app.json`; the second fails on a
 `vi` or `expect` in production code. In-source blocks live in non-test files
@@ -63,7 +64,9 @@ so nothing else loads `@types/mocha` into either program. webpack and vitest
 resolve modules without `paths`, so the runtime import is untouched. The BDD
 functions `js-runtime.ts` hands to user code are read off `globalThis` after
 `mocha.setup()`, typed by a local list of their names, instead of as ambient
-globals: the same values from the same place.
+globals: the same values from the same place. A name `mocha.setup` left
+undefined fails the run naming it, where the old free identifier threw a
+`ReferenceError`.
 
 Alternative: remove `@types/mocha` and type the import with an ambient
 `declare module`. Tried first and rejected: it breaks `yarn generate`, and an
@@ -82,11 +85,12 @@ real one gets a fake of its own.
 real members it provides, plus the test-only `__files`, with `PgFs` imported as
 a type so the check does not load it. The keyword `satisfies` would do it, but
 prettier 2.7.1 cannot parse it, so a two-line `satisfies<T>()(value)` helper
-does the same check and keeps the mock's own type. The drift the check reports
+(`checkedAs`) does the same check and keeps the mock's own type. The drift the check reports
 is fixed in the mock, and so is the drift no signature shows: paths resolve
 through `PgExplorer.convertToFullPath` (imported on call, to avoid a cycle),
-and `removeDir` refuses a non-empty directory unless `recursive`, and no
-longer removes a directory's namesake siblings.
+`removeDir` refuses a non-empty directory unless `recursive` and no longer
+removes a directory's namesake siblings, and its errors carry lightning-fs's
+`code` (`ENOENT`, `ENOTEMPTY`), which `PgFs.exists` branches on.
 
 ## Risks / Trade-offs
 
