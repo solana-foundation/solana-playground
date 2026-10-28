@@ -138,8 +138,10 @@ export class PgServer {
       : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
     const requestUrl = PgCommon.joinPaths(serverUrl, path);
+    let answered = false;
     try {
       const response = await fetch(requestUrl, requestInit);
+      answered = true;
       if (!response.ok) {
         const message = await response.text();
         throw new Error(message);
@@ -147,7 +149,22 @@ export class PgServer {
 
       return response;
     } catch (e: any) {
-      throw new Error(`Server request failed (${requestUrl}): ${e?.message}`);
+      throw new PgServerRequestError(
+        `Server request failed (${requestUrl}): ${e?.message}`,
+        answered
+      );
     }
+  }
+}
+
+/**
+ * A request to the Playground server that failed. `answered` tells a server
+ * that never replied (Spec 08's BUILD-04, "did not answer") from one that
+ * replied with an error.
+ */
+export class PgServerRequestError extends Error {
+  constructor(message: string, readonly answered: boolean) {
+    super(message);
+    this.name = "PgServerRequestError";
   }
 }

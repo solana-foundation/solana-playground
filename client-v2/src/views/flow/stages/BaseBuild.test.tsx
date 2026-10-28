@@ -40,6 +40,7 @@ const props = (
   surface,
   building,
   host: "api.solpg.io",
+  serverUrl: "https://api.solpg.io",
   ms: 2900,
   onBuild: vi.fn(() => Promise.resolve()),
   onContinue: vi.fn(),
@@ -101,16 +102,47 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  it("names the build server when the compiler was never reached", () => {
-    const p = props({ kind: "unreached" });
+  it("says a build that never reached the compiler did not start (BUILD-04)", () => {
+    const p = props({
+      kind: "unreached",
+      failure: { kind: "no-answer", message: "Failed to fetch" },
+    });
     render(<BaseBuild {...p} />);
 
-    expect(screen.getByRole("heading", { name: "Build failed" })).toBeTruthy();
     expect(
-      screen.getByText(/could not be reached: api\.solpg\.io/)
+      screen.getByRole("heading", { name: "Build did not start" })
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry build" }));
+    expect(
+      screen.getByText(
+        "The Playground server did not answer. Your code is unchanged."
+      )
+    ).toBeTruthy();
+    // The server and the raw error wait behind Show details
+    expect(screen.queryByText(/api\.solpg\.io/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(
+      screen.getByText(/Build server: https:\/\/api\.solpg\.io/)
+    ).toBeTruthy();
+    expect(screen.getByText(/Failed to fetch/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(p.onBuild).toHaveBeenCalled();
+  });
+
+  // A server that replied with an error, or any other failure: not BUILD-04
+  it("says it could not build when the server did answer (ANY-00)", () => {
+    const p = props({
+      kind: "unreached",
+      failure: { kind: "other", message: "Server request failed: boom" },
+    });
+    render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Could not build" })
+    ).toBeTruthy();
+    expect(screen.getByText("The full log has the details.")).toBeTruthy();
+    expect(screen.queryByText(/did not answer/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText(/Server request failed: boom/)).toBeTruthy();
   });
 
   it("says a failed build happened before the reload", () => {

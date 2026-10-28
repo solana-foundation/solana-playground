@@ -1463,7 +1463,7 @@ test("client-v2-layout: A cluster that is down", async ({
   await page.reload();
 
   const row = nav(page).getByRole("button", {
-    name: "Change cluster, currently devnet, down",
+    name: "Change cluster, currently devnet, not answering",
   });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await account(page).click();
@@ -1517,7 +1517,7 @@ test("a cluster that does not answer is down", async ({ seededPage: page }) => {
 
   await expect(
     nav(page).getByRole("button", {
-      name: "Change cluster, currently devnet, down",
+      name: "Change cluster, currently devnet, not answering",
     })
   ).toBeVisible({ timeout: 15_000 });
 });
@@ -1540,7 +1540,7 @@ test("a stalled cluster that moves again is not down", async ({
   });
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, down",
+    "Change cluster, currently devnet, not answering",
     { timeout: 15_000 }
   );
 
@@ -1557,7 +1557,7 @@ test("a cluster that answers again is not down", async ({
   await refuseCluster(page);
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, down",
+    "Change cluster, currently devnet, not answering",
     { timeout: 15_000 }
   );
 

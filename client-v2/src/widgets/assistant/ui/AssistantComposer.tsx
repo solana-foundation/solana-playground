@@ -81,6 +81,7 @@ const PLACEHOLDERS: Record<TurnPhase, string> = {
   running: "Working…",
   awaiting: "Waiting on your decision…",
   stopping: "Stopping…",
+  waiting: "Waiting for the model…",
 };
 
 /**

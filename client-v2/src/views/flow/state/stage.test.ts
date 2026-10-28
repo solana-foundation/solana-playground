@@ -53,6 +53,7 @@ describe("PgFlow.reduce", () => {
       buildErrorCount: 0,
       buildMs: null,
       buildStartedAt: null,
+      buildFailure: null,
     });
   });
 
@@ -105,6 +106,28 @@ describe("PgFlow.reduce", () => {
     });
     expect(s.build).toBe("done");
     expect(s.stage).toBe("build");
+  });
+
+  it("a build that settles clears the last one's failure", () => {
+    const failed = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "build-finish",
+      failed: true,
+      errorCount: 0,
+      ms: 1,
+      failure: { kind: "other", message: "Seahorse compile failed" },
+    });
+    expect(failed.buildFailure).toEqual({
+      kind: "other",
+      message: "Seahorse compile failed",
+    });
+
+    const s = PgFlow.reduce(failed, {
+      type: "build-finish",
+      failed: false,
+      errorCount: 0,
+      ms: 1,
+    });
+    expect(s.buildFailure).toBeNull();
   });
 
   it("successful build does not pull the user away from another stage", () => {
@@ -338,9 +361,19 @@ describe("PgFlow.init wiring", () => {
 
     // The build server was unreachable: the `build` command rejects and
     // `PgBuildOutput` never received a value for this run.
-    buildFinishCallback!({ err: new Error("Failed to fetch") });
+    // As `PgServer` throws it for a server that never replied
+    buildFinishCallback!({
+      err: Object.assign(new Error("Server request failed (x): boom"), {
+        answered: false,
+      }),
+    });
     expect(PgFlow.state.build).toBe("failed");
     expect(PgFlow.state.buildErrorCount).toBe(0);
+    // Kept for Build's surface and its "Show details"
+    expect(PgFlow.state.buildFailure).toEqual({
+      kind: "no-answer",
+      message: "Server request failed (x): boom",
+    });
 
     sub.dispose();
   });

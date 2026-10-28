@@ -5,6 +5,7 @@ import { PgAssistant } from "../store";
 import { MAX_RESUMES, MAX_STEPS } from "../config";
 import { PgSession } from "../../../../features/auth";
 import { MODEL_PROVIDER_PROFILES } from "./model-providers";
+import { ModelBusyError } from "./model-busy";
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
@@ -112,7 +113,13 @@ export const createProvider = (
         if (e.kind === "refusal") {
           throw new Error(`${e.message} Rephrase it, or switch backends.`);
         }
+        if (e.kind === "busy") {
+          throw new ModelBusyError(e.retryAfter, e.message, { cause: e });
+        }
+        const own = profile.ownRefusal?.(e);
+        if (own) throw new Error(own, { cause: e });
         const refusal = profile.signedOutRefusal?.(e);
+        // Spec 08's words, never the status or the server's text
         if (!refusal) throw e;
         // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
         void PgSession.refresh();
