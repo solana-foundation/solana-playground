@@ -360,10 +360,11 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   a gap the review keeps missing becomes a Linear issue too, closed later
   through agent rules or tooling. The PR description carries the line
   `sx:review-pr (full + default) @ <sha>: <n> critical open`, where `<sha>`
-  is the head the last run read; update it after each re-run. A PR into a
+  is the head both runs read; update it after each re-run. A PR into a
   `scope/*` branch or `new-face-polish-2` merges without a human approval
-  once it has no conflict, CI is green and that line shows 0 critical open;
-  without the line it does not merge.
+  once it has no conflict, CI is green and the line names the PR's current
+  head with 0 critical open. A missing or stale line, or any critical open,
+  holds the merge; a PR into any other base still waits for a human approval.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
