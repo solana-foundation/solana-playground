@@ -42,6 +42,8 @@ vi.mock("../../../utils/explorer/explorer", () => ({
     onDidRenameWorkspace: () => ({ dispose: () => {} }),
   },
 }));
+// No tutorial on screen: the panel is named after the project
+vi.mock("@/entities/tutorial", () => ({ useTutorialBeforeStart: () => null }));
 
 import { resetDefaultBackendProbe } from "../model/default-backend";
 import { Assistant } from "./Assistant";

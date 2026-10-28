@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useState } from "react";
+import { FC, useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +8,7 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 import { PgCommand, PgView, PgWallet } from "../../utils";
+import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Settings from "./Settings";
 
 // The utils barrel needs build-time globals the unit runner does not define.
@@ -24,6 +25,8 @@ vi.mock("../../utils", () => ({
       publicKey: { toBase58: () => "address" },
     },
     standardWallets: [],
+    accounts: [] as { name: string }[],
+    currentIndex: -1,
     import: vi.fn(),
     export: vi.fn(),
   },
@@ -86,7 +89,26 @@ afterEach(() => {
   told.length = 0;
   airdropHook.airdropCondition = false;
   PgWallet.standardWallets.length = 0;
+  PgWallet.accounts.length = 0;
 });
+
+/** What `PgWallet.import` does: append and select, or select an existing one */
+const importsAs = (name: string, address: string) =>
+  vi.mocked(PgWallet.import).mockImplementationOnce(async () => {
+    const at = PgWallet.accounts.findIndex((account) => account.name === name);
+    if (at === -1) PgWallet.accounts.push({ name } as never);
+    PgWallet.currentIndex = at === -1 ? PgWallet.accounts.length - 1 : at;
+    return {
+      keypair: { publicKey: { toBase58: () => address } },
+      added: at === -1,
+    } as never;
+  });
+
+/** The text of the toast `PgView.setToast` was given */
+const toastText = (call: number) => {
+  const Toast = vi.mocked(PgView.setToast).mock.calls[call][0] as FC;
+  return render(<Toast />).container.textContent;
+};
 
 /** What `Wallet.tsx` does: the rename input appears once `showRename` ran */
 const Host = () => {
@@ -195,6 +217,78 @@ describe("wallet Settings menu", () => {
       );
     }
   );
+
+  it("says so when the imported file is not a keypair", async () => {
+    vi.mocked(PgWallet.import).mockRejectedValueOnce(new KeypairFileError());
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(PgView.setToast).mock.calls[0][1]).toEqual({
+      options: { name: "wallet-import-not-keypair" },
+    });
+    expect(told).toEqual([]);
+  });
+
+  it("says which wallet Import added", async () => {
+    PgWallet.accounts.push({ name: "Wallet 1" } as never);
+    importsAs("Wallet 2", "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU");
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(PgView.setToast).mock.calls[0][1]).toEqual({
+      options: { name: "wallet-imported" },
+    });
+    expect(toastText(0)).toBe("Imported 7xKX…gAsU as Wallet 2.");
+  });
+
+  it("says Import switched to a wallet that was already there", async () => {
+    PgWallet.accounts.push({ name: "Wallet 1" } as never);
+    importsAs("Wallet 1", "9ohTQmMgo8uYEG8DgZn2bTt1Km6WGnBUa7UNAqC3odC");
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() => expect(PgView.setToast).toHaveBeenCalledTimes(1));
+    expect(toastText(0)).toBe(
+      "Wallet 1 already holds that keypair, so it is now the current wallet."
+    );
+  });
+
+  it("says nothing when the picker is closed", async () => {
+    vi.mocked(PgWallet.import).mockResolvedValueOnce(undefined);
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() => expect(PgWallet.import).toHaveBeenCalled());
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(PgView.setToast).not.toHaveBeenCalled();
+    expect(told).toEqual([]);
+  });
+
+  it("tells the user when Import fails for another reason", async () => {
+    const failure = new Error("could not read the file");
+    vi.mocked(PgWallet.import).mockRejectedValueOnce(failure);
+    render(<Host />);
+    await openMenu();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /Import/ }));
+
+    await waitFor(() =>
+      expect(told).toEqual([
+        { action: "import the wallet", error: failure, shown: false },
+      ])
+    );
+    expect(PgView.setToast).not.toHaveBeenCalled();
+  });
 
   // `PgSession.signInState` holds a known failure and the account row shows
   // it: logged as a failed click, never toasted a second time

@@ -4,7 +4,6 @@ import {
   Download,
   EllipsisVertical,
   Folder,
-  GraduationCap,
   Pencil,
   Pin,
   PinOff,
@@ -37,8 +36,8 @@ import type { ProjectEntry } from "../model/project-entries";
 type Via = "click" | "key";
 
 export interface BaseProjectListProps {
+  /** Projects and started lessons, in one list as the prototype draws it */
   projects: ProjectEntry[];
-  lessons: ProjectEntry[];
   /** The open workspace's name, or `null` when none is open */
   current: string | null;
   /** The entry whose row is the rename field, or `null` */
@@ -79,18 +78,14 @@ const pinAction = (entry: ProjectEntry): ProjectAction =>
   entry.pinned ? "unpin" : "pin";
 
 /**
- * The navigation's projects and lessons, as the prototype draws them: a row
- * per workspace, the open one marked, pinned ones with a pin, and a menu of
- * its actions whose letters work while it is open. Draws only what it is
+ * The navigation's projects, lessons among them, as the prototype draws
+ * them: a row per workspace with the folder glyph, the open one marked,
+ * pinned ones with a pin, and a menu of its actions whose letters work while
+ * it is open. A lesson differs only in its menu. Draws only what it is
  * given; `ProjectList` connects it.
  */
 const BaseProjectList = (props: BaseProjectListProps) => (
-  <>
-    <Group label="Projects" entries={props.projects} list={props} />
-    {props.lessons.length > 0 && (
-      <Group label="Lessons" entries={props.lessons} list={props} />
-    )}
-  </>
+  <Group label="Projects" entries={props.projects} list={props} />
 );
 
 export default BaseProjectList;
@@ -112,7 +107,8 @@ const Group = ({
       {/* The prototype's section heading: small, grey, sentence case */}
       <SidebarGroupLabel
         id={labelId}
-        className="mb-1 h-4 text-xs font-normal text-subtle"
+        // On a phone, the label type, lined up with the 52 px rows' text
+        className="mb-1 h-4 text-xs font-normal text-subtle max-md:mb-1.5 max-md:px-3 max-md:text-caption max-md:font-label"
       >
         {label}
       </SidebarGroupLabel>
@@ -143,7 +139,6 @@ const Row = ({
   // focus back to its trigger on close would blur the field at once
   const keepFocus = useRef(false);
   const isCurrent = entry.name === list.current;
-  const Icon = entry.isLesson ? GraduationCap : Folder;
 
   const run = (action: ProjectAction, via: Via) => {
     if (!allowed(entry, action)) return;
@@ -171,23 +166,25 @@ const Row = ({
         aria-current={isCurrent ? "page" : undefined}
         onClick={() => list.onAction(entry, "open", "click")}
       >
-        <Icon aria-hidden className={isCurrent ? "text-primary" : undefined} />
+        <Folder
+          aria-hidden
+          className={isCurrent ? "text-primary" : undefined}
+        />
         <span>{entry.name}</span>
       </SidebarMenuButton>
-      {(entry.progress || entry.pinned) && (
+      {entry.pinned && (
         <span className="pointer-events-none absolute top-1.5 right-7 flex items-center gap-1 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden">
-          {entry.progress && <span>{entry.progress}</span>}
-          {entry.pinned && (
-            <span title="Pinned">
-              <Pin aria-hidden className="size-3" />
-            </span>
-          )}
+          <span title="Pinned">
+            <Pin aria-hidden className="size-3" />
+          </span>
         </span>
       )}
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger asChild>
+          {/* The open project's stays in view, as the prototype draws it;
+              the others show on hover */}
           <SidebarMenuAction
-            showOnHover
+            showOnHover={!isCurrent}
             aria-label={`Actions for ${entry.name}`}
           >
             <EllipsisVertical />

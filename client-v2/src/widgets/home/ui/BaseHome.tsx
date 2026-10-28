@@ -1,6 +1,5 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Code, GraduationCap, Plus } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
@@ -14,8 +13,8 @@ import {
   ActionCardTitle,
 } from "@/shared/ui/action-card";
 import { AsyncButton } from "@/shared/ui/async-button";
+import { BrandIcon } from "@/shared/ui/brand-icon";
 import { Button } from "@/shared/ui/button";
-import { levelVariant, Tag } from "@/shared/ui/tag";
 import type { TutorialData } from "@/utils";
 import type { PageTile } from "../model/telemetry";
 import HomeComposer from "./HomeComposer";
@@ -77,8 +76,11 @@ const BaseHome = ({
 
       <div className="grid grid-cols-3 gap-3">
         <ActionCard orientation="vertical">
-          <ActionCardMedia>
-            <Plus aria-hidden="true" />
+          {/* Each tile: the icon alone above the title, as the prototype's
+              tiles draw it, and the BrandIcon the nav draws for the same
+              destination */}
+          <ActionCardMedia variant="glyph">
+            <BrandIcon name="new" />
           </ActionCardMedia>
           <ActionCardContent>
             <ActionCardTitle>
@@ -102,8 +104,8 @@ const BaseHome = ({
           </ActionCardContent>
         </ActionCard>
         <ActionCard orientation="vertical">
-          <ActionCardMedia>
-            <GraduationCap aria-hidden="true" />
+          <ActionCardMedia variant="glyph">
+            <BrandIcon name="tutorial" />
           </ActionCardMedia>
           <ActionCardContent>
             <ActionCardTitle>
@@ -119,8 +121,8 @@ const BaseHome = ({
           </ActionCardContent>
         </ActionCard>
         <ActionCard orientation="vertical">
-          <ActionCardMedia>
-            <Code aria-hidden="true" />
+          <ActionCardMedia variant="glyph">
+            <BrandIcon name="programs" />
           </ActionCardMedia>
           <ActionCardContent>
             <ActionCardTitle>
@@ -154,9 +156,9 @@ const BaseHome = ({
               <img src={t.thumbnail} alt="" />
             </ActionCardMedia>
             <ActionCardContent>
-              <ActionCardEyebrow className="flex items-center gap-1.5">
-                <Tag variant={levelVariant(t.level)}>{t.level}</Tag>
-                {t.framework ? <Tag>{t.framework}</Tag> : null}
+              {/* One plain line, as the catalog's cards write it */}
+              <ActionCardEyebrow>
+                {[t.level, t.framework].filter(Boolean).join(" · ")}
               </ActionCardEyebrow>
               <ActionCardTitle>
                 {/* The whole card opens the tutorial, as the catalog's cards

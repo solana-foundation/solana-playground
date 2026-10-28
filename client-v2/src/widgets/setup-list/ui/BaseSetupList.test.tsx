@@ -97,3 +97,19 @@ it("says a step is done in words, not only with the tick", () => {
     "Connect a wallet",
   ]);
 });
+
+it("starts folded to its one line when told to, as on a phone's menu", async () => {
+  render(
+    <BaseSetupList
+      steps={TWO_DONE}
+      onPick={vi.fn()}
+      onDismiss={vi.fn()}
+      folded
+    />
+  );
+  const title = screen.getByRole("button", { name: /^Get set up/ });
+  expect(title.getAttribute("aria-expanded")).toBe("false");
+  expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
+  await userEvent.click(title);
+  expect(screen.getByRole("button", { name: "Connect a wallet" })).toBeTruthy();
+});

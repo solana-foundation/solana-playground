@@ -86,12 +86,12 @@ const Harness = (choice: Choice) => {
 const pagerElement = (choice: Choice = {}) => <Harness {...choice} />;
 const renderPager = (choice: Choice = {}) => render(pagerElement(choice));
 
-it("has three pages, the work page in view, with a bar each", () => {
+it("has three pages, the work page in view, a bar on the work and the preview", () => {
   renderPager({ page: "work" });
   for (const name of ["Navigation", "Work", "Preview"]) {
     expect(screen.getByRole("region", { name })).toBeTruthy();
   }
-  expect(screen.getAllByTestId("phone-bar")).toHaveLength(3);
+  expect(screen.getAllByTestId("phone-bar")).toHaveLength(2);
   expect(screen.getByTestId("phone-pager").scrollLeft).toBe(390);
 });
 
@@ -346,11 +346,18 @@ it("keeps the console on the preview page", () => {
   ).toBeTruthy();
 });
 
-it("closes the menu back to the work page", async () => {
-  const onGo = vi.fn();
-  renderPager({ page: "menu", onGo });
-  await userEvent.click(screen.getByRole("button", { name: "Close the menu" }));
-  expect(onGo).toHaveBeenLastCalledWith("work");
+it("leaves the menu page's head to the navigation, which draws its own close", () => {
+  renderPager({ page: "menu" });
+  const menu = screen.getByRole("region", { name: "Navigation" });
+  expect(within(menu).queryByTestId("phone-bar")).toBeNull();
+  expect(within(menu).getByText("menu slot")).toBeTruthy();
+});
+
+it("links the docs from the code's head, beside the file picker", () => {
+  renderPager({ view: "code" });
+  const link = screen.getByRole("link", { name: "Documentation" });
+  expect(link.getAttribute("href")).toBe("https://solana.com/docs");
+  expect(link.getAttribute("target")).toBe("_blank");
 });
 
 describe("with Home", () => {
@@ -368,7 +375,7 @@ describe("with Home", () => {
       within(bar).queryByRole("button", { name: "Preview the build" })
     ).toBeNull();
     expect(screen.queryByRole("region", { name: "Preview" })).toBeNull();
-    expect(screen.getAllByTestId("phone-bar")).toHaveLength(2);
+    expect(screen.getAllByTestId("phone-bar")).toHaveLength(1);
     expect(within(work).queryByText("assistant slot")).toBeNull();
     expect(screen.queryByTestId("stage-probe")).toBeNull();
     expect(screen.queryByTestId("console-probe")).toBeNull();

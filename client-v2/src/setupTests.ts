@@ -18,6 +18,28 @@ if (!globalThis.TextEncoder) {
   Object.assign(globalThis, { TextEncoder, TextDecoder });
 }
 
+// Same again for `matchMedia`, which `useViewport` reads: absent, every
+// component that asks for the width class (a dialog's frame, the tab row)
+// failed to render. Nothing matches, so the window reads as wide; a test of
+// another width stubs its own (`vi.stubGlobal`). Node-environment specs have
+// no `window` at all.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  Object.defineProperty(window, "matchMedia", {
+    value: (media: string) => ({
+      matches: false,
+      media,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }),
+    configurable: true,
+    writable: true,
+  });
+}
+
 // jsdom has no IndexedDB, and `PgFs` constructs a lightning-fs store the
 // moment it is imported -- so any module that transitively reaches it fails to
 // load here, not just the ones that use it. Since chat threads now live in

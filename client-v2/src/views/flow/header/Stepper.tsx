@@ -49,6 +49,12 @@ interface StepperProps {
    * (the frame's stage tabs, design.md "Frame chrome (5.25)")
    */
   fill?: boolean;
+  /**
+   * The phone's preview bar, the prototype's `PreviewRail`: Write is the
+   * code's own page there, so it has no tab, and the other three fit in full,
+   * so the labels never fold
+   */
+  phone?: boolean;
 }
 
 /** `upcoming` and `active` both mean "nothing to report": the thumb marks the current stage */
@@ -65,7 +71,13 @@ const DS_STATUS: Record<StageStatus, StepperStatus> = {
  * system's stepper. Each stage's status is carried by glyph shape as well as
  * color, so the sequence reads correctly without color vision.
  */
-const Stepper: FC<StepperProps> = ({ state, onSelect, target, fill }) => {
+const Stepper: FC<StepperProps> = ({
+  state,
+  onSelect,
+  target,
+  fill,
+  phone,
+}) => {
   // The root fills its row, so what it measures is the room the row
   // gives, not the list's own width. Folding the labels shrinks the list but
   // not the root, so the fold cannot flip itself back. Until the first
@@ -87,7 +99,8 @@ const Stepper: FC<StepperProps> = ({ state, onSelect, target, fill }) => {
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const compact = room !== null && room < STEPPER_FULL_WIDTH_PX;
+  const compact = !phone && room !== null && room < STEPPER_FULL_WIDTH_PX;
+  const stages = phone ? STAGES.filter((stage) => stage !== "write") : STAGES;
   return (
     <DsStepper
       ref={ref}
@@ -95,8 +108,11 @@ const Stepper: FC<StepperProps> = ({ state, onSelect, target, fill }) => {
       value={state.stage}
       onValueChange={(v) => onSelect(v as Stage)}
     >
-      <StepperList compact={compact} className={fill ? "w-full" : undefined}>
-        {STAGES.map((stage) => {
+      <StepperList
+        compact={compact}
+        className={fill || phone ? "w-full" : undefined}
+      >
+        {stages.map((stage) => {
           const status = statusOf(state, stage);
           return (
             <StepperItem
@@ -105,6 +121,9 @@ const Stepper: FC<StepperProps> = ({ state, onSelect, target, fill }) => {
               status={DS_STATUS[status]}
               errors={stage === "build" ? state.buildErrorCount : undefined}
               target={stage === target}
+              className={
+                phone ? "h-12 flex-1 justify-center text-control" : undefined
+              }
               id={`flow-stage-tab-${stage}`}
               aria-controls={`flow-stage-panel-${stage}`}
               aria-label={`${LABEL[stage]}: ${status}${

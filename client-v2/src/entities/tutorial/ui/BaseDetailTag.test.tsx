@@ -15,7 +15,7 @@ it("marks an unknown level as an error", () => {
   expect(tagOf("Expert")?.getAttribute("data-variant")).toBe("error");
 });
 
-it("shows a framework's icon before its name, in neutral", () => {
+it("shows a framework's icon before its name, in a box rather than a tag", () => {
   render(
     <BaseDetailTag
       kind="framework"
@@ -24,18 +24,18 @@ it("shows a framework's icon before its name, in neutral", () => {
     />
   );
   const tag = tagOf("Anchor");
-  expect(tag?.getAttribute("data-variant")).toBe("neutral");
+  expect(tag?.getAttribute("data-slot")).toBe("detail");
   expect(tag?.firstElementChild).toBe(screen.getByTestId("icon"));
 });
 
-it("renders a plain neutral tag without an icon", () => {
+it("renders a plain box without an icon", () => {
   render(<BaseDetailTag kind="categories" label="NFT" />);
   const tag = tagOf("NFT");
-  expect(tag?.getAttribute("data-variant")).toBe("neutral");
+  expect(tag?.getAttribute("data-slot")).toBe("detail");
   expect(tag?.children.length).toBe(0);
 });
 
-it("lets a round icon override the design system's icon rounding", () => {
+it("takes a round icon's class from the caller", () => {
   render(
     <BaseDetailTag
       kind="framework"
@@ -44,7 +44,5 @@ it("lets a round icon override the design system's icon rounding", () => {
       className="[&>img]:rounded-full"
     />
   );
-  const classes = tagOf("Seahorse")?.className ?? "";
-  expect(classes).toContain("[&>img]:rounded-full");
-  expect(classes).not.toContain("[&>img]:rounded-sm");
+  expect(tagOf("Seahorse")?.className).toContain("[&>img]:rounded-full");
 });

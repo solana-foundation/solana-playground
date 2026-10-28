@@ -1,16 +1,11 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import {
-  CircleAlert,
-  CircleCheck,
-  CircleX,
-  Hammer,
-  History,
-} from "lucide-react";
+import { CircleAlert, CircleCheck, CircleX, History } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { BrandButton } from "@/shared/ui/brand-button";
+import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import {
   Collapsible,
@@ -39,7 +34,12 @@ import {
 import { errorMeta, msLabel, warningCount } from "./build-view";
 import type { BuildSurface } from "./build-surface";
 import type { DiagnosticView, FailedView } from "./build-view";
-import { STAGE_BODY, STAGE_FOOT, STAGE_FRAME } from "./stage-layout";
+import {
+  STAGE_BODY,
+  STAGE_FOOT,
+  STAGE_FRAME,
+  STAGE_REPORT,
+} from "./stage-layout";
 
 /** A Build surface with what it draws: the failed one carries its errors */
 export type BuildSurfaceView =
@@ -64,7 +64,11 @@ export interface BaseBuildProps {
   idlActions: ReactNode;
 }
 
-/** What every surface is made of; the action row comes last */
+/**
+ * What every surface is made of; the action row comes last. Centred, as the
+ * prototype's empty stage; `report` reads from the left instead, for a
+ * surface that lists the compiler's errors.
+ */
 const Surface = ({
   icon,
   title,
@@ -72,17 +76,19 @@ const Surface = ({
   description,
   children,
   actions,
+  report = false,
 }: {
-  icon: ReactNode;
+  icon?: ReactNode;
   title: string;
   meta?: string | null;
   description?: ReactNode;
   children?: ReactNode;
   actions: ReactNode;
+  report?: boolean;
 }) => (
   <div className={STAGE_FRAME}>
-    <StageEmpty className={STAGE_BODY}>
-      <StageEmptyMedia>{icon}</StageEmptyMedia>
+    <StageEmpty className={cn(STAGE_BODY, report && STAGE_REPORT)}>
+      {icon && <StageEmptyMedia>{icon}</StageEmptyMedia>}
       <StageEmptyTitle>{title}</StageEmptyTitle>
       {meta && <StageEmptyMeta>{meta}</StageEmptyMeta>}
       {description && (
@@ -119,9 +125,27 @@ const ContinueButton = ({ p }: { p: BaseBuildProps }) => (
   <BrandButton onClick={p.onContinue}>Continue to Deploy</BrandButton>
 );
 
+/**
+ * The first build: the prototype's brand pill with the play mark. A
+ * `BrandButton` rather than `AsyncButton`, which is a `Button` and has no
+ * brand look, so the busy state and the failure report are kept here.
+ */
+const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
+  <BrandButton
+    disabled={p.building}
+    aria-busy={p.building || undefined}
+    onClick={() => {
+      // Through `then`, so a synchronous throw is caught as well
+      Promise.resolve().then(p.onBuild).catch(reportButtonFailure("build"));
+    }}
+  >
+    {p.building ? "Building..." : "Build"}
+    {!p.building && <BrandButtonIcon />}
+  </BrandButton>
+);
+
 const Empty = (p: BaseBuildProps) => (
   <Surface
-    icon={<Hammer />}
     title={p.building ? "Building..." : "Nothing built yet"}
     description={
       // A run in flight names the server and warns about the wait. The
@@ -132,7 +156,7 @@ const Empty = (p: BaseBuildProps) => (
         ? `Compiling on ${p.host}. A first build there can take several minutes.`
         : "Build compiles your program on the server. Nothing leaves your browser except the source."
     }
-    actions={<BuildButton p={p} label="Build" />}
+    actions={<FirstBuildButton p={p} />}
   />
 );
 
@@ -280,6 +304,7 @@ const Failed = (p: BaseBuildProps & FailedView) => (
     title="Build failed"
     meta={errorMeta(p.errorCount, p.ms, p.host)}
     actions={<BuildButton p={p} label="Rebuild" variant="outline" />}
+    report
   >
     <div className="flex w-full flex-col gap-3.5">
       {p.diagnostics.map((view, i) => (

@@ -265,9 +265,9 @@ const startTutorial = async (page: Page, from: "home" | "navigation") => {
     await gallery.getByRole("button", { name: "Open Hello Anchor" }).click();
   }
 
-  // `exact` matters: the assistant panel has its own "Start" button, and
-  // Playwright's default name match is a case-insensitive substring
-  await page.getByRole("button", { name: "START", exact: true }).click();
+  // `exact` keeps the locator off any other name holding "Start", such as
+  // Connect a model's own Start while that dialog is open
+  await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 

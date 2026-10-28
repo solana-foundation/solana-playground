@@ -123,6 +123,17 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe("AssistantComposer, context chips", () => {
+  it("names the active file before the file count, as the prototype orders them", () => {
+    render(<Harness />);
+    // Each chip is its tooltip's trigger, which takes over its data-slot
+    const chips = Array.from(
+      document.querySelectorAll('[data-slot="composer-context"] > *')
+    ).map((chip) => chip.textContent);
+    expect(chips).toEqual(["lib.rs", "1 file"]);
+  });
+});
+
 describe("AssistantComposer, connected", () => {
   it("tunes to another model of the connected backend and keeps the thread", async () => {
     render(<Harness />);

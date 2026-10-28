@@ -98,6 +98,8 @@ const ConnectDialog = ({ preset }: ConnectDialogProps) => {
         <ModalFrame
           name="connect-model"
           title="Connect a model"
+          // One column, as the prototype's 27rem card holds it
+          size="narrow"
           buttonProps={{
             text: action.text,
             disabled: !action.ready,

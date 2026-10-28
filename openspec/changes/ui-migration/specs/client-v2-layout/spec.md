@@ -701,8 +701,9 @@ items.
 ### Requirement: The navigation lists the projects
 
 From 768 px wide, and on a phone's menu page, the navigation SHALL list the
-user's projects under "Projects" and their lessons under "Lessons", pinned
-ones first, with the open one marked. Each row's "Actions for <name>" SHALL
+user's projects under "Projects", started lessons among them with the same
+folder glyph and no step count (lesson-prototype-polish), pinned ones first,
+with the open one marked. Each row's "Actions for <name>" SHALL
 open a menu of Open (`O`), Pin or Unpin (`P`), Rename (`R`), Duplicate
 (`D`), Export as zip (`E`) and Delete (`⌫`); while it is open, the letter,
 or Backspace or Delete, SHALL run that item. A lesson's menu SHALL have no

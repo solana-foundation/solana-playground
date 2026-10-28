@@ -92,6 +92,30 @@ describe("Connect", () => {
     vi.restoreAllMocks();
   });
 
+  it("labels its fields in sentence case, as the prototype writes them", () => {
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: "anthropic" },
+    });
+
+    for (const label of ["Backend", "Model", "Effort", "API key"]) {
+      expect(screen.getByText(label, { exact: true })).toBeTruthy();
+    }
+    expect(screen.queryByText(/^(BACKEND|MODEL|EFFORT|API KEY)$/)).toBeNull();
+  });
+
+  it("labels an endpoint's base URL and optional key in sentence case", () => {
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: "openai" },
+    });
+
+    expect(screen.getByText("Base URL", { exact: true })).toBeTruthy();
+    expect(
+      screen.getByText("API key (optional)", { exact: true })
+    ).toBeTruthy();
+  });
+
   it("offers a signed-in user the default with Start", () => {
     renderConnect({ defaultBackend: "present" });
 
@@ -316,10 +340,54 @@ describe("Connect", () => {
     expect(action?.text).toBe("Switch");
   });
 
-  it("brings no title or way back of its own: the dialog has them", () => {
+  it("does not repeat the dialog's title or bring a way back", () => {
     renderConnect({ defaultBackend: "present" });
 
-    expect(screen.queryByRole("heading")).toBeNull();
+    expect(
+      screen.queryByRole("heading", { name: "Connect a model" })
+    ).toBeNull();
     expect(screen.queryByText("Back to chat")).toBeNull();
+  });
+
+  it("heads its lead with what the assistant is, as the prototype does", () => {
+    renderConnect({ defaultBackend: "absent" });
+
+    expect(
+      screen.getByRole("heading", {
+        name: "An assistant that can see your project",
+      })
+    ).toBeTruthy();
+  });
+
+  it("heads the form Switch backend over a connection", () => {
+    act(() => PgAssistant.connect(OWN));
+    renderConnect({ defaultBackend: "present" });
+
+    expect(
+      screen.getByRole("heading", { name: "Switch backend" })
+    ).toBeTruthy();
+  });
+
+  it("draws each backend as a card, its radio circle kept for the keyboard only", () => {
+    renderConnect({ defaultBackend: "absent" });
+
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio.classList.contains("opacity-0")).toBe(true);
+      expect(radio.classList.contains("size-full")).toBe(true);
+    }
+  });
+
+  it("names the model and the effort as people say them, on High by default", () => {
+    renderConnect({
+      defaultBackend: "absent",
+      preset: { provider: "anthropic" },
+    });
+
+    expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe(
+      "Opus 5.5"
+    );
+    expect(screen.getByRole("combobox", { name: "Effort" }).textContent).toBe(
+      "High"
+    );
   });
 });

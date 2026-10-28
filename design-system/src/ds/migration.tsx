@@ -49,7 +49,7 @@ const ONLY: Row[] = [
   { now: "ConsoleDrawer", next: "ConsoleDrawer", keep: "Folds by height so the terminal stays mounted. ⌘J.", state: "built" },
   { now: "SetupChecklist", next: "SetupList", keep: "The count in the title, dismiss on hover, the green tick.", state: "built" },
   { now: "ObjectiveBand", next: "ObjectiveBand", keep: "The gradient meter, back and on, the hint that escalates.", state: "built" },
-  { now: "LessonBar, on a phone", next: "ObjectiveBand's actions, at the foot", keep: "A 60 px frosted bar.", state: "planned" },
+  { now: "LessonBar, on a phone", next: "ObjectiveBar", keep: "A 60 px frosted bar.", state: "built" },
   { now: "StepRail", next: "StepRail", keep: "Done, skipped, current and locked, each with its mark.", state: "built" },
   { now: "Build and Deploy stages", next: "Diagnostic, Deploy result, Table", keep: "The faulty line marked. One accent action per screen.", state: "built" },
   { now: "Session footer", next: "Session footer block", keep: "The cluster row and the account row.", state: "built" },

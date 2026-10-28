@@ -19,8 +19,8 @@ import { useViewport } from "@/shared/lib/hooks/use-viewport";
 /**
  * The dev-loop stepper: in the frame, a full-width row of stage tabs under the
  * stage bar, across the files column and the stage (`LayoutShell`'s
- * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, in the preview
- * page's bar, where it keeps its own width. It owns the Ctrl+1..4 stage keys and
+ * `stageTabs`, design.md "Frame chrome (5.25)"); on a phone, across the
+ * preview page's bar, without Write, which is the code's own page there. It owns the Ctrl+1..4 stage keys and
  * points the stepper at the stage the current lesson step is graded on. The
  * project list and the session footer live in the navigation (`AppNav`),
  * not here.
@@ -60,6 +60,7 @@ const StageBar: FC = () => {
         onSelect={PgFlow.setStage}
         target={target}
         fill={row}
+        phone={!row}
       />
     </Bar>
   );
@@ -68,7 +69,7 @@ const StageBar: FC = () => {
 export default StageBar;
 
 // In the frame, a 38 px row with the columns' bottom line, as the prototype
-// draws the stage tabs; on a phone, centred in the preview page's bar
+// draws the stage tabs; on a phone, across the preview page's bar
 const Bar = styled.div<{ $row: boolean }>`
   ${({ theme, $row }) => css`
     flex-shrink: 0;
@@ -89,7 +90,7 @@ const Bar = styled.div<{ $row: boolean }>`
           border-bottom: 1px solid ${theme.colors.default.border};
         `
       : css`
-          padding-bottom: 0.5rem;
+          flex: 1;
         `}
   `}
 `;

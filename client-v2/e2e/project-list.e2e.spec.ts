@@ -205,10 +205,12 @@ test("client-v2-layout: A lesson's menu", async ({ seededPage: page }) => {
   await page.getByRole("button", { name: "Open Hello Anchor" }).click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
   // A lesson is a workspace only once it is started
-  await page.getByRole("button", { name: "START" }).click();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
 
-  const lessons = page.getByRole("group", { name: "Lessons" });
-  await expect(lessons.getByText("Hello Anchor")).toBeVisible(LONG);
+  // A started lesson is a row among the projects, as the prototype lists it
+  const projects = page.getByRole("group", { name: "Projects" });
+  await expect(projects.getByText("Hello Anchor")).toBeVisible(LONG);
+  await expect(page.getByRole("group", { name: "Lessons" })).toHaveCount(0);
   const menu = await projectMenu(page, "Hello Anchor");
 
   for (const item of ["Open", "Pin", "Export as zip", "Delete Hello Anchor"]) {

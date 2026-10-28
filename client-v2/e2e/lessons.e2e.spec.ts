@@ -5,12 +5,15 @@ import { expect, home, homeRegion, test } from "./fixtures";
 const FIRST = "Define the hello instruction and log a message";
 
 const band = (page: Page) => page.locator('[data-slot="objective-band"]');
+/** The band, or on a phone the fold it becomes */
+const bandOrFold = (page: Page) =>
+  page.locator('[data-slot="objective-band"], [data-slot="objective-fold"]');
 const rows = (page: Page) =>
   page.locator('[data-slot="step-rail"] [data-slot="step-rail-item"]');
 
 /**
- * Home -> Open Hello Anchor -> START, as `lesson-path` does.
- * `START` creates the workspace and flips the route to the lesson chrome.
+ * Home -> Open Hello Anchor -> Start, as `lesson-path` does.
+ * `Start` creates the workspace and flips the route to the lesson chrome.
  */
 const startHelloAnchor = async (page: Page) => {
   // No default backend, whatever the dev server is configured with
@@ -27,21 +30,16 @@ const startHelloAnchor = async (page: Page) => {
     })
     .click();
   await expect(home(page)).toBeHidden();
-  await page.getByRole("button", { name: "START", exact: true }).click();
-  await expect(band(page)).toBeVisible();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await expect(bandOrFold(page)).toBeVisible();
 };
 
-/** Entering a lesson opens its page once; most scenarios start from the code */
-const closePage = async (page: Page) => {
-  const reader = page.getByRole("dialog", { name: /hello instruction/i });
-  await expect(reader).toBeVisible();
-  // The record learns the page was opened only once its content has loaded;
-  // an Escape that outruns the load leaves the page unread on purpose.
+/** A lesson opens on its code: no page covers the editor until asked */
+const landsOnCode = async (page: Page) => {
+  await expect(bandOrFold(page)).toBeVisible();
   await expect(
-    band(page).getByRole("button", { name: "Read the page" })
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(reader).toHaveCount(0);
+    page.getByRole("dialog", { name: /hello instruction/i })
+  ).toHaveCount(0);
 };
 
 /** A control's box, which must be on screen */
@@ -60,7 +58,7 @@ test.describe("client-v2-lessons", () => {
   test("client-v2-lessons: The objective band over the editor", async ({
     page,
   }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 1440, height: 900 });
     await startHelloAnchor(page);
 
     const b = band(page);
@@ -76,15 +74,18 @@ test.describe("client-v2-lessons", () => {
     ).toBeVisible();
     await expect(b.getByRole("button", { name: "I'm stuck" })).toBeVisible();
 
-    // Row two holds back and on beside the actions (design.md, "Lessons
-    // (5.19)"); the buttons differ in height, so their middles are compared
+    // One row: the ask and its actions share a line, as the prototype draws
+    // the band; the buttons differ in height, so their middles are compared
     const middle = (box: { y: number; height: number }) =>
       box.y + box.height / 2;
     const back = await boxOf(b.getByRole("button", { name: "Previous step" }));
     const stuck = await boxOf(b.getByRole("button", { name: "I'm stuck" }));
     const objective = await boxOf(b.getByText(FIRST));
     expect(Math.abs(middle(back) - middle(stuck))).toBeLessThanOrEqual(1);
-    expect(back.y).toBeGreaterThanOrEqual(objective.y + objective.height - 1);
+    expect(Math.abs(middle(back) - middle(objective))).toBeLessThanOrEqual(2);
+    await expect(b.getByRole("button", { name: /to prove this/ })).toHaveCount(
+      0
+    );
 
     // Above the editor, not beside it
     const bandBox = await b.boundingBox();
@@ -116,7 +117,7 @@ test.describe("client-v2-lessons", () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await startHelloAnchor(page);
-    await closePage(page);
+    await landsOnCode(page);
 
     await skipStep(page).click();
 
@@ -129,14 +130,14 @@ test.describe("client-v2-lessons", () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await startHelloAnchor(page);
-    await closePage(page);
+    await landsOnCode(page);
     await skipStep(page).click();
     await expect(
       band(page).getByText("Step 2 of 4", { exact: true })
     ).toBeVisible();
 
     // Leaves as soon as the band shows Step 2, then comes back. Every write
-    // since START lands within lightning-fs's 500 ms tree-save window, so
+    // since Start lands within lightning-fs's 500 ms tree-save window, so
     // without the flush on the record file's first write (`writeWorkspaceFile`)
     // the file itself is lost; it failed that way before the flush existed.
     // Step 1 coming back means one of two things: the flush regressed, or the
@@ -155,7 +156,7 @@ test.describe("client-v2-lessons", () => {
   }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await startHelloAnchor(page);
-    await closePage(page);
+    await landsOnCode(page);
 
     // Next step is offered only behind the furthest step reached: skip one
     // and step back, so there is something for it to do
@@ -204,74 +205,142 @@ test.describe("client-v2-lessons", () => {
     await expect(reader).toHaveCount(0);
   });
 
-  test("client-v2-lessons: The band on a phone", async ({ page }) => {
-    await page.setViewportSize({ width: 390, height: 844 });
+  test("client-v2-lessons: Starting a tutorial lands on the code", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
     await startHelloAnchor(page);
-    await closePage(page);
-
-    const b = band(page);
-    await expect(b.getByText("1/4", { exact: true })).toBeVisible();
-    await expect(b.getByText(FIRST)).toBeVisible();
-
-    // Position and objective share a row; the actions sit in a row under it
-    const position = await b.getByText("1/4", { exact: true }).boundingBox();
-    const objective = await b.getByText(FIRST).boundingBox();
-    const actions = await b
-      .locator('[data-slot="objective-actions-row"]')
-      .boundingBox();
-    expect(position).not.toBeNull();
-    expect(objective).not.toBeNull();
-    expect(actions).not.toBeNull();
-    expect(Math.abs(position!.y - objective!.y)).toBeLessThan(
-      objective!.height
-    );
-    expect(actions!.y).toBeGreaterThanOrEqual(
-      objective!.y + objective!.height - 1
-    );
+    await landsOnCode(page);
+    await expect(page.locator(".monaco-editor")).toBeVisible();
     await expect(
-      b.getByRole("button", { name: "Read the page" })
+      band(page).getByRole("button", { name: "Read the page" })
     ).toBeVisible();
-    await expect(b.getByRole("button", { name: "I'm stuck" })).toBeVisible();
+  });
 
-    // One line of actions that scrolls, never a third line for the proof
-    const stuck = await boxOf(b.getByRole("button", { name: "I'm stuck" }));
-    const prove = await boxOf(
-      b.getByRole("button", { name: "Build to prove this" })
-    );
-    expect(Math.abs(prove.y - stuck.y)).toBeLessThanOrEqual(1);
+  test("client-v2-lessons: The page has no footer", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await startHelloAnchor(page);
+    await band(page).getByRole("button", { name: "Read the page" }).click();
+    const reader = page.getByRole("dialog", { name: /hello instruction/i });
+    await expect(reader).toBeVisible();
+    await expect(
+      reader.getByRole("button", { name: "Close the page" })
+    ).toBeVisible();
+    await expect(
+      reader.getByRole("button", { name: "Back to the code" })
+    ).toHaveCount(0);
+    await expect(
+      reader.getByRole("button", { name: "Mark as read" })
+    ).toHaveCount(0);
+  });
 
-    // And the proving action can be reached: scrolled into view, it lies
-    // inside the row's visible box
-    const proveButton = b.getByRole("button", { name: "Build to prove this" });
-    await proveButton.scrollIntoViewIfNeeded();
-    const row = await boxOf(b.locator('[data-slot="objective-actions-row"]'));
-    const reached = await boxOf(proveButton);
-    expect(reached.x).toBeGreaterThanOrEqual(row.x - 1);
-    expect(reached.x + reached.width).toBeLessThanOrEqual(
-      row.x + row.width + 1
-    );
-    expect(reached.y).toBeGreaterThanOrEqual(row.y - 1);
-    expect(reached.y + reached.height).toBeLessThanOrEqual(
-      row.y + row.height + 1
-    );
+  for (const [width, height] of [
+    [1440, 900],
+    [834, 1194],
+  ] as const) {
+    test(`client-v2-lessons: One row at ${width}`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await startHelloAnchor(page);
+      const b = band(page);
+      const middle = (box: { y: number; height: number }) =>
+        box.y + box.height / 2;
+      const objective = await boxOf(b.getByText(FIRST));
+      for (const name of ["Read the page", "I'm stuck"]) {
+        const box = await boxOf(b.getByRole("button", { name }));
+        expect(Math.abs(middle(box) - middle(objective))).toBeLessThanOrEqual(
+          2
+        );
+      }
+      await expect(page.getByText("Before you can deploy:")).toHaveCount(0);
+      await expect(
+        b.getByRole("button", { name: /to prove this/ })
+      ).toHaveCount(0);
+    });
+  }
 
-    // Leave the sheet on Files first, so the chevron has to switch it back
+  test("client-v2-lessons: How the step is checked", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await startHelloAnchor(page);
+    const check = band(page).getByRole("button", {
+      name: "How this step is checked",
+    });
+    await expect(check).toHaveAttribute("aria-expanded", "false");
+    await check.click();
+    await expect(check).toHaveAttribute("aria-expanded", "true");
+    await expect(
+      band(page).getByText(
+        "Verified when the built interface shows a hello instruction."
+      )
+    ).toBeVisible();
+  });
+
+  test("client-v2-lessons: Statuses on entry", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await startHelloAnchor(page);
+    await expect(rows(page).nth(0)).toContainText("aiming at build");
+    for (const i of [1, 2, 3]) {
+      await expect(rows(page).nth(i)).toContainText("locked");
+    }
+  });
+
+  test("client-v2-lessons: Suggestions in a lesson", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await startHelloAnchor(page);
+    for (const name of [
+      "Explain this step",
+      "Give me a hint",
+      "Why did my build fail?",
+    ]) {
+      await expect(page.getByRole("button", { name })).toBeVisible();
+    }
+    // Each chip is its tooltip's trigger, which takes over its data-slot
+    const chips = page.locator('[data-slot="composer-context"] > *');
+    await expect(chips).toHaveText(["Step 1 of 4", "lib.rs", "1 file"]);
+  });
+
+  test("client-v2-lessons: The band and the bar on a phone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 393, height: 852 });
+    await startHelloAnchor(page);
+    await landsOnCode(page);
+
+    // The band is the ask alone, folded to one row that opens in place
+    const fold = page.locator('[data-slot="objective-fold"]');
+    await expect(fold.getByText("1/4", { exact: true })).toBeVisible();
+    const toggle = fold.getByRole("button", { name: new RegExp(FIRST) });
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expect(fold.getByRole("button")).toHaveCount(1);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true");
+    await expect(fold.getByText(/Verified when/)).toBeVisible();
+
+    // The step's controls sit in the bar at the foot, at the thumb's size
+    const bar = page.getByRole("toolbar", { name: "This step" });
+    for (const name of [
+      "Previous step",
+      "Next step",
+      "Read the page",
+      "I'm stuck",
+    ]) {
+      const box = await boxOf(bar.getByRole("button", { name }));
+      expect(box.height).toBeGreaterThanOrEqual(48);
+    }
+    const barBox = await boxOf(bar);
+    expect(barBox.y + barBox.height).toBeGreaterThan(852 - 100);
+
+    // The files row opens the sheet on Files, Steps one tap away
     await page.getByRole("button", { name: /^Files, .* open$/ }).click();
     const sheet = page.getByRole("dialog", { name: "Files" });
     await expect(sheet).toBeVisible();
-    await sheet.getByRole("radio", { name: "Files" }).click();
     await expect(sheet.getByRole("radio", { name: "Files" })).toHaveAttribute(
       "data-state",
       "on"
     );
-    await page.keyboard.press("Escape");
-    await expect(sheet).toHaveCount(0);
-
-    await b.getByRole("button", { name: "Show the steps" }).click();
-    await expect(sheet).toBeVisible();
-    await expect(sheet.getByRole("radio", { name: "Steps" })).toHaveAttribute(
-      "data-state",
-      "on"
-    );
+    // In the product's text face, not the code's
+    const font = await sheet
+      .getByRole("radio", { name: "Steps" })
+      .evaluate((el) => getComputedStyle(el).fontFamily);
+    expect(font).not.toMatch(/JetBrains/);
   });
 });

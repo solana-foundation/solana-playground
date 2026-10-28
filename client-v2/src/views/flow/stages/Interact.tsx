@@ -107,7 +107,7 @@ const Interact = () => {
       surface={surface}
       cluster={PgConnection.cluster}
       onGoTo={(stage) => PgFlow.setStage(stage)}
-      idlLoad={<IdlActions mode="button" />}
+      idlLoad={<IdlActions mode="upload" />}
       form={programInfo.idl && <Test idl={programInfo.idl} />}
     />
   );

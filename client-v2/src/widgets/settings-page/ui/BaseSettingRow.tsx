@@ -6,7 +6,7 @@ interface BaseSettingRowProps {
   name: string;
   description?: string;
   control: ReactNode;
-  /** A control that fits beside the text at any width, such as a switch */
+  /** A control that fits beside the text at any width, such as a checkbox */
   small?: boolean;
   /** Below `LAYOUT_BREAKPOINTS.phone`: a wide control goes under the text */
   phone: boolean;
@@ -30,9 +30,25 @@ const BaseSettingRow = ({
       )}
     >
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-sm font-medium text-foreground">{name}</span>
+        {/* On a phone, the body type and the description in the
+            secondary one, as the prototype's phone sets them */}
+        <span
+          className={cn(
+            "text-caption text-foreground",
+            phone && "text-body font-read"
+          )}
+        >
+          {name}
+        </span>
         {description && (
-          <span className="text-xs text-muted-foreground">{description}</span>
+          <span
+            className={cn(
+              "text-xs text-muted-foreground",
+              phone && "text-control font-read"
+            )}
+          >
+            {description}
+          </span>
         )}
       </div>
       <div

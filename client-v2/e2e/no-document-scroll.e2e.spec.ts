@@ -35,7 +35,7 @@ for (const size of SIZES) {
 
     await page.goto("/tutorials/hello-anchor");
     await expect(
-      page.getByRole("button", { name: "START", exact: true })
+      page.getByRole("button", { name: "Start", exact: true })
     ).toBeVisible(LONG);
     expect(await documentFits(page)).toEqual({ fits: true, scrollTop: 0 });
   });

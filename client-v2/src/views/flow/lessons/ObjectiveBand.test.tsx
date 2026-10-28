@@ -1,37 +1,19 @@
 // The connected band only maps the lesson state onto `BaseObjectiveBand`'s
 // props; the base is replaced with a probe that keeps the props it was given.
-// Everything the readiness line reads is stubbed: it is not under test here.
+// The lesson's modules reach the runtime's utils, which need a browser
+// global the test runner does not set
 vi.mock("../../../utils", () => ({
-  PgCommand: { build: { execute: vi.fn() } },
-  PgConnection: { onDidChangeCluster: vi.fn() },
+  PgCommand: {},
   PgExplorer: {},
   PgGlobal: {},
-  PgProgramInfo: { uuid: null, importedProgram: null, lastBuildFailed: false },
+  PgProgramInfo: {},
   PgSettings: {},
   PgTerminal: {},
   PgTutorial: {},
   PgView: {},
 }));
 vi.mock("../../../constants", () => ({ DEFAULT_ENDPOINT: {} }));
-vi.mock("../../../hooks", () => ({
-  useBalance: () => null,
-  useProgramInfo: () => {},
-  useRenderOnChange: () => null,
-  useWallet: () => null,
-}));
-vi.mock("../../../features/auth", () => ({
-  PgSession: { get: () => null, onDidChange: vi.fn() },
-}));
 vi.mock("../../sidebar/assistant/store", () => ({ PgAssistant: {} }));
-
-// Each `reportButtonFailure` call: the action that did not happen, and the
-// error it got
-const told = vi.hoisted(() => [] as { action: string; error: unknown }[]);
-vi.mock("@/shared/lib/report-button-failure", () => ({
-  reportButtonFailure: (action: string) => (error: unknown) => {
-    told.push({ action, error });
-  },
-}));
 
 const { drawn } = vi.hoisted(() => ({
   drawn: [] as Record<string, unknown>[],
@@ -46,12 +28,11 @@ vi.mock("./BaseObjectiveBand", () => ({
 import { render } from "@testing-library/react";
 
 import ObjectiveBand from "./ObjectiveBand";
+import { PgLesson } from "./store";
 import type { BaseObjectiveBandProps } from "./BaseObjectiveBand";
 import type { LessonRecordEvent, StoredLesson } from "./events";
 import type { LessonState } from "./store";
 import type { LessonPath } from "./types";
-import { INITIAL_FLOW_STATE } from "../state/stage";
-import { PgCommand } from "../../../utils";
 
 const hints: [string, string, string] = ["a", "b", "c"];
 
@@ -134,7 +115,6 @@ const drawBand = (record: StoredLesson) => {
   render(
     <ObjectiveBand
       state={stateOf(record)}
-      flow={INITIAL_FLOW_STATE}
       onRead={() => {}}
       onOpenGallery={() => {}}
     />
@@ -172,19 +152,45 @@ describe("ObjectiveBand", () => {
     expect(props.position.progress).toBe(2 / 3);
   });
 
-  // Under Home no terminal is mounted, so the command cannot run; the click
-  // must tell the user rather than leave an unhandled rejection
-  it("tells the user when proving the step fails", async () => {
-    const failure = new Error("The terminal is not open.");
-    vi.mocked(PgCommand.build.execute).mockRejectedValueOnce(failure);
-    told.length = 0;
+  it("offers the assistant on a step a build proves", () => {
     const props = drawBand(recordOf([enter(1)]));
-    expect(props.kind).toBe("step");
-    if (props.kind !== "step") return;
+    expect(props.kind === "step" && props.primary.kind).toBe("stuck");
+    expect(props.kind === "step" && props.primary.label).toBe("I'm stuck");
+  });
 
-    props.prove!.onClick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+  it("continues a read step at the frontier", () => {
+    const props = drawBand(
+      recordOf([
+        enter(1),
+        graded(2, "one"),
+        move(3, "two"),
+        graded(4, "two"),
+        move(5, "three"),
+      ])
+    );
+    expect(props.kind === "step" && props.primary.label).toBe("Continue");
+    expect(props.kind === "step" && props.primary.kind).toBe("continue");
 
-    expect(told).toEqual([{ action: "check the step", error: failure }]);
+    // Continue marks the read step, as the reader's "Mark as read" did
+    const attest = vi.spyOn(PgLesson, "attest").mockImplementation(() => {});
+    if (props.kind === "step") props.primary.onClick();
+    expect(attest).toHaveBeenCalledTimes(1);
+    attest.mockRestore();
+  });
+
+  it("offers the assistant, not Continue, on a read step already marked", () => {
+    const props = drawBand(
+      recordOf([
+        enter(1),
+        graded(2, "one"),
+        move(3, "two"),
+        graded(4, "two"),
+        move(5, "three"),
+        attest(6, "three"),
+        move(7, "end"),
+        move(8, "three"),
+      ])
+    );
+    expect(props.kind === "step" && props.primary.kind).toBe("stuck");
   });
 });

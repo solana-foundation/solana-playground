@@ -15,6 +15,7 @@
  *   __pgSyncDiagnostics.failures()
  */
 import { createLogger } from "@/shared/lib/logger";
+import { isMissing } from "@/shared/lib/is-missing";
 
 const log = createLogger("persistence:diagnostics");
 
@@ -35,15 +36,8 @@ export const report = (what: string, error: unknown) => {
   log.error(error, { report: true, context: { what: `${what} failed` } });
 };
 
-/**
- * Whether an error just means "no such file" -- usually the expected case,
- * and not worth a report. Same matching as `sync-mark` and `chat-storage`:
- * the browser filesystem says it as a code and in the message.
- */
-export const isMissing = (error: unknown) => {
-  const e = error as { code?: string; message?: string };
-  return e?.code === "ENOENT" || !!e?.message?.includes("ENOENT");
-};
+/** Shared with entities that read the same filesystem (`useTutorialProgress`) */
+export { isMissing };
 
 export const getFailures = (): readonly Failure[] => [...failures];
 

@@ -1,4 +1,5 @@
 import type { SessionUser, SignInState } from "@/features/auth";
+import { shortAddress } from "@/shared/lib/short-address";
 import type { ClusterStatus } from "./use-cluster-status";
 
 /** What a user can pick in the account menu (and the row's Cancel), for telemetry */
@@ -59,11 +60,8 @@ export const DOCS_URL = "https://solana.com/docs";
 export const githubProfileUrl = (login: string) =>
   `https://github.com/${login}`;
 
-export const shortAddress = (address: string) =>
-  `${address.slice(0, 4)}…${address.slice(-4)}`;
-
 export const formatBalance = (balance: number | null) =>
-  balance === null ? "…" : `${balance.toFixed(2)} SOL`;
+  `${balance === null ? "…" : balance.toFixed(2)} SOL`;
 
 export const accountUser = ({ session }: AccountView) =>
   session.status === "signed-in" ? session.user : null;
@@ -308,15 +306,9 @@ if (import.meta.vitest) {
     });
 
     describe("formatBalance", () => {
-      it("waits with an ellipsis rather than claiming zero", () => {
-        expect(formatBalance(null)).toBe("…");
+      it("waits with an ellipsis rather than claiming zero, unit kept", () => {
+        expect(formatBalance(null)).toBe("… SOL");
         expect(formatBalance(0)).toBe("0.00 SOL");
-      });
-    });
-
-    describe("shortAddress", () => {
-      it("keeps four characters at each end", () => {
-        expect(shortAddress(WALLET.address)).toBe("7Hq5…Xk2P");
       });
     });
 

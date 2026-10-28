@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 import { ExternalLink, Rocket } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
-import { BrandButton } from "@/shared/ui/brand-button";
+import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
@@ -17,7 +18,12 @@ import {
 } from "@/shared/ui/stage-empty";
 import { StatusDot } from "@/shared/ui/status-dot";
 import type { DeployRecord } from "../state/deploy-history";
-import { STAGE_BODY, STAGE_FOOT, STAGE_FRAME } from "./stage-layout";
+import {
+  STAGE_BODY,
+  STAGE_FOOT,
+  STAGE_FRAME,
+  STAGE_REPORT,
+} from "./stage-layout";
 
 /**
  * What the chain says about the deployed program; `null` when unknown or,
@@ -51,8 +57,8 @@ export interface BaseDeployProps {
   txUrl: (signature: string) => string;
   onDeploy: () => void;
   onInteract: () => void;
-  /** The IDL drop zone */
-  idlDrop: ReactNode;
+  /** The secondary "Upload IDL" action (`IdlActions mode="upload"`) */
+  idlUpload: ReactNode;
 }
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
@@ -73,7 +79,7 @@ const clusterName = (p: BaseDeployProps) => p.cluster ?? "the network";
 
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
-    return "Build the program first -- the stepper unlocks Deploy once it compiles cleanly.";
+    return "Build the program first \u2014 the stepper unlocks Deploy once it compiles cleanly.";
   }
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
@@ -176,54 +182,57 @@ const DeployResult = ({
   );
 };
 
+/** Every deployment, newest first; drawn once there is one */
 const History = ({ p }: { p: BaseDeployProps }) => (
   <section aria-label="History" className="flex w-full flex-col gap-2">
     <h3 className="text-caption font-act text-muted-foreground">History</h3>
-    {p.history.length === 0 ? (
-      <p className="text-caption text-muted-foreground">
-        No deployments yet for this project.
-      </p>
-    ) : (
-      <ul className="flex flex-col divide-y divide-border">
-        {p.history.map((r) => (
-          <li
-            key={r.id}
-            className="grid grid-cols-[5.5rem_1fr_auto] items-center gap-3 py-1.5 text-caption max-md:grid-cols-[5.5rem_1fr]"
-          >
-            <Badge variant="outline" className="font-mono lowercase">
-              {r.cluster}
-            </Badge>
-            <span className="min-w-0 truncate font-mono" title={r.programId}>
-              {r.programId.slice(0, 8)}&hellip;{r.programId.slice(-4)}
-              <span className="ml-3 text-subtle">
-                {new Date(r.at).toLocaleString()}
-              </span>
+    <ul className="flex flex-col divide-y divide-border">
+      {p.history.map((r) => (
+        <li
+          key={r.id}
+          className="grid grid-cols-[5.5rem_1fr_auto] items-center gap-3 py-1.5 text-caption max-md:grid-cols-[5.5rem_1fr]"
+        >
+          <Badge variant="outline" className="font-mono lowercase">
+            {r.cluster}
+          </Badge>
+          <span className="min-w-0 truncate font-mono" title={r.programId}>
+            {r.programId.slice(0, 8)}&hellip;{r.programId.slice(-4)}
+            <span className="ml-3 text-subtle">
+              {new Date(r.at).toLocaleString()}
             </span>
-            <ExplorerLink
-              href={p.addressUrl(r.programId)}
-              label={`View deployment (${r.programId}) on Explorer`}
-            />
-          </li>
-        ))}
-      </ul>
-    )}
+          </span>
+          <ExplorerLink
+            href={p.addressUrl(r.programId)}
+            label={`View deployment (${r.programId}) on Explorer`}
+          />
+        </li>
+      ))}
+    </ul>
   </section>
 );
 
-/** The Deploy stage, drawn from props alone; `Deploy` connects it */
+/**
+ * The Deploy stage, drawn from props alone; `Deploy` connects it. Before the
+ * first deploy it is the prototype's empty stage: centred, the pill and
+ * "Upload IDL" under it, no history yet. After one it shows the result and
+ * the history, read from the left.
+ */
 const BaseDeploy = (p: BaseDeployProps) => {
   const latest = p.history[0] ?? null;
   const n = p.history.length;
   const meta = [p.cluster, latest && `${n} deployment${n === 1 ? "" : "s"}`]
     .filter(Boolean)
     .join(" · ");
+  const running = p.deploy === "running";
 
   return (
     <div className={STAGE_FRAME}>
-      <StageEmpty className={STAGE_BODY}>
-        <StageEmptyMedia>
-          <Rocket />
-        </StageEmptyMedia>
+      <StageEmpty className={cn(STAGE_BODY, latest && STAGE_REPORT)}>
+        {latest && (
+          <StageEmptyMedia>
+            <Rocket />
+          </StageEmptyMedia>
+        )}
         <StageEmptyTitle>
           {latest ? "Deploy" : "Nothing deployed yet"}
         </StageEmptyTitle>
@@ -242,17 +251,21 @@ const BaseDeploy = (p: BaseDeployProps) => {
           </Callout>
         )}
         {latest && <DeployResult latest={latest} p={p} />}
-        <History p={p} />
-        {p.idlDrop}
-        <StageEmptyActions className={STAGE_FOOT}>
+        {latest && <History p={p} />}
+        <StageEmptyActions className={cn(STAGE_FOOT, !latest && "flex-col")}>
           <BrandButton
-            disabled={!p.built || p.deploy === "running"}
-            aria-busy={p.deploy === "running" || undefined}
+            disabled={!p.built || running}
+            aria-busy={running || undefined}
             title={deployBlockedReason(p)}
             onClick={p.onDeploy}
           >
             {deployLabel(p, latest !== null)}
+            {!running && <BrandButtonIcon />}
           </BrandButton>
+          {/* Before the first deploy, centred under the pill on a desk and
+              above it on a phone, where the row stretches the pill to the
+              screen's width; after one, beside the pill */}
+          <div className="flex justify-center">{p.idlUpload}</div>
         </StageEmptyActions>
       </StageEmpty>
     </div>

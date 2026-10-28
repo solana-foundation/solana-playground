@@ -33,6 +33,8 @@ const utils = vi.hoisted(() => {
           thumbnail: "/hello.png",
           level: "Beginner",
           framework: "Anchor",
+          authors: [{ name: "acheron" }],
+          pageCount: 6,
         },
       ],
       open: vi.fn(),
@@ -41,6 +43,12 @@ const utils = vi.hoisted(() => {
   };
 });
 vi.mock("@/utils", () => utils);
+// Each tutorial's progress, by name: new unless a test says otherwise
+const progress = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("@/entities/tutorial", () => ({
+  useTutorialProgress: () => (name: string) =>
+    progress.get(name) ?? { state: "new" },
+}));
 vi.mock("@/features/new-project", () => ({
   // Stands in for Start from scratch: it waits on `held`, says when it runs
   StartFromScratch: ({
@@ -98,6 +106,7 @@ beforeEach(() => {
   utils.PgGithub.import.mockReset().mockResolvedValue(undefined);
   utils.PgTutorial.open.mockReset().mockResolvedValue(undefined);
   close.mockReset();
+  progress.clear();
   utils.PgView.setToast.mockReset();
   sent = memoryProvider();
   initTelemetry({ providers: [sent] });
@@ -127,6 +136,59 @@ it("holds Start from scratch, the two lists with their counts, and the tutorials
   expect(
     screen.getByRole("searchbox", { name: "Search tutorials" })
   ).toBeTruthy();
+});
+
+it("draws each tutorial as the tutorial card, with its level and framework", () => {
+  render(<NewProject />);
+
+  const open = screen.getByRole("button", { name: "Open Hello Anchor" });
+  const card = open.closest<HTMLElement>('[data-slot="action-card"]')!;
+  expect(within(card).getByText("Beginner · Anchor")).toBeTruthy();
+  expect(within(card).queryByText(/\d+ of \d+/)).toBeNull();
+  expect(within(card).getAllByRole("button")).toEqual([open]);
+});
+
+it("shows a failed tutorial Open on its own card and frees the others", async () => {
+  utils.PgTutorial.all.push({
+    name: "Hello Solana",
+    description: "Hello world without a framework",
+    thumbnail: "/solana.png",
+    level: "Beginner",
+    framework: "Native",
+    authors: [{ name: "acheron" }],
+    pageCount: 4,
+  });
+  utils.PgTutorial.open.mockRejectedValueOnce(new Error("gone"));
+  render(<NewProject />);
+
+  const anchor = screen.getByRole("button", { name: "Open Hello Anchor" });
+  await act(async () => fireEvent.click(anchor));
+
+  const card = (b: HTMLElement) =>
+    b.closest<HTMLElement>('[data-slot="action-card"]')!;
+  expect(within(card(anchor)).getByRole("alert").textContent).toBe("gone");
+  const solana = screen.getByRole("button", { name: "Open Hello Solana" });
+  expect(within(card(solana)).queryByRole("alert")).toBeNull();
+  expect(solana).toHaveProperty("disabled", false);
+  expect(close).not.toHaveBeenCalled();
+  utils.PgTutorial.all.pop();
+});
+
+it("continues a started tutorial from the page it is on", () => {
+  progress.set("Hello Anchor", { state: "started", page: 2, pages: 6 });
+  render(<NewProject />);
+
+  expect(
+    screen.getByRole("button", { name: "Continue Hello Anchor" })
+  ).toBeTruthy();
+  expect(screen.getByText("2 of 6")).toBeTruthy();
+});
+
+it("keeps the programs' own card, with its Open button", async () => {
+  render(<NewProject initialTab="programs" />);
+
+  const open = await screen.findByRole("button", { name: "Open drift" });
+  expect(open.textContent).toBe("Open");
 });
 
 it("switches to the programs and measures the switch", async () => {

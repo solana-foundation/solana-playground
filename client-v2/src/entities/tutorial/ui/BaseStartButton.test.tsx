@@ -16,9 +16,9 @@ const deferred = () => {
 
 describe("BaseStartButton", () => {
   it.each([
-    ["new", "START"],
-    ["started", "CONTINUE"],
-    ["completed", "COMPLETED"],
+    ["new", "Start"],
+    ["started", "Continue"],
+    ["completed", "Completed"],
   ] as const)("a %s tutorial says %s", (progress, label) => {
     render(
       <BaseStartButton
