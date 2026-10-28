@@ -42,7 +42,10 @@ const utils = vi.hoisted(() => {
         },
       ],
     },
-    PgGithub: { import: vi.fn(), isValidUrl: () => true },
+    PgGithub: {
+      import: vi.fn(),
+      isValidUrl: (url: string) => url.startsWith("https://github.com/"),
+    },
     PgRouter: { getPathUrl: (u: string) => u, navigate: vi.fn() },
     PgView: { closeModal: vi.fn(), classNames: { ERROR: "error" } },
     PgTheme: { convertToCSS: () => "", getColor: () => "inherit" },
@@ -50,7 +53,14 @@ const utils = vi.hoisted(() => {
 });
 vi.mock("../../../../../utils", () => utils);
 
+const gist = vi.hoisted(() => ({
+  importGist: vi.fn(),
+  isGistUrl: (url: string) => url.startsWith("https://gist.github.com/"),
+}));
+vi.mock("@/features/gist", () => gist);
+
 import { IMPORTED } from "./imported";
+
 import { ImportGithub } from "./ImportGithub";
 
 /** Answers every key: the modal's styles read deep theme keys, none of which matters here */
@@ -68,6 +78,7 @@ let toast: MockInstance<typeof PgViewDirect.setToast>;
 beforeEach(() => {
   initLogger({ providers: [logMemory()] });
   utils.PgGithub.import.mockReset();
+  gist.importGist.mockReset();
   utils.PgView.closeModal.mockReset();
   toast = vi.spyOn(PgViewDirect, "setToast").mockImplementation(() => {});
 });
@@ -134,6 +145,18 @@ it("tells the user an example that failed to import", async () => {
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
 });
 
+/** Type the URL into the dialog's field and press its own Import */
+const submitUrl = (url: string) => {
+  const field = screen.getByPlaceholderText(
+    "https://github.com/... or https://gist.github.com/..."
+  );
+  fireEvent.change(field, { target: { value: url } });
+  const submit = screen
+    .getAllByRole("button", { name: /^import$/i })
+    .find((button) => button.getAttribute("type") === "submit")!;
+  fireEvent.click(submit);
+};
+
 it("closes the dialog as imported when an example is opened", () => {
   draw();
   const row = screen.getByText("Anchor - Hello").closest("div")!.parentElement!;
@@ -156,16 +179,60 @@ it("closes the dialog as imported once the URL's project is imported", async () 
     .mockImplementation(() => {});
   draw();
 
-  fireEvent.change(screen.getByPlaceholderText("https://github.com/..."), {
-    target: { value: "https://github.com/c/d" },
-  });
-  // The dialog's own Import, the last one: each example has one above it
-  const imports = screen.getAllByRole("button", { name: /^import$/i });
-  fireEvent.click(imports[imports.length - 1]);
+  submitUrl("https://github.com/c/d");
 
   await waitFor(() =>
     expect(close).toHaveBeenCalledWith(IMPORTED, "import-github")
   );
   expect(utils.PgGithub.import).toHaveBeenCalledWith("https://github.com/c/d");
   close.mockRestore();
+});
+
+it("asks for a GitHub or gist URL", () => {
+  draw();
+
+  expect(screen.getByText("GitHub or gist URL")).toBeTruthy();
+});
+
+it("imports a gist URL as a gist, from the dialog", async () => {
+  gist.importGist.mockResolvedValue(undefined);
+  draw();
+
+  submitUrl("https://gist.github.com/alice/0123abcd");
+
+  await waitFor(() =>
+    expect(gist.importGist).toHaveBeenCalledWith(
+      "https://gist.github.com/alice/0123abcd",
+      "dialog"
+    )
+  );
+  expect(utils.PgGithub.import).not.toHaveBeenCalled();
+});
+
+it("still imports a repository URL as a repository", async () => {
+  utils.PgGithub.import.mockResolvedValue(undefined);
+  draw();
+
+  submitUrl("https://github.com/alice/repo");
+
+  await waitFor(() =>
+    expect(utils.PgGithub.import).toHaveBeenCalledWith(
+      "https://github.com/alice/repo"
+    )
+  );
+  expect(gist.importGist).not.toHaveBeenCalled();
+});
+
+it("shows why a gist could not be imported and stays open", async () => {
+  gist.importGist.mockRejectedValue(
+    new Error('Gist "0123abcd" was not found on GitHub.')
+  );
+  draw();
+
+  submitUrl("https://gist.github.com/alice/0123abcd");
+
+  expect(
+    await screen.findByText('Gist "0123abcd" was not found on GitHub.')
+  ).toBeTruthy();
+  expect(utils.PgView.closeModal).not.toHaveBeenCalled();
 });
