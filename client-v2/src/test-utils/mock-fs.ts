@@ -38,7 +38,7 @@ export const mockFsModule = () => {
     );
 
   /** A filesystem error carrying lightning-fs's `code`, which callers branch on */
-  const fsError = (code: "ENOENT" | "ENOTEMPTY", path: string) =>
+  const fsError = (code: "ENOENT" | "ENOTDIR" | "ENOTEMPTY", path: string) =>
     Object.assign(new Error(`${code}: ${path}`), { code });
 
   /** Whether `key` is `path` itself or lies beneath it */
@@ -182,6 +182,7 @@ export const mockFsModule = () => {
      */
     async removeDir(path: string, opts?: { recursive?: boolean }) {
       path = dir(await full(path));
+      if (files.has(path)) throw fsError("ENOTDIR", path);
       const under = [...files.keys()].filter((key) => isUnder(key, path));
       if (under.length && !opts?.recursive) {
         throw fsError("ENOTEMPTY", path);

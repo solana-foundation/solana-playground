@@ -66,6 +66,14 @@ describe("the PgFs mock", () => {
     expect(files().has("/a/b/one")).toBe(true);
   });
 
+  it("refuses to remove a file as a directory, with ENOTDIR", async () => {
+    files().set("/a/b", "1");
+
+    await expect(PgFs.removeDir("/a/b")).rejects.toMatchObject({
+      code: "ENOTDIR",
+    });
+  });
+
   it("fails a missing file with ENOENT, as PgFs.exists expects", async () => {
     await expect(PgFs.readToString("/nowhere")).rejects.toMatchObject({
       code: "ENOENT",
