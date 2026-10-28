@@ -823,7 +823,7 @@ git -C client-v2 diff --exit-code -- bench/BUNDLE.md
 
 Run it on a branch rebased onto its base. CI's build has no GA id, and the empty `REACT_APP_GA_MEASUREMENT_ID` keeps
 CRA from taking one from `client-v2/.env` (dotenv does not override a variable already set). Sentry stays out of a build without `VERCEL_ENV` (`sentryEnabled` in
-`client-v2/scripts/sentry-gate.mjs`). `build-fast` writes `client-v2/build-stats/bundle-modules.json`, outside `build/` so no deployment serves it: the
+`client-v2/scripts/sentry-gate.mjs`). `build-fast` writes `client-v2/bundle-info/bundle-modules.json`, outside `build/` so no deployment serves it: the
 module list `BundleModulesPlugin` in `client-v2/craco.config.js` takes from webpack. `test-build` runs
 `scripts/bundle-modules.build-test.mjs` over that list and `scripts/bundle-info.build-test.mjs` against
 `client-v2/bench/BUNDLE.md`. The pure functions behind both (`scripts/lib/bundle/snapshot.test.mjs`, `diff.test.mjs`,

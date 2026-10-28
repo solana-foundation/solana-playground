@@ -17,7 +17,7 @@ ships without a title and passed them.
   (`scripts/bundle-info.build-test.mjs`) and when the bundle holds a module
   under `src/test-utils/` or from `vitest` or `@vitest/*`
   (`scripts/bundle-modules.build-test.mjs`).
-- `craco.config.js` writes `build-stats/bundle-modules.json`, the module list
+- `craco.config.js` writes `bundle-info/bundle-modules.json`, the module list
   the second test reads, outside `build/`.
 - On a pull request, the build job renders the size change against the base
   branch's snapshot, and `.github/workflows/bundle-info-comment.yml` posts it as
@@ -34,7 +34,7 @@ Out of scope:
 - `client-v2/scripts/bundle-*`, `client-v2/scripts/lib/bundle/`,
   `client-v2/craco.config.js`,
   `client-v2/bench/BUNDLE.md`, `client-v2/package.json`, the root
-  `.gitignore` (`client-v2/build-stats/`).
+  `.gitignore` (`client-v2/bundle-info/`).
 - The Vercel build does not run `BundleModulesPlugin`: no build test reads the
   module list there. Elsewhere the list is written outside `build/`, and an
   error writing it is logged without failing the build.

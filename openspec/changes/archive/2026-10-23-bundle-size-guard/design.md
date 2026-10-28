@@ -14,7 +14,7 @@ build test, not shell in a workflow.
 
 `scripts/bundle-info.build-test.mjs` and
 `scripts/bundle-modules.build-test.mjs` run under `yarn test-build` and fail
-when their input, `build/` or `build-stats/bundle-modules.json`, is absent. A
+when their input, `build/` or `bundle-info/bundle-modules.json`, is absent. A
 workflow step only produces output.
 Locally and on CI, `yarn test-build` fails the same way.
 
@@ -48,7 +48,7 @@ another valid cell within the tolerance passes it.
 ### The module test reads a module list written by craco
 
 `BundleModulesPlugin` in `craco.config.js` writes
-`client-v2/build-stats/bundle-modules.json` on `compiler.hooks.done` from
+`client-v2/bundle-info/bundle-modules.json` on `compiler.hooks.done` from
 `stats.toJson({ all: false, modules: true, nestedModules: true,
 cachedModules: true })`, flattened by `slimModules` into module names. Only the
 module list names a test helper: a helper has no test title for

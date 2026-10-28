@@ -10,7 +10,7 @@
 
 # Production
 */build
-client-v2/build-stats/
+client-v2/bundle-info/
 
 # Misc
 .env

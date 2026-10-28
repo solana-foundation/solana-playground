@@ -7,7 +7,7 @@ export const MODULES_FILE = path.join(
   "..",
   "..",
   "..",
-  "build-stats",
+  "bundle-info",
   "bundle-modules.json"
 );
 

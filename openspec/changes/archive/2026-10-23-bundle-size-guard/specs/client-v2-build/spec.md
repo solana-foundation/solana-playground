@@ -59,7 +59,7 @@ from a fork.
 The production bundle SHALL contain no module under `client-v2/src/test-utils/`
 and no module from the `vitest` or `@vitest/*` packages. `yarn test-build`
 SHALL fail when one is present, naming the module, and when the module list
-`build-stats/bundle-modules.json` is absent or older than `build/index.html`.
+`bundle-info/bundle-modules.json` is absent or older than `build/index.html`.
 The module list SHALL be written outside `build/`, so a deployment does not
 serve it.
 
