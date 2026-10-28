@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import styled, { useTheme } from "styled-components";
 import * as monaco from "monaco-editor";
 
 import { editorBuffersOf } from "./editor-buffers";
@@ -30,6 +29,7 @@ import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
 import { createMountOpen } from "./mount-open";
 import { leavesFocusElsewhere } from "./open-focus";
 import { createLogger } from "@/shared/lib/logger";
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 
 const log = createLogger("editor:monaco");
 
@@ -79,7 +79,7 @@ const Monaco = () => {
     });
   }, []);
 
-  const theme = useTheme();
+  const theme = usePgTheme();
 
   // Set theme
   useAsyncEffect(async () => {
@@ -819,20 +819,9 @@ const Monaco = () => {
 
   return (
     <SpinnerWithBg loading={!isThemeSet} size="2rem">
-      <Wrapper ref={monacoRef} />
+      <div ref={monacoRef} className="pg-monaco h-full w-full" />
     </SpinnerWithBg>
   );
 };
-
-const Wrapper = styled.div`
-  width: 100%;
-  height: 100%;
-
-  /** Inlay hints */
-  & span[class^="dyn-rule"],
-  span[class*=" dyn-rule"] {
-    font-size: 12px;
-  }
-`;
 
 export default Monaco;

@@ -1,6 +1,5 @@
 import { FC } from "react";
 import { InfoIcon } from "lucide-react";
-import styled, { css } from "styled-components";
 
 import Markdown from "../../../../../components/Markdown";
 import {
@@ -89,18 +88,18 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
 
   return (
     <ModalFrame name="export-workspace" title={`Export ${label}`}>
-      <Content>
-        <Question>Convert the project layout?</Question>
+      <div className="max-w-[26rem]">
+        <p className="font-bold">Convert the project layout?</p>
 
-        <Description>
+        <p className="mt-4 text-[0.75rem] text-[color:var(--text-secondary)]">
           Playground uses a different layout than the framework's default
           layout.
-        </Description>
+        </p>
 
-        <Description>
+        <p className="mt-4 text-[0.75rem] text-[color:var(--text-secondary)]">
           To make the project work locally, playground can make the necessary
           conversion before exporting.
-        </Description>
+        </p>
 
         <Callout variant="info" className="mt-4">
           <InfoIcon />
@@ -110,7 +109,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
           </CalloutDescription>
         </Callout>
 
-        <ButtonsWrapper>
+        <div className="mt-4 flex [&>*]:mr-4">
           <AsyncButton
             type="button"
             onClick={convertAndExport}
@@ -128,36 +127,11 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
             Export without changes
             <ExportFile data-icon="inline-end" />
           </AsyncButton>
-        </ButtonsWrapper>
-      </Content>
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  max-width: 26rem;
-`;
-
-const Question = styled.p`
-  font-weight: bold;
-`;
-
-const Description = styled.p`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.small};
-    margin-top: 1rem;
-  `}
-`;
-
-const ButtonsWrapper = styled.div`
-  display: flex;
-  margin-top: 1rem;
-
-  & > * {
-    margin-right: 1rem;
-  }
-`;
 
 type ReadmeProps = ModalPageProps & {
   /** Markdown text */

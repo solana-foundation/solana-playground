@@ -5,9 +5,8 @@ import {
   forwardRef,
   SetStateAction,
 } from "react";
-import styled, { css } from "styled-components";
-
-import { PgTheme, PgView } from "../../utils";
+import { PgView } from "../../utils";
+import { cn } from "@/shared/lib/utils";
 
 type InputError = string | boolean | null;
 
@@ -21,12 +20,21 @@ export interface InputProps extends ComponentPropsWithoutRef<"input"> {
 const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ className, error, setError, onChange, validator, ...props }, ref) => (
     <>
-      {typeof error === "string" && error && <ErrorText>{error}</ErrorText>}
-      <StyledInput
+      {typeof error === "string" && error && (
+        <div className="mb-2 text-[0.75rem] text-error">{error}</div>
+      )}
+      <input
         ref={ref}
         {...defaultInputProps}
         {...props}
-        className={`${className} ${error ? PgView.classNames.ERROR : ""}`}
+        className={cn(
+          "h-8 w-full rounded-[12px] border border-border bg-surface-raised px-3 py-[0.4375rem] text-[0.8125rem] font-normal text-[var(--text-primary)] shadow-none",
+          "focus:outline focus:outline-1 focus:outline-[color-mix(in_srgb,var(--primary)_39%,transparent)]",
+          "disabled:cursor-not-allowed disabled:bg-muted disabled:text-[var(--text-secondary)]",
+          "[&.error]:border-error [&.success]:border-success",
+          className,
+          error && PgView.classNames.ERROR
+        )}
         onChange={(ev) => {
           const handleError = (err: InputError) => {
             if (setError) setError(err);
@@ -54,39 +62,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
   )
 );
 
-const ErrorText = styled.div`
-  ${({ theme }) => css`
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.code.size.small};
-    margin-bottom: 0.5rem;
-  `}
-`;
-
-const StyledInput = styled.input<InputProps>`
-  ${({ theme }) => css`
-    &:disabled {
-      background: ${theme.colors.state.disabled.bg};
-      color: ${theme.colors.state.disabled.color};
-      cursor: not-allowed;
-    }
-
-    &.${PgView.classNames.ERROR} {
-      outline-color: transparent;
-      border-color: ${theme.colors.state.error.color};
-    }
-
-    &.${PgView.classNames.SUCCESS} {
-      outline-color: transparent;
-      border-color: ${theme.colors.state.success.color};
-    }
-
-    ${PgTheme.convertToCSS(theme.components.input)};
-  `}}
-`;
-
 const defaultInputProps = {
   autoComplete: "off",
-  fullWidth: true,
   onFocus: (e: FocusEvent<HTMLInputElement>) => {
     e.target.classList.add(PgView.classNames.TOUCHED);
   },

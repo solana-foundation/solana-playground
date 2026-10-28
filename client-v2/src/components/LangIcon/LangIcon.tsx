@@ -1,5 +1,4 @@
 import { FC, useMemo } from "react";
-import styled from "styled-components";
 
 import { PgLanguage, PgView } from "../../utils";
 import { QuestionMark } from "../Icons";
@@ -16,18 +15,12 @@ const LangIcon: FC<React.PropsWithChildren<LangIconProps>> = ({ path }) => {
     return PgView.normalizeElement(lang.icon, { path });
   }, [path]);
 
-  return <Wrapper>{Icon}</Wrapper>;
+  return (
+    // An image icon stays inline on the baseline, as before preflight
+    <div className="h-4 w-4 [&>img]:inline [&>img]:h-full [&>img]:w-full [&>img]:align-baseline [&>svg]:h-full [&>svg]:w-full">
+      {Icon}
+    </div>
+  );
 };
-
-const Wrapper = styled.div`
-  width: 1rem;
-  height: 1rem;
-
-  & > svg,
-  & > img {
-    width: 100%;
-    height: 100%;
-  }
-`;
 
 export default LangIcon;

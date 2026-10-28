@@ -213,6 +213,14 @@ export class PgTheme {
       ._views()
       ._components();
 
+    // The code font is the user's choice, so CSS reads it from a variable
+    // (`font-pg-code` in index.css) instead of the design system's
+    // `--font-code`
+    document.documentElement.style.setProperty(
+      "--pg-font-code",
+      this._theme.font!.code!.family
+    );
+
     // Save to storage
     localStorage.setItem(this._THEME_KEY, this._theme.name);
     localStorage.setItem(this._FONT_KEY, this._font.family);

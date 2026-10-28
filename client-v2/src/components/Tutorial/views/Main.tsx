@@ -1,5 +1,4 @@
 import { FC, useEffect, useRef } from "react";
-import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
 import EditorWithTabs from "../../EditorWithTabs";
@@ -9,13 +8,7 @@ import { SpinnerWithBg } from "../../Loading";
 import { PointedArrow } from "../../Icons";
 import { Emoji } from "../../../constants";
 import { useAsyncEffect } from "../../../hooks";
-import {
-  PgCommon,
-  PgRouter,
-  PgTheme,
-  PgTutorial,
-  PgView,
-} from "../../../utils";
+import { PgCommon, PgRouter, PgTutorial, PgView } from "../../../utils";
 import type { TutorialMainComponentProps } from "../types";
 
 export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
@@ -78,7 +71,7 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
   const currentLayout = currentPage.layout ?? layout;
 
   return (
-    <Wrapper>
+    <div className="flex h-full">
       {currentLayout === "editor-content" && (
         <Resizable
           enable="right"
@@ -94,8 +87,8 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
         </Resizable>
       )}
 
-      <TutorialPage ref={tutorialPageRef}>
-        <TutorialContent>
+      <div ref={tutorialPageRef} className="max-w-[60rem] overflow-auto pt-10">
+        <div className="bg-surface-base p-8 font-sans text-[1rem]">
           {typeof currentContent === "string" ? (
             <Markdown
               linkable
@@ -110,11 +103,11 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
             currentContent
           )}
 
-          <NavigationButtonsOutsideWrapper>
-            <NavigationButtonsInsideWrapper>
+          <div className="py-12">
+            <div className="flex w-full border-t border-border pt-6 text-[0.875rem] font-bold">
               {pageNumber !== 1 && (
-                <PreviousWrapper>
-                  <PreviousText>Previous</PreviousText>
+                <div className="w-full">
+                  <div>Previous</div>
                   <Button
                     onClick={previousPage}
                     variant="ghost"
@@ -124,11 +117,11 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
                     {pages[pageNumber - 2].title ??
                       `${pageNumber - 1}/${pages.length}`}
                   </Button>
-                </PreviousWrapper>
+                </div>
               )}
 
-              <NextWrapper>
-                <NextText>Next</NextText>
+              <div className="flex w-full flex-col items-end">
+                <div>Next</div>
                 {pageNumber === pages.length ? (
                   <Button
                     onClick={finishTutorial}
@@ -149,64 +142,14 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
                     <PointedArrow data-icon="inline-end" />
                   </Button>
                 )}
-              </NextWrapper>
-            </NavigationButtonsInsideWrapper>
-          </NavigationButtonsOutsideWrapper>
-        </TutorialContent>
-      </TutorialPage>
-    </Wrapper>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
-const Wrapper = styled.div`
-  display: flex;
-  height: 100%;
-`;
-
-const TutorialPage = styled.div`
-  ${({ theme }) => css`
-    overflow: auto;
-    max-width: 60rem;
-    padding-top: ${theme.components.tabs.tab.default.height};
-    background: ${theme.components.tutorial.default.bg};
-  `}
-`;
-
-const TutorialContent = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.components.tutorial.tutorialPage)};
-  `}
-`;
-
-const NavigationButtonsOutsideWrapper = styled.div`
-  padding: 3rem 0;
-`;
-
-const NavigationButtonsInsideWrapper = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    width: 100%;
-    padding-top: 1.5rem;
-    border-top: 1px solid ${theme.colors.default.border};
-    font-size: ${theme.font.other.size.small};
-    font-weight: bold;
-  `}
-`;
-
 const NAVIGATION_BUTTON =
   "mt-2 text-base font-bold [&_svg:not([class*='size-'])]:size-5";
-
-const PreviousWrapper = styled.div`
-  width: 100%;
-`;
-
-const PreviousText = styled.div``;
-
-const NextWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  width: 100%;
-`;
-
-const NextText = styled.div``;

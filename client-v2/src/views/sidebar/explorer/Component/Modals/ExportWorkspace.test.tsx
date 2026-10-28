@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -30,17 +29,6 @@ vi.mock("../../../../../components/Markdown", () => ({ default: () => null }));
 
 import { ExportWorkspace } from "./ExportWorkspace";
 
-/** Answers every key: the modal's styles read deep theme keys, none of which matters here */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
-
 let logs: ReturnType<typeof logMemory>;
 beforeEach(() => {
   logs = logMemory();
@@ -53,15 +41,13 @@ afterEach(() => resetLogger());
 
 const draw = (name?: string) =>
   render(
-    <ThemeProvider theme={anyTheme}>
-      <Modal open>
-        <ModalIdContext.Provider value="export">
-          <ModalLayerContext.Provider value>
-            <ExportWorkspace name={name} />
-          </ModalLayerContext.Provider>
-        </ModalIdContext.Provider>
-      </Modal>
-    </ThemeProvider>
+    <Modal open>
+      <ModalIdContext.Provider value="export">
+        <ModalLayerContext.Provider value>
+          <ExportWorkspace name={name} />
+        </ModalLayerContext.Provider>
+      </ModalIdContext.Provider>
+    </Modal>
   );
 
 const toastNames = () =>

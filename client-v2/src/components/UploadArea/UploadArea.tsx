@@ -1,10 +1,10 @@
 import { FC } from "react";
-import styled, { css, DefaultTheme } from "styled-components";
 import { DropzoneOptions, DropzoneState, useDropzone } from "react-dropzone";
 
 import Input from "../Input";
 import { Checkmark, Upload } from "../Icons";
-import { PgCommon, PgTheme } from "../../utils";
+import { PgCommon } from "../../utils";
+import { cn } from "@/shared/lib/utils";
 
 interface UploadAreaProps extends DropzoneOptions {
   /** Callback to run on drop or import */
@@ -25,37 +25,23 @@ const UploadArea: FC<React.PropsWithChildren<UploadAreaProps>> = ({
   const { getRootProps, getInputProps, isDragActive } = useDropzone(props);
 
   return (
-    <Wrapper
-      className={className}
+    <div
       {...getRootProps()}
-      isDragActive={isDragActive}
+      className={cn(
+        "flex flex-col items-center justify-center rounded-[12px] p-8 [transition:all_50ms_linear]",
+        "border-2 border-dashed border-[color-mix(in_srgb,var(--primary)_39%,transparent)] bg-[color-mix(in_srgb,var(--primary)_9%,transparent)]",
+        "hover:cursor-pointer hover:border-[color-mix(in_srgb,var(--primary)_73%,transparent)] hover:[&>div]:text-[var(--text-primary)]",
+        "[&>svg]:h-16 [&>svg]:w-16 [&>svg]:text-primary",
+        isDragActive ? "opacity-[0.55]" : "opacity-100",
+        className
+      )}
     >
       <Input {...getInputProps()} />
       <Upload />
       <ImportResult isDragActive={isDragActive} {...props} />
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div<{ isDragActive: boolean }>`
-  ${({ theme, isDragActive }) => css`
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    opacity: ${isDragActive ? 0.55 : 1};
-
-    & > svg {
-      ${PgTheme.convertToCSS(theme.components.uploadArea.icon)};
-    }
-
-    &:hover > div {
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    ${PgTheme.convertToCSS(theme.components.uploadArea.default)};
-  `}
-`;
 
 type ImportResultProps = Pick<
   UploadAreaProps,
@@ -73,20 +59,20 @@ const ImportResult: FC<React.PropsWithChildren<ImportResultProps>> = ({
 }) => {
   if (error) {
     return (
-      <ImportResultWrapper>
+      <div>
         <ImportResultText result="error">{error}</ImportResultText>
-      </ImportResultWrapper>
+      </div>
     );
   }
 
   if (filesLength) {
     return (
-      <ImportResultWrapper>
+      <div>
         <ImportResultText result="success">
           <Checkmark />
           Imported {filesLength} {PgCommon.makePlural("file", filesLength)}.
         </ImportResultText>
-      </ImportResultWrapper>
+      </div>
     );
   }
 
@@ -99,26 +85,22 @@ const ImportResult: FC<React.PropsWithChildren<ImportResultProps>> = ({
   );
 };
 
-/** Adding this div in order to only change the color when result is not defined */
-const ImportResultWrapper = styled.div``;
+const RESULT_CLASSES = {
+  error: "text-error",
+  success: "text-primary",
+};
 
-const ImportResultText = styled.div<{
-  result?: keyof DefaultTheme["components"]["uploadArea"]["text"];
-}>`
-  ${({ theme, result }) => css`
-    display: flex;
-    align-items: center;
-
-    & > svg {
-      margin-right: 0.5rem;
-    }
-
-    ${PgTheme.convertToCSS(theme.components.uploadArea.text.default)}
-    ${result === "error" &&
-    PgTheme.convertToCSS(theme.components.uploadArea.text.error)};
-    ${result === "success" &&
-    PgTheme.convertToCSS(theme.components.uploadArea.text.success)};
-  `}
-`;
+const ImportResultText: FC<
+  React.PropsWithChildren<{ result?: keyof typeof RESULT_CLASSES }>
+> = ({ result, children }) => (
+  <div
+    className={cn(
+      "mt-4 flex items-center font-bold text-[var(--text-secondary)] [&>svg]:mr-2",
+      result && RESULT_CLASSES[result]
+    )}
+  >
+    {children}
+  </div>
+);
 
 export default UploadArea;

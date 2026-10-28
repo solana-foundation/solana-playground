@@ -1,20 +1,25 @@
 import { forwardRef } from "react";
-import styled, { css } from "styled-components";
 import {
   Resizable as ReResizable,
   ResizableProps as ReResizableProps,
   Enable,
 } from "re-resizable";
 
+import { cn } from "@/shared/lib/utils";
+
 type ResizableProps = Omit<ReResizableProps, "enable"> & {
   enable?: Enable | "top" | "right" | "bottom" | "left";
 };
 
 const Resizable = forwardRef<ReResizable, ResizableProps>((props, ref) => (
-  <StyledResizable
+  <ReResizable
     ref={ref}
     {...{
       ...props,
+      className: cn(
+        "[transition-duration:250ms] [transition-property:height,width] [transition-timing-function:linear]",
+        props.className
+      ),
       enable: transformEnable(props.enable),
       onResizeStart: (ev, dir, ref) => {
         // Having a transition makes resizing experience laggy. To solve, we
@@ -31,14 +36,6 @@ const Resizable = forwardRef<ReResizable, ResizableProps>((props, ref) => (
     }}
   />
 ));
-
-const StyledResizable = styled(ReResizable)`
-  ${({ theme }) => css`
-    transition: height, width;
-    transition-duration: ${theme.default.transition.duration.long};
-    transition-timing-function: ${theme.default.transition.type};
-  `}
-`;
 
 const transformEnable = (
   enable: ResizableProps["enable"]

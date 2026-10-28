@@ -1,6 +1,6 @@
 import { RefObject, useEffect, useLayoutEffect, useRef } from "react";
-import { useTheme } from "styled-components";
 import { PgExplorer } from "../../../../utils";
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 import { keepTree, keptFolders, reopenFolders } from "./kept-tree";
 
 /**
@@ -12,7 +12,7 @@ import { keepTree, keptFolders, reopenFolders } from "./kept-tree";
 export const useHandleItemState = (
   rootRef: RefObject<HTMLDivElement | null>
 ) => {
-  const theme = useTheme();
+  const theme = usePgTheme();
 
   // The folders open when the tree last unmounted are opened again. A layout
   // effect, so they are open before the column restores its scroll

@@ -23,7 +23,6 @@ vi.mock("../Icons", () => ({ HyperLink: () => null }));
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 
 import Markdown from "./Markdown";
 
@@ -46,41 +45,11 @@ describe("Markdown", () => {
     container.remove();
   });
 
-  // StyledMarkdown reads theme keys, so the empty theme throws. The real
-  // theme cannot be built here (its module needs the utils barrel), so this
-  // is a stand-in with only the keys the styles read.
-  const theme = {
-    default: {
-      borderRadius: "4px",
-      transition: { duration: { short: "0s" }, type: "linear" },
-    },
-    colors: {
-      default: {
-        border: "var(--border)",
-        primary: "var(--primary)",
-        textSecondary: "var(--text-secondary)",
-      },
-      state: { hover: { bg: "var(--surface-hover)" } },
-    },
-    components: {
-      markdown: {
-        color: "var(--text-primary)",
-        bg: "var(--surface-base)",
-        subtleBg: "var(--surface-raised)",
-      },
-    },
-    font: { code: { family: "monospace", size: { small: "1", medium: "2" } } },
-  } as unknown as DefaultTheme;
-
   // react-markdown 9 hands `pre` one child where 8 handed an array; the
   // renderer has to find the code either way
   it("renders through CodeBlock with its language and text", async () => {
     await act(async () => {
-      root.render(
-        <ThemeProvider theme={theme}>
-          <Markdown>{"```rust\nfn main() {}\n```"}</Markdown>
-        </ThemeProvider>
-      );
+      root.render(<Markdown>{"```rust\nfn main() {}\n```"}</Markdown>);
     });
 
     const block = container.querySelector('[data-testid="code-block"]');
@@ -92,11 +61,7 @@ describe("Markdown", () => {
   // header used to index as an array and so took only its first letter
   it("derives a linkable header id from the whole title", async () => {
     await act(async () => {
-      root.render(
-        <ThemeProvider theme={theme}>
-          <Markdown linkable>{"## Getting"}</Markdown>
-        </ThemeProvider>
-      );
+      root.render(<Markdown linkable>{"## Getting"}</Markdown>);
     });
 
     expect(container.querySelector("h2")?.id).toBe("mdgetting");

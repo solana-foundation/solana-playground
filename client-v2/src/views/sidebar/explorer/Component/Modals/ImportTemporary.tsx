@@ -1,5 +1,4 @@
 import { useState } from "react";
-import styled from "styled-components";
 
 import Input from "../../../../../components/Input";
 import { ModalFrame } from "@/widgets/overlays";
@@ -23,7 +22,7 @@ export const ImportTemporary = () => {
         disabled: !!error,
       }}
     >
-      <MainText>Project name</MainText>
+      <div className="mb-2 font-bold">Project name</div>
       <Input
         autoFocus
         value={name}
@@ -36,8 +35,3 @@ export const ImportTemporary = () => {
     </ModalFrame>
   );
 };
-
-const MainText = styled.div`
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-`;

@@ -1,8 +1,6 @@
 import { useEffect, lazy, Suspense, useState } from "react";
-import styled, { css } from "styled-components";
-
 import { SpinnerWithBg } from "../Loading";
-import { PgCommon, PgExplorer, PgTheme, PgView } from "../../utils";
+import { PgCommon, PgExplorer } from "../../utils";
 
 const Home = lazy(() => import("./Home"));
 const Monaco = lazy(() => import("./Monaco"));
@@ -36,33 +34,11 @@ export const Editor = () => {
 
   return (
     <Suspense fallback={<SpinnerWithBg loading size="2rem" />}>
-      <Wrapper>{showHome ? <Home /> : <Monaco />}</Wrapper>
+      {/* Monaco cannot draw a background image, so its own background is
+          transparent and this wrapper paints the surface under it */}
+      <div className="h-full w-full overflow-auto bg-surface-panel">
+        {showHome ? <Home /> : <Monaco />}
+      </div>
     </Suspense>
   );
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    width: 100%;
-    height: 100%;
-    overflow: auto;
-
-    /**
-     * Changing the home background only changes the part that is in view and
-     * the remaining parts still have 'main.default.bg' which causes problem if
-     * they are different. This selector selects the current element when home
-     * is in view and sets the background to 'home.default.bg'.
-     *
-     * The reason we are setting the background in this element is also partly
-     * due to Monaco editor's incompatibility with background-image property.
-     * We are able to solve this problem by setting the editor's background to
-     * transparent and set this(wrapper) element's background to background-image.
-     */
-    &:has(> #${PgView.ids.HOME}) {
-      background: ${theme.views.main.primary.home.default.bg ??
-      theme.views.main.default.bg};
-    }
-
-    ${PgTheme.convertToCSS(theme.components.editor.wrapper)};
-  `}
-`;

@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** What the mocked explorer and lesson report; each test sets its own */
@@ -66,24 +65,8 @@ vi.mock("../lessons/StepRail", () => ({
 import LeftPanel, { isLessonTab } from "./LeftPanel";
 import { forgetColumn } from "./kept-column";
 
-// A theme that answers every key: the styles are not under test, and the
-// real theme's module needs the utils barrel.
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
-
 const draw = (collapsed: boolean, onHide?: () => void) =>
-  render(
-    <ThemeProvider theme={anyTheme}>
-      <LeftPanel collapsed={collapsed} onHide={onHide} />
-    </ThemeProvider>
-  );
+  render(<LeftPanel collapsed={collapsed} onHide={onHide} />);
 
 /** A lesson the panel shows its Steps and Files tabs for */
 const inLesson = () => {
@@ -126,20 +109,12 @@ describe("LeftPanel in a lesson", () => {
   });
 
   it("opens on the tab it is told to, over the kept one", () => {
-    render(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed={false} startOn="files" />
-      </ThemeProvider>
-    );
+    render(<LeftPanel collapsed={false} startOn="files" />);
     expect(tab("files").getAttribute("data-state")).toBe("on");
   });
 
   it("keeps no tab from a column told where to open", () => {
-    const told = render(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed={false} startOn="files" />
-      </ThemeProvider>
-    );
+    const told = render(<LeftPanel collapsed={false} startOn="files" />);
     told.unmount();
     draw(false);
     expect(tab("steps").getAttribute("data-state")).toBe("on");
@@ -249,16 +224,8 @@ describe("LeftPanel across an unmount", () => {
     const panel = draw(false);
     body().scrollTop = 120;
     fireEvent.scroll(body());
-    panel.rerender(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed />
-      </ThemeProvider>
-    );
-    panel.rerender(
-      <ThemeProvider theme={anyTheme}>
-        <LeftPanel collapsed={false} />
-      </ThemeProvider>
-    );
+    panel.rerender(<LeftPanel collapsed />);
+    panel.rerender(<LeftPanel collapsed={false} />);
     expect(body().scrollTop).toBe(120);
   });
 

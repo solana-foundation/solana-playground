@@ -1,6 +1,5 @@
 import { FC, useEffect, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
 import Card from "../../Card";
@@ -11,7 +10,8 @@ import { ResourceProps, RESOURCES } from "./resources";
 import { TutorialProps, TUTORIALS } from "./tutorials";
 import { External, ShortArrow } from "../../Icons";
 import { PROJECT_NAME } from "../../../constants";
-import { PgFramework, PgTheme, PgView } from "../../../utils";
+import { cn } from "@/shared/lib/utils";
+import { PgFramework, PgView } from "../../../utils";
 
 const Home = () => {
   // This prevents unnecessarily fetching the home content for a frame when the
@@ -29,26 +29,31 @@ const Home = () => {
   if (!resources) return null;
 
   return (
-    <Wrapper id={PgView.ids.HOME}>
-      <ProjectTitle>{PROJECT_NAME}</ProjectTitle>
+    <div
+      id={PgView.ids.HOME}
+      className="h-full bg-surface-panel px-[8%] font-sans"
+    >
+      <div className="p-8 text-center font-heading text-[2.25rem] font-bold tracking-[-0.01em] text-[var(--text-secondary)]">
+        {PROJECT_NAME}
+      </div>
 
-      <ContentWrapper>
-        <ResourcesWrapper>
-          <ResourcesTitle>Resources</ResourcesTitle>
-          <ResourceCardsWrapper>
+      <div className="flex w-full flex-wrap">
+        <div className="max-w-[53rem]">
+          <div className="mb-4 text-[1.25rem] font-bold">Resources</div>
+          <div className="flex flex-wrap gap-8">
             {resources.map((r, i) => (
               <Resource key={i} {...r} />
             ))}
-          </ResourceCardsWrapper>
-        </ResourcesWrapper>
+          </div>
+        </div>
 
-        <TutorialsWrapper>
-          <TutorialsTitle>Tutorials</TutorialsTitle>
-          <TutorialCardsWrapper>
+        <div className="max-w-[27rem] min-w-[16rem]">
+          <div className="mb-4 text-[1.25rem] font-bold">Tutorials</div>
+          <div className="flex flex-col gap-4">
             {TUTORIALS.map((t, i) => (
               <Tutorial key={i} {...t} />
             ))}
-          </TutorialCardsWrapper>
+          </div>
 
           <Button
             asChild
@@ -61,47 +66,11 @@ const Home = () => {
               <ShortArrow data-icon="inline-end" />
             </RouterLink>
           </Button>
-        </TutorialsWrapper>
-      </ContentWrapper>
-    </Wrapper>
+        </div>
+      </div>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.default)};
-  `}
-`;
-
-const ProjectTitle = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.title)};
-  `}
-`;
-
-const ContentWrapper = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  width: 100%;
-`;
-
-const ResourcesWrapper = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.default)};
-  `}
-`;
-
-const ResourcesTitle = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.title)};
-  `}
-`;
-
-const ResourceCardsWrapper = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2rem;
-`;
 
 const Resource: FC<React.PropsWithChildren<ResourceProps>> = ({
   name,
@@ -110,75 +79,25 @@ const Resource: FC<React.PropsWithChildren<ResourceProps>> = ({
   icon,
   circleImage,
 }) => (
-  <ResourceCard>
-    <ResourceTitle>
-      <ResourceImg src={icon} $circleImage={circleImage} />
+  <Card className="h-60 w-60 rounded-[16px] border border-border bg-surface-raised px-6 pt-4 pb-6">
+    <div className="flex h-1/5 items-center text-[1rem] font-bold">
+      <Img
+        src={icon}
+        className={cn("mr-2 h-5 w-5", circleImage && "rounded-full")}
+      />
       {name}
-    </ResourceTitle>
-    <ResourceDescription>{description}</ResourceDescription>
-    <ResourceButtonWrapper>
+    </div>
+    <div className="h-3/5 text-[var(--text-secondary)]">{description}</div>
+    <div className="h-1/5 w-full">
       <Button asChild variant="outline" className="w-full">
         <a href={url} target="_blank" rel="noopener noreferrer">
           Learn more
           <External data-icon="inline-end" />
         </a>
       </Button>
-    </ResourceButtonWrapper>
-  </ResourceCard>
+    </div>
+  </Card>
 );
-
-const ResourceCard = styled(Card)`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.home.resources.card.default
-    )};
-  `}
-`;
-
-const ResourceTitle = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.card.title)};
-  `}
-`;
-
-const ResourceImg = styled(Img)<{ $circleImage?: boolean }>`
-  ${({ theme, $circleImage }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.resources.card.image)};
-
-    ${$circleImage && "border-radius: 50%"};
-  `};
-`;
-
-const ResourceDescription = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(
-      theme.views.main.primary.home.resources.card.description
-    )};
-  `}
-`;
-
-const ResourceButtonWrapper = styled.div`
-  width: 100%;
-  height: 20%;
-`;
-
-const TutorialsWrapper = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.tutorials.default)};
-  `}
-`;
-
-const TutorialsTitle = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.tutorials.title)};
-  `}
-`;
-
-const TutorialCardsWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
 
 const Tutorial: FC<React.PropsWithChildren<TutorialProps>> = ({
   title,
@@ -188,25 +107,12 @@ const Tutorial: FC<React.PropsWithChildren<TutorialProps>> = ({
 
   return (
     <Link href={url}>
-      <TutorialCard>
-        {src && <TutorialIcon src={src} />}
-        <TutorialTitle>{title}</TutorialTitle>
-      </TutorialCard>
+      <Card className="flex items-center rounded-[16px] border border-border bg-surface-raised">
+        {src && <Img src={src} className="mr-3 h-4" />}
+        <span>{title}</span>
+      </Card>
     </Link>
   );
 };
-
-const TutorialCard = styled(Card)`
-  ${({ theme }) => css`
-    ${PgTheme.convertToCSS(theme.views.main.primary.home.tutorials.card)};
-  `}
-`;
-
-const TutorialIcon = styled(Img)`
-  height: 1rem;
-  margin-right: 0.75rem;
-`;
-
-const TutorialTitle = styled.span``;
 
 export default Home;

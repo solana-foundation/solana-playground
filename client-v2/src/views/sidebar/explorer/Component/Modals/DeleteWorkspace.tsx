@@ -1,5 +1,4 @@
 import type { FC } from "react";
-import styled, { css } from "styled-components";
 
 import { ModalFrame } from "@/widgets/overlays";
 import { Warning } from "../../../../../components/Icons";
@@ -27,54 +26,32 @@ export const DeleteWorkspace: FC<
         onSubmit: () => PgExplorer.deleteWorkspace(workspaceName),
       }}
     >
-      <Content>
-        <IconWrapper>
+      <div className="flex items-center justify-center">
+        <div className="[&>svg]:size-12">
           <Warning color="warning" />
-        </IconWrapper>
-        <ContentText>
-          <Main>
+        </div>
+        <div className="ml-4 flex flex-col">
+          <span className="font-bold break-all">
             Are you sure you want to delete workspace '{workspaceName}'?
-          </Main>
-          <Desc>This action is irreversible!</Desc>
-          <Desc>- All files and folders will be deleted.</Desc>
-          <Desc>- Program credentials will be deleted.</Desc>
+          </span>
+          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
+            This action is irreversible!
+          </span>
+          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
+            - All files and folders will be deleted.
+          </span>
+          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
+            - Program credentials will be deleted.
+          </span>
           {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
               directory about to be removed */}
-          {isLesson && <Desc>- Your progress through the lesson is lost.</Desc>}
-        </ContentText>
-      </Content>
+          {isLesson && (
+            <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
+              - Your progress through the lesson is lost.
+            </span>
+          )}
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-`;
-
-const IconWrapper = styled.div`
-  & > svg {
-    width: 3rem;
-    height: 3rem;
-  }
-`;
-
-const ContentText = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-left: 1rem;
-`;
-
-const Main = styled.span`
-  font-weight: bold;
-  word-break: break-all;
-`;
-
-const Desc = styled.span`
-  ${({ theme }) => css`
-    margin-top: 0.5rem;
-    font-size: ${theme.font.code.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;

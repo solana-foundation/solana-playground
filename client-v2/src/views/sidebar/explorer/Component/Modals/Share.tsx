@@ -1,6 +1,5 @@
 import { FC, useState } from "react";
 import { CircleCheckIcon, CircleXIcon } from "lucide-react";
-import styled from "styled-components";
 
 import FilePicker from "../../../../../components/FilePicker";
 import Input from "../../../../../components/Input";
@@ -50,7 +49,7 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
         noCloseOnSubmit: true,
       }}
     >
-      <SelectFilesText>Select the files you'd like to share.</SelectFilesText>
+      <div className="mb-4">Select the files you'd like to share.</div>
 
       <FilePicker
         path={PgExplorer.getProjectRootPath()}
@@ -60,10 +59,6 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({ setPage }) => {
     </ModalFrame>
   );
 };
-
-const SelectFilesText = styled.div`
-  margin-bottom: 1rem;
-`;
 
 interface ErrorPageProps {
   message: string;
@@ -91,7 +86,7 @@ const SuccessPage: FC<React.PropsWithChildren<SuccessPageProps>> = ({
 
   return (
     <ModalFrame name="share" title buttonProps={{ text: "Continue" }}>
-      <SuccessWrapper>
+      <div className="min-w-[24rem]">
         <Callout variant="success">
           <CircleCheckIcon />
           <CalloutDescription>
@@ -99,35 +94,18 @@ const SuccessPage: FC<React.PropsWithChildren<SuccessPageProps>> = ({
           </CalloutDescription>
         </Callout>
 
-        <SuccessInputWrapper>
+        <div className="mt-4 flex items-center">
           <Input value={shareLink} readOnly />
           <CopyButton
             type="button"
             value={shareLink}
             onError={reportButtonFailure("copy")}
           />
-        </SuccessInputWrapper>
-        <SuccessLinkWrapper>
+        </div>
+        <div className="mt-3 ml-1 flex justify-start">
           <Link href={shareLink}>Go to the link</Link>
-        </SuccessLinkWrapper>
-      </SuccessWrapper>
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const SuccessWrapper = styled.div`
-  min-width: 24rem;
-`;
-
-const SuccessInputWrapper = styled.div`
-  display: flex;
-  margin-top: 1rem;
-  align-items: center;
-`;
-
-const SuccessLinkWrapper = styled.div`
-  display: flex;
-  justify-content: flex-start;
-  margin-top: 0.75rem;
-  margin-left: 0.25rem;
-`;

@@ -1,5 +1,4 @@
 import { FC, useEffect } from "react";
-import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
 import { Endpoint } from "../../../constants";
@@ -36,15 +35,15 @@ export const NonLocal: FC<React.PropsWithChildren<ToastChildProps>> = ({
   }, [id]);
 
   return (
-    <Wrapper>
-      <HelpTextWrapper>
-        <HelpTextTitle>Switch to localnet?</HelpTextTitle>
-        <HelpTextDescription>
+    <div>
+      <div>
+        <div>Switch to localnet?</div>
+        <div className="mt-1 text-[0.75rem] text-[var(--text-secondary)]">
           Current endpoint is not responsive.
-        </HelpTextDescription>
-      </HelpTextWrapper>
+        </div>
+      </div>
 
-      <ButtonsWrapper>
+      <div className="mt-4 flex justify-end [&>button]:ml-4">
         <Button
           onClick={() => (PgSettings.connection.endpoint = Endpoint.LOCALNET)}
           variant="ghost"
@@ -55,31 +54,7 @@ export const NonLocal: FC<React.PropsWithChildren<ToastChildProps>> = ({
         <Button variant="ghost" size="sm">
           No
         </Button>
-      </ButtonsWrapper>
-    </Wrapper>
+      </div>
+    </div>
   );
 };
-
-const Wrapper = styled.div``;
-
-const HelpTextWrapper = styled.div``;
-
-const HelpTextTitle = styled.div``;
-
-const HelpTextDescription = styled.div`
-  ${({ theme }) => css`
-    margin-top: 0.25rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.small};
-  `}
-`;
-
-const ButtonsWrapper = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 1rem;
-
-  & > button {
-    margin-left: 1rem;
-  }
-`;

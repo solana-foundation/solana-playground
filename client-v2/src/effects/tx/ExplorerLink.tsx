@@ -1,5 +1,4 @@
 import type { FC } from "react";
-import styled from "styled-components";
 
 import Link from "../../components/Link";
 import { useBlockExplorer } from "../../hooks";
@@ -14,13 +13,8 @@ export const ExplorerLink: FC<React.PropsWithChildren<ExplorerLinkProps>> = ({
   const blockExplorer = useBlockExplorer();
 
   return (
-    <Wrapper>
+    <div className="flex justify-around">
       <Link href={blockExplorer.getTxUrl(txHash)}>{blockExplorer.name}</Link>
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  display: flex;
-  justify-content: space-around;
-`;

@@ -1,8 +1,7 @@
 import { FC, useCallback, useEffect } from "react";
-import styled, { css } from "styled-components";
 
 import { About, Main } from "./views";
-import { PgTheme, PgTutorial } from "../../utils";
+import { PgTutorial } from "../../utils";
 import { useRenderOnChange } from "../../hooks";
 import type { TutorialComponentProps } from "./types";
 
@@ -32,7 +31,7 @@ export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
   const isStarted = PgTutorial.isStarted(PgTutorial.current.name);
 
   return (
-    <Wrapper>
+    <div className="pg-scrollbar-all flex-1 overflow-auto opacity-0 transition-opacity duration-150 ease-linear">
       {PgTutorial.page ? (
         <Main
           pageNumber={PgTutorial.page}
@@ -45,13 +44,6 @@ export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
       ) : (
         <About about={about} isStarted={isStarted} start={start} />
       )}
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    ${PgTheme.getScrollbarCSS({ allChildren: true })};
-    ${PgTheme.convertToCSS(theme.components.tutorial.default)};
-  `}
-`;

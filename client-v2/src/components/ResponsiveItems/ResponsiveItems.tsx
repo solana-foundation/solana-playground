@@ -1,5 +1,4 @@
 import { FC, useEffect, useRef, useState } from "react";
-import styled, { css } from "styled-components";
 
 import { PgCommon } from "../../utils";
 
@@ -56,17 +55,18 @@ const ResponsiveItems: FC<React.PropsWithChildren<ResponsiveItemsProps>> = (
     };
   }, [props.minItemWidth, props.gap, props.maxItems]);
 
-  return <Wrapper ref={ref} itemCount={itemCount} {...props} />;
+  return (
+    <div
+      ref={ref}
+      className="grid h-fit w-full"
+      style={{
+        gridTemplateColumns: `repeat(${itemCount}, 1fr)`,
+        gap: props.gap,
+      }}
+    >
+      {props.children}
+    </div>
+  );
 };
-
-const Wrapper = styled.div<ResponsiveItemsProps & { itemCount: number }>`
-  ${({ itemCount, gap }) => css`
-    width: 100%;
-    height: fit-content;
-    display: grid;
-    grid-template-columns: repeat(${itemCount}, 1fr);
-    gap: ${gap};
-  `}
-`;
 
 export default ResponsiveItems;

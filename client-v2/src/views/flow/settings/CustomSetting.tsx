@@ -1,6 +1,5 @@
 import { FC, useEffect, useRef, useState } from "react";
 import { InfoIcon } from "lucide-react";
-import styled from "styled-components";
 
 import Input from "@/components/Input";
 import Markdown from "@/components/Markdown";
@@ -46,11 +45,11 @@ export const CustomSetting: FC<React.PropsWithChildren<CustomSettingProps>> = ({
         disabled: !!error,
       }}
     >
-      <Content>
-        <InputLabel>
+      <div className="max-w-[25rem]">
+        <div className="mb-2 font-bold">
           {setting.name}
           {custom.type ? ` (${custom.type})` : ""}
-        </InputLabel>
+        </div>
         <Input
           ref={inputRef}
           autoFocus
@@ -70,16 +69,7 @@ export const CustomSetting: FC<React.PropsWithChildren<CustomSettingProps>> = ({
             </CalloutDescription>
           </Callout>
         )}
-      </Content>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  max-width: 25rem;
-`;
-
-const InputLabel = styled.div`
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-`;

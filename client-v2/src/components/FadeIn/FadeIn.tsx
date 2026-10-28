@@ -1,8 +1,17 @@
-import styled, { css, DefaultTheme, keyframes } from "styled-components";
+import { ComponentPropsWithoutRef, forwardRef } from "react";
 
-interface FadeInProps {
-  duration?: keyof DefaultTheme["default"]["transition"]["duration"];
+import { cn } from "@/shared/lib/utils";
+
+interface FadeInProps extends ComponentPropsWithoutRef<"div"> {
+  /** The theme's short, medium and long transition: 50, 150 and 250ms */
+  duration?: "short" | "medium" | "long";
 }
+
+const DURATION_CLASSES = {
+  short: "[animation:pg-fade-in_50ms_linear_backwards]",
+  medium: "[animation:pg-fade-in_150ms_linear_backwards]",
+  long: "[animation:pg-fade-in_250ms_linear_backwards]",
+};
 
 // `backwards`, not `forwards`: the end state is the element's own opacity,
 // and an animation that keeps filling after it ends keeps the stacking
@@ -11,16 +20,14 @@ interface FadeInProps {
 // anything on `body` with a z-index (the layout shell's Sheets). Menus and
 // dialogs portal to `body` through Radix, so they no longer sink, but a fill
 // that stayed would still trap whatever else renders inside the page.
-const FadeIn = styled.div<FadeInProps>`
-  ${({ theme, duration = "short" }) => css`
-    animation: ${fadeIn} ${theme.default.transition.duration[duration]}
-      ${theme.default.transition.type} backwards;
-  `}
-`;
-
-const fadeIn = keyframes`
-  0% { opacity: 0 }
-  100% { opacity: 1 }
-`;
+const FadeIn = forwardRef<HTMLDivElement, FadeInProps>(
+  ({ duration = "short", className, ...props }, ref) => (
+    <div
+      ref={ref}
+      className={cn(DURATION_CLASSES[duration], className)}
+      {...props}
+    />
+  )
+);
 
 export default FadeIn;

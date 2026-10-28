@@ -5,7 +5,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 import {
   afterEach,
   beforeEach,
@@ -52,17 +51,6 @@ vi.mock("../../../../../utils", () => utils);
 
 import { ImportGithub } from "./ImportGithub";
 
-/** Answers every key: the modal's styles read deep theme keys, none of which matters here */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
-
 let toast: MockInstance<typeof PgViewDirect.setToast>;
 beforeEach(() => {
   initLogger({ providers: [logMemory()] });
@@ -77,15 +65,13 @@ afterEach(() => {
 
 const draw = () =>
   render(
-    <ThemeProvider theme={anyTheme}>
-      <Modal open>
-        <ModalIdContext.Provider value="import-github">
-          <ModalLayerContext.Provider value>
-            <ImportGithub />
-          </ModalLayerContext.Provider>
-        </ModalIdContext.Provider>
-      </Modal>
-    </ThemeProvider>
+    <Modal open>
+      <ModalIdContext.Provider value="import-github">
+        <ModalLayerContext.Provider value>
+          <ImportGithub />
+        </ModalLayerContext.Provider>
+      </ModalIdContext.Provider>
+    </Modal>
   );
 
 /** The example's own Import, not the dialog's submit */

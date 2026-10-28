@@ -1,10 +1,10 @@
 import { SetStateAction, useCallback } from "react";
-import styled, { css } from "styled-components";
 
 import { BaseEditorTabs } from "./BaseEditorTabs";
 
 import Tab from "./Tab";
 import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import Dnd from "../Dnd";
 import Img from "../Img";
@@ -69,7 +69,15 @@ const Wallet = () => {
   if (!wallet) return null;
 
   return (
-    <WalletWrapper>
+    <div
+      className={cn(
+        "flex items-center",
+        // The picture is greyed at rest and full strength on hover, light
+        // or dark
+        "[&>button_img]:mr-1.5 [&>button_img]:invert-50",
+        "[&>button:hover_img]:invert-0 dark:[&>button:hover_img]:invert-100"
+      )}
+    >
       <Button
         onClick={() => (PgWallet.show = !PgWallet.show)}
         variant="ghost"
@@ -85,24 +93,6 @@ const Wallet = () => {
         />
         Wallet
       </Button>
-    </WalletWrapper>
+    </div>
   );
 };
-
-const WalletWrapper = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-
-    & > button {
-      & img {
-        filter: invert(0.5);
-        margin-right: 0.375rem;
-      }
-
-      &:hover img {
-        filter: invert(${theme.isDark ? 1 : 0});
-      }
-    }
-  `}
-`;

@@ -1,8 +1,8 @@
 import { createContext, useCallback, useContext, useMemo, useRef } from "react";
 import type { ReactNode, RefObject } from "react";
-import { useTheme } from "styled-components";
 
 import { useRenderOnChange } from "@/hooks";
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 import { PgConnection, PgView } from "@/utils";
 import type { GithubLink } from "../lib/github-links";
 import { useFeedbackProvider } from "../model/context";
@@ -56,7 +56,7 @@ const FeedbackMenuContext = createContext<MenuContext | null>(null);
  */
 export const FeedbackHost = ({ children }: { children: ReactNode }) => {
   const provider = useFeedbackProvider();
-  const theme = useTheme();
+  const theme = usePgTheme();
   const font = useMemo(
     () => ({
       fontFamily: theme.font.code.family,

@@ -8,7 +8,6 @@ import {
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -67,21 +66,6 @@ const Other = () => (
   </ModalFrame>
 );
 
-/**
- * A theme that answers every key: the form reads deep theme keys for its
- * styles, none of which matters here, and the real theme needs the utils
- * barrel.
- */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
-
 class NoopResizeObserver {
   observe() {}
   unobserve() {}
@@ -119,12 +103,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const renderHost = () =>
-  render(
-    <ThemeProvider theme={anyTheme}>
-      <ModalHost />
-    </ThemeProvider>
-  );
+const renderHost = () => render(<ModalHost />);
 
 const dialog = () => screen.queryByRole("dialog", { name: "Connect a model" });
 

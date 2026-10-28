@@ -1,6 +1,5 @@
 import { useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
-import styled, { css } from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
@@ -64,6 +63,9 @@ const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
 
 /** The prototype's field label: small, grey, in sentence case, untracked */
 const FIELD_LABEL = "text-[0.7rem] font-normal text-muted-foreground";
+
+const MUTED = "text-[0.7rem] text-[var(--text-secondary)]";
+const NOTE = cn(MUTED, "pt-[0.875rem] leading-[1.6]");
 
 /** The backend, and maybe the model, Connect a model opens on */
 export interface ConnectPreset {
@@ -314,9 +316,11 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
           )}
         >
           {p.name}
-          {needsSignInFor(p) && <SignInNeeded>sign-in needed</SignInNeeded>}
+          {needsSignInFor(p) && (
+            <span className="text-[0.7rem] text-warning">sign-in needed</span>
+          )}
           {!p.needsKey && !isUnavailable(p) && !needsSignInFor(p) && (
-            <NoKey>no key needed</NoKey>
+            <span className="text-[0.7rem] text-success">no key needed</span>
           )}
         </span>
         {!compact && (
@@ -329,31 +333,31 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   );
 
   const form = (
-    <Wrapper>
-      <Intro>
-        <Title>
+    <div className="flex flex-col">
+      <div className="flex flex-col gap-2.5 pb-5">
+        <h3 className="text-[0.8125rem] leading-normal font-medium text-[var(--text-primary)]">
           {current
             ? "Switch backend"
             : "An assistant that can see your project"}
-        </Title>
+        </h3>
         {!current && (
-          <Lead>
+          <div className="text-[0.75rem] leading-[1.65] text-[var(--text-secondary)]">
             It reads the tab you are looking at and the last build error,
             explains what went wrong against your actual code, and proposes
             patches you apply yourself.
-          </Lead>
+          </div>
         )}
         {!current && defaultBackend === "present" && (
-          <Lead>
+          <div className="text-[0.75rem] leading-[1.65] text-[var(--text-secondary)]">
             Out of the box it runs on this deployment's own backend, with the
             capabilities listed below. Bring your own key to run it on something
             else.
-          </Lead>
+          </div>
         )}
-      </Intro>
+      </div>
 
-      <Label as="div">Backend</Label>
-      <Providers>
+      <div className={cn(MUTED, "block pb-[0.4375rem]")}>Backend</div>
+      <div className="flex flex-col gap-1.5 pb-4">
         <RadioGroup
           aria-label="Backend"
           value={selectedBar ?? ""}
@@ -380,16 +384,27 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
             : selectedAlternative && providerBar(selectedAlternative)}
         </RadioGroup>
         {!forcedOpen && (
-          <Toggle
+          <button
             type="button"
+            className={cn(
+              MUTED,
+              "flex cursor-pointer items-center gap-1.5 self-start border-none bg-transparent py-0.5 hover:text-[var(--text-primary)] focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-primary"
+            )}
             aria-expanded={showAlternatives}
             onClick={() => setExpanded(!showAlternatives)}
           >
             {showAlternatives ? "Hide other backends" : "Bring your own key"}
-            <Chevron $open={showAlternatives}>▾</Chevron>
-          </Toggle>
+            <span
+              className={cn(
+                "inline-block leading-none transition-transform duration-150 ease-linear",
+                showAlternatives && "rotate-180"
+              )}
+            >
+              ▾
+            </span>
+          </button>
         )}
-      </Providers>
+      </div>
 
       {provider.endpoint && endpoint && (
         <>
@@ -527,195 +542,55 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
       {/* Gone once the sign-in is no longer what the action does */}
       {needsSignIn && signInError && (
-        <SignInError role="alert">{signInError}</SignInError>
+        <div
+          role="alert"
+          className="pt-2 text-[0.7rem] leading-[1.6] text-error"
+        >
+          {signInError}
+        </div>
       )}
 
       {switching && (
-        <Note>
+        <div className={NOTE}>
           Switching starts a new conversation. The current one cannot be
           replayed to another backend.
-        </Note>
+        </div>
       )}
 
       {provider.needsKey && (
-        <Note>
+        <div className={NOTE}>
           Kept in this tab until you press Forget key or close it; a copy of
           this tab keeps it too. Sent only to{" "}
           {provider.endpoint ? "the endpoint above" : provider.name}, never to
           our server.
-        </Note>
+        </div>
       )}
 
       {!current && (
-        <Capabilities>
+        <div className="flex flex-col gap-2 pt-5">
           {CAPABILITIES.map(({ tag, text }, i) => (
-            <Capability key={text}>
+            <div
+              key={text}
+              className={cn(MUTED, "flex gap-[0.5625rem] leading-[1.55]")}
+            >
               {/* One tag per run of rows sharing it, so it reads as a group */}
-              <Tag>{tag === CAPABILITIES[i - 1]?.tag ? "" : tag}</Tag>
+              <span className="w-[3.25rem] shrink-0 tracking-[0.06em] text-primary">
+                {tag === CAPABILITIES[i - 1]?.tag ? "" : tag}
+              </span>
               <span>{text}</span>
-            </Capability>
+            </div>
           ))}
-        </Capabilities>
+        </div>
       )}
 
       {provider.keyUrl && (
-        <Footer>
+        <div className={cn(MUTED, "mt-auto pt-5 text-center")}>
           No key? <Link href={provider.keyUrl}>Create one</Link>
-        </Footer>
+        </div>
       )}
-    </Wrapper>
+    </div>
   );
   return frame({ action, form });
 };
-
-/** The dialog's body scrolls and pads; the form only stacks */
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-`;
-
-const Intro = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.625rem;
-  padding-bottom: 1.25rem;
-`;
-
-const Title = styled.h3`
-  ${({ theme }) => css`
-    margin: 0;
-    color: ${theme.colors.default.textPrimary};
-    font-size: ${theme.font.code.size.medium};
-    font-weight: 500;
-    line-height: 1.5;
-  `}
-`;
-
-const Lead = styled.div`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.small};
-    line-height: 1.65;
-  `}
-`;
-
-const Label = styled.label`
-  ${({ theme }) => css`
-    display: block;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    padding-bottom: 0.4375rem;
-  `}
-`;
-
-const Providers = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  padding-bottom: 1rem;
-`;
-
-const NoKey = styled.span`
-  ${({ theme }) => css`
-    color: ${theme.colors.state.success.color};
-    font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
-
-const SignInNeeded = styled.span`
-  ${({ theme }) => css`
-    color: ${theme.colors.state.warning.color};
-    font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
-
-const SignInError = styled.div`
-  ${({ theme }) => css`
-    padding-top: 0.5rem;
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.6;
-  `}
-`;
-
-const Toggle = styled.button`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-    align-self: flex-start;
-    gap: 0.375rem;
-    padding: 0.125rem 0;
-    background: transparent;
-    border: none;
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    cursor: pointer;
-
-    &:hover {
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    &:focus-visible {
-      outline: 1px solid ${theme.colors.default.primary};
-      outline-offset: 2px;
-    }
-  `}
-`;
-
-const Chevron = styled.span<{ $open: boolean }>`
-  ${({ theme, $open }) => css`
-    display: inline-block;
-    line-height: 1;
-    transform: rotate(${$open ? "180deg" : "0deg"});
-    transition: transform ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-  `}
-`;
-
-const Note = styled.div`
-  ${({ theme }) => css`
-    padding-top: 0.875rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.6;
-  `}
-`;
-
-const Capabilities = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding-top: 1.25rem;
-`;
-
-const Capability = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    gap: 0.5625rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.55;
-  `}
-`;
-
-const Tag = styled.span`
-  ${({ theme }) => css`
-    width: 3.25rem;
-    flex-shrink: 0;
-    color: ${theme.colors.default.primary};
-    letter-spacing: 0.06em;
-  `}
-`;
-
-const Footer = styled.div`
-  ${({ theme }) => css`
-    margin-top: auto;
-    padding-top: 1.25rem;
-    text-align: center;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-  `}
-`;
 
 export default Connect;
