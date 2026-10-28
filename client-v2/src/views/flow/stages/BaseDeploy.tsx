@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ExternalLink, Rocket } from "lucide-react";
+import { ExternalLink, Rocket, TriangleAlert } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Badge } from "@/shared/ui/badge";
@@ -16,6 +16,10 @@ import {
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 import { StatusDot } from "@/shared/ui/status-dot";
+import {
+  MAINNET_DEPLOY_WARNING,
+  warnsOnDeploy,
+} from "../../../commands/deploy/mainnet-warning";
 import type { DeployRecord } from "../state/deploy-history";
 import { STAGE_BODY, STAGE_FOOT, STAGE_FRAME } from "./stage-layout";
 
@@ -239,6 +243,12 @@ const BaseDeploy = (p: BaseDeployProps) => {
             <CalloutDescription>
               Deploy failed - see the console.
             </CalloutDescription>
+          </Callout>
+        )}
+        {warnsOnDeploy(p.cluster) && (
+          <Callout variant="warning" aria-label="Mainnet deploy warning">
+            <TriangleAlert />
+            <CalloutDescription>{MAINNET_DEPLOY_WARNING}</CalloutDescription>
           </Callout>
         )}
         {latest && <DeployResult latest={latest} p={p} />}

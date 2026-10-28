@@ -41,8 +41,10 @@ const props = (state: {
   deploy: DeployStatus;
   history: DeployRecord[];
   details?: DeployDetails;
+  /** devnet unless the test is about the cluster */
+  cluster?: string | null;
 }): BaseDeployProps => ({
-  cluster: "devnet",
+  cluster: state.cluster === undefined ? "devnet" : state.cluster,
   built: state.built,
   deploy: state.deploy,
   programId: PROGRAM_ID,
@@ -75,7 +77,73 @@ const lastIsActions = (container: HTMLElement) =>
     .querySelector('[data-slot="stage-empty"]')
     ?.lastElementChild?.getAttribute("data-slot");
 
+const mainnetWarning = () =>
+  screen.queryByRole("alert", { name: "Mainnet deploy warning" });
+
 describe("BaseDeploy", () => {
+  it("warns on mainnet without holding Deploy", () => {
+    const { container } = render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [],
+          cluster: "mainnet-beta",
+        })}
+      />
+    );
+
+    const warning = mainnetWarning();
+    expect(warning?.textContent).toContain("Playground wallet");
+    expect(warning?.textContent).toContain("your own machine");
+    const deploy = screen.getByRole("button", {
+      name: "Deploy to mainnet-beta",
+    });
+    expect(deploy).toHaveProperty("disabled", false);
+    expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  it("warns on mainnet before a build too", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: false,
+          deploy: "idle",
+          history: [],
+          cluster: "mainnet-beta",
+        })}
+      />
+    );
+
+    expect(mainnetWarning()).toBeTruthy();
+  });
+
+  it("keeps the warning beside a failed deploy's alert", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "failed",
+          history: [record("a", null)],
+          cluster: "mainnet-beta",
+        })}
+      />
+    );
+
+    expect(mainnetWarning()).toBeTruthy();
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+  });
+
+  it.each(["devnet", null])("does not warn on %s", (cluster) => {
+    render(
+      <BaseDeploy
+        {...props({ built: true, deploy: "idle", history: [], cluster })}
+      />
+    );
+
+    expect(mainnetWarning()).toBeNull();
+  });
+
   it("holds Deploy until a build succeeded", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />

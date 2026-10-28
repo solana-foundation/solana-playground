@@ -17,6 +17,7 @@ import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
+import { MAINNET_DEPLOY_WARNING, warnsOnDeploy } from "./mainnet-warning";
 
 export const deploy = createCmd({
   name: "deploy",
@@ -38,6 +39,9 @@ export const deploy = createCmd({
     }
 
     PgView.setMainSecondaryProgress(0.1);
+    if (warnsOnDeploy(PgConnection.cluster)) {
+      PgTerminal.println(PgTerminal.warning(MAINNET_DEPLOY_WARNING));
+    }
     PgTerminal.println(
       `${PgTerminal.info(
         "Deploying..."
