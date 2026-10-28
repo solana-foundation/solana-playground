@@ -185,12 +185,16 @@ test.describe("client-v2-stages: Interact", () => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
 
-    await expect(panel.getByText("Program: e2e_project")).toBeVisible(LONG);
     await expect(
-      panel.getByRole("heading", { name: "Instructions" })
-    ).toBeVisible();
+      panel.getByRole("button", { name: "Copy program id" })
+    ).toBeVisible(LONG);
     await expect(
-      panel.getByRole("button", { name: "initialize" })
+      panel
+        .getByRole("radiogroup", { name: "Instruction" })
+        .getByRole("radio", { name: "initialize" })
+    ).toBeChecked();
+    await expect(
+      panel.getByRole("button", { name: "Call initialize" })
     ).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
   });
@@ -313,7 +317,7 @@ test.describe("client-v2-search-field", () => {
   }) => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
-    await panel.getByRole("button", { name: "initialize" }).click();
+    await panel.getByRole("radio", { name: "initialize" }).click();
 
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it

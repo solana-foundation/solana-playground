@@ -1,8 +1,12 @@
 import type { ReactNode } from "react";
 import { MousePointerClick } from "lucide-react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { BrandButton } from "@/shared/ui/brand-button";
+import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { CopyButton } from "@/shared/ui/copy-button";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import {
   StageEmpty,
@@ -13,6 +17,7 @@ import {
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 import type { Stage } from "../state/stage";
+import { shortenId } from "./interact-callouts";
 import type { InteractSurface } from "./interact-surface";
 import { STAGE_BODY, STAGE_FOOT, STAGE_FRAME } from "./stage-layout";
 
@@ -36,6 +41,16 @@ export interface BaseInteractProps {
   idlLoad: ReactNode;
   /** The form, drawn only on the `ready` surface */
   form: ReactNode;
+  /** The program the calls go to; null when there is none to name */
+  programId: string | null;
+  /** The code was built after the last deploy on this network */
+  builtAfterDeploy: boolean;
+  /** The fee payer cannot pay one fee; `airdrop` is null without a faucet */
+  solNeeded: {
+    balance: number;
+    cluster: string;
+    airdrop: (() => Promise<void>) | null;
+  } | null;
 }
 
 type EmptySurface = Exclude<InteractSurface, "ready">;
@@ -139,15 +154,82 @@ const Empty = ({
   );
 };
 
+/** What stands between the person and a useful call, above the form */
+const Callouts = ({ p }: { p: BaseInteractProps }) => {
+  if (!p.builtAfterDeploy && !p.solNeeded) return null;
+  return (
+    <div className="flex max-w-[42rem] flex-col gap-3 px-6 pt-6">
+      {p.builtAfterDeploy && (
+        <Callout variant="warning">
+          <CalloutDescription className="flex flex-wrap items-center justify-between gap-3">
+            The deployed program is older than your code. Redeploy to call the
+            latest version.
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => p.onGoTo("deploy")}
+            >
+              Redeploy
+            </Button>
+          </CalloutDescription>
+        </Callout>
+      )}
+      {p.solNeeded && (
+        <Callout variant="warning">
+          <CalloutDescription className="flex flex-wrap items-center justify-between gap-3">
+            {`This call needs a small fee in ${p.solNeeded.cluster} SOL. Your wallet has ${p.solNeeded.balance} SOL.`}
+            {p.solNeeded.airdrop && (
+              <AsyncButton
+                size="sm"
+                variant="outline"
+                onClick={p.solNeeded.airdrop}
+                onError={reportButtonFailure(`get ${p.solNeeded.cluster} SOL`)}
+              >
+                Get {p.solNeeded.cluster} SOL
+              </AsyncButton>
+            )}
+          </CalloutDescription>
+        </Callout>
+      )}
+    </div>
+  );
+};
+
+/** The program the stage calls, shortened, with copy, and its network */
+const Program = ({ id, cluster }: { id: string; cluster: string | null }) => (
+  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+    <span>Program</span>
+    <code className="font-mono text-foreground" title={id}>
+      {shortenId(id)}
+    </code>
+    <CopyButton
+      value={id}
+      label="Copy program id"
+      onError={reportButtonFailure("copy the program id")}
+    />
+    {cluster && (
+      <>
+        <span aria-hidden="true">·</span>
+        <span>{cluster}</span>
+      </>
+    )}
+  </div>
+);
+
 /** The Interact stage drawn from props: the toolbar, then the form or why there is none */
 const BaseInteract = (p: BaseInteractProps) => (
   <div className="flex h-full flex-col">
     <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-3">
-      <div className="flex flex-wrap items-baseline gap-2.5">
-        <h2 className="m-0 text-xl font-semibold tracking-tight">Interact</h2>
-        <span className="font-mono text-xs text-muted-foreground">
-          {p.meta}
-        </span>
+      <div className="flex flex-col gap-1">
+        <div className="flex flex-wrap items-baseline gap-2.5">
+          <h2 className="m-0 text-xl font-semibold tracking-tight">Interact</h2>
+          <span className="font-mono text-xs text-muted-foreground">
+            {p.meta}
+          </span>
+        </div>
+        {p.surface === "ready" && p.programId && (
+          <Program id={p.programId} cluster={p.cluster} />
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-4">
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -174,7 +256,14 @@ const BaseInteract = (p: BaseInteractProps) => (
       </div>
     </div>
     <div className={STAGE_FRAME}>
-      {p.surface === "ready" ? p.form : <Empty p={p} surface={p.surface} />}
+      {p.surface === "ready" ? (
+        <>
+          <Callouts p={p} />
+          {p.form}
+        </>
+      ) : (
+        <Empty p={p} surface={p.surface} />
+      )}
     </div>
   </div>
 );
