@@ -201,6 +201,10 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
       "You don't have enough SOL to complete the deployment. Would you like to request an airdrop?",
       { confirm: true, default: "yes" }
     );
+    // TODO(HOO-2394): the question cannot end on a stop, since the shell's
+    // input wait takes no signal; a stop while it waits ends the deploy at
+    // the answer instead, before any SOL moves
+    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
     if (!confirmed) throw new Error("Insufficient balance");
 
     // Request only what the deployment is missing, not the cluster's
@@ -216,6 +220,7 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
   // deployment to the first playground wallet, which allows to deploy without
   // asking for approval.
   if (standardWallet) {
+    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
     // Transfer extra 0.1 SOL for fees (doesn't have to get used)
     const requiredBalance =
       requiredBalanceWithoutFees + PgWeb3.solToLamports(0.1);
@@ -243,6 +248,7 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
   // NOTE: This ideally would happen just before the upgrade, but doing so
   // results in `Program was deployed in this block already` error.
   if (additionalLen > 0) {
+    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
     await sendAndConfirmTxWithRetries(
       async () => {
         return await BpfLoaderUpgradeable.extendProgram(

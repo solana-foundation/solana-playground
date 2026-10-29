@@ -29,6 +29,10 @@ export interface FlowState {
    * run. Lets a stage tell a stale `PgBuildOutput` apart from the one that
    * belongs to this run. */
   buildStartedAt: number | null;
+  /** `buildStartedAt` of the run before the one in flight, which a stopped
+   * build goes back to, so the report it settled on stays current. Set by
+   * `build-start`, read only by `build-stop`. */
+  buildStartedBefore: number | null;
   /** Why the last build never reached the compiler, for Build's surface
    * and its "Show details"; `null` once a build settles otherwise */
   buildFailure: BuildFailure | null;
@@ -87,6 +91,7 @@ export const INITIAL_FLOW_STATE: FlowState = {
   buildErrorCount: 0,
   buildMs: null,
   buildStartedAt: null,
+  buildStartedBefore: null,
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
@@ -159,11 +164,17 @@ export class PgFlow {
           stage: "build",
           build: "running",
           buildStartedAt: ev.at,
+          buildStartedBefore: state.buildStartedAt,
           stopped: null,
         };
       case "build-stop":
         if (state.build !== "running") return state;
-        return { ...state, build: state.buildSettled, stopped: "build" };
+        return {
+          ...state,
+          build: state.buildSettled,
+          buildStartedAt: state.buildStartedBefore,
+          stopped: "build",
+        };
       case "build-finish":
         return ev.failed
           ? {

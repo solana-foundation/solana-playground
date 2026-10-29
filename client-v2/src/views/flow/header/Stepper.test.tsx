@@ -18,6 +18,7 @@ const failedBuild: FlowState = {
   buildErrorCount: 3,
   buildMs: null,
   buildStartedAt: 1000,
+  buildStartedBefore: null,
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,

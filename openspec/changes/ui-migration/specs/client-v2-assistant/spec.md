@@ -54,6 +54,36 @@ turn.
 - **WHEN** a user sends a message and presses Stop while the answer streams
 - **THEN** the turn ends, the thread says it was stopped, and Send is back
 
+### Requirement: A busy model is asked again
+
+When the model answers that it is busy (a 429) before the turn has run any
+tool, the thread SHALL show "The model is busy" with a countdown, and SHALL
+send the message again when it ends, at most three times, then say to send
+it again in a minute. The wait SHALL be the server's when it names one, and
+Try now SHALL be off until it ends; a wait longer than a minute SHALL not be
+counted down. Try now SHALL send at once and Stop SHALL drop the retry. A
+busy answer after a tool ran SHALL NOT be sent again, since the tool's work
+would run twice.
+
+#### Scenario: A busy model counts down and sends again (manual)
+
+- **WHEN** a user sends a message and the model answers 429 with no wait
+- **THEN** the thread shows "The model is busy" and "Trying again in 10 s",
+  and the message is sent again when it reaches 0
+
+#### Scenario: Try now and Stop (manual)
+
+- **WHEN** the busy countdown shows and the user presses Try now, or
+  presses Stop
+- **THEN** Try now sends the message at once; Stop removes the countdown and
+  sends nothing
+
+#### Scenario: Busy after a tool ran (manual)
+
+- **WHEN** the model calls a tool and its next request answers 429
+- **THEN** the thread says the model is busy and that what it ran stays
+  done, and nothing is sent again
+
 ### Requirement: The assistant reports what the user does with the model
 
 The assistant SHALL send these telemetry events (prefix `assistant`). None

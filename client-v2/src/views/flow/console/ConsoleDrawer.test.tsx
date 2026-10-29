@@ -77,6 +77,7 @@ const flowState = (
   buildErrorCount: 0,
   buildMs: null,
   buildStartedAt,
+  buildStartedBefore: null,
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,

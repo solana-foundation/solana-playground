@@ -362,6 +362,25 @@ describe("the assistant's provider", () => {
       expect(failure).toBeInstanceOf(ModelBusyError);
       expect((failure as ModelBusyError).waitSeconds).toBe(12);
     });
+
+    it("is not busy once a tool has run, so the turn is not sent again", async () => {
+      respond(
+        openAiToolCall("c1", "write_file", {}),
+        new Response(JSON.stringify({ error: "Upstream 429: slow down" }), {
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: { "content-type": "application/json" },
+        })
+      );
+
+      const failure = await defaultBackend()
+        .send("make the change")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(ModelBusyError);
+      expect((failure as Error).message).toMatch(/already ran/);
+    });
   });
 
   it("never shows the default backend's relay of an upstream failure", async () => {

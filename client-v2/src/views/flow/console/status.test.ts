@@ -32,6 +32,7 @@ const DEFAULT_STATE: FlowState = {
   buildErrorCount: 0,
   buildMs: null,
   buildStartedAt: null,
+  buildStartedBefore: null,
   buildFailure: null,
   deployBeforeRun: null,
   stopped: null,
