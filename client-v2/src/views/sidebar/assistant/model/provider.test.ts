@@ -14,6 +14,12 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { createProvider } from "./provider";
+import { TurnFailure } from "./types";
+import {
+  DAILY_CAP_REASON,
+  POOL_EXHAUSTED_REASON,
+  REFUSAL_MESSAGES,
+} from "@/features/agent";
 import { PgAssistant, type ChatItem } from "../store";
 import { PgSession } from "../../../../features/auth";
 import { DEFAULT_BACKEND_URL, MAX_RESUMES, MAX_STEPS } from "../config";
@@ -51,7 +57,7 @@ vi.mock("./tools", async () => {
 const KEY = "sk-test-0123456789abcdef";
 
 /** Answer the turn's requests in order, recording each one */
-const respond = (...answers: Response[]) => {
+const respond = (...answers: Parameters<typeof fakeFetch>) => {
   const { fetch, sent } = fakeFetch(...answers);
   vi.spyOn(globalThis, "fetch").mockImplementation(fetch);
   return sent;
@@ -280,7 +286,7 @@ describe("the assistant's provider", () => {
     );
 
     await expect(anthropic().send("hi")).rejects.toMatchObject({
-      kind: "paused",
+      reason: "paused",
     });
     expect(sent).toHaveLength(MAX_RESUMES + 1);
   });
@@ -466,6 +472,21 @@ describe("the assistant's provider", () => {
       expect(failure).not.toBe(refusal);
       expect(PgSession.refresh).not.toHaveBeenCalled();
     });
+
+    it("is the provider's own 401 to telemetry, with the refusal as its text", async () => {
+      respond(unauthorized({ error: refusal, reason: "signed-out" }));
+
+      const failure = await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(TurnFailure);
+      expect(failure).toMatchObject({
+        reason: "provider",
+        status: 401,
+        message: refusal,
+      });
+    });
   });
 
   describe("a refusal by a limit of the default backend", () => {
@@ -585,5 +606,122 @@ describe("the assistant's provider", () => {
       expect(failure).toMatch(/^503 /);
       expect(refused()).toEqual([]);
     });
+  });
+});
+
+describe("a turn's failure", () => {
+  const json = { "content-type": "application/json" };
+  const refusal = () =>
+    anthropicText("", "refusal", { type: "refusal", category: "cyber" });
+  const paused = () =>
+    Array.from({ length: MAX_RESUMES + 2 }, () =>
+      anthropicText("", "pause_turn")
+    );
+  /** `/api/agent` refuses with `status` and `body` */
+  const refuses = (status: number, body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status, headers: json });
+
+  beforeEach(() => initTelemetry({ providers: [memoryProvider()] }));
+  afterEach(() => resetTelemetry());
+
+  it.each([
+    {
+      name: "a backend error, with its status",
+      provider: defaultBackend,
+      answers: () => [openAiError(500, "boom")],
+      reason: "provider",
+      status: 500,
+      message: /boom/,
+    },
+    {
+      name: "a refusal, with no status",
+      provider: anthropic,
+      answers: () => [refusal()],
+      reason: "refusal",
+      status: undefined,
+      message: /Rephrase it, or switch backends\.$/,
+    },
+    {
+      name: "a turn that kept pausing, with no status",
+      provider: anthropic,
+      answers: paused,
+      reason: "paused",
+      status: undefined,
+      message: new RegExp(
+        `^The turn paused ${MAX_RESUMES + 1} times without finishing\\.$`
+      ),
+    },
+    {
+      name: "a backend that did not answer, with no status",
+      provider: defaultBackend,
+      answers: () => [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+      ],
+      reason: "provider",
+      status: undefined,
+      message: /Failed to fetch/,
+    },
+    {
+      // The panel's own sentence for the limit, not the SDK's wrapper around the status
+      name: "the daily cap, as capped with the 429",
+      provider: defaultBackend,
+      answers: () => [
+        refuses(429, { reason: DAILY_CAP_REASON, tier: "newcomer" }),
+      ],
+      reason: "capped",
+      status: 429,
+      message: new RegExp(`^${REFUSAL_MESSAGES[DAILY_CAP_REASON]}$`),
+    },
+    {
+      name: "an exhausted pool, as capped with the 503",
+      provider: defaultBackend,
+      answers: () => [
+        refuses(503, { reason: POOL_EXHAUSTED_REASON, tier: "established" }),
+      ],
+      reason: "capped",
+      status: 503,
+      message: new RegExp(`^${REFUSAL_MESSAGES[POOL_EXHAUSTED_REASON]}$`),
+    },
+    {
+      // Relayed by the default backend with the upstream's own status and no `reason`
+      name: "an upstream rate limit, as the provider's 429 and not a cap",
+      provider: defaultBackend,
+      answers: () => [openAiError(429, "Rate limited")],
+      reason: "provider",
+      status: 429,
+      message: /Rate limited/,
+    },
+  ])(
+    "rejects with $name",
+    async ({ provider, answers, reason, status, message }) => {
+      respond(...answers());
+
+      const failure = await provider()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(TurnFailure);
+      expect(failure).toMatchObject({ reason, status });
+      expect((failure as Error).message).toMatch(message);
+      // The SDK's error travels with it, for a log
+      expect((failure as Error).cause).toMatchObject({ name: "AiTurnError" });
+    }
+  );
+
+  it("passes a failure raised on this side through unchanged", async () => {
+    respond(
+      ...Array.from({ length: MAX_STEPS }, (_, i) =>
+        openAiToolCall(`c${i}`, "write_file", {})
+      )
+    );
+
+    const failure = await defaultBackend()
+      .send("loop")
+      .catch((e: unknown) => e);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(TurnFailure);
   });
 });
