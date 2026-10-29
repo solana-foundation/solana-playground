@@ -18,7 +18,11 @@ import {
   PROVIDERS,
 } from "../../../views/sidebar/assistant/model/types";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { paramsOf, PgAssistant } from "../../../views/sidebar/assistant/store";
+import {
+  paramsOf,
+  PgAssistant,
+  STOPPED_NOTICE,
+} from "../../../views/sidebar/assistant/store";
 import type {
   Connection,
   PromptRequest,
@@ -58,6 +62,21 @@ const isRejectedKey = (error: unknown) =>
   error instanceof Error &&
   error.name === "AiTurnError" &&
   (error as AiTurnError).status === 401;
+
+/**
+ * What `fetch`, and a stream it was reading, reject with when the connection
+ * drops: a `TypeError` whose whole message is one Chrome ("Failed to fetch",
+ * "network error"), Firefox ("NetworkError when attempting to fetch
+ * resource.", "Error in input stream"), Safari ("Load failed", "The network
+ * connection was lost.") or Node's fetch ("fetch failed", "terminated") use
+ * for it. Matched whole, so
+ * a programming error that is also a `TypeError` ("x.fetch is not a
+ * function") keeps its own message instead of reading as a cut-off reply.
+ */
+const NETWORK_FAILURE =
+  /^(failed to fetch|fetch failed|networkerror when attempting to fetch resource|load failed|network error|the network connection was lost|error in input stream|terminated)\.?$/i;
+const isNetworkFailure = (error: unknown) =>
+  error instanceof TypeError && NETWORK_FAILURE.test(error.message);
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
@@ -104,6 +123,14 @@ export interface Turn {
   promptWaiting: boolean;
   /** Bumped whenever the composer's input should take focus */
   focusRequest: number;
+  /** The file whose content the next message leaves out, or `null` */
+  openFileLeftOut: string | null;
+  /**
+   * Leaves `path`'s content out of the next message, whoever sends it, as
+   * long as it is still the open file then: another file the user switched
+   * to goes in full, as its chip says
+   */
+  leaveOutOpenFile(path: string): void;
 }
 
 /**
@@ -184,6 +211,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // the panel's job, not the conversation's: a notice item would outlive the
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
+  const [openFileLeftOut, setOpenFileLeftOut] = useState<string | null>(null);
+  // Read by `start`, which a requested prompt runs from an older render
+  const leftOut = useRef<string | null>(null);
+  const leaveOutOpenFile = (path: string) => {
+    leftOut.current = path;
+    setOpenFileLeftOut(path);
+  };
 
   const provider = useRef<{
     connection: Connection;
@@ -370,14 +404,25 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
     setInput("");
+    // For this message only: the file goes with the next one again
+    const context = {
+      openFile:
+        leftOut.current === null ||
+        leftOut.current !== PgExplorer.currentFilePath,
+    };
+    leftOut.current = null;
+    setOpenFileLeftOut(null);
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
 
     try {
-      await instance.send(trimmed, controller.signal);
+      await instance.send(trimmed, controller.signal, context);
     } catch (e) {
+      const cutReply = isNetworkFailure(e)
+        ? PgAssistant.turnReplyWithText()
+        : null;
       if (
         !controller.signal.aborted &&
         isRejectedKey(e) &&
@@ -396,6 +441,15 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         });
         connectLog.warn("the provider refused the key", {
           context: { provider: current.id },
+        });
+      } else if (!controller.signal.aborted && cutReply) {
+        // The reply keeps what it streamed and says it was cut off
+        PgAssistant.markCutOff(cutReply);
+        log.warn("the connection dropped mid-reply", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        assistantTelemetry.track("assistant_reply_failed", {
+          reason: "interrupted",
         });
       } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
@@ -447,7 +501,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!turn.current || turn.current.signal.aborted) return;
     turn.current.abort();
     PgAssistant.cancelPending();
-    PgAssistant.addNotice("Stopped.");
+    PgAssistant.addNotice(STOPPED_NOTICE);
     assistantTelemetry.track("assistant_turn_stopped", {});
   };
 
@@ -482,6 +536,12 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     };
     return PgAssistant.onDidRequestPrompt(
       (request) => {
+        // Nothing is sent, so no backend is needed: the prompt takes the
+        // composer and its focus whether or not one is connected
+        if (!request.send) {
+          place(request.text);
+          return;
+        }
         if (usableConnection()) {
           run(request);
           return;
@@ -519,7 +579,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
               run(request);
               return;
             }
-            setInput(request.text);
+            // Focused first, so Connect a model gives focus back to the
+            // composer holding the prompt when it closes
+            place(request.text);
             setPromptWaiting(true);
             openConnect("send");
           })
@@ -546,5 +608,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     openConnect,
     promptWaiting,
     focusRequest,
+    openFileLeftOut,
+    leaveOutOpenFile,
   };
 };

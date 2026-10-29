@@ -319,7 +319,9 @@ test.describe("assistant-own-key", () => {
   }) => {
     await seedWorkspace(page, "own-key-change");
     await page.getByRole("button", { name: "More", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
     const dialog = page.getByRole("dialog", { name: "Connect a model" });
     await expect(dialog.locator("#assistant-api-key")).toBeVisible(LONG);
 
@@ -583,7 +585,9 @@ test.describe("assistant-own-key", () => {
     await expect(page.getByText(REPLY)).toBeVisible(LONG);
 
     await page.getByRole("button", { name: "More", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
     const dialog = page.getByRole("dialog", { name: "Connect a model" });
     await dialog.locator("#assistant-model").fill("gpt-y");
     return { dialog, turns };

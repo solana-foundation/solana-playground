@@ -1,6 +1,7 @@
 import { createMcpTools } from "./mcp-tools";
 import { createSkillTools } from "./skill-tools";
-import { PgAssistant } from "../store";
+import { PgAssistant, wroteOutcome } from "../store";
+import { PgPatchUndo } from "../patch-undo";
 import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
 import { bindTool } from "@/entities/agent-tools";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
@@ -92,7 +93,8 @@ export const createTools = (
 
     try {
       await bridge.applyPatch({ path, content });
-      PgAssistant.setApprovalOutcome(approvalId, `wrote ${path}`);
+      PgPatchUndo.wrote(approvalId);
+      PgAssistant.setApprovalOutcome(approvalId, wroteOutcome(path));
       return `Wrote ${path}.`;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);

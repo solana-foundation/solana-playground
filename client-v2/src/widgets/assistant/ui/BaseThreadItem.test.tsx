@@ -292,6 +292,64 @@ describe("BaseThreadItem", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
+  it("a stopped notice offers Try again when given onRetry", () => {
+    const onRetry = vi.fn();
+    render(
+      <BaseThreadItem
+        item={{
+          id: "n-1",
+          createdAt: CREATED,
+          kind: "notice",
+          text: "Stopped.",
+        }}
+        onAnswer={vi.fn()}
+        onRetry={onRetry}
+      />
+    );
+    expect(screen.getByRole("status").textContent).toContain("Stopped.");
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("a notice without onRetry offers nothing", () => {
+    render(
+      <BaseThreadItem
+        item={{
+          id: "n-1",
+          createdAt: CREATED,
+          kind: "notice",
+          text: "Stopped.",
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("a cut-off reply keeps its text, says so, and offers Try again", () => {
+    const onRetry = vi.fn();
+    render(
+      <BaseThreadItem
+        item={reply("The program")}
+        cutOff
+        onAnswer={vi.fn()}
+        onRetry={onRetry}
+      />
+    );
+    expect(screen.getByText("The program")).toBeTruthy();
+    expect(screen.getByText("This reply was cut off.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("a cut-off reply that is not the last says so without Try again", () => {
+    render(
+      <BaseThreadItem item={reply("The program")} cutOff onAnswer={vi.fn()} />
+    );
+    expect(screen.getByText("This reply was cut off.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("an approval answers with its own id", () => {
     const onAnswer = vi.fn();
     render(

@@ -1,5 +1,3 @@
-import { useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
 import {
   EllipsisVertical,
   FoldHorizontal,
@@ -20,6 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { headText } from "../model/head-label";
 import type { HeadLabel } from "../model/head-label";
 import { OverflowTooltip } from "./OverflowTooltip";
+import { usePickedMenu } from "./use-picked-menu";
 
 /**
  * Forget key in More: `none` while no backend holding the user's key is
@@ -35,6 +34,8 @@ export interface BaseAssistantHeadProps {
   onSources(): void;
   /** Opens Connect a model */
   onConnect(): void;
+  /** Connect's item, from `connectLabel` in `model/connection` */
+  connectLabel: string;
   /**
    * Called once More's menu has closed on a picked item: gives focus to what
    * the pick opened. `false` when nothing took it, and More takes it back.
@@ -58,14 +59,14 @@ export interface BaseAssistantHeadProps {
  * the model's name is cut when the column is narrow; the words around it
  * stay, and the cut name shows whole on hover (`OverflowTooltip`).
  *
- * More's items take S and K while it is open. The shortcuts are shown with
- * `DropdownMenuShortcut`, which only draws them, and the menu's typeahead
- * would take S but never K ("Connect…"), so the keys are read here.
+ * More's items take S and K while it is open (`usePickedMenu`); the shortcuts
+ * are shown with `DropdownMenuShortcut`, which only draws them.
  */
 export function BaseAssistantHead({
   label,
   onSources,
   onConnect,
+  connectLabel,
   focusPicked,
   wide,
   onWiden,
@@ -74,34 +75,8 @@ export function BaseAssistantHead({
   forgetKey,
   onForgetKey,
 }: BaseAssistantHeadProps) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  // A picked item may open something (Sources in place of the chat, Connect
-  // a model over it), so once the menu has closed (after its exit animation)
-  // focus goes there (`focusPicked`), not back to More, which would blur
-  // whatever the user reached in the meantime:
-  // a select opened in that window shut. A dismissal (Escape, a click outside)
-  // still returns focus to More.
-  const picked = useRef(false);
-
-  const pick = (action: () => void) => {
-    picked.current = true;
-    setMoreOpen(false);
-    action();
-  };
-
-  /** S and K with no modifier; anything else stays the menu's */
-  const onMenuKey = (event: KeyboardEvent) => {
-    if (event.metaKey || event.ctrlKey || event.altKey) return;
-    const shortcuts: Record<string, () => void> = {
-      s: onSources,
-      k: onConnect,
-    };
-    const action = shortcuts[event.key.toLowerCase()];
-    if (!action) return;
-    // Keeps the menu's own typeahead from also acting on the key
-    event.preventDefault();
-    pick(action);
-  };
+  const more = usePickedMenu(focusPicked, { s: onSources, k: onConnect });
+  const { pick } = more;
 
   const widenLabel = wide ? "Narrow the assistant" : "Widen the assistant";
 
@@ -129,7 +104,7 @@ export function BaseAssistantHead({
           </>
         )}
       </h2>
-      <DropdownMenu open={moreOpen} onOpenChange={setMoreOpen}>
+      <DropdownMenu open={more.open} onOpenChange={more.setOpen}>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" size="icon-sm" aria-label="More">
             <EllipsisVertical aria-hidden="true" />
@@ -138,19 +113,15 @@ export function BaseAssistantHead({
         <DropdownMenuContent
           align="end"
           className="w-auto min-w-48"
-          onKeyDown={onMenuKey}
-          onCloseAutoFocus={(event) => {
-            const wasPicked = picked.current;
-            picked.current = false;
-            if (wasPicked && focusPicked()) event.preventDefault();
-          }}
+          onKeyDown={more.onKeyDown}
+          onCloseAutoFocus={more.onCloseAutoFocus}
         >
           <DropdownMenuItem onSelect={() => pick(onSources)}>
             <MenuItemText>Sources and tools</MenuItemText>
             <DropdownMenuShortcut>S</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => pick(onConnect)}>
-            <MenuItemText>Connect a model…</MenuItemText>
+            <MenuItemText>{connectLabel}</MenuItemText>
             <DropdownMenuShortcut>K</DropdownMenuShortcut>
           </DropdownMenuItem>
           {forgetKey === "ready" && (

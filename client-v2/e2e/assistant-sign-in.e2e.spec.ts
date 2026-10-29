@@ -126,7 +126,9 @@ const connectDefault = async (page: Page, name: string) => {
   await stubSession(page);
   await openProject(page, name);
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+  await page
+    .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+    .click();
   await connectDialog(page)
     .getByRole("button", { name: "Start", exact: true })
     .click(LONG);

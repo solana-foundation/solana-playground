@@ -1,16 +1,18 @@
 import { useState } from "react";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { BaseAssistantComposer } from "./BaseAssistantComposer";
+import type { ComposerContextChip } from "./BaseAssistantComposer";
 
 interface Setup {
   busy?: boolean;
   value?: string;
   placeholder?: string;
-  chips?: Array<{ label: string; title: string }>;
+  chips?: ComposerContextChip[];
+  connectLabel?: string;
   focusRequest?: number;
   sendBlocked?: string | null;
 }
@@ -23,9 +25,12 @@ const setup = ({
   chips = [],
   focusRequest = 0,
   sendBlocked = null,
+  connectLabel = "Connect a model…",
 }: Setup = {}) => {
   const onSend = vi.fn();
   const onStop = vi.fn();
+  const onSources = vi.fn();
+  const onConnect = vi.fn();
   const Harness = () => {
     const [text, setText] = useState(value);
     return (
@@ -42,13 +47,29 @@ const setup = ({
           effort={<span>effort slot</span>}
           focusRequest={focusRequest}
           sendBlocked={sendBlocked}
+          onSources={onSources}
+          onConnect={onConnect}
+          connectLabel={connectLabel}
+          focusPicked={() => false}
         />
       </TooltipProvider>
     );
   };
   const view = render(<Harness />);
-  return { onSend, onStop, user: userEvent.setup(), view };
+  return {
+    onSend,
+    onStop,
+    onSources,
+    onConnect,
+    user: userEvent.setup(),
+    view,
+  };
 };
+
+/** A chip, by its short label */
+const chipOf = (label: string) =>
+  // The tooltip's trigger renames the chip's `data-slot`; the chip is the tab stop
+  screen.getByText(label).closest<HTMLElement>('[tabindex="0"]')!;
 
 const input = () =>
   screen.getByRole("textbox", { name: "Message the assistant" });
@@ -67,6 +88,22 @@ describe("BaseAssistantComposer", () => {
     const { onSend, user } = setup();
     await user.type(input(), "hello{Shift>}{Enter}{/Shift}");
     expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it("stops a running turn on Escape, and keeps the draft", async () => {
+    const { onStop, user } = setup({ busy: true, value: "draft" });
+    input().focus();
+    await user.keyboard("{Escape}");
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(input()).toHaveProperty("value", "draft");
+  });
+
+  it("does nothing on Escape with no turn running", async () => {
+    const { onStop, user } = setup({ value: "draft" });
+    input().focus();
+    await user.keyboard("{Escape}");
+    expect(onStop).not.toHaveBeenCalled();
+    expect(input()).toHaveProperty("value", "draft");
   });
 
   it("shows Stop while busy, and pressing it stops", async () => {
@@ -160,6 +197,8 @@ describe("BaseAssistantComposer", () => {
       sendBlocked: "Connect a model to send",
     });
     await user.click(input());
+    // Past +, which sits before the model
+    await user.tab();
     await user.tab();
     const send = screen.getByRole("button", { name: "Send" });
     expect(document.activeElement).toBe(send);
@@ -180,11 +219,19 @@ describe("BaseAssistantComposer", () => {
     );
     const { user } = setup({
       chips: [
-        { label: "3 files", title: "Every path is sent" },
-        { label: "idl", title: "The built program's interface" },
+        {
+          label: "3 files",
+          title: "Every path is sent",
+          spoken: "Sent with this message: the paths of all 3 files",
+        },
+        {
+          label: "idl",
+          title: "The built program's interface",
+          spoken: "Sent with this message: the built program's interface",
+        },
       ],
     });
-    const files = screen.getByText("3 files");
+    const files = chipOf("3 files");
     expect(files.getAttribute("tabindex")).toBe("0");
     expect(files.getAttribute("title")).toBeNull();
     await user.tab();
@@ -192,7 +239,148 @@ describe("BaseAssistantComposer", () => {
     expect(
       (await screen.findAllByText("Every path is sent")).length
     ).toBeGreaterThan(0);
-    expect(screen.getByText("idl").getAttribute("tabindex")).toBe("0");
+    expect(chipOf("idl").getAttribute("tabindex")).toBe("0");
+  });
+
+  it("names each chip by what it sends, for a screen reader", () => {
+    setup({
+      chips: [
+        {
+          label: "lib.rs active",
+          title: "The tab you are looking at",
+          spoken: "Sent with this message: lib.rs, the open file, in full",
+        },
+      ],
+    });
+    const chip = chipOf("lib.rs active");
+    // What a screen reader reads is the spoken name, not the short label
+    expect(
+      within(chip).getByText("lib.rs active").getAttribute("aria-hidden")
+    ).toBe("true");
+    expect(
+      within(chip).getByText(
+        "Sent with this message: lib.rs, the open file, in full"
+      ).className
+    ).toContain("sr-only");
+  });
+
+  it("removes a chip that offers it, with a 44 px target on a phone", async () => {
+    // Pressing it focuses the chip, whose tooltip watches its size
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const run = vi.fn();
+    const { user } = setup({
+      chips: [
+        {
+          label: "lib.rs active",
+          title: "The tab you are looking at",
+          spoken: "Sent with this message: lib.rs, the open file, in full",
+          remove: { label: "Leave lib.rs out of the next message", run },
+        },
+        { label: "3 files", title: "Every path", spoken: "Sent: all 3 paths" },
+      ],
+    });
+    const remove = screen.getByRole("button", {
+      name: "Leave lib.rs out of the next message",
+    });
+    expect(remove.className).toContain("before:-inset-y-3.5");
+    expect(chipOf("lib.rs active").className).toContain(
+      "before:-inset-y-[11px]"
+    );
+    expect(screen.getAllByRole("button", { name: /^Leave / })).toHaveLength(1);
+    await user.click(remove);
+    expect(run).toHaveBeenCalledTimes(1);
+    // The button goes with its chip; the keyboard lands in the input
+    expect(document.activeElement).toBe(input());
+  });
+
+  it("puts focus in the input when the removed chip goes away", async () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+    const Removable = () => {
+      const [kept, setKept] = useState(true);
+      return (
+        <TooltipProvider>
+          <BaseAssistantComposer
+            chips={
+              kept
+                ? [
+                    {
+                      label: "lib.rs",
+                      title: "The tab you are looking at",
+                      spoken: "Sent with this message: lib.rs",
+                      remove: {
+                        label: "Leave lib.rs out of the next message",
+                        run: () => setKept(false),
+                      },
+                    },
+                  ]
+                : []
+            }
+            value=""
+            onValueChange={vi.fn()}
+            onSend={vi.fn()}
+            onStop={vi.fn()}
+            busy={false}
+            placeholder="Ask"
+            model={null}
+            effort={null}
+            onSources={vi.fn()}
+            onConnect={vi.fn()}
+            connectLabel="Connect a model…"
+            focusPicked={() => false}
+          />
+        </TooltipProvider>
+      );
+    };
+    render(<Removable />);
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Leave lib.rs out of the next message",
+      })
+    );
+
+    expect(screen.queryByText("lib.rs")).toBeNull();
+    expect(document.activeElement).toBe(input());
+  });
+
+  describe("the + menu", () => {
+    it("offers Sources and tools and Connect a model…", async () => {
+      const { user, onSources } = setup();
+      await user.click(screen.getByRole("button", { name: "Add context" }));
+      const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
+      expect(items).toEqual(["Sources and toolsS", "Connect a model…K"]);
+      await user.click(
+        screen.getByRole("menuitem", { name: /Sources and tools/ })
+      );
+      expect(onSources).toHaveBeenCalledTimes(1);
+    });
+
+    it("names Connect by the label it is given, and takes K", async () => {
+      const { user, onConnect } = setup({
+        connectLabel: "Connection and key…",
+      });
+      await user.click(screen.getByRole("button", { name: "Add context" }));
+      expect(
+        screen.getByRole("menuitem", { name: /Connection and key…/ })
+      ).toBeTruthy();
+      await user.keyboard("k");
+      expect(onConnect).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("renders no context list without chips", () => {
@@ -207,14 +395,14 @@ describe("BaseAssistantComposer", () => {
     expect(input().getAttribute("placeholder")).toBe("Working…");
   });
 
-  it("renders the model and effort slots, the footer, and no Add", () => {
+  it("renders the model and effort slots, the footer, and Add", () => {
     setup();
     expect(screen.getByText("model slot")).toBeTruthy();
     expect(screen.getByText("effort slot")).toBeTruthy();
     expect(
       screen.getByText("Nothing is written to your project without your click")
     ).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Add context" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Add context" })).toBeTruthy();
   });
 
   it("focuses the input when asked, and not on mount", () => {
@@ -230,6 +418,10 @@ describe("BaseAssistantComposer", () => {
         model={null}
         effort={null}
         focusRequest={focusRequest}
+        onSources={vi.fn()}
+        onConnect={vi.fn()}
+        connectLabel="Connect a model…"
+        focusPicked={() => false}
       />
     );
     const { rerender } = render(composer(0));

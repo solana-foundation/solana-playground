@@ -19,8 +19,21 @@ export interface Provider {
    *
    * @param input what the user typed
    * @param signal aborts the turn; rejects with the abort reason
+   * @param context what goes with this message; everything when absent. A
+   * provider must pass it to `describeProject`: `openFile: false` is the user
+   * leaving that file's content out, and sending it anyway breaks that
    */
-  send(input: string, signal?: AbortSignal): Promise<void>;
+  send(
+    input: string,
+    signal?: AbortSignal,
+    context?: TurnContext
+  ): Promise<void>;
+}
+
+/** What the user chose to send with one message */
+export interface TurnContext {
+  /** `false` when the user left the open file's content out of it */
+  openFile: boolean;
 }
 
 /** Reasoning depth, and the main cost lever on the Anthropic backend */

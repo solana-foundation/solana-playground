@@ -53,6 +53,7 @@ const setup = (choice: HeadChoice = {}) => {
         label={choice.label ?? HOSTED}
         onSources={onSources}
         onConnect={onConnect}
+        connectLabel="Connect a model…"
         focusPicked={focusPicked}
         wide={choice.wide ?? false}
         onWiden={onWiden}

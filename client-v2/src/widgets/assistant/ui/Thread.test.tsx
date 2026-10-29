@@ -13,6 +13,7 @@ import {
   THREAD_NOT_SAVED,
 } from "../../../views/sidebar/assistant/store";
 import type { Turn } from "../model/use-turn";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { Thread } from "./Thread";
 
 /** The open lesson as the thread sees it; no lesson unless a test opens one */
@@ -53,6 +54,20 @@ vi.mock("../../../views/flow/lessons", () => ({
 vi.mock("../../../views/sidebar/assistant/bridge/lesson-context", () => ({
   describeLesson: (state: { path: unknown }) =>
     state.path ? { verifiedBy: "A build proves this step" } : null,
+}));
+// Undo reads and writes the project through the real bridge, which reaches
+// the same barrel; the thread only decides when to offer it and what to report
+const undo = vi.hoisted(() => ({
+  can: vi.fn(() => false),
+  original: vi.fn((): string | null => null),
+  undo: vi.fn(
+    async (): Promise<
+      import("../../../views/sidebar/assistant/patch-undo").UndoResult
+    > => "undone"
+  ),
+}));
+vi.mock("../../../views/sidebar/assistant/patch-undo", () => ({
+  PgPatchUndo: undo,
 }));
 vi.mock("../../../components/Markdown", () => ({
   default: ({ children }: { children: string }) => <p>{children}</p>,
@@ -102,6 +117,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  undo.original.mockReturnValue(null);
   // The thread is still mounted here: RTL's own cleanup runs after this hook
   act(() => PgAssistant.clear());
   resetTelemetry();
@@ -154,6 +170,121 @@ describe("Thread, approvals", () => {
     expect(tracked()).toEqual([
       ["assistant_approval_answered", { kind: "command", answer: "deny" }],
     ]);
+  });
+});
+
+describe("Thread, undo", () => {
+  const applied = () => {
+    act(() => {
+      PgAssistant.requestApproval(PATCH);
+      PgAssistant.resolveApproval(PgAssistant.items[0].id, true);
+    });
+  };
+
+  it("offers Undo patch on a card it can take back, and reports the undo once", async () => {
+    undo.can.mockReturnValue(true);
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo patch" }));
+    });
+
+    expect(undo.undo).toHaveBeenCalledWith(PgAssistant.items[0]);
+    expect(tracked()).toEqual([["assistant_patch_undone", { via: "card" }]]);
+  });
+
+  it("reports nothing when the file moved on", async () => {
+    undo.can.mockReturnValue(true);
+    undo.undo.mockResolvedValueOnce("moved-on");
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo patch" }));
+    });
+
+    expect(tracked()).toEqual([]);
+  });
+
+  it("offers the original to copy on a card whose Undo could not finish", () => {
+    undo.original.mockReturnValue("old");
+    applied();
+    render(
+      <TooltipProvider>
+        <Thread turn={stubTurn(false)} project="Counter" />
+      </TooltipProvider>
+    );
+    expect(
+      screen.getByRole("button", { name: "Copy the original" })
+    ).toBeTruthy();
+  });
+
+  it("offers nothing to copy on a card whose Undo did not strand", () => {
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(
+      screen.queryByRole("button", { name: "Copy the original" })
+    ).toBeNull();
+  });
+
+  it("offers no Undo patch on a card it cannot take back", () => {
+    undo.can.mockReturnValue(false);
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(screen.queryByRole("button", { name: "Undo patch" })).toBeNull();
+  });
+});
+
+describe("Thread, try again", () => {
+  const stopped = () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    const id = PgAssistant.startAssistantMessage();
+    PgAssistant.appendToAssistantMessage(id, "The program");
+    PgAssistant.addNotice("Stopped.");
+  };
+
+  it("after Stop sends the last message again and reports it", () => {
+    stopped();
+    const send = vi.fn();
+    render(<Thread turn={stubTurn(false, send)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(send).toHaveBeenCalledWith("What does this program do?");
+    expect(tracked()).toEqual([
+      ["assistant_reply_retried", { after: "stopped" }],
+    ]);
+  });
+
+  it("after a cut-off reply sends the last message again", () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    const id = PgAssistant.startAssistantMessage();
+    PgAssistant.appendToAssistantMessage(id, "The program");
+    PgAssistant.markCutOff(id);
+    const send = vi.fn();
+    render(<Thread turn={stubTurn(false, send)} project="Counter" />);
+
+    expect(screen.getByText("This reply was cut off.")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(send).toHaveBeenCalledWith("What does this program do?");
+    expect(tracked()).toEqual([
+      ["assistant_reply_retried", { after: "interrupted" }],
+    ]);
+  });
+
+  it("is not offered while a turn runs", () => {
+    stopped();
+    render(<Thread turn={stubTurn(true)} project="Counter" />);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
+  it("is not offered once the conversation moved on", () => {
+    stopped();
+    PgAssistant.addUserMessage("Something else");
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 });
 

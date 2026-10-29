@@ -8,6 +8,7 @@ import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { modelShown } from "../model/choice";
+import { connectLabel } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { headLabel } from "../model/head-label";
 import { useTurn } from "../model/use-turn";
@@ -100,6 +101,10 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   // where it is.
   const sourcesPicked = useRef(false);
   const back = useRef<HTMLButtonElement>(null);
+  const openSources = () => {
+    setView("sources");
+    sourcesPicked.current = true;
+  };
   const focusPicked = () => {
     const toSources = sourcesPicked.current;
     sourcesPicked.current = false;
@@ -129,11 +134,9 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
       <BaseAssistantHead
         // The composer's model, from the connection and the deployment's answer
         label={headLabel(modelShown(PgAssistant.connection, defaultBackend))}
-        onSources={() => {
-          setView("sources");
-          sourcesPicked.current = true;
-        }}
+        onSources={openSources}
         onConnect={() => turn.openConnect("menu")}
+        connectLabel={connectLabel(PgAssistant.connection)}
         focusPicked={focusPicked}
         wide={wide}
         onWiden={() => setWide(!wide)}
@@ -146,7 +149,11 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
       {view === "chat" && (
         <>
           <Thread turn={turn} project={project} />
-          <AssistantComposer turn={turn} />
+          <AssistantComposer
+            turn={turn}
+            onSources={openSources}
+            focusPicked={focusPicked}
+          />
         </>
       )}
       {view === "sources" && (

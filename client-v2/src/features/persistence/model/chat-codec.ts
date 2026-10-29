@@ -291,6 +291,35 @@ if (import.meta.vitest) {
         );
       });
 
+      it("keeps an undone patch undone and a reply's state", () => {
+        const undone: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "approval",
+          status: "allowed",
+          undone: true,
+          request: {
+            type: "patch",
+            path: "src/lib.rs",
+            before: "a",
+            after: "b",
+          },
+        };
+        const cut: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "assistant",
+          text: "The program",
+          state: "cut-off",
+        };
+
+        expect(encodeItem(undone)).toMatchObject({ undone: true });
+        expect(encodeItem(cut)).toMatchObject({ state: "cut-off" });
+        // And back, through JSON as storage and the server hold it
+        const stored = JSON.parse(JSON.stringify([undone, cut]));
+        expect(decodeThread(stored)).toEqual([undone, cut]);
+      });
+
       it("stores a pending approval as unanswered, since it can never resume", () => {
         const item: ChatItem = {
           ...base,

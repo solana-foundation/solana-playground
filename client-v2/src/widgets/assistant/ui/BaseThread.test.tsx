@@ -1,5 +1,5 @@
 // The thread: its scroller, its empty state and the working marker.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { BaseThread } from "./BaseThread";
@@ -177,6 +177,31 @@ describe("BaseThread", () => {
     expect(
       screen.getByRole("status", { name: "Assistant is working" })
     ).toBeTruthy();
+  });
+
+  it("working reads Thinking, then counts the seconds without announcing them", () => {
+    vi.useFakeTimers();
+    try {
+      renderThread(
+        [{ id: "u-1", createdAt: CREATED, kind: "user", text: "Hi" }],
+        { working: true }
+      );
+      const marker = screen.getByRole("status", {
+        name: "Assistant is working",
+      });
+      expect(marker.textContent).toBe("Thinking");
+
+      act(() => {
+        vi.advanceTimersByTime(3_000);
+      });
+
+      expect(marker.textContent).toBe("Thinking3s");
+      expect(screen.getByText("3s").getAttribute("aria-hidden")).toBe("true");
+      // One status: the spinner inside it is not a second one
+      expect(screen.getAllByRole("status")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("no working marker once the turn is over", () => {
