@@ -6,6 +6,11 @@ upstreams the assistant offers, readable by both the browser panel and the
 server rail, so the default agent and a user on their own key get the same
 assistant.
 
+Its scenarios are checked by unit tests, not in the browser, so they carry
+the `(manual)` mark: `src/entities/agent-tools/model/registry.test.mjs`
+(`yarn test-api`) and `src/views/sidebar/assistant/model/tools-registry.test.ts`
+(`yarn test-unit`), both under `client-v2/`.
+
 ## Requirements
 
 ### Requirement: The registry declares every built-in tool once
@@ -16,13 +21,13 @@ The registry SHALL declare each built-in tool (`list_files`, `read_file`,
 description the model reads, a JSON Schema object for its arguments, and
 whether it needs the user's approval. Names SHALL be unique.
 
-#### Scenario: Every built-in tool is declared
+#### Scenario: Every built-in tool is declared (manual)
 
 - **WHEN** a unit test reads the registry's tool declarations
 - **THEN** it finds exactly the nine names above, each once, each with a
   non-empty description and an object schema with `additionalProperties: false`
 
-#### Scenario: Tools that change state are marked
+#### Scenario: Tools that change state are marked (manual)
 
 - **WHEN** a unit test reads the declarations
 - **THEN** `write_file`, `build` and `deploy` are marked as needing approval
@@ -35,7 +40,7 @@ the slice's server door, using no path alias, no TypeScript syntax and no
 browser-only module, and SHALL expose the same declarations, skill catalogue
 and default MCP upstreams as its browser door.
 
-#### Scenario: Node imports the server door
+#### Scenario: Node imports the server door (manual)
 
 - **WHEN** a test running in the Node environment imports the slice's
   `server.mjs`
@@ -50,14 +55,14 @@ unchanged. A declared name without a runner, or a runner without a declared
 name, SHALL fail the unit tests. Tools discovered from MCP servers at runtime
 are not built-in and are not checked against the registry.
 
-#### Scenario: The panel and the registry agree
+#### Scenario: The panel and the registry agree (manual)
 
 - **WHEN** the unit tests compare the panel's built-in tools with the
   registry's declarations
 - **THEN** the names are the same set, and each tool's description and schema
   equal its declaration
 
-#### Scenario: A tool added on one side only
+#### Scenario: A tool added on one side only (manual)
 
 - **WHEN** a declaration is added without a runner, or a runner without a
   declaration
@@ -70,14 +75,14 @@ approval before it changes anything, and SHALL change nothing when the user
 declines. A tool not marked as needing approval SHALL neither ask nor change
 the project, so the mark always says what the tool does.
 
-#### Scenario: Declining a gated tool
+#### Scenario: Declining a gated tool (manual)
 
 - **WHEN** a unit test runs each tool declared as needing approval and the
   approval request is answered with a decline
 - **THEN** each one requested approval and none wrote a file, built or
   deployed
 
-#### Scenario: A tool not marked as needing approval
+#### Scenario: A tool not marked as needing approval (manual)
 
 - **WHEN** a unit test runs each built-in tool not marked as needing approval
 - **THEN** none of them shows an approval card or writes, builds or deploys
@@ -90,13 +95,13 @@ whose files ship in the bundle SHALL have its content bound by id in the
 browser, and a bundled catalogue entry with no bound content SHALL fail the
 unit tests.
 
-#### Scenario: The panel lists the declared skills
+#### Scenario: The panel lists the declared skills (manual)
 
 - **WHEN** the panel builds its skill list
 - **THEN** it holds the registry's skills, in order, with their ids, names and
   descriptions unchanged
 
-#### Scenario: Bundled skill without content
+#### Scenario: Bundled skill without content (manual)
 
 - **WHEN** a bundled skill is declared with no content bound to its id
 - **THEN** a unit test fails naming the skill
@@ -109,7 +114,7 @@ and an `https` URL. The public Solana Developer MCP SHALL be one of them, with
 id `solana` and URL `https://mcp.solana.com/mcp`. Upstreams that need
 deployment secrets are not defaults and are not declared.
 
-#### Scenario: The Solana upstream is a default
+#### Scenario: The Solana upstream is a default (manual)
 
 - **WHEN** a unit test reads the default MCP upstreams
 - **THEN** it finds `solana`, named "Solana Developer MCP", at
