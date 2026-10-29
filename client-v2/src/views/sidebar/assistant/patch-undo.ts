@@ -156,7 +156,9 @@ export const editedAfterApply = (path: string) =>
  *
  * Undo puts the file back as it was before Apply, and only while the file
  * still holds what the patch wrote, so it never drops an edit made after it;
- * past that, or after a reload, the editor's own undo is the way back.
+ * past that, or after a reload, the editor's own undo is the way back. A
+ * card whose earlier Undo did not finish, on a file that already holds the
+ * original, is closed by the next press.
  */
 export class PgPatchUndo {
   /** Call once a patch from an approval card is written */
