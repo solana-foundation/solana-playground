@@ -21,6 +21,7 @@ import type { ProjectEntry } from "../model/project-entries";
 import { navTelemetry } from "../model/telemetry";
 import { readWorkspaceFiles, rebaseFiles } from "../model/workspace-files";
 import BaseProjectList from "./BaseProjectList";
+import { useSyncMarkers } from "./use-sync-markers";
 
 const log = createLogger("app-nav:projects");
 
@@ -89,6 +90,7 @@ export type ProjectListProps = {
 const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const [pins, setPins] = useState(readPins);
+  const markers = useSyncMarkers();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   // How the rename was asked for: it is counted on commit, with that `via`
@@ -161,6 +163,7 @@ const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
     {
       idOf: (name) => PgExplorer.workspaceIdOf(name),
       isLesson: (name) => PgTutorial.isWorkspaceTutorial(name),
+      markerOf: (name) => markers.get(name) ?? null,
     },
     livePins
   );

@@ -40,6 +40,9 @@ const connect = vi.hoisted(() => ({ execute: vi.fn() }));
 const walletWindow = vi.hoisted(() => ({ show: false }));
 const balance = vi.hoisted(() => ({ current: 2.4 as number | undefined }));
 const setToast = vi.hoisted(() => vi.fn());
+const explorer = vi.hoisted(() => ({
+  allWorkspaceNames: [] as string[] | null,
+}));
 
 vi.mock("../model/use-cluster-status", () => ({
   useClusterStatus: () => status,
@@ -53,6 +56,7 @@ vi.mock("@/hooks", () => ({
 vi.mock("@/utils", () => ({
   PgCommand: { connect },
   PgCommon: { getOS: () => "MacOS" },
+  PgExplorer: explorer,
   PgWallet: walletWindow,
   PgView: { setToast },
 }));
@@ -102,6 +106,7 @@ afterEach(() => {
   walletWindow.show = false;
   balance.current = 2.4;
   setToast.mockReset();
+  explorer.allWorkspaceNames = [];
   PgSession.reset();
 });
 
@@ -176,31 +181,206 @@ it("starts a sign-in from the menu", async () => {
 const signInAsTester = () =>
   PgSession.refreshWith({ id: "u1", name: "Tester", image: null, login: "t" });
 
-it("asks before signing out, and signs out only on the confirmation", async () => {
+const question = () => screen.findByText("Sign out of Playground?");
+
+it("asks in the menu before signing out, and counts a cancel", async () => {
   await signInAsTester();
   const signOut = vi.spyOn(PgSession, "signOut").mockResolvedValue();
   draw("footer");
 
   await pick("Sign out");
-  const dialog = await screen.findByRole("dialog", {
-    name: "Sign out of GitHub?",
-  });
-  await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-  await waitFor(() => expect(dialog.isConnected).toBe(false));
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+  // The menu's items come back, and nothing was signed out
+  expect(
+    await screen.findByRole("menuitem", { name: "Sign out" })
+  ).toBeTruthy();
   expect(signOut).not.toHaveBeenCalled();
-
-  await pick("Sign out");
-  await screen.findByRole("dialog", { name: "Sign out of GitHub?" });
-  await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
-  await waitFor(() =>
-    expect(
-      screen.queryByRole("dialog", { name: "Sign out of GitHub?" })
-    ).toBeNull()
-  );
-  expect(signOut).toHaveBeenCalledOnce();
+  expect(eventsNamed("session_sign_out_ended")).toEqual([
+    { outcome: "cancelled" },
+  ]);
 });
 
-it("keeps the dialog busy while signing out, so it cannot run twice", async () => {
+it("counts a menu closed over the question as a cancel", async () => {
+  await signInAsTester();
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(eventsNamed("session_sign_out_ended")).toEqual([
+    { outcome: "cancelled" },
+  ]);
+});
+
+it("signs out on the confirmation and says how many projects stayed", async () => {
+  await signInAsTester();
+  explorer.allWorkspaceNames = ["counter", "voting"];
+  const signOut = vi
+    .spyOn(PgSession, "signOut")
+    .mockImplementation(async () => {
+      PgSession.reset();
+    });
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+  expect(
+    await screen.findByText(
+      "2 projects stayed in this browser because they weren't saved to your account."
+    )
+  ).toBeTruthy();
+  expect(signOut).toHaveBeenCalledOnce();
+  expect(eventsNamed("session_sign_out_ended")).toEqual([
+    { outcome: "ok", items_kept: 2 },
+  ]);
+});
+
+it("counts what is left after the sign-out released the account's projects", async () => {
+  await signInAsTester();
+  explorer.allWorkspaceNames = ["counter", "voting", "local"];
+  vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
+    // The release runs inside the sign-out, before it settles
+    explorer.allWorkspaceNames = ["local"];
+    PgSession.reset();
+  });
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+  expect(
+    await screen.findByText(
+      "1 project stayed in this browser because it wasn't saved to your account."
+    )
+  ).toBeTruthy();
+  expect(eventsNamed("session_sign_out_ended")).toEqual([
+    { outcome: "ok", items_kept: 1 },
+  ]);
+});
+
+it("says nothing more after a sign-out that left nothing, and counts zero", async () => {
+  await signInAsTester();
+  explorer.allWorkspaceNames = [];
+  vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
+    PgSession.reset();
+  });
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+
+  await waitFor(() =>
+    expect(eventsNamed("session_sign_out_ended")).toEqual([
+      { outcome: "ok", items_kept: 0 },
+    ])
+  );
+  expect(screen.queryByText(/stayed in this browser/)).toBeNull();
+});
+
+it("says the leftovers once: the next opening of the menu has no note", async () => {
+  await signInAsTester();
+  explorer.allWorkspaceNames = ["local"];
+  vi.spyOn(PgSession, "signOut").mockImplementation(async () => {
+    PgSession.reset();
+  });
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+  await screen.findByText(/stayed in this browser/);
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+
+  await openMenu();
+  await screen.findByRole("menu");
+  expect(screen.queryByText(/stayed in this browser/)).toBeNull();
+});
+
+it("counts a sign-out closed over while it runs once, as ok, not as a cancel", async () => {
+  await signInAsTester();
+  let finish = () => {};
+  vi.spyOn(PgSession, "signOut").mockReturnValue(
+    new Promise<void>((resolve) => (finish = resolve))
+  );
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: /^Sign out/ }));
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  finish();
+
+  await waitFor(() =>
+    expect(eventsNamed("session_sign_out_ended")).toEqual([
+      { outcome: "ok", items_kept: 0 },
+    ])
+  );
+  // Settled into a closed menu: the next one opens on its items
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: /^Settings/ })
+  ).toBeTruthy();
+  expect(screen.queryByText("Sign out of Playground?")).toBeNull();
+});
+
+it("opens on the items, not the question, after a sign-out that failed behind a closed menu", async () => {
+  await signInAsTester();
+  vi.spyOn(PgView, "setToast").mockImplementation(() => {});
+  let fail: (e: Error) => void = () => {};
+  vi.spyOn(PgSession, "signOut").mockReturnValue(
+    new Promise<void>((_, reject) => (fail = reject))
+  );
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: /^Sign out/ }));
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  fail(new Error("offline"));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: "Sign out" })
+  ).toBeTruthy();
+  expect(screen.queryByText("Sign out of Playground?")).toBeNull();
+});
+
+it("drops a question whose session another tab ended", async () => {
+  await signInAsTester();
+  draw("footer");
+
+  await pick("Sign out");
+  await question();
+  // Another tab signed out; this one hears it and re-renders
+  PgSession.reset();
+  await userEvent.keyboard("{Escape}");
+  await openMenu();
+  expect(
+    await screen.findByRole("menuitem", { name: "Sign in with GitHub" })
+  ).toBeTruthy();
+  expect(screen.queryByText("Sign out of Playground?")).toBeNull();
+});
+
+it("counts nothing when a menu with no question closes", async () => {
+  draw("footer");
+  await openMenu();
+  await screen.findByRole("menu");
+  await userEvent.keyboard("{Escape}");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(eventsNamed("session_sign_out_ended")).toEqual([]);
+});
+
+it("keeps the question busy while signing out, so it cannot run twice", async () => {
   await signInAsTester();
   let finish = () => {};
   const signOut = vi
@@ -209,7 +389,8 @@ it("keeps the dialog busy while signing out, so it cannot run twice", async () =
   draw("footer");
 
   await pick("Sign out");
-  const confirm = await screen.findByRole("button", { name: "Sign out" });
+  await question();
+  const confirm = screen.getByRole("menuitem", { name: /^Sign out/ });
   await userEvent.click(confirm);
   expect(confirm.getAttribute("aria-busy")).toBe("true");
   await userEvent.click(confirm);
@@ -217,13 +398,11 @@ it("keeps the dialog busy while signing out, so it cannot run twice", async () =
 
   finish();
   await waitFor(() =>
-    expect(
-      screen.queryByRole("dialog", { name: "Sign out of GitHub?" })
-    ).toBeNull()
+    expect(eventsNamed("session_sign_out_ended")).toHaveLength(1)
   );
 });
 
-it("logs, reports and tells a sign-out that fails, and keeps the dialog", async () => {
+it("logs, reports and tells a sign-out that fails, and keeps the question", async () => {
   await signInAsTester();
   const logged = logMemory();
   initLogger({ providers: [logged] });
@@ -233,9 +412,8 @@ it("logs, reports and tells a sign-out that fails, and keeps the dialog", async 
   draw("footer");
 
   await pick("Sign out");
-  await userEvent.click(
-    await screen.findByRole("button", { name: "Sign out" })
-  );
+  await question();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
 
   await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
   expect(logged.entries).toEqual([
@@ -247,8 +425,9 @@ it("logs, reports and tells a sign-out that fails, and keeps the dialog", async 
     }),
     expect.objectContaining({ ns: "ui:button", error: failure }),
   ]);
-  // Still signed in: the user can try again
-  expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy();
+  // Still signed in and still asked: the user can try again
+  expect(screen.getByText("Sign out of Playground?")).toBeTruthy();
+  expect(eventsNamed("session_sign_out_ended")).toEqual([]);
 });
 
 it("shows a signed-in user, not a sign-in that failed before the session arrived", async () => {
@@ -361,23 +540,33 @@ it("neither reports nor warns of a wallet setup the user dismissed", async () =>
   expect(setToast).not.toHaveBeenCalled();
 });
 
-it("waits for a balance that has not loaded rather than showing zero", () => {
+it("waits for a balance that has not loaded rather than showing zero", async () => {
   wallet.current = { publicKey: { toBase58: () => ADDRESS }, isPg: true };
   balance.current = undefined;
   draw("footer");
+  await openMenu();
   expect(
-    screen.getByRole("button", { name: /^Account/ }).textContent
-  ).toContain("7Hq5…Xk2P · …");
+    (await screen.findByRole("menuitem", { name: /7Hq5…Xk2P/ })).textContent
+  ).toContain("… SOL");
 });
 
-it("shows a connected wallet on the row and opens its window from the menu", async () => {
+it("keeps a connected wallet off the row and opens its window from the menu", async () => {
   wallet.current = { publicKey: { toBase58: () => ADDRESS }, isPg: true };
   draw("footer");
-  expect(
-    screen.getByRole("button", { name: /^Account/ }).textContent
-  ).toContain("7Hq5…Xk2P · 2.40 SOL");
+  expect(screen.getByRole("button", { name: /^Account/ }).textContent).toBe(
+    "Sign inSaved in this browser"
+  );
   await pick(/7Hq5…Xk2P/);
   expect(walletWindow.show).toBe(true);
+});
+
+it("says signed-in work saves here while the browser is offline", async () => {
+  await signInAsTester();
+  vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+  draw("footer");
+  expect(
+    screen.getByRole("button", { name: "Account: t" }).textContent
+  ).toContain("Offline · saving here");
 });
 
 it("names an extension wallet in the menu, not a Playground one", async () => {

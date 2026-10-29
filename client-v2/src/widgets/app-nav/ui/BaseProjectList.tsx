@@ -30,6 +30,9 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/shared/ui/sidebar";
+import { StatusDot } from "@/shared/ui/status-dot";
+import { cn } from "@/shared/lib/utils";
+import type { SyncMarker } from "@/features/persistence";
 import type { ProjectAction } from "../model/project-action";
 import type { ProjectEntry } from "../model/project-entries";
 
@@ -138,6 +141,7 @@ const Row = ({
   // Rename swaps the row for a field that takes focus; the menu handing
   // focus back to its trigger on close would blur the field at once
   const keepFocus = useRef(false);
+  const markerId = useId();
   const isCurrent = entry.name === list.current;
 
   const run = (action: ProjectAction, via: Via) => {
@@ -164,6 +168,11 @@ const Row = ({
       <SidebarMenuButton
         isActive={isCurrent}
         aria-current={isCurrent ? "page" : undefined}
+        // The marker describes the row and leaves its name alone: the row is
+        // found by its name
+        aria-describedby={entry.marker ? markerId : undefined}
+        // Room for the marker, so a long name truncates before it
+        className={entry.marker ? "pr-24" : undefined}
         onClick={() => list.onAction(entry, "open", "click")}
       >
         <Folder
@@ -172,11 +181,20 @@ const Row = ({
         />
         <span>{entry.name}</span>
       </SidebarMenuButton>
-      {entry.pinned && (
-        <span className="pointer-events-none absolute top-1.5 right-7 flex items-center gap-1 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden">
-          <span title="Pinned">
-            <Pin aria-hidden className="size-3" />
-          </span>
+      {(entry.pinned || entry.marker) && (
+        <span
+          className={cn(
+            "pointer-events-none absolute top-1.5 right-7 flex items-center gap-1.5 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden",
+            // On a phone's taller rows the marker sits on the name's line
+            entry.marker && "max-md:top-1/2 max-md:-translate-y-1/2"
+          )}
+        >
+          {entry.marker && <Marker id={markerId} marker={entry.marker} />}
+          {entry.pinned && (
+            <span title="Pinned">
+              <Pin aria-hidden className="size-3" />
+            </span>
+          )}
         </span>
       )}
       <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -256,6 +274,28 @@ const Row = ({
     </>
   );
 };
+
+/** Spec 02's words for each marker */
+const MARKER_TEXT: Record<SyncMarker, string> = {
+  "this-browser": "This browser",
+  "not-synced": "Not synced",
+};
+
+/**
+ * Where a project's work lives, when the account does not hold it. Spec 02
+ * names the words, not the look: quiet caption text where the pin sits, so the
+ * row's action keeps its place, and "Not synced" with a warning dot
+ */
+const Marker = ({ id, marker }: { id: string; marker: SyncMarker }) => (
+  <span
+    id={id}
+    data-sync-marker={marker}
+    className="flex items-center gap-1 whitespace-nowrap text-subtle"
+  >
+    {marker === "not-synced" && <StatusDot variant="warning" />}
+    {MARKER_TEXT[marker]}
+  </span>
+);
 
 const Item = ({
   icon: Icon,

@@ -24,22 +24,30 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-const project = (name: string, pinned = false): ProjectEntry => ({
+const project = (
+  name: string,
+  pinned = false,
+  marker: ProjectEntry["marker"] = null
+): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: false,
   pinned,
+  marker,
 });
 const lesson = (name: string): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: true,
   pinned: false,
+  marker: null,
 });
 
 const alpha = project("alpha");
 const beta = project("beta", true);
 const hello = lesson("Hello Anchor");
+const local = project("local", false, "this-browser");
+const behind = project("behind", true, "not-synced");
 
 type Handlers = Pick<
   BaseProjectListProps,
@@ -47,7 +55,11 @@ type Handlers = Pick<
 >;
 
 const draw = (
-  overrides: { renaming?: string; renameError?: string } = {}
+  overrides: {
+    renaming?: string;
+    renameError?: string;
+    projects?: ProjectEntry[];
+  } = {}
 ): Handlers => {
   const handlers: Handlers = {
     onAction: vi.fn(),
@@ -59,7 +71,7 @@ const draw = (
     <TooltipProvider>
       <SidebarProvider>
         <BaseProjectList
-          projects={[beta, alpha, hello]}
+          projects={overrides.projects ?? [beta, alpha, hello]}
           current="alpha"
           renaming={overrides.renaming ?? null}
           renameError={overrides.renameError ?? null}
@@ -109,6 +121,40 @@ describe("BaseProjectList", () => {
         .className.includes("md:opacity-0");
     expect(hidden("alpha")).toBe(false);
     expect(hidden("beta")).toBe(true);
+  });
+
+  it("says where a project's work lives when it is not in the account", () => {
+    draw({ projects: [behind, local, alpha] });
+    const projects = screen.getByRole("group", { name: "Projects" });
+    expect(within(projects).getByText("This browser")).toBeTruthy();
+    expect(within(projects).getByText("Not synced")).toBeTruthy();
+    // The row keeps its name; the marker is its description
+    const description = (name: string) => {
+      const id = within(projects)
+        .getByRole("button", { name })
+        .getAttribute("aria-describedby");
+      return id ? document.getElementById(id)?.textContent : null;
+    };
+    expect(description("local")).toBe("This browser");
+    expect(description("behind")).toBe("Not synced");
+    expect(description("alpha")).toBeNull();
+  });
+
+  it("draws Not synced with a warning dot, beside the pin", () => {
+    draw({ projects: [behind] });
+    const marker = screen.getByText("Not synced").closest("[data-sync-marker]");
+    expect(marker?.getAttribute("data-sync-marker")).toBe("not-synced");
+    expect(
+      marker
+        ?.querySelector('[data-slot="status-dot"]')
+        ?.getAttribute("data-variant")
+    ).toBe("warning");
+    expect(screen.getAllByTitle("Pinned")).toHaveLength(1);
+  });
+
+  it("marks no row that the account holds", () => {
+    draw();
+    expect(document.querySelector("[data-sync-marker]")).toBeNull();
   });
 
   it("marks a pinned row, whose menu offers Unpin", () => {

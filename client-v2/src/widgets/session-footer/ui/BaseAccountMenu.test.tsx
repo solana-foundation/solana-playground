@@ -1,9 +1,9 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
-import type { AccountView } from "../model/account";
+import type { AccountView, SignOutState } from "../model/account";
 import BaseAccountMenu from "./BaseAccountMenu";
 
 const UP = { name: "devnet", down: false };
@@ -20,9 +20,20 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   wallet: fields.wallet ?? null,
   cluster: fields.cluster ?? UP,
   sending: fields.sending ?? false,
+  online: fields.online ?? true,
 });
 
-const open = async (account: AccountView, onPick = vi.fn()) => {
+const IDLE: SignOutState = { status: "idle" };
+
+const open = async (
+  account: AccountView,
+  onPick = vi.fn(),
+  signOut: {
+    state?: SignOutState;
+    onConfirm?: () => Promise<void>;
+    onCancel?: () => void;
+  } = {}
+) => {
   render(
     <DropdownMenu>
       <DropdownMenuTrigger>Open</DropdownMenuTrigger>
@@ -32,6 +43,9 @@ const open = async (account: AccountView, onPick = vi.fn()) => {
         side="top"
         settingsShortcut="⌘,"
         onPick={onPick}
+        signOut={signOut.state ?? IDLE}
+        onSignOutConfirm={signOut.onConfirm ?? vi.fn(async () => {})}
+        onSignOutCancel={signOut.onCancel ?? vi.fn()}
       />
     </DropdownMenu>
   );
@@ -91,7 +105,92 @@ it("says why a sign-in failed above Sign in with GitHub, for the rail too", asyn
   expect(
     screen.getByText("Allow popups for this site to sign in.")
   ).toBeTruthy();
-  expect(items()[0]).toBe("SigninwithGitHub");
+  expect(items()[0]).toBe("Tryagain");
+});
+
+it("retries a failed sign-in from Try again", async () => {
+  const onPick = await open(
+    view({
+      session: {
+        status: "failed",
+        reason: "request-failed",
+        message: "Sign-in isn't available. Your work is saved in this browser.",
+      },
+    })
+  );
+  await userEvent.click(screen.getByRole("menuitem", { name: "Try again" }));
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("sign-in");
+});
+
+it("turns sign-in off while offline, and says why", async () => {
+  await open(view({ online: false }));
+  const item = screen.getByRole("menuitem", { name: "You're offline" });
+  expect(item.getAttribute("aria-disabled")).toBe("true");
+  expect(
+    screen.queryByRole("menuitem", { name: "Sign in with GitHub" })
+  ).toBeNull();
+});
+
+it("asks in the menu when Sign out is picked, keeping it open", async () => {
+  const onPick = await open(
+    view({ session: { status: "signed-in", user: TESTER } })
+  );
+  await userEvent.click(screen.getByRole("menuitem", { name: "Sign out" }));
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("sign-out");
+  expect(screen.getByRole("menu")).toBeTruthy();
+});
+
+const signedIn = view({ session: { status: "signed-in", user: TESTER } });
+
+it("asks Sign out of Playground? in place, focus on Cancel", async () => {
+  const onCancel = vi.fn();
+  await open(signedIn, vi.fn(), { state: { status: "asking" }, onCancel });
+  expect(screen.getByText("Sign out of Playground?")).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Projects saved to your account leave this browser. Anything not saved stays here."
+    )
+  ).toBeTruthy();
+  // Only the question's two items: the rest of the menu waits behind it
+  expect(items()).toEqual(["Cancel", "Signout"]);
+  const cancel = screen.getByRole("menuitem", { name: "Cancel" });
+  await waitFor(() => expect(document.activeElement).toBe(cancel));
+
+  await userEvent.click(cancel);
+  expect(onCancel).toHaveBeenCalledOnce();
+  expect(screen.getByRole("menu")).toBeTruthy();
+});
+
+it("stays open and busy while the sign-out runs", async () => {
+  let finish: () => void = () => {};
+  const onConfirm = vi.fn(
+    () => new Promise<void>((resolve) => (finish = resolve))
+  );
+  await open(signedIn, vi.fn(), { state: { status: "asking" }, onConfirm });
+  const confirm = screen.getByRole("menuitem", { name: /Sign out/ });
+  await userEvent.click(confirm);
+  expect(onConfirm).toHaveBeenCalledOnce();
+  expect(screen.getByRole("menu")).toBeTruthy();
+  expect(confirm.getAttribute("aria-busy")).toBe("true");
+
+  // A second press while it runs starts nothing
+  await userEvent.click(confirm);
+  expect(onConfirm).toHaveBeenCalledOnce();
+  finish();
+});
+
+it("says how many projects stayed after signing out", async () => {
+  await open(view({}), vi.fn(), { state: { status: "done", kept: 2 } });
+  expect(
+    screen.getByText(
+      "2 projects stayed in this browser because they weren't saved to your account."
+    )
+  ).toBeTruthy();
+});
+
+it("says nothing more after a sign-out that left nothing behind", async () => {
+  await open(view({}), vi.fn(), { state: { status: "done", kept: 0 } });
+  expect(screen.queryByText(/stayed in this browser/)).toBeNull();
 });
 
 it("names an account with neither a name nor a login", async () => {
@@ -106,10 +205,12 @@ it("names an account with neither a name nor a login", async () => {
   expect(screen.getByText("Account")).toBeTruthy();
 });
 
-it("offers Cancel while a sign-in waits", async () => {
+it("offers Cancel sign-in while a sign-in waits", async () => {
   const onPick = await open(view({ session: { status: "pending" } }));
-  expect(screen.getByText("Signing in...")).toBeTruthy();
-  await userEvent.click(screen.getByRole("menuitem", { name: "Cancel" }));
+  expect(screen.getByText("Waiting for GitHub…")).toBeTruthy();
+  await userEvent.click(
+    screen.getByRole("menuitem", { name: "Cancel sign-in" })
+  );
   expect(onPick).toHaveBeenCalledExactlyOnceWith("cancel-sign-in");
 });
 
@@ -220,6 +321,9 @@ const openPage = async (account: AccountView, onPick = vi.fn()) => {
         side="top"
         settingsShortcut="⌘,"
         onPick={onPick}
+        signOut={IDLE}
+        onSignOutConfirm={vi.fn(async () => {})}
+        onSignOutCancel={vi.fn()}
       />
     </DropdownMenu>
   );

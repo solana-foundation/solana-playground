@@ -24,6 +24,26 @@ const reasonOf = (error: unknown): SignInFailure =>
   error instanceof SignInFailed ? error.reason : "request-failed";
 
 /**
+ * Spec 02's words for a sign-in the server could not start, and for any
+ * failure at no known step (`messageOf`), such as the request never leaving
+ */
+const UNAVAILABLE =
+  "Sign-in isn't available. Your work is saved in this browser.";
+
+/**
+ * Spec 02's words for a popup that gave no answer in time or refused, and for
+ * a session unreadable after GitHub answered
+ */
+const DID_NOT_FINISH = "Sign-in did not finish.";
+
+/**
+ * What the person reads for a failed sign-in: a known step's own words, and
+ * for anything else the unavailable line, never the raw error
+ */
+const messageOf = (error: unknown) =>
+  error instanceof SignInFailed ? error.message : UNAVAILABLE;
+
+/**
  * Whether a rejected `PgSession.signIn` ended at a known step (cancelled,
  * blocked, refused); anything else is an error the team should hear of
  */
@@ -190,7 +210,7 @@ export class PgSession {
       PgSession._setSignIn({
         status: "failed",
         reason: reasonOf(error),
-        message: error instanceof Error ? error.message : String(error),
+        message: messageOf(error),
       });
       throw error;
     } finally {
@@ -221,15 +241,18 @@ export class PgSession {
       }),
     });
     if (!response.ok) {
-      throw new SignInFailed("request-failed", "Could not start sign-in");
+      // The person reads one line for every way the start fails; the team
+      // gets the answer it was
+      log.warn("sign-in could not start", {
+        context: { status: response.status },
+      });
+      throw new SignInFailed("request-failed", UNAVAILABLE);
     }
 
     const { url } = await response.json();
     if (!url) {
-      throw new SignInFailed(
-        "request-failed",
-        "Sign-in returned no authorize URL"
-      );
+      log.warn("sign-in start answered no authorize URL");
+      throw new SignInFailed("request-failed", UNAVAILABLE);
     }
 
     const isOurs = (data: unknown) =>
@@ -260,19 +283,14 @@ export class PgSession {
     if (!receipt.delivered) {
       throw new SignInFailed(
         receipt.reason,
-        receipt.reason === "cancelled"
-          ? "Sign-in cancelled."
-          : "Sign-in did not complete."
+        receipt.reason === "cancelled" ? "Sign-in cancelled." : DID_NOT_FINISH
       );
     }
 
     await PgSession.refresh();
     // `refresh` never throws, so a failed read would otherwise pass for a sign-in
     if (!PgSession.get()) {
-      throw new SignInFailed(
-        "request-failed",
-        "Signed in with GitHub, but the session could not be read. Try again."
-      );
+      throw new SignInFailed("request-failed", DID_NOT_FINISH);
     }
   }
 
@@ -751,7 +769,7 @@ if (import.meta.vitest) {
         }));
 
         await expect(PgSession.signIn()).rejects.toThrow(
-          "Signed in with GitHub, but the session could not be read. Try again."
+          "Sign-in did not finish."
         );
       });
 
@@ -786,6 +804,59 @@ if (import.meta.vitest) {
         expect(PgSession.get()).toBeNull();
       });
 
+      it("says a popup that never answered did not finish", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({
+            delivered: false as const,
+            reason: "expired" as const,
+          }),
+          cancel: () => {},
+        }));
+
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Sign-in did not finish."
+        );
+      });
+
+      it("says sign-in isn't available when the start answers no authorize URL", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({}),
+          }) as unknown as typeof fetch
+        );
+        const open = vi.fn();
+        PgSession.setOpenChannel(open as never);
+
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Sign-in isn't available. Your work is saved in this browser."
+        );
+        expect(PgSession.signInState()).toMatchObject({
+          reason: "request-failed",
+        });
+        expect(open).not.toHaveBeenCalled();
+      });
+
+      it("never shows a raw error as the reason a sign-in failed", async () => {
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(
+          new TypeError("Failed to fetch")
+        );
+
+        await expect(PgSession.signIn()).rejects.toThrow("Failed to fetch");
+        expect(PgSession.signInState()).toEqual({
+          status: "failed",
+          reason: "request-failed",
+          message:
+            "Sign-in isn't available. Your work is saved in this browser.",
+        });
+      });
+
       it("throws rather than opening a popup when sign-in cannot start", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(
           vi.fn().mockResolvedValue({
@@ -797,7 +868,9 @@ if (import.meta.vitest) {
         const open = vi.fn();
         PgSession.setOpenChannel(open as never);
 
-        await expect(PgSession.signIn()).rejects.toThrow(/sign-in/i);
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Sign-in isn't available. Your work is saved in this browser."
+        );
         expect(open).not.toHaveBeenCalled();
       });
 

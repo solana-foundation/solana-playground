@@ -94,6 +94,15 @@ vi.mock("../model/workspace-files", async (importOriginal) => ({
   readWorkspaceFiles: files.readWorkspaceFiles,
 }));
 
+// The markers' reading is `use-sync-markers.test.tsx`'s; here, only where
+// they land
+const syncMarkers = vi.hoisted(() => ({
+  current: new Map<string, "this-browser" | "not-synced">(),
+}));
+vi.mock("./use-sync-markers", () => ({
+  useSyncMarkers: () => syncMarkers.current,
+}));
+
 import { PINS_KEY } from "../model/pins";
 import ProjectList from "./ProjectList";
 
@@ -136,6 +145,7 @@ afterEach(() => {
   localStorage.clear();
   resetTelemetry();
   resetLogger();
+  syncMarkers.current = new Map();
 });
 
 const onPickCurrent = vi.fn();
@@ -170,6 +180,20 @@ const toasts = () =>
   );
 
 describe("ProjectList", () => {
+  it("puts each workspace's sync marker on its own row, by name", () => {
+    syncMarkers.current = new Map([["alpha", "this-browser"]]);
+    draw();
+    const projects = screen.getByRole("group", { name: "Projects" });
+    const describedBy = (name: string) =>
+      within(projects)
+        .getByRole("button", { name })
+        .getAttribute("aria-describedby");
+    expect(
+      document.getElementById(describedBy("alpha") ?? "")?.textContent
+    ).toBe("This browser");
+    expect(describedBy("beta")).toBeNull();
+  });
+
   it("pins by key, keeps the pin by id, and lists the pinned first", () => {
     draw();
     expect(projectNames()).toEqual(["alpha", "beta"]);
