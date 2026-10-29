@@ -48,5 +48,7 @@ test("allows only the token bridge, the colour resolver, the language logos and 
   assert.equal(isAllowed("views/sidebar/icons/build.svg"), false);
   assert.equal(isAllowed("app/styles/other.css"), false);
   assert.equal(isAllowed("app/favicon.svg"), true);
+  assert.equal(isAllowed("widgets/catalog/ui/art/TutorialCover.tsx"), true);
+  assert.equal(isAllowed("widgets/catalog/ui/BaseTutorialCard.tsx"), false);
   assert.equal(isAllowed("app/other.svg"), false);
 });

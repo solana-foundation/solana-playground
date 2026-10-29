@@ -15,8 +15,7 @@ type BaseStartButtonProps = {
 };
 
 /**
- * The tutorial page's primary action. The labels are upper case because the
- * e2e specs find START by its exact name; CONTINUE and COMPLETED match it.
+ * The tutorial page's primary action, in title case as the stand draws it.
  *
  * A completed tutorial is an `AsyncButton`. The brand button has no busy
  * state of its own, so it keeps AsyncButton's: disabled, `aria-busy` and a
@@ -39,7 +38,7 @@ function BaseStartButton({
         onError={onError}
       >
         <CheckIcon data-icon="inline-start" />
-        COMPLETED
+        Completed
       </AsyncButton>
     );
   }
@@ -62,7 +61,7 @@ function BaseStartButton({
       aria-busy={pending || undefined}
       onClick={start}
     >
-      {progress === "started" ? "CONTINUE" : "START"}
+      {progress === "started" ? "Continue" : "Start"}
       {pending ? <Spinner /> : <BrandButtonIcon />}
     </BrandButton>
   );

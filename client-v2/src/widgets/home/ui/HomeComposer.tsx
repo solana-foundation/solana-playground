@@ -25,7 +25,7 @@ const HomeComposer = ({ onAsk, banner }: HomeComposerProps) => (
       type="button"
       aria-label="Ask the assistant"
       onClick={onAsk}
-      className="min-h-16 w-full px-[1.125rem] pt-[1.125rem] text-left text-[0.9375rem] text-subtle outline-none"
+      className="min-h-16 w-full px-[1.125rem] pt-[1.125rem] text-left text-[0.9375rem] text-subtle outline-none max-md:min-h-12 max-md:px-4 max-md:pt-3 max-md:text-body max-md:font-read"
     >
       Ask anything…
     </button>

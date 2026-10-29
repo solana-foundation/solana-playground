@@ -18,7 +18,7 @@ vi.mock("@/components/Tooltip", () => ({ default: () => null }));
 vi.mock("@/hooks", () => ({ useRenderOnChange: () => {} }));
 
 import { PgView } from "@/utils";
-import { SettingSetterSelect } from "./SettingControl";
+import { SettingControl, SettingSetterSelect } from "./SettingControl";
 
 // Radix Select calls these while opening; jsdom implements none of them
 beforeAll(() => {
@@ -141,5 +141,30 @@ describe("SettingSetterSelect", () => {
     expect(consoleError).not.toHaveBeenCalled();
     consoleWarn.mockRestore();
     consoleError.mockRestore();
+  });
+});
+
+describe("an on/off setting", () => {
+  it("is a checkbox named by its setting, as the prototype draws it", async () => {
+    let on = true;
+    const setValue = vi.fn((v: boolean) => {
+      on = v;
+    });
+    render(
+      <SettingControl
+        id="build.improveErrors"
+        name="Improve errors"
+        default={true}
+        getValue={() => on}
+        setValue={setValue}
+        onChange={() => ({ dispose: () => {} })}
+      />
+    );
+
+    const box = screen.getByRole("checkbox", { name: "Improve errors" });
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(screen.queryByRole("switch")).toBeNull();
+    await userEvent.click(box);
+    expect(setValue).toHaveBeenCalledWith(false);
   });
 });

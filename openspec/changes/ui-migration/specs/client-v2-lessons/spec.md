@@ -52,7 +52,7 @@ one reached and nothing has proved it.
 ### Requirement: The lesson's page opens inside the stage
 
 "Read the page" SHALL open the step's page as a non-modal dialog inside the
-stage, covering the editor and not the band. Escape SHALL close it and
+stage, covering the editor and not the band; nothing else opens it. Escape SHALL close it and
 return focus to the control that opened it.
 
 #### Scenario: The page opens beside the band, not over it
@@ -66,13 +66,12 @@ return focus to the control that opened it.
 ### Requirement: The band folds to one row on a phone
 
 Below the phone width the objective band SHALL fold to one row holding the
-position, the objective and a control that opens the steps, with the band's
-actions in a row under it.
+position and the objective, which opens in place to show how the step is
+checked; the band's actions SHALL sit in a bar at the foot of the code
+(change lesson-prototype-polish, "The phone's lesson bar").
 
-#### Scenario: The band on a phone
+#### Scenario: The band and the bar on a phone
 
-- **WHEN** a tutorial is started on a 390 px wide screen
+- **WHEN** a tutorial is started on a 393 px wide screen
 - **THEN** the band shows "1/4" and the objective on one row
-- **AND** "Read the page" and "I'm stuck" sit in a row under it
-- **WHEN** the learner presses the band's steps control
-- **THEN** the Files sheet opens on Steps
+- **AND** "Read the page" and "I'm stuck" sit in the bar at the foot

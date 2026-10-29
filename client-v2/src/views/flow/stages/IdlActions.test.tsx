@@ -1,5 +1,5 @@
-// The IDL's two doors: download what the build produced, and load a file
-// into the browser by dropping or picking it.
+// The IDL's two doors: download what the build produced, and upload a file
+// into the browser by picking it.
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,11 +33,10 @@ const COUNTER_IDL = JSON.stringify({ name: "counter", instructions: [] });
 const jsonFile = (text: string, name = "idl.json") =>
   new File([text], name, { type: "application/json" });
 
-const dropOn = (zone: Element, file: File) =>
-  fireEvent.drop(zone, { dataTransfer: { files: [file] } });
-
-const zone = (container: HTMLElement) =>
-  container.querySelector('[data-slot="drop-zone"]')!;
+const pick = (container: HTMLElement, file: File) =>
+  fireEvent.change(container.querySelector('input[type="file"]')!, {
+    target: { files: [file] },
+  });
 
 afterEach(() => {
   mocks.idl = null;
@@ -46,22 +45,21 @@ afterEach(() => {
 });
 
 describe("IdlActions", () => {
-  it("offers a drop zone that says nothing reaches the chain", () => {
-    const { container } = render(<IdlActions mode="drop" />);
+  /** The prototype's secondary action, a button rather than a drop zone */
+  it("offers Upload IDL, which says nothing reaches the chain", () => {
+    const { container } = render(<IdlActions mode="upload" />);
 
-    expect(zone(container)).toBeTruthy();
-    expect(screen.getByText("Load IDL file")).toBeTruthy();
-    expect(
-      screen.getByText(
-        "Replaces the IDL this browser uses in Interact -- nothing is written on-chain"
-      )
-    ).toBeTruthy();
+    expect(container.querySelector('[data-slot="drop-zone"]')).toBeNull();
+    const button = screen.getByRole("button", { name: "Upload IDL" });
+    expect(button.getAttribute("title")).toBe(
+      "Replaces the IDL this browser uses in Interact \u2014 nothing is written on-chain"
+    );
   });
 
-  it("uses an IDL dropped on it", async () => {
-    const { container } = render(<IdlActions mode="drop" />);
+  it("uses an IDL picked through it", async () => {
+    const { container } = render(<IdlActions mode="upload" />);
 
-    dropOn(zone(container), jsonFile(COUNTER_IDL));
+    pick(container, jsonFile(COUNTER_IDL));
 
     expect(await screen.findByText("Using counter")).toBeTruthy();
     expect(mocks.update).toHaveBeenCalledWith({
@@ -69,19 +67,10 @@ describe("IdlActions", () => {
     });
   });
 
-  it("uses an IDL picked through it", async () => {
-    const { container } = render(<IdlActions mode="drop" />);
-    const input = container.querySelector('input[type="file"]')!;
-
-    fireEvent.change(input, { target: { files: [jsonFile(COUNTER_IDL)] } });
-
-    expect(await screen.findByText("Using counter")).toBeTruthy();
-  });
-
   it("refuses a file that is not JSON, and logs it", async () => {
-    const { container } = render(<IdlActions mode="drop" />);
+    const { container } = render(<IdlActions mode="upload" />);
 
-    dropOn(zone(container), jsonFile("not json", "notes.txt"));
+    pick(container, jsonFile("not json", "notes.txt"));
 
     expect(await screen.findByText("Not an Anchor IDL JSON file")).toBeTruthy();
     expect(mocks.update).not.toHaveBeenCalled();
@@ -89,9 +78,9 @@ describe("IdlActions", () => {
   });
 
   it("refuses JSON without instructions", async () => {
-    const { container } = render(<IdlActions mode="drop" />);
+    const { container } = render(<IdlActions mode="upload" />);
 
-    dropOn(zone(container), jsonFile(JSON.stringify({ name: "x" })));
+    pick(container, jsonFile(JSON.stringify({ name: "x" })));
 
     expect(await screen.findByText("Not an Anchor IDL JSON file")).toBeTruthy();
     expect(mocks.update).not.toHaveBeenCalled();
@@ -119,29 +108,16 @@ describe("IdlActions", () => {
     mocks.update.mockImplementation(() => {
       throw new Error("listener broke");
     });
-    const { container } = render(<IdlActions mode="drop" />);
+    const { container } = render(<IdlActions mode="upload" />);
 
-    dropOn(zone(container), jsonFile(COUNTER_IDL));
+    pick(container, jsonFile(COUNTER_IDL));
 
+    // `ImportButton` reports it, through `reportButtonFailure`'s logger
     await vi.waitFor(() =>
-      expect(mocks.error).toHaveBeenCalledWith(expect.any(Error), {
-        report: true,
-      })
+      expect(mocks.error).toHaveBeenCalledWith(expect.any(Error))
     );
     expect(screen.queryByText("Not an Anchor IDL JSON file")).toBeNull();
     expect(mocks.warn).not.toHaveBeenCalled();
-  });
-
-  /** Interact's toolbar has room for a button, not a drop zone */
-  it("offers a compact button where a toolbar asks for one", async () => {
-    const { container } = render(<IdlActions mode="button" />);
-
-    expect(container.querySelector('[data-slot="drop-zone"]')).toBeNull();
-    expect(screen.getByRole("button", { name: "Load IDL file" })).toBeTruthy();
-    fireEvent.change(container.querySelector('input[type="file"]')!, {
-      target: { files: [jsonFile(COUNTER_IDL)] },
-    });
-    expect(await screen.findByText("Using counter")).toBeTruthy();
   });
 
   /**
@@ -150,7 +126,7 @@ describe("IdlActions", () => {
    * lets go of it after each pick.
    */
   it("takes the same file picked again", async () => {
-    const { container } = render(<IdlActions mode="drop" />);
+    const { container } = render(<IdlActions mode="upload" />);
     const input = container.querySelector(
       'input[type="file"]'
     ) as HTMLInputElement;

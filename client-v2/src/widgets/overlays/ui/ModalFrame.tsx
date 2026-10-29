@@ -2,11 +2,17 @@ import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PROJECT_NAME } from "@/constants";
 import { PgView } from "@/utils/view";
 import { overlayTelemetry } from "../model/telemetry";
 import { BaseModalFrame } from "./BaseModalFrame";
-import type { ModalSize, SubmitStatus, SubmitVariant } from "./BaseModalFrame";
+import type {
+  ModalSize,
+  OpenFocus,
+  SubmitStatus,
+  SubmitVariant,
+} from "./BaseModalFrame";
 import {
   useBlockDismiss,
   useIsTopModal,
@@ -35,6 +41,8 @@ export type ModalFrameProps = {
   title?: string | true;
   buttonProps?: ModalSubmit;
   size?: ModalSize;
+  /** Where the focus lands on open; the body's first field (or the submit) when left out */
+  openFocus?: OpenFocus;
   children?: ReactNode;
 };
 
@@ -79,6 +87,7 @@ export const ModalFrame = ({
   title,
   buttonProps,
   size = "default",
+  openFocus,
   children,
 }: ModalFrameProps) => {
   const [error, setError] = useState<string>();
@@ -97,6 +106,7 @@ export const ModalFrame = ({
   );
   const openReport = useOpenReport();
   const blockDismiss = useBlockDismiss();
+  const phone = useViewport() === "phone";
 
   useEffect(() => {
     mounted.current = true;
@@ -178,6 +188,7 @@ export const ModalFrame = ({
 
   return (
     <BaseModalFrame
+      phone={phone}
       title={{
         text: typeof title === "string" && title ? title : PROJECT_NAME,
         hidden: !title,
@@ -195,6 +206,7 @@ export const ModalFrame = ({
         }
       }
       size={size}
+      openFocus={openFocus}
       onCloseAutoFocus={returnFocus}
     >
       {children}

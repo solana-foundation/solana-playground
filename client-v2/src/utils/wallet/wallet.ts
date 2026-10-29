@@ -9,6 +9,7 @@ import {
   updatable,
 } from "../decorators";
 import { PgWeb3 } from "../web3";
+import { parseKeypairFile } from "./keypair-file";
 import type {
   AnyTransaction,
   WalletState,
@@ -213,6 +214,8 @@ class _PgWallet {
    *
    * @param name name of the account
    * @param keypair optional keypair, default to a random keypair
+   * @returns `false` when an account with the name or keypair already existed
+   * and it switched to that account instead
    */
   static add(params?: { name?: string; keypair?: PgWeb3.Keypair }) {
     const { name, keypair } = PgCommon.setDefault(params, {
@@ -233,7 +236,7 @@ class _PgWallet {
     if (accountIndex !== -1) {
       // Account exists, switch to the account
       PgWallet.switch(accountIndex);
-      return;
+      return false;
     }
 
     // Add the account
@@ -248,6 +251,8 @@ class _PgWallet {
       accounts: PgWallet.accounts,
       currentIndex: PgWallet.accounts.length - 1,
     });
+
+    return true;
   }
 
   /**
@@ -282,30 +287,31 @@ class _PgWallet {
    * Import a keypair from the user's file system.
    *
    * @param name name of the account
-   * @returns the imported keypair if importing was successful
+   * @returns the imported keypair and whether it was added (`false`: the
+   * wallet already held it and switched to it), or `undefined` when no file
+   * was chosen
+   * @throws {KeypairFileError} when the file is not a keypair; any other
+   * failure, such as an unreadable file, propagates as it is
    */
   static async import(name?: string) {
-    return await PgCommon.import(
-      async (ev) => {
-        const files = ev.target.files;
-        if (!files?.length) return;
+    try {
+      return await PgCommon.import(
+        async (ev) => {
+          const files = ev.target.files;
+          if (!files?.length) return;
 
-        try {
-          const file = files[0];
-          const text = await file.text();
-          const bytes = Uint8Array.from(JSON.parse(text));
-          if (bytes.length !== 64) throw new Error("Invalid keypair");
+          const keypair = parseKeypairFile(await files[0].text());
+          const added = PgWallet.add({ name, keypair });
 
-          const keypair = PgWeb3.Keypair.fromSecretKey(bytes);
-          PgWallet.add({ name, keypair });
-
-          return keypair;
-        } catch (err: any) {
-          console.log(err.message);
-        }
-      },
-      { accept: ".json" }
-    );
+          return { keypair, added };
+        },
+        { accept: ".json" }
+      );
+    } catch (err) {
+      // Closing the picker imports nothing; it is not a failure
+      if (PgCommon.isImportCancelled(err)) return;
+      throw err;
+    }
   }
 
   /**

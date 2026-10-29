@@ -128,8 +128,13 @@ test.describe("client-v2-themes", () => {
     page,
   }) => {
     // A tutorial page renders Markdown through the same CodeBlock as the
-    // assistant's answers, and needs no backend
+    // assistant's answers, and needs no backend. A lesson lands on its code;
+    // the page opens from the band
     await page.goto("/tutorials/hello-anchor/1");
+    await page
+      .locator('[data-slot="objective-band"]')
+      .getByRole("button", { name: "Read the page" })
+      .click();
     const code = page.locator("pre.shiki").first();
     await expect(code).toBeVisible();
 

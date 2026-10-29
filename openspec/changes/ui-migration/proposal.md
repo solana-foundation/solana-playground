@@ -90,6 +90,8 @@ existing code moves.
 - `client-v2-assistant`: how the assistant's composer names the model it
   talks to, how a turn is sent and stopped, how a model is connected, and
   how the thread reads and answers approvals at every width.
+- `client-v2-wallet`: what importing a keypair file does to the wallets a
+  user already has, and what it tells the user (HOO-2328).
 
 ### Modified Capabilities
 

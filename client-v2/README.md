@@ -91,6 +91,16 @@ git config core.hooksPath .githooks   # once per clone; runs `check` on pre-push
 `spec:validate` runs the OpenSpec CLI pinned in `devDependencies`, so its
 verdict is the one CI sees whatever version is installed globally.
 
+`bundle:info` rewrites [`bench/BUNDLE.md`](bench/BUNDLE.md), the committed
+sizes of the production bundle, from `build/`. Run it after `yarn build-fast`
+when a change moves bundle sizes and commit the file: `yarn test-build` fails
+while the snapshot differs from the build. CI measures the merge commit, so
+rebase onto the base branch first, and build with
+`REACT_APP_GA_MEASUREMENT_ID= yarn build-fast`: CI's build has no GA id, and
+the empty value keeps CRA from taking one from `.env` (dotenv does not override
+a variable already set). Sentry stays out of a build without `VERCEL_ENV`
+(`sentryEnabled` in `scripts/sentry-gate.mjs`).
+
 ### Static assets and worktrees
 
 `public/` is mirrored from the `client/public` submodule, and `yarn start` /

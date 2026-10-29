@@ -14,10 +14,10 @@ describe("settings names", () => {
   // A control is named by its setting: two settings of one name are two
   // controls a screen reader, or a test, cannot tell apart. Every name on the
   // page is held unique by the e2e "A wide window's settings page".
-  it("names the RPC endpoint and the build server apart", () => {
+  it("names the endpoint and the build server apart, as the prototype does", () => {
     const rpc = connection.find((s) => s.id === "connection.endpoint");
     const build = server.find((s) => s.id === "server.endpoint");
-    expect(rpc?.name).toBe("RPC endpoint");
+    expect(rpc?.name).toBe("Endpoint");
     expect(build?.name).toBe("Build server");
   });
 });

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import BasePhoneHome from "./BasePhoneHome";
@@ -64,10 +64,13 @@ it("keeps an ellipsis while the program count loads", () => {
   expect(home.getByText("16 tutorials, … programs")).toBeTruthy();
 });
 
-it("reports a pressed quick start by its id", () => {
+it("reports a pressed quick start by its id", async () => {
   const p = props();
   const home = draw(p);
-  fireEvent.click(home.getByRole("button", { name: /New Anchor project/ }));
+  // Async: a quick start is an AsyncButton, which settles once its promise does
+  await act(async () => {
+    fireEvent.click(home.getByRole("button", { name: /New Anchor project/ }));
+  });
   expect(p.onQuickstart).toHaveBeenCalledWith(p.quickstarts[1]);
 });
 
@@ -86,7 +89,7 @@ it("disables a quick start while its promise runs", async () => {
   expect((button as HTMLButtonElement).disabled).toBe(true);
   fireEvent.click(button);
   expect(p.onQuickstart).toHaveBeenCalledTimes(1);
-  settle();
+  await act(async () => settle());
   await vi.waitFor(() =>
     expect((button as HTMLButtonElement).disabled).toBe(false)
   );

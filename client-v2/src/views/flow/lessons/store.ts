@@ -345,8 +345,9 @@ export class PgLesson {
   }
 
   /** Record that the learner opened this step's page. A fact, not a
-   * proof: it drives the read signpost and gates the entry auto-open,
-   * never a mark. */
+   * proof: it never becomes a mark, and since the page stopped opening on
+   * entry and the band's "read first" signpost went (lesson-prototype-
+   * polish) nothing on screen reads it; the record keeps it for history. */
   static opened(stepId: string) {
     PgLesson._dispatch({ type: "opened", stepId, at: Date.now() });
   }

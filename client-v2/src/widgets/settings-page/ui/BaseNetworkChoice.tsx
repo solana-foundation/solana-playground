@@ -45,7 +45,8 @@ const BaseNetworkChoice = ({
         <SegmentedItem
           key={n.endpoint}
           value={n.endpoint}
-          className="font-mono"
+          // A fingertip tall on a phone, as the prototype's network chips
+          className="max-md:h-12 max-md:px-4 max-md:text-control"
           onClick={() => {
             if (n.endpoint === endpoint) onChoose?.(n.endpoint);
           }}

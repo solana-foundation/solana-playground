@@ -4,12 +4,6 @@ import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
 import {
-  foldRecord,
-  getLessonPath,
-  PgLesson,
-  positionLabel,
-} from "@/views/flow/lessons";
-import {
   DeleteWorkspace,
   ExportWorkspace,
 } from "@/views/sidebar/explorer/Component/Modals";
@@ -133,7 +127,6 @@ const ProjectList = ({
       PgExplorer.onDidDeleteWorkspace(refresh),
       PgExplorer.onDidSwitchWorkspace(refresh),
       PgExplorer.onDidChangeWorkspaceList(refresh),
-      PgLesson.onDidChange(refresh),
     ];
     return () => subscriptions.forEach((s) => s.dispose());
   }, []);
@@ -181,12 +174,11 @@ const ProjectList = ({
     setRenameError(null);
   }, [renamingGone]);
 
-  const { projects, lessons } = listProjects(
+  const projects = listProjects(
     names,
     {
       idOf: (name) => PgExplorer.workspaceIdOf(name),
       isLesson: (name) => PgTutorial.isWorkspaceTutorial(name),
-      progressOf: describeProgress,
     },
     livePins
   );
@@ -326,7 +318,6 @@ const ProjectList = ({
   return (
     <BaseProjectList
       projects={projects}
-      lessons={lessons}
       current={PgExplorer.currentWorkspaceName ?? null}
       renaming={renamingGone ? null : renaming}
       renameError={renameError}
@@ -343,21 +334,3 @@ const ProjectList = ({
 };
 
 export default ProjectList;
-
-/**
- * The lesson you are in shows live progress, because `PgLesson` already
- * holds it. Every other lesson shows its length: their progress is on disk
- * in their own workspace, and reading it would mean an async fan-out on
- * every render.
- */
-const describeProgress = (name: string) => {
-  const path = getLessonPath(name);
-  if (!path) return null;
-
-  const lesson = PgLesson.state;
-  if (lesson.path?.tutorial === name) {
-    return positionLabel(path, foldRecord(path, lesson.record));
-  }
-
-  return `${path.steps.length} steps`;
-};

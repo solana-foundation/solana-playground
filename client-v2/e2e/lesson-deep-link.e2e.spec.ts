@@ -11,7 +11,12 @@ import { expect, test } from "@playwright/test";
 test("a lesson page opened by link stays on that page", async ({ page }) => {
   await page.goto("/tutorials/hello-anchor/1");
 
-  await expect(page.locator("pre").first()).toBeVisible();
+  // The lesson lands on its code, under its band
+  await expect(
+    page
+      .locator('[data-slot="objective-band"]')
+      .getByRole("button", { name: "Read the page" })
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor\/1$/);
 
   // Still there once the debounced sidebar events have all landed

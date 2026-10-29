@@ -44,7 +44,7 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 /**
  * The path this covers: `views/flow/lessons/paths/hello-anchor.ts`. Its
  * step 1 (`write-program`) has no attempt recorded and no page verified,
- * so the rail still names it "build to prove this" and the assistant action
+ * so the rail still says it is "aiming at build" and the assistant action
  * is at rung zero.
  */
 test("a lesson step is finished by the toolchain, not by a click", async ({
@@ -73,16 +73,15 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // Open lands on upstream's own About/Start screen for a lesson tutorial
   // that has never been started -- Start is what creates the workspace
   // (`PgTutorial.start()` -> `PgExplorer.createWorkspace()`) and is what
-  // flips `LessonRoute` over to the lesson chrome. `exact` matters here:
-  // the assistant panel's own "Start" (demo mode) button is always on the
-  // page too, and Playwright's default name match is a case-insensitive
-  // substring, so "START" would otherwise match both.
-  await page.getByRole("button", { name: "START", exact: true }).click();
+  // flips `LessonRoute` over to the lesson chrome. `exact` keeps the
+  // locator off any other name holding "Start", such as Connect a model's
+  // own Start while that dialog is open.
+  await page.getByRole("button", { name: "Start", exact: true }).click();
 
   // The rail switches to the lesson's steps, and the band names step 1.
   // `hello-anchor.ts` has four steps, so this is also a count check.
   //
-  // This, and everything up to the "build to prove this" assertion below, is
+  // This, and everything up to the "aiming at build" assertion below, is
   // Flow's own outer chrome -- it mounts regardless of whether the main
   // surface underneath is `LessonSurface` or upstream's own `Tutorial`,
   // so none of it actually guards the bug two commits back in this
@@ -99,10 +98,9 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   ).toBeVisible();
 
   // Nothing has been verified yet, so the rail still names what the
-  // current step is aiming at rather than marking it done. `exact` and
-  // the case matter: the band's primary is "Build to prove this".
+  // current step is aiming at rather than marking it done
   await expect(
-    page.getByText("build to prove this", { exact: true })
+    page.getByText("aiming at build", { exact: true })
   ).toBeVisible();
 
   // The one assertion in this test that actually guards the Start-time
@@ -122,28 +120,23 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
   // is on the page; if `LessonSurface` is mounted, it is not.
   await expect(page.getByText("Next", { exact: true })).toHaveCount(0);
 
-  // Entering the lesson lands on its page (D34): the sheet is open with
-  // no click, its footer names the way on, and closing it leaves the
-  // band pointing at the code with the plain label -- the record now
-  // knows the page was opened, so the "read first" signpost has rested.
+  // Entering the lesson lands on the code: the page opens only when asked,
+  // as the prototype has it, and closes back to "Read the page"
+  await expect(
+    page.getByRole("dialog", { name: /hello instruction/i })
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Read the page" }).click();
   await expect(
     page.getByRole("dialog", { name: /hello instruction/i })
   ).toBeVisible();
-  await expect(page.getByText("Back to the code")).toBeVisible();
-  // The record learns `opened` only once the page content actually
-  // loads, so wait for the band's signpost (visible beside the sheet) to
-  // rest before closing -- an Escape that outruns the load leaves the
-  // page unread on purpose.
-  await expect(
-    page.getByRole("button", { name: "Read the page" })
-  ).toBeVisible();
+  await expect(page.getByText("Back to the code")).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(
     page.getByRole("dialog", { name: /hello instruction/i })
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Read the page" })
-  ).toBeVisible();
+  ).toBeFocused();
 
   // The first ask opens the door rather than answering outright. The e2e
   // has no connected model, so there is no transcript to assert on --
@@ -163,55 +156,28 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
     page.getByRole("button", { name: "Try it first" })
   ).toBeVisible();
 
-  // Skipping to the read step: its page has never been opened, so the
-  // band signposts it, and the reader's footer offers the step's own
-  // edge -- "Mark as read" -- where the reading ends. The band offers
-  // the same label, so scope to the sheet.
+  // The deploy step offers no proving action and no readiness line: the
+  // stage bar's stepper points at Deploy, and the rail says what the step
+  // aims at
   const skip = page.getByRole("button", {
     name: "Skip this step",
     exact: true,
   });
   await skip.click();
   await expect(
-    page.getByRole("button", { name: "Read step 2 first" })
+    page.getByText("aiming at deploy", { exact: true })
   ).toBeVisible();
-
-  // The deploy step explains what it still needs rather than failing: on
-  // a fresh profile there is no build and no wallet, and the band names
-  // both, each as a live remedy (`lessons/readiness.ts`). The primary
-  // stays offered either way.
-  await expect(page.getByText("Before you can deploy:")).toBeVisible();
-  await expect(page.getByRole("button", { name: "build first" })).toBeVisible();
-  // `exact`: the navigation's Get set up checklist has a "Connect a wallet"
-  // step too
+  await expect(page.getByText("Before you can deploy:")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "connect a wallet", exact: true })
-  ).toBeVisible();
-  // ...and says nothing about the cluster, because the profile is already
-  // on devnet. Blaming a cluster that is right -- or one the client has
-  // not resolved yet -- is worse than saying nothing at all.
-  await expect(page.getByText(/switch .*to devnet/)).toHaveCount(0);
-  // `exact`: the rail's row for the step is a button whose text also
-  // ends in "deploy to prove this"
-  await expect(
-    page.getByRole("button", { name: "Deploy to prove this", exact: true })
-  ).toBeVisible();
+    page.getByRole("button", { name: "Deploy to prove this" })
+  ).toHaveCount(0);
 
+  // The read step continues from the band, where the prototype puts it:
+  // the step attests and the cursor walks on. A dead or mis-wired
+  // "Continue" fails here.
   await skip.click();
-  await page.getByRole("button", { name: "Read step 3 first" }).click();
-  const sheet = page.getByRole("dialog", { name: /TypeScript client/i });
-  await expect(
-    sheet.getByRole("button", { name: "Mark as read", exact: true })
-  ).toBeVisible();
-  await expect(sheet.getByText("Back to the code")).toHaveCount(0);
-
-  // The footer's edge actually fires: the step attests, the sheet
-  // closes, and the cursor walks on. A dead or mis-wired `onAttest`
-  // fails here, not at the visibility check above.
-  await sheet
-    .getByRole("button", { name: "Mark as read", exact: true })
-    .click();
-  await expect(sheet).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "I'm stuck" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
     page.getByText("Step 4 of 4", { exact: true }).first()
   ).toBeVisible();

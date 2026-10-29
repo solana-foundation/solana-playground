@@ -111,7 +111,8 @@ afterEach(async () => {
   act(() => {
     for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
   });
-  PgAssistant.disconnect();
+  // A dialog on its way out is still mounted here and reads the store
+  act(() => PgAssistant.disconnect());
   PgSession.reset();
   resetTelemetry();
   resetLogger();
@@ -461,12 +462,19 @@ describe("ConnectDialog", () => {
         .getAttribute("aria-checked")
     ).toBe("true");
     expect(screen.getByRole("combobox", { name: "Model" }).textContent).toBe(
-      "claude-opus-5-5"
+      "Opus 5.5"
     );
-    // A dialog has a title of its own; the form brings none
+    // One column, 27rem on a desk
+    expect(screen.getByRole("dialog").getAttribute("data-size")).toBe("narrow");
+    // The dialog's title is the frame's; the form heads only its lead
     expect(screen.queryByText("Back to chat")).toBeNull();
     expect(
-      screen.queryByText("An assistant that can see your project")
-    ).toBeNull();
+      screen.getByRole("heading", { name: "Connect a model" }).tagName
+    ).toBe("H2");
+    expect(
+      screen.getByRole("heading", {
+        name: "An assistant that can see your project",
+      }).tagName
+    ).toBe("H3");
   });
 });

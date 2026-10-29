@@ -1,5 +1,8 @@
 export { assistantTelemetry } from "./model/telemetry";
-export { displayModelName } from "./model/model-name";
+export {
+  displayModelName,
+  EFFORT_LABELS,
+} from "../../views/sidebar/assistant/model/labels";
 export {
   probeDefaultBackend,
   useDefaultBackend,
@@ -8,7 +11,7 @@ export type { DefaultBackend } from "./model/default-backend";
 export { modelOptions, modelShown } from "./model/choice";
 export type { ModelOption, ModelShown } from "./model/choice";
 export { BaseModelMenu } from "./ui/BaseModelMenu";
-export { BaseEffortMenu, EFFORT_LABELS } from "./ui/BaseEffortMenu";
+export { BaseEffortMenu } from "./ui/BaseEffortMenu";
 export { useTurn } from "./model/use-turn";
 export type {
   ConnectOpener,

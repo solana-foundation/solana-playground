@@ -1,5 +1,10 @@
 import { useRef } from "react";
-import type { KeyboardEvent, ReactNode, SyntheticEvent } from "react";
+import type {
+  ComponentProps,
+  KeyboardEvent,
+  ReactNode,
+  SyntheticEvent,
+} from "react";
 import { cn } from "@/shared/lib/utils";
 
 import { BrandButton } from "@/shared/ui/brand-button";
@@ -14,8 +19,20 @@ import {
 import { Spinner } from "@/shared/ui/spinner";
 import { isInsideToast } from "@/shared/lib/toast-layer";
 
-/** `wide` is for dialogs with a code or a table in the body */
-export type ModalSize = "default" | "wide";
+/**
+ * The design system's sizes: `narrow` is for a form of one column (Connect a
+ * model), `wide` for dialogs with a code or a table in the body
+ */
+export type ModalSize = NonNullable<
+  ComponentProps<typeof ModalContent>["size"]
+>;
+
+/**
+ * What has the focus when the dialog opens: the body's first field (or the
+ * submit, when there is none), or the dialog itself, for one that should open with no field
+ * ringed, as the prototype's New project does
+ */
+export type OpenFocus = "field" | "dialog";
 
 /**
  * How the submit is drawn: the stock `Button`'s `default` or `destructive`,
@@ -32,6 +49,12 @@ export type BaseModalFrameProps = {
   title: { text: string; hidden: boolean };
   /** Why the last submit failed */
   error?: string;
+  /**
+   * Below `LAYOUT_BREAKPOINTS.phone`, where the dialog is a page: the bar's
+   * Close is the way out, so there is no Cancel, and the one action is the
+   * flat accent across the foot, as the prototype's phone pins it
+   */
+  phone?: boolean;
   /** The footer; a dialog without one has only the header's Close */
   submit?: {
     text: string;
@@ -42,6 +65,8 @@ export type BaseModalFrameProps = {
     onCancel?: () => void;
   };
   size: ModalSize;
+  /** Where the focus lands on open; `field` when left out */
+  openFocus?: OpenFocus;
   /**
    * Runs once the dialog's content unmounts; Radix would send focus to the
    * dialog's `Trigger`, and `preventDefault()` stops it
@@ -79,13 +104,15 @@ const OWNS_ENTER =
  * content, and the root the overlay). Enter anywhere in the dialog submits,
  * except on a control that owns Enter (`OWNS_ENTER`); so does the footer's
  * `type="submit"` button, which has the focus on open when the body has no
- * field.
+ * field. With `openFocus` set to `dialog`, the dialog itself has it instead.
  */
 export const BaseModalFrame = ({
   title,
   error,
+  phone = false,
   submit,
   size,
+  openFocus = "field",
   onCloseAutoFocus,
   children,
 }: BaseModalFrameProps) => {
@@ -129,8 +156,17 @@ export const BaseModalFrame = ({
   };
 
   // Radix focuses the header's Close first, where Enter would close the
-  // dialog; Enter must submit, so focus the body's first field or the submit
+  // dialog; Enter must submit, so focus the body's first field or the submit,
+  // or the dialog itself when asked
   const handleOpenAutoFocus = (ev: Event) => {
+    if (openFocus === "dialog") {
+      // Radix dispatches this on the content, which takes focus at -1; on
+      // anything else its own default focus stays
+      if (!(ev.currentTarget instanceof HTMLElement)) return;
+      ev.preventDefault();
+      ev.currentTarget.focus();
+      return;
+    }
     const target =
       formRef.current?.querySelector<HTMLElement>(FIRST_FIELD) ??
       submitRef.current;
@@ -154,7 +190,9 @@ export const BaseModalFrame = ({
         className="flex min-h-0 flex-1 flex-col"
         onSubmit={handleSubmit}
       >
-        <ModalHeader>
+        {/* A hidden title draws no hairline on a desk; a phone's bar keeps
+            its edge */}
+        <ModalHeader className={cn(title.hidden && "md:border-b-0")}>
           <ModalTitle className={cn(title.hidden && "sr-only")}>
             {title.text}
           </ModalTitle>
@@ -169,7 +207,7 @@ export const BaseModalFrame = ({
         </ModalBody>
         {submit && (
           <ModalFooter>
-            {submit.onCancel && (
+            {submit.onCancel && !phone && (
               <Button
                 type="button"
                 variant="ghost"
@@ -180,7 +218,13 @@ export const BaseModalFrame = ({
               </Button>
             )}
             {submit.variant === "brand" ? (
-              <BrandButton ref={submitRef} type="submit" disabled={!canSubmit}>
+              <BrandButton
+                ref={submitRef}
+                type="submit"
+                variant={phone ? "accent" : "ring"}
+                className={phone ? "h-12 rounded-xl text-control" : undefined}
+                disabled={!canSubmit}
+              >
                 {submitLabel}
               </BrandButton>
             ) : (

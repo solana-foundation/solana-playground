@@ -22,13 +22,10 @@ import { Dialog, DialogContent, DialogTitle } from "@/shared/ui/dialog";
 
 const noop = () => {};
 
-/** A step with no page, going back to the code; each test changes a copy */
+/** A step with no page; each test changes a copy */
 const props = (): BaseReaderProps => ({
   title: "Say hello on chain",
-  position: "Step 1 of 4",
-  criterion: "Verified when the build passes.",
   body: { kind: "none" },
-  footer: { kind: "back", onClick: noop },
   onClose: noop,
 });
 
@@ -44,12 +41,6 @@ const withBody = (body: ReaderBody): BaseReaderProps => {
   return p;
 };
 
-const withFooter = (footer: BaseReaderProps["footer"]): BaseReaderProps => {
-  const p = props();
-  p.footer = footer;
-  return p;
-};
-
 describe("BaseReader", () => {
   it("is a non-modal dialog named by the title, rendered in place", () => {
     const { container } = render(<BaseReader {...props()} />);
@@ -58,8 +49,8 @@ describe("BaseReader", () => {
     expect(dialog.getAttribute("data-slot")).toBe("dialog-content");
     expect(container.contains(dialog)).toBe(true);
     expect(screen.getByRole("button", { name: "Close the page" })).toBeTruthy();
-    expect(dialog.textContent).toContain("Step 1 of 4");
-    expect(dialog.textContent).toContain("Verified when the build passes.");
+    // The head is the objective alone, as the prototype's page has it
+    expect(dialog.textContent).not.toMatch(/step 1 of 4/i);
   });
 
   it("closes on Escape", () => {
@@ -105,21 +96,13 @@ describe("BaseReader", () => {
     expect(screen.getByText("This step has no page to read.")).toBeTruthy();
   });
 
-  it("labels and styles the footer by its kind and fires it", () => {
-    const onClick = vi.fn();
-    const { rerender } = render(
-      <BaseReader {...withFooter({ kind: "attest", onClick })} />
-    );
-    const attest = screen.getByRole("button", { name: "Mark as read" });
-    expect(attest.getAttribute("data-variant")).toBe("default");
-    fireEvent.click(attest);
-    expect(onClick).toHaveBeenCalledTimes(1);
-    rerender(<BaseReader {...withFooter({ kind: "back", onClick })} />);
+  it("has no footer: the band carries the way on", () => {
+    render(<BaseReader {...props()} />);
+    expect(screen.queryByRole("button", { name: "Mark as read" })).toBeNull();
     expect(
-      screen
-        .getByRole("button", { name: "Back to the code" })
-        .getAttribute("data-variant")
-    ).toBe("outline");
+      screen.queryByRole("button", { name: "Back to the code" })
+    ).toBeNull();
+    expect(screen.getAllByRole("button")).toHaveLength(1);
   });
 
   it("leaves the page open when Escape closes a modal stacked over it", () => {

@@ -33,12 +33,14 @@ export interface LayoutShellProps {
    * over it (settings, from the session footer): on a phone, where the
    * navigation is a page, it brings Work into view; from
    * `LAYOUT_BREAKPOINTS.phone` up, where the navigation is a column, it does
-   * nothing.
+   * nothing. `phone` is the pager's menu page (the stock `isMobile`), where
+   * the navigation draws the page's head and `toggle` closes it.
    */
   nav: (panel: {
     collapsed: boolean;
     toggle: () => void;
     closeSheet: () => void;
+    phone: boolean;
   }) => ReactNode;
   /**
    * The stage tabs, in a row across the files column and the stage, under the
@@ -46,16 +48,16 @@ export interface LayoutShellProps {
    */
   stageTabs: ReactNode;
   /**
-   * The files column. `collapsed` is never true in the phone's Files Sheet.
+   * The files column. `collapsed` is never true in the phone's Files Sheet;
+   * `phone` says the column is in that Sheet, where `toggle` closes it.
    */
-  files: (panel: { collapsed: boolean; toggle: () => void }) => ReactNode;
-  /**
-   * The stage. `openFiles` opens the phone's Files sheet, for a control in the
-   * stage that points at the files column (the lesson band's "Show the steps"),
-   * below `LAYOUT_BREAKPOINTS.phone`, and is a no-op otherwise: its only
-   * caller, the compact band, shows only below that breakpoint.
-   */
-  stage: (panel: { openFiles: () => void }) => ReactNode;
+  files: (panel: {
+    collapsed: boolean;
+    toggle: () => void;
+    phone: boolean;
+  }) => ReactNode;
+  /** The stage */
+  stage: () => ReactNode;
   console: (panel: { open: boolean; toggle: () => void }) => ReactNode;
   /**
    * The assistant, in its panel or, below `LAYOUT_BREAKPOINTS.compact`, its
@@ -522,26 +524,32 @@ const LayoutShell = ({
           collapsed: stock.collapsed,
           toggle: toggleNav(stock.toggle),
           closeSheet: closeNav,
+          phone: stock.isMobile,
         })
       }
       files={(stock) => {
         // In the phone's Files Sheet the column is always open, so a control
         // of its own, if it draws one, closes the Sheet, as ⌘E does there
-        // (Flow's column draws none since the stage bar took its toggle)
+        // (Flow's column draws none there: the Sheet has its own close)
         if (stock.isMobile) {
           return files({
             collapsed: false,
             toggle: toggleNav(stock.toggle),
+            phone: true,
           });
         }
         return files({
           collapsed: !state.open.files,
           toggle: () =>
             setOpen("files", { open: !state.open.files, via: "button" }),
+          phone: false,
         });
       }}
+      // The product's text face, as the desktop's column has it: the code
+      // face leaked into every button of a Sheet, which inherit their font.
+      // The size stays the one the legacy file tree is laid out at.
       sheetFont={{
-        fontFamily: theme.font.code.family,
+        fontFamily: theme.font.other.family,
         fontSize: theme.font.code.size.medium,
       }}
       phone={{
@@ -584,11 +592,7 @@ const LayoutShell = ({
         />
       }
       stageTabs={stageTabs}
-      stage={stage({
-        openFiles: () => {
-          if (phone) setPhoneFiles(true, "button");
-        },
-      })}
+      stage={stage()}
       console={console({
         open: phone ? phoneConsole : state.open.console,
         toggle: () => {

@@ -20,7 +20,7 @@ const TutorialDetails: FC<React.PropsWithChildren<TutorialDetailsProps>> = ({
               {kind}
             </span>
 
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-4">
               {Array.isArray(data) ? (
                 data.map((data) => (
                   <ClickableTutorialDetail key={data} kind={kind} data={data} />

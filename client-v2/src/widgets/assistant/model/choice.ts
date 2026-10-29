@@ -5,7 +5,7 @@ import {
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import type { KeyedProviderId } from "./connection";
 import type { DefaultBackend } from "./default-backend";
-import { displayModelName } from "./model-name";
+import { displayModelName } from "../../../views/sidebar/assistant/model/labels";
 
 /** The effort a connection runs at, on the ladder its provider offers */
 export interface EffortChoice {
@@ -221,7 +221,7 @@ if (import.meta.vitest) {
           model: "claude-opus-5-5",
           label: "Opus 5.5",
           effort: {
-            value: "medium",
+            value: "high",
             ladder: ["low", "medium", "high", "xhigh", "max"],
           },
         });

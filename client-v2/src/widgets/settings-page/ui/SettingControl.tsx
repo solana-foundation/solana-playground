@@ -9,14 +9,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { Switch } from "@/shared/ui/switch";
+import { Checkbox } from "@/shared/ui/checkbox";
 import { useRenderOnChange } from "@/hooks";
 import { PgCommon, PgView, RequiredKey, Setting as SettingType } from "@/utils";
 import { CustomSetting } from "@/views/flow/settings/CustomSetting";
 
 type SettingSetterProps = SettingType;
 
-/** The control that sets one setting: a select when it has values, else a switch */
+/** The control that sets one setting: a select when it has values, else a checkbox */
 export const SettingControl: FC<
   React.PropsWithChildren<SettingSetterProps>
 > = ({ values, ...props }) => {
@@ -96,7 +96,10 @@ export const SettingSetterSelect: FC<
         else setting.setValue(v);
       }}
     >
-      <SelectTrigger aria-label={setting.name} className="w-full">
+      <SelectTrigger
+        aria-label={setting.name}
+        className="w-full max-md:text-body max-md:font-read max-md:data-[size=default]:h-12"
+      >
         <SelectValue />
       </SelectTrigger>
       <SelectContent position="popper">
@@ -154,9 +157,9 @@ type SettingSetterCheckBoxProps = Omit<SettingSetterProps, "values">;
 const SettingSetterCheckBox: FC<
   React.PropsWithChildren<SettingSetterCheckBoxProps>
 > = ({ name, getValue, setValue }) => (
-  <Switch
+  <Checkbox
     aria-label={name}
     checked={getValue()}
-    onCheckedChange={(checked) => setValue(checked)}
+    onCheckedChange={(checked) => setValue(checked === true)}
   />
 );

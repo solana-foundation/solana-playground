@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import BaseHome from "./BaseHome";
@@ -60,6 +60,46 @@ it("shows four of the tutorials and links to all of them", () => {
   expect(p.onAllTutorials).toHaveBeenCalledTimes(1);
 });
 
+it("writes a tutorial's level and framework as one plain line", () => {
+  const home = draw(props());
+  const card = home
+    .getByRole("button", { name: "Hello Anchor" })
+    .closest<HTMLElement>("[data-slot=action-card]");
+  const eyebrow = card?.querySelector("[data-slot=action-card-eyebrow]");
+  expect(eyebrow?.textContent).toBe("Beginner · Anchor");
+  expect(eyebrow?.querySelector("[data-slot=tag]")).toBeNull();
+});
+
+it("writes the level alone for a tutorial with no framework", () => {
+  const p = props();
+  p.tutorials = [
+    {
+      name: "Bare",
+      description: "Bare description",
+      level: "Beginner",
+      framework: undefined,
+      thumbnail: "/t.png",
+    },
+  ];
+  const home = draw(p);
+  const eyebrow = home
+    .getByRole("button", { name: "Bare" })
+    .closest<HTMLElement>("[data-slot=action-card]")
+    ?.querySelector("[data-slot=action-card-eyebrow]");
+  expect(eyebrow?.textContent).toBe("Beginner");
+});
+
+it("draws the tiles' icons bare, with no tile behind them", () => {
+  const home = draw(props());
+  for (const name of ["New project", "Follow a tutorial", "Open a program"]) {
+    const media = home
+      .getByRole("button", { name })
+      .closest<HTMLElement>("[data-slot=action-card]")
+      ?.querySelector("[data-slot=action-card-media]");
+    expect(media?.getAttribute("data-variant")).toBe("glyph");
+  }
+});
+
 it("unfolds and folds the scratch options under New project", () => {
   const p = props();
   const home = draw(p);
@@ -84,10 +124,13 @@ it("reports the other tiles", () => {
   expect(p.onTile).toHaveBeenCalledWith("tutorials");
 });
 
-it("opens a tutorial by name", () => {
+it("opens a tutorial by name", async () => {
   const p = props();
   const home = draw(p);
-  fireEvent.click(home.getByRole("button", { name: "Open Hello Anchor" }));
+  // Async: Open is an AsyncButton, which settles once `onTutorial` resolves
+  await act(async () => {
+    fireEvent.click(home.getByRole("button", { name: "Open Hello Anchor" }));
+  });
   expect(p.onTutorial).toHaveBeenCalledWith("Hello Anchor");
 });
 

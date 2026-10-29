@@ -12,13 +12,13 @@ repository has them. `yarn spec:validate` in `client-v2/` runs
 openspec/
   config.yaml                  project context and rules every /opsx:* command reads
   specs/<capability>/spec.md   what the system does today; filled by archiving changes
-  changes/<change>/            a change in progress
+  changes/<change>/            a change with tasks left, or finished and awaiting archive
     .openspec.yaml             schema and creation date
     proposal.md                why, what changes, which capabilities
     specs/<capability>/spec.md the delta: ADDED / MODIFIED / REMOVED requirements
     design.md                  context, decisions, risks
     tasks.md                   checklist; one PR per task
-  changes/archive/<date>-<change>/   closed changes, deltas merged into specs/
+  changes/archive/<date>-<change>/   finished changes, deltas merged into specs/, no tasks.md
 ```
 
 `specs/` starts nearly empty and grows one change at a time; nothing is

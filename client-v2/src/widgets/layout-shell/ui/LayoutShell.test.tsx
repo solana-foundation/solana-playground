@@ -145,7 +145,8 @@ afterEach(() => {
   // `PgView`'s stack outlives every test: a dialog left open here would be
   // closed, and reported, by its no-host wait during a later test
   for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
-  PgFlow["_dispatch"]({ type: "workspace-change" });
+  // The shell is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgFlow["_dispatch"]({ type: "workspace-change" }));
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   resetTelemetry();
@@ -174,7 +175,10 @@ const sheetOverlay = () =>
 
 // Only what the shell reads: the font a portaled Sheet is set in
 const theme = {
-  font: { code: { family: "monospace", size: { medium: "13px" } } },
+  font: {
+    code: { family: "monospace", size: { medium: "13px" } },
+    other: { family: "sans-serif" },
+  },
 } as unknown as DefaultTheme;
 
 /** The shell's tree, for `render` and for a `rerender` that adds or drops Home */
@@ -186,8 +190,11 @@ const shellTree = (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
       <LayoutShell
-        nav={({ collapsed, toggle, closeSheet }) => (
+        nav={({ collapsed, toggle, closeSheet, phone }) => (
           <>
+            <span data-testid="nav-shape">
+              {phone ? "menu page" : "column"}
+            </span>
             <button type="button" onClick={toggle}>
               {collapsed ? "Expand navigation" : "Collapse navigation"}
             </button>
@@ -198,23 +205,19 @@ const shellTree = (
           </>
         )}
         stageTabs={<div>stage tabs</div>}
-        files={({ collapsed, toggle }) => (
+        files={({ collapsed, toggle, phone }) => (
           // Stands for a control inside the column; the stage bar carries
           // "Collapse project panel" / "Expand project panel"
-          <button type="button" aria-expanded={!collapsed} onClick={toggle}>
+          <button
+            type="button"
+            aria-expanded={!collapsed}
+            data-phone={phone}
+            onClick={toggle}
+          >
             Files column control
           </button>
         )}
-        stage={({ openFiles }) =>
-          work.stage ?? (
-            <main>
-              stage
-              <button type="button" onClick={openFiles}>
-                Show the steps
-              </button>
-            </main>
-          )
-        }
+        stage={() => work.stage ?? <main>stage</main>}
         console={({ open, toggle }) => (
           <button
             type="button"
@@ -284,6 +287,13 @@ it("should report the navigation's own button as a button", () => {
   shell();
   fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
   expect(toggled()).toEqual([{ panel: "nav", open: false, via: "button" }]);
+});
+
+it("should tell the files column it is not in the phone's Sheet", () => {
+  shell();
+  expect(
+    screen.getByRole("button", { name: "Files column control" }).dataset.phone
+  ).toBe("false");
 });
 
 it("should toggle the files column by Cmd+E and by its button, and say which", () => {
@@ -610,14 +620,15 @@ it("should open the assistant Sheet on Ctrl+R after the window narrows", () => {
   expect(toggled()).toEqual([{ panel: "assistant", open: true, via: "key" }]);
 });
 
-it("should set the assistant Sheet in the theme's font and draw no stock close button over its header", () => {
+it("should set the assistant Sheet in the theme's text font, not its code font, and draw no stock close button over its header", () => {
   resizeTo(800);
   shell();
   fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
   const sheet = document.querySelector<HTMLElement>(
     '[data-slot="sheet-content"]'
   )!;
-  expect(sheet.style.fontFamily).toBe("monospace");
+  // The code face leaked into every button of a Sheet, which inherit it
+  expect(sheet.style.fontFamily).toBe("sans-serif");
   expect(sheet.querySelector('[data-slot="sheet-close"]')).toBeNull();
 });
 
@@ -686,8 +697,8 @@ it("should open the console once when a deploy fails, not for one already failed
   shell();
   expect(toggled()).toEqual([]);
 
-  dispatch({ type: "workspace-change" });
-  dispatch({ type: "deploy-start" });
+  act(() => dispatch({ type: "workspace-change" }));
+  act(() => dispatch({ type: "deploy-start" }));
   act(() => dispatch({ type: "deploy-finish", ok: false }));
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });
@@ -696,7 +707,7 @@ it("should not reopen the console for a change that leaves a deploy failed", () 
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
     PgFlow["_dispatch"](ev);
   shell();
-  dispatch({ type: "deploy-start" });
+  act(() => dispatch({ type: "deploy-start" }));
   act(() => dispatch({ type: "deploy-finish", ok: false }));
   press({ key: "j", ctrlKey: true });
   expect(consoleButton().getAttribute("aria-expanded")).toBe("false");
@@ -886,6 +897,17 @@ describe("on a phone", () => {
   const consoleBox = () =>
     consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']")!;
 
+  it("hands the navigation the menu page, whose toggle brings the work back", () => {
+    phoneShell();
+    expect(screen.getByTestId("nav-shape").textContent).toBe("menu page");
+    fireEvent.click(button("Menu"));
+    fireEvent.click(button("Collapse navigation"));
+    expect(events("layout_page_shown")).toEqual([
+      { page: "menu", via: "button" },
+      { page: "work", via: "button" },
+    ]);
+  });
+
   it("lands on the work page showing the code", () => {
     phoneShell();
     expect(isChecked("Code")).toBe("true");
@@ -1071,16 +1093,6 @@ describe("on a phone", () => {
     ]);
   });
 
-  it("opens the Files sheet from the stage, reported as a button", () => {
-    phoneShell();
-    tap(screen.getByRole("button", { name: "Show the steps" }));
-    expect(
-      document.querySelector('[data-slot="sheet-content"]')
-    ).not.toBeNull();
-    expect(screen.getByRole("dialog", { name: "Files" })).toBeTruthy();
-    expect(toggled()).toEqual([{ panel: "files", open: true, via: "button" }]);
-  });
-
   it("reports a tap on the Files sheet's overlay as a button", async () => {
     phoneShell();
     tap(button("Files"));
@@ -1196,6 +1208,8 @@ describe("on a phone", () => {
   it("closes the Files sheet by the column's own button", () => {
     phoneShell();
     tap(button("Files"));
+    // The column is told it is in the Sheet, so Flow draws no Hide files there
+    expect(button("Files column control").dataset.phone).toBe("true");
     fireEvent.click(button("Files column control"));
     expect(document.querySelector('[data-slot="sheet-content"]')).toBeNull();
     expect(toggled().at(-1)).toEqual({

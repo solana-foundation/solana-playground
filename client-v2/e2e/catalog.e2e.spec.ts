@@ -40,7 +40,7 @@ test("client-v2-layout: Finding a tutorial by search", async ({
   await expect(search(page, "tutorials")).toBeHidden();
   // An unstarted tutorial opens on its About screen, in the stage
   await expect(
-    page.getByRole("button", { name: "START", exact: true })
+    page.getByRole("button", { name: "Start", exact: true })
   ).toBeVisible(LONG);
 });
 
@@ -115,7 +115,7 @@ test("Back from a page's link returns past it", async ({
 }) => {
   await page.goto("/tutorials/hello-anchor");
   await expect(
-    page.getByRole("button", { name: "START", exact: true })
+    page.getByRole("button", { name: "Start", exact: true })
   ).toBeVisible(LONG);
   await page.goto("/tutorials");
   await expect(search(page, "tutorials")).toBeVisible(LONG);

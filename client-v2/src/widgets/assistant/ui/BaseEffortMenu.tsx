@@ -1,4 +1,5 @@
 import type { Effort } from "../../../views/sidebar/assistant/model/types";
+import { EFFORT_LABELS } from "../../../views/sidebar/assistant/model/labels";
 import type { EffortChoice } from "../model/choice";
 import { ComposerEffort } from "@/shared/ui/composer";
 import {
@@ -8,15 +9,6 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
-
-/** The words for each effort level, in the trigger and in the menu */
-export const EFFORT_LABELS: Record<Effort, string> = {
-  low: "Low",
-  medium: "Medium",
-  high: "High",
-  xhigh: "Extra high",
-  max: "Max",
-};
 
 /** Picks how hard the model thinks, from the levels its provider offers */
 export function BaseEffortMenu({
