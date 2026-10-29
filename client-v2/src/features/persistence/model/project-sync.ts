@@ -9,7 +9,11 @@ import {
   settleConflicts,
   withLocalKeypair,
 } from "./merge";
-import { MAX_PROJECT_BODY_BYTES, projectKindOf } from "./project-write.mjs";
+import {
+  MAX_PROJECT_BODY_BYTES,
+  NO_FILES_REASON,
+  projectKindOf,
+} from "./project-write.mjs";
 import { diffFiles, hashFiles, sameUserFiles, snapshotOf } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
@@ -30,6 +34,13 @@ import type { SyncMark } from "./sync-mark";
 import type { Disposable } from "../../../utils/types";
 
 type PushResult = "ok" | "conflict" | "skipped";
+
+/** `push`'s options -- see there */
+type PushOptions = {
+  immediate?: boolean;
+  merging?: boolean;
+  generation?: number;
+};
 
 /** A project as `/api/projects` lists it */
 export interface ServerProject {
@@ -470,7 +481,7 @@ export class PgProjectSync {
     projectId: string,
     snapshot: Snapshot,
     name?: string,
-    opts: { immediate?: boolean; merging?: boolean; generation?: number } = {}
+    opts: PushOptions = {}
   ): Promise<PushResult> {
     // Held from reading the mark to writing the new one -- and through a
     // merge a refusal leads to -- so no other tab decides against a mark that
@@ -485,7 +496,10 @@ export class PgProjectSync {
     projectId: string,
     snapshot: Snapshot,
     name: string | undefined,
-    opts: { immediate?: boolean; merging?: boolean; generation?: number }
+    opts: PushOptions & {
+      /** Send the whole set even with a mark -- see the `no-files` 400 */
+      whole?: boolean;
+    }
   ): Promise<PushResult> {
     if (!(await PgProjectSync._ready())) return "skipped";
 
@@ -529,7 +543,7 @@ export class PgProjectSync {
     const storedName = pinned ? mark!.name : localName;
     // Relative to the last agreement, when there is one. Without a mark there
     // is nothing to be relative to.
-    const patch = mark ? diffFiles(mark.files, hashes) : null;
+    const patch = mark && !opts.whole ? diffFiles(mark.files, hashes) : null;
 
     // Before anything that can decline to send. What these files held at the
     // last agreement is the one thing a later merge cannot rebuild, and a
@@ -642,11 +656,26 @@ export class PgProjectSync {
       if (!response.ok) {
         // The server's own words, when it sent any: a 400 names the check
         // the body failed, which "HTTP 400" alone leaves to guesswork
-        const said = await response.json().then(
-          (refusal) => refusal?.error,
+        const refusal = await response.json().then(
+          (answer) => answer,
           // No readable body; the status is reported below all the same
           () => undefined
         );
+        // A patch that would leave the account's copy with no files. This
+        // device builds its patches from a non-empty snapshot, so the row is
+        // already empty -- emptied before the server refused that -- and the
+        // whole set puts the files back. Past the gate already, and a whole
+        // set is never refused for this, so it is sent once.
+        if (patch && refusal?.reason === NO_FILES_REASON) {
+          report(`push project ${projectId}: account copy was empty`, null);
+          return await PgProjectSync._push(projectId, snapshot, name, {
+            immediate: true,
+            merging: opts.merging,
+            generation: opts.generation,
+            whole: true,
+          });
+        }
+        const said = refusal?.error;
         report(
           `push project ${projectId}: HTTP ${response.status}` +
             (typeof said === "string" ? ` (${said})` : ""),
@@ -1872,9 +1901,9 @@ export const isCleanAgainst = async (
  * Whether a stored snapshot can be written to a workspace.
  *
  * An empty file map is not: written, it is the workspace emptied, exactly as
- * a malformed one would be. The server refuses a full write of one, but a row
- * written before it did can hold one, and so can a patch that removes every
- * file, which the server does not check.
+ * a malformed one would be. The server refuses any write that would leave
+ * one, but a row written before it did can hold one: a full write before it
+ * checked those, or a patch that removed every file before it checked that.
  *
  * Exported because reconcile checks it before the same destructive call, and
  * both halves have to agree on what "usable" means.

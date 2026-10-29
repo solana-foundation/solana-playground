@@ -2,6 +2,7 @@ import type { Mock } from "vitest";
 import { PgChatStorage } from "./chat-storage";
 import { clearFailures, getFailures } from "./diagnostics";
 import { PgProjectSync } from "./project-sync";
+import { NO_FILES_REASON } from "./project-write.mjs";
 import { sha256, snapshotOf, SYNCED_WORKSPACE_FILES } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
@@ -127,12 +128,23 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
       : { ...held, ...(body.changed ?? {}) };
     for (const path of body.removed ?? []) delete files[path];
 
-    // No files reads back as no snapshot, as `getProject` reads no rows
+    // Refused and rolled back, as `saveProject` does
+    if (!Object.keys(files).length) {
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({
+          error: "A write must leave the project at least one file",
+          reason: NO_FILES_REASON,
+        }),
+      };
+    }
+
     const stored: StoredProject = {
       id: body.id,
       name: body.name,
       kind: body.kind,
-      snapshot: Object.keys(files).length ? { files } : null,
+      snapshot: { files },
       updatedAt: tick(),
     };
     server.set(stored.id, stored);
@@ -1374,6 +1386,39 @@ describe("a workspace whose files are gone from the store", () => {
     expect(server.get(HELLO.id)!.snapshot).toEqual(held);
     // and the question is still up, rather than silently dropped
     expect(PgProjectSync.conflictFor(HELLO.id)).not.toBeNull();
+  });
+});
+
+describe("a row emptied before the server refused it", () => {
+  beforeEach(setUp);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("is put back by this device's next upload", async () => {
+    // The account's row lost every file to a patch the server once accepted.
+    // This device still agrees with its token, so its next patch adds
+    // nothing to an empty row and is refused; the whole set restores it.
+    asDevice([HELLO]);
+    writeStored(HELLO.name, { "src/lib.rs": "kept", "src/extra.rs": "gone" });
+    await signedIn();
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    const row = server.get(HELLO.id)!;
+    server.set(HELLO.id, {
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      snapshot: null,
+      updatedAt: row.updatedAt,
+    });
+
+    writeStored(HELLO.name, { "src/lib.rs": "kept" });
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "kept" },
+    });
+    // and the mark now agrees with it, so nothing more goes up
+    (global.fetch as Mock).mockClear();
+    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
   });
 });
 

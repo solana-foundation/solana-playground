@@ -259,6 +259,18 @@ changes. Asked to build something in the client, look there first.
   the user answers. A row that reads as 404 is raised as `deleted-elsewhere`
   (`PgProjectSync.read` returns `"gone"`), since both version answers would
   merge against nothing.
+- **No write may leave a project with no files.** A row with none reads back
+  as `snapshot: null`, which no device can merge with or take, so the server
+  refuses an empty `files` up front and a patch that empties the row inside
+  the transaction (`saveProject`, rolled back). The patch refusal is a 400
+  with `reason: "no-files"` (`NO_FILES_REASON`), never a 409; the browser
+  only meets it against a row emptied before the server checked, and answers
+  with its whole file set once (`_push`, `whole`).
+- **`/api/projects` still takes the pre-#40 client's body.** A tab open
+  across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
+  and drops every status but 409 and 413 silently, so `describeWrite` reads
+  `snapshot` as `files`, `force: false` as absent, and answers `force: true`
+  with a 409. Both doors can go once no such tab can still be open.
 - **Only a visible tab pushes.** Tabs share IndexedDB but hold the _current_
   workspace in memory separately, so a backgrounded tab's snapshot goes stale;
   it flushes on `visibilitychange` -> `hidden` (not `beforeunload`, which is

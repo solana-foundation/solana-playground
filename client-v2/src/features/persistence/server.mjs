@@ -32,6 +32,7 @@ export { getPool, isConfigured, isEnabled, query } from "./model/db.mjs";
 
 export {
   MAX_PROJECT_BODY_BYTES,
+  NO_FILES_REASON,
   projectKindOf,
 } from "./model/project-write.mjs";
 

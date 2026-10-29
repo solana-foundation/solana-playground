@@ -10,6 +10,7 @@ import {
   ThreadDeleted,
 } from "./conversations.mjs";
 import { query, transaction } from "./db.mjs";
+import { NO_FILES_REASON } from "./project-write.mjs";
 import {
   deleteProject,
   getProject,
@@ -117,6 +118,83 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
         "new.rs": "added",
       },
     });
+  });
+
+  it("refuses a patch that removes every file, and changes nothing", async () => {
+    // Once a row holds no files, every other device reads it as no snapshot
+    // and can neither adopt it nor merge with it
+    const first = await put({ files });
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    const after = await getProject(userId, "p1");
+    assert.deepEqual(after.snapshot, { files });
+    assert.equal(after.updatedAt, first.updatedAt);
+  });
+
+  it("takes a patch that only removes a file, keeping the rest", async () => {
+    // The common delete-one-file push, which reaches the emptiness check
+    const first = await put({
+      files: {
+        "src/lib.rs": "fn main() {}",
+        "Cargo.toml": "[package]",
+        "old.rs": "gone soon",
+      },
+    });
+    const result = await put({
+      changed: {},
+      removed: ["old.rs", "never-there.rs"],
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, { files });
+  });
+
+  it("answers a stale emptying patch with the conflict, not the refusal", async () => {
+    // The conflict carries the token the client retries with; the refusal
+    // carries none
+    await put({ files });
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: "2000-01-01T00:00:00.000Z",
+    });
+    assert.equal(result.conflict, true);
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, { files });
+  });
+
+  it("takes a patch that removes every file and adds another", async () => {
+    const first = await put({ files });
+    const result = await put({
+      changed: { "src/main.rs": "fn main() {}" },
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, {
+      files: { "src/main.rs": "fn main() {}" },
+    });
+  });
+
+  it("refuses an empty patch against a row that has no files", async () => {
+    // The parent row a chat turn creates holds no files; a patch adding
+    // nothing to it would bump its token over an empty project
+    await query(
+      `insert into projects (id, user_id, name, kind) values ('p1', $1, 'one', 'project')`,
+      [userId]
+    );
+    const { updatedAt } = await getProject(userId, "p1");
+    const result = await put({
+      changed: {},
+      removed: [],
+      baseUpdatedAt: updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    assert.equal((await getProject(userId, "p1")).updatedAt, updatedAt);
   });
 
   it("leaves the rows a patch does not name unwritten", async () => {

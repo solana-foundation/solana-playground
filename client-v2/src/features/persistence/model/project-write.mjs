@@ -22,6 +22,14 @@ export const MAX_PROJECT_BODY_LABEL = `${
   MAX_PROJECT_BODY_BYTES / 1_000_000
 } MB`;
 
+/**
+ * The `reason` of the 400 a write gets when it would leave the project with
+ * no files. The browser answers it by sending its whole file set: it only
+ * ever sends such a patch against a row that is already empty, and the whole
+ * set is what puts the files back.
+ */
+export const NO_FILES_REASON = "no-files";
+
 /** Ids of tutorial projects carry this prefix; every other id is a uuid */
 export const TUTORIAL_ID_PREFIX = "tut:";
 
