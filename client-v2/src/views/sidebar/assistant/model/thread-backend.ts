@@ -5,6 +5,9 @@ import type { BackendParams } from "./backend-params";
 
 const log = createLogger("assistant:thread-backend");
 
+/** Providers already reported: `threadBackend` runs on every send */
+const reported = new Set<string>();
+
 /**
  * The backend the open thread was last answered by: the `origin` of its last
  * reply that names one this build still has, or `undefined`. A send with
@@ -22,16 +25,20 @@ export const threadBackend = (
     if (origin) return origin;
     // A reply from a provider this build dropped: the send may go to an
     // earlier reply's backend, or to the default, so the team hears of it
-    log.warn("skipped a reply from a provider this build does not have", {
-      report: true,
-      context: { provider: String(item.origin.provider) },
-    });
+    const provider = String(item.origin.provider);
+    if (!reported.has(provider)) {
+      reported.add(provider);
+      log.warn("skipped a reply from a provider this build does not have", {
+        report: true,
+        context: { provider },
+      });
+    }
   }
   return undefined;
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect, beforeAll } = import.meta.vitest;
+  const { describe, it, expect, beforeAll, afterEach } = import.meta.vitest;
 
   describe("views/sidebar/assistant/model/thread-backend", () => {
     let logger: typeof import("@/shared/lib/logger");
@@ -70,22 +77,21 @@ if (import.meta.vitest) {
       expect(threadBackend([reply(anthropic), reply()])).toEqual(anthropic);
     });
 
-    it("reads a provider this build no longer has as absent, and reports it", () => {
+    afterEach(() => logger.resetLogger());
+
+    it("reads a provider this build no longer has as absent, and reports it once", () => {
       const logs = logger.memoryProvider();
       logger.initLogger({ providers: [logs] });
+      const gone = [reply({ provider: "gone" as BackendParams["provider"] })];
 
-      expect(
-        threadBackend([
-          reply({ provider: "gone" as BackendParams["provider"] }),
-        ])
-      ).toBeUndefined();
+      expect(threadBackend(gone)).toBeUndefined();
+      expect(threadBackend(gone)).toBeUndefined();
 
       expect(
         logs.entries.map((e) => [e.ns, e.level, e.report, e.context])
       ).toEqual([
         ["assistant:thread-backend", "warn", true, { provider: "gone" }],
       ]);
-      logger.resetLogger();
     });
 
     it("answers nothing for a thread with no reply", () => {

@@ -178,7 +178,8 @@ const isStoredItem = (value: unknown): value is StoredItem => {
  * An `updatedAt` that does not parse is dropped rather than costing the item:
  * the item falls back to `createdAt` as its version. Kept, it would be
  * uploaded with every push of the thread, and the server refuses a whole
- * thread over one item it cannot cast.
+ * thread over one item it cannot cast. An approval card's `undo` that the
+ * card cannot have is dropped too (`withValidUndo`).
  */
 export const decodeItem = (stored: unknown): ChatItem | null => {
   if (!isStoredItem(stored)) return null;
@@ -187,7 +188,8 @@ export const decodeItem = (stored: unknown): ChatItem | null => {
 
 /**
  * An approval card keeps an undo state only where Undo patch can leave one
- * (`PgAssistant.markUndone`): on an allowed patch card, as one of its states
+ * (`PgAssistant.markUndone`, `markUndoStranded`, `clearUndoStranded`): on an
+ * allowed patch card, as one of its states
  */
 const withValidUndo = (item: ChatItem): ChatItem => {
   if (item.kind !== "approval" || item.undo === undefined) return item;

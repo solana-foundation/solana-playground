@@ -311,6 +311,22 @@ describe("Thread, try again", () => {
     ]);
   });
 
+  it("offers no Try again once the turn applied a change", () => {
+    PgAssistant.addUserMessage("Rename the counter");
+    void PgAssistant.requestApproval({
+      type: "patch",
+      path: "src/lib.rs",
+      before: "old",
+      after: "new",
+    });
+    PgAssistant.resolveApproval(PgAssistant.items.at(-1)!.id, true);
+    PgAssistant.addError(CONNECTION_LOST);
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    // Sent again, the same request would propose the applied patch once more
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+  });
+
   it("offers no Try again under any other error", () => {
     PgAssistant.addUserMessage("What does this program do?");
     PgAssistant.addError("The model declined this request.");

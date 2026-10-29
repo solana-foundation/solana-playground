@@ -261,14 +261,10 @@ const CUT_TURN_OVERDUE_MS = 120_000;
 
 /**
  * How long a reply another device is writing may go without a newer copy
- * before it reads as cut off. Its device pushes the finished copy at the end
+ * arriving here before it reads as cut off. Its device pushes the finished copy at the end
  * of the turn, so a reply this quiet is one that turn left behind.
  */
 const STREAM_QUIET_MS = 120_000;
-
-/** Milliseconds since the item was last written, by its own version stamp */
-const quietFor = (item: ChatItem) =>
-  Date.now() - Date.parse(item.updatedAt ?? item.createdAt);
 
 const makeId = uuid;
 const now = () => new Date().toISOString();
@@ -914,8 +910,9 @@ export class PgAssistant {
     }
     // Another device may still be writing it: Try again would ask the same
     // question twice, on the user's key, so it waits for the reply to go quiet
-    if (!PgAssistant._elsewhere.has(item.id)) return true;
-    return quietFor(item) >= STREAM_QUIET_MS;
+    const received = PgAssistant._elsewhere.get(item.id);
+    if (received === undefined) return true;
+    return Date.now() - received >= STREAM_QUIET_MS;
   }
 
   static addToolCall(label: string) {
@@ -1104,6 +1101,7 @@ export class PgAssistant {
    */
   static clear() {
     PgAssistant._conversation++;
+    PgAssistant._forgetElsewhere();
     PgAssistant._denyPending();
     // Not while a read is out: what is rendered then is only what was typed
     // during it, written nowhere yet, and the read adopts it from this very
@@ -1146,6 +1144,7 @@ export class PgAssistant {
     // `loadThread` is about to adopt -- and the explorer announces a switch
     // late enough for that to be an ordinary sequence, not a rare one.
     if (PgAssistant._threadId === null) return;
+    PgAssistant._forgetElsewhere();
 
     PgAssistant._cutTurn();
     PgAssistant._denyPending();
@@ -1476,10 +1475,25 @@ export class PgAssistant {
       ) {
         continue;
       }
-      PgAssistant._elsewhere.add(item.id);
-      const left = Math.max(0, STREAM_QUIET_MS - quietFor(item));
-      setTimeout(() => PgAssistant._emitOnly(), left);
+      // By this device's clock: the two devices' clocks need not agree
+      PgAssistant._elsewhere.set(item.id, Date.now());
+      const previous = PgAssistant._quietTimers.get(item.id);
+      if (previous) clearTimeout(previous);
+      PgAssistant._quietTimers.set(
+        item.id,
+        setTimeout(() => {
+          PgAssistant._quietTimers.delete(item.id);
+          PgAssistant._emitOnly();
+        }, STREAM_QUIET_MS)
+      );
     }
+  }
+
+  /** Forgets the replies `_watchElsewhere` watched, with their timers */
+  private static _forgetElsewhere() {
+    for (const timer of PgAssistant._quietTimers.values()) clearTimeout(timer);
+    PgAssistant._quietTimers.clear();
+    PgAssistant._elsewhere.clear();
   }
 
   /**
@@ -1517,10 +1531,15 @@ export class PgAssistant {
   } | null = null;
   /**
    * Replies another device was still writing when its copy folded in
-   * (`foldIn`). In memory: a copy this device stored and reloaded mid-reply
-   * reads as cut off at once, as before.
+   * (`foldIn`), each with when the latest copy arrived here. In memory: a copy
+   * this device stored and reloaded mid-reply reads as cut off at once.
    */
-  private static readonly _elsewhere = new Set<string>();
+  private static readonly _elsewhere = new Map<string, number>();
+  /** The redraw each of `_elsewhere` gets once it has gone quiet */
+  private static readonly _quietTimers = new Map<
+    string,
+    ReturnType<typeof setTimeout>
+  >();
   private static _conversation = 0;
   private static readonly _pending = new Map<
     string,
@@ -2144,12 +2163,24 @@ if (import.meta.vitest) {
           expect(PgAssistant.isCutOff(folded())).toBe(false);
         });
 
-        it("reads as cut off once it has gone quiet", async () => {
-          const quiet = new Date(Date.now() - 3 * 60_000).toISOString();
+        it("reads as cut off once it has gone quiet here", async () => {
+          vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+          await PgAssistant.foldIn("fold", [
+            midReply(new Date().toISOString()),
+          ]);
 
-          await PgAssistant.foldIn("fold", [midReply(quiet)]);
+          vi.advanceTimersByTime(2 * 60_000);
 
           expect(PgAssistant.isCutOff(folded())).toBe(true);
+        });
+
+        it("waits by this device's clock, whatever the other device's says", async () => {
+          // The writing device's clock runs ten minutes behind
+          const behind = new Date(Date.now() - 10 * 60_000).toISOString();
+
+          await PgAssistant.foldIn("fold", [midReply(behind)]);
+
+          expect(PgAssistant.isCutOff(folded())).toBe(false);
         });
 
         it("redraws when a fresh one goes quiet", async () => {

@@ -166,7 +166,7 @@ describe("PgPatchUndo", () => {
     expect(await PgPatchUndo.undo(card, bridge)).toBe("moved-on");
 
     expect(file.content).toBe("new, edited");
-    expect(card.undo).not.toBe("done");
+    expect(card.undo).toBeUndefined();
     expect(PgAssistant.items[PgAssistant.items.length - 1]).toMatchObject({
       kind: "notice",
       text: "You edited src/lib.rs after applying. Use undo in the editor.",
@@ -268,7 +268,7 @@ describe("PgPatchUndo", () => {
 
       await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-      expect(card.undo).not.toBe("done");
+      expect(card.undo).toBe("stranded");
       expect(PgPatchUndo.can(card, bridge)).toBe(false);
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs changed while Undo wrote it."
@@ -392,7 +392,7 @@ describe("PgPatchUndo", () => {
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs changed while Undo wrote it. It did not exist before the patch."
       );
-      expect(card.undo).not.toBe("done");
+      expect(card.undo).toBe("stranded");
       expect(PgPatchUndo.can(card, bridge)).toBe(false);
       expect(PgPatchUndo.original(card)).toBeNull();
     });
@@ -406,7 +406,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-    expect(card.undo).not.toBe("done");
+    expect(card.undo).toBeUndefined();
     expect(PgPatchUndo.can(card, bridge)).toBe(true);
     expect(card.outcome).toBeUndefined();
     expect(PgPatchUndo.original(card)).toBeNull();
@@ -423,7 +423,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-    expect(card.undo).not.toBe("done");
+    expect(card.undo).toBeUndefined();
     expect(PgPatchUndo.can(card, bridge)).toBe(true);
     expect(PgPatchUndo.original(card)).toBeNull();
   });
@@ -455,7 +455,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-    expect(card.undo).not.toBe("done");
+    expect(card.undo).toBeUndefined();
     expect(PgPatchUndo.can(card, bridge)).toBe(true);
   });
 });

@@ -203,7 +203,12 @@ export const Thread = ({
   const retryAfter = (): "stopped" | "interrupted" | null => {
     if (busy || !lastItem || lastSent?.kind !== "user") return null;
     if (isStoppedNotice(lastItem)) return "stopped";
-    if (PgAssistant.isCutOff(lastItem) || isConnectionLost(lastItem)) {
+    // Not once the turn applied a change: sent again, the same request would
+    // propose that change over the code it already rewrote
+    if (
+      (PgAssistant.isCutOff(lastItem) || isConnectionLost(lastItem)) &&
+      !turnAppliedApproval(items)
+    ) {
       return "interrupted";
     }
     return null;
