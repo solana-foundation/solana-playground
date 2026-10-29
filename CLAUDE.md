@@ -78,6 +78,7 @@ yarn test                  # test-types + test-unit + build:bundle
 yarn test-types            # tsc --noEmit
 yarn test-e2e              # playwright
 yarn test-api              # node --test, for api/ and **/server/*.mjs
+yarn bundle:info           # rewrite bench/BUNDLE.md from build/; commit it when bundle sizes move
 yarn check-format          # prettier; CI enforces this
 yarn lint                  # eslint over src/, api/, e2e/; CI enforces this
 yarn spec:validate         # openspec validate --all --strict; CI enforces this
@@ -99,8 +100,10 @@ Once per machine, for planning: `npm i -g @fission-ai/openspec@latest`
 `client-v2/CLAUDE.md` is loaded whenever work happens in that folder and
 holds the rules for the client: layers, components, what review keeps
 finding, the checklist before a PR, and the OpenSpec workflow. Specs and
-change proposals live in `openspec/`; `openspec list` shows the active
-changes. Asked to build something in the client, look there first.
+change proposals live in `openspec/`; `openspec list` shows the changes
+under `openspec/changes/`, which hold work with tasks left. Finished changes
+are archived under `openspec/changes/archive/` and are a record, not work.
+Asked to build something in the client, look in `openspec/changes/` first.
 
 ## Gotchas
 
