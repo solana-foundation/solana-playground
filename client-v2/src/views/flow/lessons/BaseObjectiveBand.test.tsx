@@ -12,10 +12,8 @@ const props = (): StepBandProps => ({
   criterion: "Verified when the build passes.",
   back: { enabled: true, onClick: noop },
   next: { enabled: true, onClick: noop },
-  read: { label: "Read the page", unread: false, onClick: noop },
-  stuck: { label: "I'm stuck", onClick: noop },
-  prove: { label: "Build to prove this", onClick: noop },
-  readiness: null,
+  read: { label: "Read the page", onClick: noop },
+  primary: { kind: "stuck", label: "I'm stuck", onClick: noop },
 });
 
 const finished = (onGallery: () => void): FinishedBandProps => ({
@@ -28,48 +26,75 @@ const finished = (onGallery: () => void): FinishedBandProps => ({
   gallery: { label: "Browse gallery", onClick: onGallery },
 });
 
-const actionsRow = (container: HTMLElement) =>
-  container.querySelector('[data-slot="objective-actions-row"]');
+const slot = (container: HTMLElement, name: string) =>
+  container.querySelector(`[data-slot="${name}"]`);
 
 describe("BaseObjectiveBand", () => {
-  it("draws the wide band with its position, meter and actions", () => {
+  it("draws the wide band as one row: where, the ask, then the actions", () => {
     const { container } = render(<BaseObjectiveBand {...props()} />);
-    const band = container.querySelector('[data-slot="objective-band"]');
-    expect(band).not.toBeNull();
+    const band = slot(container, "objective-band");
     expect(band?.textContent).toContain("Step 1 of 4");
     expect(band?.textContent).toContain("Say hello on chain");
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe(
       "25"
     );
+    const actions = slot(container, "objective-actions");
+    expect(actions?.parentElement).toBe(slot(container, "objective-row"));
     for (const name of [
       "Previous step",
       "Next step",
       "Read the page",
       "I'm stuck",
-      "Build to prove this",
     ]) {
-      expect(screen.getByRole("button", { name })).toBeTruthy();
+      expect(actions?.contains(screen.getByRole("button", { name }))).toBe(
+        true
+      );
     }
   });
 
-  it("keeps the brand button for I'm stuck alone", () => {
+  it("says the position in sentence case", () => {
     const { container } = render(<BaseObjectiveBand {...props()} />);
-    const brand = container.querySelectorAll('[data-slot="brand-button"]');
-    expect(brand).toHaveLength(1);
-    expect(brand[0].textContent).toBe("I'm stuck");
-    expect(
-      screen
-        .getByRole("button", { name: "Build to prove this" })
-        .getAttribute("data-slot")
-    ).toBe("button");
+    expect(slot(container, "objective-count")?.className).not.toContain(
+      "uppercase"
+    );
   });
 
-  it("marks an unread page with a dot", () => {
+  it("offers no proving action and no readiness line", () => {
+    const { container } = render(<BaseObjectiveBand {...props()} />);
+    expect(screen.queryByRole("button", { name: /to prove this/ })).toBeNull();
+    expect(slot(container, "callout")).toBeNull();
+    expect(container.textContent).not.toContain("Before you can");
+  });
+
+  it("shows how the step is checked under the row on request", () => {
+    const { container } = render(<BaseObjectiveBand {...props()} />);
+    const check = screen.getByRole("button", {
+      name: "How this step is checked",
+    });
+    expect(check.getAttribute("aria-expanded")).toBe("false");
+    expect(slot(container, "objective-condition")).toBeNull();
+    fireEvent.click(check);
+    expect(check.getAttribute("aria-expanded")).toBe("true");
+    expect(slot(container, "objective-condition")?.textContent).toBe(
+      "Verified when the build passes."
+    );
+  });
+
+  it("keeps the brand ring for the step's one action", () => {
+    const { container } = render(<BaseObjectiveBand {...props()} />);
+    const brand = container.querySelectorAll('[data-slot="objective-primary"]');
+    expect(brand).toHaveLength(1);
+    expect(brand[0].textContent).toBe("I'm stuck");
+  });
+
+  it("continues a step proved by reading", () => {
+    const onContinue = vi.fn();
     const p = props();
-    p.read = { label: "Read step 1 first", unread: true, onClick: noop };
+    p.primary = { kind: "continue", label: "Continue", onClick: onContinue };
     render(<BaseObjectiveBand {...p} />);
-    const read = screen.getByRole("button", { name: "Read step 1 first" });
-    expect(read.hasAttribute("data-unread")).toBe(true);
+    expect(screen.queryByRole("button", { name: "I'm stuck" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
   it("renders no read button without a page", () => {
@@ -89,31 +114,6 @@ describe("BaseObjectiveBand", () => {
     expect(back.disabled).toBe(true);
   });
 
-  it("lists readiness as a callout of remedies and plain text", () => {
-    const onFund = vi.fn();
-    const p = props();
-    p.readiness = {
-      lead: "Before you can deploy:",
-      items: [
-        { key: "wallet", text: "fund the wallet", onClick: onFund },
-        { key: "build", text: "building...", onClick: null },
-      ],
-    };
-    const { container } = render(<BaseObjectiveBand {...p} />);
-    const callout = container.querySelector('[data-slot="callout"]');
-    expect(callout?.textContent).toContain("Before you can deploy:");
-    fireEvent.click(screen.getByRole("button", { name: "fund the wallet" }));
-    expect(onFund).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "building..." })).toBeNull();
-    expect(callout?.textContent).toContain("building...");
-    expect(callout?.parentElement?.getAttribute("aria-live")).toBe("polite");
-  });
-
-  it("renders no callout without readiness", () => {
-    const { container } = render(<BaseObjectiveBand {...props()} />);
-    expect(container.querySelector('[data-slot="callout"]')).toBeNull();
-  });
-
   it("draws the finished band with the gallery", () => {
     const onGallery = vi.fn();
     const onBack = vi.fn();
@@ -121,6 +121,13 @@ describe("BaseObjectiveBand", () => {
     f.back = { enabled: true, onClick: onBack };
     const { container } = render(<BaseObjectiveBand {...f} />);
     expect(container.textContent).toContain("4 of 4 steps");
+    // The summary shows without a check to press
+    expect(slot(container, "objective-condition")?.textContent).toBe(
+      "Verified when the build passes."
+    );
+    expect(
+      screen.queryByRole("button", { name: "How this step is checked" })
+    ).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Previous step" }));
     expect(onBack).toHaveBeenCalledTimes(1);
     fireEvent.click(screen.getByRole("button", { name: "Browse gallery" }));
@@ -129,37 +136,22 @@ describe("BaseObjectiveBand", () => {
     expect(screen.queryByRole("button", { name: /read/i })).toBeNull();
   });
 
-  it("puts back and on in the actions row on a wide screen", () => {
-    const { container } = render(<BaseObjectiveBand {...props()} />);
-    const row = actionsRow(container);
-    for (const name of ["Previous step", "Next step", "I'm stuck"]) {
-      expect(row?.contains(screen.getByRole("button", { name }))).toBe(true);
-    }
-    expect(row?.className).toContain("flex-wrap");
-    expect(screen.queryByRole("button", { name: "Show the steps" })).toBeNull();
-  });
-
-  it("folds to one row on a phone and opens the steps", () => {
-    const onOpenSteps = vi.fn();
+  it("folds to one row on a phone that opens in place", () => {
     const p = props();
-    p.compact = { onOpenSteps };
+    p.phone = true;
     const { container } = render(<BaseObjectiveBand {...p} />);
-    const band = container.querySelector('[data-slot="objective-band"]');
-    expect(band?.textContent).toContain("1/4");
-    expect(band?.textContent).not.toContain("Step 1 of 4");
-    expect(band?.textContent).toContain("Say hello on chain");
-    fireEvent.click(screen.getByRole("button", { name: "Show the steps" }));
-    expect(onOpenSteps).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole("button", { name: "I'm stuck" })).toBeTruthy();
-  });
-
-  it("keeps the phone's actions on one row that scrolls", () => {
-    const p = props();
-    p.compact = { onOpenSteps: noop };
-    const { container } = render(<BaseObjectiveBand {...p} />);
-    const row = actionsRow(container);
-    expect(row?.className).toContain("flex-nowrap");
-    expect(row?.className).toContain("overflow-x-auto");
-    expect(row?.className).not.toContain("flex-wrap");
+    const fold = slot(container, "objective-fold");
+    expect(fold?.textContent).toContain("1/4");
+    expect(fold?.textContent).not.toContain("Step 1 of 4");
+    expect(fold?.textContent).toContain("Say hello on chain");
+    // The actions are the foot bar's on a phone
+    expect(screen.queryByRole("button", { name: "I'm stuck" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Read the page" })).toBeNull();
+    const toggle = screen.getByRole("button", { name: /Say hello on chain/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(fold?.textContent).not.toContain("Verified when");
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(fold?.textContent).toContain("Verified when the build passes.");
   });
 });

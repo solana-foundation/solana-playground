@@ -25,11 +25,13 @@ const renderFrame = ({
   title = { text: "Rename", hidden: false },
   error,
   submit,
+  openFocus,
   children,
 }: {
   title?: BaseModalFrameProps["title"];
   error?: string;
   submit?: Submit;
+  openFocus?: BaseModalFrameProps["openFocus"];
   children?: ReactNode;
 } = {}) =>
   render(
@@ -38,6 +40,7 @@ const renderFrame = ({
         title={title}
         error={error}
         submit={submit}
+        openFocus={openFocus}
         size="default"
       >
         {children}
@@ -242,6 +245,27 @@ it("should focus the body's first input on open", () => {
   );
 });
 
+it("should draw the hairline under a shown title only", () => {
+  const { unmount } = renderFrame({ title: { text: "Rename", hidden: false } });
+  const header = () =>
+    document.querySelector('[data-slot="modal-header"]')!.classList;
+  expect(header().contains("border-b")).toBe(true);
+  expect(header().contains("md:border-b-0")).toBe(false);
+  unmount();
+
+  renderFrame({ title: { text: "Solana Playground", hidden: true } });
+  expect(header().contains("md:border-b-0")).toBe(true);
+});
+
+it("should focus the dialog itself on open when asked, so no field shows a ring", () => {
+  renderFrame({
+    openFocus: "dialog",
+    children: <input aria-label="Name" />,
+  });
+
+  expect(document.activeElement).toBe(screen.getByRole("dialog"));
+});
+
 /** A press: Radix settles an outside press on the click that follows it */
 const pressOutside = (el: HTMLElement) => {
   fireEvent.pointerDown(el);
@@ -311,4 +335,29 @@ it("should draw a default submit as the stock button", () => {
   expect(
     screen.getByRole("button", { name: "Rename" }).getAttribute("data-slot")
   ).toBe("button");
+});
+
+it("on a phone, has no Cancel beside the bar's Close and draws a brand submit as the accent", () => {
+  const onSubmit = vi.fn();
+  render(
+    <Modal open>
+      <BaseModalFrame
+        phone
+        title={{ text: "Connect a model", hidden: false }}
+        submit={{
+          text: "Connect",
+          status: "ready",
+          variant: "brand",
+          onSubmit,
+          onCancel: vi.fn(),
+        }}
+        size="default"
+      />
+    </Modal>
+  );
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
+  const submit = screen.getByRole("button", { name: "Connect" });
+  expect(submit.getAttribute("data-variant")).toBe("accent");
+  fireEvent.click(submit);
+  expect(onSubmit).toHaveBeenCalledTimes(1);
 });

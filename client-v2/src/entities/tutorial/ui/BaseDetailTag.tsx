@@ -1,9 +1,13 @@
 import type { ReactNode } from "react";
 
 import { levelVariant, Tag } from "@/shared/ui/tag";
+import { cn } from "@/shared/lib/utils";
 
 type BaseDetailTagProps = {
-  /** `level` takes its colour from the label; every other kind is neutral */
+  /**
+   * `level` is a tag coloured by the label; every other kind is its icon and
+   * name in a soft box, in the label's own case, as the stand draws it
+   */
   kind: "level" | "framework" | "languages" | (string & {});
   label: string;
   /** Shown before the label */
@@ -20,10 +24,16 @@ function BaseDetailTag({ kind, label, icon, className }: BaseDetailTagProps) {
     );
   }
   return (
-    <Tag variant="neutral" className={className}>
+    <span
+      data-slot="detail"
+      className={cn(
+        "inline-flex w-fit items-center gap-2 rounded-md bg-surface-raised px-3 py-2 font-act text-control text-muted-foreground [&>img]:size-4 [&>svg]:size-4",
+        className
+      )}
+    >
       {icon}
       {label}
-    </Tag>
+    </span>
   );
 }
 

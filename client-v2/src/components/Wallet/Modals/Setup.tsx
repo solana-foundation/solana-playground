@@ -7,6 +7,7 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet, PgWeb3 } from "../../../utils";
+import { KeypairFileError } from "../../../utils/wallet/keypair-file";
 import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("wallet:setup");
@@ -32,11 +33,20 @@ export const Setup = () => {
   };
 
   const handleImport = async () => {
+    setText("");
     try {
-      if (PgWallet.accounts.length) PgWallet.remove(0);
-      const keypair = await PgWallet.import();
-      if (keypair) setText("Imported address: " + keypair.publicKey.toBase58());
+      // Never removes the wallet the user already has: the file may be
+      // cancelled or not a keypair. `PgWallet.add` switches to an account
+      // that is already there.
+      const imported = await PgWallet.import();
+      if (imported) {
+        setText("Imported address: " + imported.keypair.publicKey.toBase58());
+      }
     } catch (err) {
+      if (err instanceof KeypairFileError) {
+        setText(err.message);
+        return;
+      }
       log.error(err, { report: true });
       setText(
         "Could not import the keypair: " +

@@ -27,6 +27,11 @@ export interface BaseSetupListProps {
   onDismiss: () => void;
   /** Extra attributes for a step's button, such as a settings trigger's */
   stepAttrs?: Partial<Record<SetupStep, Record<`data-${string}`, string>>>;
+  /**
+   * Starts folded to its title, "Get set up · n of 4 ›": the phone's menu is
+   * the whole screen, so the prototype keeps the list to one line there
+   */
+  folded?: boolean;
 }
 
 /** "Get set up · n of total": a done step shows its value, a step to do runs its action */
@@ -35,8 +40,9 @@ const BaseSetupList = ({
   onPick,
   onDismiss,
   stepAttrs,
+  folded = false,
 }: BaseSetupListProps) => (
-  <SetupList defaultOpen className="px-2 pb-2">
+  <SetupList defaultOpen={!folded} className="px-2 pb-2">
     <SetupListHeader>
       <SetupListTrigger
         done={steps.filter((s) => s.done).length}

@@ -1,6 +1,6 @@
 // The Build stage drawn from props: which surface says what, which action
 // is the brand one, and that the action row closes every surface.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import BaseBuild from "./BaseBuild";
@@ -59,16 +59,23 @@ const lastIsActions = (container: HTMLElement) =>
     ?.lastElementChild?.getAttribute("data-slot");
 
 describe("BaseBuild", () => {
-  it("offers a first build with no brand button", () => {
+  /** The prototype's empty stage: no icon tile, the brand pill to press */
+  it("offers a first build as the brand pill", async () => {
     const p = props({ kind: "empty" });
     const { container } = render(<BaseBuild {...p} />);
 
     expect(
       screen.getByRole("heading", { name: "Nothing built yet" })
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    // Async: Build is an AsyncButton, which settles once `onBuild` resolves
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    });
     expect(p.onBuild).toHaveBeenCalled();
-    expect(brandButtons(container)).toHaveLength(0);
+    expect(brandButtons(container)).toHaveLength(1);
+    expect(
+      container.querySelector('[data-slot="stage-empty-media"]')
+    ).toBeNull();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
@@ -97,7 +104,7 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  it("names the build server when the compiler was never reached", () => {
+  it("names the build server when the compiler was never reached", async () => {
     const p = props({ kind: "unreached" });
     render(<BaseBuild {...p} />);
 
@@ -105,7 +112,9 @@ describe("BaseBuild", () => {
     expect(
       screen.getByText(/could not be reached: api\.solpg\.io/)
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry build" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Retry build" }));
+    });
     expect(p.onBuild).toHaveBeenCalled();
   });
 
@@ -129,7 +138,7 @@ describe("BaseBuild", () => {
     ).toBeTruthy();
   });
 
-  it("marks the faulty line of a failed build", () => {
+  it("marks the faulty line of a failed build", async () => {
     const p = props(failed([typeError("fix it", "expected u32")]));
     const { container } = render(<BaseBuild {...p} />);
 
@@ -149,7 +158,9 @@ describe("BaseBuild", () => {
     expect(p.onFix).toHaveBeenCalledWith("fix it");
     fireEvent.click(screen.getByRole("button", { name: "Open in editor" }));
     expect(p.onOpenFile).toHaveBeenCalledWith("src/lib.rs");
-    fireEvent.click(screen.getByRole("button", { name: "Rebuild" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Rebuild" }));
+    });
     expect(p.onBuild).toHaveBeenCalled();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });

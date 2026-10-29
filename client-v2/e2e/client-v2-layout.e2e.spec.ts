@@ -40,8 +40,8 @@ const startTutorial = async (page: Page) => {
   await homeRegion(page)
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
-  // `exact`: the assistant has a "Start" button of its own
-  await page.getByRole("button", { name: "START", exact: true }).click();
+  // `exact`: Connect a model's dialog has a "Start" of its own
+  await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
@@ -453,6 +453,28 @@ test.describe("on a phone", () => {
     await page.setViewportSize({ width: 390, height: 844 });
   };
 
+  test("the account is a page of its own on a phone", async ({ page }) => {
+    await seedThenNarrow(page);
+    await page.getByRole("button", { name: "Menu", exact: true }).click();
+    // A tap: the page opens over the row, and the release lands on its foot
+    await page.getByRole("button", { name: "Account, signed out" }).click();
+    const account = page.getByRole("menu", { name: "Account" });
+    await expect(account).toBeVisible();
+    // Once its opening animation has settled
+    await expect
+      .poll(() => account.boundingBox())
+      .toEqual({ x: 0, y: 0, width: 390, height: 844 });
+    await expect(
+      account.getByRole("menuitem", { name: "Sign in with GitHub" })
+    ).toBeInViewport();
+    await account.getByRole("menuitem", { name: "Close" }).click();
+    await expect(account).toHaveCount(0);
+    // The release that opened it was no pick: no sign-in started
+    await expect(
+      page.getByRole("button", { name: "Account, signed out" })
+    ).toBeVisible();
+  });
+
   test("client-v2-layout: A phone", async ({ page }) => {
     await seedThenNarrow(page);
     const lines = page.locator(".monaco-editor .view-lines");
@@ -480,7 +502,7 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     const menu = page.getByRole("region", { name: "Navigation" });
     await expect(menu).toBeInViewport();
-    await page.getByRole("button", { name: "Collapse navigation" }).click();
+    await page.getByRole("button", { name: "Close the menu" }).click();
     await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
     await page.getByRole("radio", { name: "Chat" }).click();
     // The composer is there and takes typing with nothing connected
@@ -594,6 +616,11 @@ test.describe("on a phone", () => {
       await expect(page.getByRole("region", { name: "Work" })).toBeInViewport({
         ratio: 1,
       });
+      // No tab row: the code's head names the open file
+      await expect(page.locator("#tabs")).toHaveCount(0);
+      await expect(
+        page.getByRole("button", { name: /^Files, .+ open$/ })
+      ).toBeVisible();
     }
   });
 
@@ -635,6 +662,14 @@ test.describe("on a phone", () => {
         )
       )
       .toContain("via: button");
+    // Build, Deploy and Interact in full; Write is the code's own page
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect(preview.getByRole("tab")).toHaveCount(3);
+    await expect(preview.locator("#flow-stage-tab-write")).toHaveCount(0);
+    await expect(preview.getByRole("tablist")).toHaveAttribute(
+      "data-compact",
+      "false"
+    );
   });
 });
 
@@ -913,7 +948,8 @@ test.describe("a select inside the assistant Sheet", () => {
     await dialog.getByRole("combobox", { name: "Model" }).click();
     const option = page.getByRole("option").first();
     await expect(option).toBeVisible();
-    await expect(option).toContainText("claude");
+    // The model by name, as the prototype writes it (R39)
+    await expect(option).toContainText("Opus");
     const hit = await option.evaluate((el) => {
       const rect = el.getBoundingClientRect();
       const top = document.elementFromPoint(
@@ -1669,7 +1705,7 @@ test.describe("the settings page", () => {
     // Each setting's control carries its own name: two of one name ("Endpoint"
     // twice, once) cannot be told apart by a screen reader or a test
     const names = await settingsPage(page)
-      .locator('[role="combobox"], [role="switch"]')
+      .locator('[role="combobox"], [role="checkbox"]')
       .evaluateAll((els) => els.map((el) => el.getAttribute("aria-label")));
     expect(names.length).toBeGreaterThan(5);
     expect(names.filter((n, i) => names.indexOf(n) !== i)).toEqual([]);

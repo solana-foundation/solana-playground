@@ -122,7 +122,21 @@ import {
   ModalTitle,
   ModalTrigger,
 } from "@/components/ui/modal"
-import { ObjectiveActions, ObjectiveBand, ObjectiveMeter, ObjectiveNav, ObjectiveText } from "@/components/ui/objective-band"
+import {
+  ObjectiveActions,
+  ObjectiveBand,
+  ObjectiveBar,
+  ObjectiveCheck,
+  ObjectiveCount,
+  ObjectiveFold,
+  ObjectiveMain,
+  ObjectiveMeter,
+  ObjectiveNav,
+  ObjectivePrimary,
+  ObjectiveQuiet,
+  ObjectiveRow,
+  ObjectiveText,
+} from "@/components/ui/objective-band"
 import { Progress } from "@/components/ui/progress"
 import { Segmented, SegmentedCount, SegmentedItem } from "@/components/ui/segmented"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -776,7 +790,7 @@ function PlaygroundComponents() {
         ))}
       </Block>
 
-      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring." className="grid gap-3 md:grid-cols-2">
+      <Block id="action-card" title="Action card" source="playground" registry="action-card" note="A card you open: a tutorial, a sample, a program. Its link covers the whole card, so the card is one target and its text stays selectable. frame is the older card's lift and ring. The glyph media variant is the icon alone, with no tile behind it, for a vertical card." className="grid gap-3 md:grid-cols-2">
         <ActionCard>
           <ActionCardMedia><Coins /></ActionCardMedia>
           <ActionCardContent>
@@ -785,6 +799,13 @@ function PlaygroundComponents() {
             <ActionCardDescription>Take tips in SOL and send them on to one wallet.</ActionCardDescription>
           </ActionCardContent>
           <ActionCardAction><Button size="sm" variant="outline">Open</Button></ActionCardAction>
+        </ActionCard>
+        <ActionCard orientation="vertical">
+          <ActionCardMedia variant="glyph"><Plus /></ActionCardMedia>
+          <ActionCardContent>
+            <ActionCardTitle><ActionCardLink href="#c-action-card">New project</ActionCardLink></ActionCardTitle>
+            <ActionCardDescription>Anchor, Native or Seahorse</ActionCardDescription>
+          </ActionCardContent>
         </ActionCard>
         <ActionCard variant="frame">
           <ActionCardMedia><Vote /></ActionCardMedia>
@@ -850,16 +871,34 @@ function PlaygroundComponents() {
         </StepRail>
       </Block>
 
-      <Block id="objective-band" title="Objective band" source="playground" registry="objective-band" note="A lesson's band over the stage: how far along, what to do now, and the way on. It is frosted, so the work shows through. On a phone it folds to one row." className="block">
-        <ObjectiveBand className="max-w-2xl rounded-xl border">
-          <ObjectiveMeter value={0.5} />
-          <ObjectiveText>Give the program an initialize instruction</ObjectiveText>
-          <ObjectiveNav canBack canNext={false} />
-          <ObjectiveActions>
-            <Button size="xs" variant="ghost">Read the page</Button>
-            <BrandButton size="sm">Show me how<BrandButtonIcon /></BrandButton>
-          </ObjectiveActions>
-        </ObjectiveBand>
+      <Block id="objective-band" title="Objective band" source="playground" registry="objective-band" note="A lesson's band over the stage: how far along, what to do now, and the way on. It is frosted, so the work shows through. On a phone it folds to one row that opens in place, and its actions move to a bar at the foot of the code." className="block">
+        <div className="flex max-w-2xl flex-col gap-4">
+          <ObjectiveBand className="overflow-hidden rounded-xl border">
+            <ObjectiveRow>
+              <ObjectiveMain>
+                <ObjectiveCount>Step 2 of 4</ObjectiveCount>
+                <ObjectiveMeter value={0.25} />
+                <ObjectiveText>Give the program an initialize instruction</ObjectiveText>
+                <ObjectiveCheck open={false} />
+              </ObjectiveMain>
+              <ObjectiveActions>
+                <ObjectiveNav canBack canNext={false} />
+                <ObjectiveQuiet>Read the page</ObjectiveQuiet>
+                <ObjectivePrimary>I'm stuck</ObjectivePrimary>
+              </ObjectiveActions>
+            </ObjectiveRow>
+          </ObjectiveBand>
+          <div className="w-[393px] overflow-hidden rounded-xl border">
+            <ObjectiveFold open={false} position="2/4" value={0.25} objective="Give the program an initialize instruction" />
+            <ObjectiveBar>
+              <ObjectiveNav size="phone" canBack canNext={false} />
+              <div className="ml-auto flex items-center gap-1">
+                <ObjectiveQuiet size="phone">Read the page</ObjectiveQuiet>
+                <ObjectivePrimary size="phone">I'm stuck</ObjectivePrimary>
+              </div>
+            </ObjectiveBar>
+          </div>
+        </div>
       </Block>
 
       <Block id="stage-empty" title="Stage empty" source="playground" registry="stage-empty" note="What a stage says before there is anything on it: what it is for, what it needs and the one thing to do. It sits on the stage's own ground. On a phone the actions pin to the foot." className="block">

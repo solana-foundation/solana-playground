@@ -48,7 +48,7 @@ export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
         </Icon>
         <ContentText>
           <Main>Are you sure you want to delete '{itemName}'?</Main>
-          <Desc>This action is irreversable.</Desc>
+          <Desc>This action is irreversible.</Desc>
         </ContentText>
       </Content>
     </ModalFrame>

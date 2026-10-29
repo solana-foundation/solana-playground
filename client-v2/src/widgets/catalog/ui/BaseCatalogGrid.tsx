@@ -39,9 +39,9 @@ export type CardOpen =
   | { state: "failed"; message: string };
 
 /** The list behind the cards: still loading, read, or not readable */
-export type CatalogList =
+export type CatalogList<C = CatalogCard> =
   | { state: "loading" }
-  | { state: "ready"; cards: CatalogCard[] }
+  | { state: "ready"; cards: C[] }
   | { state: "failed"; message: string; onRetry: () => void };
 
 export interface BaseCatalogGridProps {
@@ -60,8 +60,8 @@ export interface BaseCatalogGridProps {
 }
 
 /**
- * The catalog's cards, as the Tutorials and Programs pages and New project
- * draw them: two columns from 720 px, one below. Below 768 px the card's own
+ * The catalog's cards, as the Tutorials and Programs pages and New project's
+ * Programs tab draw them (New project's tutorials are `BaseTutorialGrid`): two columns from 720 px, one below. Below 768 px the card's own
  * Open is hidden (`ActionCardAction`), the whole card opens through its
  * title, and a chevron at its end says so. One Open at a time: while one
  * runs (`busy`) every card's Open and title are disabled.
@@ -105,7 +105,7 @@ const BaseCatalogGrid = ({
           </ActionCardMedia>
           <ActionCardContent>
             {/* Plain text, as the prototype writes it: level · framework, or
-                framework · categories */}
+                framework · first category */}
             <ActionCardEyebrow>
               {c.tags.map((t) => t.label).join(" · ")}
             </ActionCardEyebrow>

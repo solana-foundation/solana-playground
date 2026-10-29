@@ -29,7 +29,7 @@ export interface InteractFacts {
 /**
  * Picks the Interact stage's surface; the first missing piece wins, in the
  * order the embedded form checked before 5.12. No build is required: an IDL
- * can arrive without one, through "Load IDL file".
+ * can arrive without one, through "Upload IDL".
  */
 export const interactSurface = (f: InteractFacts): InteractSurface => {
   if (!f.hasProject) return "no-project";

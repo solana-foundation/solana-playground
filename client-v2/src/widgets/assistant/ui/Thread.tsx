@@ -24,11 +24,16 @@ import { BaseThread } from "./BaseThread";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
 import type { ReplyActions } from "./BaseThreadItem";
 
-const SUGGESTIONS = [
-  "What does this program do?",
-  "Why did my build fail?",
-  "How do I deploy this?",
-];
+/** The empty thread's first questions: the step's inside a lesson, as the
+ * prototype offers them, the project's elsewhere */
+const SUGGESTIONS = {
+  lesson: ["Explain this step", "Give me a hint", "Why did my build fail?"],
+  project: [
+    "What does this program do?",
+    "Why did my build fail?",
+    "How do I deploy this?",
+  ],
+} as const;
 
 /**
  * Sent by "Make this change": models often describe an edit in prose instead of
@@ -179,7 +184,7 @@ export const Thread = ({
       // (`clear`) and must never be saved or synced with the thread
       unsaved={PgAssistant.unsaved}
       project={project}
-      suggestions={SUGGESTIONS}
+      suggestions={lesson ? SUGGESTIONS.lesson : SUGGESTIONS.project}
       onSuggestion={(text) => {
         assistantTelemetry.track("assistant_suggestion_picked", {});
         send(text);

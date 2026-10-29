@@ -469,7 +469,10 @@ const sidebarMenuButtonVariants = cva(
           "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
       },
       size: {
-        default: "h-7 text-[0.8125rem]",
+        /* Below md a row is the prototype's phone row, a fingertip tall in
+           the body type, where you are at the strong weight */
+        default:
+          "h-7 text-[0.8125rem] max-md:h-13 max-md:gap-3 max-md:rounded-xl max-md:px-3 max-md:text-body max-md:font-read max-md:data-active:font-act max-md:[&_svg]:size-5",
         sm: "h-7 text-xs",
         lg: "h-12 text-sm group-data-[collapsible=icon]:p-0!",
       },

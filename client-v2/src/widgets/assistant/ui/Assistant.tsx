@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
+import { useTutorialBeforeStart } from "@/entities/tutorial";
 import { Button } from "@/shared/ui/button";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
 import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
@@ -83,7 +84,10 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   // Here, above both views, so a turn and a prompt waiting in the composer
   // outlive a visit to Sources; the thread and the composer share this one
   const turn = useTurn({ open: openConnect });
-  const project = useProjectName();
+  // With no project open, a tutorial before its Start names the panel. An
+  // open project keeps its name: the thread and the tools still act on it.
+  const tutorial = useTutorialBeforeStart();
+  const project = useProjectName() ?? tutorial;
   const defaultBackend = useDefaultBackend();
   // The head names the connected model, so a change of connection redraws it
   const [, render] = useReducer((n: number) => n + 1, 0);

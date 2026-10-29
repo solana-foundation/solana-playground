@@ -86,9 +86,9 @@ test("client-v2-assistant: A backend with an effort ladder", async ({
   await page.locator("#assistant-api-key").fill("sk-ant-fake-key");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
 
-  await expect(
-    page.getByRole("button", { name: "Medium: 2 of 5" })
-  ).toBeVisible(LONG);
+  await expect(page.getByRole("button", { name: "High: 3 of 5" })).toBeVisible(
+    LONG
+  );
   await expect(modelButton(page, "Opus 5.5")).toBeVisible();
   expect(anthropicRequests).toBe(0);
 });

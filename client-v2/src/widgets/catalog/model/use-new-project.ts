@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 
 import { PgTutorial } from "@/utils";
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
-import type { CardList } from "./lists";
 import { importProgram, isImportCancel } from "./program-open";
 import { catalogTelemetry } from "./telemetry";
 import type { CatalogPage } from "./telemetry";
@@ -65,15 +64,15 @@ export const useNewProject = (
     onFailed,
   });
   const busy = tutorialOpen.busy || programOpen.busy;
-  const lists: Record<CatalogPage, CardList> = {
-    tutorials: useTutorialList(query, tutorialOpen.cardOpen),
-    programs: useProgramList(query, programOpen.cardOpen),
-  };
-  const OPEN: Record<CatalogPage, (id: string) => Promise<void>> = {
-    tutorials: (name) => tutorialOpen.open(name, () => PgTutorial.open(name)),
-    programs: (repo) => programOpen.open(repo, importProgram(repo)),
-  };
+  const tutorials = useTutorialList(query, tutorialOpen.cardOpen);
+  const programs = useProgramList(query, programOpen.cardOpen);
   const held = busy || starting;
+  // Each list refuses its own second Open; this refuses the other's while
+  // one runs, and any while Start runs
+  const unlessHeld =
+    (open: (id: string) => Promise<void>) => async (id: string) => {
+      if (!held) await open(id);
+    };
 
   return {
     view: {
@@ -83,19 +82,24 @@ export const useNewProject = (
         setTab(next);
       },
       counts: {
-        tutorials: lists.tutorials.count,
-        programs: lists.programs.count,
+        tutorials: tutorials.count,
+        programs: programs.count,
       },
       query,
       onQuery: setQuery,
-      grid: {
-        list: lists[tab].list,
+      tutorials: {
+        items: tutorials.list,
         busy: held,
-        // Each list refuses its own second Open; this refuses the other's
-        // while one runs, and any while Start runs
-        onOpen: async (id) => {
-          if (!held) await OPEN[tab](id);
-        },
+        onOpen: unlessHeld((name) =>
+          tutorialOpen.open(name, () => PgTutorial.open(name))
+        ),
+      },
+      grid: {
+        list: programs.list,
+        busy: held,
+        onOpen: unlessHeld((repo) =>
+          programOpen.open(repo, importProgram(repo))
+        ),
       },
     },
     busy,

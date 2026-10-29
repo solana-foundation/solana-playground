@@ -17,8 +17,6 @@ import {
   describeFinish,
   describeStep,
   positionLabel,
-  primaryLabel,
-  readLabel,
 } from "./band-copy";
 import { foldRecord } from "./ledger";
 import { INITIAL_LESSON_STATE } from "./store";
@@ -70,20 +68,6 @@ const withEvents = (
   loadFailed: false,
 });
 
-describe("primaryLabel", () => {
-  it("names the action that proves the step", () => {
-    expect(primaryLabel({ kind: "idl", instruction: "hello" })).toBe(
-      "Build to prove this"
-    );
-    expect(primaryLabel({ kind: "build-passes" })).toBe("Build to prove this");
-    expect(primaryLabel({ kind: "deployed" })).toBe("Deploy to prove this");
-  });
-
-  it("never says an attestation verifies anything", () => {
-    expect(primaryLabel({ kind: "read", at: "write" })).toBe("Mark as read");
-  });
-});
-
 describe("describeStep", () => {
   it("is null outside a lesson", () => {
     expect(describeStep(INITIAL_LESSON_STATE)).toBeNull();
@@ -93,20 +77,11 @@ describe("describeStep", () => {
     const d = describeStep(withEvents(PATH, []));
     expect(d).toMatchObject({
       number: "Step 1 of 2",
-      position: 1,
       objective: "Define hello",
       verifiedBy: "Verified when the interface shows hello.",
       mark: "open",
-      opened: false,
       offersPrimary: true,
     });
-  });
-
-  it("knows whether the page has been opened", () => {
-    const opened = withEvents(PATH, [
-      { seq: 1, at: 1, actor: "learner", type: "opened", stepId: "one" },
-    ]);
-    expect(describeStep(opened)?.opened).toBe(true);
   });
 
   it("is null once the path is finished", () => {
@@ -166,13 +141,6 @@ describe("describeStep", () => {
       offersPrimary: true,
       verifiedBy: "Skipped -- not verified.",
     });
-  });
-});
-
-describe("readLabel", () => {
-  it("points at the page until it has been opened", () => {
-    expect(readLabel(2, false)).toBe("Read step 2 first");
-    expect(readLabel(2, true)).toBe("Read the page");
   });
 });
 

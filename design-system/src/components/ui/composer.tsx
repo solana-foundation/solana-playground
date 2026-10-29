@@ -5,7 +5,8 @@ import { cn } from "@/lib/utils"
 /* Where you ask the assistant for something: a note above it, the files it
    will read, the words, then the tools. Enter sends; Shift and Enter make a
    new line; a half-typed character in an input method never sends. While it
-   answers, Send becomes Stop. */
+   answers, Send becomes Stop. Below md every control is a fingertip and
+   the words are in the body type, as on the prototype's phone. */
 
 type ComposerContextValue = { busy: boolean; empty: boolean; setEmpty: (empty: boolean) => void; onStop?: () => void }
 const ComposerContext = React.createContext<ComposerContextValue>({ busy: false, empty: true, setEmpty: () => {} })
@@ -42,7 +43,7 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       data-slot="composer-banner"
-      className={cn("flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground", className)}
+      className={cn("flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground max-md:text-control max-md:font-read", className)}
       {...props}
     />
   )
@@ -119,7 +120,7 @@ function ComposerInput({ className, onKeyDown, onInput, value, ...props }: React
         }
       }}
       className={cn(
-        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle",
+        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body max-md:font-read",
         className
       )}
       {...props}
@@ -139,7 +140,7 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
       data-slot="composer-add"
       aria-label="Add context"
       className={cn(
-        "grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-12",
         className
       )}
       {...props}
@@ -213,7 +214,7 @@ function ComposerSend({ className, children, ...props }: React.ComponentProps<"b
         data-slot="composer-stop"
         aria-label="Stop"
         onClick={onStop}
-        className={cn("ml-auto grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background transition-transform outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95", className)}
+        className={cn("ml-auto grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background transition-transform outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 max-md:size-12", className)}
       >
         <Square className="size-3 fill-current" />
       </button>
@@ -226,7 +227,7 @@ function ComposerSend({ className, children, ...props }: React.ComponentProps<"b
       aria-label="Send"
       disabled={empty}
       className={cn(
-        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-foreground hover:not-disabled:not-aria-disabled:text-white active:not-disabled:not-aria-disabled:text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4",
+        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-foreground hover:not-disabled:not-aria-disabled:text-white active:not-disabled:not-aria-disabled:text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4 max-md:size-12 max-md:[&_svg]:size-5",
         className
       )}
       {...props}

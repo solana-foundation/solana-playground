@@ -92,3 +92,30 @@ it("offers to expand a collapsed navigation", () => {
   fireEvent.click(screen.getByRole("button", { name: "Expand navigation" }));
   expect(onToggle).toHaveBeenCalledTimes(1);
 });
+
+it("on a phone, heads the menu with the logo and a close, not a collapse", () => {
+  const onToggle = vi.fn();
+  render(
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseAppNav
+          phone
+          collapsed={false}
+          onToggle={onToggle}
+          onOpen={vi.fn()}
+          logo={<span>logo</span>}
+          projects={<span>projects</span>}
+          footer={<span>footer</span>}
+          railFooter={<span>rail footer</span>}
+          setup={<span>setup</span>}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  expect(screen.getByText("logo")).toBeTruthy();
+  expect(
+    screen.queryByRole("button", { name: "Collapse navigation" })
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Close the menu" }));
+  expect(onToggle).toHaveBeenCalledOnce();
+});

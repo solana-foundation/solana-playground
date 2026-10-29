@@ -10,7 +10,7 @@ import {
 export const server = [
   createSetting({
     id: "server.endpoint",
-    // Not "Endpoint", which `connection.endpoint` would share
+    // Not "Endpoint", which `connection.endpoint` takes from its id
     name: "Build server",
     description: "Build server URL",
     // The list lives beside the default so the two cannot disagree about

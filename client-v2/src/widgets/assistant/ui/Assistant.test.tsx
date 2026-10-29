@@ -58,6 +58,13 @@ vi.mock("../../../utils/explorer/explorer", () => {
   };
 });
 
+// The tutorial on screen before its Start, which names the panel over the
+// project; null off a tutorial's route
+const tutorial = vi.hoisted(() => ({ beforeStart: null as string | null }));
+vi.mock("@/entities/tutorial", () => ({
+  useTutorialBeforeStart: () => tutorial.beforeStart,
+}));
+
 import { Modal, ModalContent, ModalTitle } from "@/shared/ui/modal";
 import { Assistant } from "./Assistant";
 
@@ -89,6 +96,7 @@ class NoopResizeObserver {
 
 beforeEach(() => {
   explorer.name = "hello-anchor";
+  tutorial.beforeStart = null;
   explorer.listeners.clear();
   deployment.backend = { state: "absent" };
   turn.openConnect.mockReset();
@@ -147,6 +155,22 @@ describe("Assistant", () => {
   it("hands the thread the project's own name", () => {
     setup();
     expect(screen.getByText("thread").dataset.project).toBe("hello-anchor");
+  });
+
+  it("names a tutorial not yet started while no project is open", () => {
+    explorer.name = undefined;
+    tutorial.beforeStart = "Hello Anchor";
+    setup();
+    expect(screen.getByRole("heading", { name: "Hello Anchor" })).toBeTruthy();
+    expect(screen.getByText("thread").dataset.project).toBe("Hello Anchor");
+  });
+
+  it("keeps the open project's name beside a tutorial not yet started", () => {
+    explorer.name = "Counter";
+    tutorial.beforeStart = "Hello Anchor";
+    setup();
+    expect(screen.getByRole("heading", { name: "Counter" })).toBeTruthy();
+    expect(screen.getByText("thread").dataset.project).toBe("Counter");
   });
 
   it("asks the gateway for its tools once, on mount", () => {

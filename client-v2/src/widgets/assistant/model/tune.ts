@@ -111,7 +111,7 @@ if (import.meta.vitest) {
         ).toEqual({
           id: "anthropic",
           apiKey: "k",
-          settings: { model: "claude-sonnet-5-5", effort: "medium" },
+          settings: { model: "claude-sonnet-5-5", effort: "high" },
         });
         expect(
           withModel({ id: "gemini", apiKey: "k" }, "gemini-3.1-pro-preview")

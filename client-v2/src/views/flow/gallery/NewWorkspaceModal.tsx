@@ -27,6 +27,9 @@ const NewWorkspaceModal = ({
       name="new-workspace"
       title="What do you want to build?"
       size="wide"
+      // The prototype opens it with nothing ringed: the name is one choice
+      // among the catalogue's, not the dialog's question
+      openFocus="dialog"
     >
       <NewProject project={project} />
     </ModalFrame>

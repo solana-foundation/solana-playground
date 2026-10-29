@@ -255,7 +255,7 @@ Honesty rule for the demo — never present a mocked step as working.
   transaction signature yet, because the deploy command it hooks into
   returns no signature to record.
 - **Honest wording, not new work:** "Download IDL" on the Build surface
-  saves the IDL a successful build already produced; "Load IDL file" on
+  saves the IDL a successful build already produced; "Upload IDL" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
 - **Not view-only:** the Programs page's and the gallery's ecosystem program cards

@@ -27,6 +27,7 @@ import {
   type Effort,
   type ProviderInfo,
 } from "../model/types";
+import { displayModelName, EFFORT_LABELS } from "../model/labels";
 
 /** Model and effort a backend starts on, when it offers the choice */
 const defaultSettings = (provider: ProviderInfo) =>
@@ -62,7 +63,8 @@ const DEFAULT_PROVIDER = PROVIDERS.find((p) => p.id === "default")!;
 /** Everything behind the accordion: each of these needs a key of your own */
 const ALTERNATIVES = PROVIDERS.filter((p) => p.id !== "default");
 
-const FIELD_LABEL = "text-xs tracking-[0.1em] text-muted-foreground";
+/** The prototype's field label: small, grey, in sentence case, untracked */
+const FIELD_LABEL = "text-[0.7rem] font-normal text-muted-foreground";
 
 /**
  * The backend, and maybe its model, base URL and effort, Connect a model opens
@@ -136,9 +138,9 @@ const startSettings = (provider: ProviderInfo, preset?: ConnectPreset) => {
 };
 
 /**
- * The form of Connect a model. It lives in `ConnectDialog`, which gives it its
- * title and closes it once a backend is connected; reconnecting on load is
- * `useTurn`'s.
+ * The form of Connect a model. It lives in `ConnectDialog`, which gives the
+ * dialog its title and closes it once a backend is connected; the form heads
+ * only its own lead. Reconnecting on load is `useTurn`'s.
  */
 const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
   // Reopened over a live connection: seed the fields with it so changing just
@@ -300,13 +302,18 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
       key={p.id}
       onPointerDown={() => (pointerPick.current = true)}
       className={cn(
-        "flex cursor-pointer items-start gap-2 rounded-md border border-border px-2.5 py-2 transition-colors hover:bg-accent has-data-checked:border-primary has-data-disabled:cursor-not-allowed has-data-disabled:opacity-45 has-data-disabled:hover:bg-transparent"
+        "relative flex cursor-pointer items-start gap-2 rounded-xl border border-border has-focus-visible:ring-2 has-focus-visible:ring-ring px-2.5 py-2 transition-colors hover:bg-accent has-data-checked:border-primary has-data-disabled:cursor-not-allowed has-data-disabled:opacity-45 has-data-disabled:hover:bg-transparent"
       )}
     >
+      {/* The card is the choice, as the prototype draws it; the circle
+          stays for the keyboard and the screen reader */}
       <RadioGroupItem
         value={p.id}
         disabled={isUnavailable(p)}
-        className="mt-0.5"
+        // Unseen, over the whole card: a press anywhere on it is a press on
+        // the radio itself (`sr-only` would lose to the item's own `relative`
+        // and `size-4`)
+        className="absolute inset-0 size-full rounded-xl border-0 opacity-0"
       />
       <span className="flex min-w-0 flex-col">
         <span
@@ -332,24 +339,29 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
   const form = (
     <Wrapper>
-      {!current && (
-        <Intro>
+      <Intro>
+        <Title>
+          {current
+            ? "Switch backend"
+            : "An assistant that can see your project"}
+        </Title>
+        {!current && (
           <Lead>
             It reads the tab you are looking at and the last build error,
             explains what went wrong against your actual code, and proposes
             patches you apply yourself.
           </Lead>
-          {defaultBackend === "present" && (
-            <Lead>
-              Out of the box it runs on this deployment's own backend, with the
-              capabilities listed below. Bring your own key to run it on
-              something else.
-            </Lead>
-          )}
-        </Intro>
-      )}
+        )}
+        {!current && defaultBackend === "present" && (
+          <Lead>
+            Out of the box it runs on this deployment's own backend, with the
+            capabilities listed below. Bring your own key to run it on something
+            else.
+          </Lead>
+        )}
+      </Intro>
 
-      <Label as="div">BACKEND</Label>
+      <Label as="div">Backend</Label>
       <Providers>
         <RadioGroup
           aria-label="Backend"
@@ -392,7 +404,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         <>
           <Field className="mb-3">
             <FieldLabel htmlFor="assistant-base-url" className={FIELD_LABEL}>
-              BASE URL
+              Base URL
             </FieldLabel>
             <Input
               id="assistant-base-url"
@@ -406,7 +418,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
           </Field>
           <Field className="mb-3">
             <FieldLabel htmlFor="assistant-model" className={FIELD_LABEL}>
-              MODEL
+              Model
             </FieldLabel>
             {provider.endpoint.models && (
               <Segmented
@@ -447,7 +459,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               htmlFor="assistant-model-select"
               className={FIELD_LABEL}
             >
-              MODEL
+              Model
             </FieldLabel>
             <Select
               value={activeSettings.model}
@@ -458,14 +470,14 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               <SelectTrigger
                 id="assistant-model-select"
                 aria-label="Model"
-                className="w-full font-mono"
+                className="w-full"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper">
                 {provider.modelSettings.models.map((m) => (
-                  <SelectItem key={m} value={m} className="font-mono">
-                    {m}
+                  <SelectItem key={m} value={m}>
+                    {displayModelName(m)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -477,7 +489,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               htmlFor="assistant-effort-select"
               className={FIELD_LABEL}
             >
-              EFFORT
+              Effort
             </FieldLabel>
             <Select
               value={activeSettings.effort}
@@ -488,14 +500,14 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
               <SelectTrigger
                 id="assistant-effort-select"
                 aria-label="Effort"
-                className="w-full font-mono"
+                className="w-full"
               >
                 <SelectValue />
               </SelectTrigger>
               <SelectContent position="popper">
                 {provider.modelSettings.efforts.map((e) => (
-                  <SelectItem key={e} value={e} className="font-mono">
-                    {e}
+                  <SelectItem key={e} value={e}>
+                    {EFFORT_LABELS[e]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -508,7 +520,7 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
         <>
           <Field className="mb-3">
             <FieldLabel htmlFor="assistant-api-key" className={FIELD_LABEL}>
-              API KEY{provider.keyOptional ? " (OPTIONAL)" : ""}
+              API key{provider.keyOptional ? " (optional)" : ""}
             </FieldLabel>
             <Input
               id="assistant-api-key"
@@ -571,6 +583,16 @@ const Intro = styled.div`
   padding-bottom: 1.25rem;
 `;
 
+const Title = styled.h3`
+  ${({ theme }) => css`
+    margin: 0;
+    color: ${theme.colors.default.textPrimary};
+    font-size: ${theme.font.code.size.medium};
+    font-weight: 500;
+    line-height: 1.5;
+  `}
+`;
+
 const Lead = styled.div`
   ${({ theme }) => css`
     color: ${theme.colors.default.textSecondary};
@@ -584,7 +606,6 @@ const Label = styled.label`
     display: block;
     color: ${theme.colors.default.textSecondary};
     font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.1em;
     padding-bottom: 0.4375rem;
   `}
 `;

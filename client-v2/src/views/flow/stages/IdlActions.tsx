@@ -1,36 +1,29 @@
 import { useState } from "react";
 import type { FC } from "react";
-import { FileJson } from "lucide-react";
 
 import ImportButton from "../../../components/ImportButton";
 import { createLogger } from "@/shared/lib/logger";
 import { Button } from "@/shared/ui/button";
-import {
-  DropZone,
-  DropZoneDescription,
-  DropZoneIcon,
-  DropZoneTitle,
-} from "@/shared/ui/drop-zone";
 import { useRenderOnChange } from "../../../hooks";
 import { PgCommon, PgProgramInfo } from "../../../utils";
 
 const log = createLogger("flow:idl-actions");
 
 const LOAD_HINT =
-  "Replaces the IDL this browser uses in Interact -- nothing is written on-chain";
+  "Replaces the IDL this browser uses in Interact \u2014 nothing is written on-chain";
 
 /**
- * Which door to the IDL: `download` saves what the build produced; `drop`
- * loads a file dropped or picked on a drop zone; `button` loads one through a
- * compact button, for a toolbar with no room for a drop zone.
+ * Which door to the IDL: `download` saves what the build produced; `upload`
+ * loads a file picked through a button, the prototype's secondary action
+ * under Deploy's pill and in Interact's toolbar.
  */
-export type IdlActionsMode = "download" | "drop" | "button";
+export type IdlActionsMode = "download" | "upload";
 
 type Note = { kind: "used"; text: string } | { kind: "refused" };
 
-/** Parses an Anchor IDL file; throws when it is not one */
-const parseIdl = async (file: File) => {
-  const parsed = JSON.parse(await file.text());
+/** Parses an Anchor IDL file's text; throws when it is not one */
+const parseIdl = (text: string) => {
+  const parsed = JSON.parse(text);
   // The one field every consumer walks; a JSON file without it would land in
   // Interact as "corrupted IDL" -- refuse it at the door instead
   if (!Array.isArray(parsed?.instructions)) {
@@ -58,16 +51,21 @@ const DownloadIdl = () => {
   );
 };
 
-/** Loads an IDL file into this browser, by drop zone or by button */
-const LoadIdl = ({ mode }: { mode: "drop" | "button" }) => {
+/** Loads an IDL file into this browser, picked through a button */
+const UploadIdl = () => {
   const [note, setNote] = useState<Note | null>(null);
 
   /** Refuses a file that is not an IDL; a throw after that is ours */
   const load = async (file: File | undefined) => {
     if (!file) return;
+    // A note from an earlier file must not outlive a failure on this one
+    setNote(null);
+    // Read outside the try: a file that cannot be read is not the user's
+    // malformed IDL, and `ImportButton` reports it
+    const text = await file.text();
     let idl;
     try {
-      idl = await parseIdl(file);
+      idl = parseIdl(text);
     } catch (e) {
       // The user's own file, not a fault of ours: say so and log it quietly
       log.warn("Refused an IDL file", {
@@ -93,47 +91,33 @@ const LoadIdl = ({ mode }: { mode: "drop" | "button" }) => {
     </span>
   );
 
-  if (mode === "button") {
-    // `ImportButton` reports a throw from `load` itself
-    return (
-      <>
-        <ImportButton
-          accept=".json"
-          title={LOAD_HINT}
-          onImport={(ev) => load(ev.target.files?.[0])}
-        >
-          Load IDL file
-        </ImportButton>
-        {noteLine}
-      </>
-    );
-  }
-
+  // `ImportButton` reports a throw from `load` itself. The input lets go of
+  // the file on every pick: a browser fires no change for the file it already
+  // holds, so a file fixed on disk and picked again would be ignored.
   return (
-    <div className="flex w-full flex-col gap-2">
-      <DropZone
+    <>
+      <ImportButton
         accept=".json"
-        onFiles={(files) =>
-          load(files[0]).catch((e) => log.error(e, { report: true }))
-        }
+        title={LOAD_HINT}
+        onImport={(ev) => {
+          const file = ev.target.files?.[0];
+          ev.target.value = "";
+          return load(file);
+        }}
       >
-        <DropZoneIcon>
-          <FileJson />
-        </DropZoneIcon>
-        <DropZoneTitle>Load IDL file</DropZoneTitle>
-        <DropZoneDescription>{LOAD_HINT}</DropZoneDescription>
-      </DropZone>
+        Upload IDL
+      </ImportButton>
       {noteLine}
-    </div>
+    </>
   );
 };
 
 /**
  * Labels promise no more than what happens in the browser: "Download IDL"
- * saves what the build already produced, "Load IDL file" replaces the IDL
+ * saves what the build already produced, "Upload IDL" replaces the IDL
  * this app uses -- neither touches the chain.
  */
 const IdlActions: FC<{ mode: IdlActionsMode }> = ({ mode }) =>
-  mode === "download" ? <DownloadIdl /> : <LoadIdl mode={mode} />;
+  mode === "download" ? <DownloadIdl /> : <UploadIdl />;
 
 export default IdlActions;

@@ -44,7 +44,8 @@ export interface BaseStartFromScratchProps {
 /**
  * A new project in three choices, as the prototype draws it: a framework
  * (the choice that matters, so it gets the gradient ring), a name, then
- * Start. One row from `md`, stacked below it.
+ * Start. One row from `md`, stacked below it, where every choice is a
+ * fingertip tall in the phone's type, as the prototype's phone draws it.
  */
 const BaseStartFromScratch = ({
   frameworks,
@@ -70,16 +71,18 @@ const BaseStartFromScratch = ({
       <div className="flex min-w-0 flex-1 items-center gap-3 md:basis-56">
         <span
           aria-hidden="true"
-          className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-surface-raised text-foreground"
+          className="grid size-10 shrink-0 place-items-center rounded-[10px] bg-surface-raised text-foreground max-md:bg-background"
         >
           <Plus className="size-5" />
         </span>
         <div className="min-w-0">
-          <div className="text-caption text-muted-foreground">Blank canvas</div>
-          <div className="text-control font-act text-foreground">
+          <div className="text-caption text-muted-foreground max-md:font-label max-md:text-subtle">
+            Blank canvas
+          </div>
+          <div className="text-control font-act text-foreground max-md:text-body">
             Start from scratch
           </div>
-          <div className="text-caption font-read text-muted-foreground">
+          <div className="text-caption font-read text-muted-foreground max-md:text-control">
             A working starter you shape with the assistant.
           </div>
         </div>
@@ -88,6 +91,7 @@ const BaseStartFromScratch = ({
       <Segmented
         variant="gradient"
         aria-label="Framework"
+        className="max-md:w-full max-md:gap-1"
         value={framework}
         onValueChange={(f) => {
           // A press on the chosen item clears the group; keep the choice
@@ -95,7 +99,11 @@ const BaseStartFromScratch = ({
         }}
       >
         {frameworks.map((f) => (
-          <SegmentedItem key={f.name} value={f.name}>
+          <SegmentedItem
+            key={f.name}
+            value={f.name}
+            className="max-md:h-12 max-md:flex-1 max-md:px-2 max-md:text-control"
+          >
             <img
               src={f.icon}
               alt=""
@@ -114,7 +122,7 @@ const BaseStartFromScratch = ({
             aria-label="Project name"
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : undefined}
-            className="min-w-0 flex-1 md:w-48 md:flex-none"
+            className="min-w-0 flex-1 md:w-48 md:flex-none max-md:h-12 max-md:px-3.5 max-md:text-body"
             value={name}
             placeholder={placeholder}
             onChange={(e) => onName(e.target.value)}
@@ -126,7 +134,7 @@ const BaseStartFromScratch = ({
             type="button"
             variant="accent"
             // One height with the framework chips and the name field
-            className="h-8"
+            className="h-8 max-md:h-12 max-md:px-4.5 max-md:text-control"
             disabled={!usable}
             aria-busy={creating || undefined}
             onClick={onStart}
