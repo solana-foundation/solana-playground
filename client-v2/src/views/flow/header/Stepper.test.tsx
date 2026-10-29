@@ -97,7 +97,7 @@ describe("Stepper", () => {
   it("moves focus with the arrow keys without selecting", async () => {
     const onSelect = vi.fn();
     render(<Stepper state={INITIAL_FLOW_STATE} onSelect={onSelect} />);
-    screen.getByRole("tab", { name: /^Write:/ }).focus();
+    act(() => screen.getByRole("tab", { name: /^Write:/ }).focus());
     await userEvent.keyboard("{ArrowRight}");
     expect(document.activeElement?.id).toBe("flow-stage-tab-build");
     expect(onSelect).not.toHaveBeenCalled();

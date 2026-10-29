@@ -134,7 +134,8 @@ it("should show a stacked dialog and bring back the first with its text", async 
   expect(screen.getAllByRole("dialog").length).toBe(1);
   expect(screen.getByRole("dialog", { name: "Info" })).toBeTruthy();
 
-  act(() => {
+  // Async: Info's answer settles Outer's submit, which ends its busy state
+  await act(async () => {
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
   });
 

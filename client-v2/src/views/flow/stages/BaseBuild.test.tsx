@@ -1,6 +1,6 @@
 // The Build stage drawn from props: which surface says what, which action
 // is the brand one, and that the action row closes every surface.
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import BaseBuild from "./BaseBuild";
@@ -71,8 +71,11 @@ describe("BaseBuild", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing built yet" })
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Build" }));
-    await vi.waitFor(() => expect(p.onBuild).toHaveBeenCalled());
+    // Async: Build is an AsyncButton, which settles once `onBuild` resolves
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    });
+    expect(p.onBuild).toHaveBeenCalled();
     expect(brandButtons(container)).toHaveLength(1);
     expect(
       container.querySelector('[data-slot="stage-empty-media"]')
@@ -105,7 +108,7 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  it("says a build that never reached the compiler did not start (BUILD-04)", () => {
+  it("says a build that never reached the compiler did not start (BUILD-04)", async () => {
     const p = props({
       kind: "unreached",
       failure: { kind: "no-answer", message: "Failed to fetch" },
@@ -127,7 +130,9 @@ describe("BaseBuild", () => {
       screen.getByText(/Build server: https:\/\/api\.solpg\.io/)
     ).toBeTruthy();
     expect(screen.getByText(/Failed to fetch/)).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    });
     expect(p.onBuild).toHaveBeenCalled();
   });
 
@@ -168,7 +173,7 @@ describe("BaseBuild", () => {
     ).toBeTruthy();
   });
 
-  it("marks the faulty line of a failed build", () => {
+  it("marks the faulty line of a failed build", async () => {
     const p = props(failed([typeError("it", "expected u32")]));
     const { container } = render(<BaseBuild {...p} />);
 
@@ -190,7 +195,9 @@ describe("BaseBuild", () => {
     expect(p.onAsk).toHaveBeenCalledWith("fix it");
     fireEvent.click(screen.getByRole("button", { name: "Open in editor" }));
     expect(p.onOpenFile).toHaveBeenCalledWith("src/lib.rs");
-    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    });
     expect(p.onBuild).toHaveBeenCalled();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });

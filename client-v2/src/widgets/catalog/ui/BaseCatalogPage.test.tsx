@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import BaseCatalogPage from "./BaseCatalogPage";
@@ -64,11 +64,14 @@ it("draws a card per item with its tags as one line and an Open of its own", () 
   expect(eyebrow.querySelector("[data-slot=tag]")).toBeNull();
 });
 
-it("opens the card's item from its Open", () => {
+it("opens the card's item from its Open", async () => {
   const onOpen = vi.fn(async () => {});
   draw({ onOpen });
 
-  fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+  // Async: Open is an AsyncButton, which settles once `onOpen` resolves
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
+  });
   expect(onOpen).toHaveBeenCalledWith("Hello Anchor");
 });
 
