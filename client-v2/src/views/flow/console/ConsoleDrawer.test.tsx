@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PgCommon, PgTerminal } from "../../../utils";
+import { PgCommandManager, PgCommon, PgTerminal } from "../../../utils";
 import type { FlowState, StageStatus } from "../state/stage";
 
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
@@ -34,6 +34,7 @@ vi.mock("../../../shared/lib/logger", () => ({
 vi.mock("@/utils", () => ({
   PgTerminal: { clear: vi.fn(), setConsoleOpen: vi.fn() },
   PgCommon: { getOS: vi.fn(() => "MacOS") },
+  PgCommandManager: { stop: vi.fn() },
 }));
 
 /** The flow's state and its one listener, which a test drives by hand */
@@ -77,6 +78,8 @@ const flowState = (
   buildMs: null,
   buildStartedAt,
   buildFailure: null,
+  deployBeforeRun: null,
+  stopped: null,
 });
 
 beforeEach(() => {
@@ -155,6 +158,15 @@ it("should show the flow's status as it changes", () => {
   act(() => flow.listener!(flowState("running")));
 
   expect(screen.getByText(/^Building…/)).toBeTruthy();
+});
+
+it("should stop the run in flight from Stop", () => {
+  flow.state = flowState("running");
+  render(<ConsoleDrawer open={false} onToggle={vi.fn()} />);
+
+  fireEvent.click(screen.getByRole("button", { name: "Stop build" }));
+
+  expect(PgCommandManager.stop).toHaveBeenCalledTimes(1);
 });
 
 describe("the strip's clock", () => {

@@ -10,6 +10,7 @@ import {
 } from "@/shared/ui/console-drawer";
 import { Kbd } from "@/shared/ui/kbd";
 import { StatusDot } from "@/shared/ui/status-dot";
+import type { RunKind } from "../state/stage";
 import type { ConsoleStatus } from "./status";
 
 /** The well's id. The Terminal button's `aria-controls` names it, and the
@@ -21,6 +22,9 @@ interface BaseConsoleDrawerProps {
   /** The state the drawer asks for, which may be the one it is in */
   onOpenChange: (open: boolean) => void;
   onClear: () => void;
+  /** The run Stop names and the handler that stops it, while a build or a
+   * deploy runs; `null` otherwise */
+  stop: { run: RunKind; onStop: () => void } | null;
   status: ConsoleStatus;
   /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
   shortcut: string;
@@ -39,6 +43,7 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   open,
   onOpenChange,
   onClear,
+  stop,
   status,
   shortcut,
   children,
@@ -67,9 +72,32 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
       </ConsoleDrawerStatus>
       <ConsoleDrawerActions>
         <Kbd aria-hidden>{shortcut}</Kbd>
+        {/* Spec 13: while a build or a deploy runs, Clear is off with Stop
+            beside it; on a phone Stop takes Clear's place, a fingertip
+            wide. Stop shows folded too: the strip is all a folded console
+            shows. */}
         {open && (
-          <Button type="button" variant="ghost" size="xs" onClick={onClear}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            disabled={!!stop}
+            className={stop ? "max-md:hidden" : undefined}
+            onClick={onClear}
+          >
             Clear
+          </Button>
+        )}
+        {stop && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            aria-label={`Stop ${stop.run}`}
+            className="max-md:min-h-11 max-md:min-w-11"
+            onClick={stop.onStop}
+          >
+            Stop
           </Button>
         )}
       </ConsoleDrawerActions>

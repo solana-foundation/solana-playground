@@ -18,7 +18,7 @@ vi.mock("../../sidebar/assistant/bridge/build-output", () => ({
 }));
 
 import * as buildOutputModule from "../../sidebar/assistant/bridge/build-output";
-import { describeConsoleStatus } from "./status";
+import { describeConsoleStatus, runToStop } from "./status";
 
 // The mocked module, typed as what the factory above returns
 const buildOutput = buildOutputModule as unknown as MockBuildOutput;
@@ -33,6 +33,8 @@ const DEFAULT_STATE: FlowState = {
   buildMs: null,
   buildStartedAt: null,
   buildFailure: null,
+  deployBeforeRun: null,
+  stopped: null,
 };
 
 const state = (overrides: Partial<FlowState>): FlowState => ({
@@ -131,5 +133,39 @@ describe("describeConsoleStatus", () => {
         state({ build: "done", buildMs: 1000, deploy: "failed" })
       )
     ).toEqual({ text: "Deploy failed", tone: "error" });
+  });
+});
+
+describe("a stopped run", () => {
+  it("reads Build stopped, not the result before it", () => {
+    expect(
+      describeConsoleStatus(
+        state({ build: "done", buildSettled: "done", stopped: "build" })
+      )
+    ).toEqual({ text: "Build stopped", tone: "idle" });
+  });
+
+  it("reads Deploy stopped, not the build under it", () => {
+    expect(
+      describeConsoleStatus(
+        state({ build: "done", deploy: "active", stopped: "deploy" })
+      )
+    ).toEqual({ text: "Deploy stopped", tone: "idle" });
+  });
+});
+
+describe("runToStop", () => {
+  it("is nothing while nothing runs", () => {
+    expect(runToStop(state({ build: "done", deploy: "done" }))).toBeNull();
+  });
+
+  it("is the build while one runs", () => {
+    expect(runToStop(state({ build: "running" }))).toBe("build");
+  });
+
+  it("is the deploy while one runs", () => {
+    expect(runToStop(state({ build: "done", deploy: "running" }))).toBe(
+      "deploy"
+    );
   });
 });

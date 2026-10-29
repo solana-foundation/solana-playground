@@ -4,10 +4,14 @@ import {
 } from "../../sidebar/assistant/bridge/build-output";
 import { emptyFileOf } from "../../../commands/build/empty-source";
 import { PgCommand, PgExplorer, PgGlobal, PgProgramInfo } from "../../../utils";
+import { isStopped } from "../../../utils/stopped";
 import type { Disposable } from "../../../utils";
 
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";
+
+/** A run the console strip can stop */
+export type RunKind = "build" | "deploy";
 
 export interface FlowState {
   stage: Stage;
@@ -28,6 +32,13 @@ export interface FlowState {
   /** Why the last build never reached the compiler, for Build's surface
    * and its "Show details"; `null` once a build settles otherwise */
   buildFailure: BuildFailure | null;
+  /** What Deploy showed when the last deploy started, which a stopped
+   * deploy goes back to; `null` until the first deploy starts. Set by
+   * `deploy-start`, read only by `deploy-stop`. */
+  deployBeforeRun: StageStatus | null;
+  /** Which run the person stopped last, for the console strip's words;
+   * `null` once the next run starts */
+  stopped: RunKind | null;
 }
 
 /**
@@ -50,8 +61,14 @@ export type FlowEvent =
       /** Why a build never reached the compiler */
       failure?: BuildFailure;
     }
+  /** The person stopped the build: no result is kept, the stage goes back to
+   * its settled status */
+  | { type: "build-stop" }
   | { type: "deploy-start" }
   | { type: "deploy-finish"; ok: boolean }
+  /** The person stopped the deploy before its last step: the program on
+   * chain is as it was, and the stage goes back to where it was */
+  | { type: "deploy-stop" }
   | { type: "set-stage"; stage: Stage }
   | { type: "workspace-change" }
   /**
@@ -71,6 +88,8 @@ export const INITIAL_FLOW_STATE: FlowState = {
   buildMs: null,
   buildStartedAt: null,
   buildFailure: null,
+  deployBeforeRun: null,
+  stopped: null,
 };
 
 export const STAGES: readonly Stage[] = [
@@ -140,7 +159,11 @@ export class PgFlow {
           stage: "build",
           build: "running",
           buildStartedAt: ev.at,
+          stopped: null,
         };
+      case "build-stop":
+        if (state.build !== "running") return state;
+        return { ...state, build: state.buildSettled, stopped: "build" };
       case "build-finish":
         return ev.failed
           ? {
@@ -165,7 +188,24 @@ export class PgFlow {
               buildFailure: null,
             };
       case "deploy-start":
-        return { ...state, stage: "deploy", deploy: "running" };
+        // A second Deploy click pauses or resumes the run in flight and
+        // starts again: what Deploy showed before is the first click's
+        if (state.deploy === "running") return state;
+        return {
+          ...state,
+          stage: "deploy",
+          deploy: "running",
+          deployBeforeRun: state.deploy,
+          stopped: null,
+        };
+      case "deploy-stop":
+        if (state.deploy !== "running") return state;
+        return {
+          ...state,
+          deploy: state.deployBeforeRun ?? "active",
+          // A stop of the build a deploy runs first is the build's stop
+          stopped: state.stopped === "build" ? "build" : "deploy",
+        };
       case "deploy-finish":
         return ev.ok
           ? { ...state, stage: "deploy", deploy: "done", interact: "active" }
@@ -233,6 +273,10 @@ export class PgFlow {
       // *this* run already arrived and handled it.
       PgCommand.build.onDidFinish((result) => {
         if (!("err" in result)) return;
+        if (isStopped(result.err)) {
+          PgFlow._dispatch({ type: "build-stop" });
+          return;
+        }
         const out = PgBuildOutput.latest;
         if (out && out.at >= startedAt) return;
         PgFlow._dispatch({
@@ -254,6 +298,10 @@ export class PgFlow {
         // "ready" before a genuine finish, success or failure, so that is
         // the only value that means the deploy actually ended.
         if (PgGlobal.deployState !== "ready") return;
+        if ("err" in result && isStopped(result.err)) {
+          PgFlow._dispatch({ type: "deploy-stop" });
+          return;
+        }
         PgFlow._dispatch({
           type: "deploy-finish",
           ok: !("err" in result),

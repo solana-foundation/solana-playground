@@ -38,9 +38,10 @@ export class PgServer {
    * Build the program files.
    *
    * @param req build request
+   * @param opts.signal aborts the request
    * @returns the build response
    */
-  static async build(req: BuildRequest) {
+  static async build(req: BuildRequest, opts?: { signal?: AbortSignal }) {
     interface BuildResponse {
       /** Build output */
       stderr: string;
@@ -53,6 +54,7 @@ export class PgServer {
     const response = await this._send("/build", {
       post: { body: JSON.stringify(req) },
       unstable: PgSettings.experimental.unstable,
+      signal: opts?.signal,
     });
     return (await response.json()) as BuildResponse;
   }
@@ -111,7 +113,8 @@ export class PgServer {
   /**
    * Send an HTTP request to the Playground server.
    *
-   * @param opts server send request options
+   * @param opts server send request options; an aborted `signal` fails the
+   * request like any other network failure ("Server request failed")
    * @throws when the response is not OK (with the decoded response)
    * @returns the HTTP response
    */
@@ -122,9 +125,10 @@ export class PgServer {
       post?: { body: string };
       useDbServer?: boolean;
       unstable?: boolean;
+      signal?: AbortSignal;
     }
   ) {
-    const requestInit: RequestInit = {};
+    const requestInit: RequestInit = { signal: opts?.signal };
     if (!opts?.cache) requestInit.cache = "no-store";
 
     if (opts?.post) {
