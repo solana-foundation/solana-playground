@@ -324,7 +324,10 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
       left = { state: "closed" };
     } catch (e) {
       // The line names the buffer and how to reclaim it by hand
-      log.error(e, { context: { action: "close the buffer on stop" } });
+      log.error(e, {
+        report: true,
+        context: { action: "close the buffer on stop" },
+      });
       left = { state: "kept", address: bufferKp.publicKey.toBase58() };
     }
     return new StoppedError(deployStoppedLine(left));
