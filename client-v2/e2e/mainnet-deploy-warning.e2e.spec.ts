@@ -100,3 +100,22 @@ test("mainnet-deploy-warning: Mainnet Beta picked in Settings", async ({
     panel.getByRole("alert", { name: "Mainnet deploy warning" })
   ).toHaveCount(0);
 });
+
+test("mainnet-deploy-warning: Guide from the mainnet warning", async ({
+  seededPage: page,
+}) => {
+  await reloadOn(page, "mainnet-beta");
+  const panel = await openDeploy(page);
+
+  await panel
+    .getByRole("alert", { name: "Mainnet deploy warning" })
+    .getByRole("button", { name: "deploy from your own machine" })
+    .click(LONG);
+  const guide = page.getByRole("dialog", { name: "Deploy from your machine" });
+  await expect(guide).toBeVisible();
+  await expect(
+    guide
+      .getByRole("radiogroup", { name: "Cluster" })
+      .getByRole("radio", { name: "Mainnet" })
+  ).toBeChecked();
+});

@@ -19,9 +19,11 @@ import {
 import { StatusDot } from "@/shared/ui/status-dot";
 import {
   MAINNET_DEPLOY_WARNING_BODY,
+  MAINNET_DEPLOY_WARNING_GUIDE,
   MAINNET_DEPLOY_WARNING_TITLE,
   warnsOnDeploy,
 } from "../../../commands/deploy/mainnet-warning";
+import type { GuideFrom } from "@/features/cli-deploy";
 import type { DeployRecord } from "../state/deploy-history";
 import {
   STAGE_BODY,
@@ -64,6 +66,8 @@ export interface BaseDeployProps {
   onInteract: () => void;
   /** The secondary "Upload IDL" action (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
+  /** Opens the CLI deploy guide; `from` is the control pressed */
+  onOpenCliGuide: (from: GuideFrom) => void;
 }
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
@@ -221,10 +225,34 @@ const History = ({ p }: { p: BaseDeployProps }) => (
 );
 
 /**
+ * The mainnet warning's body, its "deploy from your own machine" turned into
+ * the button that opens the CLI deploy guide; the words stay the terminal's
+ */
+const MainnetWarningBody = ({ p }: { p: BaseDeployProps }) => {
+  const [before, after] = MAINNET_DEPLOY_WARNING_BODY.split(
+    MAINNET_DEPLOY_WARNING_GUIDE
+  );
+  return (
+    <>
+      {before}
+      <Button
+        variant="link"
+        className="inline h-auto p-0 align-baseline text-[length:inherit] whitespace-normal"
+        onClick={() => p.onOpenCliGuide("mainnet-warning")}
+      >
+        {MAINNET_DEPLOY_WARNING_GUIDE}
+      </Button>
+      {after}
+    </>
+  );
+};
+
+/**
  * The Deploy stage, drawn from props alone; `Deploy` connects it. Before the
- * first deploy it is the prototype's empty stage: centred, the pill and
- * "Upload IDL" under it, no history yet. After one it shows the result and
- * the history, read from the left.
+ * first deploy it is the prototype's empty stage: centred, the pill with
+ * "Upload IDL" and "Deploy with the CLI" under it, no history yet. After one
+ * it shows the result and the history, read from the left. The CLI guide's
+ * button shows on every cluster.
  */
 const BaseDeploy = (p: BaseDeployProps) => {
   const latest = p.history[0] ?? null;
@@ -264,7 +292,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             <TriangleAlert />
             <CalloutTitle>{MAINNET_DEPLOY_WARNING_TITLE}</CalloutTitle>
             <CalloutDescription>
-              {MAINNET_DEPLOY_WARNING_BODY}
+              <MainnetWarningBody p={p} />
             </CalloutDescription>
           </Callout>
         )}
@@ -280,10 +308,19 @@ const BaseDeploy = (p: BaseDeployProps) => {
             {deployLabel(p, latest !== null)}
             {!running && <BrandButtonIcon />}
           </BrandButton>
-          {/* Before the first deploy, centred under the pill on a desk and
-              above it on a phone, where the row stretches the pill to the
-              screen's width; after one, beside the pill */}
-          <div className="flex justify-center">{p.idlUpload}</div>
+          {/* Upload IDL and the CLI guide: before the first deploy, centred
+              under the pill on a desk and above it on a phone, where the row
+              stretches the pill to the screen's width; after one, beside the
+              pill */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {p.idlUpload}
+            <Button
+              variant="ghost"
+              onClick={() => p.onOpenCliGuide("deploy-stage")}
+            >
+              Deploy with the CLI
+            </Button>
+          </div>
         </StageEmptyActions>
       </StageEmpty>
     </div>

@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { MAINNET_DEPLOY_WARNING, warnsOnDeploy } from "./mainnet-warning";
+import {
+  MAINNET_DEPLOY_WARNING,
+  MAINNET_DEPLOY_WARNING_BODY,
+  MAINNET_DEPLOY_WARNING_GUIDE,
+  warnsOnDeploy,
+} from "./mainnet-warning";
 
 describe("warnsOnDeploy", () => {
   it("warns on mainnet-beta only", () => {
@@ -21,5 +26,15 @@ describe("MAINNET_DEPLOY_WARNING", () => {
     "Solana CLI or Anchor",
   ])("says %s", (phrase) => {
     expect(MAINNET_DEPLOY_WARNING).toContain(phrase);
+  });
+});
+
+describe("MAINNET_DEPLOY_WARNING_GUIDE", () => {
+  // The Deploy stage links these words in place; a body edit that drops or
+  // repeats them would leave the link dangling or doubled
+  it("is in the body exactly once", () => {
+    expect(
+      MAINNET_DEPLOY_WARNING_BODY.split(MAINNET_DEPLOY_WARNING_GUIDE)
+    ).toHaveLength(2);
   });
 });

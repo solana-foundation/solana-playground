@@ -43,6 +43,7 @@ const props = (state: {
   details?: DeployDetails;
   /** devnet unless the test is about the cluster */
   cluster?: string | null;
+  onOpenCliGuide?: BaseDeployProps["onOpenCliGuide"];
 }): BaseDeployProps => ({
   cluster: state.cluster === undefined ? "devnet" : state.cluster,
   built: state.built,
@@ -55,6 +56,7 @@ const props = (state: {
   onDeploy: vi.fn(),
   onInteract: vi.fn(),
   idlUpload: <button>Upload IDL</button>,
+  onOpenCliGuide: state.onOpenCliGuide ?? vi.fn(),
 });
 
 /** The app gives every screen a tooltip provider; the copy button needs one */
@@ -103,6 +105,55 @@ describe("BaseDeploy", () => {
     expect(deploy).toHaveProperty("disabled", false);
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
+
+  it("opens the CLI guide from the warning's own words", () => {
+    const onOpenCliGuide = vi.fn();
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [],
+          cluster: "mainnet-beta",
+          onOpenCliGuide,
+        })}
+      />
+    );
+
+    const warning = mainnetWarning()!;
+    expect(warning.textContent).toContain(
+      "For a program that matters, deploy from your own machine with the Solana CLI or Anchor."
+    );
+    fireEvent.click(
+      within(warning).getByRole("button", {
+        name: "deploy from your own machine",
+      })
+    );
+    expect(onOpenCliGuide).toHaveBeenCalledWith("mainnet-warning");
+  });
+
+  it.each(["devnet", "mainnet-beta"])(
+    "offers the CLI guide beside Deploy on %s",
+    (cluster) => {
+      const onOpenCliGuide = vi.fn();
+      render(
+        <BaseDeploy
+          {...props({
+            built: false,
+            deploy: "idle",
+            history: [],
+            cluster,
+            onOpenCliGuide,
+          })}
+        />
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Deploy with the CLI" })
+      );
+      expect(onOpenCliGuide).toHaveBeenCalledWith("deploy-stage");
+    }
+  );
 
   it("warns on mainnet before a build too", () => {
     render(
@@ -289,8 +340,8 @@ describe("BaseDeploy", () => {
     ).toHaveLength(2);
   });
 
-  /** The prototype's first deploy: the pill, and Upload IDL under it */
-  it("before the first deploy it has no history, only Upload IDL", () => {
+  /** The prototype's first deploy: the pill, Upload IDL and the CLI guide under it */
+  it("before the first deploy it has no history, only Upload IDL and the CLI guide", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
     );
@@ -302,7 +353,11 @@ describe("BaseDeploy", () => {
     const labels = [...actions.querySelectorAll("button")].map(
       (b) => b.textContent
     );
-    expect(labels).toEqual(["Deploy to devnet", "Upload IDL"]);
+    expect(labels).toEqual([
+      "Deploy to devnet",
+      "Upload IDL",
+      "Deploy with the CLI",
+    ]);
   });
 
   /** After a deploy the stage reports: the history, and Upload IDL beside the pill */

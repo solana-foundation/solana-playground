@@ -58,7 +58,31 @@ const lastIsActions = (container: HTMLElement) =>
     .querySelector('[data-slot="stage-empty"]')
     ?.lastElementChild?.getAttribute("data-slot");
 
+/** The props with the build's downloads in their slot */
+const withDownloads = (surface: BuildSurfaceView): BaseBuildProps => {
+  const p = props(surface);
+  p.idlActions = <button type="button">Download .so</button>;
+  return p;
+};
+
 describe("BaseBuild", () => {
+  it.each<BuildSurfaceView>([
+    failed([]),
+    { kind: "restored", failed: false },
+    { kind: "unreached" },
+    { kind: "empty" },
+  ])("offers no downloads on the $kind surface", (surface) => {
+    render(<BaseBuild {...withDownloads(surface)} />);
+
+    expect(screen.queryByRole("button", { name: "Download .so" })).toBeNull();
+  });
+
+  it("offers the downloads after a successful build", () => {
+    render(<BaseBuild {...withDownloads({ kind: "succeeded" })} />);
+
+    expect(screen.getByRole("button", { name: "Download .so" })).toBeTruthy();
+  });
+
   /** The prototype's empty stage: no icon tile, the brand pill to press */
   it("offers a first build as the brand pill", async () => {
     const p = props({ kind: "empty" });

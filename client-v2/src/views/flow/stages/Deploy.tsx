@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 
+import { CliDeployGuide } from "@/features/cli-deploy";
+import type { GuideFrom } from "@/features/cli-deploy";
+
 import BaseDeploy from "./BaseDeploy";
 import type { DeployDetails, DeployStatus } from "./BaseDeploy";
 import IdlActions from "./IdlActions";
@@ -44,6 +47,7 @@ const Deploy = () => {
   // Read on mount, not only on change: the stage router remounts this stage
   // on every switch, and no event fires to fill it again.
   const [history, setHistory] = useState<DeployRecord[]>(readHistory);
+  const [guide, setGuide] = useState<GuideFrom | null>(null);
   const explorer = useBlockExplorer();
   const programInfo = useProgramInfo();
   const deployState = useRenderOnChange(PgGlobal.onDidChangeDeployState);
@@ -73,26 +77,39 @@ const Deploy = () => {
     programSize: upgradable ? onChain?.programDataLen ?? null : null,
   };
 
+  const built = flow.build === "done";
+  const programId = programInfo.pk?.toBase58() ?? null;
+
   return (
-    <BaseDeploy
-      cluster={PgConnection.cluster}
-      built={flow.build === "done"}
-      deploy={deployStatus(deployState, flow)}
-      programId={programInfo.pk?.toBase58() ?? null}
-      details={details}
-      history={history}
-      addressUrl={(id) => explorer.getAddressUrl(id)}
-      txUrl={(signature) => explorer.getTxUrl(signature)}
-      onDeploy={() => {
-        // Interact's deployment switcher may have pointed the project at an
-        // imported id; redeploying always targets the project's own key,
-        // never whatever Interact last selected.
-        PgProgramInfo.update({ customPk: null });
-        PgCommand.deploy.execute().catch(reportButtonFailure("deploy"));
-      }}
-      onInteract={() => PgFlow.setStage("interact")}
-      idlUpload={<IdlActions mode="upload" />}
-    />
+    <>
+      <BaseDeploy
+        cluster={PgConnection.cluster}
+        built={built}
+        deploy={deployStatus(deployState, flow)}
+        programId={programId}
+        details={details}
+        history={history}
+        addressUrl={(id) => explorer.getAddressUrl(id)}
+        txUrl={(signature) => explorer.getTxUrl(signature)}
+        onDeploy={() => {
+          // Interact's deployment switcher may have pointed the project at an
+          // imported id; redeploying always targets the project's own key,
+          // never whatever Interact last selected.
+          PgProgramInfo.update({ customPk: null });
+          PgCommand.deploy.execute().catch(reportButtonFailure("deploy"));
+        }}
+        onInteract={() => PgFlow.setStage("interact")}
+        idlUpload={<IdlActions mode="upload" />}
+        onOpenCliGuide={setGuide}
+      />
+      <CliDeployGuide
+        from={guide}
+        onClose={() => setGuide(null)}
+        cluster={PgConnection.cluster}
+        built={built}
+        programId={programId}
+      />
+    </>
   );
 };
 

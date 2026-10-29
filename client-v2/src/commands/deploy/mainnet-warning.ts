@@ -8,6 +8,9 @@
  */
 export const MAINNET_DEPLOY_WARNING_TITLE = "Mainnet uses real SOL";
 
+/** The words of the body that open the CLI deploy guide on the Deploy stage */
+export const MAINNET_DEPLOY_WARNING_GUIDE = "deploy from your own machine";
+
 export const MAINNET_DEPLOY_WARNING_BODY =
   "This deploy pays from the Playground wallet. Its key is kept in this browser, where a malicious script could read it. For a program that matters, deploy from your own machine with the Solana CLI or Anchor.";
 
