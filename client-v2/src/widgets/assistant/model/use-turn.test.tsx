@@ -12,12 +12,20 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import * as reportModule from "@/shared/lib/report-button-failure";
+// The class itself, which the slice entry exports as a type only
+import { AiTurnError } from "@/shared/lib/ai/run-turn";
 import { PgSession } from "@/features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import type { Connection } from "../../../views/sidebar/assistant/store";
-import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
+import type {
+  BackendParams,
+  Connection,
+} from "../../../views/sidebar/assistant/store";
+import {
+  REMEMBERED_BACKEND_KEY,
+  rememberBackend,
+} from "../../../views/sidebar/assistant/model/remembered-backend";
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
@@ -315,6 +323,68 @@ describe("useTurn", () => {
     await waitFor(() => expect(result.current.busy).toBe(false));
   });
 
+  it("names the backend and offers its key again on a 401", async () => {
+    const own: Connection = {
+      id: "openai",
+      apiKey: "sk-test",
+      endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
+    };
+    PgAssistant.connect(own);
+    provider.send.mockRejectedValue(
+      new AiTurnError("Unauthorized", { status: 401 })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.items.at(-1)).toMatchObject({
+      kind: "error",
+      text: "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model.",
+      recover: {
+        provider: "openai",
+        model: "gpt-x",
+        baseUrl: "https://api.example.test/v1",
+      },
+    });
+    expect(JSON.stringify(PgAssistant.items)).not.toContain("sk-test");
+    expect(eventNames()).toContainEqual([
+      "assistant_key_rejected",
+      { provider: "openai" },
+    ]);
+  });
+
+  it.each([
+    ["a 403, which a valid key without access gets too", 403],
+    ["a 500", 500],
+  ])("keeps the provider's error for %s", async (_, status) => {
+    PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+    provider.send.mockRejectedValue(
+      new AiTurnError("Provider says no", { status })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    const error = PgAssistant.items.at(-1);
+    expect(error).toMatchObject({ kind: "error", text: "Provider says no" });
+    expect(error).not.toHaveProperty("recover");
+    expect(eventNames().map(([name]) => name)).not.toContain(
+      "assistant_key_rejected"
+    );
+  });
+
+  it("keeps the ordinary error for a 401 from the default", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockRejectedValue(
+      new AiTurnError("Unauthorized", { status: 401 })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.items.at(-1)).not.toHaveProperty("recover");
+  });
+
   it("reports a failed turn as an error item", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     provider.send.mockRejectedValue(new Error("quota"));
@@ -512,6 +582,81 @@ describe("useTurn", () => {
     act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
     expect(result.current.promptWaiting).toBe(false);
     expect(result.current.input).toBe("Explain this error");
+  });
+});
+
+describe("useTurn when the key is gone", () => {
+  afterEach(() => localStorage.clear());
+  const OPENAI = {
+    provider: "openai" as const,
+    model: "gpt-x",
+    baseUrl: "https://api.example.test/v1",
+  };
+  /** The open thread, last answered by `origin`, as a new tab finds it */
+  const threadAnsweredBy = (origin: BackendParams) =>
+    vi.spyOn(PgAssistant, "items", "get").mockReturnValue([
+      {
+        kind: "user",
+        id: "u",
+        createdAt: "2026-10-28T00:00:00.000Z",
+        text: "q",
+      },
+      {
+        kind: "assistant",
+        id: "a",
+        createdAt: "2026-10-28T00:00:01.000Z",
+        text: "r",
+        origin,
+      },
+    ]);
+
+  it("opens Connect on the thread's own backend instead of the default", async () => {
+    defaultBackend(true);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection).toBeNull();
+    expect(open).toHaveBeenCalledWith("thread", OPENAI);
+    expect(result.current.input).toBe("hi");
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("connects the default for a thread the default answered", async () => {
+    defaultBackend(true);
+    threadAnsweredBy({ provider: "default" });
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection?.id).toBe("default");
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Connect on the last chosen backend for a thread with no reply", async () => {
+    defaultBackend(true);
+    localStorage.setItem(REMEMBERED_BACKEND_KEY, JSON.stringify(OPENAI));
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection).toBeNull();
+    expect(open).toHaveBeenCalledWith("send", OPENAI);
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps a requested prompt waiting on the thread's own backend", async () => {
+    defaultBackend(true);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => PgAssistant.requestPrompt("Explain this error"));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith("thread", OPENAI));
+    expect(PgAssistant.connection).toBeNull();
+    expect(result.current.input).toBe("Explain this error");
+    expect(provider.send).not.toHaveBeenCalled();
   });
 });
 

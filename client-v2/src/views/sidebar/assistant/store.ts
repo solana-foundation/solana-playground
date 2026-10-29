@@ -25,6 +25,7 @@ import type { Disposable } from "../../../utils";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import type { ModelProvider } from "@/shared/lib/ai";
 import { isDefaultBackend, type Effort } from "./model/types";
+import { paramsOf, type BackendParams } from "./model/backend-params";
 
 const log = createLogger("assistant:store");
 
@@ -83,35 +84,8 @@ interface ChatItemBase {
   updatedAt?: string;
 }
 
-/**
- * Which backend a thread was created with, or a reply produced by.
- *
- * Never the API key, in any form -- not the value, not a hash, not the last
- * four characters. A thread is synced to the account; the key never is.
- */
-export interface BackendParams {
-  provider: ModelProvider;
-  /** Absent only on a backend that picks its own model server-side */
-  model?: string;
-  /** Only the OpenAI-compatible providers have one */
-  baseUrl?: string;
-  effort?: Effort;
-}
-
-/** The parameters a connection is identified by, with the key left behind */
-export const paramsOf = (
-  connection: Connection | null
-): BackendParams | undefined => {
-  if (!connection) return undefined;
-
-  const params: BackendParams = { provider: connection.id };
-  const model = connection.endpoint?.model ?? connection.settings?.model;
-  if (model) params.model = model;
-  if (connection.endpoint?.baseUrl)
-    params.baseUrl = connection.endpoint.baseUrl;
-  if (connection.settings?.effort) params.effort = connection.settings.effort;
-  return params;
-};
+export { paramsOf };
+export type { BackendParams };
 
 export type ChatItem =
   | (ChatItemBase & { kind: "user"; text: string })
@@ -132,9 +106,27 @@ export type ChatItem =
       /** Set once the tool has actually run */
       outcome?: string;
     })
-  | (ChatItemBase & { kind: "error"; text: string })
+  | (ChatItemBase & {
+      kind: "error";
+      text: string;
+      /**
+       * The backend whose key the provider refused (401 or 403), for Enter key
+       * to reopen Connect a model on it. Never the key.
+       */
+      recover?: BackendParams;
+    })
   /** Something the panel did, not the model — e.g. the user stopped the turn */
   | (ChatItemBase & { kind: "notice"; text: string });
+
+/** Whether two connections reach the same backend with the same key and choices */
+const isSame = (a: Connection | null, b: Connection) =>
+  !!a &&
+  a.id === b.id &&
+  a.apiKey === b.apiKey &&
+  a.endpoint?.baseUrl === b.endpoint?.baseUrl &&
+  a.endpoint?.model === b.endpoint?.model &&
+  a.settings?.model === b.settings?.model &&
+  a.settings?.effort === b.settings?.effort;
 
 /**
  * Whether the turn ending at the last item already produced an approval card.
@@ -266,15 +258,6 @@ const holdsNewer = (
   );
 };
 
-const isSame = (a: Connection | null, b: Connection) =>
-  !!a &&
-  a.id === b.id &&
-  a.apiKey === b.apiKey &&
-  a.endpoint?.baseUrl === b.endpoint?.baseUrl &&
-  a.endpoint?.model === b.endpoint?.model &&
-  a.settings?.model === b.settings?.model &&
-  a.settings?.effort === b.settings?.effort;
-
 /**
  * Everything the panel renders.
  *
@@ -313,19 +296,15 @@ export class PgAssistant {
   }
 
   /**
-   * Choose a backend for this tab.
+   * Choose a backend for this tab, keeping the conversation.
    *
-   * Re-picking the current one keeps the conversation and marks Connect a
-   * model closed; switching
-   * to a different one starts a new conversation, because the history lives
-   * inside the provider and the new one cannot see the old transcript.
-   *
-   * Connecting when nothing is connected is *not* a switch, and must not reset
-   * anything. The live connection starts empty after every reload, and by the
-   * time one is made -- the user's pick, or `useTurn`'s reconnect on load from
-   * `remembered-backend` -- `chat-thread` may already have restored this
-   * workspace's conversation from storage. Treating that as a switch cleared
-   * the restored thread on every single reload.
+   * A switch to a different backend does not clear the thread: `useTurn`
+   * rebuilds the provider for the new connection from what is rendered, as it
+   * does after a reload, so the next turn goes to the new backend with the
+   * conversation so far, and each reply's `origin` says which backend wrote
+   * it. Clearing here dropped the thread from the screen whenever the user
+   * entered their key again in a new tab (HOO-1719). Marks Connect a model
+   * closed.
    *
    * @param connection which provider, its key, and whatever it needs to be
    * reached — a base URL and model, or a model and effort
@@ -335,30 +314,30 @@ export class PgAssistant {
       ...connection,
       apiKey: connection.apiKey.trim(),
     };
-    if (PgAssistant._connection && !PgAssistant.isCurrent(next)) {
-      PgAssistant.clear();
-    }
+    // A turn still running on the old backend is cut, not carried over: it
+    // would go on spending the old key, and every reply it starts from here
+    // would be stamped with the new backend's `origin`, which `threadBackend`
+    // then trusts to pick where the next send goes
+    if (!isSame(PgAssistant._connection, next)) PgAssistant._cutTurn();
     PgAssistant._connection = next;
     PgAssistant._pickingBackend = false;
-    // So a reload of this tab reconnects without asking again: the keyless
-    // default by id, a key-based backend whole for this tab only. See
+    // So a reload reconnects without asking again: the backend's parameters
+    // for every tab, a key-based backend's key for this tab only. See
     // `remembered-backend`.
     rememberBackend(next);
 
     // `_emitOnly`, because nothing here is the user writing to the
-    // conversation. `clear` above goes out of its way to leave the stored
-    // thread alone, and `_emit` would write the emptied list straight back
-    // over it -- undoing that, one line later.
+    // conversation
     PgAssistant._emitOnly();
   }
 
   /**
    * Switch the model or effort on the connected backend, keeping the thread.
    *
-   * Does not `clear`, unlike `connect` with a different connection: the
-   * provider for the next turn is rebuilt from what is rendered (`useTurn`
-   * compares connection identity), so the new settings apply to the
-   * next turn and the transcript on screen stays the history it works from.
+   * Like `connect`, keeps the thread: the provider for the next turn is
+   * rebuilt from what is rendered (`useTurn` compares connection identity),
+   * so the new settings apply to the next turn and the transcript on screen
+   * stays the history it works from.
    * Remembered as `connect` remembers, so a reload of this tab keeps the new
    * model and effort. `_emitOnly` for the same reason as `connect`: nothing
    * here is the user writing to the conversation.
@@ -380,11 +359,6 @@ export class PgAssistant {
     return (
       !!current && current.id === next.id && current.apiKey === next.apiKey
     );
-  }
-
-  /** Whether connecting with these settings would keep the conversation */
-  static isCurrent(next: Connection) {
-    return isSame(PgAssistant._connection, next);
   }
 
   /** Mark Connect a model open, keeping the conversation */
@@ -839,13 +813,15 @@ export class PgAssistant {
     PgAssistant._emit();
   }
 
-  static addError(text: string) {
+  static addError(text: string, recover?: BackendParams) {
     if (PgAssistant._dropsCut("error", text)) return;
     PgAssistant._items.push({
       kind: "error",
       id: makeId(),
       createdAt: created(),
       text: redactKey(text, PgAssistant._connection?.apiKey),
+      // Spread, like `origin`: an error with nothing to recover has no key
+      ...(recover ? { recover } : {}),
     });
     PgAssistant._emit();
   }
@@ -945,12 +921,11 @@ export class PgAssistant {
   /**
    * Drop what is rendered, keeping the stored thread.
    *
-   * Called when the backend changes, which starts a new conversation with the
-   * provider but is not the user deleting anything — so it deliberately does
-   * not write back. `_emitOnly` rather than `_emit` is what makes that true.
-   * Also called by sign-out, to drop what the panel holds with no thread
-   * open, which the next account's thread would otherwise adopt; `conversation`
-   * changes, so the provider forgets it too.
+   * Called by a disconnect and by sign-out, to drop what the panel holds with
+   * no thread open, which the next account's thread would otherwise adopt;
+   * `conversation` changes, so the provider forgets it too. Not the user
+   * deleting anything, so it deliberately does not write back: `_emitOnly`
+   * rather than `_emit` is what makes that true.
    */
   static clear() {
     PgAssistant._conversation++;
@@ -1960,6 +1935,30 @@ if (import.meta.vitest) {
         expect(PgAssistant.items[0]).not.toHaveProperty("origin");
       });
 
+      it("cuts a turn still running when the backend changes", () => {
+        PgAssistant.connect({ id: "default", apiKey: "" });
+        const controller = new AbortController();
+        PgAssistant.beginTurn(controller);
+
+        PgAssistant.connect({ id: "anthropic", apiKey: "k" });
+        PgAssistant.startAssistantMessage();
+
+        expect(controller.signal.aborted).toBe(true);
+        expect(PgAssistant.items).toEqual([]);
+        PgAssistant.endTurn(controller);
+      });
+
+      it("leaves a running turn alone when the same backend is picked again", () => {
+        PgAssistant.connect({ id: "anthropic", apiKey: "k" });
+        const controller = new AbortController();
+        PgAssistant.beginTurn(controller);
+
+        PgAssistant.connect({ id: "anthropic", apiKey: "k" });
+
+        expect(controller.signal.aborted).toBe(false);
+        PgAssistant.endTurn(controller);
+      });
+
       it("follows the user switching backends mid-thread", () => {
         PgAssistant.connect({ id: "default", apiKey: "" });
         PgAssistant.startAssistantMessage();
@@ -1971,9 +1970,16 @@ if (import.meta.vitest) {
         });
         PgAssistant.startAssistantMessage();
 
-        // Switching backends clears the conversation, so the second reply stands
-        // alone -- but it stands alone carrying the backend that produced it
+        // Switching backends keeps the conversation: each reply carries the
+        // backend that produced it
+        expect(PgAssistant.items.map((item) => item.kind)).toEqual([
+          "assistant",
+          "assistant",
+        ]);
         expect(PgAssistant.items[0]).toMatchObject({
+          origin: { provider: "default" },
+        });
+        expect(PgAssistant.items[1]).toMatchObject({
           origin: { provider: "gemini", model: "gemini-3.6-flash" },
         });
       });
@@ -2411,9 +2417,10 @@ if (import.meta.vitest) {
         }
       });
 
-      it("keeps what was typed mid-read across a backend switch", async () => {
-        // `clear` on a backend switch replaced the stand-in list, so messages
-        // typed after it were on no list an overtaken read could keep
+      it("keeps what was typed mid-read across a clear", async () => {
+        // `clear` (a backend switch, before HOO-1719) replaced the stand-in
+        // list, so messages typed after it were on no list an overtaken read
+        // could keep
         await PgChatStorage.write("t1", [
           {
             kind: "user",
@@ -2424,17 +2431,17 @@ if (import.meta.vitest) {
         ]);
 
         const loading = PgAssistant.loadThread("t1");
-        PgAssistant.addUserMessage("before the switch");
+        PgAssistant.addUserMessage("before the clear");
         PgAssistant.clear();
-        PgAssistant.addUserMessage("after the switch");
+        PgAssistant.addUserMessage("after the clear");
         PgAssistant.closeThread();
         await loading;
         await settled();
 
         expect(storedTexts(await PgChatStorage.read("t1"))).toEqual([
           "stored",
-          "before the switch",
-          "after the switch",
+          "before the clear",
+          "after the clear",
         ]);
       });
 
@@ -2558,8 +2565,7 @@ if (import.meta.vitest) {
         ]);
 
         // A reload starts with no connection in memory, so the first thing the
-        // user does is connect, and that must not be mistaken for switching away
-        // from a backend they were already talking to
+        // user does is connect, and connecting never clears a restored thread
         PgAssistant.disconnect();
         await PgAssistant.loadThread("t1");
         expect(PgAssistant.items).toHaveLength(1);

@@ -155,7 +155,7 @@ describe("AssistantComposer, connected", () => {
     expect(PgAssistant.items.length).toBe(1);
   });
 
-  it("connects the default from a keyed backend and clears the thread", async () => {
+  it("connects the default from a keyed backend and keeps the thread", async () => {
     await PgSession.refreshWith({
       id: "u1",
       name: null,
@@ -169,7 +169,7 @@ describe("AssistantComposer, connected", () => {
     );
 
     expect(PgAssistant.connection?.id).toBe("default");
-    expect(PgAssistant.items.length).toBe(0);
+    expect(PgAssistant.items.length).toBe(1);
     expect(tracked()).toEqual([
       ["assistant_model_picked", { provider: "default", via: "menu" }],
     ]);

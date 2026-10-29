@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
+import type { AiTurnError } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
@@ -8,10 +9,16 @@ import { report, toReplayMessages } from "@/features/persistence";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import {
   isDefaultBackendRemembered,
+  rememberedChoice,
   rememberedConnection,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
+import { threadBackend } from "../../../views/sidebar/assistant/model/thread-backend";
+import {
+  isDefaultBackend,
+  PROVIDERS,
+} from "../../../views/sidebar/assistant/model/types";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import { paramsOf, PgAssistant } from "../../../views/sidebar/assistant/store";
 import type {
   Connection,
   PromptRequest,
@@ -39,6 +46,18 @@ const isAbort = (error: unknown) =>
   error !== null &&
   "name" in error &&
   error.name === "AbortError";
+
+/**
+ * Whether a turn ended on the provider refusing the key: a 401. Not a 403,
+ * which providers also answer for a valid key without access to the model, a
+ * region or an organisation's policy; asking for the key again there loops,
+ * so a 403 keeps the provider's own message. By name, since the slice entry
+ * exports `AiTurnError` as a type only: the class loads with the SDK.
+ */
+const isRejectedKey = (error: unknown) =>
+  error instanceof Error &&
+  error.name === "AiTurnError" &&
+  (error as AiTurnError).status === 401;
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
@@ -123,6 +142,34 @@ const connectDefault = async (): Promise<Connection | null> => {
     PgAssistant.connect(DEFAULT_CONNECTION);
   }
   return PgAssistant.connection;
+};
+
+/** Where a send with nothing connected goes */
+type SendBackend =
+  /** The default, if this deployment serves it to this user */
+  | { kind: "default" }
+  /** A key-based backend: the user has to give its key in Connect a model */
+  | { kind: "ask"; via: "thread" | "send"; preset: ConnectPreset };
+
+/**
+ * The backend a send with nothing connected goes to: the one that last
+ * answered the open thread, else the one this browser last chose, else the
+ * default. A key-based answer is never replaced by the default, which would
+ * continue the user's conversation with their own model on another one
+ * behind their back (HOO-1719).
+ */
+const resolveSendBackend = (): SendBackend => {
+  const thread = threadBackend(PgAssistant.items);
+  if (thread) {
+    return isDefaultBackend(thread.provider)
+      ? { kind: "default" }
+      : { kind: "ask", via: "thread", preset: thread };
+  }
+  const choice = rememberedChoice();
+  if (choice && !isDefaultBackend(choice.provider)) {
+    return { kind: "ask", via: "send", preset: choice };
+  }
+  return { kind: "default" };
 };
 
 export const useTurn = ({ open }: TurnOptions): Turn => {
@@ -264,9 +311,16 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Only a send with nothing connected waits, so a connected one has started
     // its turn by the time it first yields
     let current = usableConnection();
-    // Nothing connected: try the default. Connected to the default with no
-    // session falls through to Connect a model, which offers sign-in
+    // Nothing connected: the thread's own backend, or the default. Connected
+    // to the default with no session falls through to Connect a model, which
+    // offers sign-in
     if (!current && !PgAssistant.connection) {
+      const backend = resolveSendBackend();
+      if (backend.kind === "ask") {
+        setInput(text);
+        openConnect(backend.via, backend.preset);
+        return true;
+      }
       const project = PgExplorer.currentWorkspaceId;
       starting.current = true;
       try {
@@ -324,7 +378,26 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     try {
       await instance.send(trimmed, controller.signal);
     } catch (e) {
-      if (!controller.signal.aborted) {
+      if (
+        !controller.signal.aborted &&
+        isRejectedKey(e) &&
+        !isDefaultBackend(current.id)
+      ) {
+        // The key-based backend refused the key: say which, and offer to enter
+        // it again on the same backend rather than leaving a bare 401
+        const { id } = current;
+        const name = PROVIDERS.find((p) => p.id === id)?.name ?? id;
+        PgAssistant.addError(
+          `${name} did not accept this key. Check it and enter it again, or pick another model.`,
+          paramsOf(current)
+        );
+        assistantTelemetry.track("assistant_key_rejected", {
+          provider: current.id,
+        });
+        connectLog.warn("the provider refused the key", {
+          context: { provider: current.id },
+        });
+      } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
       } else if (isAbort(e)) {
         // Aborted by `stop`, which has already written its notice, or by the
@@ -412,6 +485,15 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         if (usableConnection()) {
           run(request);
           return;
+        }
+        if (!PgAssistant.connection) {
+          const backend = resolveSendBackend();
+          if (backend.kind === "ask") {
+            setInput(request.text);
+            setPromptWaiting(true);
+            openConnect(backend.via, backend.preset);
+            return;
+          }
         }
         const project = PgExplorer.currentWorkspaceId;
         Promise.all([probeDefaultBackend(), isSignedIn()])

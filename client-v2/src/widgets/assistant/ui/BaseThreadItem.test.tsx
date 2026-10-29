@@ -88,6 +88,38 @@ describe("BaseThreadItem", () => {
     expect(container.innerHTML).toBe("");
   });
 
+  it("an error offers Enter key when its turn says so", () => {
+    const enterKey = vi.fn();
+    render(
+      <BaseThreadItem
+        item={{
+          kind: "error",
+          id: "e",
+          createdAt: CREATED,
+          text: "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model.",
+        }}
+        actions={{ enterKey }}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Enter key" }));
+
+    expect(enterKey).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("#assistant-enter-key")).not.toBeNull();
+  });
+
+  it("an error offers nothing on its own", () => {
+    render(
+      <BaseThreadItem
+        item={{ kind: "error", id: "e", createdAt: CREATED, text: "quota" }}
+        onAnswer={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByRole("button")).toBeNull();
+  });
+
   it("a tool line is a marker", () => {
     const { container } = render(
       <BaseThreadItem

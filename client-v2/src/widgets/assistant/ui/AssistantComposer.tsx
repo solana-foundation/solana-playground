@@ -132,8 +132,8 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         turn.openConnect("model", { provider: "default" });
         return;
       }
-      // From a keyed backend this is a change of backend, and starts a new
-      // conversation as connecting always has
+      // From a keyed backend this is a change of backend; the conversation
+      // carries over, as it does on every connect
       PgAssistant.connect(DEFAULT_CONNECTION);
       assistantTelemetry.track("assistant_model_picked", {
         provider: "default",

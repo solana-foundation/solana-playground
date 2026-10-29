@@ -194,6 +194,54 @@ describe("Thread, the working marker", () => {
   });
 });
 
+describe("Thread, a refused key", () => {
+  const RECOVER = { provider: "openai" as const, model: "gpt-x" };
+  const withOpener = (openConnect: Turn["openConnect"]) =>
+    ({ busy: false, send: vi.fn(), openConnect } as unknown as Turn);
+
+  it("offers Enter key on the error, opening Connect on that backend", () => {
+    act(() => {
+      PgAssistant.addUserMessage("hi");
+      PgAssistant.addError(
+        "OpenAI-compatible did not accept this key.",
+        RECOVER
+      );
+    });
+    const openConnect = vi.fn();
+    render(<Thread turn={withOpener(openConnect)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Enter key" }));
+
+    expect(openConnect).toHaveBeenCalledWith("key-rejected", RECOVER);
+  });
+
+  it("offers nothing once a reply came after the error", () => {
+    act(() => {
+      PgAssistant.addUserMessage("hi");
+      PgAssistant.addError(
+        "OpenAI-compatible did not accept this key.",
+        RECOVER
+      );
+    });
+    act(() => finishedReply("Hello."));
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Enter key" })).toBeNull();
+  });
+
+  it("offers nothing for a backend this build does not have", () => {
+    act(() => {
+      PgAssistant.addUserMessage("hi");
+      PgAssistant.addError("Gone did not accept this key.", {
+        provider: "gone" as typeof RECOVER.provider,
+      });
+    });
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Enter key" })).toBeNull();
+  });
+});
+
 describe("Thread, sending", () => {
   it("a suggestion sends and is reported", () => {
     const send = vi.fn().mockResolvedValue(undefined);

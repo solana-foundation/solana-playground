@@ -37,6 +37,11 @@ export type ReplyActions = {
   };
   /** The lesson's escape valve, recorded as a skip */
   skipStep?: { onClick: () => void; title: string };
+  /**
+   * On an error whose provider refused the key: reopens Connect a model on
+   * that backend for the key to be entered again
+   */
+  enterKey?: () => void;
 };
 
 const MAKE_CHANGE: Record<
@@ -118,6 +123,21 @@ export const BaseThreadItem = ({
           <CalloutDescription className="break-words">
             {item.text}
           </CalloutDescription>
+          {actions?.enterKey && (
+            // Spec 08 (state AI-05) offers Open settings and Use hosted model;
+            // the key lives in Connect a model here, so Enter key opens that.
+            // TODO(HOO-1719): its look awaits Design alignment's sync item
+            // 4.15; the design system's outline button until then
+            <Button
+              id="assistant-enter-key"
+              variant="outline"
+              size="sm"
+              className="mt-2 self-start"
+              onClick={actions.enterKey}
+            >
+              Enter key
+            </Button>
+          )}
         </Callout>
       );
 

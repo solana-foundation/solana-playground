@@ -8,10 +8,14 @@ export type AssistantEvents = {
   assistant_model_picked: { provider: ModelProvider; via: "menu" | "dialog" };
   /** The user changed the reasoning effort in the composer's menu. */
   assistant_effort_changed: { effort: Effort };
-  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected or the Get set up checklist. */
-  assistant_connect_opened: { via: "menu" | "model" | "send" | "setup" };
+  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist or the Enter key button of a rejected key. */
+  assistant_connect_opened: {
+    via: "menu" | "model" | "send" | "thread" | "setup" | "key-rejected";
+  };
   /** The user stopped a turn in progress with the stop button. */
   assistant_turn_stopped: NoParams;
+  /** A turn on a key-based backend ended on the provider refusing the key with a 401. Never the key, the model or the base URL. */
+  assistant_key_rejected: { provider: ModelProvider };
   /** The default backend's probe failed and the default was treated as absent; `reason` says whether the request, the status (not a 404, which is a deployment without the agent) or the body. */
   assistant_default_probe_failed: { reason: "network" | "status" | "body" };
   /** The user answered an approval card, once per card; `kind` says whether it proposed a patch or a command. */
