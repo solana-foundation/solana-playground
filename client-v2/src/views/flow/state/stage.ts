@@ -164,7 +164,11 @@ export class PgFlow {
           stage: "build",
           build: "running",
           buildStartedAt: ev.at,
-          buildStartedBefore: state.buildStartedAt,
+          // A second start mid-run keeps the run before both, not the one in flight
+          buildStartedBefore:
+            state.build === "running"
+              ? state.buildStartedBefore
+              : state.buildStartedAt,
           stopped: null,
         };
       case "build-stop":

@@ -524,7 +524,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * approval holds the agent loop open, so deny whatever is pending too.
    *
    * A stopped turn stays busy until its provider unwinds; a second Stop in
-   * that window has nothing left to stop and must not say so twice.
+   * that window has nothing left to stop and must not say so twice. With no
+   * turn running, Stop ends a busy model's countdown instead.
    */
   const stop = () => {
     if (waiting.current && !turn.current) {
