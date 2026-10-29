@@ -32,6 +32,9 @@ const written = new Set<string>();
  */
 const stranded = new Set<string>();
 
+/** Cards whose file `can` could not read, reported once each, not per render */
+const unreadable = new Set<string>();
+
 const DECLARE_ID = /declare_id!\("[^"]*"\)/;
 
 /**
@@ -184,7 +187,19 @@ export class PgPatchUndo {
     ) {
       return false;
     }
-    const now = bridge.readFile(request.path);
+    let now: string | null;
+    try {
+      now = bridge.readFile(request.path);
+    } catch (error) {
+      // Called while rendering: a throw here would take the panel down. No
+      // project open (mid-switch, the last one deleted) is the known cause;
+      // Undo comes back on the next render that can read the file
+      if (!unreadable.has(item.id)) {
+        unreadable.add(item.id);
+        report(`undo ${request.path}: read the file to offer Undo`, error);
+      }
+      return false;
+    }
     // A stranded attempt whose write did land: the press finishes it
     return (
       (now !== null && holdsPatch(now, request.after)) ||

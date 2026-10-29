@@ -132,6 +132,21 @@ describe("PgPatchUndo", () => {
     expect(file.content).toBe('declare_id!("Built1111");\nold');
   });
 
+  it("offers no Undo, and reports why, while the file cannot be read", async () => {
+    clearFailures();
+    const card = await applied("old", "new");
+    PgPatchUndo.wrote(card.id);
+    const { bridge } = fakeBridge("new");
+    bridge.readFile = () => {
+      throw new Error("no current workspace");
+    };
+
+    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(getFailures().map((f) => f.what)).toContainEqual(
+      expect.stringContaining("src/lib.rs")
+    );
+  });
+
   it("writes nothing over an edit made after Apply, and says so", async () => {
     const card = await applied("old", "new");
     PgPatchUndo.wrote(card.id);

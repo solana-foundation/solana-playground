@@ -55,3 +55,43 @@ export const backendParamsFrom = (value: unknown): BackendParams | null => {
   if (effort) params.effort = effort;
   return params;
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("views/sidebar/assistant/model/backend-params", () => {
+    it("paramsOf leaves the key behind and prefers the endpoint's model", () => {
+      const params = paramsOf({
+        id: "openai",
+        apiKey: "sk-test-backend-0123456789",
+        endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
+        settings: { model: "ignored" },
+      });
+
+      expect(params).toEqual({
+        provider: "openai",
+        model: "gpt-x",
+        baseUrl: "https://api.example.test/v1",
+      });
+    });
+
+    it("backendParamsFrom drops the key, unknown fields and mistyped ones", () => {
+      expect(
+        backendParamsFrom({
+          provider: "openai",
+          apiKey: "sk-x",
+          junk: 1,
+          model: 5,
+          baseUrl: {},
+        })
+      ).toEqual({ provider: "openai" });
+    });
+
+    it("backendParamsFrom refuses what is not a known provider's params", () => {
+      expect(backendParamsFrom(null)).toBeNull();
+      expect(backendParamsFrom("openai")).toBeNull();
+      expect(backendParamsFrom(["openai"])).toBeNull();
+      expect(backendParamsFrom({ provider: "gone" })).toBeNull();
+    });
+  });
+}
