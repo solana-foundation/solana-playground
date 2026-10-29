@@ -2,10 +2,10 @@ import type { FC } from "react";
 
 import BaseStepRail, { railStatus } from "./BaseStepRail";
 import type { RailRow } from "./BaseStepRail";
-import { primaryLabel } from "./band-copy";
 import { foldRecord, legal } from "./ledger";
 import { PgLesson } from "./store";
 import type { LessonState } from "./store";
+import { targetStage } from "./verify";
 
 interface StepRailProps {
   state: LessonState;
@@ -18,8 +18,8 @@ interface StepRailProps {
  * (master-2.0's navigation; design.md "Lessons (5.19)" overrides the
  * design system's "not a way to jump"), and clicking one proves nothing.
  * An open row at the frontier is `next`, every other open row `locked`
- * (`railStatus`); why a row cannot be reached is its meta line, "not
- * reached".
+ * (`railStatus`). The meta lines are the prototype's: "aiming at" the
+ * stage that proves the step, "locked" for a step not reached.
  */
 const StepRail: FC<React.PropsWithChildren<StepRailProps>> = ({ state }) => {
   const { path } = state;
@@ -32,12 +32,12 @@ const StepRail: FC<React.PropsWithChildren<StepRailProps>> = ({ state }) => {
     const isCurrent = view.cursor === i;
     const atFrontier = view.frontier === i;
 
-    let meta = "not reached";
+    let meta = "locked";
     if (mark === "proved") meta = step.verifiedBy;
     else if (mark === "attested")
       meta = "you marked this read — not machine-checked";
     else if (mark === "passed") meta = "skipped — not verified";
-    else if (atFrontier) meta = primaryLabel(step.verify).toLowerCase();
+    else if (atFrontier) meta = `aiming at ${targetStage(step.verify)}`;
 
     return {
       id: step.id,

@@ -6,7 +6,7 @@ steps, and the expected result, so it can be run by hand and later scripted.
 | Section | Covers |
 | --- | --- |
 | [Prerequisites](#0-prerequisites) | macOS and Docker set-up, toolchains, branches |
-| [Builds](#1-builds) | wasm, client, client-v2, server, compose images |
+| [Builds](#1-builds) | wasm, client, client-v2 and its browser suite, server, compose images |
 | [Client dev servers](#2-client-dev-servers-without-a-server) | client and client-v2 start with no build server running |
 | [Full suite with compose](#3-full-suite-with-docker-compose) | client, server, and database together; client-server requests |
 | [Static assets](#4-static-assets-default-rs-files-and-templates) | rust-analyzer `.rs` files in local, Vercel, and Docker builds; templates, tutorials |
@@ -161,8 +161,9 @@ yarn --cwd client-v2 test-build
 Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
 `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
 minification", and "Build tests" in `reusable-client-v2-build.yml` require. `run check` covers the in-source
-collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle check
-(`scripts/in-source-tests.build-test.mjs`). Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle checks, every
+`client-v2/scripts/*.build-test.mjs`; M-5 to M-7 check the chunk scope, in-source test, module, and snapshot tests by
+hand. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 
@@ -173,6 +174,38 @@ cargo build --manifest-path server/Cargo.toml --release
 ```
 
 Expect: exit code 0 for each; `server/target/release/solpg-server` exists.
+
+### B-5. client-v2: browser suite
+
+Mirrors the `e2e` job in [client-v2.yml](../.github/workflows/client-v2.yml).
+
+Precondition: the install of B-3, on the stubs or on B-1; a free slot port from "Slots" in
+[Parallel runs](#8-parallel-runs), with no dev server on it, so the run starts its own. The suite needs no build
+server, no Postgres, and no default backend: every spec answers the account and model endpoints with `page.route`.
+`AGENT_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
+backend, as CI's does. With one configured, the panel opens with "Bring your own key" collapsed, and the specs that
+fill that form without expanding it fail. The platform RPC variables in `client-v2/.env.local`
+(`REACT_APP_DEVNET_RPC_URL` and the others) can stay set: the `test` fixture in
+[e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on the public devnet, the endpoint the
+specs stub, instead of the platform devnet those variables make the default.
+
+```sh
+k=5
+PORT=$((13000 + 10 * k)) AGENT_API_KEY= E2E_FULL=1 yarn --cwd client-v2 test-e2e
+grep -cv '^#\|^$' client-v2/e2e/known-skips.txt
+```
+
+Expect:
+
+- [ ] the run ends with `N passed` and no `failed`.
+- [ ] the run's `N skipped` equals the number the `grep` prints, less the entries whose `test.fixme` is gated on
+      `process.env.CI`, which run locally. A skip beyond that count is one outside `e2e/known-skips.txt`. The job
+      reads titles from the `json` reporter, which `playwright.config.mts` enables only in CI, so locally the count
+      stands in for its "Check skips against the known list" step.
+- [ ] no `flaky` in the summary. Outside CI `playwright.config.mts` sets no retries, so a test that fails on timing
+      fails the run, which is where it gets fixed.
+- [ ] the two `client-v2-ai` tests in `e2e/assistant-pause.e2e.spec.ts` pass rather than skip: they stub
+      `/api/agent` themselves, so they need no configured backend.
 
 ### B-6. compose images
 
@@ -441,7 +474,10 @@ Steps: create an Anchor project and open `src/lib.rs`, then:
 2. type `let v = Vec::` and ask for completion;
 3. write `std::array::from_fn`;
 4. type `Pubkey::find_` and ask for completion;
-5. hover over `Context`, `Account`, and `Signer`.
+5. hover over `Context`, `Account`, and `Signer`;
+6. look at `declare_id!` in `src/lib.rs`;
+7. add `src/a.rs` with `pub struct A;` and `src/b.rs` with `pub struct B;`, then add `mod a; mod b;` and
+   `use a::A; use b::B;` to `src/lib.rs`.
 
 Expect:
 
@@ -450,6 +486,9 @@ Expect:
 - [ ] `std::array::from_fn` resolves (stabilized in Rust 1.63, so it proves the default crates are not older).
 - [ ] `Pubkey::find_` offers `find_program_address` with its signature and documentation.
 - [ ] each hover shows the definition.
+- [ ] `declare_id!` carries no "unresolved macro" diagnostic, which proves the proc-macro crates in
+  `/crates/transitive.json` loaded.
+- [ ] neither import is underlined. Two files besides `lib.rs` are needed: each must get a file id of its own.
 
 Known limitation: a crate outside `supported-crates.json`, such as `clockwork_sdk` in some tutorials, has no crate
 file, so its imports stay unresolved. This is not a regression.
@@ -672,7 +711,7 @@ Expect: one image per directory in `server/templates/`.
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
 not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
-`openspec/specs/client-v2-build/spec.md`; M-1 to M-6 walk its manual scenarios.
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk its manual scenarios.
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine
@@ -715,7 +754,7 @@ Run from `client-v2/`.
 
 Expect:
 
-- [ ] the target lists the lowest version per browser of the `production` `browserslist` in `client-v2/package.json`
+- [ ] the target lists the lowest version per browser of the `browserslist` in `client-v2/package.json`
       (`chrome111`, `edge111`, `firefox128`, `opera97`, `safari16.4` at `bf729fa1`).
 - [ ] optional, where a Safari 16.4 device is available: the production build loads every JavaScript chunk with no
       syntax error in the console. The `browserslist` target check is the gate; this step only confirms it.
@@ -767,12 +806,53 @@ Expect:
       blocks under `client-v2/src` (`client-v2/AGENTS.md`, "Tests: a module's unit tests live in the module") and
       finds none of them in `client-v2/build/static/js`. webpack drops the block on its own, with no setting of ours,
       which is why the outcome is checked.
-- [ ] a planted leak makes it fail naming the chunk and the title: add a static
-      `import "../../test-utils/stored-values";` to a module with a block, or copy a block's title into a production
-      string, rebuild, and run `test-build` again; the failure reads `<chunk> holds "<title>" from <module>`. Revert the
-      plant.
+- [ ] a planted leak makes it fail naming the chunk and the title: copy a block's title into a production string,
+      rebuild, and run `test-build` again; the failure reads `<chunk> holds "<title>" from <module>`. Revert the plant.
+      A test helper imported by production code carries no title; M-7 plants that case.
 - [ ] with `yarn --cwd client-v2 dev` running, the served `static/js/bundle.js` holds none of that module's test
       titles either.
+
+### M-7. the bundle snapshot is current and carries no test code
+
+```sh
+REACT_APP_GA_MEASUREMENT_ID= yarn --cwd client-v2 build-fast
+yarn --cwd client-v2 test-build
+yarn --cwd client-v2 bundle:info
+git -C client-v2 diff --exit-code -- bench/BUNDLE.md
+```
+
+Run it on a branch rebased onto its base. CI's build has no GA id, and the empty `REACT_APP_GA_MEASUREMENT_ID` keeps
+CRA from taking one from `client-v2/.env` (dotenv does not override a variable already set). Sentry stays out of a build without `VERCEL_ENV` (`sentryEnabled` in
+`client-v2/scripts/sentry-gate.mjs`). `build-fast` writes `client-v2/bundle-info/bundle-modules.json`, outside `build/` so no deployment serves it: the
+module list `BundleModulesPlugin` in `client-v2/craco.config.js` takes from webpack. `test-build` runs
+`scripts/bundle-modules.build-test.mjs` over that list and `scripts/bundle-info.build-test.mjs` against
+`client-v2/bench/BUNDLE.md`. The pure functions behind both (`scripts/lib/bundle/snapshot.test.mjs`, `diff.test.mjs`,
+`modules.test.mjs`) and the comment workflow's pull request lookup (`locate-pr.test.mjs`) run under `test-api`.
+
+Expect:
+
+- [ ] `test-build` passes, and `bundle:info` leaves `bench/BUNDLE.md` unchanged: the `git diff` exits 0.
+- [ ] `client-v2/build/` holds no `bundle-modules.json`.
+- [ ] a planted test helper makes `bundle-modules.build-test.mjs` fail naming it: add
+      `import { storedValues } from "@/test-utils/stored-values";` and `console.log(storedValues(localStorage));` to
+      `client-v2/src/index.tsx`, rebuild, and run `test-build`; the failure lists `./src/test-utils/stored-values.ts`.
+      The call matters: webpack drops a bare `import "...";` of a module with no side effects, and nothing ships.
+      Revert the plant and rebuild.
+- [ ] a stale snapshot makes `bundle-info.build-test.mjs` fail naming `yarn bundle:info` and the row: raise the
+      `main` row's gzipped cell in `bench/BUNDLE.md` by 30 kB and run `test-build`. Restore the file.
+- [ ] `test-build` without a `client-v2/build/` fails instead of passing.
+- [ ] on a pull request to `master`, the build job's "Bundle change report" step summary holds the report, and one
+      comment headed "Bundle change vs `master`" appears on the pull request, naming the pull request's head commit
+      under the heading; a second push updates the same comment. `workflow_run` runs the workflow from the default
+      branch, so the comment appears only once `bundle-info-comment.yml` is on `master`.
+- [ ] "A pull request with a stale snapshot": push a commit that changes `bench/BUNDLE.md` as in the stale-snapshot
+      step. "Build tests" fails, and the comment is still posted with the line saying `client-v2/bench/BUNDLE.md` is
+      out of date for this branch.
+- [ ] "A pull request with no size change": on a pull request that changes no bundle size, the comment says
+      "No row moved past the 11 KiB tolerance." and holds the fresh tables in a collapsed "Full table (fresh build)"
+      section.
+- [ ] a pull request from a fork gets the comment as well. Check it on a real fork pull request after this workflow
+      is on `master`, and mark the step with the pull request's number.
 
 ## 8. Parallel runs
 
@@ -799,7 +879,7 @@ different port is a different origin.
 | upstream prod | D-2, then D-3 | `prod` | 2 |
 | v2 stack | D-6 | `v2` | 3 |
 | v2 standalone | D-8, S-7, S-1 to S-3, S-10 | `client-v2-standalone` | 4 |
-| local, no Docker | C-1, C-2, C-4, C-5, S-9 | none | `PORT` per dev server, from slot 5 |
+| local, no Docker | B-5, C-1, C-2, C-4, C-5, S-9 | none | `PORT` per dev server, from slot 5 |
 | remote | S-6, R-2 | none | none |
 
 ### Slots
@@ -851,8 +931,8 @@ broad pattern such as `spec` gets past it: it catches the usual mistake, not eve
 
 ### Limits
 
-- [ ] Every group runs from its own clone: B-1 to B-4, the C cases, and S-9 write to `node_modules`, `public/`,
-      `target/`, and `public/crates`. A worktree does not work for Docker builds (P-5).
+- [ ] Every group runs from its own clone: B-1 to B-5, the C cases, and S-9 write to `node_modules`, `public/`,
+      `target/`, `test-results/`, and `public/crates`. A worktree does not work for Docker builds (P-5).
 - [ ] Images are shared by name, so all groups test the commit B-6 built. Testing two commits at once needs two
       separate image builds, one after the other.
 - [ ] Run serially what shares global state: U-1 to U-3 (globally named `program-*` images) and D-3 (one funded

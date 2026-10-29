@@ -8,6 +8,7 @@ export const EVENT_PREFIXES = {
   "fund-wallet": "fund",
   home: "home",
   "layout-shell": "layout",
+  mcp: "mcp",
   "new-project": "new_project",
   observability: "obs",
   overlays: "overlay",

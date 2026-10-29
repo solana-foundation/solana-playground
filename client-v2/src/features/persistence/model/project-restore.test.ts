@@ -1,11 +1,13 @@
 import { reconcile, releaseLocalProjects } from "./project-restore";
 import { PgProjectSync } from "./project-sync";
 import { hashFiles } from "./snapshot";
+import { PgSyncClaim } from "./sync-claim";
 import { PgSyncMark } from "./sync-mark";
 import * as tabReload from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { clearFailures, getFailures } from "./diagnostics";
-import { PgSession } from "../../auth";
+// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { PgSession } from "@/features/auth";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { ServerProject } from "./project-sync";
@@ -493,6 +495,69 @@ describe("reconcile", () => {
     expect(result.pushed).toEqual([]);
   });
 
+  /** `tut:hello`, synced by `u1` and left on this browser, now opened by `u2` */
+  const leftTutorial = async () => {
+    withLocal({ alpha: "tut:hello" });
+    withFiles("alpha", { "src/lib.rs": "u1's progress" });
+    await PgSyncMark.write("tut:hello", {
+      files: { "src/lib.rs": "whatever" },
+      name: "alpha",
+      updatedAt: "t1",
+      dirty: false,
+    });
+    await PgSession.refreshWith({
+      id: "u2",
+      name: null,
+      image: null,
+      login: null,
+    });
+  };
+
+  it("does not merge another account's tutorial into this account's copy", async () => {
+    // A tutorial's id is the same in every account. The merge writes this
+    // account's mark before its own upload, so the push's own check never saw
+    // the project, and the previous user's files reached this account.
+    await leftTutorial();
+    const merge = vi.spyOn(PgProjectSync, "mergeWithServer");
+    const push = vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
+    serverHas([project("tut:hello", "alpha", "t9")]);
+
+    const result = await reconcile();
+
+    expect(merge).not.toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+    expect(result.conflicts).toEqual([]);
+  });
+
+  it("reports the account's copy hidden behind it, once, under its own message", async () => {
+    // A known gap: the account's own copy is never brought down while the
+    // leftover holds the id. Its own message is what makes it findable in
+    // error tracking; once, because reconcile runs on every switch and refocus.
+    await leftTutorial();
+    vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
+    serverHas([project("tut:hello", "alpha", "t9")]);
+    clearFailures();
+
+    await reconcile();
+    await reconcile();
+
+    expect(getFailures().map((f) => f.what)).toEqual([
+      "sync tut:hello: another account's leftover hides this account's copy (known gap, issue #98)",
+    ]);
+  });
+
+  it("hands over a tutorial this account started here, under the other's id", async () => {
+    // Started after the other account's copy was released, so this browser
+    // still holds that account's mark for the id
+    await leftTutorial();
+    await PgSyncClaim.claim("tut:hello");
+    const push = vi.spyOn(PgProjectSync, "push").mockResolvedValue("ok");
+    serverHas([]);
+
+    expect((await reconcile()).pushed).toEqual(["alpha"]);
+    expect(push).toHaveBeenCalled();
+  });
+
   it("still hands over a project nobody has ever synced", async () => {
     // Made locally while signed out, so it belongs to whoever signs in
     withLocal({ alpha: "nobodys" });
@@ -672,10 +737,6 @@ describe("releasing local projects at sign-out", () => {
     PgProjectSync.reset();
     storedFiles().clear();
     await signedIn();
-    // Sign-out flushes the open workspace first. Nothing here is testing that
-    // request, and letting it reach the network would make every case below
-    // depend on it.
-    vi.spyOn(PgProjectSync, "pushCurrent").mockResolvedValue("ok");
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -710,9 +771,8 @@ describe("releasing local projects at sign-out", () => {
   });
 
   it("keeps a project holding work that never uploaded", async () => {
-    // Sign-out completes with no network -- `PgSession.signOut` swallows the
-    // request's failure on purpose -- so this is reachable by signing out
-    // offline, and it is the case where being wrong costs an afternoon.
+    // The flush before the sign-out request can fail while the sign-out
+    // succeeds, and this is the case where being wrong costs an afternoon.
     withLocal({ alpha: "p1" });
     withFiles("alpha", { "src/lib.rs": "written since the last push" });
     await agreed(
@@ -740,9 +800,9 @@ describe("releasing local projects at sign-out", () => {
   });
 
   it("decides per project rather than for the set", async () => {
-    // The mistake this mirrors the fix for, one directory over in
-    // `PgChatSync.handOver`: one project that cannot be handed over is no
-    // reason to leave the others on a browser the account is done with.
+    // The mistake this mirrors the fix for, in `PgChatSync.forget`: one
+    // project that cannot be handed over is no reason to leave the others on
+    // a browser the account is done with.
     withLocal({ alpha: "p1", beta: "p2" });
     withFiles("alpha", { "src/lib.rs": "same" });
     withFiles("beta", { "src/lib.rs": "never uploaded" });
@@ -764,18 +824,5 @@ describe("releasing local projects at sign-out", () => {
     await releaseLocalProjects();
 
     expect(await PgSyncMark.read("p1")).not.toBeNull();
-  });
-
-  it("flushes the open workspace before deciding anything", async () => {
-    // Up to a debounce window of edits sits unpushed at any moment, and they
-    // are the difference between this project qualifying and being kept
-    withLocal({ alpha: "p1" });
-    withFiles("alpha", { "src/lib.rs": "same" });
-    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
-    stubDelete();
-
-    await releaseLocalProjects();
-
-    expect(PgProjectSync.pushCurrent).toHaveBeenCalled();
   });
 });

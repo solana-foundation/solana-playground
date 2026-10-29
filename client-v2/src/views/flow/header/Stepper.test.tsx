@@ -94,7 +94,7 @@ describe("Stepper", () => {
   it("moves focus with the arrow keys without selecting", async () => {
     const onSelect = vi.fn();
     render(<Stepper state={INITIAL_FLOW_STATE} onSelect={onSelect} />);
-    screen.getByRole("tab", { name: /^Write:/ }).focus();
+    act(() => screen.getByRole("tab", { name: /^Write:/ }).focus());
     await userEvent.keyboard("{ArrowRight}");
     expect(document.activeElement?.id).toBe("flow-stage-tab-build");
     expect(onSelect).not.toHaveBeenCalled();
@@ -143,5 +143,24 @@ describe("fill", () => {
     expect(list()).toMatch(/\bw-full\b/);
     rerender(<Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} />);
     expect(list()).not.toMatch(/\bw-full\b/);
+  });
+});
+
+describe("phone", () => {
+  beforeEach(() => {
+    observed.clear();
+    vi.stubGlobal("ResizeObserver", StubResizeObserver);
+  });
+
+  it("shows Build, Deploy and Interact in full, Write being the code's page", () => {
+    render(<Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} phone />);
+    expect(screen.queryByRole("tab", { name: /^Write:/ })).toBeNull();
+    expect(
+      screen.getAllByRole("tab").map((tab) => tab.id.replace(/^.*-/, ""))
+    ).toEqual(["build", "deploy", "interact"]);
+    resizeTo(STEPPER_FULL_WIDTH_PX - 1);
+    expect(screen.getByRole("tablist").getAttribute("data-compact")).toBe(
+      "false"
+    );
   });
 });

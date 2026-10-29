@@ -18,12 +18,12 @@ import {
   initLogger,
   memoryProvider as logMemory,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import { SETUP_REJECTED } from "@/commands/connect/setup-rejected";
 import RailFooter from "./RailFooter";
 import SessionFooter from "./SessionFooter";

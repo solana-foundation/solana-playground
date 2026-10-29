@@ -19,7 +19,7 @@ export const Remove = () => (
   >
     <MainContent>
       <MainText>Are you sure you want to remove the current wallet?</MainText>
-      <Desc>This action is irreversable!</Desc>
+      <Desc>This action is irreversible!</Desc>
       <Callout className="mt-4">
         <TriangleAlertIcon />
         <CalloutDescription>

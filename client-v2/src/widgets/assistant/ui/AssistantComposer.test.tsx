@@ -6,14 +6,14 @@ import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import { PgSession } from "../../../features/auth";
+import { PgSession } from "@/features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import type { DefaultBackend } from "../model/default-backend";
@@ -116,11 +116,23 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   openConnect.mockReset();
-  PgAssistant.disconnect();
+  // The harness is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgAssistant.disconnect());
   PgSession.reset();
   resetTelemetry();
   resetLogger();
   vi.restoreAllMocks();
+});
+
+describe("AssistantComposer, context chips", () => {
+  it("names the active file before the file count, as the prototype orders them", () => {
+    render(<Harness />);
+    // Each chip is its tooltip's trigger, which takes over its data-slot
+    const chips = Array.from(
+      document.querySelectorAll('[data-slot="composer-context"] > *')
+    ).map((chip) => chip.textContent);
+    expect(chips).toEqual(["lib.rs", "1 file"]);
+  });
 });
 
 describe("AssistantComposer, connected", () => {

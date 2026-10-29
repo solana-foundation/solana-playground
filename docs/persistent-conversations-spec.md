@@ -8,9 +8,9 @@ client-v2 assistant panel and project code.
 Three gaps in the current client-v2:
 
 1. Conversations are not tied to a project or tutorial, and do not survive a
-   reload. Chat is in-memory only by design (`store.ts:115-121`).
+   reload. Chat is in-memory only by design (`store.ts: PgAssistant`).
 2. Code lives only in this browser. Signing in "buys identity and nothing
-   else" — the in-repo note at `features/github-oauth/model/github-auth.ts:50-68`
+   else" — the in-repo note at `features/github-oauth/model/github-auth.ts: GithubAuth` (at 2233963e)
    states the problem and names this work as the fix.
 3. There is no way to move between conversation threads.
 
@@ -20,10 +20,10 @@ Facts established while designing, which contradict the original brief:
 
 | Assumed | Actual |
 | --- | --- |
-| Code is in `localStorage` | Code is in **IndexedDB** via lightning-fs (`utils/explorer/fs.ts:7`). The `"explorer"` localStorage key is a dead legacy migration (`explorer.ts:1186-1208`). |
+| Code is in `localStorage` | Code is in **IndexedDB** via lightning-fs (`utils/explorer/fs.ts: PgFs._fs`). The `"explorer"` localStorage key is a dead legacy migration (`explorer.ts: PgExplorer._initCurrentWorkspace`). |
 | Chat can follow "how code does it" | No such precedent. Chat has never been persisted. |
-| There are no approval items | `write_file`, `build` and `deploy` are all approval-gated (`model/tools.ts:126-131,157,195`). A model that explains instead of editing is what the "Make this change" button exists for (`Chat.tsx:44-49`). |
-| Thread id is inferrable from project id | Projects have **no id**. The name is the key, and renaming orphans every external reference (`explorer.ts:534-555`), exactly as `flow.deploys` is already orphaned (`deploy-history.ts:11-13`). |
+| There are no approval items | `write_file`, `build` and `deploy` are all approval-gated (`model/tools.ts: createTools`). A model that explains instead of editing is what the "Make this change" button exists for (`Chat.tsx: MAKE_CHANGE`). |
+| Thread id is inferrable from project id | Projects have **no id**. The name is the key, and renaming orphans every external reference (`explorer.ts: PgExplorer.renameWorkspace`), exactly as `flow.deploys` is already orphaned (`deploy-history.ts: DeployRecord`). |
 | This is "add two tables" | There is **no server-side user**. GitHub sign-in is stateless and memory-only. Auth is a prerequisite. |
 
 ## Decisions
@@ -31,7 +31,7 @@ Facts established while designing, which contradict the original brief:
 ### Identity
 
 - **Better Auth in DB mode**, replacing the hand-rolled PKCE/state/cookie flow.
-  Its own `FIXME(@rogaldh)` at `api/github-oauth.mjs:16-20` names this.
+  Its own `FIXME(@rogaldh)` in the module header comment of `api/github-oauth.mjs` (at 2233963e) names this.
 - GitHub OAuth scope widens from `""` to **`read:user user:email`** — Better
   Auth's GitHub default, and not reducible: the `email` column it fills is
   `not null unique`, so an account with a private email cannot sign in without
@@ -40,7 +40,7 @@ Facts established while designing, which contradict the original brief:
 - Primary key is the **numeric GitHub user id**. Never the login, which is
   renameable.
 - Session is Better Auth's **HttpOnly cookie**. The existing OAuth cookies are
-  already scoped `Path=/api` (`features/github-oauth/server/flow-cookies.mjs:10-31`).
+  already scoped `Path=/api` (`features/github-oauth/server/flow-cookies.mjs: cookie, issueFlowCookies` (at 2233963e)).
 - `/api/agent` stays ungated in this work. Gating it is a real access change
   for every anonymous user and gets its own PR.
 
@@ -63,7 +63,7 @@ Facts established while designing, which contradict the original brief:
 cache; Postgres is authoritative on load. One codepath signed in or out.
 
 IndexedDB rather than `localStorage`, via the `PgFs` wrapper over lightning-fs
-that already holds project code (`utils/explorer/fs.ts:7`). Threads are files
+that already holds project code (`utils/explorer/fs.ts: PgFs._fs`). Threads are files
 under `/.config/chats/<threadId>.json`, sharing the volume the code lives in —
 no second database, no new dependency, and no ~5 MB origin ceiling shared with
 `settings`, `wallet`, `theme` and `flow.deploys`. The cost is that reads become
@@ -77,15 +77,15 @@ too.
 - On restore, seed the provider with a **synthetic text-only replay**: stored
   `user` and `assistant` text replayed as plain messages, tool and approval
   items dropped. `describeProject()` already re-sends live project state every
-  turn (`model/prompt.ts:72-117`), so the model gets memory from the replay and
+  turn (`model/prompt.ts: describeProject`), so the model gets memory from the replay and
   current reality from the project block.
 - **Patch approvals store a trimmed `before`/`after` pair**, not whole files.
   `diffLines` already trims to the changed hunk plus `CONTEXT_LINES = 3`
-  (`Component/diff.ts:10,36-84`), so the trimmed pair renders identically
+  (`diff.ts: CONTEXT_LINES, diffLines`), so the trimmed pair renders identically
   through the existing `Diff` component. Command approvals are small and stored
   whole.
 - **Pending approvals persist as `unanswered`.** The promise that blocked the
-  agent loop (`store.ts:417`) cannot be resumed; a restored `pending` card
+  agent loop (`store.ts: PgAssistant.requestApproval`) cannot be resumed; a restored `pending` card
   would spin forever. It is a status of its own rather than `denied`, which
   would record a refusal the user never made -- the session ended under the
   card. It renders as `NOT ANSWERED` and reads "not applied", so nothing
@@ -93,8 +93,8 @@ too.
 - **The model's reasoning is not stored, because it is never shown.** The
   question was open on the assumption that reasoning was rendered and then
   dropped. It is not: the Anthropic backend runs with `thinking: { type:
-  "adaptive" }` (`model/anthropic.ts:122`), but the panel turns that into a
-  three-dot working indicator (`Component/Chat.tsx:285`) and `ChatItem` has no
+  "adaptive" }` (`model/anthropic.ts: createAnthropicProvider` (at 79713558)), but the panel turns that into a
+  three-dot working indicator (`Component/Chat.tsx: Chat`) and `ChatItem` has no
   reasoning kind at all. A restored thread therefore loses nothing a live one
   showed, and storing reasoning would mean first deciding to render it.
 - **A device that truncates says so.** `MAX_MESSAGES_PER_THREAD` applies to
@@ -105,7 +105,7 @@ too.
   comes back shortened with nothing to say so, which is the one way a restored
   thread can mislead: it looks complete.
 - Every item gets a **client-minted UUID and a `createdAt`** at creation,
-  replacing `let nextId = 0; const makeId = () => \`i${++nextId}\`` (`store.ts:103-104`),
+  replacing `let nextId = 0; const makeId = () => \`i${++nextId}\`` (`store.ts: makeId`),
   which collides across reloads and devices. This makes the login dump
   `INSERT ... ON CONFLICT (id) DO NOTHING` — idempotent, so "dump exactly once"
   stops being a rule anyone has to enforce.
@@ -225,12 +225,12 @@ still alive and an ordinary fetch completes — `beforeunload` is too late and
 - `/.config/workspaces.json` extends `{ allNames, currentName }` to
   `{ workspaces: [{ id, name }], currentId }`, with a **read-time migration**
   minting UUIDs for existing users — the same shape of versioned migration the
-  codebase already uses (`utils/settings.ts:73-188`, `utils/theme/theme.ts:31-117`).
+  codebase already uses (`utils/settings.ts: migrate, migrateLegacy`, `utils/theme/theme.ts: PgTheme._MIGRATION_KEY, PgTheme.set` (at 2233963e)).
 - **Directories stay named by name.** The id is a sidecar. This avoids a
   filesystem migration across every user's IndexedDB.
 - **Tutorials get deterministic ids** (`tut:<kebab-slug>`) so the same tutorial
   converges on one thread across devices instead of forking. A tutorial *is* a
-  workspace named after the tutorial (`utils/tutorial/tutorial.ts:228,134-136`).
+  workspace named after the tutorial (`utils/tutorial/tutorial.ts: PgTutorial.start, PgTutorial.isWorkspaceTutorial`).
 - Conversations get their **own UUID primary key** with a nullable project
   reference. **Several threads may share a project**: the index on
   `(user_id, project_id)` is deliberately *not* unique, and the table carries
@@ -253,7 +253,7 @@ still alive and an ordinary fetch completes — `beforeunload` is too late and
 - Deletes are **tombstoned** (`deleted_at`) so another device's sync sees
   "deleted" rather than "missing" and does not resurrect the row.
 - Renames **propagate as an explicit sync operation** on the existing
-  `onDidChangeWorkspace` event (`explorer.ts:977-1099`).
+  `onDidRenameWorkspace` event (`explorer.ts: PgExplorer.onDidRenameWorkspace`).
 - Import collisions create a **second row with a suffixed name**
   (`my-program (imported)`). Never merge, never overwrite.
 
@@ -266,7 +266,7 @@ the conversation's own UUID PK keeps cheap later.
 ### Shipping
 
 - Behind a `GET /api/sync -> { enabled }` probe, matching the existing
-  `/api/agent` capability-probe idiom (`api/agent.mjs:100-120`).
+  `/api/agent` capability-probe idiom (`api/agent.mjs: handler`).
 - **Default off in production** until a `SELECT 1` from a deployed preview
   passes.
 - `postgres:16` added to `compose.yaml` for local dev and to `client-v2.yml`
@@ -285,7 +285,7 @@ the conversation's own UUID PK keeps cheap later.
 - Program keypairs will live in managed Postgres. Accepted; disclosed.
 - Restored threads are not genuinely resumable.
 - `/api/agent` remains an open endpoint that can spend the configured model key
-  (`api/agent.mjs:12-14`). Tracked separately.
+  (module header comment of `api/agent.mjs`). Tracked separately.
 
 ## Descope line
 

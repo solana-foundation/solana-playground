@@ -5,18 +5,12 @@ import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
-import { keepTab } from "./left/kept-column";
+import LessonBar from "./lessons/LessonBar";
 import ObjectiveBand from "./lessons/ObjectiveBand";
 import Reader from "./lessons/Reader";
 // The barrel registers every lesson path as a side effect, so importing
 // it here is also what populates the registry for the whole app.
-import {
-  describeStep,
-  entryReading,
-  graderClass,
-  INITIAL_LESSON_STATE,
-  PgLesson,
-} from "./lessons";
+import { describeStep, INITIAL_LESSON_STATE, PgLesson } from "./lessons";
 import type { LessonState } from "./lessons";
 import StageRouter from "./stages/StageRouter";
 import { PgDeployHistory } from "./state/deploy-history";
@@ -37,7 +31,8 @@ import { useKeybind } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { createLogger } from "@/shared/lib/logger";
 import { LogoLockup } from "@/shared/ui/logo";
-import { PgExplorer, PgView } from "@/utils";
+import { Pattern } from "@/shared/ui/pattern";
+import { PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
@@ -102,6 +97,30 @@ const revealAtOnce = (root: Element) => {
 };
 
 /**
+ * Focuses `el` once it shows. The shell comes back from `invisible`, and a
+ * control with `transition-all` (the design system's buttons) animates the
+ * visibility it inherits, so for a frame or more it is still hidden and
+ * `focus()` does nothing. A frame that is slow to come, as under the
+ * window's pattern on a loaded machine, made that a lost focus. Bounded: a
+ * control that never shows is left alone. Returns a cancel.
+ */
+const focusWhenShown = (el: HTMLElement, frames = 30): (() => void) => {
+  if (getComputedStyle(el).visibility === "visible") {
+    el.focus();
+    return () => {};
+  }
+  if (frames === 0) return () => {};
+  let cancel = () => {};
+  const id = requestAnimationFrame(() => {
+    cancel = focusWhenShown(el, frames - 1);
+  });
+  return () => {
+    cancelAnimationFrame(id);
+    cancel();
+  };
+};
+
+/**
  * Where focus goes back when the control that opened the settings is gone or
  * out of reach: a checklist step that the pick ticked, a footer the rail
  * swapped out, a cluster row on the phone's menu page once Work shows. The
@@ -154,10 +173,12 @@ const FlowFrame = () => {
     wasOpen.current = settings.open;
     if (!closed) return;
     revealAtOnce(shell.current!);
-    if (refocus.current && canTakeFocus(refocus.current)) {
-      refocus.current.focus();
-    } else fallbackFocus()?.focus();
+    const target =
+      refocus.current && canTakeFocus(refocus.current)
+        ? refocus.current
+        : fallbackFocus();
     refocus.current = null;
+    if (target) return focusWhenShown(target);
   }, [settings.open]);
   const closeSettings = (via: SettingsExit) => {
     if (!settings.open) return;
@@ -236,22 +257,22 @@ const FlowFrame = () => {
     setReading(false);
   }, [described?.step.id]);
 
-  // Entering the lesson lands on the page -- once (D34). Declared after
-  // the effect above so that, on the commit where both fire (a load
-  // moves the cursor too), open wins. The record learns `opened` from
-  // the Reader once the page content actually loads, which moves the
-  // record's tail off `enter` -- so the next state returns null here and
-  // the effect is inert; closing the sheet by hand does not reopen it,
-  // while a page that failed to load gets another chance on re-entry.
-  const entryStep = entryReading(lesson);
-  useEffect(() => {
-    if (entryStep) read();
-    // `read` is recreated every render; the step id is the real trigger
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entryStep?.id]);
-
   return (
     <Wrapper>
+      {/* One ground for the whole window, as the prototype lays it, so the
+          grid runs on unbroken wherever a pane lets it through: faint, a
+          quarter of the landing's strength, rising from the bottom edge, and
+          lit where the pointer is. The nav and the files cover it. It sits
+          below everything in the window's own stacking context (`isolation`
+          on the Wrapper), on a compositing layer of its own: the light
+          repaints it on every frame it moves, and nothing above it should
+          repaint with it. */}
+      <Pattern
+        rest={0.025}
+        lit={0.07}
+        fade={1}
+        className="-z-10 will-change-transform"
+      />
       {/* The app stays mounted under the settings page, invisible and inert
           (design.md, "Settings as a full page (5.20)"): `Write` must never
           unmount, and with `display: contents` and `visibility` the shell
@@ -275,7 +296,7 @@ const FlowFrame = () => {
           )}
           keepWork={page.workKept}
           cover={catalogSlot(catalog)}
-          nav={({ collapsed, toggle, closeSheet }) => {
+          nav={({ collapsed, toggle, closeSheet, phone: menuPage }) => {
             closeNavSheet.current = closeSheet;
             return (
               <AppNav
@@ -300,6 +321,7 @@ const FlowFrame = () => {
                 }}
                 onClosePage={catalogPage.close}
                 closeSheet={closeSheet}
+                phone={menuPage}
                 collapsed={collapsed}
                 onToggle={toggle}
                 logo={<LogoLockup aria-hidden="true" />}
@@ -314,6 +336,8 @@ const FlowFrame = () => {
                 }
                 footer={
                   <SessionFooter
+                    page={menuPage}
+                    closeSheet={closeSheet}
                     settingsOpen={settingsOpen}
                     onToggleSettings={toggleSettings(closeSheet)}
                   />
@@ -326,6 +350,7 @@ const FlowFrame = () => {
                 }
                 setup={
                   <SetupList
+                    folded={menuPage}
                     onConnectAssistant={() => openConnectDialog("setup")}
                     onChooseNetwork={() => openSettings(closeSheet)("network")}
                   />
@@ -334,28 +359,20 @@ const FlowFrame = () => {
             );
           }}
           stageTabs={<StageBar />}
-          files={({ collapsed }) => <LeftPanel collapsed={collapsed} />}
-          stage={({ openFiles }) => (
+          files={({ collapsed, toggle, phone }) => (
+            <LeftPanel
+              collapsed={collapsed}
+              onHide={phone ? undefined : toggle}
+              startOn={phone ? "files" : undefined}
+            />
+          )}
+          stage={() => (
             <Center>
               <ObjectiveBand
                 state={lesson}
-                flow={state}
                 onRead={read}
                 onOpenGallery={openGallery}
-                compact={
-                  phone
-                    ? {
-                        // Below `LAYOUT_BREAKPOINTS.phone`, where the band is
-                        // compact, the Files sheet mounts the column fresh, and
-                        // it reads its tab from the per-project memory
-                        // (`kept-column.ts`)
-                        onOpenSteps: () => {
-                          keepTab(PgExplorer.currentWorkspaceId, "steps");
-                          openFiles();
-                        },
-                      }
-                    : undefined
-                }
+                phone={phone}
               />
               <Stage>
                 <StageRouter stage={state.stage} />
@@ -363,21 +380,20 @@ const FlowFrame = () => {
                   <Reader
                     key={described.step.id}
                     step={described.step}
-                    position={described.number}
-                    criterion={described.verifiedBy}
-                    offersAttest={
-                      described.offersPrimary &&
-                      graderClass(described.step.verify) === "attestation"
-                    }
                     onLoaded={() => PgLesson.opened(described.step.id)}
                     onClose={() => setReading(false)}
-                    onAttest={() => {
-                      PgLesson.attest();
-                      setReading(false);
-                    }}
                   />
                 )}
               </Stage>
+              {/* On a phone the step's controls sit at the foot of the code,
+                  under the thumb; the band above folds to the ask */}
+              {phone && (
+                <LessonBar
+                  state={lesson}
+                  onRead={read}
+                  onOpenGallery={openGallery}
+                />
+              )}
             </Center>
           )}
           console={({ open, toggle }) => (
@@ -436,6 +452,8 @@ const Wrapper = styled.div.attrs({
     flex-direction: column;
     position: relative;
     overflow: hidden;
+    /* The window's stacking context, so the pattern can sit under it all */
+    isolation: isolate;
     background: ${theme.colors.default.bgPrimary};
   `}
 `;
@@ -450,17 +468,16 @@ const BannerSlot = styled.div`
 `;
 
 // The stage's column. The frame is flush (design.md, "Frame chrome (5.25)"):
-// no card edges, the page's background; the shell draws the dividers.
+// no card edges and no fill of its own, so a stage with nothing in it yet
+// shows the window's pattern, as the prototype's does; the editor paints its
+// own ground over it. The shell draws the dividers.
 const Center = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    flex-direction: column;
-    flex: 1;
-    min-width: 0;
-    min-height: 0;
-    background: ${theme.colors.default.bgPrimary};
-    overflow: hidden;
-  `}
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
 `;
 
 // display: flex here matters: Primary's own wrapper sizes itself with
@@ -478,14 +495,13 @@ const Stage = styled.div`
   position: relative;
 `;
 
+// The assistant's column: no fill, so the conversation sits on the window's
+// pattern, as the prototype's does
 const Right = styled.aside`
-  ${({ theme }) => css`
-    position: relative;
-    width: 100%;
-    height: 100%;
-    background: ${theme.colors.default.bgPrimary};
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  `}
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 `;

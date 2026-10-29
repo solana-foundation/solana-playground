@@ -32,9 +32,11 @@ layers below its own in the order `app -> widgets -> features -> entities -> sha
   uses the pool) or `features/persistence` imports `features/auth` (it reads
   the session)
 - **THEN** the import is tolerated as the named exception until the cycle is
-  broken (`ui-migration` task 1.4), and the boundary check
-  (`client-v2/eslint-layers.js`, run by `yarn lint` and the build) exempts
-  exactly these two
+  broken (`ui-migration` task 1.4): the boundary check
+  (`client-v2/eslint-layers.js`) reports each such import already in the
+  code, made through the other slice's public entry, as a warning that does
+  not fail the build; the same import from any other file, or one past the
+  entry, is an error; and a test pins the set of tolerated imports
 
 #### Scenario: A new screen-level composition is needed
 

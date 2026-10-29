@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,26 @@ import { fileURLToPath } from "node:url";
 import { ESLint } from "eslint";
 
 const cwd = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+
+const layersConfig = createRequire(import.meta.url)("../eslint-layers.js");
+
+/** The imports `ui-migration` task 1.4 removes, by file */
+const RECORDED_IMPORTS = {
+  "src/features/auth/model/auth.mjs": "../../persistence/server.mjs",
+  "src/features/persistence/model/chat-sync.ts": "@/features/auth",
+  "src/features/persistence/model/project-sync.ts": "@/features/auth",
+  "src/features/persistence/model/sync-base.ts": "@/features/auth",
+  "src/features/persistence/model/sync-claim.ts": "@/features/auth",
+  "src/features/persistence/model/sync-mark.ts": "@/features/auth",
+  "src/features/persistence/model/project-restore.test.ts": "@/features/auth",
+  "src/features/persistence/model/project-sync.test.ts": "@/features/auth",
+  "src/features/persistence/model/two-devices.test.ts": "@/features/auth",
+};
+
+const LAYER_RULES = new Set([
+  "boundaries/dependencies",
+  "layers/recorded-exception",
+]);
 
 /**
  * The layer rule's messages for `code` linted with `package.json`
@@ -15,10 +36,10 @@ const cwd = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
  * import that resolves to nothing is not checked, so a broken resolver shows
  * here as violations that pass.
  */
-const layerErrors = async (file, code) => {
+const layerMessages = async (file, code) => {
   const eslint = new ESLint({ cwd });
   const [result] = await eslint.lintText(code, { filePath: file });
-  return result.messages.filter((m) => m.ruleId === "boundaries/dependencies");
+  return result.messages.filter((m) => LAYER_RULES.has(m.ruleId));
 };
 
 const VIOLATIONS = [
@@ -120,18 +141,37 @@ const VIOLATIONS = [
     code: 'export const load = () => import("../../overlays");\n',
     message: /widgets\/overlays is not allowed here/,
   },
+  {
+    name: "persistence importing auth from a file outside the recorded exception",
+    file: "src/features/persistence/model/probe.ts",
+    code: 'import * as auth from "@/features/auth";\nauth;\n',
+    message: /features\/auth is not allowed here/,
+  },
+  {
+    name: "a file of the recorded exception importing a third feature",
+    file: "src/features/persistence/model/sync-mark.ts",
+    code: 'import * as feedback from "@/features/feedback";\nfeedback;\n',
+    message: /features\/feedback is not allowed here/,
+  },
+  {
+    name: "auth server code outside the recorded exception importing persistence",
+    file: "src/features/auth/model/probe.mjs",
+    code: 'import * as persistence from "../../persistence/server.mjs";\npersistence;\n',
+    message: /features\/persistence is not allowed here/,
+  },
+  {
+    name: "a file of the recorded exception importing past the other slice's entry",
+    file: "src/features/persistence/model/sync-mark.ts",
+    code: 'import * as session from "@/features/auth/model/session";\nsession;\n',
+    message: /through its public entry/,
+  },
 ];
 
 const ALLOWED = [
   {
-    name: "the recorded exception, auth importing persistence",
-    file: "src/features/auth/model/probe.ts",
-    code: 'import * as persistence from "../../persistence";\npersistence;\n',
-  },
-  {
-    name: "the recorded exception, persistence importing auth",
-    file: "src/features/persistence/model/probe.ts",
-    code: 'import * as auth from "../../auth";\nauth;\n',
+    name: "a file of the recorded exception importing inside its own slice",
+    file: "src/features/persistence/model/sync-mark.ts",
+    code: 'import { report } from "./diagnostics";\nreport;\n',
   },
   {
     name: "a widget importing a feature and shared through their entries",
@@ -155,8 +195,8 @@ const ALLOWED = [
   },
   {
     name: "server code importing another slice's server.mjs",
-    file: "src/features/auth/model/probe.mjs",
-    code: 'import * as persistence from "../../persistence/server.mjs";\npersistence;\n',
+    file: "src/widgets/home/model/probe.mjs",
+    code: 'import * as auth from "../../../features/auth/server.mjs";\nauth;\n',
   },
   {
     name: "a slice importing a path inside itself",
@@ -199,7 +239,7 @@ describe("eslint-layers.js run from the repository root", () => {
 describe("eslint-layers.js", () => {
   for (const { name, file, code, message } of VIOLATIONS) {
     it(`fails ${name}`, async () => {
-      const errors = await layerErrors(file, code);
+      const errors = await layerMessages(file, code);
       assert.equal(errors.length, 1, JSON.stringify(errors));
       assert.equal(errors[0].severity, 2);
       assert.match(errors[0].message, message);
@@ -208,7 +248,32 @@ describe("eslint-layers.js", () => {
 
   for (const { name, file, code } of ALLOWED) {
     it(`allows ${name}`, async () => {
-      assert.deepEqual(await layerErrors(file, code), []);
+      assert.deepEqual(await layerMessages(file, code), []);
     });
   }
+});
+
+// A new import across the pair, in a listed file or a newly listed one, or a
+// listed file that stopped importing across, fails here
+describe("the recorded exception", () => {
+  it("warns on exactly the known imports and fails none", async () => {
+    const files = layersConfig.overrides.find(
+      (o) => "layers/recorded-exception" in o.rules
+    ).files;
+    const results = await new ESLint({ cwd }).lintFiles(files);
+    const found = results.flatMap((result) =>
+      result.messages
+        .filter((m) => LAYER_RULES.has(m.ruleId))
+        .map((m) => [
+          path.relative(cwd, result.filePath),
+          m.ruleId,
+          m.severity,
+          m.message.match(/imports "([^"]+)"/)?.[1],
+        ])
+    );
+    const expected = Object.entries(RECORDED_IMPORTS).map(
+      ([file, specifier]) => [file, "layers/recorded-exception", 1, specifier]
+    );
+    assert.deepEqual(found.sort(), expected.sort());
+  });
 });

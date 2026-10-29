@@ -5,12 +5,12 @@ import {
   initLogger,
   memoryProvider as logMemory,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import type { PopupReceipt } from "../lib/popup-channel";
 import { PgSession } from "./session";
 
@@ -123,25 +123,33 @@ describe("auth telemetry", () => {
     ]);
   });
 
-  it.each([
-    [
-      "succeeds",
-      () =>
-        vi
-          .spyOn(globalThis, "fetch")
-          .mockResolvedValue({ ok: true } as Response),
-    ],
-    [
-      "fails",
-      () =>
-        vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")),
-    ],
-  ])("should track a sign-out when the request %s", async (_, arrange) => {
-    arrange();
+  it("should track a sign-out the server accepted", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true } as Response);
 
     await PgSession.signOut();
 
     expect(names()).toEqual(["auth_signed_out"]);
+  });
+
+  it.each([
+    [
+      "is refused",
+      () =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockResolvedValue({ ok: false, status: 500 } as Response),
+    ],
+    [
+      "fails on the network",
+      () =>
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline")),
+    ],
+  ])("should not track a sign-out when the request %s", async (_, arrange) => {
+    arrange();
+
+    await expect(PgSession.signOut()).rejects.toThrow();
+
+    expect(names()).toEqual([]);
   });
 
   it("should report a failed flush before sign-out", async () => {

@@ -1,10 +1,10 @@
 import type { FC } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { PanelLeft } from "lucide-react";
 import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
-import Eyebrow from "./Eyebrow";
 import StepRail from "../lessons/StepRail";
 import { cursorStep, foldRecord, PgLesson } from "../lessons";
 import Explorer from "../../sidebar/explorer/Component";
@@ -23,7 +23,34 @@ interface LeftPanelProps {
    * (design.md, "Frame chrome (5.25)"), so it draws nothing
    */
   collapsed: boolean;
+  /**
+   * Hides the column, as ⌘E does; its button sits in the column's head, as
+   * the prototype draws it. Absent where nothing can hide the column (the
+   * phone's Files sheet has its own close).
+   */
+  onHide?: () => void;
+  /**
+   * The tab to open on, over the kept one. The phone's Files sheet opens
+   * from the files row, so in a lesson it lands on Files, with Steps one
+   * tap away, as the prototype's sheet does.
+   */
+  startOn?: Tab;
 }
+
+/** The head's way to hide the column */
+const HideButton = ({ onHide }: { onHide: () => void }) => (
+  <Button
+    type="button"
+    variant="ghost"
+    size="icon-sm"
+    aria-label="Hide files"
+    title="Hide files (⌘E)"
+    className="ml-auto text-muted-foreground"
+    onClick={onHide}
+  >
+    <PanelLeft />
+  </Button>
+);
 
 /**
  * Where you are inside the current project. Which project you are in is
@@ -33,6 +60,8 @@ interface LeftPanelProps {
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
+  onHide,
+  startOn,
 }) => {
   // From the first commit, not from the subscription's first call: a commit
   // without the lesson draws the tree, and the scroll put back below would
@@ -41,7 +70,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   useEffect(() => PgLesson.onDidChange(setLesson).dispose, []);
 
   const [tab, setTab] = useState<Tab>(
-    () => keptColumn(PgExplorer.currentWorkspaceId)?.tab ?? "steps"
+    () => startOn ?? keptColumn(PgExplorer.currentWorkspaceId)?.tab ?? "steps"
   );
 
   // Hidden, the column unmounts (design.md, "Frame chrome (5.25)"), so its
@@ -49,6 +78,9 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   // tracked as they change, for a body already out of the document, where
   // its scroll reads 0.
   const kept = useRef({ tab, scrollTop: 0 });
+  // A column told where to open (the phone's sheet) keeps nothing: it is
+  // mounted fresh each time, and its tab must not become the wide column's
+  const told = useRef(startOn !== undefined);
   useLayoutEffect(() => {
     kept.current.tab = tab;
   }, [tab]);
@@ -59,6 +91,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   useLayoutEffect(() => {
     // The one object `onScroll` and the tab effect write to
     const memory = kept.current;
+    const keeps = !told.current;
     const body = bodyRef.current;
     const restored = keptColumn(PgExplorer.currentWorkspaceId);
     if (body && restored) {
@@ -69,7 +102,7 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
       // Read now, not at mount: a lesson mounts the column before the
       // explorer has opened its project
       const workspace = PgExplorer.currentWorkspaceId;
-      if (!workspace) return;
+      if (!workspace || !keeps) return;
       // Read from the body while it is still in the document: `scroll`
       // arrives a frame late, so ⌘E right after a scroll would otherwise
       // keep the scroll before it
@@ -117,6 +150,16 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
                 Files
               </SegmentedItem>
             </Segmented>
+            {onHide && <HideButton onHide={onHide} />}
+          </div>
+        )}
+        {/* The prototype's head: the column's name and a way to hide it */}
+        {!inLesson && (
+          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
+            <span className="truncate text-[0.8125rem] font-medium text-muted-foreground">
+              Files
+            </span>
+            {onHide && <HideButton onHide={onHide} />}
           </div>
         )}
         <Body
@@ -130,7 +173,6 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
             <StepRail state={lesson} />
           ) : (
             <>
-              {!inLesson && <Eyebrow>Files</Eyebrow>}
               <ExplorerContainer>
                 <Explorer />
               </ExplorerContainer>
@@ -140,17 +182,18 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
         {/* Pinned below the rail for the same reason as the files footer:
               a way out that scrolls away is not a way out. */}
         {showSteps && frontierStep && (
-          <div className="flex shrink-0 justify-center border-t border-border py-1.5">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
-              onClick={() => PgLesson.pass()}
-            >
-              Skip this step
-            </Button>
-          </div>
+          // The prototype's `SkipFooter`: a full-width row under the rail,
+          // underlined from the phone width up, plain and thumb-sized below
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-full shrink-0 rounded-none border-t border-border px-3.5 text-[0.8125rem] font-normal text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:font-act max-md:no-underline"
+            title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
+            onClick={() => PgLesson.pass()}
+          >
+            Skip this step
+          </Button>
         )}
         {!showSteps && (
           <Footer type="button" onClick={createItem}>

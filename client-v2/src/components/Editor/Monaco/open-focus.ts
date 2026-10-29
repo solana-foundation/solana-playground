@@ -23,8 +23,12 @@ const isOutOfWindow = (el: Element) => {
  * other field the user is typing in (the assistant's composer, a dialog's)
  * keeps focus, because nothing typed there asked for the open: sync
  * re-opening the workspace after an adoption, a merge or another tab's
- * write. The mount's open keeps focus in any field, the tree's included: the
- * new file the user is still naming has not been created yet.
+ * write. The mount's open keeps focus wherever the user put it, a field or
+ * a control: under load it lands late, after a click on the lesson band
+ * already moved focus (the tree's field too: the new file the user is still
+ * naming has not been created yet). It takes focus from the bare document,
+ * so a fresh load lands in the editor, and from an item of the tree, whose
+ * click opened the file with no tab open and so mounted the editor.
  *
  * Neither open takes focus while the editor is out of the window: on a phone
  * the user swiped to another page while it loaded, and focusing it would
@@ -48,10 +52,28 @@ export const leavesFocusElsewhere = ({
   active?: Element | null;
 }): boolean => {
   if (isOutOfWindow(editor)) return true;
+  if (open === "mount") {
+    // A click in the tree opened the file: the editor mounts to show it
+    if (
+      !isTypingElsewhere(editor, active) &&
+      tree &&
+      active &&
+      tree.contains(active)
+    ) {
+      return false;
+    }
+    return isFocusedElsewhere(editor, active);
+  }
   if (!isTypingElsewhere(editor, active)) return false;
-  if (open === "mount") return true;
   return !(tree && active && tree.contains(active));
 };
+
+/** Focus sits on something outside the editor, not on the bare document */
+const isFocusedElsewhere = (editor: Element, active: Element | null) =>
+  !!active &&
+  active !== document.body &&
+  active !== document.documentElement &&
+  !editor.contains(active);
 
 if (import.meta.vitest) {
   const { describe, it, expect, afterEach, vi } = import.meta.vitest;
@@ -65,7 +87,7 @@ if (import.meta.vitest) {
     const page = () => {
       document.body.innerHTML =
         '<div id="root-dir"><input id="name" /><div id="item" tabindex="0"></div></div>' +
-        '<textarea id="composer"></textarea>' +
+        '<textarea id="composer"></textarea><button id="button"></button>' +
         '<div id="editor"><textarea id="inputarea"></textarea></div>';
       const get = (id: string) => document.getElementById(id)!;
       return {
@@ -74,6 +96,7 @@ if (import.meta.vitest) {
         name: get("name"),
         item: get("item"),
         composer: get("composer"),
+        button: get("button"),
         inputarea: get("inputarea"),
       };
     };
@@ -119,6 +142,35 @@ if (import.meta.vitest) {
             active: composer,
           })
         ).toBe(true);
+      });
+
+      it("leaves focus on a control on the mount's open", () => {
+        const { editor, tree, button } = page();
+        expect(
+          leavesFocusElsewhere({ open: "mount", editor, tree, active: button })
+        ).toBe(true);
+      });
+
+      it("takes focus from the tree's item on the mount's open", () => {
+        const { editor, tree, item } = page();
+        expect(
+          leavesFocusElsewhere({ open: "mount", editor, tree, active: item })
+        ).toBe(false);
+      });
+
+      it("takes focus on the mount's open when nothing has it", () => {
+        const { editor, tree } = page();
+        expect(
+          leavesFocusElsewhere({
+            open: "mount",
+            editor,
+            tree,
+            active: document.body,
+          })
+        ).toBe(false);
+        expect(
+          leavesFocusElsewhere({ open: "mount", editor, tree, active: null })
+        ).toBe(false);
       });
 
       it("takes focus on a later open when no field has it", () => {

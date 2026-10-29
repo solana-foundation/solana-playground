@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { PgSession } from "../../../features/auth";
+import { PgSession } from "@/features/auth";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
@@ -37,11 +37,19 @@ const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
   const filePaths = realBridge.listFiles();
   const openPaths = realBridge.listOpenFiles();
   const lesson = describeLesson(lessonState);
+  // The prototype's order: where you are, what you are looking at, then
+  // what else is sent
   return [
     lesson
       ? {
-          label: `step ${lesson.stepIndex} of ${lesson.stepCount}`,
+          label: `Step ${lesson.stepIndex} of ${lesson.stepCount}`,
           title: lesson.objective,
+        }
+      : null,
+    currentFilePath
+      ? {
+          label: PgExplorer.getItemNameFromPath(currentFilePath),
+          title: "The tab you are looking at, sent in full every turn",
         }
       : null,
     {
@@ -56,12 +64,6 @@ const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
           title: `Your open tabs are named each turn; only the active one is sent in full:\n\n${openPaths.join(
             "\n"
           )}`,
-        }
-      : null,
-    currentFilePath
-      ? {
-          label: `${PgExplorer.getItemNameFromPath(currentFilePath)} active`,
-          title: "The tab you are looking at, sent in full every turn",
         }
       : null,
     PgBuildOutput.latest?.failed

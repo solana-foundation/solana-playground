@@ -90,6 +90,8 @@ existing code moves.
 - `client-v2-assistant`: how the assistant's composer names the model it
   talks to, how a turn is sent and stopped, how a model is connected, and
   how the thread reads and answers approvals at every width.
+- `client-v2-wallet`: what importing a keypair file does to the wallets a
+  user already has, and what it tells the user (HOO-2328).
 
 ### Modified Capabilities
 
@@ -105,7 +107,7 @@ existing code moves.
   (`features/`, `shared/`, `widgets/`, `entities/`), `src/themes/` (three
   themes removed), `utils/theme/theme.ts` (the `dark` class), `Monaco.tsx`
   and `Terminal.tsx` (resolved colours), `app/` (the shell).
-- `client-v2/craco.config.js`, `tsconfig.paths.json`: Tailwind through
+- `client-v2/craco.config.js`, `client-v2/tsconfig.json`: Tailwind through
   PostCSS, the `@/` alias.
 - `design-system/`: new top-level package, catalogue site, registry build.
 - CI: `client-v2.yml` gains the layer check (`eslint-plugin-boundaries`) and

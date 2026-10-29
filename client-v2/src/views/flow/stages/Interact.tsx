@@ -142,7 +142,7 @@ const Interact = () => {
       surface={surface}
       cluster={cluster}
       onGoTo={(stage) => PgFlow.setStage(stage)}
-      idlLoad={<IdlActions mode="button" />}
+      idlLoad={<IdlActions mode="upload" />}
       programId={programId}
       builtAfterDeploy={builtAfterDeploy(buildAt, deployAt)}
       solNeeded={short}

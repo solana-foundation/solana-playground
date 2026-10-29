@@ -81,15 +81,6 @@ vi.mock("@/utils", () => ({
   PgTutorial: app.PgTutorial,
   PgView: app.PgView,
 }));
-vi.mock("@/views/flow/lessons", () => ({
-  PgLesson: {
-    state: { path: null, record: null },
-    onDidChange: () => ({ dispose: () => {} }),
-  },
-  getLessonPath: () => ({ steps: [1, 2, 3, 4] }),
-  positionLabel: () => "1 of 4",
-  foldRecord: () => null,
-}));
 const modals = vi.hoisted(() => ({
   DeleteWorkspace: () => null,
   ExportWorkspace: () => null,

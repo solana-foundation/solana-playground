@@ -1,10 +1,13 @@
+import { DEFAULT_SKILL_IDS } from "./grounding";
 import {
-  DEFAULT_SKILL_IDS,
+  closeConnection,
   listGatewayServers,
   listTools,
   LOCAL_MCP_SERVERS,
-} from "./grounding";
-import { redactKey } from "./model/redact-key";
+  sameConnection,
+} from "@/features/mcp";
+import { redactKey } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 import { forgetBackend, rememberBackend } from "./model/remembered-backend";
 import { PgSession } from "../../../features/auth";
 import {
@@ -19,8 +22,11 @@ import {
 import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
 import type { Disposable } from "../../../utils";
-import type { McpServerEntry, McpTool } from "./grounding";
-import { isDefaultBackend, type Effort, type ProviderId } from "./model/types";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
+import type { ModelProvider } from "@/shared/lib/ai";
+import { isDefaultBackend, type Effort } from "./model/types";
+
+const log = createLogger("assistant:store");
 
 /** A change the assistant wants to make, waiting on the user */
 export interface PatchApproval {
@@ -84,7 +90,7 @@ interface ChatItemBase {
  * four characters. A thread is synced to the account; the key never is.
  */
 export interface BackendParams {
-  provider: ProviderId;
+  provider: ModelProvider;
   /** Absent only on a backend that picks its own model server-side */
   model?: string;
   /** Only the OpenAI-compatible providers have one */
@@ -179,7 +185,7 @@ type ThreadWrites = "open" | "reading" | "unreadable";
 
 /** Which backend the panel is talking to, and what it needs to reach it */
 export interface Connection {
-  id: ProviderId;
+  id: ModelProvider;
   apiKey: string;
   endpoint?: { baseUrl: string; model: string };
   /** Model and effort, for backends that pick them without a base URL */
@@ -201,6 +207,12 @@ export type AssistantStatus =
   | "running"
   /** A turn is in flight but blocked on an approval */
   | "awaiting";
+
+/**
+ * How long a cut turn may take to unwind before it is reported. Long enough
+ * for a build or a deploy already under way to come back on its own.
+ */
+const CUT_TURN_OVERDUE_MS = 120_000;
 
 const makeId = uuid;
 const now = () => new Date().toISOString();
@@ -237,6 +249,21 @@ const stamp = (item: ChatItem) => {
   const previous = versionOf(item);
   item.updatedAt =
     previous >= Date.parse(at) ? new Date(previous + 1).toISOString() : at;
+};
+
+/**
+ * Whether `items` holds anything `stored` lacks, or a newer copy of what it
+ * has. A version that does not parse counts as newer, so nothing is judged
+ * already kept on a guess.
+ */
+const holdsNewer = (
+  items: readonly ChatItem[],
+  stored: readonly ChatItem[]
+) => {
+  const versions = new Map(stored.map((item) => [item.id, versionOf(item)]));
+  return items.some(
+    (item) => !(versionOf(item) <= (versions.get(item.id) ?? NaN))
+  );
 };
 
 const isSame = (a: Connection | null, b: Connection) =>
@@ -425,9 +452,22 @@ export class PgAssistant {
    * what it serves and the client cannot edit that; a local entry is an
    * addition. Merging them into one editable list would let Apply silently
    * delete a server the gateway still offers.
+   *
+   * Ids are unique: a local entry whose id the gateway serves is left out,
+   * because tool names and connections are keyed by id.
    */
   static get mcpServers(): readonly McpServerEntry[] {
-    return [...PgAssistant._gatewayServers, ...PgAssistant._localServers];
+    const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
+    return [
+      ...PgAssistant._gatewayServers,
+      ...PgAssistant._localServers.filter((s) => !gatewayIds.has(s.id)),
+    ];
+  }
+
+  /** Local entries the gateway took over by serving the same id; kept for when it stops */
+  static get shadowedMcpServers(): readonly McpServerEntry[] {
+    const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
+    return PgAssistant._localServers.filter((s) => gatewayIds.has(s.id));
   }
 
   /** The gateway's own upstreams, as it reported them */
@@ -447,8 +487,33 @@ export class PgAssistant {
 
   /** Replace the local additions — edited as one JSON document */
   static setMcpServers(servers: readonly McpServerEntry[]) {
-    PgAssistant._localServers = servers;
+    PgAssistant._replaceServers(() => {
+      PgAssistant._localServers = servers;
+    });
     PgAssistant._emit();
+  }
+
+  /**
+   * Apply a change to either server list, closing the connection of every id
+   * it removes or points at another URL, and dropping that id's cached tools.
+   */
+  private static _replaceServers(change: () => void) {
+    const before = PgAssistant.mcpServers;
+    change();
+    const after = new Map(PgAssistant.mcpServers.map((s) => [s.id, s]));
+    // Another connection under the same id (an edit, or the gateway taking over a local id) is another server's session and tools
+    const gone = before
+      .filter((server) => {
+        const next = after.get(server.id);
+        return !next || !sameConnection(next, server);
+      })
+      .map((server) => server.id);
+    for (const id of gone) closeConnection(id);
+    if (gone.length) {
+      const tools = { ...PgAssistant._mcpTools };
+      for (const id of gone) delete tools[id];
+      PgAssistant._mcpTools = tools;
+    }
   }
 
   /**
@@ -460,7 +525,10 @@ export class PgAssistant {
    */
   static async loadMcpServers() {
     try {
-      PgAssistant._gatewayServers = await listGatewayServers();
+      const gateway = await listGatewayServers();
+      PgAssistant._replaceServers(() => {
+        PgAssistant._gatewayServers = gateway;
+      });
       PgAssistant._emit();
     } catch (err) {
       console.warn("MCP gateway unavailable; using local servers only", err);
@@ -474,7 +542,7 @@ export class PgAssistant {
   }
 
   /**
-   * Tools discovered from browser-executed servers, by server id.
+   * Tools discovered from each server, by server id.
    *
    * Cached because discovery is a network round trip and `createTools()` is
    * synchronous — a server missing from here contributes no tools this turn
@@ -484,13 +552,31 @@ export class PgAssistant {
     return PgAssistant._mcpTools;
   }
 
-  static setMcpTools(serverId: string, tools: readonly McpTool[]) {
-    PgAssistant._mcpTools = { ...PgAssistant._mcpTools, [serverId]: tools };
+  /**
+   * Discover one server's tools and cache them under its id.
+   *
+   * The result is dropped when the id now names another connection or is off,
+   * so a discovery that outlived a takeover or an edit cannot restore the old tools.
+   *
+   * @throws what {@link listTools} throws
+   */
+  static async discoverToolsOf(server: McpServerEntry) {
+    const tools = await listTools(server);
+    const current = PgAssistant.enabledMcpServers.find(
+      (s) => s.id === server.id
+    );
+    if (!current || !sameConnection(current, server)) {
+      log.debug("Dropped tools discovered on a replaced MCP server", {
+        context: { server: server.id },
+      });
+      return;
+    }
+    PgAssistant._mcpTools = { ...PgAssistant._mcpTools, [server.id]: tools };
     PgAssistant._emit();
   }
 
   /**
-   * Discover tools for every enabled browser-executed server.
+   * Discover tools for every enabled server.
    *
    * Called when the panel mounts, not only from the Sources tab: `createTools`
    * reads this cache, so a model connected before discovery ran would simply
@@ -503,15 +589,13 @@ export class PgAssistant {
    */
   static async discoverMcpTools(force = false) {
     const servers = PgAssistant.enabledMcpServers.filter(
-      (server) =>
-        server.executor === "browser" &&
-        (force || !PgAssistant._mcpTools[server.id])
+      (server) => force || !PgAssistant._mcpTools[server.id]
     );
 
     await Promise.all(
       servers.map(async (server) => {
         try {
-          PgAssistant.setMcpTools(server.id, await listTools(server));
+          await PgAssistant.discoverToolsOf(server);
         } catch (err) {
           console.warn(`MCP server ${server.id}: tool discovery failed`, err);
         }
@@ -522,6 +606,117 @@ export class PgAssistant {
   static setStatus(status: AssistantStatus) {
     PgAssistant._status = status;
     PgAssistant._emit();
+  }
+
+  /**
+   * Register the turn in flight, so that closing the open thread cuts it off.
+   *
+   * The panel owns the turn, but the thread can close under it from outside
+   * (`closeThread`: a workspace switch, sign-out, a thread the server
+   * deleted). Left running, a turn would keep calling the backend, and its
+   * tool rows, notices and errors would land in whichever thread opened next
+   * -- under sign-out, the previous user's turn in the next account's
+   * conversation.
+   *
+   * @param controller aborts the turn's request; the store aborts it when the
+   * thread closes, or on `stopTurn`
+   */
+  static beginTurn(controller: AbortController) {
+    PgAssistant._turn = { controller, cut: false };
+  }
+
+  /**
+   * Unregister the turn.
+   *
+   * @param controller the one passed to `beginTurn`
+   * @returns `true` when the turn ran to its end uncut; `false` when a closed
+   * thread or `stopTurn` cut it off, or `controller` is not the turn
+   * registered. On `false` the caller must not push the thread open now as
+   * this turn's result: it holds nothing of the turn.
+   */
+  static endTurn(controller: AbortController) {
+    const turn = PgAssistant._turn;
+    if (turn?.controller !== controller) return false;
+    if (turn.overdue) clearTimeout(turn.overdue);
+    PgAssistant._turn = null;
+    return !turn.cut;
+  }
+
+  /**
+   * Whether a turn is in flight, including one cut off and still unwinding.
+   *
+   * The panel reads this, not its own state, to decide whether it may start
+   * another: leaving a thread resets `status` to idle, and a remounted panel
+   * has lost its controller, while the cut turn can still write. A new turn
+   * begun over it would replace `_turn` and let those writes through.
+   */
+  static get turnRunning() {
+    return PgAssistant._turn !== null;
+  }
+
+  /**
+   * Cut off the turn in flight whether or not a thread is open.
+   *
+   * For sign-out: the panel works with no thread open, and `closeThread` then
+   * has nothing to close, so a turn running there would carry on for the next
+   * account. Opening a thread does not cut a turn: that thread adopts what
+   * the turn has written and what it writes next.
+   */
+  static stopTurn() {
+    PgAssistant._cutTurn();
+    // Not persisted: with a thread open the caller is leaving it, and with
+    // none open there is nowhere to write
+    PgAssistant._emitOnly();
+  }
+
+  /**
+   * Stop the turn writing to the panel: abort its request and refuse the
+   * items it would add (`_dropsCut`) until it ends.
+   *
+   * Aborting stops the request, but a provider unwinds on its own schedule: a
+   * tool already running reports, and the stream's last chunk may already be
+   * read. Writes into items the turn made before the cut miss because the
+   * caller replaces `_items` (`closeThread`) or drops them (`clear`). No new
+   * turn can overlap: the panel starts none while `turnRunning`.
+   */
+  private static _cutTurn() {
+    const turn = PgAssistant._turn;
+    if (!turn || turn.cut) return;
+    turn.cut = true;
+    turn.controller.abort();
+    // Denied here as well as by `closeThread`, which returns early with no
+    // thread open: an approval the cut turn waits on holds the turn open
+    PgAssistant._denyPending();
+    // The panel refuses new turns until this one ends, so one whose provider
+    // ignores the abort (a hung tool, a fetch without the signal) is a bug
+    // the team has to hear of
+    turn.overdue = setTimeout(() => {
+      log.error(new Error("a cut turn has not ended"), {
+        report: true,
+        context: { afterMs: CUT_TURN_OVERDUE_MS },
+      });
+    }, CUT_TURN_OVERDUE_MS);
+  }
+
+  /**
+   * Whether a write now comes from a cut turn, and is to be dropped. Logged,
+   * since anything else that writes while the turn unwinds is dropped too.
+   */
+  private static _dropsCut(kind: ChatItem["kind"], text: string) {
+    if (!PgAssistant._turn?.cut) return false;
+    log.debug(`dropped a ${kind} written while a cut turn unwinds`, {
+      context: { text },
+    });
+    return true;
+  }
+
+  /**
+   * Bumped whenever what is rendered is dropped while the same thread (or
+   * none) stays open, so a provider seeded from it starts afresh: `threadId`
+   * alone does not change then.
+   */
+  static get conversation() {
+    return PgAssistant._conversation;
   }
 
   static addUserMessage(text: string) {
@@ -594,6 +789,8 @@ export class PgAssistant {
   /** Start an assistant message and return its id so text can stream into it */
   static startAssistantMessage() {
     const id = makeId();
+    // An id all the same: the provider streams into it, and finds nothing
+    if (PgAssistant._dropsCut("assistant", "")) return id;
     // Stamped here because this is the only moment the panel knows what is
     // answering. A thread records the backend it was created with; a reply
     // records the one that wrote it, and the two differ as soon as the user
@@ -620,17 +817,8 @@ export class PgAssistant {
     }
   }
 
-  /** Drop an assistant message that never received any text */
-  static discardIfEmpty(id: string) {
-    const index = PgAssistant._items.findIndex((i) => i.id === id);
-    const item = PgAssistant._items[index];
-    if (item?.kind === "assistant" && !item.text) {
-      PgAssistant._items.splice(index, 1);
-      PgAssistant._emit();
-    }
-  }
-
   static addToolCall(label: string) {
+    if (PgAssistant._dropsCut("tool", label)) return;
     PgAssistant._items.push({
       kind: "tool",
       id: makeId(),
@@ -641,6 +829,7 @@ export class PgAssistant {
   }
 
   static addNotice(text: string) {
+    if (PgAssistant._dropsCut("notice", text)) return;
     PgAssistant._items.push({
       kind: "notice",
       id: makeId(),
@@ -651,6 +840,7 @@ export class PgAssistant {
   }
 
   static addError(text: string) {
+    if (PgAssistant._dropsCut("error", text)) return;
     PgAssistant._items.push({
       kind: "error",
       id: makeId(),
@@ -672,11 +862,17 @@ export class PgAssistant {
    * turn's tool calls concurrently: with two gated tools, both outcomes landed
    * on the second card and the first got none.
    *
+   * A cut turn (`stopTurn`, or its thread closed) is refused without a card:
+   * nobody is left to answer it, and the tool must not run.
+   *
    * @param request what needs approving
    * @returns the card's id, and whether the user allowed it
    */
   static requestApproval(request: ApprovalRequest): Promise<ApprovalAnswer> {
     const id = makeId();
+    if (PgAssistant._dropsCut("approval", request.type)) {
+      return Promise.resolve({ id, allowed: false });
+    }
     PgAssistant._items.push({
       kind: "approval",
       id,
@@ -752,8 +948,12 @@ export class PgAssistant {
    * Called when the backend changes, which starts a new conversation with the
    * provider but is not the user deleting anything — so it deliberately does
    * not write back. `_emitOnly` rather than `_emit` is what makes that true.
+   * Also called by sign-out, to drop what the panel holds with no thread
+   * open, which the next account's thread would otherwise adopt; `conversation`
+   * changes, so the provider forgets it too.
    */
   static clear() {
+    PgAssistant._conversation++;
     PgAssistant._denyPending();
     // Not while a read is out: what is rendered then is only what was typed
     // during it, written nowhere yet, and the read adopts it from this very
@@ -779,9 +979,16 @@ export class PgAssistant {
   /**
    * Close the open thread without touching what is stored.
    *
-   * For when there is no workspace to key a conversation on -- the panel still
-   * renders and still works, it just has nowhere to persist to, so it must not
-   * keep writing into whichever thread happened to be open last.
+   * Called whenever the panel leaves a thread: a workspace switch, no
+   * workspace to key a conversation on, sign-out, a thread the server
+   * deleted. The panel still renders and still works with none open, it just
+   * has nowhere to persist to, so it must not keep writing into whichever
+   * thread happened to be open last.
+   *
+   * With a thread open, a turn still running is cut off (`_cutTurn`): its
+   * request is aborted and what it adds is dropped until it ends. With none
+   * open this returns early and the turn runs on; sign-out cuts it with
+   * `stopTurn`.
    */
   static closeThread() {
     // Nothing open is nothing to close. Clearing anyway would throw away
@@ -790,6 +997,7 @@ export class PgAssistant {
     // late enough for that to be an ordinary sequence, not a rare one.
     if (PgAssistant._threadId === null) return;
 
+    PgAssistant._cutTurn();
     PgAssistant._denyPending();
     PgAssistant._threadId = null;
     // A read still out for the closed thread is stale from here on, even if
@@ -804,15 +1012,17 @@ export class PgAssistant {
   /**
    * Open a thread, replacing whatever is rendered.
    *
-   * Called when the workspace changes. Anything still awaiting approval
-   * belongs to the thread being left, so it is denied rather than carried
-   * across.
+   * Called when the workspace changes, after `closeThread`. Anything still
+   * awaiting approval is denied rather than carried across. A running turn is
+   * not cut: a workspace switch has cut it in `closeThread` already, and a
+   * turn started with no thread open carries on into the thread opened. Sync
+   * moving the open workspace to another thread id uses `repointThread`
+   * instead, which keeps memory while it reads.
    *
    * The id is claimed before the read so a second switch landing mid-read can
    * be detected and its result discarded — otherwise a slow read for project A
    * would repaint the panel after the user has already moved to B.
    *
-   * @param threadId the workspace whose conversation to open
    * A call for the thread that is already open does nothing -- but waits for
    * that thread's read when it is still out. Returning at once let a caller
    * act on the empty list standing in for it: `foldIn` merged the server's
@@ -820,6 +1030,7 @@ export class PgAssistant {
    * thread to it as though every item had arrived mid-read, so each synced
    * message appeared twice.
    *
+   * @param threadId the thread to open
    * @param force re-read even if this thread is already open, for when sync
    * has just rewritten it underneath
    */
@@ -836,6 +1047,97 @@ export class PgAssistant {
     } finally {
       if (PgAssistant._loading === loading) PgAssistant._loading = null;
     }
+  }
+
+  /**
+   * Move the open thread to another id, keeping the conversation in memory.
+   *
+   * For sync adopting the account's thread for the open workspace
+   * (`openThread`): the same conversation under the id the account knows,
+   * possibly mid-turn. `loadThread` replaced memory with an empty list while
+   * it read the new id, so chunks streamed meanwhile found no message to
+   * append to and the saved reply had a hole; it also denied the approval the
+   * turn waited on. Here what is rendered stays in memory, `to`'s stored copy
+   * is merged into it as `foldIn` merges the server's, and the turn, the
+   * status and pending approvals carry on untouched.
+   *
+   * `from`'s file is removed once its queued writes land. `adoptAccountThread`
+   * has already merged it into `to` and removed it, but a write the turn
+   * queued before the move would bring it back as a thread no workspace
+   * points at.
+   *
+   * @param from the thread open now
+   * @param to the thread the workspace points at instead
+   * @returns whether `from` was open and the panel is now on `to`
+   */
+  static async repointThread(from: string, to: string) {
+    await PgAssistant._settled(from);
+    if (PgAssistant._threadId !== from) return false;
+
+    PgAssistant._threadId = to;
+    const seq = ++PgAssistant._loadSeq;
+    // Closed to writes until `to` is read: memory lacks what `to` holds, and
+    // a write now would replace it
+    PgAssistant._writes = "reading";
+    // Registered as `to`'s read, so a `foldIn` or `loadThread` of `to` waits
+    // for the merge instead of landing in the middle of it
+    const loading = { threadId: to, done: PgAssistant._repoint(from, to, seq) };
+    PgAssistant._loading = loading;
+    try {
+      return await loading.done;
+    } finally {
+      if (PgAssistant._loading === loading) PgAssistant._loading = null;
+    }
+  }
+
+  private static async _repoint(from: string, to: string, seq: number) {
+    // Captured for an overtaken move: the close or load overtaking it
+    // replaces `_items`, and what was typed in the meantime is `to`'s
+    const live = PgAssistant._items;
+
+    await PgAssistant._afterThreadWrites(to);
+    const stored = await PgChatStorage.read(to);
+    if (PgAssistant._loadSeq !== seq) {
+      PgAssistant._keepOvertaken(to, live);
+      return false;
+    }
+
+    // As in `_load`: an unreadable `to` is shown from memory but not written
+    // over, and `from` is kept, since it may hold what `to` cannot give back
+    PgAssistant._writes = stored === null ? "unreadable" : "open";
+    PgAssistant._items = capThread(
+      to,
+      mergeThreads(stored ?? [], live),
+      Math.max(MAX_MESSAGES_PER_THREAD, live.length)
+    );
+    PgAssistant._emit();
+    if (stored !== null) PgAssistant._dropMoved(from, to);
+    return true;
+  }
+
+  /**
+   * Remove `from` once `to`, as stored, holds every item of it at least as
+   * new.
+   *
+   * Checked against storage rather than trusting the write queued for `to`:
+   * `PgChatStorage.write` reports a failure and returns, and `from` may then
+   * hold the only stored copy of what the turn wrote last.
+   */
+  private static _dropMoved(from: string, to: string) {
+    PgAssistant._enqueue(from, async () => {
+      const [left, moved] = await Promise.all([
+        PgChatStorage.read(from),
+        PgChatStorage.read(to),
+      ]);
+      if (left === null || moved === null) return;
+
+      if (!holdsNewer(left, moved)) {
+        await PgChatStorage.remove(from);
+        return;
+      }
+      // `report` appends "failed" to this
+      report(`move ${from} to ${to}: ${from} kept, as ${to} lacks it`, null);
+    });
   }
 
   /** Once `threadId`'s read has landed, if one is in flight */
@@ -908,10 +1210,12 @@ export class PgAssistant {
   }
 
   /**
-   * Keep what was typed during a read that was overtaken before it landed.
+   * Keep what was typed during a read that was overtaken before it landed,
+   * or what an overtaken `repointThread` held.
    *
    * With writes closed it was never written, and the close or the next load
-   * took it off screen: it belongs to `threadId`, so it is not dropped.
+   * took it off screen: it belongs to `threadId`, so it is not dropped. An
+   * item already stored is written again when this copy is newer.
    *
    * - The same thread is open again: it goes onto what is rendered, where
    *   that load adopts it, or writes it now if its read has landed.
@@ -945,8 +1249,10 @@ export class PgAssistant {
         );
         return;
       }
-      const known = new Set(stored.map((item) => item.id));
-      if (unwritten.some((item) => !known.has(item.id))) {
+      // A newer copy of a stored item is owed as much as a new one: an
+      // overtaken `repointThread` hands over a reply that streamed on, or an
+      // approval answered, under an id the thread already has
+      if (holdsNewer(unwritten, stored)) {
         await PgChatStorage.write(threadId, mergeThreads(stored, unwritten));
       }
     });
@@ -1025,6 +1331,17 @@ export class PgAssistant {
   private static _localServers: readonly McpServerEntry[] =
     LOCAL_MCP_SERVERS.map((server) => ({ ...server }));
   private static _mcpTools: Readonly<Record<string, readonly McpTool[]>> = {};
+  /**
+   * The turn in flight, if `beginTurn` registered one. `cut` once its thread
+   * has closed, until the turn ends.
+   */
+  private static _turn: {
+    controller: AbortController;
+    cut: boolean;
+    /** Reports a cut turn that has not ended in `CUT_TURN_OVERDUE_MS` */
+    overdue?: ReturnType<typeof setTimeout>;
+  } | null = null;
+  private static _conversation = 0;
   private static readonly _pending = new Map<
     string,
     (allowed: boolean) => void
@@ -1052,9 +1369,11 @@ export class PgAssistant {
   private static _lastWrite: Promise<void> = Promise.resolve();
   /** Each thread's latest step on the write queue, while it is out */
   private static readonly _threadWrites = new Map<string, Promise<void>>();
-  /** The thread read `loadThread` has out, if any */
-  private static _loading: { threadId: string; done: Promise<void> } | null =
-    null;
+  /** The thread read `loadThread` or `repointThread` has out, if any */
+  private static _loading: {
+    threadId: string;
+    done: Promise<unknown>;
+  } | null = null;
 
   /**
    * Resolves once every pending write has landed.
@@ -1158,8 +1477,8 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, beforeEach, afterEach } =
     import.meta.vitest;
   describe("views/sidebar/assistant/store", () => {
-    let MIN_REDACTED_KEY_LENGTH: typeof import("./model/redact-key").MIN_REDACTED_KEY_LENGTH;
-    let REDACTED_KEY: typeof import("./model/redact-key").REDACTED_KEY;
+    let MIN_REDACTED_KEY_LENGTH: typeof import("@/shared/lib/ai").MIN_REDACTED_KEY_LENGTH;
+    let REDACTED_KEY: typeof import("@/shared/lib/ai").REDACTED_KEY;
     let isDefaultBackendRemembered: typeof import("./model/remembered-backend").isDefaultBackendRemembered;
     let rememberedConnection: typeof import("./model/remembered-backend").rememberedConnection;
     let truncationNoticeId: typeof import("../../../features/persistence/model/chat-storage").truncationNoticeId;
@@ -1167,7 +1486,7 @@ if (import.meta.vitest) {
     let storedValues: typeof import("../../../test-utils/stored-values").storedValues;
     beforeAll(async () => {
       ({ MIN_REDACTED_KEY_LENGTH, REDACTED_KEY } = await import(
-        "./model/redact-key"
+        "@/shared/lib/ai"
       ));
       ({ isDefaultBackendRemembered, rememberedConnection } = await import(
         "./model/remembered-backend"
@@ -1175,9 +1494,7 @@ if (import.meta.vitest) {
       ({ truncationNoticeId } = await import(
         "../../../features/persistence/model/chat-storage"
       ));
-      // Through `@/` on purpose: the alias is mapped in `tsconfig.json`'s `paths`, in
-      // craco's webpack alias and in `vitest.config.ts`'s `resolve.alias`, and this
-      // dynamic import is what fails when the vitest mapping drifts from the other two.
+      // Through `@/` on purpose: this dynamic import fails if vitest stops resolving `@/` through tsconfig `paths`
       ({ PgFs } = await import("@/utils/explorer/fs"));
       ({ storedValues } = await import("../../../test-utils/stored-values"));
     });
@@ -1916,7 +2233,7 @@ if (import.meta.vitest) {
         ]);
 
         const loading = PgAssistant.loadThread("t1");
-        PgAssistant.setMcpTools("probe", []);
+        PgAssistant.keepBackend();
         await loading;
         await settled();
 
@@ -2285,6 +2602,316 @@ if (import.meta.vitest) {
 
         await PgAssistant.loadThread("t1", true);
         expect(PgAssistant.items).toHaveLength(1);
+      });
+    });
+
+    /** A turn is cut off when the panel closes its thread, or on `stopTurn` */
+    describe("PgAssistant turns", () => {
+      let turn: AbortController;
+      let logger: typeof import("../../../shared/lib/logger");
+
+      beforeAll(async () => {
+        logger = await import("../../../shared/lib/logger");
+      });
+
+      beforeEach(async () => {
+        (PgFs as unknown as { __files: Map<string, string> }).__files.clear();
+        PgAssistant.closeThread();
+        PgAssistant.clear();
+        await PgAssistant.loadThread("t1");
+        turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+      });
+
+      afterEach(() => {
+        PgAssistant.endTurn(turn);
+        PgAssistant.closeThread();
+        vi.useRealTimers();
+        logger.resetLogger();
+      });
+
+      it("stops when its thread closes", () => {
+        PgAssistant.closeThread();
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(true);
+        expect(PgAssistant.items).toEqual([]);
+        expect(PgAssistant.endTurn(turn)).toBe(false);
+      });
+
+      /**
+       * `openThread` adopting the account's thread: the same conversation
+       * under another id, with a reply still streaming into it
+       */
+      describe("when sync repoints the workspace at another thread", () => {
+        const onAccount: ChatItem = {
+          kind: "user",
+          id: "66666666-6666-4666-8666-666666666666",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          text: "from the account",
+        };
+
+        const texts = () =>
+          PgAssistant.items.map((i) => ("text" in i ? i.text : i.kind));
+
+        /** Holds the read of `threadId` until the returned gate opens */
+        const holdRead = (threadId: string) => {
+          let open = () => {};
+          const gate = new Promise<void>((resolve) => (open = resolve));
+          const realRead = PgChatStorage.read.bind(PgChatStorage);
+          const read = vi
+            .spyOn(PgChatStorage, "read")
+            .mockImplementation(async (id) => {
+              if (id === threadId) await gate;
+              return realRead(id);
+            });
+          return { open, read };
+        };
+
+        /**
+         * What `adoptAccountThread` does before the move: the local thread
+         * merged into the account's, and removed
+         */
+        const adopt = async () => {
+          await PgAssistant.whenPersisted();
+          const local = (await PgChatStorage.read("t1")) ?? [];
+          await PgChatStorage.write("t2", mergeThreads([onAccount], local));
+          await PgChatStorage.remove("t1");
+        };
+
+        const storedTexts = async (threadId: string) =>
+          (await PgChatStorage.read(threadId))?.map((i) =>
+            "text" in i ? i.text : i.kind
+          );
+
+        it("streams the reply on without losing text mid-move", async () => {
+          PgAssistant.addUserMessage("build it");
+          const id = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(id, "Hel");
+          await adopt();
+          const { open, read } = holdRead("t2");
+
+          try {
+            const moving = PgAssistant.repointThread("t1", "t2");
+            await vi.waitFor(() => expect(read).toHaveBeenCalledWith("t2"));
+            PgAssistant.appendToAssistantMessage(id, "lo, ");
+            open();
+            await moving;
+            PgAssistant.appendToAssistantMessage(id, "world");
+          } finally {
+            read.mockRestore();
+          }
+
+          expect(PgAssistant.threadId).toBe("t2");
+          expect(texts()).toEqual([
+            "from the account",
+            "build it",
+            "Hello, world",
+          ]);
+          await PgAssistant.whenPersisted();
+          expect(await storedTexts("t2")).toEqual([
+            "from the account",
+            "build it",
+            "Hello, world",
+          ]);
+          expect(turn.signal.aborted).toBe(false);
+          expect(PgAssistant.endTurn(turn)).toBe(true);
+        });
+
+        it("leaves the approval the turn waits on to the user", async () => {
+          const approval = PgAssistant.requestApproval({
+            type: "command",
+            name: "build",
+            effect: "builds",
+          });
+
+          await PgAssistant.repointThread("t1", "t2");
+          const [card] = PgAssistant.items;
+          PgAssistant.resolveApproval(card.id, true);
+
+          expect(await approval).toEqual({ id: card.id, allowed: true });
+        });
+
+        it("drops the thread it moved from once its writes land", async () => {
+          // `adoptAccountThread` has removed it already; a write queued for it
+          // before the move would bring it back, pointed at by no workspace
+          PgAssistant.addUserMessage("build it");
+
+          await PgAssistant.repointThread("t1", "t2");
+          await PgAssistant.whenPersisted();
+
+          expect(await PgChatStorage.threadIds()).toEqual(["t2"]);
+        });
+
+        it("keeps the thread it moved from when the move's write fails", async () => {
+          // `PgChatStorage.write` reports a failure and returns: removing the
+          // source on that would lose what only the source holds
+          PgAssistant.addUserMessage("build it");
+          await PgAssistant.whenPersisted();
+          const realWrite = PgChatStorage.write.bind(PgChatStorage);
+          const write = vi
+            .spyOn(PgChatStorage, "write")
+            .mockImplementation(async (threadId, items) => {
+              if (threadId !== "t2") await realWrite(threadId, items);
+            });
+
+          try {
+            await PgAssistant.repointThread("t1", "t2");
+            await PgAssistant.whenPersisted();
+          } finally {
+            write.mockRestore();
+          }
+
+          expect(await storedTexts("t1")).toEqual(["build it"]);
+        });
+
+        describe("overtaken by a switch before the read lands", () => {
+          it("keeps text streamed into a reply the account already has", async () => {
+            // Every id is already stored, so only the newer version says
+            // anything is owed
+            PgAssistant.addUserMessage("build it");
+            const id = PgAssistant.startAssistantMessage();
+            PgAssistant.appendToAssistantMessage(id, "Hel");
+            await adopt();
+            const { open, read } = holdRead("t2");
+
+            try {
+              const moving = PgAssistant.repointThread("t1", "t2");
+              await vi.waitFor(() => expect(read).toHaveBeenCalledWith("t2"));
+              PgAssistant.appendToAssistantMessage(id, "lo");
+              PgAssistant.closeThread();
+              open();
+              expect(await moving).toBe(false);
+              await PgAssistant.whenPersisted();
+            } finally {
+              read.mockRestore();
+            }
+
+            expect(await storedTexts("t2")).toEqual([
+              "from the account",
+              "build it",
+              "Hello",
+            ]);
+          });
+
+          it("keeps the answer to an approval the account already has", async () => {
+            void PgAssistant.requestApproval({
+              type: "command",
+              name: "build",
+              effect: "builds",
+            });
+            await adopt();
+            const { open, read } = holdRead("t2");
+
+            try {
+              const moving = PgAssistant.repointThread("t1", "t2");
+              await vi.waitFor(() => expect(read).toHaveBeenCalledWith("t2"));
+              // Denies the card, which nobody is left to answer
+              PgAssistant.closeThread();
+              open();
+              await moving;
+              await PgAssistant.whenPersisted();
+            } finally {
+              read.mockRestore();
+            }
+
+            const stored = await PgChatStorage.read("t2");
+            const card = stored?.find((i) => i.kind === "approval");
+            expect(card).toMatchObject({ status: "denied" });
+          });
+        });
+      });
+
+      it("carries on into the thread that opens when none was", async () => {
+        PgAssistant.endTurn(turn);
+        PgAssistant.closeThread();
+        turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+
+        await PgAssistant.loadThread("t2");
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(false);
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["tool"]);
+        expect(PgAssistant.endTurn(turn)).toBe(true);
+      });
+
+      it("reports a cut turn that does not end", () => {
+        vi.useFakeTimers();
+        const logged = logger.memoryProvider();
+        logger.initLogger({ providers: [logged] });
+
+        PgAssistant.closeThread();
+        vi.advanceTimersByTime(CUT_TURN_OVERDUE_MS);
+
+        expect(logged.entries).toEqual([
+          expect.objectContaining({
+            ns: "assistant:store",
+            level: "error",
+            report: true,
+          }),
+        ]);
+      });
+
+      it("reports nothing for a cut turn that ends in time", () => {
+        vi.useFakeTimers();
+        const logged = logger.memoryProvider();
+        logger.initLogger({ providers: [logged] });
+
+        PgAssistant.closeThread();
+        PgAssistant.endTurn(turn);
+        vi.advanceTimersByTime(CUT_TURN_OVERDUE_MS);
+
+        expect(logged.entries.filter((e) => e.level === "error")).toEqual([]);
+      });
+
+      it("carries on when the same thread is re-read after a pull", async () => {
+        await PgAssistant.loadThread("t1", true);
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(false);
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["tool"]);
+        expect(PgAssistant.endTurn(turn)).toBe(true);
+      });
+
+      it("writes again once the stopped turn has ended", async () => {
+        PgAssistant.closeThread();
+        PgAssistant.endTurn(turn);
+        await PgAssistant.loadThread("t2");
+
+        PgAssistant.addNotice("Stopped.");
+
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["notice"]);
+      });
+
+      it("counts as running until it ends, even once cut off", () => {
+        expect(PgAssistant.turnRunning).toBe(true);
+        PgAssistant.closeThread();
+
+        expect(PgAssistant.status).toBe("idle");
+        expect(PgAssistant.turnRunning).toBe(true);
+        PgAssistant.endTurn(turn);
+        expect(PgAssistant.turnRunning).toBe(false);
+      });
+
+      it("stops on sign-out with no thread open", async () => {
+        PgAssistant.endTurn(turn);
+        PgAssistant.closeThread();
+        turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+        const approval = PgAssistant.requestApproval({
+          type: "command",
+          name: "build",
+          effect: "builds",
+        });
+
+        PgAssistant.stopTurn();
+        PgAssistant.addToolCall("listed the project");
+
+        expect(turn.signal.aborted).toBe(true);
+        await expect(approval).resolves.toMatchObject({ allowed: false });
+        expect(PgAssistant.items.map((i) => i.kind)).toEqual(["approval"]);
+        expect(PgAssistant.endTurn(turn)).toBe(false);
       });
     });
 

@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
-import { MousePointerClick } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
-import { BrandButton } from "@/shared/ui/brand-button";
+import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
@@ -12,7 +11,6 @@ import {
   StageEmpty,
   StageEmptyActions,
   StageEmptyDescription,
-  StageEmptyMedia,
   StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
@@ -37,7 +35,7 @@ export interface BaseInteractProps {
   /** The cluster for prose; null until the endpoint has been read */
   cluster: string | null;
   onGoTo: (stage: Extract<Stage, "build" | "deploy">) => void;
-  /** The "Load IDL file" action (`IdlActions mode="button"`) */
+  /** The "Upload IDL" action (`IdlActions mode="upload"`) */
   idlLoad: ReactNode;
   /** The form, drawn only on the `ready` surface */
   form: ReactNode;
@@ -67,15 +65,17 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
     title: "No project open",
     description: () => "Open a project or start a new one to call its program.",
   },
+  // Interact's own missing piece is a deployment, as the prototype says it;
+  // Deploy then asks for the build
   "not-built": {
     title: "Nothing to call yet",
-    description: () =>
-      "Build the program first. Once it is deployed, its instructions show up here, ready to call.",
+    description: (cluster) =>
+      `Deploy the program first. Once it is on ${cluster}, its instructions show up here, ready to call.`,
   },
   "no-idl": {
     title: "No IDL yet",
     description: () =>
-      "This program's Anchor IDL was not found. Load the IDL file to call its instructions.",
+      "This program's Anchor IDL was not found. Upload the IDL file to call its instructions.",
   },
   "no-program-id": {
     title: "No program id",
@@ -106,14 +106,20 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
 
 /** The step that supplies what an empty surface lacks, if there is one */
 const action = (p: BaseInteractProps, surface: EmptySurface): ReactNode => {
-  if (surface === "not-built" || surface === "no-program-id") {
+  if (surface === "no-program-id") {
     return (
-      <BrandButton onClick={() => p.onGoTo("build")}>Go to Build</BrandButton>
+      <BrandButton onClick={() => p.onGoTo("build")}>
+        Go to Build
+        <BrandButtonIcon />
+      </BrandButton>
     );
   }
-  if (surface === "not-deployed") {
+  if (surface === "not-built" || surface === "not-deployed") {
     return (
-      <BrandButton onClick={() => p.onGoTo("deploy")}>Go to Deploy</BrandButton>
+      <BrandButton onClick={() => p.onGoTo("deploy")}>
+        Go to Deploy
+        <BrandButtonIcon />
+      </BrandButton>
     );
   }
   if (surface === "no-idl") return p.idlLoad;
@@ -131,9 +137,6 @@ const Empty = ({
   const act = action(p, surface);
   return (
     <StageEmpty className={STAGE_BODY}>
-      <StageEmptyMedia>
-        <MousePointerClick />
-      </StageEmptyMedia>
       <StageEmptyTitle>{copy.title}</StageEmptyTitle>
       {copy.description && (
         <StageEmptyDescription>
@@ -216,14 +219,22 @@ const Program = ({ id, cluster }: { id: string; cluster: string | null }) => (
   </div>
 );
 
-/** The Interact stage drawn from props: the toolbar, then the form or why there is none */
+/**
+ * The Interact stage drawn from props: the toolbar, then the form or why
+ * there is none. The toolbar is the prototype's: the title row with the
+ * program under it, then the deployment picker and the upload on a row of
+ * their own. On a phone the tab above already says Interact, so the head is
+ * that one row, the picker at the start and the upload at the end.
+ */
 const BaseInteract = (p: BaseInteractProps) => (
   <div className="flex h-full flex-col">
-    <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border px-6 py-3">
-      <div className="flex flex-col gap-1">
+    <div className="flex flex-col items-start gap-4 border-b border-border px-6 py-3 max-md:min-h-15 max-md:justify-center max-md:py-2 max-md:pr-2 max-md:pl-5">
+      <div className="flex flex-col gap-1 max-md:hidden">
         <div className="flex flex-wrap items-baseline gap-2.5">
-          <h2 className="m-0 text-xl font-semibold tracking-tight">Interact</h2>
-          <span className="font-mono text-xs text-muted-foreground">
+          <h2 className="m-0 text-[1.75rem] leading-tight font-medium tracking-tight">
+            Interact
+          </h2>
+          <span className="font-mono text-sm text-muted-foreground">
             {p.meta}
           </span>
         </div>
@@ -231,7 +242,7 @@ const BaseInteract = (p: BaseInteractProps) => (
           <Program id={p.programId} cluster={p.cluster} />
         )}
       </div>
-      <div className="flex flex-wrap items-center gap-4">
+      <div className="flex flex-wrap items-center gap-4 max-md:w-full max-md:flex-nowrap max-md:justify-between max-md:gap-2">
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           Deployment
           <NativeSelect

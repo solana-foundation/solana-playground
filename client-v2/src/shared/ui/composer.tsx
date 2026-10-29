@@ -5,7 +5,8 @@ import { cn } from "@/shared/lib/utils";
 /* Where you ask the assistant for something: a note above it, the files it
    will read, the words, then the tools. Enter sends; Shift and Enter make a
    new line; a half-typed character in an input method never sends. While it
-   answers, Send becomes Stop. */
+   answers, Send becomes Stop. Below md every control is a fingertip and
+   the words are in the body type, as on the prototype's phone. */
 
 type ComposerContextValue = {
   busy: boolean;
@@ -52,7 +53,7 @@ function ComposerBanner({ className, ...props }: React.ComponentProps<"div">) {
     <div
       data-slot="composer-banner"
       className={cn(
-        "flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground",
+        "flex items-center gap-2 rounded-t-[15px] border-b border-border bg-white/[0.03] px-3.5 py-2 text-xs text-muted-foreground max-md:text-control max-md:font-read",
         className
       )}
       {...props}
@@ -98,19 +99,21 @@ function ComposerInput({
   const ref = React.useRef<HTMLTextAreaElement>(null);
   // The width the height was last measured at; null until it first is
   const measuredAt = React.useRef<number | null>(null);
-  const grow = (el: HTMLTextAreaElement) => {
-    el.style.height = "auto";
-    el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
-    measuredAt.current = el.clientWidth;
-    setEmpty(!el.value.trim());
-  };
+  const grow = React.useCallback(
+    (el: HTMLTextAreaElement) => {
+      el.style.height = "auto";
+      el.style.height = `${Math.min(el.scrollHeight, 200)}px`;
+      measuredAt.current = el.clientWidth;
+      setEmpty(!el.value.trim());
+    },
+    [setEmpty]
+  );
   // A controlled value can change without an input event (a prompt the
   // product puts in, a send that clears it), so emptiness follows it too.
-  // `grow` is left out of the deps: it only uses the stable setEmpty and the ref
   React.useLayoutEffect(() => {
     if (value === undefined || !ref.current) return;
     grow(ref.current);
-  }, [value]);
+  }, [value, grow]);
   // The height follows the width too. An input measured in a narrow column
   // (a panel that mounts it while still folded, then opens) wraps its
   // placeholder per character and would keep that height once the column
@@ -127,7 +130,7 @@ function ComposerInput({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [grow]);
   return (
     <textarea
       ref={ref}
@@ -148,7 +151,7 @@ function ComposerInput({
         }
       }}
       className={cn(
-        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle",
+        "max-h-[200px] min-h-11 w-full resize-none bg-transparent px-[1.125rem] pt-[1.125rem] pb-0 text-[0.9375rem] leading-normal font-[350] text-foreground outline-none placeholder:text-subtle max-md:min-h-12 max-md:text-body max-md:font-read",
         className
       )}
       {...props}
@@ -174,7 +177,7 @@ function ComposerAdd({ className, ...props }: React.ComponentProps<"button">) {
       data-slot="composer-add"
       aria-label="Add context"
       className={cn(
-        "grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
+        "grid size-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:size-12",
         className
       )}
       {...props}
@@ -268,7 +271,7 @@ function ComposerSend({
         aria-label="Stop"
         onClick={onStop}
         className={cn(
-          "ml-auto grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background transition-transform outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
+          "ml-auto grid size-8 shrink-0 place-items-center rounded-full bg-foreground text-background transition-transform outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 max-md:size-12",
           className
         )}
       >
@@ -283,7 +286,7 @@ function ComposerSend({
       aria-label="Send"
       disabled={empty}
       className={cn(
-        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-foreground hover:not-disabled:not-aria-disabled:text-white active:not-disabled:not-aria-disabled:text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4",
+        "brand-action ml-auto grid size-8 shrink-0 place-items-center rounded-full text-foreground hover:not-disabled:not-aria-disabled:text-white active:not-disabled:not-aria-disabled:text-white [--stroke-fill:var(--surface-hover)] transition-[opacity,transform] outline-none focus-visible:ring-2 focus-visible:ring-ring active:scale-95 disabled:opacity-35 [&_svg]:size-4 max-md:size-12 max-md:[&_svg]:size-5",
         className
       )}
       {...props}

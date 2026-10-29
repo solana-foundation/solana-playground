@@ -1,8 +1,8 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 
-import { LoggerErrorBoundary } from "../../../shared/lib/logger";
-import { GoogleAnalytics } from "../../../shared/lib/telemetry";
+import { LoggerErrorBoundary } from "@/shared/lib/logger";
+import { GoogleAnalytics } from "@/shared/lib/telemetry";
 import { initObservability } from "../model/init";
 import type { ObservabilityConfig } from "../model/init";
 

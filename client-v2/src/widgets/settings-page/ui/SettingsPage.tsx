@@ -97,7 +97,7 @@ const LiveSettingsPage = ({
             name={setting.name}
             description={setting.description}
             control={<SettingControl {...setting} />}
-            // A setting without values is a switch
+            // A setting without values is a checkbox
             small={!setting.values}
             phone={phone}
           />
@@ -133,10 +133,14 @@ const SettingsPage = (props: SettingsPageProps) => (
 
 export default SettingsPage;
 
+/** On a phone the prototype's buttons: a fingertip tall in the control type */
+const PHONE_BUTTON = "h-12 rounded-xl text-control font-act";
+
 const Project = ({ phone }: { phone: boolean }) => (
   <div className={cn("flex gap-2", phone ? "flex-col" : "flex-wrap")}>
     <AsyncButton
       variant="outline"
+      className={phone ? PHONE_BUTTON : undefined}
       onClick={() => PgFramework.exportWorkspace()}
       onError={reportButtonFailure("export the project")}
     >
@@ -145,6 +149,7 @@ const Project = ({ phone }: { phone: boolean }) => (
     </AsyncButton>
     <AsyncButton
       variant="outline"
+      className={phone ? PHONE_BUTTON : undefined}
       onClick={() => PgView.setModal(ImportGithub)}
       onError={reportButtonFailure("open the GitHub import")}
     >
@@ -153,6 +158,7 @@ const Project = ({ phone }: { phone: boolean }) => (
     </AsyncButton>
     <AsyncButton
       variant="outline"
+      className={phone ? PHONE_BUTTON : undefined}
       onClick={() => PgView.setModal(ImportFs)}
       onError={reportButtonFailure("open the file import")}
     >

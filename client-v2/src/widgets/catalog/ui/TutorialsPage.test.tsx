@@ -62,9 +62,14 @@ const search = (value: string) =>
     }
   );
 const named = (name: string) => sent.events.filter((e) => e.name === name);
-
-it("finds a tutorial by search", () => {
+// The progress read begun on mount lands on a microtask, after a sync test ends
+const draw = async () => {
   render(<TutorialsPage />);
+  await act(async () => {});
+};
+
+it("finds a tutorial by search", async () => {
+  await draw();
   search("seahorse");
 
   expect(
@@ -88,9 +93,9 @@ it("opens a tutorial, reports it and leaves the page", async () => {
   expect(catalogPage.current()).toBeNull();
 });
 
-it("refuses a second Open while one runs", () => {
+it("refuses a second Open while one runs", async () => {
   utils.PgTutorial.open.mockReturnValue(new Promise<void>(() => {}));
-  render(<TutorialsPage />);
+  await draw();
   fireEvent.click(screen.getByRole("button", { name: "Open Hello Anchor" }));
   fireEvent.click(screen.getByRole("button", { name: "Hello Seahorse" }));
 
@@ -112,9 +117,9 @@ it("shows a failed open on its card, reports and logs it, and stays", async () =
   expect(catalogPage.current()).toBe("tutorials");
 });
 
-it("reports a search once typing rests", () => {
+it("reports a search once typing rests", async () => {
   vi.useFakeTimers();
-  render(<TutorialsPage />);
+  await draw();
   search("z");
   act(() => vi.advanceTimersByTime(200));
   search("zz");
@@ -127,9 +132,9 @@ it("reports a search once typing rests", () => {
   ]);
 });
 
-it("reports no search for a cleared field", () => {
+it("reports no search for a cleared field", async () => {
   vi.useFakeTimers();
-  render(<TutorialsPage />);
+  await draw();
   search("anchor");
   act(() => vi.advanceTimersByTime(100));
   search("");

@@ -9,7 +9,8 @@ import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
 import { reconcile, releaseLocalProjects } from "./project-restore";
-import { PgSession } from "../../auth";
+// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { PgSession } from "@/features/auth";
 import { projectSync } from "../../../effects/project-sync/project-sync";
 import { PgCommon } from "../../../utils/common";
 import { PgExplorer } from "../../../utils/explorer/explorer";

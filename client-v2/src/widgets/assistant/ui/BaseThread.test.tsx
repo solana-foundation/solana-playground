@@ -121,6 +121,14 @@ describe("BaseThread", () => {
     ).toBeNull();
   });
 
+  it("lays the suggestions out as a row that wraps", () => {
+    renderThread([]);
+    const suggestion = screen.getByRole("button", {
+      name: "Why did my build fail?",
+    });
+    expect(suggestion.parentElement?.className).toContain("flex-wrap");
+  });
+
   it("a suggestion sends itself", () => {
     const onSuggestion = vi.fn();
     renderThread([], { onSuggestion });

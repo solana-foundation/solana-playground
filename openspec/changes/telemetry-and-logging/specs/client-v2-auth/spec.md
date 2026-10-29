@@ -21,7 +21,7 @@ listed:
   URL, or any other step failed without a reason of its own), `popup-blocked` (the browser blocked the popup), `cancelled` (the
   user closed the popup), `rejected` (a reply arrived that did not match this
   sign-in), `expired` (no reply arrived in time).
-- `auth_signed_out`: the user signed out. No parameters.
+- `auth_signed_out`: the server accepted the user's sign-out. No parameters.
 
 #### Scenario: A completed sign-in
 
@@ -42,5 +42,11 @@ listed:
 
 #### Scenario: A sign-out
 
-- **WHEN** the user signs out
-- **THEN** `auth_signed_out` is tracked, also when the sign-out request fails
+- **WHEN** the user signs out and the server accepts the request
+- **THEN** `auth_signed_out` is tracked
+
+#### Scenario: A sign-out that fails
+
+- **WHEN** the sign-out request is refused or does not reach the server
+- **THEN** `auth_signed_out` is not tracked, the user stays signed in, and the
+  error reaches the caller

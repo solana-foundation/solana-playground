@@ -86,19 +86,30 @@ forwards a chat-completions turn to an upstream configured server-side, so the
 key stays off the client. Every tool that touches your project still runs in
 the browser, behind the same approval gates. See `decisions.md` → D19.
 
-- The providers share one vendor-neutral tool set (`createTools()`): the
-  default backend (whatever this deployment configured, reached through
-  `/api/agent`), Anthropic (`claude-opus-5` via `@anthropic-ai/sdk`'s Tool
-  Runner), and an OpenAI-compatible chat-completions provider with ready-made
-  presets for OpenRouter and Gemini. The Anthropic provider is implemented but
-  has not yet been exercised against a live key.
+- The providers share one vendor-neutral tool set (`createTools()`) and one
+  turn loop: the default backend (whatever this deployment configured, reached
+  through `/api/agent`), Anthropic (Claude Opus 5.5 or Sonnet 5.5), and an
+  OpenAI-compatible chat-completions provider with ready-made presets for
+  OpenRouter and Gemini. Every model call goes through `@/shared/lib/ai`, a
+  module of the client built on the Vercel `ai` SDK (`@ai-sdk/anthropic` and
+  `@ai-sdk/openai-compatible`); the differences between backends are settings
+  passed to that one loop, not separate code. The SDK is loaded on the first
+  turn, or when the panel opens if an MCP server is enabled, since the panel
+  then lists that server's tools. The Anthropic provider is implemented but has
+  not yet been exercised against a live key.
+- MCP servers are called from the browser, through `@ai-sdk/mcp` in the same
+  module: directly when the host allows a browser to call it, otherwise
+  through the MCP gateway (`/api/mcp`). No MCP server is handed to a model
+  provider to call on its side; a configuration that still names
+  `"executor": "server"` loads, and that server is called from the browser like
+  any other.
 - The tools map onto the playground: read and list files, read the last build
   error, write a file, build, deploy. The gate lives inside each
   state-changing tool's own `run` — `write_file`, `build` and `deploy` each
   `await PgAssistant.requestApproval(...)` and do not return until the user
   clicks, which holds the agent loop open. That is how "propose automatically,
   apply explicitly" is enforced in the loop itself, identically for every
-  provider, rather than by the Tool Runner inspecting a call before it runs.
+  provider, rather than by the transport inspecting a call before it runs.
 - Project context comes from what the client already holds: `PgExplorer` for
   files and the open tab, `PgProgramInfo` for the IDL and program ID,
   `PgGlobal` for build and deploy state. Every turn carries the whole file
@@ -245,7 +256,7 @@ Honesty rule for the demo — never present a mocked step as working.
   transaction signature yet, because the deploy command it hooks into
   returns no signature to record.
 - **Honest wording, not new work:** "Download IDL" on the Build surface
-  saves the IDL a successful build already produced; "Load IDL file" on
+  saves the IDL a successful build already produced; "Upload IDL" on
   Deploy and Interact replaces the IDL this browser uses -- neither
   generates anything or writes anything on-chain.
 - **Not view-only:** the Programs page's and the gallery's ecosystem program cards

@@ -3,8 +3,8 @@ import { useEffect, useReducer, useRef, useState } from "react";
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
-import { PgSession } from "../../../features/auth";
-import { report, toReplayMessages } from "../../../features/persistence";
+import { PgSession } from "@/features/auth";
+import { report, toReplayMessages } from "@/features/persistence";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import {
   isDefaultBackendRemembered,
@@ -17,7 +17,7 @@ import type {
   PromptRequest,
 } from "../../../views/sidebar/assistant/store";
 import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
-import { reportButtonFailure } from "../../../shared/lib/report-button-failure";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 // Deep import rather than the `utils` barrel, as `effects/chat-thread` does
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { DEFAULT_CONNECTION } from "./connection";
@@ -55,8 +55,10 @@ export interface TurnOptions {
 }
 
 /**
- * Where the turn is. `stopping` is a stopped turn still unwinding:
- * `cancelPending` drops the store's status to idle before its provider does.
+ * Where the turn is. `stopping` is a turn that was stopped, by the user
+ * (`stop`) or by the store (`PgAssistant.stopTurn`, or its thread closing),
+ * and is still unwinding: the store's status reads idle before its provider
+ * finishes.
  */
 export type TurnPhase = "idle" | "running" | "awaiting" | "stopping";
 
@@ -140,6 +142,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     connection: Connection;
     /** The conversation its history was seeded from */
     threadId: string | null;
+    /** `PgAssistant.conversation` when it was seeded */
+    conversation: number;
     instance: Provider;
   } | null>(null);
   const turn = useRef<AbortController | null>(null);
@@ -149,11 +153,16 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   const starting = useRef(false);
 
   // The store says what a live turn is doing; the controller says whether a
-  // turn is over, since a stopped one still has to unwind
+  // turn is over, since a stopped one still has to unwind. A turn the store
+  // records but this hook has no controller for was started before the hook
+  // remounted. The store's status may already read idle (a closed thread, a
+  // backend change), so its record is all that says the turn still runs; it
+  // shows as stopping because this hook cannot stop it
   const phaseOf = (): TurnPhase => {
     if (turn.current?.signal.aborted) return "stopping";
     if (PgAssistant.status !== "idle") return PgAssistant.status;
     if (turn.current) return "running";
+    if (PgAssistant.turnRunning) return "stopping";
     return "idle";
   };
   const phase = phaseOf();
@@ -231,9 +240,16 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   const openConnect = (via: ConnectVia, preset?: ConnectPreset) =>
     opener.current(via, preset);
 
-  /** Whether a turn, or a send still finding its backend, is under way */
+  /**
+   * Whether a turn, or a send still finding its backend, is under way.
+   * `PgAssistant.turnRunning` covers a turn this hook has no controller for,
+   * and one whose status a closed thread reset; see `turnRunning`.
+   */
   const occupied = () =>
-    starting.current || !!turn.current || PgAssistant.status !== "idle";
+    starting.current ||
+    !!turn.current ||
+    PgAssistant.turnRunning ||
+    PgAssistant.status !== "idle";
 
   /**
    * @returns `false` when the send was refused because another one is under
@@ -276,15 +292,19 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // One provider per connection and conversation; it owns the history.
     // Every connect and tune stores a new object, so identity catches any
     // change, a re-pick included, and another project's thread gets its own,
-    // or the model would carry the last project's turns. A rebuild is
-    // harmless: the new provider is seeded from what is rendered.
+    // or the model would carry the last project's turns. `conversation`
+    // catches what is dropped with no thread change: sign-out with no thread
+    // open would otherwise hand the next account the last one's history. A
+    // rebuild is harmless: the new provider is seeded from what is rendered.
     if (
       provider.current?.connection !== current ||
-      provider.current.threadId !== PgAssistant.threadId
+      provider.current.threadId !== PgAssistant.threadId ||
+      provider.current.conversation !== PgAssistant.conversation
     ) {
       provider.current = {
         connection: current,
         threadId: PgAssistant.threadId,
+        conversation: PgAssistant.conversation,
         // Seeded from what is rendered, so reopening a stored thread gives the
         // model the conversation rather than amnesia behind a full transcript
         instance: createProvider(current, toReplayMessages(PgAssistant.items)),
@@ -298,6 +318,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     setInput("");
     const controller = new AbortController();
     turn.current = controller;
+    PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
 
     try {
@@ -306,24 +327,27 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
       } else if (isAbort(e)) {
-        // Stopping is the user's own doing, and `stop` already said so
+        // Aborted by `stop`, which has already written its notice, or by the
+        // store cutting the turn off, when there is nothing to tell the user
         log.debug("the stopped turn unwound");
       } else {
         // Stopped, but the turn ended on something other than the abort: not
-        // the user's to read, since they stopped it, but a bug to hear of
+        // the user's to read, since the turn was stopped, but a bug to hear of
         log.error(e, { report: true, context: { stopped: true } });
       }
     } finally {
       if (turn.current === controller) turn.current = null;
+      const finished = PgAssistant.endTurn(controller);
       PgAssistant.setStatus("idle");
       focus();
 
       // End of turn is the natural commit point: the exchange is complete and
       // the user is reading rather than typing. Deliberately not awaited --
       // a slow or failed upload must not hold up the panel, and the local
-      // copy is already written either way.
+      // copy is already written either way. Not for a turn that was cut off
+      // (`endTurn` answers false): the thread open now holds nothing of it.
       const threadId = PgAssistant.threadId;
-      if (threadId) {
+      if (finished && threadId) {
         void pushThread(threadId).catch((e) => report("push turn", e));
       }
     }

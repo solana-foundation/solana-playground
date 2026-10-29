@@ -35,6 +35,15 @@ const warnWallet = () =>
 interface UseAccountOptions {
   from: AccountSurface;
   onToggleSettings: (request: SettingsRequest) => void;
+  /** The menu is a page of its own: the phone's menu page holds the footer */
+  page?: boolean;
+  /**
+   * Makes way for the wallet window: on a phone's menu page it brings the
+   * work, where the window opens, into view. Flow passes the shell's
+   * `closeSheet`, which does nothing from `LAYOUT_BREAKPOINTS.phone` up.
+   * Disconnecting opens no window, so it does not call it
+   */
+  closeSheet?: () => void;
 }
 
 /**
@@ -43,7 +52,12 @@ interface UseAccountOptions {
  * remounted when the window crosses `LAYOUT_BREAKPOINTS.phone`, while the
  * sign-in goes on.
  */
-export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
+export const useAccount = ({
+  from,
+  onToggleSettings,
+  page = false,
+  closeSheet,
+}: UseAccountOptions) => {
   const cluster = useClusterStatus();
   useRenderOnChange(PgSession.onDidChange);
   const wallet = useWallet();
@@ -123,9 +137,13 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
         focus: "network",
         returnTo: triggerRef.current,
       }),
-    "connect-wallet": () => toggleWallet("connect-wallet"),
+    "connect-wallet": () => {
+      closeSheet?.();
+      toggleWallet("connect-wallet");
+    },
     "disconnect-wallet": () => toggleWallet("disconnect-wallet"),
     wallet: () => {
+      closeSheet?.();
       PgWallet.show = true;
     },
     // The dialog is mounted beside the menu, so it outlives the menu closing
@@ -163,6 +181,7 @@ export const useAccount = ({ from, onToggleSettings }: UseAccountOptions) => {
       side={from === "footer" ? "top" : "right"}
       settingsShortcut={PgCommon.getOS() === "MacOS" ? "⌘," : "Ctrl+,"}
       onPick={pick}
+      page={page}
     />
   );
 

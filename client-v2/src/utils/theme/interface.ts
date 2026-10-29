@@ -1,7 +1,7 @@
 import { StandardProperties } from "csstype";
 import { ITerminalOptions as XtermOptions } from "xterm";
 
-import { AllRequired, ChildRequired, NestedRequired } from "../types";
+import { AllRequired, NestedRequired } from "../types";
 
 /** Playground theme */
 export interface ThemeParam {

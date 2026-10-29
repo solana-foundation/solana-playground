@@ -5,14 +5,14 @@ import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
-import * as reportModule from "../../../shared/lib/report-button-failure";
-import { PgSession } from "../../../features/auth";
+} from "@/shared/lib/telemetry";
+import * as reportModule from "@/shared/lib/report-button-failure";
+import { PgSession } from "@/features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
@@ -20,6 +20,8 @@ import type { Connection } from "../../../views/sidebar/assistant/store";
 import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgFs } from "../../../utils/explorer/fs";
+import { PgChatStorage } from "@/features/persistence/model/chat-storage";
 import { resetDefaultBackendProbe } from "./default-backend";
 import { useTurn } from "./use-turn";
 import type { ConnectOpener } from "./use-turn";
@@ -82,7 +84,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  PgAssistant.disconnect();
+  // The hook is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgAssistant.disconnect());
   PgSession.reset();
   resetTelemetry();
   vi.restoreAllMocks();
@@ -298,8 +301,9 @@ describe("useTurn", () => {
     });
 
     act(() => result.current.stop());
-
     expect(signal.aborted).toBe(true);
+    // Async: the aborted provider rejects and the turn unwinds in a microtask
+    await act(async () => {});
     expect((await answer).allowed).toBe(false);
     const kinds = PgAssistant.items.map((item) => item.kind);
     expect(kinds).toContain("notice");
@@ -350,6 +354,21 @@ describe("useTurn", () => {
     // Seeded from what is rendered: the first exchange is on screen
     const seed = vi.mocked(createProvider).mock.calls[1][1];
     expect(seed?.length).toBeGreaterThan(0);
+  });
+
+  it("rebuilds the provider once what is rendered is dropped, with no thread open", async () => {
+    // Sign-out with no thread open: `threadId` stays null and a key-based
+    // connection survives, so only `clear` says the conversation is gone
+    PgAssistant.closeThread();
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    const { result } = renderHook(() => useTestTurn());
+    await act(() => result.current.send("from the last account"));
+
+    act(() => PgAssistant.clear());
+    await act(() => result.current.send("from the next one"));
+
+    expect(createProvider).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(createProvider).mock.calls[1][1]).toEqual([]);
   });
 
   it("puts a requested prompt in the composer without sending", async () => {
@@ -891,5 +910,120 @@ describe("useTurn's failures and races", () => {
 
     expect(pushThread).toHaveBeenCalledTimes(1);
     expect(pushThread).toHaveBeenCalledWith("thread-1");
+  });
+});
+
+/**
+ * Sign-out's teardown and a workspace switch both close the open thread. A
+ * turn still running then belongs to a thread that is gone, and nothing it
+ * does afterwards may land in the one that opens next.
+ */
+describe("useTurn when the thread closes mid-turn", () => {
+  /** What the turn sees: its signal, and a way to let it finish */
+  interface HeldTurn {
+    signal: AbortSignal;
+    finish: () => void;
+  }
+
+  let held: Promise<HeldTurn>;
+
+  beforeEach(async () => {
+    (PgFs as unknown as { __files: Map<string, string> }).__files.clear();
+    PgAssistant.closeThread();
+    PgAssistant.clear();
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    await PgAssistant.loadThread("before");
+    vi.mocked(pushThread).mockClear();
+
+    held = new Promise((started) => {
+      provider.send.mockImplementation(
+        (_text: string, signal: AbortSignal) =>
+          new Promise<void>((finish) => started({ signal, finish }))
+      );
+    });
+  });
+  afterEach(async () => {
+    act(() => PgAssistant.closeThread());
+    await PgAssistant.whenPersisted();
+  });
+
+  /** Send a prompt and wait until the provider has it */
+  const startTurn = async () => {
+    const hook = renderHook(() => useTestTurn());
+    act(() => {
+      void hook.result.current.send("build it");
+    });
+    return { hook, turn: await held };
+  };
+
+  it("stops the turn when its thread closes", async () => {
+    const { turn } = await startTurn();
+
+    act(() => PgAssistant.closeThread());
+
+    expect(turn.signal.aborted).toBe(true);
+    await act(async () => turn.finish());
+  });
+
+  it("writes nothing from the stopped turn into the thread opened next", async () => {
+    const { turn } = await startTurn();
+
+    act(() => PgAssistant.closeThread());
+    await act(() => PgAssistant.loadThread("after"));
+
+    // What a provider still unwinding does: its tools report, its reply
+    // streams, its gated tool asks, and the request fails
+    let approval: Promise<{ allowed: boolean }> | undefined;
+    act(() => {
+      PgAssistant.addToolCall("read src/lib.rs");
+      const reply = PgAssistant.startAssistantMessage();
+      PgAssistant.appendToAssistantMessage(reply, "Half a rep");
+      approval = PgAssistant.requestApproval({
+        type: "command",
+        name: "build",
+        effect: "builds",
+      });
+      PgAssistant.addError("request failed");
+    });
+    await act(async () => turn.finish());
+
+    expect(PgAssistant.items).toEqual([]);
+    expect(PgAssistant.status).toBe("idle");
+    await expect(approval).resolves.toMatchObject({ allowed: false });
+    expect(pushThread).not.toHaveBeenCalled();
+    await PgAssistant.whenPersisted();
+    expect(await PgChatStorage.read("after")).toEqual([]);
+  });
+
+  it("lets the next turn write to the thread opened next", async () => {
+    const { hook, turn } = await startTurn();
+    act(() => PgAssistant.closeThread());
+    await act(() => PgAssistant.loadThread("after"));
+    await act(async () => turn.finish());
+
+    provider.send.mockImplementation(async () => {
+      PgAssistant.addToolCall("read src/lib.rs");
+    });
+    await act(() => hook.result.current.send("again"));
+
+    expect(PgAssistant.items.map((i) => i.kind)).toEqual(["user", "tool"]);
+  });
+
+  it("starts no turn over the stopped one, even from a remounted panel", async () => {
+    const { hook, turn } = await startTurn();
+    act(() => PgAssistant.closeThread());
+    await act(() => PgAssistant.loadThread("after"));
+
+    // Leaving for another view and back loses the hook's own controller
+    hook.unmount();
+    const { result } = renderHook(() => useTestTurn());
+    expect(result.current.phase).toBe("stopping");
+    await act(() => result.current.send("again"));
+    act(() => PgAssistant.addNotice("the old tool reports late"));
+
+    expect(provider.send).toHaveBeenCalledTimes(1);
+    expect(PgAssistant.items).toEqual([]);
+    await act(async () => turn.finish());
+    await waitFor(() => expect(result.current.phase).toBe("idle"));
   });
 });

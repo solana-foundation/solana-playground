@@ -6,7 +6,9 @@
   "license": "GPL-3.0",
   "private": true,
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.117.1",
+    "@ai-sdk/anthropic": "~4.0.80",
+    "@ai-sdk/mcp": "~2.0.76",
+    "@ai-sdk/openai-compatible": "~3.0.69",
     "@clockwork-xyz/sdk": "^0.3.1",
     "@coral-xyz/anchor": "^0.29.0",
     "@dnd-kit/core": "^6.0.8",
@@ -34,6 +36,7 @@
     "@solana/spl-token": "*",
     "@solana/spl-token-metadata": "^0.1.2",
     "@solana/web3.js": "*",
+    "ai": "~7.0.141",
     "assert": "^2.0.0",
     "better-auth": "^1.7.5",
     "class-variance-authority": "^0.7.1",
@@ -74,7 +77,8 @@
     "vscode-textmate": "^9.0.0",
     "xterm": "^4.18.0",
     "xterm-addon-fit": "^0.5.0",
-    "xterm-addon-web-links": "^0.5.1"
+    "xterm-addon-web-links": "^0.5.1",
+    "zod": "~4.6.7"
   },
   "devDependencies": {
     "@craco/craco": "^6.4.3",
@@ -98,9 +102,10 @@
     "csstype": "^3.1.2",
     "esbuild": "0.25.9",
     "eslint-import-resolver-typescript": "^3.10.1",
-    "eslint-plugin-boundaries": "7.2.0",
+    "eslint-plugin-boundaries": "7.3.0",
+    "eslint-plugin-layers": "link:./eslint-plugin-layers",
     "jsdom": "^29.1.1",
-    "markdownlint-cli2": "0.23.3",
+    "markdownlint-cli2": "0.24.0",
     "monaco-editor-webpack-plugin": "^7.0.1",
     "postcss": "^8.5.16",
     "postcss-flexbugs-fixes": "^5.0.2",
@@ -158,13 +163,14 @@
     "test": "yarn test-types && yarn test-unit && yarn build:bundle",
     "test-types": "tsc --noEmit",
     "test-unit": "vitest run",
-    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\"",
+    "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/**/*.test.mjs\" \"src/features/**/model/**/*.test.mjs\" \"src/shared/**/*.test.mjs\"",
     "db-migrate": "dbmate --no-dump-schema up",
     "db-rollback": "dbmate --no-dump-schema down",
     "db-status": "dbmate status",
     "db-new": "dbmate new",
     "test-e2e": "playwright test",
     "test-build": "node --test \"scripts/*.build-test.mjs\"",
+    "bundle:info": "node scripts/bundle-info.mjs",
     "db-dump": "./scripts/db-dump.sh"
   },
   "eslintConfig": {
@@ -369,18 +375,11 @@
       }
     ]
   },
-  "browserslist": {
-    "production": [
-      "chrome >= 111",
-      "edge >= 111",
-      "firefox >= 128",
-      "opera >= 97",
-      "safari >= 16.4"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
-  }
+  "browserslist": [
+    "chrome >= 111",
+    "edge >= 111",
+    "firefox >= 128",
+    "opera >= 97",
+    "safari >= 16.4"
+  ]
 }

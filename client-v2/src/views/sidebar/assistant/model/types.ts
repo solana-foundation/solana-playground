@@ -1,43 +1,8 @@
-/** Input a tool receives, straight from the model — always validate before use */
-export type ToolInput = Record<string, unknown>;
-
-/** A JSON Schema object describing one tool's arguments */
-export interface ToolSchema {
-  type: "object";
-  properties: Record<string, unknown>;
-  required?: string[];
-  additionalProperties: false;
-}
-
-/**
- * A tool, described without reference to any vendor.
- *
- * Each provider adapts these into its own SDK's shape. The gating lives inside
- * `run` — a tool that changes state awaits the user before returning — so it is
- * enforced identically no matter which provider is driving.
- */
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  schema: ToolSchema;
-  /** @returns what the model should see as the result */
-  run: (input: ToolInput) => Promise<string> | string;
-}
-
-/** Which model backend the panel is talking to */
-export type ProviderId =
-  | "default"
-  | "anthropic"
-  | "openai"
-  | "openrouter"
-  | "gemini";
+import type { ModelProvider } from "@/shared/lib/ai";
 
 /** The deployment's own backend, which needs a session instead of a key */
-export const isDefaultBackend = (id: ProviderId | undefined) =>
+export const isDefaultBackend = (id: ModelProvider | undefined) =>
   id === "default";
-
-/** Same-origin rail whose upstream and key are configured server-side */
-export const DEFAULT_BACKEND_URL = "/api/agent";
 
 /**
  * One conversation with one backend.
@@ -46,7 +11,7 @@ export const DEFAULT_BACKEND_URL = "/api/agent";
  * arrives, so the UI does not need to know anything about the wire format.
  */
 export interface Provider {
-  readonly id: ProviderId;
+  readonly id: ModelProvider;
   /** Shown in the panel footer */
   readonly label: string;
   /**
@@ -73,7 +38,7 @@ export interface ModelSettings {
 
 /** How a provider is described on the connect screen */
 export interface ProviderInfo {
-  id: ProviderId;
+  id: ModelProvider;
   name: string;
   /** One line on what picking this gets you */
   description: string;
@@ -87,7 +52,7 @@ export interface ProviderInfo {
   keyOptional?: boolean;
   /**
    * OpenAI-compatible endpoint settings, editable on the connect screen.
-   * Present only on providers driven by the generic chat-completions loop.
+   * Present only on the OpenAI-compatible providers.
    * `models` offers known-good ids as one-click presets; the field stays free
    * text, since any id the endpoint serves is valid.
    */
@@ -116,9 +81,8 @@ export const PROVIDERS: ProviderInfo[] = [
     id: "anthropic",
     name: "Anthropic",
     description:
-      "The SDK's tool runner, with Anthropic's own MCP connector for servers " +
-      "routed that way. Sonnet costs half of Opus per token; effort is the " +
-      "other cost lever.",
+      "Claude with adaptive thinking, called straight from the browser. " +
+      "Sonnet costs half of Opus per token; effort is the other cost lever.",
     needsKey: true,
     keyUrl: "https://console.anthropic.com/",
     keyPlaceholder: "sk-ant-…",
@@ -127,8 +91,9 @@ export const PROVIDERS: ProviderInfo[] = [
       // takes neither, so offering it would need a different request shape.
       models: ["claude-opus-5-5", "claude-sonnet-5-5"],
       efforts: ["low", "medium", "high", "xhigh", "max"],
-      // Both 5.5 models match their predecessor's `high` at `medium`
-      defaults: { model: "claude-opus-5-5", effort: "medium" },
+      // High, as the prototype's Connect a model picker shows it; Medium
+      // stays a pick for a cheaper turn
+      defaults: { model: "claude-opus-5-5", effort: "high" },
     },
   },
   {

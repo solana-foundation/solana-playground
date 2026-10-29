@@ -141,9 +141,8 @@ jobs:
 
       # The same chain as Makefile.vercel's deploy-client-to-vercel-preview,
       # with its CLI version: pull, pin the Root Directory, build here, deploy
-      # the prebuilt output. Building here rather than on Vercel also keeps the
-      # project's Ignored Build Step, which cancels every preview build, out of
-      # the way.
+      # the prebuilt output. The Git integration deploys the same push on its
+      # own; this deployment differs in its DATABASE_URL, the PR's Neon branch.
       - name: Build and deploy
         id: deploy
         env:
@@ -163,6 +162,11 @@ jobs:
           . ./.vercel/.env.preview.local
           set +a
           npx --yes "$cli" build --token="$VERCEL_TOKEN"
+          # Every file under api/ becomes a public function unless
+          # client-v2/.vercelignore drops it, and a test there writes to the
+          # database it is given (HOO-2175).
+          tests=$(find .vercel/output/functions -name '*.test.func')
+          [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
           # --archive=tgz: the prebuilt output is over the upload API's 15000-file cap.
           url=$(npx --yes "$cli" deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" \
             -e DATABASE_URL="$db" --meta githubPrId="$PR" --meta githubCommitSha="$SHA")

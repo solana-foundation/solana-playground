@@ -1,16 +1,16 @@
 import { cn } from "@/shared/lib/utils";
-import { ChevronDown, ChevronLeft, Folder, Menu, Play, X } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import { Outlet } from "@/shared/lib/outlet";
-import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
 import { Button } from "@/shared/ui/button";
+import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import { Sheet, SheetContent, SheetTitle } from "@/shared/ui/sheet";
 import { isCovered, isWorkInFrame, screenOf } from "../model/screen";
 import { PHONE_PAGES, isWorkView } from "../model/phone-pages";
 import type { PhonePage, StagePage, WorkView } from "../model/phone-pages";
+import { PHONE_ICONS } from "./phone-icons";
 
 /** How long a scroll must rest before it counts as a swipe that settled */
 export const SWIPE_SETTLE_MS = 120;
@@ -38,6 +38,7 @@ export interface PhonePagerState {
 
 /** The content and the outlets' nodes the pager lays out */
 export interface PhonePagerSlots {
+  /** The navigation, which draws its own head and close on the menu page */
   menu: ReactNode;
   assistant: ReactNode;
   files: ReactNode;
@@ -63,6 +64,10 @@ export interface PhonePagerSlots {
 
 export type BasePhonePagerProps = PhonePagerState & PhonePagerSlots;
 
+/** A Chat or Code option, the prototype's `PaneOption`: filled when it shows */
+const PANE_OPTION =
+  "h-12 rounded-xl px-3 text-control font-act data-[state=on]:bg-surface-hover";
+
 /** The pages under Home: `PHONE_PAGES` without the preview, indices kept */
 const HOME_PAGES: readonly PhonePage[] = PHONE_PAGES.filter(
   (page) => page !== "preview"
@@ -80,16 +85,53 @@ const jumpTo = (el: HTMLElement, index: number) => {
   el.style.removeProperty("scroll-behavior");
 };
 
+/** The bar across the top of a page, the prototype's `PhoneBar` */
 const PhoneBar = ({ children }: { children: ReactNode }) => (
   <div
     data-testid="phone-bar"
-    className="flex h-phone-bar shrink-0 items-center gap-2 border-b border-border px-2"
+    className={cn(
+      "relative z-2 flex h-phone-bar shrink-0 items-center gap-1 border-b border-border pr-2 pl-1.5",
+      "frosted"
+    )}
   >
     {children}
   </div>
 );
 
-/** "src/ lib.rs": names the open file and opens Files */
+/** The DS ghost button at a fingertip's size, as the prototype's bar buttons are */
+const BAR_BUTTON = "size-12 rounded-xl [&_svg:not([class*='size-'])]:size-6";
+
+const BarButton = ({
+  label,
+  onClick,
+  children,
+  ...attrs
+}: {
+  label: string;
+  onClick: () => void;
+  children: ReactNode;
+} & Record<`data-${string}`, string>) => (
+  <Button
+    variant="ghost"
+    size="icon"
+    aria-label={label}
+    onClick={onClick}
+    className={BAR_BUTTON}
+    {...attrs}
+  >
+    {children}
+  </Button>
+);
+
+/** A control in the code's head: the DS ghost button, a fingertip tall */
+const HEAD_BUTTON =
+  "h-12 min-w-12 rounded-xl text-control font-act [&_svg:not([class*='size-'])]:size-5";
+
+/**
+ * Names the open file and opens Files: its folder quiet and cut short first,
+ * its name cut short only when it alone is too long. The label names the
+ * file whole
+ */
 const FilePicker = ({
   file,
   onOpen,
@@ -97,17 +139,45 @@ const FilePicker = ({
   file: BasePhonePagerProps["file"];
   onOpen: () => void;
 }) => (
-  <button
-    type="button"
+  <Button
+    variant="ghost"
     aria-label={file ? `Files, ${file.name} open` : "Files"}
     onClick={onOpen}
-    className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-4 text-sm"
+    className={cn(
+      HEAD_BUTTON,
+      "mr-auto min-w-0 shrink pr-2.5 pl-3 text-foreground [&>svg:first-child]:mr-0.5 [&>svg:first-child]:text-muted-foreground [&>svg:last-child]:ml-0.5 [&>svg:last-child]:size-4.5 [&>svg:last-child]:text-muted-foreground"
+    )}
   >
-    <Folder className="size-4" aria-hidden />
-    {file && <span className="text-muted-foreground">{file.dir}</span>}
-    <span className="font-semibold">{file?.name ?? "Files"}</span>
-    <ChevronDown className="size-4" aria-hidden />
-  </button>
+    {PHONE_ICONS.files}
+    {file ? (
+      <>
+        {file.dir && (
+          <span className="min-w-0 shrink-[999] truncate font-read text-muted-foreground">
+            {file.dir}
+          </span>
+        )}
+        <span className="min-w-0 truncate">{file.name}</span>
+      </>
+    ) : (
+      <span className="shrink-0 whitespace-nowrap">Files</span>
+    )}
+    {PHONE_ICONS.down}
+  </Button>
+);
+
+/**
+ * The code's head: which file is open, and the docs. A phone has no tab row
+ * (`Tabs`), so this is where the open file is named
+ */
+const CodeHead = ({ children }: { children: ReactNode }) => (
+  <div
+    className={cn(
+      "flex h-13 shrink-0 items-center gap-2 border-b border-border pr-1 pl-1.5",
+      "frosted"
+    )}
+  >
+    {children}
+  </div>
 );
 
 /**
@@ -229,16 +299,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
         inert={page !== "menu"}
         className="flex h-full w-full shrink-0 snap-start flex-col"
       >
-        <PhoneBar>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Close the menu"
-            onClick={() => props.onGo("work")}
-          >
-            <X />
-          </Button>
-        </PhoneBar>
+        {/* The navigation draws its own head, the logo and its close */}
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {props.menu}
         </div>
@@ -249,41 +310,45 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
         className="flex h-full w-full shrink-0 snap-start flex-col"
       >
         <PhoneBar>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Menu"
+          <BarButton
+            label="Menu"
             // The phone's way to the navigation, as the stock Sidebar's own
             // trigger is in the frame: where focus goes when the control it
             // left is gone (Flow's `fallbackFocus`)
             data-sidebar="trigger"
             onClick={() => props.onGo("menu")}
           >
-            <Menu />
-          </Button>
-          <span className="min-w-0 flex-1 truncate font-semibold">
+            {PHONE_ICONS.menu}
+          </BarButton>
+          <span className="min-w-0 flex-1 truncate pl-0.5 text-title font-act text-foreground">
             {props.title}
           </span>
           {!covered && (
             <>
+              {/* Two views of one session, one filled: the prototype's
+                `PaneSwitch`, 48 tall at the control type */}
               <Segmented
                 aria-label="Show"
+                variant="boxed"
+                className="shrink-0 gap-0.5 rounded-xl bg-surface-panel p-0.5"
                 value={props.view}
                 onValueChange={(v) => {
                   if (isWorkView(v)) props.onView(v);
                 }}
               >
-                <SegmentedItem value="chat">Chat</SegmentedItem>
-                <SegmentedItem value="code">Code</SegmentedItem>
+                <SegmentedItem value="chat" className={PANE_OPTION}>
+                  Chat
+                </SegmentedItem>
+                <SegmentedItem value="code" className={PANE_OPTION}>
+                  Code
+                </SegmentedItem>
               </Segmented>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Preview the build"
+              <BarButton
+                label="Preview the build"
                 onClick={() => props.onGo("preview")}
               >
-                <Play />
-              </Button>
+                {PHONE_ICONS.preview}
+              </BarButton>
             </>
           )}
         </PhoneBar>
@@ -313,10 +378,27 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
                 (pageShown || props.view !== "code") && "hidden"
               )}
             >
-              <FilePicker
-                file={props.file}
-                onOpen={() => props.onFilesOpenChange(true)}
-              />
+              <CodeHead>
+                <FilePicker
+                  file={props.file}
+                  onOpen={() => props.onFilesOpenChange(true)}
+                />
+                <Button
+                  asChild
+                  variant="ghost"
+                  size="icon"
+                  className={HEAD_BUTTON}
+                >
+                  <a
+                    href="https://solana.com/docs"
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label="Documentation"
+                  >
+                    {PHONE_ICONS.help}
+                  </a>
+                </Button>
+              </CodeHead>
               {props.stageOn === "work" && (
                 <Outlet
                   node={props.stageNode}
@@ -339,14 +421,12 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
             className="flex h-full w-full shrink-0 snap-start flex-col"
           >
             <PhoneBar>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Back to the code"
+              <BarButton
+                label="Back to the code"
                 onClick={() => props.onGo("work")}
               >
-                <ChevronLeft />
-              </Button>
+                {PHONE_ICONS.back}
+              </BarButton>
               <div className="min-w-0 flex-1 overflow-x-auto">
                 {props.stageBar}
               </div>

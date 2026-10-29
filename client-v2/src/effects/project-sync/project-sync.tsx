@@ -6,6 +6,7 @@ import {
   snapshotOf,
 } from "../../features/persistence/model/snapshot";
 import { PgSyncBase } from "../../features/persistence/model/sync-base";
+import { PgSyncClaim } from "../../features/persistence/model/sync-claim";
 import { PgSyncMark } from "../../features/persistence/model/sync-mark";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgWorkspaceRegistry } from "../../features/persistence/model/workspace-registry";
@@ -207,6 +208,12 @@ export const projectSync = (): Disposable => {
       if (PgProjectSync.isSigningOut) return;
       void settleLocalDeletes();
     }),
+    // A tutorial started here has the id another account's copy had, and
+    // without a claim its pushes read as that account's leftover project and
+    // never went up. An import needs none: sync writes its mark.
+    PgExplorer.onDidCreateWorkspace(({ id, imported }) => {
+      if (id && !imported) void PgSyncClaim.claim(id);
+    }),
   ];
 
   /**
@@ -244,6 +251,17 @@ export const projectSync = (): Disposable => {
         // workspace id, which is all a delete knows: storage is keyed by
         // thread id.
         await PgThreadIndex.forget(projectId);
+      }
+
+      // A workspace deleted before its first upload has a claim and no mark,
+      // so the loop above never meets it. Left behind, the claim would vouch
+      // for another account's project that later turns up under the same id.
+      // Every account's, not the signed-in one's: a workspace deleted after
+      // its account signed out takes that account's claim with it.
+      for (const projectId of await PgSyncClaim.projectIds()) {
+        if (PgExplorer.workspaceNameOf(projectId)) continue;
+        if ((await PgWorkspaceRegistry.lists(projectId)) !== false) continue;
+        await PgSyncClaim.forget(projectId);
       }
     } catch (e) {
       report("settle local deletes", e);

@@ -42,12 +42,12 @@ import {
   initLogger,
   memoryProvider as logMemory,
   resetLogger,
-} from "../../../shared/lib/logger";
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import { merge3 } from "../model/merge";
 import { PgProjectSync } from "../model/project-sync";
 import type { FileConflict } from "../model/merge";

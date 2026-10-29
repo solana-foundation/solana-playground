@@ -2,13 +2,14 @@ name: client-v2
 
 # The fork's frontend checks. ci.yml checks formatting and clippy, not
 # `client/`'s build or tests; this one guards `client-v2/` and never touches
-# the Rust workspaces. Keep the push branch list identical on master and
-# new-face, so a merge in either direction leaves it unchanged. A
-# pull_request run reads this file from the PR's merge commit (CLAUDE.md,
-# "This is a fork").
+# the Rust workspaces. A pull_request run reads this file from the PR's
+# merge commit.
+#
+# Every action is pinned to a commit, the version tag beside it: a tag can
+# be moved, a commit cannot.
 on:
   push:
-    branches: ["master", "new-face"]
+    branches: ["master"]
   pull_request:
 
   workflow_dispatch:
@@ -62,12 +63,12 @@ jobs:
       # it out of the `client/public` submodule and dates each tutorial
       # from that submodule's history, so the submodule is checked out
       # with full history.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
           cache: "yarn"
@@ -164,20 +165,33 @@ jobs:
   # The browser suite (`client-v2/e2e/`, Playwright) in its own job, so
   # `checks` stays short and a browser failure reads as one. No Postgres and
   # no secret: every spec stubs the account endpoints with `page.route`, and
-  # the dev server serves `api/*.mjs` itself. The skips the job expects are
-  # listed in `e2e/known-skips.txt`; `playwright.config.mts` says what `CI`
-  # changes.
+  # the dev server serves `api/*.mjs` itself. The suite runs as shards, one
+  # per matrix entry, each on its own runner; `e2e-report` reads every
+  # shard's json report and checks the skips there against
+  # `e2e/known-skips.txt`. `playwright.config.mts` says what `CI` changes.
   e2e:
-    name: e2e
+    name: e2e (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # Measured locally at under five minutes for the suite plus a minute of
-    # dev-server boot (the dated number is in D61); a 2-vCPU runner is two to
-    # three times slower, so this is generous rather than tight. A genuine
-    # hang still fails, just later. Raised from 30 on 2026-10-23: the suite
-    # reached 23 minutes on the runner, and one retry ran it past
-    # Playwright's 25-minute `globalTimeout` (playwright.config.mts), which
-    # moved with it.
-    timeout-minutes: 40
+    # Measured on run 40369790881 (2026-10-26, 278 tests): about 4 minutes
+    # from checkout to the first test (install, browser, dev-server compile),
+    # and the slowest of four shards holds about 7 minutes of tests. The
+    # steps before `Browser tests` vary far more than the tests: on run
+    # 40379245789 the apt downloads of `install-deps` took 11 minutes on one
+    # shard and 20 seconds on another. This limit holds that variance;
+    # Playwright's `globalTimeout` (playwright.config.mts) is what bounds the
+    # tests, and a shard hung there still prints its summary.
+    timeout-minutes: 30
+
+    strategy:
+      # A red shard leaves the others running, so one run reports every
+      # failure and `e2e-report` sees every report.
+      fail-fast: false
+      # The list is 1..N without gaps: `strategy.job-total` is its length and
+      # the divisor in the `--shard` argument of `Browser tests`, and a shard
+      # index the matrix skips is a slice nobody runs while this job stays
+      # green. `e2e-report` fails on the gap.
+      matrix:
+        shard: [1, 2, 3, 4]
 
     defaults:
       run:
@@ -186,12 +200,12 @@ jobs:
     steps:
       # Same checkout as `checks`: `client-v2/public` is generated out of the
       # `client/public` submodule, dated from its history.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
           cache: "yarn"
@@ -215,7 +229,7 @@ jobs:
         id: playwright
         run: echo "version=$(jq -r .version node_modules/@playwright/test/package.json)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache/restore@v6
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: playwright-cache
         with:
           path: ~/.cache/ms-playwright
@@ -225,7 +239,7 @@ jobs:
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         run: yarn playwright install --with-deps chromium
 
-      - uses: actions/cache/save@v6
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         if: steps.playwright-cache.outputs.cache-hit != 'true'
         with:
           path: ~/.cache/ms-playwright
@@ -238,38 +252,72 @@ jobs:
       # `yarn dev` runs `generate-fast` itself before `craco start`, and the
       # config starts it (`webServer`), so there is no separate generate step.
       - name: Browser tests
-        run: yarn test-e2e
-
-      # A skipped test is green to Playwright, and so is one that passed on
-      # its retry; the reporters name neither. Both are read from the json
-      # report: a skip outside `e2e/known-skips.txt` fails the job, a listed
-      # test that no longer skips is a warning to prune the list, and a
-      # flaky test is a warning with its title -- work to do, not a pass.
-      - name: Check skips against the known list
-        if: always()
-        run: |
-          report=test-results/report.json
-          [ -f "$report" ] || { echo "::error::no $report -- the suite did not run to a report"; exit 1; }
-          titles() { jq -r --arg s "$1" '.. | objects | select(has("tests")) | select(any(.tests[]; .status == $s)) | .title' "$report" | sort; }
-          grep -v '^#' e2e/known-skips.txt | sed '/^$/d' | sort > /tmp/known-skips
-          titles skipped > /tmp/skipped
-          comm -13 /tmp/known-skips /tmp/skipped | while read -r t; do echo "::error title=unexpected e2e skip::$t -- not in e2e/known-skips.txt"; done
-          comm -23 /tmp/known-skips /tmp/skipped | while read -r t; do echo "::warning title=stale known skip::$t -- listed in e2e/known-skips.txt but ran"; done
-          titles flaky | while read -r t; do echo "::warning title=flaky e2e test::$t -- failed once on this runner, passed on retry; its trace is in the artifact"; done
-          [ -z "$(comm -13 /tmp/known-skips /tmp/skipped)" ]
+        run: yarn test-e2e --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       # Traces, screenshots and the per-test error context of what failed.
       # Open a trace with `yarn playwright show-trace <file>`. `always()`,
       # not `failure()`: a run that `timeout-minutes` cancels is the one whose
       # trace matters most, and `failure()` does not fire for it. On a green
       # run the directory holds the json report and little else.
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: playwright-test-results
+          name: playwright-test-results-${{ matrix.shard }}
           path: client-v2/test-results/
           retention-days: 7
           if-no-files-found: warn
+
+  # The skip check, once over every shard's report: run per shard, it would
+  # warn "stale known skip" from every shard that does not hold the listed
+  # test. `always()`, so a red shard's report is still read, and a shard
+  # whose report never arrived fails here instead of passing by absence. The
+  # checks are `scripts/e2e-report.mjs`, tested by `scripts/e2e-report.test.mjs`
+  # (`yarn test-api`).
+  e2e-report:
+    name: e2e-report
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: e2e
+    if: always()
+
+    defaults:
+      run:
+        working-directory: client-v2
+
+    steps:
+      # The script, its list and the Node pin are all this job reads from
+      # the repository; nothing is installed.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          sparse-checkout: |
+            client-v2/e2e/known-skips.txt
+            client-v2/scripts/e2e-report.mjs
+            client-v2/.nvmrc
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+
+      # One directory per shard, named after its artifact, so a shard that
+      # uploaded nothing is a missing directory rather than a quiet merge.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: playwright-test-results-*
+          merge-multiple: false
+          path: client-v2/shard-reports
+
+      # Playwright writes `config.shard` as `{ total, current }` into the
+      # json report. The reports must agree on `total` and cover 1..total: a
+      # cancelled shard, a shard that never reached a report, or a lost
+      # upload is a slice nobody checked, not a pass. A skipped test is green
+      # to Playwright, and so is one that passed on its retry; the reporters
+      # name neither. Both are read from the json reports: a skip outside
+      # `e2e/known-skips.txt` fails the job, a listed test that no longer
+      # skips is a warning to prune the list, and a flaky test is a warning
+      # with its title -- work to do, not a pass.
+      - name: Check the shards and their skips
+        run: node scripts/e2e-report.mjs shard-reports e2e/known-skips.txt
 
   # The status context the default branch's ruleset names (`client-v2`), so
   # a job added to or renamed in this workflow needs no ruleset edit: list it
@@ -280,7 +328,7 @@ jobs:
     name: client-v2
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [checks, build, e2e]
+    needs: [checks, build, e2e, e2e-report]
     if: always()
     steps:
       - name: Every job succeeded

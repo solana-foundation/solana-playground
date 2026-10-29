@@ -1,4 +1,4 @@
-import { createTracker } from "../../../shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
 
 type OverlayEvents = {
   /** A dialog opened: its frame mounted. */

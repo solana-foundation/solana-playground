@@ -35,11 +35,15 @@ app -> widgets -> features -> entities -> shared
 Two rules on top of the direction:
 
 - **A feature never imports another feature.** When two features must meet,
-  they meet in a widget that imports both. One named exception exists today:
-  `auth` and `persistence` import each other (`auth`'s server module uses
-  `persistence`'s pool; `persistence` reads the session). It is recorded as
-  the exception in the `client-v2-layers` spec and is broken by task 1.4 of
-  `ui-migration`; the boundary check exempts these two by name until then.
+  they meet in a widget that imports both. One named exception holds until
+  `ui-migration` task 1.4 breaks it: `auth` and `persistence` import each
+  other (`auth`'s server module uses `persistence`'s pool; `persistence`
+  reads the session), as the `client-v2-layers` spec records. The pair's
+  existing imports, each marked `TODO(ui-migration 1.4)`, are warnings from
+  `layers/recorded-exception`, and only through the other slice's entry; the
+  same import from any file outside `RECORDED_EXCEPTION` (`eslint-layers.js`)
+  is an error. `scripts/eslint-layers.test.mjs` pins those imports, so CI
+  fails on a new one, or on one that is gone without the list shrinking.
 - **Entities do not import each other.** FSD's `@x` cross-imports are not
   enabled.
 
@@ -61,6 +65,15 @@ may import the route it drives. The layer direction holds for tests too, and
 production code gets neither. `scripts/eslint-layers.test.mjs`
 (`yarn test-api`) lints a probe of each kind against the real slices, so a
 check that stopped resolving imports, and so passed everything, fails there.
+
+**An import from one module of the layers into another is written
+`@/...`.** A module is a slice or a first-level folder of `app` or `shared`,
+and the files at the top of a layer form one module; inside a module,
+relative paths stay. Imports to or from the legacy roots are not checked.
+`layers/alias-across-modules` (`eslint-plugin-layers/`) fails, in a `.ts`,
+`.tsx` or `.mts` file, a relative path that leaves its module, and `--fix`
+rewrites it; `scripts/eslint-plugin-layers.test.mjs` tests it. `.mjs` files are
+exempt, because plain Node runs them and cannot resolve `@/`.
 
 A slice's segments: `ui/` for React, `model/` for logic, `lib/` for leaf
 helpers. Its public API is `index.ts` for browser code and `server.mjs` for
@@ -204,21 +217,30 @@ counts.
    "Before a PR") still applies to every task.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
-   before the sx review runs and before the PR is opened; it never runs
-   `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
+   before the PR is opened (and before the sx review, if it runs); it never
+   runs `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
    `tasks.md`, then `/opsx:archive` merges the deltas into `openspec/specs/`
    and moves the folder to `changes/archive/<date>-<name>/`, all committed in
    that same PR. On a no, the PR description says
-   `OpenSpec: <change> stays open (<who answered>, <date>)`. A change whose
-   last task merged without the question is closed in a PR of its own once a
-   human says yes. `specs/` therefore always describes the code as it is,
-   never a plan; nothing is back-filled for code that is not changing.
+   `OpenSpec: <change> stays open (<who answered>, <date>)`, and the change is
+   closed in a PR of its own once a human says yes; so is a change whose last
+   task merged without the question. `specs/` therefore always describes the
+   code as it is, never a plan; nothing is back-filled for code that is not changing.
 6. **Asked to build something, look in `openspec/changes/` first**
    (`openspec list`). If a change covers it, `/opsx:apply` that change and
    say which task. If none does and the work is more than a bug fix, offer
    `/opsx:propose` rather than starting on the code. A bug fix in a slice
    that sends no events, or none for the path being fixed, says so and
    proposes the missing events as a follow-up ticket.
+
+**Active means unfinished.** `openspec/changes/` holds changes with
+tasks left, usually work that takes several PRs, and a finished change only
+until a human says yes to closing it (step 5). A change whose tasks are all
+done is archived, without `tasks.md`, so `openspec/specs/` carries its
+requirements; no change stays open as a standing record, however wide its
+scope. An archived change under `changes/archive/<date>-<name>/` is a record,
+not work: never apply, tick or edit one, and read its `proposal.md` and
+`design.md` for the reasoning behind code it introduced.
 
 **Where the superpowers skills write.** Their default locations
 (`docs/superpowers/specs/`, `docs/superpowers/plans/`) are not used in this
@@ -304,8 +326,12 @@ check's job (Layers, "The boundary check"); the rest hold by review.
 - **Build configuration is not unit-tested; its outcome is.** CI greps the
   built CSS (or bundle) for what the configuration must produce, Tailwind's
   `.flex` rule and the `_Pg*` class names, and the build tests
-  (`yarn test-build`) read `build/`: `scripts/in-source-tests.build-test.mjs`
-  fails when a chunk holds an in-source test title. A test that runs the real
+  (`yarn test-build`, every `scripts/*.build-test.mjs`) read the build's
+  output. Among them, `scripts/in-source-tests.build-test.mjs` fails when a
+  chunk holds an in-source test title, `scripts/bundle-modules.build-test.mjs`
+  when the bundle holds a module under `src/test-utils/` or from `vitest` or
+  `@vitest/*`, and `scripts/bundle-info.build-test.mjs` when
+  `bench/BUNDLE.md` no longer matches the build. A test that runs the real
   build tool, with the production options, on representative input and
   asserts on its output is allowed: `scripts/esbuild-minify.test.mjs` (run by
   `yarn test-api`, no build needed) minifies two small chunks with
@@ -325,46 +351,89 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   a fallback or a migration for a problem someone reported, reproduce it
   live (a probe, a curl, a screenshot, dated) and put that in the PR. A PR
   that solves a problem the repository does not have is closed, not fixed.
-- **Archiving is a human's call, asked before the sx review.** If the
+- **Archiving is a human's call, asked before the PR is opened.** If the
   PR ticks the change's last task, ask whether to close the change before
-  the first `/sx:review-pr` run and before opening the PR. On a yes,
-  confirm every task is ticked, delete `tasks.md`, run `/opsx:archive` and
-  commit the deletion and the archive in this PR; on a no, the PR
+  opening the PR, and before the first `/sx:review-pr` run if there is one.
+  On a yes, confirm every task is ticked, delete `tasks.md`, run
+  `/opsx:archive` and commit the deletion and the archive in this PR; on a
+  no, the PR
   description says `OpenSpec: <change> stays open (<who answered>, <date>)`.
   Never archive unasked.
-- **The author runs the sx review.** `/sx:review-pr full`, then
-  `/sx:review-pr`, on every PR and before `gh pr create`; the skill comes
-  from the `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills).
-  `full` hands the review to the pr-review-toolkit plugin, which must be
-  installed too; the default run checks the plugin's built-in rules and this
-  repository's, plus the governing OpenSpec change and the Solana guidance
-  where they apply. Human reviewers read the diff; they do not re-run the
-  review, so the author's run is the gate. A ticket branch gets no Vercel
-  preview, only the integration branches do
-  (`scripts/vercel-ignore-build.mjs`), so a PR that changes the UI shows it
-  in its screenshots. Fix every critical finding in the same PR, and every
-  important one the PR needs; an important you defer gets a `TODO` at the
-  site naming why or the follow-up, so the next run reads it as acknowledged.
-  A finding outside the PR's scope goes to its existing Linear issue, or a
-  new one when none fits; a gap the review keeps missing becomes a Linear
-  issue too, closed later through agent rules or tooling.
+- **The author runs the sx review when they have it.** An author with the
+  `sx` plugin (github.com/hoodieshq/solana-explorer-dev-skills) runs
+  `/sx:review-pr full`, then `/sx:review-pr`, on every PR and before
+  `gh pr create`. `full` hands the review to the pr-review-toolkit plugin,
+  which must be installed too; the default run checks the plugin's built-in
+  rules and this repository's, plus the governing OpenSpec change and the
+  Solana guidance where they apply. An author without the plugin skips the
+  run, and the human review is the gate. Human reviewers read the diff;
+  they do not re-run the review. A ticket branch gets no Vercel preview,
+  only the integration branches do (`scripts/vercel-ignore-build.mjs`), so a
+  PR that changes the UI shows it in its screenshots. Fix every
+  critical finding in the same PR, and every important one the PR needs; an
+  important you defer gets a `TODO` at the site naming why or the follow-up,
+  so the next run reads it as acknowledged. A finding outside the PR's scope
+  goes to its existing Linear issue, or a new one when none fits; a gap the
+  review keeps missing becomes a Linear issue too, closed later through agent
+  rules or tooling. The PR description may carry the line
+  `sx:review-pr (full + default) @ <sha>: <n> critical open`, where `<sha>`
+  is the head both runs read; write it only when both runs read that head,
+  and update it after each re-run. The line is optional: a PR without it is
+  reviewed and merged the usual way, with a human approval. With it, a PR
+  into a `scope/*` branch or `new-face-polish-2` merges without a human
+  approval once it has no conflict, no human has requested changes, CI is
+  green and the line names the PR's current head with 0 critical open.
+  Green means every check the `ci.yml` and `client-v2.yml`
+  workflows report on that head passed, except `ci.yml`'s `checks / Build`,
+  which is always skipped because `ci.yml` passes `build: false`; any other
+  skipped check, and any pending, cancelled or missing one, is not green. A
+  red Vercel preview does not hold the merge. The fleet's Dispatcher (the
+  agent session that merges ready PRs) merges these PRs, never their author.
+  Without the line, with a stale one or with any critical open, and for any
+  other base, a human approves.
 - **A stacked PR is rebased** whenever the one under it moves. "Needs a
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
   in CI's order, minus the production build. Opt in to running it on every
-  push with `git config core.hooksPath .githooks` once per clone.
-- **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` job of
-  `client-v2.yml`) on every PR (GitHub reads the workflow from the PR's
-  merge commit; see the root `CLAUDE.md`, "This is a fork"), and a red spec
-  fails the PR's checks. It needs no server and no Postgres: every spec
-  stubs the account endpoints with `page.route`, and the dev server serves
-  `api/*.mjs` itself. The assistant's specs stub `/api/agent` the same way,
-  so none depends on the machine's default backend. Two sync tests ("switching
+  push with `git config core.hooksPath .githooks` once per clone. To run a
+  CI job itself, in its runner image, see
+  [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
+- **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**
+  Rebase onto the base branch first: CI measures the merge commit. Then run
+  `REACT_APP_GA_MEASUREMENT_ID= yarn build-fast`: CI's build has no GA id, and
+  the empty value keeps CRA from taking one from `client-v2/.env`, since
+  dotenv does not override a variable already set. Sentry needs no override:
+  `sentryEnabled` (`scripts/sentry-gate.mjs`) keeps it out of a build without
+  `VERCEL_ENV`. Then run `yarn bundle:info` and commit the file; `yarn test-build` fails while
+  the snapshot differs from the build. A fresh cell within
+  `DISPLAY_STEP_TOLERANCE_BYTES` of the committed cell keeps the committed value,
+  so a rebuild of the same commit leaves the file as it is. CI posts the
+  change against the base branch's snapshot as a comment on the PR.
+- **Every row that grows is explained in the PR description.** The bundle
+  comment lists each row whose cell moved against the base branch's
+  snapshot; the description's "Bundle size"
+  line names what each one is for, or says that no row moved. A refreshed
+  snapshot only proves the file is current, not that the growth is wanted.
+  Review flags growth the description does not justify: tens of kB on `main`
+  or a worker, `other chunks` growing with no new lazy feature to explain it,
+  or a new named chunk far above its peers. Review does not flag a row the
+  comment leaves out: its movement is below the snapshot's resolution, set by
+  `DISPLAY_STEP_TOLERANCE_BYTES`, where real change of up to about two display
+  steps can stay unrecorded.
+- **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
+  `client-v2.yml`, one shard per matrix entry) on every PR (GitHub reads the
+  workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
+  fork"), and a red spec fails the PR's checks. It needs no server and no
+  Postgres: every spec stubs the account endpoints with `page.route`, and
+  the dev server serves `api/*.mjs` itself. The assistant's specs stub
+  `/api/agent` the same way, so none depends on the machine's default
+  backend. Two sync tests ("switching
   tabs mid-debounce raises no conflict", "reloading a project the account
   already has writes nothing") are `test.fixme` on the runner, where the
   load's timing differs and the sync races they guard show. The two are
-  listed by title in `e2e/known-skips.txt`; the job fails on any skip that
-  is not in the list and warns on an entry that no longer skips. CI retries a
+  listed by title in `e2e/known-skips.txt`; the `e2e-report` job checks the
+  list once, over every shard's report, and fails on any skip that is not in
+  the list and warns on an entry that no longer skips. CI retries a
   failed spec once, because the runner is three times slower than a laptop and
   fails specs on timing alone; a pass on the retry is reported as **flaky**, named in the
   run's annotations, and is work to do, not a pass. Locally `retries` is 0,

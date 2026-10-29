@@ -5,7 +5,7 @@ import {
   loadSkill,
   requireSkill,
 } from "../grounding";
-import type { ToolDefinition, ToolInput } from "./types";
+import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {

@@ -5,6 +5,7 @@ import { BaseEditorTabs } from "./BaseEditorTabs";
 
 import Tab from "./Tab";
 import { Button } from "@/shared/ui/button";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import Dnd from "../Dnd";
 import Img from "../Img";
 import { PgExplorer, PgView, PgWallet } from "../../utils";
@@ -40,7 +41,11 @@ export const Tabs = () => {
     []
   );
 
-  if (!explorer.tabs.length) return null;
+  // A phone has no tab row: the code's head names the open file and opens
+  // the others (`BasePhonePager`'s file picker), as the prototype draws it.
+  // The row's wallet toggle goes with it; the account menu opens the wallet
+  const phone = useViewport() === "phone";
+  if (phone || !explorer.tabs.length) return null;
 
   return (
     <BaseEditorTabs

@@ -15,7 +15,7 @@ import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import {
   PgAssistant,
   THREAD_NOT_SAVED,
@@ -110,7 +110,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  PgAssistant.clear();
+  // The thread is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgAssistant.clear());
   resetTelemetry();
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -405,6 +406,26 @@ describe("Thread, sending", () => {
     expect(tracked()).toEqual([["assistant_suggestion_picked", {}]]);
   });
 
+  it("offers the lesson's questions while a lesson is open", () => {
+    lesson.open = true;
+    const send = vi.fn().mockResolvedValue(undefined);
+    render(<Thread turn={stubTurn(false, send)} project="Hello Anchor" />);
+    for (const name of [
+      "Explain this step",
+      "Give me a hint",
+      "Why did my build fail?",
+    ]) {
+      expect(screen.getByRole("button", { name })).toBeTruthy();
+    }
+    expect(
+      screen.queryByRole("button", { name: "What does this program do?" })
+    ).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Give me a hint" }));
+    expect(send).toHaveBeenCalledWith("Give me a hint");
+    expect(tracked()).toEqual([["assistant_suggestion_picked", {}]]);
+  });
+
   it("make this change asks for a patch and is reported", () => {
     act(() => finishedReply("Add a field to the account."));
     const send = vi.fn().mockResolvedValue(undefined);
@@ -455,12 +476,15 @@ describe("Thread, inside a lesson", () => {
     ).toBeTruthy();
   });
 
-  it("after an applied patch the move is the step's build", () => {
+  it("after an applied patch the move is the step's build", async () => {
     lesson.open = true;
     act(() => appliedPatchThenReply());
     render(<Thread turn={stubTurn(false)} project="Counter" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    // Async: Build is an AsyncButton, which settles once the command resolves
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    });
 
     expect(lesson.execute).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("button", { name: "Skip this step" })).toBeNull();

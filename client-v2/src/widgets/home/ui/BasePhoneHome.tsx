@@ -72,7 +72,7 @@ const BasePhoneHome = ({
           variant="outline"
           onClick={() => onQuickstart(q)}
           onError={reportButtonFailure("open the quick start")}
-          className="h-auto min-h-16 w-full justify-start gap-3 rounded-2xl bg-surface-panel px-3 py-2 text-left"
+          className="h-auto min-h-15.5 w-full justify-start gap-3 rounded-2xl bg-surface-panel py-2.5 pr-3 pl-2.5 text-left"
         >
           <span
             className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${
@@ -82,10 +82,10 @@ const BasePhoneHome = ({
             {ICONS[q.id]}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate text-sm font-medium text-foreground">
+            <span className="truncate text-body font-act text-foreground">
               {q.title}
             </span>
-            <span className="truncate text-xs font-normal text-muted-foreground">
+            <span className="truncate text-caption font-label text-muted-foreground">
               {q.description}
             </span>
           </span>
@@ -101,7 +101,13 @@ const BasePhoneHome = ({
           <span className="flex-1">
             {`${tutorialCount} tutorials, ${programCount ?? "…"} programs`}
           </span>
-          <Button variant="secondary" size="sm" onClick={onBrowse}>
+          {/* The prototype's pill, a fingertip tall to press though 36 to
+              see: the ground's colour, in the control type */}
+          <Button
+            variant="secondary"
+            onClick={onBrowse}
+            className="relative h-9 rounded-full bg-background px-4 text-control font-act after:absolute after:-inset-y-1.5 after:inset-x-0"
+          >
             Browse
           </Button>
         </>

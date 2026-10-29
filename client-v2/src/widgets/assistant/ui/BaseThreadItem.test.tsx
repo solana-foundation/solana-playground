@@ -1,15 +1,21 @@
 // One item of the thread, drawn from the design system's message parts.
 import { createElement } from "react";
 import type { FC } from "react";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
-} from "../../../shared/lib/logger";
-import { BUTTON_FAILED_TOAST } from "../../../shared/lib/report-button-failure";
+} from "@/shared/lib/logger";
+import { BUTTON_FAILED_TOAST } from "@/shared/lib/report-button-failure";
 import { PgView } from "../../../utils/view";
 import type { ToastChildProps } from "../../../utils/view";
 import { BaseThreadItem } from "./BaseThreadItem";
@@ -134,7 +140,7 @@ describe("BaseThreadItem", () => {
     ).toBeNull();
   });
 
-  it("the verify step is named by its stage and runs its action", () => {
+  it("the verify step is named by its stage and runs its action", async () => {
     const onClick = vi.fn(() => Promise.resolve());
     render(
       <BaseThreadItem
@@ -145,7 +151,10 @@ describe("BaseThreadItem", () => {
         onAnswer={vi.fn()}
       />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
+    // Async: the verify step is an AsyncButton, which settles once `onClick` resolves
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Deploy" }));
+    });
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 

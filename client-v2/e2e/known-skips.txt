@@ -1,6 +1,7 @@
-# Tests the `e2e` job expects to skip, one title per line. The job fails on a
-# skip that is not here and warns on a line that no longer skips, so this is
-# maintained by hand and read in CI with jq. Why each one skips is in the
+# Tests the suite expects to skip, one title per line. The `e2e-report` job
+# of client-v2.yml reads this list (`scripts/e2e-report.mjs`) over every
+# shard's report: it fails on a skip that is not here and warns on a line that
+# no longer skips, so this is maintained by hand. Why each one skips is in the
 # test, next to its `test.skip` / `test.fixme`.
 switching tabs mid-debounce raises no conflict
 reloading a project the account already has writes nothing

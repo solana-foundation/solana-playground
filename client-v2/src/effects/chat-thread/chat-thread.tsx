@@ -1,3 +1,4 @@
+import { PgSession } from "../../features/auth";
 import { report } from "../../features/persistence/model/diagnostics";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgAssistant } from "../../views/sidebar/assistant/store";
@@ -156,6 +157,20 @@ export const chatThread = (): Disposable => {
 
   void open();
 
+  // Sign-out's teardown closes the thread, and nothing else would open one:
+  // the workspace has not changed, so `open` stands down on `openedFor`. The
+  // panel then held whatever was typed next in memory only, and a reload
+  // lost it.
+  let signedIn = !!PgSession.get();
+  const onSessionChange = () => {
+    const wasSignedIn = signedIn;
+    signedIn = !!PgSession.get();
+    if (!wasSignedIn || signedIn) return;
+
+    openedFor = null;
+    void open().catch((e) => report("open thread after sign-out", e));
+  };
+
   const subscriptions = [
     PgExplorer.onDidSwitchWorkspace(() => {
       // The outgoing thread's, not the incoming one's
@@ -163,6 +178,7 @@ export const chatThread = (): Disposable => {
       void open();
     }),
     PgAssistant.onDidChange(onChange),
+    PgSession.onDidChange(onSessionChange),
   ];
 
   document.addEventListener("visibilitychange", onVisibilityChange);

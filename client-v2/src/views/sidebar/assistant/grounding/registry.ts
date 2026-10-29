@@ -1,5 +1,5 @@
 import playgroundEnvSkill from "../content/playground-env.skill.md";
-import type { McpServerEntry, SkillEntry } from "./types";
+import type { SkillEntry } from "./types";
 
 /**
  * The skills the panel offers.
@@ -35,22 +35,6 @@ export const SKILLS: SkillEntry[] = [
     },
   },
 ];
-
-/**
- * Extra MCP servers, added from the client.
- *
- * **Not the source of truth.** The gateway (`api/mcp.mjs`) owns the list and
- * the panel asks it at startup, so enabling an upstream is a deploy plus an
- * env var rather than a client change — that is how an operator turns Explorer
- * on without shipping anything, and why its absence from the panel means the
- * server has no bypass configured.
- *
- * This list is only for servers wanted *in addition*: something CORS-open a
- * page can reach directly, or an `executor: "server"` entry to route through
- * Anthropic's connector instead. Empty by default, and deliberately not a
- * mirror of what the gateway serves — two lists would disagree.
- */
-export const LOCAL_MCP_SERVERS: McpServerEntry[] = [];
 
 /** Skills that are on unless the user turns them off */
 export const DEFAULT_SKILL_IDS = SKILLS.map((skill) => skill.id);

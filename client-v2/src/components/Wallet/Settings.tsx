@@ -21,11 +21,13 @@ import {
   Trash,
 } from "../Icons";
 import { createLogger } from "@/shared/lib/logger";
+import { shortAddress } from "@/shared/lib/short-address";
 import {
   markFailureShown,
   reportButtonFailure,
 } from "@/shared/lib/report-button-failure";
 import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
+import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import { useAirdrop, useDarken } from "./hooks";
 import { isSignInFailure } from "../../features/auth";
 import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
@@ -45,6 +47,37 @@ const openModal = async (action: string, load: () => Promise<unknown>) => {
       () => <span>Could not open that. Reload and try again.</span>,
       { options: { name: "menu-action-failed" } }
     );
+  }
+};
+
+// The toast says what the import did, in Spec 12's words: `PgWallet.add`
+// switches to an account that already holds the keypair instead of adding it,
+// which would otherwise look like nothing happened. A file that is not a
+// keypair is the user's to fix, so the toast says why; anything else is a
+// failed click. A closed picker resolves with nothing and says nothing.
+const importWallet = async () => {
+  try {
+    const imported = await PgWallet.import();
+    if (!imported) return;
+
+    const { name } = PgWallet.accounts[PgWallet.currentIndex];
+    const text = imported.added
+      ? `Imported ${shortAddress(
+          imported.keypair.publicKey.toBase58()
+        )} as ${name}.`
+      : `${name} already holds that keypair, so it is now the current wallet.`;
+    PgView.setToast(() => <span>{text}</span>, {
+      options: { name: "wallet-imported" },
+    });
+  } catch (err) {
+    if (err instanceof KeypairFileError) {
+      const { message } = err;
+      PgView.setToast(() => <span>{message}</span>, {
+        options: { name: "wallet-import-not-keypair" },
+      });
+      return;
+    }
+    reportButtonFailure("import the wallet")(err);
   }
 };
 
@@ -157,7 +190,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
               <MenuItemText>Remove</MenuItemText>
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onSelect={() => PgWallet.import()}>
+          <DropdownMenuItem onSelect={importWallet}>
             <ImportFile />
             <MenuItemText>Import</MenuItemText>
           </DropdownMenuItem>

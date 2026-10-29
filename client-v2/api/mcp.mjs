@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * MCP gateway.
  *
@@ -26,11 +27,36 @@ import {
 } from "../src/features/api/server.mjs";
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
 import { mcpExplorerEnv } from "../src/shared/config/server-env.mjs";
+import {
+  rpcError,
+  rpcRequest,
+  rpcResult,
+} from "../src/shared/lib/json-rpc.mjs";
 
 const PROTOCOL_VERSION = "2025-06-18";
 
 /** Separates upstream id from tool name when several are selected */
 const SEPARATOR = "__";
+
+/** @typedef {import("../src/shared/lib/json-rpc.mjs").RpcId} RpcId */
+
+/**
+ * @typedef {object} Upstream
+ * @property {string} name
+ * @property {string} url
+ * @property {Record<string, string>} [headers] sent on every request to it
+ */
+
+/** @typedef {Record<string, Upstream>} Upstreams by id */
+
+/**
+ * The request body as the gateway reads it: unvalidated, its `id` echoed back verbatim.
+ *
+ * @typedef {object} RpcRequestBody
+ * @property {RpcId} id
+ * @property {unknown} method
+ * @property {Record<string, unknown>} [params]
+ */
 
 /**
  * The upstreams this caller may use.
@@ -46,6 +72,7 @@ const SEPARATOR = "__";
  * @param {{ signedIn: boolean }} caller
  */
 const upstreams = (caller) => {
+  /** @type {Upstreams} */
   const configured = {
     solana: {
       name: "Solana Developer MCP",
@@ -71,6 +98,11 @@ const upstreams = (caller) => {
   return configured;
 };
 
+/**
+ * @param {import("node:http").ServerResponse} res
+ * @param {number} status
+ * @param {unknown} body
+ */
 const sendJson = (res, status, body) => {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
@@ -101,18 +133,22 @@ const explorerWithheld = async (req) => {
   return session.status === "signed-in" ? null : session.status;
 };
 
-const rpcError = (res, id, code, message) =>
-  sendJson(res, 200, {
-    jsonrpc: "2.0",
-    id: id ?? null,
-    error: { code, message },
-  });
+/**
+ * A JSON-RPC error with HTTP 200: the transport worked, the call did not.
+ *
+ * @param {import("node:http").ServerResponse} res
+ * @param {RpcId} id
+ * @param {number} code
+ * @param {string} message
+ */
+const sendRpcError = (res, id, code, message) =>
+  sendJson(res, 200, rpcError(id, code, message));
 
 /**
  * Which upstreams this request is for, defaulting to all of them.
  *
  * @param {URL} url
- * @param {ReturnType<typeof upstreams>} configured
+ * @param {Upstreams} configured
  * @param {keyof typeof EXPLORER_HINTS | null} withheld why Explorer is absent, for the error
  */
 const selected = (url, configured, withheld) => {
@@ -142,6 +178,9 @@ const selected = (url, configured, withheld) => {
  *
  * Streamable HTTP answers with JSON or a one-event SSE stream, so both are
  * unwrapped here and the caller only ever sees JSON.
+ *
+ * @param {Upstream} upstream
+ * @param {unknown} payload
  */
 const call = async (upstream, payload) => {
   const response = await fetch(upstream.url, {
@@ -171,11 +210,14 @@ const call = async (upstream, payload) => {
   throw new Error("Upstream sent an event stream with no data.");
 };
 
-/** `initialize` is answered here: there is no single upstream to forward it to */
-const initialize = (id, ids) => ({
-  jsonrpc: "2.0",
-  id,
-  result: {
+/**
+ * `initialize` is answered here: there is no single upstream to forward it to
+ *
+ * @param {RpcId} id
+ * @param {string[]} ids
+ */
+const initialize = (id, ids) =>
+  rpcResult(id, {
     protocolVersion: PROTOCOL_VERSION,
     capabilities: { tools: { listChanged: false } },
     serverInfo: { name: "solana-playground-gateway", version: "0.1.0" },
@@ -184,19 +226,24 @@ const initialize = (id, ids) => ({
       (ids.length > 1
         ? ` Names are prefixed with the upstream id and "${SEPARATOR}".`
         : ""),
-  },
-});
+  });
 
-/** Merge every selected upstream's tools, prefixing only when disambiguation is needed */
+/**
+ * Merge every selected upstream's tools, prefixing only when disambiguation is needed
+ *
+ * @param {RpcId} id
+ * @param {string[]} ids
+ * @param {Upstreams} configured
+ */
 const listTools = async (id, ids, configured) => {
   const prefix = ids.length > 1;
   const lists = await Promise.all(
     ids.map(async (serverId) => {
-      const payload = await call(configured[serverId], {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "tools/list",
-      });
+      const payload = await call(
+        configured[serverId],
+        rpcRequest("tools/list")
+      );
+      /** @type {Array<{ name: string } & Record<string, unknown>>} */
       const tools = payload.result?.tools ?? [];
       return prefix
         ? tools.map((tool) => ({
@@ -207,10 +254,17 @@ const listTools = async (id, ids, configured) => {
     })
   );
 
-  return { jsonrpc: "2.0", id, result: { tools: lists.flat() } };
+  return rpcResult(id, { tools: lists.flat() });
 };
 
-/** Route a call by its name prefix when several upstreams are in play */
+/**
+ * Route a call by its name prefix when several upstreams are in play
+ *
+ * @param {RpcId} id
+ * @param {string[]} ids
+ * @param {Upstreams} configured
+ * @param {Record<string, unknown> | undefined} params
+ */
 const callTool = async (id, ids, configured, params) => {
   let serverId = ids[0];
   let name = params?.name;
@@ -225,12 +279,10 @@ const callTool = async (id, ids, configured, params) => {
       throw new Error(`Unknown upstream "${serverId}"`);
   }
 
-  const payload = await call(configured[serverId], {
-    jsonrpc: "2.0",
-    id: 1,
-    method: "tools/call",
-    params: { ...params, name },
-  });
+  const payload = await call(
+    configured[serverId],
+    rpcRequest("tools/call", { ...params, name })
+  );
 
   return { ...payload, id };
 };
@@ -271,10 +323,10 @@ async function handler(req, res) {
     body = await readJson(req);
     ids = selected(url, configured, withheld);
   } catch (e) {
-    return sendJson(res, 400, { error: e.message });
+    return sendJson(res, 400, { error: /** @type {Error} */ (e).message });
   }
 
-  const { id, method, params } = body;
+  const { id, method, params } = /** @type {RpcRequestBody} */ (body);
 
   // A notification carries no id and expects no response body
   if (typeof method === "string" && method.startsWith("notifications/")) {
@@ -291,11 +343,11 @@ async function handler(req, res) {
       case "tools/call":
         return sendJson(res, 200, await callTool(id, ids, configured, params));
       default:
-        return rpcError(res, id, -32601, `Method not supported: ${method}`);
+        return sendRpcError(res, id, -32601, `Method not supported: ${method}`);
     }
   } catch (e) {
     // An upstream failure is the model's business, not a transport error
-    return rpcError(res, id, -32603, e.message);
+    return sendRpcError(res, id, -32603, /** @type {Error} */ (e).message);
   }
 }
 

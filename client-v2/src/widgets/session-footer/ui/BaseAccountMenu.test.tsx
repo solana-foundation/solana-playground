@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 
@@ -226,4 +226,61 @@ it("offers no funding before the Playground wallet is set up", async () => {
   expect(
     screen.queryByRole("menuitem", { name: "Fund from a wallet" })
   ).toBeNull();
+});
+
+const openPage = async (account: AccountView, onPick = vi.fn()) => {
+  render(
+    <DropdownMenu>
+      <DropdownMenuTrigger>Open</DropdownMenuTrigger>
+      <BaseAccountMenu
+        page
+        account={account}
+        feedback={<div role="menuitem">Report a bug</div>}
+        side="top"
+        settingsShortcut="⌘,"
+        onPick={onPick}
+      />
+    </DropdownMenu>
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Open" }));
+  return onPick;
+};
+
+it("as a phone's page, is titled Account and closes from its bar", async () => {
+  await openPage(view({}));
+  expect(screen.getByRole("menu")).toBeTruthy();
+  expect(screen.getByText("Account", { selector: "h2" })).toBeTruthy();
+  await userEvent.click(screen.getByRole("menuitem", { name: "Close" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+it("as a phone's page, signed out, pins Sign in with GitHub at its foot with what it is for", async () => {
+  const onPick = await openPage(view({}));
+  expect(
+    screen.getByText(
+      "Keep your projects and conversations on every device, and request devnet SOL."
+    )
+  ).toBeTruthy();
+  const signIns = screen.getAllByRole("menuitem", {
+    name: "Sign in with GitHub",
+  });
+  expect(signIns).toHaveLength(1);
+  expect(signIns[0].closest("[data-account-foot]")).toBeTruthy();
+  await userEvent.click(signIns[0]);
+  expect(onPick).toHaveBeenCalledWith("sign-in");
+});
+
+it("as a phone's page, signed in, has no foot", async () => {
+  await openPage(view({ session: { status: "signed-in", user: TESTER } }));
+  expect(document.querySelector("[data-account-foot]")).toBeNull();
+});
+
+it("as a phone's page, does not sign in on the release of the press that opened it", async () => {
+  const onPick = await openPage(view({}));
+  // The page covers the account row, so the finger that opened it lifts over
+  // the foot's button: a release with no press on it
+  const signIn = screen.getByRole("menuitem", { name: "Sign in with GitHub" });
+  fireEvent.pointerUp(signIn, { pointerType: "touch" });
+  expect(onPick).not.toHaveBeenCalled();
+  expect(screen.getByRole("menu")).toBeTruthy();
 });

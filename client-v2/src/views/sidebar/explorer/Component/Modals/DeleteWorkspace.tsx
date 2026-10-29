@@ -35,7 +35,7 @@ export const DeleteWorkspace: FC<
           <Main>
             Are you sure you want to delete workspace '{workspaceName}'?
           </Main>
-          <Desc>This action is irreversable!</Desc>
+          <Desc>This action is irreversible!</Desc>
           <Desc>- All files and folders will be deleted.</Desc>
           <Desc>- Program credentials will be deleted.</Desc>
           <Desc>

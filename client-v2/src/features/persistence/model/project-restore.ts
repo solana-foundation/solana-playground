@@ -395,6 +395,17 @@ const rebaseWholeSnapshotMark = async (
  * its first upload already exists server-side with a null snapshot. There is
  * nothing there to lose, so this device's copy simply goes up.
  *
+ * Neither happens to a project another account left on this browser under an
+ * id this one also has, which a tutorial's can be. The merge writes this
+ * account's mark before its own upload, so the push's check would never see
+ * it, and the previous user's files would reach this account.
+ *
+ * Skipping it leaves a known gap: the account's own copy is never brought
+ * down while the leftover holds the id, so the user goes on seeing the other
+ * account's files, and their edits to them do not sync. Reaching it takes two
+ * GitHub accounts signing in on one browser, so it is reported under its own
+ * message (`hiding-account-copy`) rather than handled.
+ *
  * @returns the conflict actually raised, or `null` when it settled itself
  */
 const settleDivergence = async (
@@ -402,6 +413,11 @@ const settleDivergence = async (
   local: string,
   result: SyncResult
 ): Promise<Conflict | null> => {
+  if (await PgSyncMark.belongsToAnotherAccount(projectId)) {
+    PgProjectSync.reportDisowned(projectId, "hiding-account-copy");
+    return null;
+  }
+
   const full = await PgProjectSync.fetch(projectId);
 
   if (!full || !isUsableSnapshot(full.snapshot)) {
@@ -545,7 +561,7 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
     // delete elsewhere -- `settleDeletes`'s -- and a create-only upload of it
     // a refusal against the tombstone
     if (await PgSyncMark.exists(id)) continue;
-    if (await PgSyncMark.ownedByAnother(id)) continue;
+    if (await PgSyncMark.belongsToAnotherAccount(id)) continue;
     if (!(await PgWorkspaceRegistry.has(name, id))) continue;
 
     try {
@@ -567,20 +583,25 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  *
  * Local workspaces are not account-scoped -- they predate accounts, and
  * signing out never cleared them -- so the next person to sign in here found
- * the previous user's projects sitting in the explorer. `ownedByAnother`
- * already stops those being *uploaded* into the new account, so nothing
- * reaches the server that should not; what was left is that they are visible.
+ * the previous user's projects sitting in the explorer.
+ * `PgSyncMark.belongsToAnotherAccount` already stops those being *uploaded*
+ * into the new account -- unless the new account claimed one by creating it
+ * here -- so nothing reaches the server that should not; what was left is
+ * that they are visible.
  *
  * Decided per project, and only where the account demonstrably holds the same
- * content -- the same trade `PgChatSync.handOver` makes one directory over,
- * and it has to be the same one for the same reason. Sign-out completes with
- * no network at all: `PgSession.signOut` swallows the request's failure by
- * design, because a UI still claiming you are signed in is worse than a cookie
- * that outlives it. So "the server has this" is a question that can genuinely
- * be answered "no", and deleting on the strength of a push that never happened
- * is exactly how work disappears. The cost of being wrong in this direction is
- * that the next user of the browser sees a project that is not theirs; the
- * cost of being wrong the other way is somebody's afternoon.
+ * content -- the same trade `PgChatSync.forget` makes for conversations,
+ * and it has to be the same one for the same reason. The flush before the
+ * sign-out request can fail while the sign-out itself succeeds, so "the server
+ * has this" is a question that can genuinely be answered "no", and deleting on
+ * the strength of a push that never happened is exactly how work disappears.
+ * The cost of being wrong in this direction is that the next user of the
+ * browser sees a project that is not theirs; the cost of being wrong the
+ * other way is somebody's afternoon.
+ *
+ * Runs only after the server has ended the session, so it pushes nothing:
+ * the open workspace is flushed beforehand, by the session effect, while the
+ * request is still authenticated.
  *
  * Every removal runs inside `whileSigningOut`, because each one reaches the
  * `project-sync` effect as an ordinary `onDidDeleteWorkspace` -- the same
@@ -601,16 +622,6 @@ const pushNeverSynced = async (serverIds: Set<string>, result: SyncResult) => {
  */
 export const releaseLocalProjects = async (): Promise<string[]> =>
   PgProjectSync.whileSigningOut(async () => {
-    // The editor's push is debounced by seconds, so the workspace in front of
-    // the user is the one most likely to hold something the server has not
-    // seen. Best effort: if this fails, that project simply fails `isClean`
-    // below and is kept, which is the outcome we want anyway.
-    try {
-      await PgProjectSync.pushCurrent();
-    } catch (e) {
-      report("flush before sign-out", e);
-    }
-
     // Copied, because `deleteWorkspace` mutates the explorer's own list and
     // iterating it while it shrinks skips every other entry
     const names = [...(PgExplorer.allWorkspaceNames ?? [])];

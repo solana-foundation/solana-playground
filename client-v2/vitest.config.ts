@@ -1,4 +1,3 @@
-import { fileURLToPath } from "url";
 import { defineConfig } from "vitest/config";
 import type { Plugin } from "vite";
 
@@ -16,12 +15,9 @@ const markdownAsText: Plugin = {
 export default defineConfig({
   plugins: [markdownAsText],
   resolve: {
+    // `@/` comes from `tsconfig.json` `paths`, so vitest keeps no copy of it
+    tsconfigPaths: true,
     alias: [
-      // `tsconfig.json`'s `paths`: `@/` is `src/`
-      {
-        find: /^@\//,
-        replacement: fileURLToPath(new URL("./src/", import.meta.url)),
-      },
       // monaco-editor declares only `module`, no `main`. Webpack takes
       // `module`; vite's server-side resolution does not, so point it there.
       {

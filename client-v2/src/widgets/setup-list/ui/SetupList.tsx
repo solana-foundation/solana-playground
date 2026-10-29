@@ -4,6 +4,7 @@ import { isSetupRejected } from "@/commands/connect/setup-rejected";
 import { isSignInFailure, PgSession } from "@/features/auth";
 import { useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
+import { shortAddress } from "@/shared/lib/short-address";
 import { PgCommand, PgConnection, PgView } from "@/utils";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
@@ -14,13 +15,6 @@ import { setupTelemetry } from "../model/telemetry";
 import BaseSetupList from "./BaseSetupList";
 
 const log = createLogger("setup-list:actions");
-
-/**
- * The format of `shortAddress` in `widgets/session-footer`, copied: a widget
- * does not import another
- */
-const shortAddress = (address: string) =>
-  `${address.slice(0, 4)}…${address.slice(-4)}`;
 
 const warnWallet = () =>
   PgView.setToast(
@@ -38,13 +32,19 @@ export interface SetupListProps {
   onConnectAssistant: () => void;
   /** Opens the settings on the network; the layout owns them */
   onChooseNetwork: () => void;
+  /** Starts folded to its title (the phone's menu page) */
+  folded?: boolean;
 }
 
 /**
  * "Get set up": the four steps' live state, and their actions. Gone for good
  * on this device once dismissed, or once all four were done together.
  */
-const SetupList = ({ onConnectAssistant, onChooseNetwork }: SetupListProps) => {
+const SetupList = ({
+  onConnectAssistant,
+  onChooseNetwork,
+  folded,
+}: SetupListProps) => {
   const marks = useSetupMarks();
   const cluster = useRenderOnChange(PgConnection.onDidChangeCluster);
   useRenderOnChange(PgSession.onDidChange);
@@ -124,6 +124,7 @@ const SetupList = ({ onConnectAssistant, onChooseNetwork }: SetupListProps) => {
       steps={steps}
       onPick={pick}
       onDismiss={dismiss}
+      folded={folded}
       // The network step opens the settings, so it is marked as their trigger,
       // as tests find the triggers
       stepAttrs={{ network: { [SETTINGS_TRIGGER_ATTR]: "" } }}

@@ -66,8 +66,8 @@ export interface LessonSnapshot {
   marks: Array<[string, LessonMark]>;
   /** Step id under the cursor at the cut, or `end` */
   cursor: string | "end";
-  /** Step ids whose page was opened, so the band's signpost survives a
-   * trim -- a signpost that forgot would nag again */
+  /** Step ids whose page was opened, so the fact survives a trim like the
+   * rest of the record */
   opened?: string[];
 }
 

@@ -19,9 +19,14 @@ in HOO-1859's PR (Lead's sweep, 2026-10-22).
       [plans/1.3-layer-check.md](plans/1.3-layer-check.md))
 - [ ] 1.4 Break the `auth` <-> `persistence` cycle: `auth`'s server module
       stops importing `persistence`'s pool, or the pool moves to `shared/`;
-      then drop the exemption from the boundary check and the
-      `client-v2-layers` spec (ticket to file). Until then the boundary check
-      (HOO-1859, `client-v2/eslint-layers.js`) exempts the pair by name
+      then remove the exception (ticket to file): the imports between the
+      pair and their `TODO(ui-migration 1.4)` lines; in
+      `client-v2/eslint-layers.js`, `RECORDED_EXCEPTION`, the
+      `layers/recorded-exception` rule and the allow policy for those files;
+      the rule's re-export in `client-v2/eslint-plugin-layers/index.js`; the
+      pinning test in `client-v2/scripts/eslint-layers.test.mjs`; and the
+      exception scenario of the `client-v2-layers` spec. Until then the pair's
+      imports warn (HOO-2285)
 - [x] 1.5 ESLint for what review keeps finding, inside the layers, and the
       ids module moved to `shared/lib` (HOO-1897, PR #49)
 

@@ -3,12 +3,14 @@ import {
   AUTH_COMPLETE_ROUTE,
   AUTH_MESSAGE_TYPE,
   FLOW_MAX_AGE_SECONDS,
+  SIGN_OUT_TIMEOUT_MS,
 } from "../config.mjs";
 import { openPopupChannel } from "../lib/popup-channel";
 import type { PopupChannel } from "../lib/popup-channel";
 import { authTelemetry } from "./telemetry";
 import type { SignInFailure } from "./telemetry";
-import { createLogger } from "../../../shared/lib/logger";
+import { createLogger } from "@/shared/lib/logger";
+import { timeoutSignal } from "@/shared/lib/timeout-signal";
 import type { Disposable } from "../../../utils/types";
 
 /** A sign-in that ended at a known step; any other error counts as `request-failed` */
@@ -50,6 +52,12 @@ export interface SessionUser {
 
 /** Where a sign-in started, when its listeners must tell it apart from the account footer's */
 export type SignInOrigin = "assistant";
+
+/** Local cleanup that runs only after the server has ended the session */
+export type SignOutTeardown = () => Promise<void>;
+
+/** Runs before the sign-out request; see `PgSession.setOnSignOut` */
+export type SignOutHook = () => Promise<SignOutTeardown | undefined>;
 
 /**
  * Where the last sign-in stands. Held here, not by the control that started
@@ -296,56 +304,107 @@ export class PgSession {
   /**
    * End the session.
    *
-   * Clears locally even when the request fails: the user asked to be signed
-   * out, and leaving the UI claiming otherwise is worse than a cookie that
-   * outlives it and expires on its own.
+   * Signed out only once the server says so. A refused or unsent request
+   * leaves the HttpOnly cookie in place, so clearing the UI anyway showed a
+   * signed-out header that a reload undid -- on a shared browser, handing the
+   * account to the next person while telling the user it had not. The user
+   * stays signed in, nothing local is torn down, and this rejects with a
+   * message for them.
+   *
+   * A call while one is running joins it rather than starting another: two
+   * teardowns at once deleted the same workspaces twice.
    */
-  static async signOut() {
+  static signOut(): Promise<void> {
+    PgSession._signingOut ??= PgSession._signOut().finally(() => {
+      PgSession._signingOut = undefined;
+    });
+    return PgSession._signingOut;
+  }
+
+  /**
+   * Whether the server has ended the session and its local teardown is
+   * running.
+   *
+   * `get` still answers the user then, because what the teardown removes is
+   * keyed by their id. Nothing may go to the network on their behalf, though:
+   * the cookie is gone, every request answers 401, and each one was reported
+   * as a sync failure on an ordinary sign-out.
+   */
+  static get isEnding(): boolean {
+    return PgSession._ending;
+  }
+
+  private static async _signOut() {
     // Before the cookie goes, so anything holding unsynced local state gets a
     // last chance at the network while the request is still authenticated.
-    // Never allowed to block the sign-out itself.
+    // Never allowed to block the sign-out itself -- but a hook that throws
+    // returns no teardown either.
+    let teardown: SignOutTeardown | undefined;
     try {
-      await PgSession._onSignOut?.();
+      teardown = await PgSession._onSignOut?.();
     } catch (error) {
-      // Unsynced local work may be lost: the team needs to hear of it
+      // Nothing local is forgotten: the account's conversations and projects
+      // stay on this browser after it signs out
       log.error(error, { report: true, context: { step: "flush" } });
     }
 
+    let res: Response;
     try {
-      const res = await fetch("/api/auth/sign-out", {
+      res = await fetch("/api/auth/sign-out", {
         method: "POST",
         credentials: "include",
+        signal: timeoutSignal(SIGN_OUT_TIMEOUT_MS),
       });
-      // The server session survives a refused sign-out, and a reload signs
-      // the user back in; say so rather than only on a network error
-      if (!res.ok) {
-        log.error(
-          new Error(
-            `sign-out request answered ${res.status}; the server session may survive`
-          ),
-          { report: true, context: { step: "request", status: res.status } }
-        );
-      }
     } catch (error) {
-      // The cookie expires on its own; the local sign-out still stands
-      log.warn("sign-out request failed; the cookie expires on its own", {
-        context: { error: String(error) },
+      // Offline, or timed out: the user's network, not a defect to report
+      log.warn("sign-out request failed; still signed in", {
+        context: {
+          step: "request",
+          error: String(error),
+          name: (error as Error | undefined)?.name,
+        },
       });
+      throw new Error("Could not sign out. Check your connection.");
+    }
+    if (!res.ok) {
+      log.error(new Error(`sign-out request answered ${res.status}`), {
+        report: true,
+        context: { step: "request", status: res.status },
+      });
+      throw new Error("Could not sign out. Try again.");
     }
 
-    PgSession._set(null);
+    PgSession._ending = true;
+    try {
+      // While the user is still readable: what it removes is keyed by their id
+      try {
+        await teardown?.();
+      } catch (error) {
+        // The previous account's data may be left on this browser
+        log.error(error, { report: true, context: { step: "teardown" } });
+      }
+      PgSession._set(null);
+    } finally {
+      PgSession._ending = false;
+    }
     authTelemetry.track("auth_signed_out", {});
   }
 
   /**
-   * Register what must happen before a sign-out completes.
+   * Register what must happen around a sign-out.
+   *
+   * The hook runs before the request, while it is still authenticated, and
+   * may return a teardown. The teardown runs only once the server has ended
+   * the session: a sign-out that fails leaves the user signed in, and must
+   * not leave them with their conversation closed and their projects gone.
    *
    * Inversion on purpose: the persistence slice needs to flush threads here,
    * but it already imports this module, and importing it back would make the
    * two slices circular. The session effect wires them together instead, so
-   * `features/auth` stays unaware that persistence exists.
+   * the browser side of `features/auth` stays unaware that persistence exists
+   * (its server module, `model/auth.mjs`, does import it).
    */
-  static setOnSignOut(hook: (() => Promise<void>) | null) {
+  static setOnSignOut(hook: SignOutHook | null) {
     PgSession._onSignOut = hook;
   }
 
@@ -373,6 +432,8 @@ export class PgSession {
     PgSession._channel = undefined;
     PgSession._openChannelImpl = openPopupChannel;
     PgSession._signingInFrom = null;
+    PgSession._signingOut = undefined;
+    PgSession._ending = false;
     PgSession._pending = undefined;
     PgSession._signInState = IDLE;
     PgSession._hasRead = false;
@@ -380,9 +441,11 @@ export class PgSession {
     PgSession._readWaiters.length = 0;
   }
 
+  private static _signingOut: Promise<void> | undefined;
+  private static _ending = false;
   private static _user: SessionUser | null = null;
   private static _signingInFrom: SignInOrigin | null = null;
-  private static _onSignOut: (() => Promise<void>) | null = null;
+  private static _onSignOut: SignOutHook | null = null;
   private static readonly _listeners = new Set<() => void>();
 
   private static _pending: Promise<void> | undefined;
@@ -426,12 +489,12 @@ if (import.meta.vitest) {
   const { describe, it, expect, vi, beforeAll, afterEach } = import.meta.vitest;
   type Mock = import("vitest").Mock;
   describe("features/auth/model/session", () => {
-    let initLogger: typeof import("../../../shared/lib/logger").initLogger;
-    let memoryProvider: typeof import("../../../shared/lib/logger").memoryProvider;
-    let resetLogger: typeof import("../../../shared/lib/logger").resetLogger;
+    let initLogger: typeof import("@/shared/lib/logger").initLogger;
+    let memoryProvider: typeof import("@/shared/lib/logger").memoryProvider;
+    let resetLogger: typeof import("@/shared/lib/logger").resetLogger;
     beforeAll(async () => {
       ({ initLogger, memoryProvider, resetLogger } = await import(
-        "../../../shared/lib/logger"
+        "@/shared/lib/logger"
       ));
     });
     const signedIn = (user: {
@@ -904,36 +967,128 @@ if (import.meta.vitest) {
         );
       });
 
-      it("clears the user even when sign-out fails on the network", async () => {
-        vi.spyOn(globalThis, "fetch").mockImplementation(
-          signedIn({ id: "u1", name: "Ada", image: null })
-        );
-        await PgSession.refresh();
+      const ada = { id: "u1", name: "Ada", image: null, login: null };
 
-        vi.spyOn(globalThis, "fetch").mockImplementation(
-          vi
-            .fn()
-            .mockRejectedValue(new Error("offline")) as unknown as typeof fetch
+      const signOutAnswers = (answer: Partial<Response>) =>
+        vi.spyOn(globalThis, "fetch").mockResolvedValue(answer as Response);
+
+      const signOutOffline = () =>
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+
+      it("stays signed in when sign-out fails on the network", async () => {
+        await PgSession.refreshWith(ada);
+        signOutOffline();
+
+        await expect(PgSession.signOut()).rejects.toThrow(
+          /could not sign out/i
         );
+        expect(PgSession.get()?.id).toBe("u1");
+      });
+
+      it("stays signed in, and says so, when the server refuses the sign-out", async () => {
+        // The cookie is HttpOnly and survives a refused sign-out, so a reload
+        // signed the user straight back in after the header had said otherwise
+        await PgSession.refreshWith(ada);
+        const logged = memoryProvider();
+        initLogger({ providers: [logged] });
+        signOutAnswers({ ok: false, status: 500 });
+
+        await expect(PgSession.signOut()).rejects.toThrow(
+          /could not sign out/i
+        );
+        expect(PgSession.get()?.id).toBe("u1");
+        expect(logged.entries).toEqual([
+          expect.objectContaining({
+            ns: "auth:session",
+            level: "error",
+            report: true,
+            context: { step: "request", status: 500 },
+          }),
+        ]);
+      });
+
+      it("runs the teardown only once the server has ended the session", async () => {
+        await PgSession.refreshWith(ada);
+        const order: string[] = [];
+        PgSession.setOnSignOut(async () => {
+          order.push("hand over");
+          return async () => {
+            // Still readable: what the teardown removes is keyed by the user id.
+            // Ending, so nothing goes to the network on a cookie that is gone.
+            order.push(
+              `teardown as ${PgSession.get()?.id}, ending ${PgSession.isEnding}`
+            );
+          };
+        });
+        vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+          order.push("request");
+          return { ok: true } as Response;
+        });
+
         await PgSession.signOut();
 
+        expect(order).toEqual([
+          "hand over",
+          "request",
+          "teardown as u1, ending true",
+        ]);
+        expect(PgSession.get()).toBeNull();
+        expect(PgSession.isEnding).toBe(false);
+      });
+
+      it.each([
+        ["is refused", () => signOutAnswers({ ok: false, status: 500 })],
+        ["fails on the network", signOutOffline],
+      ])("skips the teardown when the request %s", async (_, arrange) => {
+        // The user is still signed in, so their conversation and projects stay
+        await PgSession.refreshWith(ada);
+        const teardown = vi.fn().mockResolvedValue(undefined);
+        PgSession.setOnSignOut(async () => teardown);
+        arrange();
+
+        await expect(PgSession.signOut()).rejects.toThrow();
+
+        expect(teardown).not.toHaveBeenCalled();
+        expect(PgSession.isEnding).toBe(false);
+      });
+
+      it("joins a sign-out already running rather than starting another", async () => {
+        // Two teardowns at once deleted the same workspaces twice
+        await PgSession.refreshWith(ada);
+        const hook = vi.fn(async () => undefined);
+        PgSession.setOnSignOut(hook);
+        const request = signOutAnswers({ ok: true });
+
+        await Promise.all([PgSession.signOut(), PgSession.signOut()]);
+
+        expect(hook).toHaveBeenCalledTimes(1);
+        expect(request).toHaveBeenCalledTimes(1);
+      });
+
+      it("can sign out again after a failed attempt", async () => {
+        await PgSession.refreshWith(ada);
+        const teardown = vi.fn().mockResolvedValue(undefined);
+        PgSession.setOnSignOut(async () => teardown);
+        signOutAnswers({ ok: false, status: 500 });
+        await expect(PgSession.signOut()).rejects.toThrow();
+
+        signOutAnswers({ ok: true });
+        await PgSession.signOut();
+
+        expect(teardown).toHaveBeenCalledTimes(1);
         expect(PgSession.get()).toBeNull();
       });
 
-      it("says so when the server refuses the sign-out", async () => {
-        vi.spyOn(globalThis, "fetch").mockImplementation(
-          signedIn({ id: "u1", name: "Ada", image: null })
-        );
-        await PgSession.refresh();
+      it("still signs out when the teardown fails, and reports it", async () => {
+        await PgSession.refreshWith(ada);
         const logged = memoryProvider();
         initLogger({ providers: [logged] });
+        const failure = new Error("quota");
+        PgSession.setOnSignOut(async () => async () => {
+          throw failure;
+        });
+        signOutAnswers({ ok: true });
 
-        vi.spyOn(globalThis, "fetch").mockImplementation(
-          vi.fn().mockResolvedValue({
-            ok: false,
-            status: 500,
-          }) as unknown as typeof fetch
-        );
         await PgSession.signOut();
 
         expect(PgSession.get()).toBeNull();
@@ -941,8 +1096,9 @@ if (import.meta.vitest) {
           expect.objectContaining({
             ns: "auth:session",
             level: "error",
+            error: failure,
             report: true,
-            context: { step: "request", status: 500 },
+            context: { step: "teardown" },
           }),
         ]);
       });

@@ -7,7 +7,7 @@ import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { PgAssistant } from "../store";
-import type { McpServerEntry } from "../grounding";
+import type { McpServerEntry } from "@/features/mcp";
 import ServerConsole from "./ServerConsole";
 
 // A theme that answers every key: the console's styled rules read deep tokens
@@ -26,23 +26,18 @@ const server: McpServerEntry = {
   name: "Docs",
   url: "https://example.com/mcp",
   enabled: true,
-  executor: "browser",
 };
 
 afterEach(() => vi.restoreAllMocks());
 
 it("flips Show more and Show less and says which state it is in", () => {
   vi.spyOn(PgAssistant, "mcpTools", "get").mockReturnValue({
-    docs: [{ name: "search", description: "x".repeat(300) }],
+    docs: [{ name: "search", description: "x".repeat(300), inputSchema: {} }],
   });
 
   render(
     <ThemeProvider theme={theme}>
-      <ServerConsole
-        server={server}
-        providerName="Anthropic"
-        hasServerExecutor
-      />
+      <ServerConsole server={server} providerName="Anthropic" />
     </ThemeProvider>
   );
   fireEvent.change(screen.getByRole("combobox"), {

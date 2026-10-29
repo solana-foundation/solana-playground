@@ -854,8 +854,9 @@
       "name": "objective-band",
       "type": "registry:ui",
       "title": "Objective band",
-      "description": "A lesson's frosted band: a gradient meter, the objective, back and on, and actions.",
+      "description": "A lesson's frosted band: a gradient meter, the objective, back and on, and actions; on a phone a fold and a foot bar.",
       "registryDependencies": [
+        "@playground/brand-button",
         "@playground/playground-tokens",
         "@playground/utils"
       ],
@@ -867,6 +868,21 @@
       ],
       "dependencies": [
         "lucide-react"
+      ]
+    },
+    {
+      "name": "pattern",
+      "type": "registry:ui",
+      "title": "Pattern",
+      "description": "The brand pattern as the window's ground, lit where the pointer is; transparent panes show it.",
+      "registryDependencies": [
+        "@playground/utils"
+      ],
+      "files": [
+        {
+          "path": "src/components/ui/pattern.tsx",
+          "type": "registry:ui"
+        }
       ]
     },
     {

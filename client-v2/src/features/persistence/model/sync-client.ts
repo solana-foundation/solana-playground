@@ -1,4 +1,5 @@
-import { LOCKED_REQUEST_MS, timeoutSignal } from "./sync-lock";
+import { LOCKED_REQUEST_MS } from "./sync-lock";
+import { timeoutSignal } from "@/shared/lib/timeout-signal";
 
 /**
  * Whether the backend will accept sync at all.

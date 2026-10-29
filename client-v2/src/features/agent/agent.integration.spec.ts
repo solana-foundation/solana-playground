@@ -18,8 +18,10 @@ const session = vi.hoisted(() => ({
     | "unconfigured",
 }));
 
-vi.mock("../auth/server.mjs", async (importOriginal) => {
-  const real = await importOriginal<typeof import("../auth/server.mjs")>();
+vi.mock("@/features/auth/server.mjs", async (importOriginal) => {
+  const real = await importOriginal<
+    typeof import("@/features/auth/server.mjs")
+  >();
   return {
     SIGNED_OUT_REASON: real.SIGNED_OUT_REASON,
     isAllowedOrigin: real.isAllowedOrigin,

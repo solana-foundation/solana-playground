@@ -133,8 +133,8 @@ const BaseSettingsPage = ({
       ref={heading}
       tabIndex={-1}
       className={cn(
-        "font-semibold text-foreground outline-none",
-        phone ? "text-base" : "text-2xl"
+        "text-foreground outline-none",
+        phone ? "text-base font-semibold" : "text-[1.375rem] font-medium"
       )}
     >
       Settings
@@ -146,12 +146,19 @@ const BaseSettingsPage = ({
       ref={root}
       role="region"
       aria-label="Settings"
-      className="fixed inset-0 z-40 flex bg-background text-foreground"
+      // The text face throughout, as the prototype sets the page; the app
+      // under it is in the code face
+      className="fixed inset-0 z-40 flex bg-background font-sans text-foreground"
     >
       {!phone && (
         <aside className="flex w-58 shrink-0 flex-col border-r border-border">
           <div className="flex h-11 shrink-0 items-center border-b border-border px-2">
-            <Button variant="ghost" size="sm" onClick={onBack}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="font-sans text-caption font-normal text-muted-foreground"
+              onClick={onBack}
+            >
               <ChevronLeft data-icon="inline-start" />
               Back to app
             </Button>
@@ -166,7 +173,7 @@ const BaseSettingsPage = ({
                 variant="ghost"
                 size="sm"
                 aria-current={s.id === current ? "true" : undefined}
-                className="justify-start aria-[current=true]:bg-accent aria-[current=true]:text-accent-foreground"
+                className="justify-start font-sans text-caption font-normal text-muted-foreground aria-[current=true]:bg-accent aria-[current=true]:font-medium aria-[current=true]:text-accent-foreground"
                 onClick={() => pick(s.id)}
               >
                 {s.title}
@@ -221,7 +228,10 @@ const BaseSettingsPage = ({
               >
                 <h2
                   id={headingId(s.id)}
-                  className="border-b border-border pb-2 text-base font-semibold text-foreground"
+                  className={cn(
+                    "border-b border-border pb-2 text-control font-medium text-foreground",
+                    phone && "text-title font-act"
+                  )}
                 >
                   {s.title}
                 </h2>

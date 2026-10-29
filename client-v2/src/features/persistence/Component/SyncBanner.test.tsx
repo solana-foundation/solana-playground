@@ -18,7 +18,7 @@ import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
-} from "../../../shared/lib/telemetry";
+} from "@/shared/lib/telemetry";
 import { PgProjectSync } from "../model/project-sync";
 import type { FileConflict } from "../model/merge";
 import { PgExplorer } from "../../../utils/explorer/explorer";

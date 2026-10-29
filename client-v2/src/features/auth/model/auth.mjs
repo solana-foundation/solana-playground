@@ -14,35 +14,70 @@ import { betterAuth } from "better-auth";
 import { oAuthProxy } from "better-auth/plugins";
 
 import { authEnv } from "../../../shared/config/server-env.mjs";
+// TODO(ui-migration 1.4): a feature importing a feature; the auth database adapter needs persistence's pool
 import { getPool, isConfigured } from "../../persistence/server.mjs";
 import { SIGN_IN_ENV } from "../config.mjs";
 
 let instance = null;
 
 /**
- * The origin Better Auth builds its callback and redirect URLs from.
+ * What Better Auth builds its callback and redirect URLs from.
  *
- * Production sets `AUTH_BASE_URL` explicitly. A preview cannot: every deployment
- * gets its own URL and only learns it once it exists, so there is nothing to put
- * in the variable beforehand. Vercel injects that URL at runtime as `VERCEL_URL`
- * -- hostname only, no scheme -- which lets a preview describe itself and need
- * no configuration at all.
+ * Production sets `AUTH_BASE_URL` explicitly: one origin. A preview cannot:
+ * every deployment gets its own URL and only learns it once it exists, so there
+ * is nothing to put in the variable beforehand. Vercel injects the hostnames at
+ * runtime instead -- no scheme -- and a preview answers on two of them: the
+ * per-deployment `VERCEL_URL` and the branch alias `VERCEL_BRANCH_URL`, which
+ * follows the branch's latest deployment. People open both, so a preview gets
+ * Better Auth's dynamic base URL: each request resolves to its own `Host`,
+ * provided that host is one of these, and each host carries a session of its
+ * own. A request on any other host, or with no `Host`, falls back to
+ * `VERCEL_URL`, as every request did before the alias was listed: its sign-in
+ * is refused as `INVALID_ORIGIN` and its session reads as signed out, rather
+ * than Better Auth throwing on every request there.
  *
- * `undefined` rather than `""` when neither is set, so local development falls
+ * `undefined` rather than `""` when nothing is set, so local development falls
  * through to Better Auth's own default instead of being handed a base URL that
  * is not one.
  *
- * {@link isAllowedOrigin} compares it against a request's `Origin` for
- * `/api/agent`, `/api/mcp` and the sync routes. Deliberately the same value the session
- * cookie is issued for, rather than a second copy of "where we are deployed"
+ * {@link deploymentOrigins} derives the origins `isAllowedOrigin` accepts from
+ * this same value, rather than from a second copy of "where we are deployed"
  * that could drift from it: an origin check keyed off a different answer than
  * the cookie's would be a check of nothing in particular.
  *
- * @returns {string | undefined} the origin, or `undefined` to let Better Auth decide
+ * @returns {string | {
+ *   allowedHosts: string[];
+ *   protocol: "https";
+ *   fallback: string;
+ * } | undefined} the base URL, the hosts a preview resolves among, or
+ * `undefined` to let Better Auth decide
  */
 export const resolveBaseURL = () => {
-  const { AUTH_BASE_URL, VERCEL_URL } = authEnv();
-  return AUTH_BASE_URL || (VERCEL_URL ? `https://${VERCEL_URL}` : undefined);
+  const { AUTH_BASE_URL, VERCEL_BRANCH_URL, VERCEL_URL } = authEnv();
+  if (AUTH_BASE_URL) return AUTH_BASE_URL;
+
+  const allowedHosts = [VERCEL_BRANCH_URL, VERCEL_URL].filter(Boolean);
+  if (!allowedHosts.length) return undefined;
+  return {
+    allowedHosts,
+    protocol: "https",
+    fallback: `https://${VERCEL_URL ?? VERCEL_BRANCH_URL}`,
+  };
+};
+
+/**
+ * The origins this deployment serves sign-in on: the one `AUTH_BASE_URL`
+ * names, or each of a preview's Vercel hostnames. Empty in local development.
+ * Reduced to `URL.origin` because `AUTH_BASE_URL` may legitimately carry a
+ * path and an `Origin` header never does.
+ *
+ * @returns {string[]}
+ */
+export const deploymentOrigins = () => {
+  const base = resolveBaseURL();
+  if (base === undefined) return [];
+  if (typeof base === "string") return [new URL(base).origin];
+  return base.allowedHosts.map((host) => `https://${host}`);
 };
 
 /**
@@ -68,19 +103,30 @@ export const oauthProxyPlugins = () => {
     authEnv();
   if (!AUTH_OAUTH_PROXY_SECRET) return [];
 
-  const self = resolveBaseURL();
+  const base = resolveBaseURL();
+  const fixed = typeof base === "string" ? base : undefined;
   const plugin = oAuthProxy({
-    productionURL: AUTH_OAUTH_PROXY_URL ?? self,
-    // The origin the session cookie is issued for, never a request's Host
-    currentURL: self,
+    productionURL: AUTH_OAUTH_PROXY_URL ?? fixed,
+    // The origin the session cookie is issued for. A preview's depends on the
+    // request, so it is left to the plugin, which takes the request's origin
+    // only when Better Auth trusts it -- here, one of `allowedHosts`.
+    currentURL: fixed,
     secret: AUTH_OAUTH_PROXY_SECRET,
   });
 
+  // Parsed last, so a malformed AUTH_BASE_URL on the host fails in Better
+  // Auth's own check, which names the value, rather than here
+  const proxiesElsewhere = () => {
+    const origins = deploymentOrigins();
+    return (
+      origins.length > 0 &&
+      !origins.includes(new URL(AUTH_OAUTH_PROXY_URL).origin)
+    );
+  };
   const isPreview =
     VERCEL_ENV === "preview" &&
     AUTH_OAUTH_PROXY_URL !== undefined &&
-    self !== undefined &&
-    new URL(AUTH_OAUTH_PROXY_URL).origin !== new URL(self).origin;
+    proxiesElsewhere();
   return [isPreview ? plugin : { ...plugin, endpoints: {} }];
 };
 
@@ -96,11 +142,10 @@ export const oauthProxyPlugins = () => {
  * This is the control written down, so the next person to touch cookie
  * attributes finds it.
  *
- * `resolveBaseURL()` is `undefined` when neither `AUTH_BASE_URL` nor
- * `VERCEL_URL` is set, which is local development: there is no deployment
- * origin to compare against, so there is no check to make. Both sides are
- * reduced to `URL.origin` because `AUTH_BASE_URL` may legitimately carry a
- * path and an `Origin` header never does.
+ * {@link deploymentOrigins} is empty when neither `AUTH_BASE_URL` nor a Vercel
+ * hostname is set, which is local development: there is no deployment
+ * origin to compare against, so there is no check to make. On a preview,
+ * either of its hostnames is ours.
  *
  * A request carrying no `Origin` at all is allowed through. Every browser
  * sends one on PUT, POST and DELETE, so a missing header is a client that had
@@ -112,12 +157,21 @@ export const oauthProxyPlugins = () => {
  * @param {import("node:http").IncomingMessage} req
  */
 export const isAllowedOrigin = (req) => {
-  const expected = resolveBaseURL();
   const origin = req.headers.origin;
-  if (!expected || !origin) return true;
+  if (!origin) return true;
+
+  let expected;
+  try {
+    expected = deploymentOrigins();
+  } catch (e) {
+    // Refuses every write until fixed; logged, since the 403 names the client
+    console.error("auth: AUTH_BASE_URL is not a URL", { message: e?.message });
+    return false;
+  }
+  if (!expected.length) return true;
 
   try {
-    return new URL(origin).origin === new URL(expected).origin;
+    return expected.includes(new URL(origin).origin);
   } catch {
     // An `Origin` we cannot even parse is not one of ours
     return false;

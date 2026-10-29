@@ -122,16 +122,20 @@ const EmptyThread = ({
   onSuggestion: (text: string) => void;
 }) => (
   <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-    <CirclePlayIcon className="size-12 text-primary" aria-hidden />
-    {/* Under the panel head, which is the h2 */}
-    <h3 className="text-xl font-semibold text-foreground">
+    <CirclePlayIcon
+      className="mb-2 size-10 text-primary drop-shadow-[0_0_18px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
+      aria-hidden
+    />
+    {/* Under the panel head, which is the h2; the prototype's display type */}
+    <h3 className="max-w-[16em] font-heading text-[clamp(1.375rem,1.9vw,1.75rem)] leading-[1.12] font-medium tracking-[-0.015em] text-foreground">
       {project ? `Ask about ${project}` : "Ask the assistant"}
     </h3>
-    <p className="max-w-xs text-sm text-muted-foreground">
+    <p className="max-w-[21rem] text-sm leading-normal text-muted-foreground">
       It reads the file you are looking at and the last build error, and
       proposes patches you apply yourself.
     </p>
-    <div className="flex flex-col items-center gap-2 pt-2">
+    {/* A row that wraps, as the prototype lays the questions out */}
+    <div className="flex flex-wrap justify-center gap-1.5 pt-3.5">
       {suggestions.map((suggestion) => (
         <Button
           key={suggestion}
