@@ -4,6 +4,7 @@ import { useRenderOnChange } from "../../../hooks/useRenderOnChange";
 import { PgCommand } from "../../../utils/command";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import {
+  isConnectionLost,
   isStoppedNotice,
   PgAssistant,
   turnAppliedApproval,
@@ -202,7 +203,9 @@ export const Thread = ({
   const retryAfter = (): "stopped" | "interrupted" | null => {
     if (busy || !lastItem || lastSent?.kind !== "user") return null;
     if (isStoppedNotice(lastItem)) return "stopped";
-    if (PgAssistant.isCutOff(lastItem)) return "interrupted";
+    if (PgAssistant.isCutOff(lastItem) || isConnectionLost(lastItem)) {
+      return "interrupted";
+    }
     return null;
   };
   const after = retryAfter();

@@ -9,9 +9,11 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import {
+  CONNECTION_LOST,
   PgAssistant,
   THREAD_NOT_SAVED,
 } from "../../../views/sidebar/assistant/store";
+import * as reportModule from "@/shared/lib/report-button-failure";
 import type { Turn } from "../model/use-turn";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { Thread } from "./Thread";
@@ -207,6 +209,27 @@ describe("Thread, undo", () => {
     expect(tracked()).toEqual([]);
   });
 
+  it("reports a failed Undo on the button and counts no undo", async () => {
+    const report = vi.fn();
+    const reportFor = vi
+      .spyOn(reportModule, "reportButtonFailure")
+      .mockReturnValue(report);
+    const failure = new Error("the write failed");
+    undo.can.mockReturnValue(true);
+    undo.undo.mockRejectedValueOnce(failure);
+    applied();
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Undo patch" }));
+    });
+
+    expect(reportFor).toHaveBeenCalledWith("undo the patch");
+    expect(report).toHaveBeenCalledWith(failure);
+    expect(tracked()).toEqual([]);
+    reportFor.mockRestore();
+  });
+
   it("offers the original to copy on a card whose Undo could not finish", () => {
     undo.original.mockReturnValue("old");
     applied();
@@ -272,6 +295,28 @@ describe("Thread, try again", () => {
     expect(tracked()).toEqual([
       ["assistant_reply_retried", { after: "interrupted" }],
     ]);
+  });
+
+  it("after the connection dropped with no reply sends the last message again", () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    PgAssistant.addError(CONNECTION_LOST);
+    const send = vi.fn();
+    render(<Thread turn={stubTurn(false, send)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+
+    expect(send).toHaveBeenCalledWith("What does this program do?");
+    expect(tracked()).toEqual([
+      ["assistant_reply_retried", { after: "interrupted" }],
+    ]);
+  });
+
+  it("offers no Try again under any other error", () => {
+    PgAssistant.addUserMessage("What does this program do?");
+    PgAssistant.addError("The model declined this request.");
+    render(<Thread turn={stubTurn(false)} project="Counter" />);
+
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("is not offered while a turn runs", () => {

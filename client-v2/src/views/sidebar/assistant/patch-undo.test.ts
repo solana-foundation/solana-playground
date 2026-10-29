@@ -73,7 +73,7 @@ describe("PgPatchUndo", () => {
     expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
 
     expect(file.content).toBe("old");
-    expect(card.undone).toBe(true);
+    expect(card.undo).toBe("done");
     expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
     expect(card.updatedAt).toBeDefined();
     expect(PgPatchUndo.can(card, bridge)).toBe(false);
@@ -142,9 +142,19 @@ describe("PgPatchUndo", () => {
     };
 
     expect(PgPatchUndo.can(card, bridge)).toBe(false);
-    expect(getFailures().map((f) => f.what)).toContainEqual(
-      expect.stringContaining("src/lib.rs")
-    );
+    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(getFailures().map((f) => f.what)).toEqual([
+      expect.stringContaining("src/lib.rs"),
+    ]);
+
+    // Readable again: Undo is back, and the next outage is reported again
+    bridge.readFile = () => "new";
+    expect(PgPatchUndo.can(card, bridge)).toBe(true);
+    bridge.readFile = () => {
+      throw new Error("no current workspace");
+    };
+    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(getFailures()).toHaveLength(2);
   });
 
   it("writes nothing over an edit made after Apply, and says so", async () => {
@@ -156,7 +166,7 @@ describe("PgPatchUndo", () => {
     expect(await PgPatchUndo.undo(card, bridge)).toBe("moved-on");
 
     expect(file.content).toBe("new, edited");
-    expect(card.undone).toBeUndefined();
+    expect(card.undo).not.toBe("done");
     expect(PgAssistant.items[PgAssistant.items.length - 1]).toMatchObject({
       kind: "notice",
       text: "You edited src/lib.rs after applying. Use undo in the editor.",
@@ -225,7 +235,7 @@ describe("PgPatchUndo", () => {
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("model");
 
     expect(file.content).toBe("old");
-    expect(card.undone).toBe(true);
+    expect(card.undo).toBe("done");
     expect(PgPatchUndo.can(card, bridge)).toBe(false);
   });
 
@@ -240,7 +250,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("refresh");
 
-    expect(card.undone).toBe(true);
+    expect(card.undo).toBe("done");
   });
 
   describe("a failed write that strands the card", () => {
@@ -258,7 +268,7 @@ describe("PgPatchUndo", () => {
 
       await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-      expect(card.undone).toBeUndefined();
+      expect(card.undo).not.toBe("done");
       expect(PgPatchUndo.can(card, bridge)).toBe(false);
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs changed while Undo wrote it."
@@ -292,7 +302,7 @@ describe("PgPatchUndo", () => {
       // a retry that lands clears the copy
       expect(PgPatchUndo.can(card, bridge)).toBe(true);
       expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
-      expect(card.undone).toBe(true);
+      expect(card.undo).toBe("done");
       expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
       expect(PgPatchUndo.original(card)).toBeNull();
     });
@@ -382,7 +392,7 @@ describe("PgPatchUndo", () => {
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs changed while Undo wrote it. It did not exist before the patch."
       );
-      expect(card.undone).toBeUndefined();
+      expect(card.undo).not.toBe("done");
       expect(PgPatchUndo.can(card, bridge)).toBe(false);
       expect(PgPatchUndo.original(card)).toBeNull();
     });
@@ -396,7 +406,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-    expect(card.undone).toBeUndefined();
+    expect(card.undo).not.toBe("done");
     expect(PgPatchUndo.can(card, bridge)).toBe(true);
     expect(card.outcome).toBeUndefined();
     expect(PgPatchUndo.original(card)).toBeNull();
@@ -413,7 +423,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-    expect(card.undone).toBeUndefined();
+    expect(card.undo).not.toBe("done");
     expect(PgPatchUndo.can(card, bridge)).toBe(true);
     expect(PgPatchUndo.original(card)).toBeNull();
   });
@@ -433,7 +443,7 @@ describe("PgPatchUndo", () => {
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("model");
 
     expect(file.content).toBe('declare_id!("Built1111");\nold');
-    expect(card.undone).toBe(true);
+    expect(card.undo).toBe("done");
     expect(PgPatchUndo.original(card)).toBeNull();
   });
 
@@ -445,7 +455,7 @@ describe("PgPatchUndo", () => {
 
     await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
 
-    expect(card.undone).toBeUndefined();
+    expect(card.undo).not.toBe("done");
     expect(PgPatchUndo.can(card, bridge)).toBe(true);
   });
 });

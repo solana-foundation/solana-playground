@@ -1,6 +1,9 @@
+import { createLogger } from "@/shared/lib/logger";
 import type { ChatItem } from "../store";
 import { backendParamsFrom } from "./backend-params";
 import type { BackendParams } from "./backend-params";
+
+const log = createLogger("assistant:thread-backend");
 
 /**
  * The backend the open thread was last answered by: the `origin` of its last
@@ -17,14 +20,25 @@ export const threadBackend = (
     if (item.kind !== "assistant" || !item.origin) continue;
     const origin = backendParamsFrom(item.origin);
     if (origin) return origin;
+    // A reply from a provider this build dropped: the send may go to an
+    // earlier reply's backend, or to the default, so the team hears of it
+    log.warn("skipped a reply from a provider this build does not have", {
+      report: true,
+      context: { provider: String(item.origin.provider) },
+    });
   }
   return undefined;
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("views/sidebar/assistant/model/thread-backend", () => {
+    let logger: typeof import("@/shared/lib/logger");
+    beforeAll(async () => {
+      logger = await import("@/shared/lib/logger");
+    });
+
     const reply = (origin?: BackendParams): ChatItem => ({
       kind: "assistant",
       id: `a-${origin?.provider ?? "none"}`,
@@ -56,12 +70,22 @@ if (import.meta.vitest) {
       expect(threadBackend([reply(anthropic), reply()])).toEqual(anthropic);
     });
 
-    it("reads a provider this build no longer has as absent", () => {
+    it("reads a provider this build no longer has as absent, and reports it", () => {
+      const logs = logger.memoryProvider();
+      logger.initLogger({ providers: [logs] });
+
       expect(
         threadBackend([
           reply({ provider: "gone" as BackendParams["provider"] }),
         ])
       ).toBeUndefined();
+
+      expect(
+        logs.entries.map((e) => [e.ns, e.level, e.report, e.context])
+      ).toEqual([
+        ["assistant:thread-backend", "warn", true, { provider: "gone" }],
+      ]);
+      logger.resetLogger();
     });
 
     it("answers nothing for a thread with no reply", () => {

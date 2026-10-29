@@ -32,7 +32,7 @@ const written = new Set<string>();
  */
 const stranded = new Set<string>();
 
-/** Cards whose file `can` could not read, reported once each, not per render */
+/** Cards whose file `can` cannot read now: reported once per outage, not per render */
 const unreadable = new Set<string>();
 
 const DECLARE_ID = /declare_id!\("[^"]*"\)/;
@@ -81,7 +81,7 @@ const strand = (item: ApprovalItem, request: PatchApproval, why: string) => {
     return;
   }
   stranded.add(item.id);
-  PgAssistant.setApprovalOutcome(
+  PgAssistant.markUndoStranded(
     item.id,
     undoStrandedOutcome(request.path, why, request.before === null)
   );
@@ -117,7 +117,7 @@ const settleFailedUndo = (
     written.add(item.id);
     if (stranded.delete(item.id)) {
       // An earlier attempt said it did not finish; the patch is whole again
-      PgAssistant.setApprovalOutcome(item.id, wroteOutcome(request.path));
+      PgAssistant.clearUndoStranded(item.id, wroteOutcome(request.path));
     }
     return;
   }
@@ -172,7 +172,11 @@ export class PgPatchUndo {
    */
   static original(item: ApprovalItem) {
     const { request } = item;
-    if (!stranded.has(item.id) || item.undone || request.type !== "patch") {
+    if (
+      !stranded.has(item.id) ||
+      item.undo === "done" ||
+      request.type !== "patch"
+    ) {
       return null;
     }
     return request.before;
@@ -184,7 +188,7 @@ export class PgPatchUndo {
     if (
       request.type !== "patch" ||
       item.status !== "allowed" ||
-      item.undone ||
+      item.undo === "done" ||
       !written.has(item.id)
     ) {
       return false;
@@ -202,6 +206,8 @@ export class PgPatchUndo {
       }
       return false;
     }
+    // Readable again: the next outage is reported afresh
+    unreadable.delete(item.id);
     // A stranded attempt whose write did land: the press finishes it
     return (
       (now !== null && holdsPatch(now, request.after)) ||
@@ -217,7 +223,7 @@ export class PgPatchUndo {
     if (
       request.type !== "patch" ||
       item.status !== "allowed" ||
-      item.undone ||
+      item.undo === "done" ||
       !written.has(item.id)
     ) {
       return "not-undoable";

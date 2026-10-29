@@ -19,7 +19,6 @@ import {
   diffLines,
   summarizeDiff,
 } from "../../../views/sidebar/assistant/diff";
-import { isUndoStranded } from "../../../views/sidebar/assistant/store";
 import type {
   ApprovalStatus,
   ChatItem,
@@ -83,8 +82,8 @@ export const BaseApprovalCard = ({
   const { request, status } = item;
   const pending = status === "pending";
   const patch = request.type === "patch";
-  const undone = !!item.undone;
-  const stranded = isUndoStranded(item.outcome);
+  const undone = item.undo === "done";
+  const stranded = item.undo === "stranded";
 
   return (
     <Diff data-status={status} className={cn(pending && "border-primary")}>

@@ -20,6 +20,7 @@ import {
 } from "../../../views/sidebar/assistant/model/types";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
+  CONNECTION_LOST,
   paramsOf,
   PgAssistant,
   STOPPED_NOTICE,
@@ -467,6 +468,15 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         });
         assistantTelemetry.track("assistant_reply_failed", {
           reason: "interrupted",
+        });
+      } else if (!controller.signal.aborted && isDroppedConnection(e)) {
+        // No reply text to keep: say so in words, with Try again (`isConnectionLost`)
+        PgAssistant.addError(CONNECTION_LOST);
+        log.warn("the connection dropped before the reply", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        assistantTelemetry.track("assistant_reply_failed", {
+          reason: "connection-lost",
         });
       } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));

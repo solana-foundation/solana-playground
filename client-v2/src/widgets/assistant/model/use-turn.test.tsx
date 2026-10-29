@@ -15,7 +15,10 @@ import * as reportModule from "@/shared/lib/report-button-failure";
 // The class itself, which the slice entry exports as a type only
 import { AiTurnError } from "@/shared/lib/ai/run-turn";
 import { PgSession } from "@/features/auth";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import {
+  PgAssistant,
+  isConnectionLost,
+} from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import type {
@@ -1071,17 +1074,22 @@ describe("useTurn's failures and races", () => {
       expect(PgAssistant.items.some((i) => i.kind === "error")).toBe(false);
     });
 
-    it("shows a network error before any text as an error", async () => {
+    it("says the connection dropped, in words, when it drops before any text", async () => {
       PgAssistant.connect({ id: "default", apiKey: "" });
-      failAfter("", new TypeError("network error"));
+      failAfter("", new TypeError("Load failed"));
       const { result } = renderHook(() => useTestTurn());
 
       await act(() => result.current.send("hi"));
 
-      expect(PgAssistant.items.at(-1)).toMatchObject({
-        kind: "error",
-        text: "network error",
-      });
+      const last = PgAssistant.items.at(-1)!;
+      expect(last.kind).toBe("error");
+      expect(isConnectionLost(last)).toBe(true);
+      expect(PgAssistant.items.some((i) => i.kind === "assistant")).toBe(false);
+      expect(eventNames()).toContainEqual([
+        "assistant_reply_failed",
+        { reason: "connection-lost" },
+      ]);
+      expect(logged()).toContainEqual(["assistant:turn", "warn", false]);
     });
 
     it("shows a programming TypeError after text as an error, not a cut-off", async () => {
@@ -1113,10 +1121,7 @@ describe("useTurn's failures and races", () => {
 
       const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
       expect(PgAssistant.isCutOff(reply)).toBe(false);
-      expect(PgAssistant.items.at(-1)).toMatchObject({
-        kind: "error",
-        text: "Failed to fetch",
-      });
+      expect(isConnectionLost(PgAssistant.items.at(-1)!)).toBe(true);
     });
 
     it.each([

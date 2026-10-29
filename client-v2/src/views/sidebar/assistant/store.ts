@@ -111,12 +111,16 @@ export type ChatItem =
       /** Set once the tool has actually run */
       outcome?: string;
       /**
-       * An applied patch the user took back from its card (`PgPatchUndo`).
-       * Only on an `allowed` card. A flag beside `status` rather than a fifth
-       * status, because `ApprovalStatus` is what the codec and the server
-       * read, and an undone patch was still allowed when it ran.
+       * Where Undo patch left an applied patch (`PgPatchUndo`): `done`, the
+       * file is back as it was; `stranded`, an Undo threw and left the file
+       * holding neither the patch nor the original. Only on an `allowed`
+       * patch card, written only by `markUndone`, `markUndoStranded` and
+       * `clearUndoStranded`, and checked again on decode (`chat-codec`). Beside
+       * `status` rather than a fifth status, because `ApprovalStatus` is what
+       * the codec and the server read, and the patch was allowed when it ran.
+       * `outcome` is only the card's wording.
        */
-      undone?: true;
+      undo?: UndoState;
     })
   | (ChatItemBase & {
       kind: "error";
@@ -174,6 +178,9 @@ export const turnAppliedApproval = (items: readonly ChatItem[]) => {
 /** A patch card's outcome once `write_file` wrote its file */
 export const wroteOutcome = (path: string) => `wrote ${path}`;
 
+/** Where Undo patch left a card; see the approval item's `undo` */
+export type UndoState = "done" | "stranded";
+
 const UNDO_STRANDED = "Undo did not finish:";
 
 /** A card's outcome when its Undo threw and did not finish */
@@ -185,16 +192,24 @@ export const undoStrandedOutcome = (
   `${UNDO_STRANDED} ${path} ${why}.` +
   (created ? " It did not exist before the patch." : "");
 
-/** Whether a card's outcome says its Undo did not finish */
-export const isUndoStranded = (outcome: string | undefined) =>
-  !!outcome?.startsWith(UNDO_STRANDED);
-
 /** What the thread says where the user stopped a turn */
 export const STOPPED_NOTICE = "Stopped.";
 
 /** Whether `item` is the notice a stopped turn leaves */
 export const isStoppedNotice = (item: ChatItem) =>
   item.kind === "notice" && item.text === STOPPED_NOTICE;
+
+/**
+ * What the thread says when the connection dropped with no reply text to
+ * keep (a cut-off reply says so on the reply instead): the browser's own
+ * words ("Load failed", "Failed to fetch") say nothing to the user
+ */
+export const CONNECTION_LOST =
+  "The connection dropped. Check your connection and try again.";
+
+/** Whether `item` is the error `CONNECTION_LOST` wrote, which offers Try again */
+export const isConnectionLost = (item: ChatItem) =>
+  item.kind === "error" && item.text === CONNECTION_LOST;
 
 /** Shown when disconnecting could not remove the key from this tab */
 export const KEY_NOT_FORGOTTEN =
@@ -243,6 +258,17 @@ export type AssistantStatus =
  * for a build or a deploy already under way to come back on its own.
  */
 const CUT_TURN_OVERDUE_MS = 120_000;
+
+/**
+ * How long a reply another device is writing may go without a newer copy
+ * before it reads as cut off. Its device pushes the finished copy at the end
+ * of the turn, so a reply this quiet is one that turn left behind.
+ */
+const STREAM_QUIET_MS = 120_000;
+
+/** Milliseconds since the item was last written, by its own version stamp */
+const quietFor = (item: ChatItem) =>
+  Date.now() - Date.parse(item.updatedAt ?? item.createdAt);
 
 const makeId = uuid;
 const now = () => new Date().toISOString();
@@ -880,10 +906,16 @@ export class PgAssistant {
   static isCutOff(item: ChatItem) {
     if (item.kind !== "assistant") return false;
     if (item.state === "cut-off") return true;
-    return (
-      item.state === "streaming" &&
-      !PgAssistant._turn?.replies.includes(item.id)
-    );
+    if (
+      item.state !== "streaming" ||
+      PgAssistant._turn?.replies.includes(item.id)
+    ) {
+      return false;
+    }
+    // Another device may still be writing it: Try again would ask the same
+    // question twice, on the user's key, so it waits for the reply to go quiet
+    if (!PgAssistant._elsewhere.has(item.id)) return true;
+    return quietFor(item) >= STREAM_QUIET_MS;
   }
 
   static addToolCall(label: string) {
@@ -990,9 +1022,41 @@ export class PgAssistant {
    * @returns `false` when the open thread no longer holds that applied card
    */
   static markUndone(id: string, outcome: string) {
+    return PgAssistant._setUndo(id, "done", outcome);
+  }
+
+  /**
+   * Record that an Undo did not finish, with what the card says now. Never
+   * over a finished one.
+   *
+   * @returns `false` when the open thread no longer holds that applied card,
+   * or its Undo already finished
+   */
+  static markUndoStranded(id: string, outcome: string) {
+    return PgAssistant._setUndo(id, "stranded", outcome);
+  }
+
+  /** A stranded card whose patch is whole again: Undo is simply offered */
+  static clearUndoStranded(id: string, outcome: string) {
+    return PgAssistant._setUndo(id, undefined, outcome);
+  }
+
+  private static _setUndo(
+    id: string,
+    undo: UndoState | undefined,
+    outcome: string
+  ) {
     const item = PgAssistant._items.find((i) => i.id === id);
-    if (item?.kind !== "approval" || item.status !== "allowed") return false;
-    item.undone = true;
+    if (
+      item?.kind !== "approval" ||
+      item.status !== "allowed" ||
+      item.request.type !== "patch" ||
+      (item.undo === "done" && undo !== "done")
+    ) {
+      return false;
+    }
+    if (undo) item.undo = undo;
+    else delete item.undo;
     item.outcome = outcome;
     stamp(item);
     PgAssistant._emit();
@@ -1392,8 +1456,30 @@ export class PgAssistant {
     if (unchanged) return true;
 
     PgAssistant._items = merged;
+    PgAssistant._watchElsewhere(fromServer);
     PgAssistant._emit();
     return true;
+  }
+
+  /**
+   * Notes the replies the server's copy brought in still streaming, which
+   * another device is writing, and redraws once each has been quiet for
+   * `STREAM_QUIET_MS`, when `isCutOff` starts reading it as cut off
+   */
+  private static _watchElsewhere(fromServer: readonly ChatItem[]) {
+    for (const item of fromServer) {
+      if (
+        item.kind !== "assistant" ||
+        item.state !== "streaming" ||
+        PgAssistant._turn?.replies.includes(item.id) ||
+        !PgAssistant._items.includes(item)
+      ) {
+        continue;
+      }
+      PgAssistant._elsewhere.add(item.id);
+      const left = Math.max(0, STREAM_QUIET_MS - quietFor(item));
+      setTimeout(() => PgAssistant._emitOnly(), left);
+    }
   }
 
   /**
@@ -1429,6 +1515,12 @@ export class PgAssistant {
     /** Reports a cut turn that has not ended in `CUT_TURN_OVERDUE_MS` */
     overdue?: ReturnType<typeof setTimeout>;
   } | null = null;
+  /**
+   * Replies another device was still writing when its copy folded in
+   * (`foldIn`). In memory: a copy this device stored and reloaded mid-reply
+   * reads as cut off at once, as before.
+   */
+  private static readonly _elsewhere = new Set<string>();
   private static _conversation = 0;
   private static readonly _pending = new Map<
     string,
@@ -1621,15 +1713,75 @@ if (import.meta.vitest) {
     };
 
     describe("undoStrandedOutcome", () => {
-      it("is read back by isUndoStranded, and nothing else is", () => {
-        expect(
-          isUndoStranded(undoStrandedOutcome("src/lib.rs", "changed", false))
-        ).toBe(true);
+      it("says which file, why, and whether it existed before", () => {
         expect(undoStrandedOutcome("src/new.rs", "changed", true)).toBe(
           "Undo did not finish: src/new.rs changed. It did not exist before the patch."
         );
-        expect(isUndoStranded(wroteOutcome("src/lib.rs"))).toBe(false);
-        expect(isUndoStranded(undefined)).toBe(false);
+      });
+    });
+
+    describe("a patch card's undo state", () => {
+      /** A patch card answered `allowed`, as the store holds it */
+      const card = (allowed: boolean) => {
+        void PgAssistant.requestApproval({
+          type: "patch",
+          path: "src/lib.rs",
+          before: "old",
+          after: "new",
+        });
+        const { id } = PgAssistant.items[PgAssistant.items.length - 1];
+        PgAssistant.resolveApproval(id, allowed);
+        return id;
+      };
+      const undoOf = (id: string) => {
+        const item = PgAssistant.items.find((i) => i.id === id);
+        return item?.kind === "approval" ? item.undo : "missing";
+      };
+
+      beforeEach(() => PgAssistant.clear());
+
+      it("is set apart from the outcome's wording", () => {
+        const id = card(true);
+
+        expect(PgAssistant.markUndoStranded(id, "anything at all")).toBe(true);
+
+        expect(undoOf(id)).toBe("stranded");
+      });
+
+      it("reads done once Undo finishes, stranded or not", () => {
+        const id = card(true);
+        PgAssistant.markUndoStranded(id, undoStrandedOutcome("a", "b", false));
+
+        PgAssistant.markUndone(id, "undone");
+
+        expect(undoOf(id)).toBe("done");
+      });
+
+      it("never reads stranded after it finished", () => {
+        const id = card(true);
+        PgAssistant.markUndone(id, "undone");
+
+        expect(PgAssistant.markUndoStranded(id, "late")).toBe(false);
+
+        expect(undoOf(id)).toBe("done");
+      });
+
+      it("clears a stranded mark once the patch is whole again", () => {
+        const id = card(true);
+        PgAssistant.markUndoStranded(id, "stranded");
+
+        PgAssistant.clearUndoStranded(id, wroteOutcome("src/lib.rs"));
+
+        expect(undoOf(id)).toBeUndefined();
+      });
+
+      it("is never set on a card that was not allowed", () => {
+        const id = card(false);
+
+        expect(PgAssistant.markUndone(id, "undone")).toBe(false);
+        expect(PgAssistant.markUndoStranded(id, "stranded")).toBe(false);
+
+        expect(undoOf(id)).toBeUndefined();
       });
     });
 
@@ -1967,6 +2119,53 @@ if (import.meta.vitest) {
         await Promise.all([loading, folded]);
 
         expect(texts()).toEqual(["stored"]);
+      });
+
+      describe("a reply another device is still writing", () => {
+        /** The other device's copy, pushed mid-reply, last written at `updatedAt` */
+        const midReply = (updatedAt: string): ChatItem => ({
+          kind: "assistant",
+          id: "77777777-7777-4777-8777-777777777777",
+          createdAt: at,
+          text: "The program",
+          state: "streaming",
+          updatedAt,
+        });
+        const folded = () =>
+          PgAssistant.items.find((i) => i.kind === "assistant")!;
+
+        afterEach(() => vi.useRealTimers());
+
+        it("does not read as cut off while it is fresh", async () => {
+          await PgAssistant.foldIn("fold", [
+            midReply(new Date().toISOString()),
+          ]);
+
+          expect(PgAssistant.isCutOff(folded())).toBe(false);
+        });
+
+        it("reads as cut off once it has gone quiet", async () => {
+          const quiet = new Date(Date.now() - 3 * 60_000).toISOString();
+
+          await PgAssistant.foldIn("fold", [midReply(quiet)]);
+
+          expect(PgAssistant.isCutOff(folded())).toBe(true);
+        });
+
+        it("redraws when a fresh one goes quiet", async () => {
+          vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+          await PgAssistant.foldIn("fold", [
+            midReply(new Date().toISOString()),
+          ]);
+          const changed = vi.fn();
+          const listener = PgAssistant.onDidChange(changed);
+
+          vi.advanceTimersByTime(2 * 60_000);
+
+          expect(changed).toHaveBeenCalled();
+          expect(PgAssistant.isCutOff(folded())).toBe(true);
+          listener.dispose();
+        });
       });
 
       describe("on a thread longer than this device keeps", () => {

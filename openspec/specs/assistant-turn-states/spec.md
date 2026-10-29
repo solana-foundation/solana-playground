@@ -32,7 +32,7 @@ Stop, or Escape in the composer while a reply runs, SHALL leave the notice "Stop
 - **THEN** the "Stopped." notice no longer shows "Try again"
 
 ### Requirement: A cut-off reply says so
-A reply SHALL read as cut off when the request failed with a network error after the reply began streaming, or when the thread is opened and the reply was still streaming in no turn this tab is running (the page was reloaded or closed mid-reply). A cut-off reply SHALL keep its text and show "This reply was cut off."; while it is the thread's last item and no turn runs, it SHALL carry "Try again", which sends `assistant_reply_retried` with `after: "interrupted"`. A network cut SHALL send `assistant_reply_failed` with `reason: "interrupted"`. Any other failure SHALL still show its error.
+A reply SHALL read as cut off when the request failed with a network error after the reply began streaming, or when the thread is opened and the reply was still streaming in no turn this tab is running (the page was reloaded or closed mid-reply). A reply still streaming in a copy another device pushed SHALL read as cut off only once no newer copy has arrived for two minutes, so "Try again" never asks the same question while the other device is still answering it. A cut-off reply SHALL keep its text and show "This reply was cut off."; while it is the thread's last item and no turn runs, it SHALL carry "Try again", which sends `assistant_reply_retried` with `after: "interrupted"`. A network cut SHALL send `assistant_reply_failed` with `reason: "interrupted"`. A network failure with no reply text to keep SHALL show "The connection dropped. Check your connection and try again." in place of the browser's message, carry "Try again" while it is the thread's last item, and send `assistant_reply_failed` with `reason: "connection-lost"`. Any other failure SHALL still show its error.
 
 #### Scenario: The connection drops mid-reply (manual)
 - **WHEN** the reply has streamed "The program" and the request then fails with a network error
@@ -44,4 +44,8 @@ A reply SHALL read as cut off when the request failed with a network error after
 
 #### Scenario: A failure before any text (manual)
 - **WHEN** the request fails with a network error before any text streamed
-- **THEN** the thread shows the error, not "This reply was cut off."
+- **THEN** the thread shows "The connection dropped. Check your connection and try again." with "Try again", not "This reply was cut off.", and `assistant_reply_failed` is sent with `reason: "connection-lost"`
+
+#### Scenario: A reply another device is still writing (manual)
+- **WHEN** the thread folds in another device's copy of a reply that is still streaming, last written under two minutes ago
+- **THEN** the reply shows no "This reply was cut off." and no "Try again" until two minutes pass with no newer copy

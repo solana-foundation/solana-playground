@@ -152,7 +152,7 @@ describe("BaseApprovalCard", () => {
       kind: "approval",
       status: "allowed",
       outcome: "undone, src/lib.rs is back as it was",
-      undone: true,
+      undo: "done",
       request,
     });
 
@@ -225,6 +225,7 @@ describe("BaseApprovalCard", () => {
         createdAt: CREATED,
         kind: "approval",
         status: "allowed",
+        undo: "stranded",
         outcome: "Undo did not finish: src/lib.rs changed while Undo wrote it.",
         request,
       };
@@ -234,6 +235,22 @@ describe("BaseApprovalCard", () => {
           "Undo did not finish: src/lib.rs changed while Undo wrote it."
         ).className
       ).toContain("text-warning");
+    });
+
+    it("reads the undo state, never the outcome's wording", () => {
+      const card: ApprovalItem = {
+        id: "card-5",
+        createdAt: CREATED,
+        kind: "approval",
+        status: "allowed",
+        outcome: "Undo did not finish: but no Undo ran on this card.",
+        request,
+      };
+      render(<BaseApprovalCard item={card} onAnswer={vi.fn()} />);
+      expect(
+        screen.getByText("Undo did not finish: but no Undo ran on this card.")
+          .className
+      ).not.toContain("text-warning");
     });
 
     it("offers no Undo patch without onUndo", () => {

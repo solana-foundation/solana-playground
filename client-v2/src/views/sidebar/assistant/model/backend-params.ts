@@ -65,13 +65,14 @@ if (import.meta.vitest) {
         id: "openai",
         apiKey: "sk-test-backend-0123456789",
         endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
-        settings: { model: "ignored" },
+        settings: { model: "ignored", effort: "high" },
       });
 
       expect(params).toEqual({
         provider: "openai",
         model: "gpt-x",
         baseUrl: "https://api.example.test/v1",
+        effort: "high",
       });
     });
 

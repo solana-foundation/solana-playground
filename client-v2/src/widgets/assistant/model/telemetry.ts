@@ -34,8 +34,8 @@ export type AssistantEvents = {
   assistant_suggestion_picked: NoParams;
   /** The user asked for a described change as a patch ("Make this change" or "Write it for me"). */
   assistant_make_change_requested: NoParams;
-  /** A reply was cut off: the connection dropped after text had streamed (`reason: "interrupted"`). Other failures show their error and send nothing here. */
-  assistant_reply_failed: { reason: "interrupted" };
+  /** The connection dropped during a turn: after text had streamed, cutting the reply off (`reason: "interrupted"`), or before any (`reason: "connection-lost"`). Other failures show their error and send nothing here. */
+  assistant_reply_failed: { reason: "interrupted" | "connection-lost" };
   /** The user pressed Try again under the last reply; `after` says whether it had been stopped or cut off. */
   assistant_reply_retried: { after: "stopped" | "interrupted" };
   /** The user removed the open-file chip, so the next message goes without that file's content. */

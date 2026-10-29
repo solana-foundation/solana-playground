@@ -171,6 +171,7 @@ export const BaseThreadItem = ({
               Enter key
             </Button>
           )}
+          {onRetry && <TryAgain onClick={onRetry} />}
         </Callout>
       );
 
