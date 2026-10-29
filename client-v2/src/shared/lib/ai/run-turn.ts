@@ -9,6 +9,7 @@ import type {
 } from "ai";
 
 import { createLogger } from "../logger";
+import { isNetworkFailure } from "./network-failure";
 import { redactKey } from "./redact";
 
 const log = createLogger("ai:run-turn");
@@ -23,11 +24,11 @@ const FALLBACK_MAX_RESUMES = 3;
 const PAUSE_TURN = "pause_turn";
 
 /** Why a turn failed, so a caller can word each case for its own users */
-export type AiTurnErrorKind = "provider" | "refusal" | "paused";
+export type AiTurnErrorKind = "provider" | "refusal" | "paused" | "network";
 
 /**
- * A turn the provider ended in failure: an error, a refusal, or a turn that
- * kept pausing. The message never carries the connection's key.
+ * A turn the provider ended in failure: an error, a refusal, a turn that
+ * kept pausing, or the connection dropping (`isNetworkFailure`). The message never carries the connection's key.
  */
 export class AiTurnError extends Error {
   readonly kind: AiTurnErrorKind;
@@ -123,6 +124,12 @@ const apiCallMessage = (error: APICallError, body: string | undefined) => {
 
 const toTurnError = (error: unknown, apiKey: string | undefined) => {
   if (error instanceof AiTurnError) return error;
+  // Before the status: a body that drops early is wrapped with the 200 it began with
+  if (isNetworkFailure(error)) {
+    return new AiTurnError(redactKey(messageOf(error), apiKey), {
+      kind: "network",
+    });
+  }
   if (!APICallError.isInstance(error)) {
     return new AiTurnError(redactKey(messageOf(error), apiKey));
   }

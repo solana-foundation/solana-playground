@@ -226,6 +226,58 @@ describe("runTurn", () => {
     await expect(turn).rejects.toThrow(/overloaded/);
   });
 
+  it("rejects a stream the connection drops after text as a network failure", async () => {
+    const encoder = new TextEncoder();
+    const dropped = () =>
+      new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({
+                  id: "1",
+                  created: 0,
+                  model: "m",
+                  choices: [{ index: 0, delta: { content: "The program" } }],
+                })}\n\n`
+              )
+            );
+          },
+          // Later, as a real drop: an error in `start` would drop the queue
+          async pull(controller) {
+            await new Promise((resolve) => setTimeout(resolve, 10));
+            controller.error(new TypeError("network error"));
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } }
+      );
+    const { fetch } = fakeFetch(dropped);
+    const text: string[] = [];
+
+    const failure = await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+      onText: (delta) => text.push(delta),
+    }).catch((e: unknown) => e);
+
+    expect(text.join("")).toBe("The program");
+    expect(failure).toBeInstanceOf(AiTurnError);
+    expect((failure as AiTurnError).kind).toBe("network");
+  });
+
+  it("keeps a programming TypeError a provider failure", async () => {
+    const { fetch } = fakeFetch(() => {
+      throw new TypeError("x.fetch is not a function");
+    });
+
+    const failure = await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+    }).catch((e: unknown) => e);
+
+    expect((failure as AiTurnError).kind).toBe("provider");
+  });
+
   it("rejects a refusal with its category", async () => {
     const { fetch } = fakeFetch(
       anthropicText("", "refusal", { type: "refusal", category: "cyber" })

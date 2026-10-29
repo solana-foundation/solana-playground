@@ -104,6 +104,34 @@ describe("PgPatchUndo", () => {
     expect(file.content).toBe('declare_id!("Built1111");\nold');
   });
 
+  it("puts back the id a patch changed when no build ran since", async () => {
+    const card = await applied(
+      'declare_id!("Before1111");\nfn main() {}',
+      'declare_id!("Patched111");\nfn main() {}'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge(
+      'declare_id!("Patched111");\nfn main() {}'
+    );
+
+    await PgPatchUndo.undo(card, bridge);
+
+    expect(file.content).toBe('declare_id!("Before1111");\nfn main() {}');
+  });
+
+  it("keeps a build's id over the one a patch wrote", async () => {
+    const card = await applied(
+      'declare_id!("Before1111");\nold',
+      'declare_id!("Patched111");\nnew'
+    );
+    PgPatchUndo.wrote(card.id);
+    const { bridge, file } = fakeBridge('declare_id!("Built1111");\nnew');
+
+    await PgPatchUndo.undo(card, bridge);
+
+    expect(file.content).toBe('declare_id!("Built1111");\nold');
+  });
+
   it("writes nothing over an edit made after Apply, and says so", async () => {
     const card = await applied("old", "new");
     PgPatchUndo.wrote(card.id);

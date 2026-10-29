@@ -52,10 +52,15 @@ const holdsOriginal = (now: string | null, request: PatchApproval) =>
     : now !== null &&
       now.replace(DECLARE_ID, "") === request.before.replace(DECLARE_ID, "");
 
-/** `content` with the id the file holds now, so Undo keeps the real one */
-const keepId = (content: string, now: string | null) => {
+/**
+ * `content` with the id a build wrote since Apply, so Undo keeps the real
+ * one. An id that is still the one the patch wrote is the patch's, and goes
+ * back with the rest of it.
+ */
+const keepId = (content: string, now: string | null, after: string) => {
   const id = now?.match(DECLARE_ID)?.[0];
-  return id ? content.replace(DECLARE_ID, id) : content;
+  if (!id || id === after.match(DECLARE_ID)?.[0]) return content;
+  return content.replace(DECLARE_ID, id);
 };
 
 /**
@@ -218,7 +223,7 @@ export class PgPatchUndo {
       else
         await bridge.applyPatch({
           path: request.path,
-          content: keepId(request.before, now),
+          content: keepId(request.before, now, request.after),
         });
     } catch (error) {
       // A write can land before what follows it fails (the editor's model

@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
+import { isNetworkFailure } from "@/shared/lib/ai";
 import type { AiTurnError } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
@@ -64,19 +65,15 @@ const isRejectedKey = (error: unknown) =>
   (error as AiTurnError).status === 401;
 
 /**
- * What `fetch`, and a stream it was reading, reject with when the connection
- * drops: a `TypeError` whose whole message is one Chrome ("Failed to fetch",
- * "network error"), Firefox ("NetworkError when attempting to fetch
- * resource.", "Error in input stream"), Safari ("Load failed", "The network
- * connection was lost.") or Node's fetch ("fetch failed", "terminated") use
- * for it. Matched whole, so
- * a programming error that is also a `TypeError` ("x.fetch is not a
- * function") keeps its own message instead of reading as a cut-off reply.
+ * Whether the turn ended on the connection dropping: `runTurn` reports it as
+ * an `AiTurnError` of kind `network`; a send that failed before reaching it
+ * throws the dropped fetch itself. By name, like `isRejectedKey`.
  */
-const NETWORK_FAILURE =
-  /^(failed to fetch|fetch failed|networkerror when attempting to fetch resource|load failed|network error|the network connection was lost|error in input stream|terminated)\.?$/i;
-const isNetworkFailure = (error: unknown) =>
-  error instanceof TypeError && NETWORK_FAILURE.test(error.message);
+const isDroppedConnection = (error: unknown) =>
+  isNetworkFailure(error) ||
+  (error instanceof Error &&
+    error.name === "AiTurnError" &&
+    (error as AiTurnError).kind === "network");
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
@@ -199,6 +196,16 @@ const resolveSendBackend = (): SendBackend => {
   return { kind: "default" };
 };
 
+/**
+ * Connections the page made on its own, reconnecting a remembered default:
+ * nobody chose them for the thread now open. A send treats one as nothing
+ * connected when that thread was last answered by a key-based backend, so
+ * project A's conversation never goes to the default the user picked in
+ * project B (HOO-1719). A pick in Connect a model connects a new object, and
+ * from then on the user's choice holds.
+ */
+const restored = new WeakSet<Connection>();
+
 export const useTurn = ({ open }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
@@ -273,7 +280,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * the page asks once (again only after a failure).
    *
    * Neither overrules a live connection or a choice in progress in Connect a
-   * model. A Forget key stays forgotten because `forgetBackend` drops what
+   * model. A default reconnected here never answers a thread a key-based
+   * backend answered (`restored`). A Forget key stays forgotten because `forgetBackend` drops what
    * both would read.
    */
   useEffect(() => {
@@ -290,6 +298,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
           if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
           if (!isDefaultBackendRemembered() || !PgSession.get()) return;
           PgAssistant.connect(DEFAULT_CONNECTION);
+          if (PgAssistant.connection) restored.add(PgAssistant.connection);
         })
         .catch((error: unknown) => {
           // Nothing on screen asked for it: the panel opens unconnected, and
@@ -345,6 +354,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Only a send with nothing connected waits, so a connected one has started
     // its turn by the time it first yields
     let current = usableConnection();
+    if (current && restored.has(current)) {
+      const backend = resolveSendBackend();
+      if (backend.kind === "ask") {
+        setInput(text);
+        openConnect(backend.via, backend.preset);
+        return true;
+      }
+    }
     // Nothing connected: the thread's own backend, or the default. Connected
     // to the default with no session falls through to Connect a model, which
     // offers sign-in
@@ -420,7 +437,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     try {
       await instance.send(trimmed, controller.signal, context);
     } catch (e) {
-      const cutReply = isNetworkFailure(e)
+      const cutReply = isDroppedConnection(e)
         ? PgAssistant.turnReplyWithText()
         : null;
       if (

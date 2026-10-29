@@ -692,6 +692,32 @@ describe("useTurn when the key is gone", () => {
     expect(provider.send).not.toHaveBeenCalled();
   });
 
+  it("opens Connect on the thread's own backend over a default the reload reconnected", async () => {
+    defaultBackend(true);
+    rememberBackend({ id: "default", apiKey: "" });
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+    await waitFor(() => expect(PgAssistant.connection?.id).toBe("default"));
+
+    await act(() => result.current.send("hi"));
+
+    expect(open).toHaveBeenCalledWith("thread", OPENAI);
+    expect(result.current.input).toBe("hi");
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("sends to the default the user picked for a thread another backend answered", async () => {
+    defaultBackend(true);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+    act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
+
+    await act(() => result.current.send("hi"));
+
+    expect(open).not.toHaveBeenCalled();
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
   it("connects the default for a thread the default answered", async () => {
     defaultBackend(true);
     threadAnsweredBy({ provider: "default" });
@@ -1028,6 +1054,21 @@ describe("useTurn's failures and races", () => {
         { reason: "interrupted" },
       ]);
       expect(logged()).toContainEqual(["assistant:turn", "warn", false]);
+    });
+
+    it("marks the reply cut off on the network failure runTurn reports", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter(
+        "The program",
+        new AiTurnError("network error", { kind: "network" })
+      );
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("What does this program do?"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(reply).toMatchObject({ text: "The program", state: "cut-off" });
+      expect(PgAssistant.items.some((i) => i.kind === "error")).toBe(false);
     });
 
     it("shows a network error before any text as an error", async () => {
