@@ -418,11 +418,13 @@ describe("from an open project", () => {
     expect(names()).toEqual([["home_shown", { via: "start" }]]);
   });
 
-  it("ignores the navigation's Home until the start is decided", () => {
+  it("ignores the navigation's Home until the start is decided", async () => {
     const { result } = renderHook(() => useStartView());
     expect(result.current.view).toBe("pending");
     act(() => result.current.showHome("nav"));
     expect(result.current.view).toBe("pending");
+    // The explorer's answer decides the start after the last assertion
+    await act(async () => {});
   });
 
   it("keeps Home and stops keeping the work when the last project goes while Home shows", async () => {

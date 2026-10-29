@@ -63,6 +63,8 @@ operations:
   archive:
     guidance:
       - Run only when a human asked for it in this session
+      - Archive in the PR that ticks the last task, on a human's yes; a
+        finished change stays in openspec/changes/ only until that yes
       - Before archiving, confirm every task in tasks.md is ticked, then
         delete tasks.md
       - Say which spec files changed

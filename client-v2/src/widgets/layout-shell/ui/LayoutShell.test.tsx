@@ -145,7 +145,8 @@ afterEach(() => {
   // `PgView`'s stack outlives every test: a dialog left open here would be
   // closed, and reported, by its no-host wait during a later test
   for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
-  PgFlow["_dispatch"]({ type: "workspace-change" });
+  // The shell is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgFlow["_dispatch"]({ type: "workspace-change" }));
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   resetTelemetry();
@@ -696,8 +697,8 @@ it("should open the console once when a deploy fails, not for one already failed
   shell();
   expect(toggled()).toEqual([]);
 
-  dispatch({ type: "workspace-change" });
-  dispatch({ type: "deploy-start" });
+  act(() => dispatch({ type: "workspace-change" }));
+  act(() => dispatch({ type: "deploy-start" }));
   act(() => dispatch({ type: "deploy-finish", ok: false }));
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });
@@ -706,7 +707,7 @@ it("should not reopen the console for a change that leaves a deploy failed", () 
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
     PgFlow["_dispatch"](ev);
   shell();
-  dispatch({ type: "deploy-start" });
+  act(() => dispatch({ type: "deploy-start" }));
   act(() => dispatch({ type: "deploy-finish", ok: false }));
   press({ key: "j", ctrlKey: true });
   expect(consoleButton().getAttribute("aria-expanded")).toBe("false");

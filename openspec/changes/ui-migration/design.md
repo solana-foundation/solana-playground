@@ -1421,7 +1421,7 @@ Decided with Slava on 2026-10-16 (HOO-2070), from the prototype's sidebar
   the round "Feedback" button is removed. `FeedbackHost` keeps the form and
   its state above the frame and gives the menu its actions; a send in flight
   shows on the account row and on the rail's "Account". The requirement is
-  revised in `feedback-widget`'s delta, which is not yet archived.
+  in `openspec/specs/client-v2-feedback/spec.md`.
 - **The cluster that is down** turns the dot red, adds ", down" to the names,
   and puts a warning first in the menu that opens the settings on the
   cluster.
