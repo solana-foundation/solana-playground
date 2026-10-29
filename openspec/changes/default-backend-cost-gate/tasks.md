@@ -62,7 +62,7 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       with no `content-length` (HOO-1751)
 - [x] 2.4 Wire the gate into `api/agent.mjs`: the tier `reserve` returns
       picks the upstream key; reserve before the upstream call and refuse
-      with 429 `daily-cap` plus `tier` and `Retry-After`; send `max_tokens`,
+      with 429 `daily-cap` plus `tier` and `Retry-After`; send `max_completion_tokens`,
       `stream_options.include_usage`, and
       `providerOptions.gateway.only` from `AGENT_PROVIDERS` when it is
       non-empty; read `usage` from the stream while

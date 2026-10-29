@@ -62,7 +62,7 @@ import {
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
 import { query } from "../src/features/persistence/server.mjs";
-import { agentEnv, isGatewayUrl } from "../src/shared/config/server-env.mjs";
+import { agentEnv } from "../src/shared/config/server-env.mjs";
 
 /**
  * Request fields forwarded upstream; everything else is the server's to
@@ -105,11 +105,6 @@ const upstream = () => {
       newcomer: agent.NEWCOMER_API_KEY ?? agent.API_KEY,
     },
     maxOutputTokens: agent.MAX_OUTPUT_TOKENS,
-    // The same limit under the name each upstream takes: the Gateway documents
-    // `max_tokens`; Nous refuses it for GLM and asks for OpenAI's current name
-    outputLimitField: isGatewayUrl(agent.BASE_URL)
-      ? "max_tokens"
-      : "max_completion_tokens",
     providers: agent.PROVIDERS,
     prices: { input: agent.PRICE_INPUT, output: agent.PRICE_OUTPUT },
     maxBodyBytes: agent.MAX_BODY_BYTES,
@@ -138,14 +133,20 @@ const sendJson = (res, status, body) => {
  * @param body the upstream's web stream
  * @param {(chunk: Uint8Array) => void} observe sees every chunk as it is
  *   forwarded, for the usage the ledger charges
+ * @returns {Promise<boolean>} whether the upstream's stream ended with the
+ *   caller still there; false when the caller left or the stream broke
  */
 const pipeStream = async (res, body, observe) => {
   const reader = body.getReader();
+  let finished = false;
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        finished = !res.destroyed;
+        break;
+      }
       observe(value);
       // Nobody left to write to: the caller's `close` handler has already
       // aborted the upstream, and writing on a dead socket is a no-op
@@ -180,6 +181,7 @@ const pipeStream = async (res, body, observe) => {
     await reader.cancel().catch(() => {});
     if (!res.writableEnded) res.end();
   }
+  return finished;
 };
 
 /**
@@ -375,8 +377,10 @@ const relay = async (res, configured, body, tier, now) => {
         model: configured.model,
         reasoning_effort: configured.reasoningEffort,
         stream: true,
-        // The output half of the worst case the turn reserved
-        [configured.outputLimitField]: configured.maxOutputTokens,
+        // The output half of the worst case the turn reserved, under OpenAI's
+        // current name: Nous refuses `max_tokens` for GLM, and the Gateway
+        // takes this one too
+        max_completion_tokens: configured.maxOutputTokens,
         stream_options: { include_usage: true },
         // US-region providers that keep no data; empty for an upstream that
         // is not the Gateway
@@ -386,6 +390,10 @@ const relay = async (res, configured, body, tier, now) => {
       }),
     });
   } catch (e) {
+    // The caller left before the upstream answered, so the abort is ours, and
+    // the upstream may already have taken the request: charging nothing here
+    // would let a caller that hangs up early spend past the cap
+    if (abortUpstream.signal.aborted) return { kind: "unfinished" };
     sendJson(res, 502, { error: `Upstream unreachable: ${e.message}` });
     return { kind: "refused" };
   }
@@ -441,9 +449,11 @@ const relay = async (res, configured, body, tier, now) => {
   res.setHeader("content-type", "text/event-stream");
   res.setHeader("cache-control", "no-cache, no-transform");
   const usage = usageReader();
-  await pipeStream(res, response.body, usage.push);
+  const finished = await pipeStream(res, response.body, usage.push);
   const reported = usage.usage();
-  return reported
+  // Usage seen on a turn that did not finish may be a running total, not the
+  // turn's: only a stream read to its end is charged what it reported
+  return finished && reported
     ? { kind: "completed", usage: reported }
     : { kind: "unfinished" };
 };

@@ -198,10 +198,14 @@ key `(user_id, day)`. Amounts are integers in micro-USD.
   serialises two concurrent reservations, so parallel turns cannot pass the
   cap together.
 - **Worst case `$r`**: input tokens estimated from the body's byte length,
-  plus `max_tokens` output tokens, at the configured prices.
+  plus `max_completion_tokens` output tokens, at the configured prices.
 - **Settle**: one statement, `reserved = reserved - $r, spent = spent + $charge`,
   with `$charge` from the spec's requirement "A turn is charged what it cost".
-  It runs after the response has ended, so it adds no latency either.
+  It runs after the response has ended, so it adds no latency either. Only a
+  stream read to its end with the caller still connected is charged its
+  reported usage: usage seen on a turn that stopped early may be a running
+  total, and a caller that hangs up before the upstream answers may already
+  have been billed for, so both are charged the reservation.
 - A function that dies between reserve and settle leaves the reservation in
   `reserved` for the rest of the UTC day. The user is overcharged, which the
   Non-Goals allow.
@@ -220,8 +224,10 @@ provision and operate. Postgres already serves `readSession` on every turn.
 - `AGENT_MAX_BODY_BYTES`: a body over the limit is refused with 413 before
   `readJson` buffers it, using `content-length` and the byte count while
   reading.
-- `AGENT_MAX_OUTPUT_TOKENS`: sent as `max_tokens` on every upstream request.
-  `FORWARDED` already drops a caller's `max_tokens`.
+- `AGENT_MAX_OUTPUT_TOKENS`: sent as `max_completion_tokens` on every upstream
+  request, to the Gateway and Nous alike: both take it, and Nous refuses
+  `max_tokens` for GLM. `FORWARDED` already drops a caller's `max_tokens` and
+  `max_completion_tokens`.
 
 ### 6. Refusal shapes
 

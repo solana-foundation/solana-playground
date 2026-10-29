@@ -307,7 +307,7 @@ The upstream is Vercel AI Gateway (HOO-1751, OpenSpec change
   The date is stored at sign-in, or looked up from GitHub after the user's
   first turn when sign-in did not store it.
 - **Bounds on one request.** A body over `AGENT_MAX_BODY_BYTES` is refused, and
-  every upstream request carries `max_tokens`, so a turn's worst case is known
+  every upstream request carries `max_completion_tokens`, so a turn's worst case is known
   before the call. Every request also restricts the Gateway to
   `AGENT_PROVIDERS`.
 
@@ -347,7 +347,7 @@ The limits are optional and default to the starting values in the change's
 | `AGENT_PROVIDERS` | `baseten,fireworks` when `AGENT_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
 | `AGENT_PRICE_INPUT` / `AGENT_PRICE_OUTPUT` | `0.15` / `0.50` | USD per million tokens, the Gateway's list price. The ledger charges reported usage at these prices: the cost in the Gateway's streamed usage is undocumented, so it is not used |
 | `AGENT_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
-| `AGENT_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_tokens` |
+| `AGENT_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
 | `AGENT_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
 | `AGENT_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
 | `AGENT_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |

@@ -1,7 +1,7 @@
 /**
  * The bounds on one `/api/agent` request that make its worst-case cost known
  * before the upstream is called: a body no larger than `AGENT_MAX_BODY_BYTES`,
- * and `AGENT_MAX_OUTPUT_TOKENS` sent as `max_tokens`.
+ * and `AGENT_MAX_OUTPUT_TOKENS` sent as `max_completion_tokens`.
  */
 
 /** Bytes per input token, for sizing a reservation; the charge uses reported usage */
@@ -59,7 +59,7 @@ export const readBoundedBody = async (req, limit) => {
 
 /**
  * The most a turn can cost, in micro-USD: the body's bytes as input tokens,
- * plus `max_tokens` of output. Prices are USD per million tokens, so tokens
+ * plus `max_completion_tokens` of output. Prices are USD per million tokens, so tokens
  * times price is micro-USD already.
  *
  * @param {{

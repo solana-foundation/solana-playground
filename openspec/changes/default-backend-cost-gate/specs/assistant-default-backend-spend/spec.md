@@ -55,9 +55,10 @@ by one user SHALL together never reserve more than the cap.
 
 When a turn ends, `POST /api/agent` SHALL replace the turn's reservation with
 its charge: the cost of the token usage the upstream reported for a turn that
-streamed to the end, the full reservation for a turn that ended without
-reported usage (the caller went away, the stream broke), and nothing for a turn
-the upstream refused before streaming.
+streamed to the end with the caller still connected, the full reservation for
+any other turn the upstream may have received (the caller went away, before
+the upstream answered or while the turn streamed; the stream broke; no usage
+was reported), and nothing for a turn the upstream refused before streaming.
 
 #### Scenario: A completed turn is charged its reported usage
 
@@ -68,6 +69,13 @@ the upstream refused before streaming.
 #### Scenario: A turn the caller abandons is charged the reservation
 
 - **WHEN** the caller closes the connection while the turn is streaming
+- **THEN** the user's spend today grows by the full reservation, even when the
+  upstream reported usage before the caller left
+
+#### Scenario: A turn the caller abandons before the upstream answers is charged the reservation
+
+- **WHEN** the caller closes the connection after the upstream request is sent
+  and before the upstream answers
 - **THEN** the user's spend today grows by the full reservation
 
 #### Scenario: A turn the upstream refuses is not charged
@@ -79,8 +87,9 @@ the upstream refused before streaming.
 
 `POST /api/agent` SHALL refuse a request body larger than the configured limit
 with 413, before the upstream is called and without charging the user. Every
-upstream request SHALL carry the server's configured `max_tokens`, whatever the
-caller sent, so the worst-case cost of a turn is known before the call.
+upstream request SHALL carry the server's configured output limit as
+`max_completion_tokens`, whatever the caller sent, so the worst-case cost of a
+turn is known before the call.
 
 #### Scenario: An oversized body is refused
 
@@ -90,8 +99,10 @@ caller sent, so the worst-case cost of a turn is known before the call.
 
 #### Scenario: The caller cannot raise the output limit
 
-- **WHEN** a signed-in user sends a turn whose body sets `max_tokens`
-- **THEN** the upstream request carries the server's configured `max_tokens`
+- **WHEN** a signed-in user sends a turn whose body sets `max_tokens` or
+  `max_completion_tokens`
+- **THEN** the upstream request carries the server's configured
+  `max_completion_tokens` and no `max_tokens`
 
 ### Requirement: Turns are served only by the configured providers
 

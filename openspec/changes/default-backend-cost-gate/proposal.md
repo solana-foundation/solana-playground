@@ -37,7 +37,7 @@ one request.
 - A Gateway budget refusal (`402`, `quota_for_entity_exceeded`) reaches the
   panel as 503 with `reason: "pool-exhausted"`, not as `Upstream 402: ...`.
 - `/api/agent` refuses a request whose body is larger than a configured limit
-  (413), and sets `max_tokens` on every upstream request, so the worst-case
+  (413), and sets `max_completion_tokens` on every upstream request, so the worst-case
   cost of one turn is known before the call.
 - The panel shows a plain sentence for `daily-cap` and `pool-exhausted`, says
   when the default backend is available again, and points at the key-based

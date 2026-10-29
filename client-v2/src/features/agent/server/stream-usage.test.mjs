@@ -32,7 +32,17 @@ describe("usageReader", () => {
     assert.equal(feed(last.slice(0, -2)), null);
   });
 
-  it("skips a malformed event and keeps reading", () => {
+  it("skips a malformed event and keeps reading", (t) => {
+    t.mock.method(console, "warn", () => {});
     assert.deepEqual(feed('data: {"usage": nope}\n\n', last), USAGE);
+  });
+
+  it("logs the first malformed event of a turn, and only the first", (t) => {
+    const warn = t.mock.method(console, "warn", () => {});
+
+    feed('data: {"usage": nope}\n\n', 'data: {"usage": nor this}\n\n', last);
+
+    assert.equal(warn.mock.callCount(), 1);
+    assert.equal(warn.mock.calls[0].arguments[1].event, '{"usage": nope}');
   });
 });

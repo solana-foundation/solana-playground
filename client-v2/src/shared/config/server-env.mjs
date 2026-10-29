@@ -66,13 +66,12 @@ const DEFAULT_AGENT_BASE_URL = "https://inference-api.nousresearch.com/v1";
 const GATEWAY_HOST = "ai-gateway.vercel.sh";
 
 /**
- * Whether an upstream base URL is Vercel AI Gateway. The request differs by
- * upstream: only the Gateway takes `providerOptions`, and it documents
- * `max_tokens` where Nous Research takes only `max_completion_tokens`.
+ * Whether an upstream base URL is Vercel AI Gateway, the only upstream that
+ * takes `providerOptions`.
  *
  * @param {string} baseUrl
  */
-export const isGatewayUrl = (baseUrl) =>
+const isGatewayUrl = (baseUrl) =>
   URL.canParse(baseUrl) && new URL(baseUrl).host === GATEWAY_HOST;
 
 /**
@@ -122,7 +121,7 @@ export const agentEnv = () => ({
   PRICE_OUTPUT: readNumber("AGENT_PRICE_OUTPUT", 0.5),
   /** About 128k input tokens at 4 bytes per token */
   MAX_BODY_BYTES: readCount("AGENT_MAX_BODY_BYTES", 524288),
-  /** Sent as `max_tokens` on every upstream request */
+  /** Sent as `max_completion_tokens` on every upstream request */
   MAX_OUTPUT_TOKENS: readCount("AGENT_MAX_OUTPUT_TOKENS", 8192),
   /** A GitHub account younger than this many days is a `newcomer` */
   NEWCOMER_AGE_DAYS: readNumber("AGENT_NEWCOMER_AGE_DAYS", 30),

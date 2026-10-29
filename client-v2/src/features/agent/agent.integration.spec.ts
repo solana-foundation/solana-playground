@@ -847,6 +847,57 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
     });
 
+    it("charges the reservation, not the usage seen so far, to a turn the caller abandons", async () => {
+      // An upstream that reports a running total on every event
+      const running = `data: ${JSON.stringify({
+        choices: [],
+        usage: USAGE,
+      })}\n\n`;
+      const res = makeRes({
+        write: (chunk) => {
+          res.chunks.push(Buffer.from(chunk as Uint8Array));
+          res.destroyed = true;
+          res.emit("close");
+          return true;
+        },
+      });
+      network(
+        () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.enqueue(new TextEncoder().encode(running));
+              },
+            }),
+            { status: 200 }
+          )
+      );
+
+      await handler(makeReq(TURN), res as never);
+
+      expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
+    });
+
+    it("charges the reservation to a turn the caller abandons before the upstream answers", async () => {
+      const res = makeRes();
+      // The caller hangs up while the upstream is still working on the
+      // request; the route's abort is what rejects the fetch
+      network(
+        (init) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError"))
+            );
+            res.destroyed = true;
+            res.emit("close");
+          })
+      );
+
+      await handler(makeReq(TURN), res as never);
+
+      expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
+    });
+
     it("A turn the upstream refuses is not charged", async () => {
       network(() => new Response("overloaded", { status: 529 }));
 
@@ -896,15 +947,15 @@ describe("POST /api/agent spend gate", () => {
       expect(body.stream_options).toEqual({ include_usage: true });
     });
 
-    it("names the output limit the way the Gateway documents it", async () => {
+    it("names the output limit the same way to the Gateway", async () => {
       vi.stubEnv("AGENT_BASE_URL", "https://ai-gateway.vercel.sh/v1");
       const fetched = network();
 
       await postJson(handler, TURN);
 
       const { body } = sent(fetched);
-      expect(body.max_tokens).toBe(8192);
-      expect(body).not.toHaveProperty("max_completion_tokens");
+      expect(body.max_completion_tokens).toBe(8192);
+      expect(body).not.toHaveProperty("max_tokens");
     });
   });
 

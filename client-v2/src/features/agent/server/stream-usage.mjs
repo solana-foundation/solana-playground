@@ -19,6 +19,7 @@ export const usageReader = () => {
   let buffer = "";
   /** @type {Usage | null} */
   let usage = null;
+  let warned = false;
 
   return {
     push(chunk) {
@@ -37,10 +38,19 @@ export const usageReader = () => {
             if (parsed?.usage && typeof parsed.usage === "object") {
               usage = parsed.usage;
             }
-          } catch {
+          } catch (e) {
             // A malformed event is the upstream's bug and the caller's to
             // skip; for the ledger it is only an event without usage, and a
-            // turn that never reports usage is charged its reservation
+            // turn that never reports usage is charged its reservation. Logged
+            // once per turn, so a charge that jumps to the reservation has a
+            // cause in the logs
+            if (!warned) {
+              warned = true;
+              console.warn("agent: skipped a malformed usage event", {
+                message: e?.message,
+                event: payload.slice(0, 300),
+              });
+            }
           }
         }
       }
