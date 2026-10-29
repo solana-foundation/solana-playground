@@ -1484,7 +1484,8 @@ export class PgAssistant {
         setTimeout(() => {
           PgAssistant._quietTimers.delete(item.id);
           PgAssistant._emitOnly();
-        }, STREAM_QUIET_MS)
+          // A margin: a timer can fire a little before `Date.now()` agrees
+        }, STREAM_QUIET_MS + 50)
       );
     }
   }
@@ -2191,7 +2192,7 @@ if (import.meta.vitest) {
           const changed = vi.fn();
           const listener = PgAssistant.onDidChange(changed);
 
-          vi.advanceTimersByTime(2 * 60_000);
+          vi.advanceTimersByTime(2 * 60_000 + 50);
 
           expect(changed).toHaveBeenCalled();
           expect(PgAssistant.isCutOff(folded())).toBe(true);
