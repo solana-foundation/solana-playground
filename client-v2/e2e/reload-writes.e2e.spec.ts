@@ -185,7 +185,7 @@ test("a tutorial's progress file survives a reload right after START", async ({
   page,
 }) => {
   await page.goto("/tutorials/bank-simulator");
-  await page.getByRole("button", { name: "START", exact: true }).click();
+  await page.getByRole("button", { name: "Start", exact: true }).click();
   await expect(page).toHaveURL(/\/tutorials\/bank-simulator\/1$/, LONG);
   await waitForStored(page, ['"pageNumber":1', '"completed":false']);
 
