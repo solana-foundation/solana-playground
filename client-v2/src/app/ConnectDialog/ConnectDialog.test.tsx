@@ -111,7 +111,8 @@ afterEach(async () => {
   act(() => {
     for (const { id } of PgView.getOpenModals()) PgView.closeModal(null, id);
   });
-  PgAssistant.disconnect();
+  // A dialog on its way out is still mounted here and reads the store
+  act(() => PgAssistant.disconnect());
   PgSession.reset();
   resetTelemetry();
   resetLogger();

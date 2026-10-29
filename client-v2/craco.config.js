@@ -50,6 +50,45 @@ const { sentryEnabled } = require("./scripts/sentry-gate.mjs");
 const { sourcemapsEnabled } = require("./scripts/sourcemap-gate.mjs");
 
 const { esbuildMinifyOptions } = require("./scripts/esbuild-minify.mjs");
+const {
+  MODULES_FILE,
+  slimModules,
+} = require("./scripts/lib/bundle/modules.mjs");
+
+/** Writes the bundle's module list for `scripts/bundle-modules.build-test.mjs`; only the module list names a test helper that ships */
+class BundleModulesPlugin {
+  apply(compiler) {
+    // Removed first, so a build that cannot write the list leaves none for the test to read as current
+    compiler.hooks.run.tap("BundleModulesPlugin", () => {
+      try {
+        fs.rmSync(MODULES_FILE, { force: true });
+      } catch (e) {
+        // A list left behind is older than build/index.html, which yarn test-build rejects
+        console.error(
+          `BundleModulesPlugin: could not remove ${MODULES_FILE}: ${e.message}`
+        );
+      }
+    });
+    compiler.hooks.done.tap("BundleModulesPlugin", (stats) => {
+      try {
+        const { modules } = stats.toJson({
+          all: false,
+          modules: true,
+          nestedModules: true,
+          // CRA's filesystem cache serves most modules on a rebuild, and `all: false` would leave those out
+          cachedModules: true,
+        });
+        fs.mkdirSync(path.dirname(MODULES_FILE), { recursive: true });
+        fs.writeFileSync(MODULES_FILE, JSON.stringify(slimModules(modules)));
+      } catch (e) {
+        // Only a build test reads the list, so a failure here must not fail the build
+        console.error(
+          `BundleModulesPlugin: wrote no ${MODULES_FILE}, so yarn test-build will fail: ${e.message}`
+        );
+      }
+    });
+  }
+}
 
 /** CRA's in-build type check and lint, by plugin class name */
 const BUILD_ONLY_CHECKS = [
@@ -147,6 +186,10 @@ module.exports = {
         webpackConfig.plugins = webpackConfig.plugins.filter(
           (plugin) => !BUILD_ONLY_CHECKS.includes(plugin.constructor.name)
         );
+        // Only `yarn test-build` reads the module list, and a deployment runs no build test
+        if (!process.env.VERCEL) {
+          webpackConfig.plugins.push(new BundleModulesPlugin());
+        }
       }
 
       // `build:bundle` passes GENERATE_SOURCEMAP=false, so CRA emits none; hidden maps

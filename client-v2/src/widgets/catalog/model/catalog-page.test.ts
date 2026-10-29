@@ -43,7 +43,8 @@ beforeEach(() => {
   initTelemetry({ providers: [sent] });
 });
 afterEach(() => {
-  catalogPage.close();
+  // A rendered hook is still mounted here: RTL's own cleanup runs after this hook
+  act(() => catalogPage.close());
   resetTelemetry();
 });
 

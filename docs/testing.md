@@ -161,8 +161,9 @@ yarn --cwd client-v2 test-build
 Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
 `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
 minification", and "Build tests" in `reusable-client-v2-build.yml` require. `run check` covers the in-source
-collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle check
-(`scripts/in-source-tests.build-test.mjs`). Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
+collection test (`scripts/in-source-collection.test.mjs`, under `test-api`) and `test-build` the bundle checks, every
+`client-v2/scripts/*.build-test.mjs`; M-5 to M-7 check the chunk scope, in-source test, module, and snapshot tests by
+hand. Tests that need a database require `DATABASE_URL` and `yarn --cwd client-v2 db-migrate`.
 
 ### B-4. server: format, lint, release build
 
@@ -710,7 +711,7 @@ Expect: one image per directory in `server/templates/`.
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
 not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
-`openspec/specs/client-v2-build/spec.md`; M-1 to M-6 walk its manual scenarios.
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk its manual scenarios.
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine
@@ -805,12 +806,53 @@ Expect:
       blocks under `client-v2/src` (`client-v2/AGENTS.md`, "Tests: a module's unit tests live in the module") and
       finds none of them in `client-v2/build/static/js`. webpack drops the block on its own, with no setting of ours,
       which is why the outcome is checked.
-- [ ] a planted leak makes it fail naming the chunk and the title: add a static
-      `import "../../test-utils/stored-values";` to a module with a block, or copy a block's title into a production
-      string, rebuild, and run `test-build` again; the failure reads `<chunk> holds "<title>" from <module>`. Revert the
-      plant.
+- [ ] a planted leak makes it fail naming the chunk and the title: copy a block's title into a production string,
+      rebuild, and run `test-build` again; the failure reads `<chunk> holds "<title>" from <module>`. Revert the plant.
+      A test helper imported by production code carries no title; M-7 plants that case.
 - [ ] with `yarn --cwd client-v2 dev` running, the served `static/js/bundle.js` holds none of that module's test
       titles either.
+
+### M-7. the bundle snapshot is current and carries no test code
+
+```sh
+REACT_APP_GA_MEASUREMENT_ID= yarn --cwd client-v2 build-fast
+yarn --cwd client-v2 test-build
+yarn --cwd client-v2 bundle:info
+git -C client-v2 diff --exit-code -- bench/BUNDLE.md
+```
+
+Run it on a branch rebased onto its base. CI's build has no GA id, and the empty `REACT_APP_GA_MEASUREMENT_ID` keeps
+CRA from taking one from `client-v2/.env` (dotenv does not override a variable already set). Sentry stays out of a build without `VERCEL_ENV` (`sentryEnabled` in
+`client-v2/scripts/sentry-gate.mjs`). `build-fast` writes `client-v2/bundle-info/bundle-modules.json`, outside `build/` so no deployment serves it: the
+module list `BundleModulesPlugin` in `client-v2/craco.config.js` takes from webpack. `test-build` runs
+`scripts/bundle-modules.build-test.mjs` over that list and `scripts/bundle-info.build-test.mjs` against
+`client-v2/bench/BUNDLE.md`. The pure functions behind both (`scripts/lib/bundle/snapshot.test.mjs`, `diff.test.mjs`,
+`modules.test.mjs`) and the comment workflow's pull request lookup (`locate-pr.test.mjs`) run under `test-api`.
+
+Expect:
+
+- [ ] `test-build` passes, and `bundle:info` leaves `bench/BUNDLE.md` unchanged: the `git diff` exits 0.
+- [ ] `client-v2/build/` holds no `bundle-modules.json`.
+- [ ] a planted test helper makes `bundle-modules.build-test.mjs` fail naming it: add
+      `import { storedValues } from "@/test-utils/stored-values";` and `console.log(storedValues(localStorage));` to
+      `client-v2/src/index.tsx`, rebuild, and run `test-build`; the failure lists `./src/test-utils/stored-values.ts`.
+      The call matters: webpack drops a bare `import "...";` of a module with no side effects, and nothing ships.
+      Revert the plant and rebuild.
+- [ ] a stale snapshot makes `bundle-info.build-test.mjs` fail naming `yarn bundle:info` and the row: raise the
+      `main` row's gzipped cell in `bench/BUNDLE.md` by 30 kB and run `test-build`. Restore the file.
+- [ ] `test-build` without a `client-v2/build/` fails instead of passing.
+- [ ] on a pull request to `master`, the build job's "Bundle change report" step summary holds the report, and one
+      comment headed "Bundle change vs `master`" appears on the pull request, naming the pull request's head commit
+      under the heading; a second push updates the same comment. `workflow_run` runs the workflow from the default
+      branch, so the comment appears only once `bundle-info-comment.yml` is on `master`.
+- [ ] "A pull request with a stale snapshot": push a commit that changes `bench/BUNDLE.md` as in the stale-snapshot
+      step. "Build tests" fails, and the comment is still posted with the line saying `client-v2/bench/BUNDLE.md` is
+      out of date for this branch.
+- [ ] "A pull request with no size change": on a pull request that changes no bundle size, the comment says
+      "No row moved past the 11 KiB tolerance." and holds the fresh tables in a collapsed "Full table (fresh build)"
+      section.
+- [ ] a pull request from a fork gets the comment as well. Check it on a real fork pull request after this workflow
+      is on `master`, and mark the step with the pull request's number.
 
 ## 8. Parallel runs
 

@@ -116,7 +116,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   openConnect.mockReset();
-  PgAssistant.disconnect();
+  // The harness is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgAssistant.disconnect());
   PgSession.reset();
   resetTelemetry();
   resetLogger();

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -60,7 +60,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  PgAssistant.disconnect();
+  // The panel is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgAssistant.disconnect());
   vi.restoreAllMocks();
 });
 

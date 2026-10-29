@@ -138,7 +138,7 @@ it("holds Start from scratch, the two lists with their counts, and the tutorials
   ).toBeTruthy();
 });
 
-it("draws each tutorial as the tutorial card, with its level and framework", () => {
+it("draws each tutorial as the tutorial card, with its level and framework", async () => {
   render(<NewProject />);
 
   const open = screen.getByRole("button", { name: "Open Hello Anchor" });
@@ -146,6 +146,7 @@ it("draws each tutorial as the tutorial card, with its level and framework", () 
   expect(within(card).getByText("Beginner · Anchor")).toBeTruthy();
   expect(within(card).queryByText(/\d+ of \d+/)).toBeNull();
   expect(within(card).getAllByRole("button")).toEqual([open]);
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
 it("shows a failed tutorial Open on its own card and frees the others", async () => {
@@ -174,7 +175,7 @@ it("shows a failed tutorial Open on its own card and frees the others", async ()
   utils.PgTutorial.all.pop();
 });
 
-it("continues a started tutorial from the page it is on", () => {
+it("continues a started tutorial from the page it is on", async () => {
   progress.set("Hello Anchor", { state: "started", page: 2, pages: 6 });
   render(<NewProject />);
 
@@ -182,6 +183,7 @@ it("continues a started tutorial from the page it is on", () => {
     screen.getByRole("button", { name: "Continue Hello Anchor" })
   ).toBeTruthy();
   expect(screen.getByText("2 of 6")).toBeTruthy();
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
 it("keeps the programs' own card, with its Open button", async () => {
@@ -304,6 +306,8 @@ it("holds every card while Start makes a project", async () => {
   expect(
     screen.getByRole("button", { name: "Open Hello Anchor" })
   ).toHaveProperty("disabled", true);
+  // The program count lands after the listing's fetch, past the last assertion
+  await waitFor(() => expect(choice(/Programs/).textContent).toBe("Programs1"));
 });
 
 it("keeps the dialog for a cancelled import, and says nothing", async () => {

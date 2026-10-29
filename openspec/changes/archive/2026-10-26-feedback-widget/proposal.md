@@ -11,6 +11,10 @@ widget gives the team a channel that costs the user one form.
 
 ## What Changes
 
+`ui-migration` 5.15 (2026-10-16) replaced the footer trigger described here
+with entries in the account menu; `openspec/specs/client-v2-feedback/spec.md`
+states the placement that shipped.
+
 - A `features/feedback` slice: a trigger in the navigation's footer, under
   the status chips (the prototype keeps "Report a bug" in that footer's
   account menu), a menu with "Share

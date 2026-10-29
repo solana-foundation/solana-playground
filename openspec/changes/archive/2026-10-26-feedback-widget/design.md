@@ -213,10 +213,12 @@ on the account row.
 The e2e dev server has no `VERCEL_ENV`, so it carries no Sentry and the form
 is unreachable there. The scenarios that need the form are marked
 `(manual)` in the spec; each is covered by an interaction or integration
-test from the table above, and checked by hand in the walk-through. Running
+test from the table above. Task 4.1, a walk-through by hand on a preview,
+did not run: it closed on the owner's confirmation of the production
+configuration (2026-10-26, HOO-2280). Running
 the suite with Sentry carried and the ingest URL stubbed by `page.route`
 would turn them into browser tests, but it changes the environment of every
-spec (ticket to file).
+spec (no ticket filed).
 
 ### Toast
 
@@ -241,7 +243,8 @@ is nothing to read but the toast, so the failure is a toast there.
   The rail swaps the footer for its own (the cluster's dot and the account)
   and the phone's Sheet unmounts it on close, so the form and its state stay
   in `FeedbackHost`, above the navigation, and only the trigger moves with
-  the footer.
+  the footer. `ui-migration` 5.15 later moved the trigger into the account
+  menu ("Where it mounts").
 - [The feedback text reaches Sentry, which the team reads] → the message is
   never put in telemetry; the spec forbids it.
 

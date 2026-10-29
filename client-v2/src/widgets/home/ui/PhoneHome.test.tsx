@@ -212,18 +212,21 @@ it("toasts the message of a failure that is not an Error", async () => {
   expect(toastText()).toBe("Could not open. quota exceeded");
 });
 
-it("opens the Tutorials page from Browse, and no gallery", () => {
+it("opens the Tutorials page from Browse, and no gallery", async () => {
   const { home, onOpenPage } = draw();
   fireEvent.click(home.getByRole("button", { name: "Browse" }));
   expect(onOpenPage).toHaveBeenCalledWith("tutorials");
   expect(utils.PgView.setModal).not.toHaveBeenCalled();
+  // The program count lands after the listing's fetch, past the last assertion
+  await home.findByText("3 tutorials, 34 programs");
 });
 
-it("opens the assistant from the composer and reports it", () => {
+it("opens the assistant from the composer and reports it", async () => {
   const { home, onAsk } = draw();
   fireEvent.click(home.getByRole("button", { name: "Ask the assistant" }));
   expect(onAsk).toHaveBeenCalledTimes(1);
   expect(events("home_composer_opened")).toEqual([{}]);
+  await home.findByText("3 tutorials, 34 programs");
 });
 
 it("switches to the project Continue names when another opened since Home drew it", async () => {

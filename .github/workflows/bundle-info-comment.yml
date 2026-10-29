@@ -1,0 +1,70 @@
+name: Bundle info comment
+
+# Posts the client-v2 build job's bundle change report as one sticky comment; ported from the Solana Explorer's build-info-comment.yaml.
+# Not in client-v2.yml: a fork's pull request runs CI with a read-only token, and this runs in the base repository without the pull request's code.
+on:
+  workflow_run:
+    workflows: [client-v2]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  pull-requests: write
+
+jobs:
+  comment:
+    name: comment
+    # Any conclusion: the report uploads before "Build tests", so a stale snapshot still gets its comment.
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      # Both post steps must name the same comment, or the second adds one instead of replacing it
+      STICKY_HEADER: bundle-info
+
+    steps:
+      # The default branch's copy of one file only, which is safe in this privileged context.
+      - name: Checkout locate script
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            client-v2/scripts/lib/bundle/locate-pr.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+
+      # The pull request comes from the head commit, since `workflow_run.pull_requests` is empty for a fork's pull request.
+      - name: Locate report and pull request
+        id: locate
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { locatePullRequest } = await import('${{ github.workspace }}/client-v2/scripts/lib/bundle/locate-pr.mjs');
+            await locatePullRequest({ context, core, github });
+
+      # Outside the workspace, so the fork-controlled artifact cannot overwrite checked-out files.
+      - name: Download report
+        if: steps.locate.outputs.pr != '' && steps.locate.outputs.has_report == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: bundle-info-comment
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/bundle-info-comment
+
+      - name: Post sticky comment
+        if: steps.locate.outputs.pr != '' && steps.locate.outputs.has_report == 'true'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: ${{ env.STICKY_HEADER }}
+          path: ${{ runner.temp }}/bundle-info-comment/bundle-report.md
+          number_force: ${{ steps.locate.outputs.pr }}
+
+      # Replaces the previous head's numbers, which would otherwise read as this head's.
+      - name: Post sticky comment without a report
+        if: steps.locate.outputs.pr != '' && steps.locate.outputs.has_report == 'false'
+        uses: marocchino/sticky-pull-request-comment@5770ad5eb8f42dd2c4f34da00c94c5381e49af88 # v3.0.5
+        with:
+          header: ${{ env.STICKY_HEADER }}
+          message: "No bundle report for ${{ github.event.workflow_run.head_sha }}: the build job saved none (run ${{ github.event.workflow_run.html_url }})."
+          number_force: ${{ steps.locate.outputs.pr }}

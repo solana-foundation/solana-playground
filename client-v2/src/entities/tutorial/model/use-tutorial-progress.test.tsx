@@ -92,9 +92,11 @@ describe("useTutorialProgress", () => {
     expect(result.current("Hello Solana")).toEqual({ state: "new" });
   });
 
-  it("reads a tutorial it does not know as new", () => {
+  it("reads a tutorial it does not know as new", async () => {
     state.workspaces = [];
     const { result } = renderHook(() => useTutorialProgress());
+    // The read begun on mount lands on a microtask, after a sync test ends
+    await act(async () => {});
     expect(result.current("Nowhere")).toEqual({ state: "new" });
   });
 

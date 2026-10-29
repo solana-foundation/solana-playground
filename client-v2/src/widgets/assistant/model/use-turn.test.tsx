@@ -85,7 +85,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  PgAssistant.disconnect();
+  // The hook is still mounted here: RTL's own cleanup runs after this hook
+  act(() => PgAssistant.disconnect());
   PgSession.reset();
   resetTelemetry();
   vi.restoreAllMocks();
@@ -301,8 +302,9 @@ describe("useTurn", () => {
     });
 
     act(() => result.current.stop());
-
     expect(signal.aborted).toBe(true);
+    // Async: the aborted provider rejects and the turn unwinds in a microtask
+    await act(async () => {});
     expect((await answer).allowed).toBe(false);
     const kinds = PgAssistant.items.map((item) => item.kind);
     expect(kinds).toContain("notice");
@@ -1086,7 +1088,7 @@ describe("useTurn when the thread closes mid-turn", () => {
     });
   });
   afterEach(async () => {
-    PgAssistant.closeThread();
+    act(() => PgAssistant.closeThread());
     await PgAssistant.whenPersisted();
   });
 

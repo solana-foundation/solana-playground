@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -65,8 +65,11 @@ afterEach(() => {
   wallet.current = null;
   assistant.connected = false;
   localStorage.clear();
-  // What another tab clearing the site's storage looks like: marks start over
-  window.dispatchEvent(new StorageEvent("storage", { key: null }));
+  // What another tab clearing the site's storage looks like: marks start over.
+  // In `act`: the list is still mounted, RTL's own cleanup runs after this hook
+  act(() => {
+    window.dispatchEvent(new StorageEvent("storage", { key: null }));
+  });
   PgSession.reset();
 });
 

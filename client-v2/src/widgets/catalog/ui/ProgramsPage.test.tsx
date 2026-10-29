@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -137,7 +143,7 @@ it("imports a program with its progress on the card, and reports it", async () =
   render(<ProgramsPage />);
   fireEvent.click(await screen.findByRole("button", { name: "Open drift-v2" }));
 
-  progress({ loaded: 3, total: 10 });
+  act(() => progress({ loaded: 3, total: 10 }));
   expect(await screen.findByText("Downloading 3/10 files…")).toBeTruthy();
   finish();
   await waitFor(() => expect(named("catalog_item_opened")).toHaveLength(1));
