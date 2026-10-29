@@ -12,9 +12,17 @@
  * **Only a signed-in caller from our own site spends the key.** A turn needs a
  * Better Auth session, the same GitHub sign-in the sync routes use, and passes
  * the same `isAllowedOrigin` check; a deployment without sign-in configured
- * serves no turns at all. That bounds who can spend the key, not how much:
- * per-session and daily caps are HOO-1751, and the Vercel Firewall rate limit
- * in `docs/firewall.md` caps one client's request rate.
+ * serves no turns at all.
+ *
+ * **How much they spend is bounded three ways** (HOO-1751). A body over
+ * `AGENT_MAX_BODY_BYTES` is refused, and every upstream request carries
+ * an output limit, so a turn's worst-case cost is known before the call. The
+ * ledger in `features/agent` reserves that cost against the user's daily cap
+ * for their tier before the upstream is dialled, and settles it to the
+ * reported usage once the response has ended. Each tier spends through its
+ * own Gateway key, whose daily budget, with the team's monthly one, is the
+ * ceiling that holds even when the ledger is wrong. The Vercel Firewall rate
+ * limit in `docs/firewall.md` caps one client's request rate.
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
  *
@@ -26,6 +34,23 @@
  */
 
 import {
+  BodyTooLarge,
+  chargeFor,
+  DAILY_CAP_REASON,
+  learnAccountAge,
+  POOL_EXHAUSTED_REASON,
+  readBoundedBody,
+  REFUSAL_MESSAGES,
+  REFUSAL_STATUS,
+  reserve,
+  secondsToReset,
+  settle,
+  toMicro,
+  usageReader,
+  utcDay,
+  worstCaseCost,
+} from "../src/features/agent/server.mjs";
+import {
   readJson,
   warnAboutMissingObservabilityIds,
   withObservability,
@@ -36,10 +61,24 @@ import {
   readSession,
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
-import { agentEnv } from "../src/shared/config/server-env.mjs";
+import { query } from "../src/features/persistence/server.mjs";
+import { agentEnv, isGatewayUrl } from "../src/shared/config/server-env.mjs";
 
-/** Request fields forwarded upstream; everything else is the server's to decide */
+/**
+ * Request fields forwarded upstream; everything else is the server's to
+ * decide, the output limit and `providerOptions` included
+ */
 const FORWARDED = ["messages", "tools", "tool_choice"];
+
+/**
+ * The `error.type` of a Gateway `402`: a budget in scope is spent, or the
+ * team's credit balance is empty. Either way the tier's pool is out until a
+ * reset or a person acts, which the caller reads as `pool-exhausted`.
+ */
+const POOL_EXHAUSTED_TYPES = [
+  "quota_for_entity_exceeded",
+  "insufficient_funds",
+];
 
 /**
  * The configured upstream, or `null` when this deployment has no key.
@@ -59,7 +98,26 @@ const upstream = () => {
     url: `${agent.BASE_URL}/chat/completions`,
     model: agent.MODEL,
     reasoningEffort: agent.REASONING_EFFORT,
-    apiKey: agent.API_KEY,
+    // Without a newcomer key the pools are shared, and the per-user caps
+    // still hold each tier to its own allowance
+    keys: {
+      established: agent.API_KEY,
+      newcomer: agent.NEWCOMER_API_KEY ?? agent.API_KEY,
+    },
+    maxOutputTokens: agent.MAX_OUTPUT_TOKENS,
+    // The same limit under the name each upstream takes: the Gateway documents
+    // `max_tokens`; Nous refuses it for GLM and asks for OpenAI's current name
+    outputLimitField: isGatewayUrl(agent.BASE_URL)
+      ? "max_tokens"
+      : "max_completion_tokens",
+    providers: agent.PROVIDERS,
+    prices: { input: agent.PRICE_INPUT, output: agent.PRICE_OUTPUT },
+    maxBodyBytes: agent.MAX_BODY_BYTES,
+    newcomerAgeDays: agent.NEWCOMER_AGE_DAYS,
+    caps: {
+      newcomer: toMicro(agent.NEWCOMER_DAILY_CAP),
+      established: toMicro(agent.ESTABLISHED_DAILY_CAP),
+    },
   };
 };
 
@@ -78,14 +136,17 @@ const sendJson = (res, status, body) => {
  *
  * @param res the response, already committed
  * @param body the upstream's web stream
+ * @param {(chunk: Uint8Array) => void} observe sees every chunk as it is
+ *   forwarded, for the usage the ledger charges
  */
-const pipeStream = async (res, body) => {
+const pipeStream = async (res, body, observe) => {
   const reader = body.getReader();
 
   try {
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
+      observe(value);
       // Nobody left to write to: the caller's `close` handler has already
       // aborted the upstream, and writing on a dead socket is a no-op
       if (res.destroyed || res.writableEnded) break;
@@ -157,9 +218,10 @@ async function handler(req, res) {
     });
   }
 
-  // Every refusal comes before the body is read and the upstream dialled, so a
-  // refused turn spends nothing. Unconfigured sign-in fails closed: with no way
-  // to tell a user from anyone else, nobody spends the key.
+  // Every refusal comes before the upstream is dialled, so a refused turn
+  // spends nothing; those about who is asking come before the body is read too.
+  // Unconfigured sign-in fails closed: with no way to tell a user from anyone
+  // else, nobody spends the key.
   if (!isAllowedOrigin(req)) {
     return sendJson(res, 403, { error: "Cross-origin request refused" });
   }
@@ -184,9 +246,15 @@ async function handler(req, res) {
   }
 
   let body;
+  let bytes;
   try {
-    body = await readJson(req);
+    const read = await readBoundedBody(req, configured.maxBodyBytes);
+    bytes = read.bytes;
+    // `readJson` takes the text the way it takes a pre-parsed body
+    body = await readJson({ body: read.body });
   } catch (e) {
+    if (e instanceof BodyTooLarge)
+      return sendJson(res, 413, { error: e.message });
     return sendJson(res, 400, {
       error: `Malformed request body: ${e.message}`,
     });
@@ -198,6 +266,88 @@ async function handler(req, res) {
     });
   }
 
+  // One clock for the day the turn is reserved on, the day it settles on and
+  // the `Retry-After` of a refusal
+  const now = new Date();
+  const turn = {
+    userId: session.user.id,
+    day: utcDay(now),
+    amount: worstCaseCost({
+      bytes,
+      maxOutputTokens: configured.maxOutputTokens,
+      prices: configured.prices,
+    }),
+  };
+
+  // Fails closed: a ledger that cannot be read is no allowance at all
+  let gate;
+  try {
+    gate = await reserve(query, {
+      userId: turn.userId,
+      day: turn.day,
+      amount: turn.amount,
+      newcomerAgeDays: configured.newcomerAgeDays,
+      caps: configured.caps,
+    });
+  } catch (e) {
+    console.error("agent: spend ledger unavailable", {
+      message: e?.message,
+      code: e?.code,
+    });
+    return sendJson(res, 503, {
+      error: "The default backend is unavailable right now. Try again shortly.",
+    });
+  }
+
+  // Until `relay` says otherwise: a turn that throws out of it may have been
+  // generated, and charging the reservation never undercharges
+  /** @type {import("../src/features/agent/server/ledger.mjs").TurnEnd} */
+  let end = { kind: "unfinished" };
+  try {
+    if (!gate.admitted) {
+      res.setHeader("retry-after", String(secondsToReset(now)));
+      return sendJson(res, REFUSAL_STATUS[DAILY_CAP_REASON], {
+        error: REFUSAL_MESSAGES[DAILY_CAP_REASON],
+        reason: DAILY_CAP_REASON,
+        tier: gate.tier,
+      });
+    }
+    end = await relay(res, configured, body, gate.tier, now);
+  } finally {
+    // The response has ended on every path here, so none of this delays an
+    // answer. Neither step throws: there is nobody left to tell.
+    if (gate.admitted) {
+      await settle(query, {
+        userId: turn.userId,
+        day: turn.day,
+        reserved: turn.amount,
+        charge: chargeFor(end, turn.amount, configured.prices),
+      }).catch((e) =>
+        // The reservation stays spent for the day: an overcharge, never an
+        // undercharge
+        console.error("agent: settling a turn failed", {
+          message: e?.message,
+          code: e?.code,
+          end: end.kind,
+        })
+      );
+    }
+    if (!gate.dated) await learnAccountAge(query, turn.userId);
+  }
+}
+
+/**
+ * Take an admitted turn upstream and answer the caller.
+ *
+ * @param {import("node:http").ServerResponse} res
+ * @param {NonNullable<ReturnType<typeof upstream>>} configured
+ * @param {Record<string, unknown>} body the caller's request
+ * @param {"newcomer" | "established"} tier picks the key
+ * @param {Date} now for a refusal's `Retry-After`
+ * @returns {Promise<import("../src/features/agent/server/ledger.mjs").TurnEnd>}
+ *   how the turn ended, which decides its charge
+ */
+const relay = async (res, configured, body, tier, now) => {
   // A browser that closes the tab should not keep paying for tokens
   // nobody will read: closing the response aborts the upstream request,
   // which is also what ends `pipeStream`'s read loop. Fires on a normal
@@ -213,7 +363,7 @@ async function handler(req, res) {
       headers: {
         "content-type": "application/json",
         accept: "text/event-stream",
-        authorization: `Bearer ${configured.apiKey}`,
+        authorization: `Bearer ${configured.keys[tier]}`,
       },
       body: JSON.stringify({
         ...Object.fromEntries(
@@ -225,43 +375,137 @@ async function handler(req, res) {
         model: configured.model,
         reasoning_effort: configured.reasoningEffort,
         stream: true,
+        // The output half of the worst case the turn reserved
+        [configured.outputLimitField]: configured.maxOutputTokens,
+        stream_options: { include_usage: true },
+        // US-region providers that keep no data; empty for an upstream that
+        // is not the Gateway
+        ...(configured.providers.length
+          ? { providerOptions: { gateway: { only: configured.providers } } }
+          : {}),
       }),
     });
   } catch (e) {
-    return sendJson(res, 502, { error: `Upstream unreachable: ${e.message}` });
+    sendJson(res, 502, { error: `Upstream unreachable: ${e.message}` });
+    return { kind: "refused" };
   }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    // Our key was refused: relayed, it would read as this route refusing the caller
+    // Our request was refused: relayed, it would read as this route refusing
+    // the caller
     if (response.status === 401 || response.status === 403) {
-      console.error("agent: upstream refused the key", {
+      const cause = refusalCause(response.status, text);
+      console.error("agent: upstream refused the default backend", {
         status: response.status,
+        cause,
+        tier,
         body: text.slice(0, 300),
       });
-      return sendJson(res, 502, {
-        error: `The default backend's key was refused upstream (${response.status}).`,
+      sendJson(res, 502, {
+        error: `${REFUSAL_CAUSES[cause]} (${response.status}).`,
       });
+      return { kind: "refused" };
+    }
+    if (response.status === 402 && isPoolExhausted(text)) {
+      console.warn("agent: tier pool exhausted", {
+        tier,
+        body: text.slice(0, 300),
+      });
+      res.setHeader("retry-after", String(secondsToReset(now)));
+      sendJson(res, REFUSAL_STATUS[POOL_EXHAUSTED_REASON], {
+        error: REFUSAL_MESSAGES[POOL_EXHAUSTED_REASON],
+        reason: POOL_EXHAUSTED_REASON,
+        tier,
+      });
+      return { kind: "refused" };
     }
     // The upstream's own status, so a 429 still reads as a 429 in the panel
-    return sendJson(res, response.status, {
+    sendJson(res, response.status, {
       error: `Upstream ${response.status}: ${text.slice(0, 300)}`,
     });
+    return { kind: "refused" };
   }
 
   // A success with nothing to stream (a 204, say) is the upstream's
   // fault, not an answer: relaying its status would put a body on one
-  // that cannot carry it
+  // that cannot carry it. It was accepted, so it may have been billed.
   if (!response.body) {
-    return sendJson(res, 502, {
+    sendJson(res, 502, {
       error: `Upstream ${response.status} with no body to stream.`,
     });
+    return { kind: "unfinished" };
   }
 
   res.statusCode = 200;
   res.setHeader("content-type", "text/event-stream");
   res.setHeader("cache-control", "no-cache, no-transform");
-  await pipeStream(res, response.body);
-}
+  const usage = usageReader();
+  await pipeStream(res, response.body, usage.push);
+  const reported = usage.usage();
+  return reported
+    ? { kind: "completed", usage: reported }
+    : { kind: "unfinished" };
+};
+
+/**
+ * What the operator must fix, by the cause of an upstream `401` or `403`.
+ * A Gateway `403` has several causes besides the key, and reporting them all
+ * as a refused key sends the operator after the wrong one.
+ * https://vercel.com/docs/ai-gateway/faq#why-did-my-ai-gateway-request-fail
+ *
+ * @type {Record<RefusalCause, string>}
+ */
+const REFUSAL_CAUSES = {
+  key: "The default backend's key was refused upstream",
+  "free-tier":
+    "The default backend's model is not in the Gateway's free tier; the team needs paid credits",
+  "payment-method":
+    "The default backend's Gateway team needs a payment method on file",
+  allowlist:
+    "The default backend's model or providers are outside the Gateway team's allowlist",
+  unknown: "The default backend was refused upstream",
+};
+
+/**
+ * Why the upstream refused the default backend, read from a `401` or `403`
+ *
+ * @typedef {"key" | "free-tier" | "payment-method" | "allowlist" | "unknown"} RefusalCause
+ * @param {number} status `401` or `403`
+ * @param {string} text the upstream's body
+ * @returns {RefusalCause}
+ */
+const refusalCause = (status, text) => {
+  // A missing, invalid or revoked key, whatever the upstream
+  if (status === 401) return "key";
+  let error;
+  try {
+    error = JSON.parse(text)?.error;
+  } catch {
+    // Not JSON, so not the Gateway's: nothing to tell the causes apart by
+    return "unknown";
+  }
+  const message = String(error?.message ?? "");
+  if (error?.type === "customer_verification_required") {
+    return "payment-method";
+  }
+  if (/free tier/i.test(message)) return "free-tier";
+  if (/restrict|allowlist/i.test(message)) return "allowlist";
+  return "unknown";
+};
+
+/**
+ * Whether a `402` body is the Gateway's spent budget or empty balance
+ *
+ * @param {string} text the upstream's body
+ */
+const isPoolExhausted = (text) => {
+  try {
+    return POOL_EXHAUSTED_TYPES.includes(JSON.parse(text)?.error?.type);
+  } catch {
+    // Not JSON, so not the Gateway's refusal: relayed as the upstream's 402
+    return false;
+  }
+};
 
 export default withObservability("agent", handler);

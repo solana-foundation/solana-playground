@@ -8,6 +8,11 @@ import {
   openAiToolCall,
   sse,
 } from "@/shared/lib/ai/__fixtures__/fake-provider";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { createProvider } from "./provider";
 import { PgAssistant, type ChatItem } from "../store";
 import { PgSession } from "../../../../features/auth";
@@ -460,6 +465,136 @@ describe("the assistant's provider", () => {
 
       expect(failure).not.toBe(refusal);
       expect(PgSession.refresh).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("a refusal by a limit of the default backend", () => {
+    let tracked: ReturnType<typeof memoryProvider>;
+
+    beforeEach(() => {
+      tracked = memoryProvider();
+      initTelemetry({ providers: [tracked] });
+      vi.spyOn(PgSession, "refresh").mockResolvedValue();
+    });
+
+    afterEach(() => {
+      resetTelemetry();
+      vi.restoreAllMocks();
+    });
+
+    /** `/api/agent` answers `status` with `body` */
+    const refuses = (status: number, body: Record<string, unknown>) =>
+      respond(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        })
+      );
+
+    const refused = () =>
+      tracked.events.filter((event) => event.name === "agent_refused");
+
+    it("shows the daily-cap sentence and tracks it once", async () => {
+      refuses(429, {
+        error: "server text",
+        reason: "daily-cap",
+        tier: "newcomer",
+      });
+
+      await expect(defaultBackend().send("hi")).rejects.toThrow(
+        /^You have used today's free assistant allowance\. It resets at 00:00 UTC, or bring your own key to keep going\.$/
+      );
+      expect(refused()).toEqual([
+        {
+          name: "agent_refused",
+          params: { reason: "daily-cap", tier: "newcomer" },
+        },
+      ]);
+    });
+
+    it("shows the pool-exhausted sentence and tracks it once", async () => {
+      refuses(503, {
+        error: "server text",
+        reason: "pool-exhausted",
+        tier: "established",
+      });
+
+      await expect(defaultBackend().send("hi")).rejects.toThrow(
+        /^The free assistant is out of capacity for today\. It resets at 00:00 UTC, or bring your own key to keep going\.$/
+      );
+      expect(refused()).toEqual([
+        {
+          name: "agent_refused",
+          params: { reason: "pool-exhausted", tier: "established" },
+        },
+      ]);
+    });
+
+    it("tracks a refusal without a tier as unknown", async () => {
+      refuses(429, { reason: "daily-cap" });
+
+      await defaultBackend()
+        .send("hi")
+        .catch(() => undefined);
+
+      expect(refused()).toEqual([
+        {
+          name: "agent_refused",
+          params: { reason: "daily-cap", tier: "unknown" },
+        },
+      ]);
+    });
+
+    it("tracks nothing for a signed-out refusal", async () => {
+      refuses(401, { error: "Sign in.", reason: "signed-out" });
+
+      await defaultBackend()
+        .send("hi")
+        .catch(() => undefined);
+
+      expect(refused()).toEqual([]);
+    });
+
+    it("keeps the conversation and does not end the session", async () => {
+      PgAssistant.addUserMessage("earlier");
+      refuses(429, { reason: "daily-cap", tier: "newcomer" });
+
+      await defaultBackend()
+        .send("hi")
+        .catch(() => undefined);
+
+      expect(
+        PgAssistant.items.some(
+          (item) => item.kind === "user" && item.text === "earlier"
+        )
+      ).toBe(true);
+      // Ending it would reopen the picker on sign-in, not on the backends
+      expect(PgSession.refresh).not.toHaveBeenCalled();
+    });
+
+    it("keeps the SDK's message for another backend's 429 in the same shape", async () => {
+      refuses(429, { error: "server text", reason: "daily-cap" });
+      const ownKey = createProvider({
+        id: "openai",
+        apiKey: KEY,
+        endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
+      });
+
+      const failure = await ownKey.send("hi").catch((e: Error) => e.message);
+
+      expect(failure).toMatch(/^429 /);
+      expect(refused()).toEqual([]);
+    });
+
+    it("does not read a reason sent with the other limit's status", async () => {
+      refuses(503, { reason: "daily-cap", tier: "newcomer" });
+
+      const failure = await defaultBackend()
+        .send("hi")
+        .catch((e: Error) => e.message);
+
+      expect(failure).toMatch(/^503 /);
+      expect(refused()).toEqual([]);
     });
   });
 });
