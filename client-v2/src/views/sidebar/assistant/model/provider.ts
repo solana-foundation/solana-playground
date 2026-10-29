@@ -113,6 +113,13 @@ export const createProvider = (
         if (e.kind === "refusal") {
           throw new Error(`${e.message} Rephrase it, or switch backends.`);
         }
+        // Busy is sent again only before any tool ran: `history` keeps none of this turn, so a retry would run its tools twice
+        if (e.kind === "busy" && calledTool) {
+          throw new Error(
+            `${e.message} What it already ran stays done; send your next message once it is free.`,
+            { cause: e }
+          );
+        }
         if (e.kind === "busy") {
           throw new ModelBusyError(e.retryAfter, e.message, { cause: e });
         }

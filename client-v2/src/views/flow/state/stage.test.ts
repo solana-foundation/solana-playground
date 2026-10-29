@@ -54,6 +54,7 @@ describe("PgFlow.reduce", () => {
       buildErrorCount: 0,
       buildMs: null,
       buildStartedAt: null,
+      buildStartedBefore: null,
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
@@ -251,6 +252,25 @@ describe("PgFlow.reduce, a stopped run", () => {
 
     expect(s.build).toBe("failed");
     expect(s.buildErrorCount).toBe(2);
+  });
+
+  it("a stopped retry keeps the start of the build it retried", () => {
+    const started = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "build-start",
+      at: 3,
+    });
+    const failed = PgFlow.reduce(started, {
+      type: "build-finish",
+      failed: true,
+      errorCount: 2,
+      ms: 5,
+    });
+    const retrying = PgFlow.reduce(failed, { type: "build-start", at: 9 });
+
+    const s = PgFlow.reduce(retrying, { type: "build-stop" });
+
+    // The Build surface reads the failed run's report as current, not stale
+    expect(s.buildStartedAt).toBe(3);
   });
 
   it("a stop of the build a deploy runs first reads as the build's", () => {
