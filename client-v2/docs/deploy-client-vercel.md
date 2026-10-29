@@ -81,7 +81,7 @@ runs against the newer schema; revisit this once one is not.
 | Framework Preset | Other |
 | Root Directory | `client-v2` |
 | Production Branch | `master` |
-| Ignored Build Step | Automatic |
+| Ignored Build Step | set by `vercel.json` `ignoreCommand` (`scripts/vercel-ignore-build.mjs`) |
 
 The Production Branch row was confirmed on 2026-10-19.
 
@@ -131,7 +131,7 @@ Both paths build `client-v2`, each from its own setting:
 
 1. Create the project. Framework: Other. Root Directory: `client-v2`.
 2. Build Machine: Enhanced on Enterprise; default on Pro.
-3. Production Branch: `master`. Ignored Build Step: Automatic.
+3. Production Branch: `master`. Ignored Build Step: leave it; `vercel.json`'s `ignoreCommand` overrides it.
 4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
 5. Link the local checkout (from repo root):
 

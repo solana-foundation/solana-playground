@@ -367,10 +367,11 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   rules and this repository's, plus the governing OpenSpec change and the
   Solana guidance where they apply. An author without the plugin skips the
   run, and the human review is the gate. Human reviewers read the diff and
-  click through the integration branch's preview; they do not re-run the
-  review. A ticket branch gets no Vercel preview
-  (`scripts/vercel-ignore-build.mjs`), so a PR that changes the UI shows it
-  in its screenshots. Fix every
+  the PR's screenshots; they do not re-run the review. The Git integration
+  builds no preview of a ticket branch (`scripts/vercel-ignore-build.mjs`),
+  only of the integration branches, so a PR that changes the UI shows it in
+  its screenshots, or carries the `preview` label (`preview.yml`) for a
+  preview of its own. Fix every
   critical finding in the same PR, and every important one the PR needs; an
   important you defer gets a `TODO` at the site naming why or the follow-up,
   so the next run reads it as acknowledged. A finding outside the PR's scope
@@ -388,7 +389,7 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   workflows report on that head passed, except `ci.yml`'s `checks / Build`,
   which is always skipped because `ci.yml` passes `build: false`; any other
   skipped check, and any pending, cancelled or missing one, is not green. A
-  red Vercel preview does not hold the merge. The fleet's Dispatcher (the
+  red or skipped Vercel preview does not hold the merge. The fleet's Dispatcher (the
   agent session that merges ready PRs) merges these PRs, never their author.
   Without the line, with a stale one or with any critical open, and for any
   other base, a human approves.

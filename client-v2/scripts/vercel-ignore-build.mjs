@@ -1,7 +1,8 @@
 // vercel.json's ignoreCommand: Vercel skips the build when this exits 0 and
-// builds on any other code, so a crash here builds rather than skips. A
-// ticket branch's preview was built on every push, and reviewers use the
-// integration branch's preview instead, so only those get a deployment.
+// builds on any other code, so a crash here builds rather than skips. Only
+// production, a deployment with no Git ref and the integration branches are
+// built; a ticket branch is skipped, since reviewers use the integration
+// branch's preview and the PR's screenshots.
 // Vercel reads this file from the commit it builds, so a branch that does not
 // have it yet builds as before, until it is rebased onto it.
 const ref = process.env.VERCEL_GIT_COMMIT_REF;

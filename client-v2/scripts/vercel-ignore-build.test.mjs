@@ -30,6 +30,10 @@ test("builds production from any branch", () => {
   assert.equal(exitCode("hoo-2378-vercel-build-skip", "production"), BUILD);
 });
 
+test("builds production with no ref", () => {
+  assert.equal(exitCode(undefined, "production"), BUILD);
+});
+
 for (const [ref, expected] of [
   ["master", BUILD],
   ["scope/interface", BUILD],
