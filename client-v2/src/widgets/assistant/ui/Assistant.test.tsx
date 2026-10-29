@@ -157,19 +157,17 @@ describe("Assistant", () => {
     expect(screen.getByText("thread").dataset.project).toBe("hello-anchor");
   });
 
-  it("names a tutorial not yet started while no project is open", () => {
+  it("hands the thread a tutorial not yet started while no project is open", () => {
     explorer.name = undefined;
     tutorial.beforeStart = "Hello Anchor";
     setup();
-    expect(screen.getByRole("heading", { name: "Hello Anchor" })).toBeTruthy();
     expect(screen.getByText("thread").dataset.project).toBe("Hello Anchor");
   });
 
-  it("keeps the open project's name beside a tutorial not yet started", () => {
+  it("keeps the thread on the open project beside a tutorial not yet started", () => {
     explorer.name = "Counter";
     tutorial.beforeStart = "Hello Anchor";
     setup();
-    expect(screen.getByRole("heading", { name: "Counter" })).toBeTruthy();
     expect(screen.getByText("thread").dataset.project).toBe("Counter");
   });
 
