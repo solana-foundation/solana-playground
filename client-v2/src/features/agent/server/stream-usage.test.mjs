@@ -43,6 +43,20 @@ describe("usageReader", () => {
     feed('data: {"usage": nope}\n\n', 'data: {"usage": nor this}\n\n', last);
 
     assert.equal(warn.mock.callCount(), 1);
-    assert.equal(warn.mock.calls[0].arguments[1].event, '{"usage": nope}');
+    assert.deepEqual(warn.mock.calls[0].arguments[1], {
+      error: "SyntaxError",
+      bytes: '{"usage": nope}'.length,
+    });
+  });
+
+  it("keeps the event's text out of the log", (t) => {
+    const warn = t.mock.method(console, "warn", () => {});
+
+    feed('data: {"usage": null, "content": "private answer\n\n', last);
+
+    assert.doesNotMatch(
+      JSON.stringify(warn.mock.calls[0].arguments),
+      /private answer/
+    );
   });
 });

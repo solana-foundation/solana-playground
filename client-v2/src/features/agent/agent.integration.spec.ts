@@ -633,11 +633,10 @@ describe("POST /api/agent spend gate", () => {
 
   /** An upstream stream: one text event, then the usage unless `usage` is null */
   const streamed = (usage: object | null = USAGE) => {
-    const events = [
-      'data: {"choices":[{"delta":{"content":"hi"}}]}\n\n',
-      ...(usage ? [`data: ${JSON.stringify({ choices: [], usage })}\n\n`] : []),
-      "data: [DONE]\n\n",
-    ];
+    const events = ['data: {"choices":[{"delta":{"content":"hi"}}]}\n\n'];
+    if (usage)
+      events.push(`data: ${JSON.stringify({ choices: [], usage })}\n\n`);
+    events.push("data: [DONE]\n\n");
     return new Response(events.join(""), { status: 200 });
   };
 

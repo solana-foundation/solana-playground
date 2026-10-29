@@ -107,6 +107,18 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.equal(await stored(), null);
   });
 
+  it("logs why a body that is not JSON was skipped, without the body", async (t) => {
+    const warn = t.mock.method(console, "warn", () => {});
+    github(async () => new Response('{"email": "private@example.com"'));
+
+    assert.equal((await learnAccountAge(query, USER)).reason, "malformed");
+    assert.deepEqual(warn.mock.calls[0].arguments[1], {
+      userId: USER,
+      reason: "malformed",
+      detail: "SyntaxError",
+    });
+  });
+
   it("asks GitHub nothing for a user with no GitHub token", async () => {
     const fetched = github(async () => Response.json({}));
 

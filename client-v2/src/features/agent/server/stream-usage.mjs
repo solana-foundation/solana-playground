@@ -43,12 +43,14 @@ export const usageReader = () => {
             // skip; for the ledger it is only an event without usage, and a
             // turn that never reports usage is charged its reservation. Logged
             // once per turn, so a charge that jumps to the reservation has a
-            // cause in the logs
+            // cause in the logs. Neither the event nor the parser's message
+            // is logged: an event carrying usage can carry the answer too,
+            // and V8's `SyntaxError` quotes the text it failed on
             if (!warned) {
               warned = true;
               console.warn("agent: skipped a malformed usage event", {
-                message: e?.message,
-                event: payload.slice(0, 300),
+                error: e?.name,
+                bytes: payload.length,
               });
             }
           }

@@ -379,9 +379,11 @@ A day after production traffic moves to the Gateway, revoke the Nous Research
 key, so nothing can spend outside the budgets.
 
 **Rollback**, before the Nous key is revoked: restore the previous
-`AGENT_API_KEY`, and unset `AGENT_BASE_URL` and `AGENT_MODEL` (or set them back
-to the Nous values), then redeploy. A non-Gateway base URL gets no provider
-restriction, so `AGENT_PROVIDERS` needs no change. The ledger works against any
+`AGENT_API_KEY`, unset `AGENT_NEWCOMER_API_KEY` (left set, newcomers' turns
+send its Gateway key to Nous and get `502`), and unset `AGENT_BASE_URL` and
+`AGENT_MODEL` (or set them back to the Nous values), then redeploy. Unset,
+`AGENT_PROVIDERS` follows the base URL and sends no restriction to Nous; if it
+was set by hand, unset it too, since Nous refuses the restriction. The ledger works against any
 upstream that reports usage on the stream. After the Nous key is revoked, a
 rollback needs a new one.
 

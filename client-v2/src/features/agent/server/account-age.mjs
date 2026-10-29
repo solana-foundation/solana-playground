@@ -66,7 +66,14 @@ export const learnAccountAge = async (query, userId, options = {}) => {
     }
     if (!response.ok) return skipped("refused", response.status);
 
-    const profile = await response.json().catch(() => null);
+    let profile;
+    try {
+      profile = await response.json();
+    } catch (e) {
+      // Only the error's name: V8's `SyntaxError` quotes the body it failed
+      // on, and the body is the user's GitHub profile
+      return skipped("malformed", e?.name);
+    }
     const createdAt = new Date(profile?.created_at ?? NaN);
     if (Number.isNaN(createdAt.getTime())) return skipped("malformed");
 
