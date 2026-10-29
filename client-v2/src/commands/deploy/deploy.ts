@@ -197,13 +197,24 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
 
     const term = await PgTerminal.get();
     term.println(`Warning: ${msg}`);
-    const confirmed = await term.waitForInput(
-      "You don't have enough SOL to complete the deployment. Would you like to request an airdrop?",
-      { confirm: true, default: "yes" }
-    );
-    // TODO(HOO-2394): the question cannot end on a stop, since the shell's
-    // input wait takes no signal; a stop while it waits ends the deploy at
-    // the answer instead, before any SOL moves
+    throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+    // A stop while the question is open answers it, as "no" would; the
+    // check below then ends the deploy as stopped, before any SOL moves
+    const answerNo = () => {
+      term.executeFromStr("no").catch((e: unknown) => {
+        log.error(e, { context: { action: "answer the airdrop on stop" } });
+      });
+    };
+    signal.addEventListener("abort", answerNo, { once: true });
+    let confirmed;
+    try {
+      confirmed = await term.waitForInput(
+        "You don't have enough SOL to complete the deployment. Would you like to request an airdrop?",
+        { confirm: true, default: "yes" }
+      );
+    } finally {
+      signal.removeEventListener("abort", answerNo);
+    }
     throwIfStopped(signal, deployStoppedLine({ state: "none" }));
     if (!confirmed) throw new Error("Insufficient balance");
 
@@ -443,10 +454,9 @@ const getAdditionalLen = (programLen: number) => {
  * stop: a stop ends the write after the chunks in flight, and answers an open
  * "Continue deployment?" with no.
  *
- * TODO(HOO-2394 follow-up): unit tests for the stop paths (stop at the pause
- * question, mid-chunk, a failed buffer close) need this loader out of
- * `deploy.ts` with the loader and terminal injected; held back while HOO-2385
- * rewrites this file, and covered by the manual deploy scenarios until then.
+ * TODO(HOO-2394 follow-up): the stop at the pause question and a failed
+ * buffer close have no unit test yet (`deploy.test.ts` covers a load that
+ * fails after a stop); the manual deploy scenarios cover them until then.
  */
 const loadBufferWithControl = (
   signal: AbortSignal,
@@ -533,8 +543,14 @@ const loadBufferWithControl = (
         if (signal.aborted) res({ cancelled: true });
         else if (!paused()) res({ success: true });
       } catch (e) {
-        // A real failure is told, stop or not
-        if (!paused()) rej(e);
+        if (signal.aborted) {
+          // A segment can fail as the stop aborts it: still a stop, so the
+          // buffer is closed and its SOL comes back
+          log.error(e, { context: { action: "load the buffer after a stop" } });
+          res({ cancelled: true });
+        } else if (!paused()) {
+          rej(e);
+        }
       } finally {
         signal.removeEventListener("abort", stopLoad);
         if (!paused()) dispose();
