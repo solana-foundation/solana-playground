@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { isSignInFailure, PgSession } from "../../../features/auth";
-import { PgSyncClient } from "../../../features/persistence";
+import { isSignInFailure, PgSession } from "@/features/auth";
+import { PgSyncClient } from "@/features/persistence";
 import { assistantTelemetry } from "./telemetry";
 
 const log = createLogger("assistant:sign-in-offer");
