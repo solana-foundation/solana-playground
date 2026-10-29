@@ -546,7 +546,10 @@ const loadBufferWithControl = (
         if (signal.aborted) {
           // A segment can fail as the stop aborts it: still a stop, so the
           // buffer is closed and its SOL comes back
-          log.error(e, { context: { action: "load the buffer after a stop" } });
+          log.error(e, {
+            report: true,
+            context: { action: "load the buffer after a stop" },
+          });
           res({ cancelled: true });
         } else if (!paused()) {
           rej(e);

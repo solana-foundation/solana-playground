@@ -119,16 +119,21 @@ describe("commands/deploy", () => {
   });
 
   it("answers the airdrop question no when stopped, without waiting for the person", async () => {
-    let answer: (value: string) => void = () => undefined;
+    let answer: (value: boolean) => void = () => undefined;
     env.waitForInput = () =>
       new Promise((res) => {
         answer = res;
         env.controller.abort();
       });
-    env.executeFromStr = async (cmd) => answer(cmd);
+    const executed: string[] = [];
+    env.executeFromStr = async (cmd) => {
+      executed.push(cmd);
+      answer(cmd === "yes");
+    };
 
     const failure = await runDeploy();
 
+    expect(executed).toEqual(["no"]);
     expect(isStopped(failure)).toBe(true);
     expect(airdrop).not.toHaveBeenCalled();
   });
