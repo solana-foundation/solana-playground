@@ -1,18 +1,37 @@
 import { FC } from "react";
 
 import { ModalFrame } from "@/widgets/overlays";
-import { Warning } from "../../../../../components/Icons";
 import { PgCommon, PgExplorer } from "../../../../../utils";
 
 interface DeleteItemProps {
   path: string;
 }
 
+/** How many files sit under a folder path, at any depth */
+const countFilesIn = (folderPath: string) => {
+  const prefix = PgCommon.appendSlash(PgExplorer.convertToFullPath(folderPath));
+  return Object.entries(PgExplorer.files).filter(
+    ([itemPath, item]) =>
+      itemPath.startsWith(prefix) && item.content !== undefined
+  ).length;
+};
+
+/** "Delete lib.rs?", or a folder's name with the files that go with it */
+const titleOf = (path: string) => {
+  const itemName = PgExplorer.getItemNameFromPath(path);
+  const count = path.endsWith("/") ? countFilesIn(path) : 0;
+  if (count === 0) return `Delete ${itemName}?`;
+  const files = count === 1 ? "the 1 file" : `the ${count} files`;
+  return `Delete ${itemName} and ${files} in it?`;
+};
+
+/**
+ * Spec 11's file and folder delete: names the item, counts a folder's files,
+ * and opens on Cancel so Enter does not delete.
+ */
 export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
   path,
 }) => {
-  const itemName = PgExplorer.getItemNameFromPath(path);
-
   const deleteItem = async () => {
     await PgExplorer.deleteItem(path);
 
@@ -34,26 +53,17 @@ export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
   return (
     <ModalFrame
       name="delete-item"
-      title
+      title={titleOf(path)}
+      openFocus="cancel"
       buttonProps={{
         text: "Delete",
         variant: "destructive",
         onSubmit: deleteItem,
       }}
     >
-      <div className="flex items-center justify-center">
-        <div className="size-8 [&>svg]:size-full">
-          <Warning color="warning" />
-        </div>
-        <div className="ml-4 flex flex-col">
-          <span className="font-bold">
-            Are you sure you want to delete '{itemName}'?
-          </span>
-          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
-            This action is irreversible.
-          </span>
-        </div>
-      </div>
+      <p className="text-control font-read text-muted-foreground">
+        You can't undo this.
+      </p>
     </ModalFrame>
   );
 };

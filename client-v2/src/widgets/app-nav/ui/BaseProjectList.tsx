@@ -4,6 +4,7 @@ import {
   Download,
   EllipsisVertical,
   Folder,
+  GraduationCap,
   Pencil,
   Pin,
   PinOff,
@@ -29,6 +30,7 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
 } from "@/shared/ui/sidebar";
 import { StatusDot } from "@/shared/ui/status-dot";
 import { cn } from "@/shared/lib/utils";
@@ -41,6 +43,8 @@ type Via = "click" | "key";
 export interface BaseProjectListProps {
   /** Projects and started lessons, in one list as the prototype draws it */
   projects: ProjectEntry[];
+  /** The names are still being read from browser storage: skeleton rows, no entries */
+  loading: boolean;
   /** The open workspace's name, or `null` when none is open */
   current: string | null;
   /** The entry whose row is the rename field, or `null` */
@@ -82,16 +86,20 @@ const pinAction = (entry: ProjectEntry): ProjectAction =>
 
 /**
  * The navigation's projects, lessons among them, as the prototype draws
- * them: a row per workspace with the folder glyph, the open one marked,
- * pinned ones with a pin, and a menu of its actions whose letters work while
- * it is open. A lesson differs only in its menu. Draws only what it is
- * given; `ProjectList` connects it.
+ * them: a row per workspace with the folder glyph (a lesson's with the
+ * tutorial glyph, Spec 11), the open one marked, pinned ones with a pin, and
+ * a menu of its actions whose letters work while it is open. Three skeleton
+ * rows stand in while the names load, so no empty list flashes first. Draws
+ * only what it is given; `ProjectList` connects it.
  */
 const BaseProjectList = (props: BaseProjectListProps) => (
   <Group label="Projects" entries={props.projects} list={props} />
 );
 
 export default BaseProjectList;
+
+/** Keys for the loading rows, three as Spec 11's "List loading" state draws */
+const SKELETON_ROWS = ["first", "second", "third"];
 
 const Group = ({
   label,
@@ -116,15 +124,22 @@ const Group = ({
         {label}
       </SidebarGroupLabel>
       <SidebarMenu className="gap-px">
-        {entries.map((entry) => (
-          <SidebarMenuItem key={entry.name}>
-            {list.renaming === entry.name ? (
-              <RenameField entry={entry} list={list} />
-            ) : (
-              <Row entry={entry} list={list} />
-            )}
-          </SidebarMenuItem>
-        ))}
+        {list.loading &&
+          SKELETON_ROWS.map((row) => (
+            <SidebarMenuItem key={row}>
+              <SidebarMenuSkeleton showIcon />
+            </SidebarMenuItem>
+          ))}
+        {!list.loading &&
+          entries.map((entry) => (
+            <SidebarMenuItem key={entry.name}>
+              {list.renaming === entry.name ? (
+                <RenameField entry={entry} list={list} />
+              ) : (
+                <Row entry={entry} list={list} />
+              )}
+            </SidebarMenuItem>
+          ))}
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -143,6 +158,7 @@ const Row = ({
   const keepFocus = useRef(false);
   const markerId = useId();
   const isCurrent = entry.name === list.current;
+  const Glyph = entry.isLesson ? GraduationCap : Folder;
 
   const run = (action: ProjectAction, via: Via) => {
     if (!allowed(entry, action)) return;
@@ -175,8 +191,9 @@ const Row = ({
         className={entry.marker ? "pr-24" : undefined}
         onClick={() => list.onAction(entry, "open", "click")}
       >
-        <Folder
+        <Glyph
           aria-hidden
+          data-glyph={entry.isLesson ? "lesson" : "project"}
           className={isCurrent ? "text-primary" : undefined}
         />
         <span>{entry.name}</span>

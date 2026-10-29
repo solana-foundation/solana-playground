@@ -293,6 +293,10 @@ const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
   return (
     <BaseProjectList
       projects={projects}
+      // A preview has no workspaces at all, rather than none read yet
+      loading={
+        !PgExplorer.isTemporary && PgExplorer.allWorkspaceNames === undefined
+      }
       current={PgExplorer.currentWorkspaceName ?? null}
       renaming={renamingGone ? null : renaming}
       renameError={renameError}

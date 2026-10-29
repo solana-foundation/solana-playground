@@ -59,6 +59,7 @@ const draw = (
     renaming?: string;
     renameError?: string;
     projects?: ProjectEntry[];
+    loading?: boolean;
   } = {}
 ): Handlers => {
   const handlers: Handlers = {
@@ -72,6 +73,7 @@ const draw = (
       <SidebarProvider>
         <BaseProjectList
           projects={overrides.projects ?? [beta, alpha, hello]}
+          loading={overrides.loading ?? false}
           current="alpha"
           renaming={overrides.renaming ?? null}
           renameError={overrides.renameError ?? null}
@@ -95,6 +97,26 @@ const openMenu = (name: string) => {
 };
 
 describe("BaseProjectList", () => {
+  it("marks a lesson's row with the tutorial glyph and a project's with the folder", () => {
+    draw();
+    const glyphOf = (name: string) =>
+      screen
+        .getByRole("button", { name })
+        .querySelector("[data-glyph]")
+        ?.getAttribute("data-glyph");
+    expect(glyphOf("Hello Anchor")).toBe("lesson");
+    expect(glyphOf("alpha")).toBe("project");
+  });
+
+  it("shows three skeleton rows and no project while loading", () => {
+    draw({ loading: true });
+    const group = screen.getByRole("group", { name: "Projects" });
+    expect(
+      group.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(3);
+    expect(within(group).queryByRole("button", { name: "alpha" })).toBeNull();
+  });
+
   it("lists lessons among the projects, with no count, the open one marked", () => {
     draw();
     const projects = screen.getByRole("group", { name: "Projects" });

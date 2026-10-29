@@ -312,6 +312,28 @@ it("should toggle the files column by Cmd+E and by its button, and say which", (
   ]);
 });
 
+it("should open a folded files column when the editor asks to show files", () => {
+  shell();
+  press({ key: "e", metaKey: true });
+  act(() => PgView.showFiles());
+  expect(
+    screen.getByRole("button", { name: "Collapse project panel" })
+  ).toBeTruthy();
+  expect(toggled()).toEqual([
+    { panel: "files", open: false, via: "key" },
+    { panel: "files", open: true, via: "button" },
+  ]);
+});
+
+it("should leave an open files column open when the editor asks to show files", () => {
+  shell();
+  act(() => PgView.showFiles());
+  expect(
+    screen.getByRole("button", { name: "Collapse project panel" })
+  ).toBeTruthy();
+  expect(toggled()).toEqual([]);
+});
+
 it("should start the navigation as a rail between 768 and 1023 px, and save nothing", () => {
   resizeTo(800);
   shell();
@@ -1053,6 +1075,15 @@ describe("on a phone", () => {
     });
   });
 
+  it("opens the Files sheet when the editor asks to show files", () => {
+    phoneShell();
+    act(() => PgView.showFiles());
+    expect(
+      document.querySelector('[data-slot="sheet-content"]')
+    ).not.toBeNull();
+    expect(toggled()).toEqual([{ panel: "files", open: true, via: "button" }]);
+  });
+
   it("writes nothing to the saved layout on a visit", () => {
     const before = savedBefore();
     phoneShell();
@@ -1405,6 +1436,23 @@ describe("with Home", () => {
     shell(home);
     act(() => deploy.starts.forEach((cb) => cb(null)));
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBe(before);
+    expect(toggled()).toEqual([]);
+  });
+
+  it("ignores the editor asking to show files", () => {
+    // Folded, so the request would have something to open
+    localStorage.setItem(
+      LAYOUT_STORAGE_KEY,
+      JSON.stringify({
+        v: DRAGGED.v,
+        open: { nav: true, files: false, assistant: true, console: false },
+        h: DRAGGED.h,
+        w: DRAGGED.w,
+        vert: DRAGGED.vert,
+      })
+    );
+    shell(home);
+    act(() => PgView.showFiles());
     expect(toggled()).toEqual([]);
   });
 

@@ -1,18 +1,19 @@
 import { useEffect, lazy, Suspense, useState } from "react";
+
+import { NoFileOpen } from "@/widgets/layout-shell";
 import { SpinnerWithBg } from "../Loading";
 import { PgCommon, PgExplorer } from "../../utils";
 
-const Home = lazy(() => import("./Home"));
 const Monaco = lazy(() => import("./Monaco"));
 
 export const Editor = () => {
-  const [showHome, setShowHome] = useState<boolean>();
+  const [noFile, setNoFile] = useState<boolean>();
 
   // Decide which editor to show
   useEffect(() => {
     const { dispose } = PgExplorer.onNeedRender(
       PgCommon.debounce(
-        () => setShowHome(!PgExplorer.tabs.length),
+        () => setNoFile(!PgExplorer.tabs.length),
         { delay: 50 } // To fix flickering on workspace deletion
       )
     );
@@ -30,14 +31,14 @@ export const Editor = () => {
     return () => clearInterval(saveMetadataIntervalId);
   }, []);
 
-  if (showHome === undefined) return null;
+  if (noFile === undefined) return null;
 
   return (
     <Suspense fallback={<SpinnerWithBg loading size="2rem" />}>
       {/* Monaco cannot draw a background image, so its own background is
           transparent and this wrapper paints the surface under it */}
       <div className="h-full w-full overflow-auto bg-surface-panel">
-        {showHome ? <Home /> : <Monaco />}
+        {noFile ? <NoFileOpen /> : <Monaco />}
       </div>
     </Suspense>
   );

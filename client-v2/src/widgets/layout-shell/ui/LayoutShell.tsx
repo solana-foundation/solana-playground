@@ -309,6 +309,19 @@ const LayoutShell = ({
     return () => subs.forEach((sub) => sub.dispose());
   }, [phone]);
 
+  // The editor's "Show files", from inside the work: opens, never folds, and
+  // like Ctrl+E means nothing under Home or a page
+  useEffect(() => {
+    const sub = PgView.onDidRequestFiles(() => {
+      if (isCovered(screenNow.current)) return;
+      if (phone) setPhoneFiles(true, "button");
+      else setOpen("files", { open: true, via: "button" });
+    });
+    return () => sub.dispose();
+    // `setPhoneFiles` reads only refs and stable setters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, setOpen]);
+
   const wideOrSheet = viewport === "wide" ? state.open.assistant : sheetOpen;
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
   const assistantShown = homeShown ? homeSheetOpen : pagerOrFrame;

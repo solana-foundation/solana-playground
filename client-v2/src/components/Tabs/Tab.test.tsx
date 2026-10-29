@@ -79,52 +79,52 @@ describe("Tab context menu", () => {
   it("Close closes only this tab", async () => {
     await openMenuOf("/b.rs", 1);
 
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Close\s*ALT\+W/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Close\s*Alt\+W/ }));
 
     expect(closed()).toEqual(["/b.rs"]);
   });
 
-  it("Close Others closes every tab but this one", async () => {
+  it("Close others closes every tab but this one", async () => {
     await openMenuOf("/b.rs", 1);
 
-    fireEvent.click(screen.getByRole("menuitem", { name: /Close Others/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Close others/ }));
 
     expect(closed()).toEqual(["/a.rs", "/c.rs"]);
   });
 
-  it("Close To The Right closes only the tabs after this one", async () => {
+  it("Close to the right closes only the tabs after this one", async () => {
     await openMenuOf("/b.rs", 1);
 
     fireEvent.click(
-      screen.getByRole("menuitem", { name: /Close To The Right/ })
+      screen.getByRole("menuitem", { name: /Close to the right/ })
     );
 
     expect(closed()).toEqual(["/c.rs"]);
   });
 
-  it("Close All closes every tab, this one included", async () => {
+  it("Close all closes every tab, this one included", async () => {
     await openMenuOf("/b.rs", 1);
 
-    fireEvent.click(screen.getByRole("menuitem", { name: /Close All/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Close all/ }));
 
     expect(closed()).toEqual(["/a.rs", "/b.rs", "/c.rs"]);
   });
 
-  it("hides Close Others when this is the only tab", async () => {
+  it("hides Close others when this is the only tab", async () => {
     explorer.tabs = ["/a.rs"];
     await openMenuOf("/a.rs", 0);
 
-    expect(screen.queryByRole("menuitem", { name: /Close Others/ })).toBeNull();
-    expect(screen.getByRole("menuitem", { name: /Close All/ })).toBeTruthy();
+    expect(screen.queryByRole("menuitem", { name: /Close others/ })).toBeNull();
+    expect(screen.getByRole("menuitem", { name: /Close all/ })).toBeTruthy();
   });
 
-  it("hides Close To The Right on the last tab", async () => {
+  it("hides Close to the right on the last tab", async () => {
     await openMenuOf("/c.rs", 2);
 
     expect(
-      screen.queryByRole("menuitem", { name: /Close To The Right/ })
+      screen.queryByRole("menuitem", { name: /Close to the right/ })
     ).toBeNull();
-    expect(screen.getByRole("menuitem", { name: /Close Others/ })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: /Close others/ })).toBeTruthy();
   });
 
   it("shows every item on a tab in the middle", async () => {
@@ -133,10 +133,10 @@ describe("Tab context menu", () => {
     expect(
       screen.getAllByRole("menuitem").map((item) => item.textContent)
     ).toEqual([
-      "CloseALT+W",
-      "Close Others",
-      "Close To The Right",
-      "Close All",
+      "CloseAlt+W",
+      "Close others",
+      "Close to the right",
+      "Close all",
     ]);
   });
 });

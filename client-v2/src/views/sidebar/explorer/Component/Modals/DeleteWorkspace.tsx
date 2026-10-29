@@ -1,7 +1,8 @@
 import type { FC } from "react";
 
+import { PgSession } from "@/features/auth";
 import { ModalFrame } from "@/widgets/overlays";
-import { Warning } from "../../../../../components/Icons";
+import { useRenderOnChange } from "../../../../../hooks/useRenderOnChange";
 import { PgExplorer } from "../../../../../utils";
 
 interface DeleteWorkspaceProps {
@@ -11,46 +12,38 @@ interface DeleteWorkspaceProps {
   isLesson?: boolean;
 }
 
+/**
+ * Spec 11's project delete: names the project and says what goes, with
+ * Cancel focused so Enter does not delete.
+ */
 export const DeleteWorkspace: FC<
   React.PropsWithChildren<DeleteWorkspaceProps>
 > = ({ name, isLesson }) => {
   const workspaceName = name ?? PgExplorer.currentWorkspaceName;
+  // Read here, not passed in: the session may still be loading when the
+  // dialog opens, and the account line must appear once it is read
+  useRenderOnChange(PgSession.onDidChange);
+  const signedIn = PgSession.get() !== null;
 
   return (
     <ModalFrame
       name="delete-workspace"
-      title
+      title={`Delete ${workspaceName}?`}
+      openFocus="cancel"
       buttonProps={{
-        text: "Delete",
+        text: "Delete project",
         variant: "destructive",
         onSubmit: () => PgExplorer.deleteWorkspace(workspaceName),
       }}
     >
-      <div className="flex items-center justify-center">
-        <div className="[&>svg]:size-12">
-          <Warning color="warning" />
-        </div>
-        <div className="ml-4 flex flex-col">
-          <span className="font-bold break-all">
-            Are you sure you want to delete workspace '{workspaceName}'?
-          </span>
-          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
-            This action is irreversible!
-          </span>
-          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
-            - All files and folders will be deleted.
-          </span>
-          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
-            - Program credentials will be deleted.
-          </span>
-          {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
-              directory about to be removed */}
-          {isLesson && (
-            <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
-              - Your progress through the lesson is lost.
-            </span>
-          )}
-        </div>
+      <div className="flex flex-col gap-2 text-control font-read text-muted-foreground">
+        <p>Its files and its program keypair are deleted from this browser.</p>
+        {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
+            directory about to be removed */}
+        {isLesson && <p>Your progress in this lesson is lost.</p>}
+        {signedIn && (
+          <p>It's also deleted from your account and your other devices.</p>
+        )}
       </div>
     </ModalFrame>
   );
