@@ -1,4 +1,10 @@
-import { ChevronRight, GraduationCap, Play, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  FlaskConical,
+  GraduationCap,
+  Play,
+  Plus,
+} from "lucide-react";
 import type { ReactNode } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -6,10 +12,12 @@ import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Logo, LogoMark } from "@/shared/ui/logo";
 import type { HomeQuickstart } from "../model/telemetry";
+import { RetryLine } from "./BaseHome";
 import HomeComposer from "./HomeComposer";
 
 /** What a quick start opens, with what it needs to open it */
 export type QuickstartTarget =
+  | { id: "example" }
   | { id: "continue"; workspace: string }
   | { id: "new"; framework: FrameworkName }
   | { id: "tutorial"; name: string };
@@ -20,7 +28,10 @@ export type PhoneQuickstart = QuickstartTarget & {
 };
 
 export interface BasePhoneHomeProps {
-  /** At most three, in order; `continue` first when there is one */
+  /**
+   * At most three, in order: one lead (`example` on a first visit, see
+   * `visitOf`, else `continue` when a project is open), then the rest
+   */
   quickstarts: readonly PhoneQuickstart[];
   tutorialCount: number;
   /** `null` while loading */
@@ -29,15 +40,19 @@ export interface BasePhoneHomeProps {
   onQuickstart: (quickstart: PhoneQuickstart) => Promise<void>;
   onBrowse: () => void;
   onAsk: () => void;
+  /** Set once the account check has spent its automatic re-reads */
+  onRetrySession?: () => Promise<void>;
 }
 
 const ICONS: Record<HomeQuickstart, ReactNode> = {
+  example: <FlaskConical aria-hidden="true" />,
   continue: <Play aria-hidden="true" />,
   new: <Plus aria-hidden="true" />,
   tutorial: <GraduationCap aria-hidden="true" />,
 };
 
 const TILE_TINTS: Record<HomeQuickstart, string> = {
+  example: "bg-brand-green/15 text-brand-green",
   continue: "bg-brand-purple/15 text-brand-purple",
   new: "bg-brand-green/15 text-brand-green",
   tutorial: "bg-brand-purple/15 text-brand-purple",
@@ -50,6 +65,7 @@ const BasePhoneHome = ({
   onQuickstart,
   onBrowse,
   onAsk,
+  onRetrySession,
 }: BasePhoneHomeProps) => (
   <section
     aria-label="Home"
@@ -64,6 +80,7 @@ const BasePhoneHome = ({
       </h1>
     </div>
 
+    {onRetrySession && <RetryLine onRetry={onRetrySession} />}
     <nav aria-label="Quick start" className="flex flex-col gap-2">
       {quickstarts.map((q) => (
         <AsyncButton

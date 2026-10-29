@@ -54,6 +54,8 @@ export interface BaseBuildProps {
   host: string;
   /** The last build's duration, `null` while unknown */
   ms: number | null;
+  /** How long the running build has run, `null` while none runs */
+  elapsedMs: number | null;
   onBuild: () => unknown;
   onContinue: () => void;
   onExport: () => unknown;
@@ -144,20 +146,35 @@ const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
   </BrandButton>
 );
 
+/** From when a first build reads as slow (spec `client-v2-first-run`) */
+const SLOW_BUILD_MS = 60_000;
+
 const Empty = (p: BaseBuildProps) => (
   <Surface
     title={p.building ? "Building..." : "Nothing built yet"}
+    meta={
+      p.building && p.elapsedMs !== null
+        ? `${Math.floor(p.elapsedMs / 1000)} s`
+        : null
+    }
     description={
       // A run in flight names the server and warns about the wait. The
       // Foundation's server took 381s on a cold first build and 2.9s on the
       // next one (measured 2026-09-21); six unexplained minutes read as a
-      // hang, so say the first build is the slow one.
+      // hang, so say the first build is the slow one; from `SLOW_BUILD_MS`
+      // a second line below adds that this one is still running.
       p.building
         ? `Compiling on ${p.host}. A first build there can take several minutes.`
         : "Build compiles your program on the server. Nothing leaves your browser except the source."
     }
     actions={<FirstBuildButton p={p} />}
-  />
+  >
+    {p.building && (p.elapsedMs ?? 0) >= SLOW_BUILD_MS && (
+      <StageEmptyDescription>
+        First builds take longer. This one is running.
+      </StageEmptyDescription>
+    )}
+  </Surface>
 );
 
 const Unreached = (p: BaseBuildProps) => (

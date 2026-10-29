@@ -13,7 +13,11 @@
  */
 import { toNodeHandler } from "better-auth/node";
 
-import { getAuth, missingConfig } from "../src/features/auth/server.mjs";
+import {
+  AUTH_NOT_CONFIGURED,
+  getAuth,
+  missingConfig,
+} from "../src/features/auth/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
   withObservability,
@@ -63,7 +67,7 @@ async function handler(req, res) {
     res.setHeader("cache-control", "no-store");
     return res.end(
       JSON.stringify({
-        error: "Authentication is not configured",
+        error: AUTH_NOT_CONFIGURED,
         missing: missingConfig(),
       })
     );

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 
+import { AUTH_NOT_CONFIGURED } from "../src/features/auth/server.mjs";
+
 const load = async () => {
   const url = new URL("./auth.mjs", import.meta.url);
   url.searchParams.set("t", String(Math.random()));
@@ -37,7 +39,10 @@ describe("/api/auth", () => {
       res
     );
     assert.equal(res.statusCode, 503);
-    assert.match(JSON.parse(res.body).error, /not configured/i);
+    // The browser reads this answer as "nobody can be signed in here" only by
+    // this exact string in a JSON body (`notConfigured` in the session model)
+    assert.equal(JSON.parse(res.body).error, AUTH_NOT_CONFIGURED);
+    assert.match(res.headers["content-type"], /application\/json/);
   });
 
   it("503s when the database is set but GitHub credentials are missing", async () => {
