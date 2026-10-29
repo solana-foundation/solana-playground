@@ -10,7 +10,11 @@ const idle = { text: "", tone: "idle" as const };
 
 const draw = (
   open: boolean,
-  handlers: { onOpenChange?: (open: boolean) => void; onClear?: () => void }
+  handlers: {
+    onOpenChange?: (open: boolean) => void;
+    onClear?: () => void;
+    stop?: { run: "build" | "deploy"; onStop: () => void } | null;
+  }
 ) =>
   render(
     <BaseConsoleDrawer
@@ -18,6 +22,7 @@ const draw = (
       status={idle}
       onOpenChange={handlers.onOpenChange ?? vi.fn()}
       onClear={handlers.onClear ?? vi.fn()}
+      stop={handlers.stop ?? null}
       shortcut="⌘J"
     >
       <div className="xterm" />
@@ -70,6 +75,39 @@ it("clears without toggling", () => {
   expect(onOpenChange).not.toHaveBeenCalled();
 });
 
+// Spec 13: Stop shows while a build or a deploy runs, folded or open
+it.each([
+  ["build", true],
+  ["build", false],
+  ["deploy", true],
+  ["deploy", false],
+] as const)("offers Stop %s (open: %s), without toggling", (run, open) => {
+  const onOpenChange = vi.fn();
+  const onStop = vi.fn();
+  draw(open, { onOpenChange, stop: { run, onStop } });
+
+  const stop = screen.getByRole("button", { name: `Stop ${run}` });
+  expect(stop.textContent).toBe("Stop");
+  fireEvent.click(stop);
+  expect(onStop).toHaveBeenCalledTimes(1);
+  expect(onOpenChange).not.toHaveBeenCalled();
+});
+
+// Spec 13 (TRM-28): Clear is off beside Stop; a phone hides it for Stop
+it("turns Clear off while a run can be stopped", () => {
+  draw(true, { stop: { run: "build", onStop: vi.fn() } });
+
+  const clear = screen.getByRole("button", { name: "Clear" });
+  expect(clear.hasAttribute("disabled")).toBe(true);
+  expect(clear.className).toContain("max-md:hidden");
+});
+
+it("offers no Stop while nothing runs", () => {
+  draw(true, {});
+  expect(screen.queryByRole("button", { name: /^Stop/ })).toBeNull();
+  expect(screen.getByRole("button", { name: "Clear" })).toBeTruthy();
+});
+
 it("shows the status text with a dot of its tone", () => {
   render(
     <BaseConsoleDrawer
@@ -77,6 +115,7 @@ it("shows the status text with a dot of its tone", () => {
       status={{ text: "build failed", tone: "error" }}
       onOpenChange={vi.fn()}
       onClear={vi.fn()}
+      stop={null}
       shortcut="⌘J"
     />
   );

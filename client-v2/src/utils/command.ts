@@ -2,6 +2,21 @@ import { PgCommon } from "./common";
 import { PgTerminal } from "./terminal";
 import type { Arrayable, Disposable, Getable, SyncOrAsync } from "./types";
 
+/**
+ * Whether a run can be stopped now: `stoppable` honours its signal, `step`
+ * is a stoppable command in a step that cannot stop (deploy's last
+ * transaction), `never` is a command that does not honour a stop
+ */
+type Stoppability = "stoppable" | "step" | "never";
+
+/** A command run in flight, for `PgCommandManager.stop` */
+interface Run {
+  /** Name of the top-level command */
+  readonly name: string;
+  stoppability: Stoppability;
+  readonly controller: AbortController;
+}
+
 /** Terminal command creation parameter */
 export type CommandParam<
   N extends string,
@@ -16,6 +31,12 @@ export type CommandParam<
   description: string;
   /* Only process the command if the condition passes */
   preChecks?: Arrayable<() => SyncOrAsync<void>>;
+  /**
+   * Whether the handler honours its input's `signal`: a stop (Ctrl+C, the
+   * console strip's Stop) aborts it, and the handler ends with a
+   * `StoppedError`. Any other command answers a stop with "can't be stopped".
+   */
+  stoppable?: true;
 } & (WithSubcommands<S> | WithHandle<A, O, R>);
 
 type WithSubcommands<S> = {
@@ -47,6 +68,13 @@ type ParsedInput<A, O> = {
   args: ParsedArgs<A>;
   /** Parsed options */
   options: ParsedOptions<O>;
+  /** Aborted when the person stops the run (see `stoppable`) */
+  signal: AbortSignal;
+  /**
+   * The rest of this run is one step that cannot stop: a stop from here on
+   * says "This step can't be stopped" and the run goes on
+   */
+  lockStop: () => void;
 };
 
 /** Recursively map argument types */
@@ -308,6 +336,12 @@ export class PgCommandManager {
 
       const input = tokens.join(" ");
 
+      const run: Run = {
+        name: topCmd.name,
+        stoppability: topCmd.stoppable ? "stoppable" : "never",
+        controller: new AbortController(),
+      };
+
       // Dispatch start event
       const eventNames = PgCommandManager._getEventNames(topCmd.name);
       PgCommon.createAndDispatchCustomEvent(eventNames.start, input);
@@ -318,6 +352,7 @@ export class PgCommandManager {
       // command print and end without a result, and finish nothing.
       let result: { ok: unknown } | { err: unknown } | undefined;
       try {
+        PgCommandManager._runs.add(run);
         let cmd: Command<string, Arg[], Option[], any[], any> = topCmd;
         const args = [];
         const opts = [];
@@ -543,10 +578,15 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
           }
 
           // Run the command processor
+          run.stoppability = cmd.stoppable ? "stoppable" : "never";
           const ret = await cmd.handle({
             raw: input,
             args: parsedArgs,
             options: parsedOpts,
+            signal: run.controller.signal,
+            lockStop: () => {
+              if (run.stoppability === "stoppable") run.stoppability = "step";
+            },
           });
           result = { ok: ret };
           return ret;
@@ -555,12 +595,50 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
         result = { err: e };
         throw e;
       } finally {
+        PgCommandManager._runs.delete(run);
         if (result) {
           PgCommon.createAndDispatchCustomEvent(eventNames.finish, result);
         }
       }
     });
   }
+
+  /**
+   * Stop the runs in flight: Ctrl+C (or ⌘. on a Mac) in the terminal and the
+   * console strip's Stop. A run of a `stoppable` command has its signal
+   * aborted and ends with a `StoppedError` at its next safe point; a run in a
+   * step that cannot stop, or of a command that does not honour a stop, goes
+   * on, and the terminal says so. A stop pressed again while a run is
+   * already stopping says nothing. When one run starts another (deploy
+   * builds first when the program is not built), every stoppable one stops.
+   *
+   * @returns whether a run is stopping
+   */
+  static stop() {
+    const runs = [...PgCommandManager._runs];
+    const last = runs.at(-1);
+    if (!last) return false;
+
+    const stoppable = runs.filter(
+      (run) =>
+        run.stoppability === "stoppable" && !run.controller.signal.aborted
+    );
+    if (stoppable.length) {
+      PgTerminal.println("^C");
+      for (const run of stoppable) run.controller.abort();
+      return true;
+    }
+    if (runs.some((run) => run.controller.signal.aborted)) return true;
+
+    const why = runs.some((run) => run.stoppability === "step")
+      ? "This step can't be stopped."
+      : `\`${last.name}\` can't be stopped.`;
+    PgTerminal.println(`^C\n${why} Wait for it to finish.`);
+    return false;
+  }
+
+  /** Runs in flight, oldest first */
+  private static readonly _runs = new Set<Run>();
 
   /**
    * Runs after the command starts execution.

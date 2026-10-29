@@ -13,16 +13,23 @@ import {
   SyncOrAsync,
 } from "../../utils";
 import { checkWallet } from "../checks";
+import { StoppedError, throwIfStopped } from "../../utils/stopped";
 import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
+import { deployStoppedLine } from "./stopped";
+import type { StoppedBuffer } from "./stopped";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("commands:deploy");
 
 export const deploy = createCmd({
   name: "deploy",
   description: "Deploy your program",
   preChecks: [checkWallet, checkProgram],
-  handle: async () => {
+  stoppable: true,
+  handle: async ({ signal, lockStop }) => {
     switch (PgGlobal.deployState) {
       case "ready":
         PgGlobal.update({ deployState: "loading" });
@@ -46,7 +53,7 @@ export const deploy = createCmd({
 
     try {
       const startTime = performance.now();
-      await processDeploy();
+      await processDeploy(signal, lockStop);
       const timePassed = (performance.now() - startTime) / 1000;
       PgTerminal.println(
         `${PgTerminal.success(
@@ -131,8 +138,15 @@ Your address: ${PgWallet.current!.publicKey}`);
   }
 }
 
-/** Deploy the current program. */
-const processDeploy = async () => {
+/**
+ * Deploy the current program.
+ *
+ * @param signal a stop ends the deploy while it funds the wallet or writes
+ * the buffer (Spec 03's Cancel): at the next transaction, or between chunks
+ * @param lockStop called once the final deploy or upgrade begins, which
+ * cannot stop
+ */
+const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
   const programBytes =
     PgProgramInfo.importedProgram?.bytes ??
     (await PgServer.deploy(PgProgramInfo.uuid!));
@@ -152,6 +166,9 @@ const processDeploy = async () => {
       PgWeb3.BpfLoaderUpgradeableProgram.getBufferAccountSize(programLen)
     ),
   ]);
+
+  // Nothing is sent yet; a stop here leaves nothing behind
+  throwIfStopped(signal, deployStoppedLine({ state: "none" }));
 
   // Get the balance required to deploy/upgrade (without fees)
   const programExists = PgProgramInfo.onChain!.deployed;
@@ -238,6 +255,9 @@ const processDeploy = async () => {
     );
   }
 
+  // Funding is done; a stop here leaves no buffer
+  throwIfStopped(signal, deployStoppedLine({ state: "none" }));
+
   // Create buffer
   const bufferKp = PgWeb3.Keypair.generate();
   await sendAndConfirmTxWithRetries(
@@ -257,6 +277,7 @@ const processDeploy = async () => {
 
   // Load buffer
   const loadBufferResult = await loadBufferWithControl(
+    signal,
     bufferKp.publicKey,
     programBytes,
     {
@@ -283,7 +304,30 @@ const processDeploy = async () => {
       },
     }
   );
+  /** End a stopped deploy, closing its buffer so its SOL comes back */
+  const stopWithBuffer = async () => {
+    let left: StoppedBuffer;
+    try {
+      await sendAndConfirmTxWithRetries(
+        () =>
+          BpfLoaderUpgradeable.closeBuffer(bufferKp.publicKey, {
+            wallet: pgWallet,
+          }),
+        async () => !(await connection.getAccountInfo(bufferKp.publicKey))
+      );
+      left = { state: "closed" };
+    } catch (e) {
+      // The line names the buffer and how to reclaim it by hand
+      log.error(e, { context: { action: "close the buffer on stop" } });
+      left = { state: "kept", address: bufferKp.publicKey.toBase58() };
+    }
+    return new StoppedError(deployStoppedLine(left));
+  };
+
   if (loadBufferResult.cancelled) {
+    // Stopped: no questions, the buffer is closed
+    if (signal.aborted) throw await stopWithBuffer();
+
     const term = await PgTerminal.get();
     const shouldCloseBufferAccount = await term.waitForInput(
       `${PgTerminal.warning(
@@ -314,6 +358,11 @@ const processDeploy = async () => {
     term.println(msg);
     throw new Error("Deployment cancelled");
   }
+
+  // A stop that came as the last chunk landed still ends here; from here the
+  // deploy finishes, since its last transactions cannot stop
+  if (signal.aborted) throw await stopWithBuffer();
+  lockStop();
 
   // If deploying from a standard wallet, transfer the buffer authority
   // to the standard wallet before deployment, otherwise it doesn't
@@ -380,8 +429,18 @@ const getAdditionalLen = (programLen: number) => {
   });
 };
 
-/** Load buffer with the ability to pause, resume and cancel on demand. */
+/**
+ * Load buffer with the ability to pause, resume and cancel on demand, and to
+ * stop: a stop ends the write after the chunks in flight, and answers an open
+ * "Continue deployment?" with no.
+ *
+ * TODO(HOO-2394 follow-up): unit tests for the stop paths (stop at the pause
+ * question, mid-chunk, a failed buffer close) need this loader out of
+ * `deploy.ts` with the loader and terminal injected; held back while HOO-2385
+ * rewrites this file, and covered by the manual deploy scenarios until then.
+ */
 const loadBufferWithControl = (
+  signal: AbortSignal,
   ...args: Parameters<typeof BpfLoaderUpgradeable["loadBuffer"]>
 ) => {
   return new Promise<
@@ -394,49 +453,85 @@ const loadBufferWithControl = (
         success: true;
       }
   >(async (res, rej) => {
-    const abortController = new AbortController();
-    args[2] = { ...args[2], abortController };
+    try {
+      if (signal.aborted) return res({ cancelled: true });
 
-    const term = await PgTerminal.get();
-    const handle = async () => {
-      if (abortController.signal.aborted) {
-        await term.executeFromStr("yes");
-      } else {
+      const abortController = new AbortController();
+      args[2] = { ...args[2], abortController };
+
+      const term = await PgTerminal.get();
+      // This load segment's stop; a pause ends the segment and removes it
+      const stopLoad = () => {
+        term.println("Stopping after this step…");
         abortController.abort();
+      };
+      signal.addEventListener("abort", stopLoad, { once: true });
+      // An abort while the terminal was fetched fired no listener
+      if (signal.aborted) stopLoad();
+
+      const handle = async () => {
+        if (abortController.signal.aborted) {
+          await term.executeFromStr("yes");
+          return;
+        }
+
+        abortController.abort();
+        signal.removeEventListener("abort", stopLoad);
+        if (signal.aborted) {
+          dispose();
+          PgGlobal.update({ deployState: "cancelled" });
+          return res({ cancelled: true });
+        }
+
+        // A stop while the question is open answers it, as "no" would
+        const answerNo = () => {
+          term.executeFromStr("no").catch((e: unknown) => {
+            log.error(e, { context: { action: "answer the pause on stop" } });
+          });
+        };
+        signal.addEventListener("abort", answerNo, { once: true });
         const shouldContinue = await term.waitForInput("Continue deployment?", {
           confirm: true,
           default: "yes",
         });
+        signal.removeEventListener("abort", answerNo);
         dispose();
 
-        if (shouldContinue) {
+        if (shouldContinue && !signal.aborted) {
           PgGlobal.update({ deployState: "loading" });
-          loadBufferWithControl(...args).then(res);
+          loadBufferWithControl(signal, ...args).then(res, rej);
         } else {
           PgGlobal.update({ deployState: "cancelled" });
           res({ cancelled: true });
         }
-      }
-    };
+      };
 
-    let prevState = PgGlobal.deployState;
-    const { dispose } = PgGlobal.onDidChangeDeployState((state) => {
-      if (
-        prevState !== state &&
-        (prevState === "paused" || state === "paused")
-      ) {
-        handle();
-      }
-      prevState = state;
-    });
+      let prevState = PgGlobal.deployState;
+      const { dispose } = PgGlobal.onDidChangeDeployState((state) => {
+        if (
+          prevState !== state &&
+          (prevState === "paused" || state === "paused")
+        ) {
+          handle().catch(rej);
+        }
+        prevState = state;
+      });
 
-    try {
-      await BpfLoaderUpgradeable.loadBuffer(...args);
-      if (!abortController.signal.aborted) res({ success: true });
+      // A pause aborts the segment too; `handle` settles the promise then
+      const paused = () => abortController.signal.aborted && !signal.aborted;
+      try {
+        await BpfLoaderUpgradeable.loadBuffer(...args);
+        if (signal.aborted) res({ cancelled: true });
+        else if (!paused()) res({ success: true });
+      } catch (e) {
+        // A real failure is told, stop or not
+        if (!paused()) rej(e);
+      } finally {
+        signal.removeEventListener("abort", stopLoad);
+        if (!paused()) dispose();
+      }
     } catch (e) {
-      if (!abortController.signal.aborted) rej(e);
-    } finally {
-      if (!abortController.signal.aborted) dispose();
+      rej(e);
     }
   });
 };

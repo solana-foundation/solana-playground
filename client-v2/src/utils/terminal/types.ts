@@ -34,6 +34,8 @@ export type CommandManager<R = unknown> = {
   getCompletions: () => Record<string, any>;
   /** Execute from the given tokens. */
   execute: (tokens: string[]) => Promise<R>;
+  /** Stop the command in flight (Ctrl+C). */
+  stop: () => unknown;
 };
 
 export interface ActiveCharPrompt {
