@@ -48,10 +48,14 @@ export const Main: FC<React.PropsWithChildren<TutorialMainComponentProps>> = ({
     tutorialPageRef.current?.scrollTo({ top: 0, left: 0 });
   }, [pageNumber]);
 
-  // Specific page events
+  // Specific page events. `onMount` may return anything: a one-line arrow
+  // returns the value it assigns, an async hook returns a promise. React
+  // calls whatever the effect returns as its cleanup, so only a function is
+  // passed on.
   useEffect(() => {
     const page = pages.at(pageNumber - 1);
-    if (page?.onMount) return page.onMount();
+    const cleanup = page?.onMount?.();
+    if (typeof cleanup === "function") return cleanup;
   }, [pageNumber, pages]);
 
   const nextPage = () => {
