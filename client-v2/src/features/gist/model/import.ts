@@ -142,6 +142,37 @@ const readAnswer = async (response: Response, subject: string) => {
   return body as GistApiResponse;
 };
 
+/** Whether a file's `raw_url` is a download from GitHub's gist host */
+const isGistDownload = (url: unknown): url is string => {
+  if (typeof url !== "string") return false;
+  try {
+    const { protocol, host } = new URL(url);
+    return protocol === "https:" && host === "gist.githubusercontent.com";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Download a file the API cut short or gave no content for.
+ *
+ * The URL comes from the answer's body, so only a download from GitHub's gist
+ * host is followed, never a relative or foreign one.
+ */
+const downloadWhole = async (url: unknown, name: string, subject: string) => {
+  if (!isGistDownload(url)) {
+    log.warn(`${subject} gave "${name}" no GitHub download`, {
+      context: { url },
+    });
+    throw new GistImportError(
+      "request-failed",
+      `GitHub answered the request for ${subject} with something that is ` +
+        "not a gist. Please try again."
+    );
+  }
+  return (await request(url, `"${name}"`)).text();
+};
+
 /**
  * Read a gist's files, downloading whole any file the API cut short.
  *
@@ -171,7 +202,7 @@ const readGist = async (ref: GistRef) => {
     if (!file) continue;
     const content =
       file.truncated || file.content === undefined
-        ? await (await request(file.raw_url, `"${name}"`)).text()
+        ? await downloadWhole(file.raw_url, name, subject)
         : file.content;
     files[name] = { content };
   }

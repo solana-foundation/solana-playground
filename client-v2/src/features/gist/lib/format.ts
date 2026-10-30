@@ -171,7 +171,7 @@ const looseTarget = (
   name: string,
   isSupported: (path: string) => boolean
 ): string | null => {
-  if (!isSupported(name)) return null;
+  if (!isSupported(name) || !isExportablePath(name)) return null;
   if (/\.(test|spec)\.[jt]sx?$/.test(name)) return `tests/${name}`;
   if (/\.(rs|py)$/.test(name)) return `src/${name}`;
   if (/\.[jt]sx?$/.test(name)) return `client/${name}`;
@@ -527,6 +527,18 @@ if (import.meta.vitest) {
           "config.json": "f",
         },
       });
+    });
+
+    it("leaves a hand-made gist's root .tutorial.json out", () => {
+      const back = fromGistFiles(
+        {
+          ".tutorial.json": { content: "{}" },
+          "client.ts": { content: "e" },
+        },
+        { isSupported: () => true }
+      );
+
+      expect(back.files).toEqual({ "client/client.ts": "e" });
     });
 
     it("fails a hand-made gist with nothing supported", () => {

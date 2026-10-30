@@ -17,10 +17,11 @@ const fail = (status, reason) => ({ status, body: { reason } });
 /**
  * Whether GitHub refused for want of requests rather than of permission.
  *
- * A primary limit says so in `x-ratelimit-remaining: 0`; a secondary one only
- * in its message (and sometimes `retry-after`), both on a 403. Checked before
- * the scope, because a rate-limited 403 carries `x-oauth-scopes` too and,
- * for a token without `gist`, would be misread as the missing scope.
+ * A 429 always; on a 403, a primary limit says so in
+ * `x-ratelimit-remaining: 0` and a secondary one only in its message (and
+ * sometimes `retry-after`). Checked before the scope, because a rate-limited
+ * 403 carries `x-oauth-scopes` too and, for a token without `gist`, would be
+ * misread as the missing scope.
  */
 const isRateLimited = (response, message) =>
   response.status === 429 ||

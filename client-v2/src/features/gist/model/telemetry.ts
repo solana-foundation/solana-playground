@@ -28,7 +28,8 @@ type GistEvents = {
   /**
    * The share dialog started an export: the user pressed create, or the
    * export resumed after a sign-in or a grant of gist access. `files` counts
-   * the exported files, the manifest left out.
+   * the gist's files: the manifest and empty files (listed only in the
+   * manifest) left out.
    */
   gist_export_started: { files: number };
   /** The dialog asked the user to allow gists on GitHub */

@@ -354,6 +354,22 @@ describe("getGistFiles", () => {
     expect(format.fromGistFiles).not.toHaveBeenCalled();
   });
 
+  it("refuses a cut-short file whose download is not GitHub's", async () => {
+    answers({
+      [API]: ok({
+        truncated: false,
+        owner: { login: "alice" },
+        files: { "lib.rs": { truncated: true } },
+      }),
+    });
+
+    const error = await failure(getGistFiles({ id: ID }, "link"));
+
+    expect(error.reason).toBe("request-failed");
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    expect(format.fromGistFiles).not.toHaveBeenCalled();
+  });
+
   it("refuses a gist GitHub lists only part of", async () => {
     answers({ [API]: ok(gist({}, { truncated: true })) });
 
