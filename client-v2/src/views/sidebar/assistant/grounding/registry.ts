@@ -40,3 +40,7 @@ export const SKILLS: SkillEntry[] = [
 export const DEFAULT_SKILL_IDS = SKILLS.map((skill) => skill.id);
 
 export const findSkill = (id: string) => SKILLS.find((s) => s.id === id);
+
+/** A bundled skill ships with the app and cannot be switched off: the prompt always lists it */
+export const isAlwaysOn = (skill: SkillEntry) =>
+  skill.source.type === "bundled";

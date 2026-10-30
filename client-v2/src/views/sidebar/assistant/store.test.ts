@@ -95,6 +95,22 @@ it("closes the connection of a local entry the user removes, and only that one",
   expect(mcp.closeConnection.mock.calls).toEqual([["removed"]]);
 });
 
+it("declares no tools for a gateway entry switched off, and the same tools once it is on again", async () => {
+  PgAssistant.setMcpServers([]);
+  mcp.listGatewayServers.mockResolvedValueOnce([gatewayEntry("solana")]);
+  await PgAssistant.loadMcpServers();
+  await discovered(gatewayEntry("solana"), [
+    { name: "search", inputSchema: {} },
+  ]);
+
+  PgAssistant.setMcpServerEnabled("solana", false);
+  expect(PgAssistant.enabledMcpServers).toEqual([]);
+  expect(createMcpTools()).toEqual([]);
+
+  PgAssistant.setMcpServerEnabled("solana", true);
+  expect(createMcpTools().map((tool) => tool.name)).toEqual(["solana__search"]);
+});
+
 it("closes the connection of a gateway entry the gateway stops serving", async () => {
   PgAssistant.setMcpServers([]);
   mcp.listGatewayServers.mockResolvedValueOnce([entry("explorer")]);

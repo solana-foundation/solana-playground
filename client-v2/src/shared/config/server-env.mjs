@@ -5,7 +5,7 @@
 // Every getter reads `process.env` when called, never at import: tests stub
 // the environment per case, and a value captured on import would outlive it.
 // Each field is named after its variable, minus the group's prefix where all
-// its variables share one: `mcpExplorerEnv().BYPASS` is `MCP_EXPLORER_BYPASS`.
+// its variables share one: `agentEnv().API_KEY` is `AGENT_API_KEY`.
 // Names and defaults live here and nowhere else; `.env.example` documents them.
 
 /**
@@ -131,11 +131,14 @@ export const agentEnv = () => ({
   ESTABLISHED_DAILY_CAP: readNumber("AGENT_ESTABLISHED_DAILY_CAP", 0.5),
 });
 
-/** `MCP_EXPLORER_*`: the Explorer MCP upstream; no `BYPASS` leaves it out */
-export const mcpExplorerEnv = () => ({
-  BYPASS: read("MCP_EXPLORER_BYPASS"),
-  URL: read("MCP_EXPLORER_URL") || "https://explorer.solana.com/mcp",
-  TOKEN: read("MCP_EXPLORER_TOKEN"),
+/**
+ * `MCP_*`: the gateway's upstreams. `SERVERS` replaces the catalogue in
+ * `features/mcp/model/catalogue.mjs`; the catalogue's own variables
+ * (`MCP_EXPLORER_*`) are named there, as placeholders it fills from the
+ * whole environment, so they have no getter here.
+ */
+export const mcpEnv = () => ({
+  SERVERS: read("MCP_SERVERS"),
 });
 
 /** Postgres for sync, and its opt-in kill switch */
