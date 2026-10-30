@@ -20,7 +20,10 @@ import {
   isConnectionLost,
 } from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
+import {
+  TurnFailure,
+  type Provider,
+} from "../../../views/sidebar/assistant/model/types";
 import type {
   BackendParams,
   Connection,
@@ -390,8 +393,13 @@ describe("useTurn", () => {
       endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
     };
     PgAssistant.connect(own);
+    // As the provider rejects: the SDK's error kept as the cause
     provider.send.mockRejectedValue(
-      new AiTurnError("Unauthorized", { kind: "key-refused", status })
+      new TurnFailure("Unauthorized", {
+        reason: "provider",
+        status,
+        cause: new AiTurnError("Unauthorized", { kind: "key-refused", status }),
+      })
     );
     const { result } = renderHook(() => useTestTurn());
 
@@ -1066,7 +1074,10 @@ describe("useTurn's failures and races", () => {
       PgAssistant.connect({ id: "default", apiKey: "" });
       failAfter(
         "The program",
-        new AiTurnError("network error", { kind: "network" })
+        new TurnFailure("network error", {
+          reason: "provider",
+          cause: new AiTurnError("network error", { kind: "network" }),
+        })
       );
       const { result } = renderHook(() => useTestTurn());
 

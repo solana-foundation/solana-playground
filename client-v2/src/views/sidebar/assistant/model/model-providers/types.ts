@@ -1,4 +1,5 @@
 import type { JSONValue } from "ai";
+import type { AgentRefusalReason, AgentTierParam } from "@/features/agent";
 import type { AiTurnError, ModelConnection } from "@/shared/lib/ai";
 import type { Effort } from "../types";
 
@@ -13,6 +14,16 @@ export interface ModelProviderInput {
 
 export type ProviderOptions = Record<string, Record<string, JSONValue>>;
 
+/** A refusal by our own backend that the panel answers in a sentence of its own */
+export type BackendRefusal =
+  | { kind: "signed-out"; message: string }
+  | {
+      kind: "limit";
+      reason: AgentRefusalReason;
+      tier: AgentTierParam;
+      message: string;
+    };
+
 /** Everything that differs between model providers, as data for the one turn loop */
 export interface TurnProfile {
   connection: ModelConnection;
@@ -24,8 +35,8 @@ export interface TurnProfile {
   /** Set on the first system message, which is stable across turns */
   promptOptions?: ProviderOptions;
   maxOutputTokens?: number;
-  /** The sentence this model provider refuses a signed-out turn with, or `undefined` for any other failure */
-  signedOutRefusal?: (error: AiTurnError) => string | undefined;
+  /** Which of our backend's refusals a failed turn is, or `undefined` for any other failure */
+  backendRefusal?: (error: AiTurnError) => BackendRefusal | undefined;
   /**
    * A refusal this backend wrote for people, shown as it is, or `undefined`
    * for a failure that gets Spec 08's words (`AiTurnError.message`)

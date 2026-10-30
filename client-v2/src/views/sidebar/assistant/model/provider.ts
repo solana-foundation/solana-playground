@@ -5,12 +5,13 @@ import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
 import { MAX_RESUMES, MAX_STEPS } from "../config";
 import { PgSession } from "../../../../features/auth";
+import { agentTelemetry } from "@/features/agent";
 import { MODEL_PROVIDER_PROFILES } from "./model-providers";
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { ModelProviderInput } from "./model-providers";
-import type { Provider } from "./types";
+import { TurnFailure, type Provider } from "./types";
 
 const log = createLogger("assistant:provider");
 
@@ -116,22 +117,55 @@ export const createProvider = (
       } catch (e) {
         if (!(e instanceof ai.AiTurnError)) throw e;
         if (e.kind === "refusal") {
-          throw new Error(`${e.message} Rephrase it, or switch backends.`);
+          throw new TurnFailure(
+            `${e.message} Rephrase it, or switch backends.`,
+            { reason: "refusal", cause: e }
+          );
         }
+        const refusal = profile.backendRefusal?.(e);
+        if (refusal?.kind === "signed-out") {
+          // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
+          void PgSession.refresh();
+          throw new TurnFailure(refusal.message, {
+            reason: "provider",
+            status: e.status,
+            cause: e,
+          });
+        }
+        if (refusal) {
+          // The conversation and the session stay: switching to a key-based
+          // backend is how the user keeps going today
+          agentTelemetry.track("agent_refused", {
+            reason: refusal.reason,
+            tier: refusal.tier,
+          });
+          throw new TurnFailure(refusal.message, {
+            reason: "capped",
+            status: e.status,
+            cause: e,
+          });
+        }
+        // After the cap, whose 503 is a refusal of ours with its own words
         const own = profile.ownRefusal?.(e);
-        if (own) throw new Error(own, { cause: e });
+        if (own) {
+          throw new TurnFailure(own, {
+            reason: "provider",
+            status: e.status,
+            cause: e,
+          });
+        }
         if (ai.isOutage(e.status) && profile.reportsOutage?.(e)) {
           log.warn("the backend we run is down", {
             report: true,
             context: { status: e.status, detail: e.detail },
           });
         }
-        const refusal = profile.signedOutRefusal?.(e);
         // Spec 08's words, never the status or the server's text
-        if (!refusal) throw e;
-        // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
-        void PgSession.refresh();
-        throw new Error(refusal);
+        throw new TurnFailure(e.message, {
+          reason: e.kind === "paused" ? "paused" : "provider",
+          status: e.status,
+          cause: e,
+        });
       }
 
       history = result.messages;

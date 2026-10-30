@@ -249,7 +249,13 @@ Honesty rule for the demo — never present a mocked step as working.
   changes nothing about how the playground works.
 - **Real, behind sign-in:** the default backend. It answers only a user
   signed in with GitHub; signed out, the panel offers sign-in or a backend on
-  the user's own key. There is no per-user spend cap yet.
+  the user's own key. Each user has a free daily allowance, smaller while
+  their GitHub account is under a month old, that resets at 00:00 UTC. At the
+  limit the panel says "You have used today's free assistant allowance. It
+  resets at 00:00 UTC, or bring your own key to keep going."; when the free
+  backend as a whole is out for the day it says "The free assistant is out of
+  capacity for today." with the same advice. The conversation stays, and a
+  backend on the user's own key has no such limit.
 - **Real, with a gap:** deploy history. It is a genuine client-side store,
   not seeded or scripted, and records every real deploy — but not the
   transaction signature yet, because the deploy command it hooks into
