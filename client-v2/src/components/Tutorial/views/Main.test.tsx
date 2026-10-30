@@ -1,22 +1,30 @@
 import { render } from "@testing-library/react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 import type { MockInstance } from "vitest";
 
 import { Main } from "./Main";
 
 // The utils barrel needs build-time globals the unit runner does not define.
+// The navigation buttons are the only part of `Main` here that reaches it.
 vi.mock("../../../utils", () => ({
-  PgCommon: { transition: (cb: () => unknown) => cb() },
-  PgRouter: { location: { pathname: "/tutorials/test/1" } },
   PgTheme: { convertToCSS: () => "" },
   PgTutorial: { openPage: vi.fn(), finish: vi.fn() },
-  PgView: { setSidebarLoading: vi.fn() },
 }));
 vi.mock("../../../hooks", () => ({ useAsyncEffect: () => {} }));
 
-// The editor, the resizable pane and the Markdown renderer sit on the
-// "editor-content" layout and on string content, which these pages avoid.
+// The test needs only the page effect: these components either draw nothing
+// on a "content-only" page with JSX content (the editor, the resizable pane,
+// the spinner, the Markdown renderer) or read the app theme (the arrow icon).
 vi.mock("../../EditorWithTabs", () => ({ default: () => null }));
 vi.mock("../../Markdown", () => ({ default: () => null }));
 vi.mock("../../Resizable", () => ({ default: () => null }));
@@ -24,7 +32,7 @@ vi.mock("../../Loading", () => ({ SpinnerWithBg: () => null }));
 vi.mock("../../Icons", () => ({ PointedArrow: () => null }));
 
 // Every theme path the styled wrappers read answers with the same stand-in,
-// which reads as an empty string where a style interpolates it
+// which reads as an empty string where a style interpolates it.
 const theme: DefaultTheme = new Proxy({} as DefaultTheme, {
   get: (_, key) =>
     key === "toString" || key === Symbol.toPrimitive ? () => "" : theme,
@@ -48,22 +56,27 @@ const renderAt = (pages: Pages, pageNumber: number) => {
   return { openPage: (page: number) => rerender(view(page)), unmount };
 };
 
-/** React's warning for an effect that returns something other than a cleanup */
-const cleanupWarnings = (error: MockInstance<typeof console.error>) =>
-  error.mock.calls.filter((call) =>
-    String(call[0]).includes("must not return anything besides a function")
-  );
-
 describe("Main page hooks", () => {
+  // jsdom has no scrolling, and `Main` scrolls to the top on page change
+  beforeAll(() => {
+    Object.defineProperty(Element.prototype, "scrollTo", {
+      value: () => {},
+      configurable: true,
+    });
+  });
+  afterAll(() => {
+    Reflect.deleteProperty(Element.prototype, "scrollTo");
+  });
+
+  // React reports a bad cleanup on the console; a passing run logs nothing.
   let error: MockInstance<typeof console.error>;
   beforeEach(() => {
     error = vi.spyOn(console, "error").mockImplementation(() => {});
-    // jsdom has no scrolling, and `Main` scrolls to the top on page change
-    Element.prototype.scrollTo = vi.fn();
   });
   afterEach(() => vi.restoreAllMocks());
 
   it("does not take a value or a promise a page hook returns for a cleanup", () => {
+    // Written as the tutorials write it: the arrow returns the assigned string
     const sidebar = { name: "" };
     const assigns = vi.fn(() => (sidebar.name = "Build & Deploy"));
     const isAsync = vi.fn(async () => {});
@@ -74,13 +87,15 @@ describe("Main page hooks", () => {
     ];
 
     const { openPage, unmount } = renderAt(pages, 2);
-    openPage(3);
-    openPage(1);
-    unmount();
+    expect(() => {
+      openPage(3);
+      openPage(1);
+      unmount();
+    }).not.toThrow();
 
     expect(assigns).toHaveBeenCalledTimes(1);
     expect(isAsync).toHaveBeenCalledTimes(1);
-    expect(cleanupWarnings(error)).toEqual([]);
+    expect(error).not.toHaveBeenCalled();
   });
 
   it("runs a function a page hook returns when the learner leaves the page", () => {
@@ -95,5 +110,17 @@ describe("Main page hooks", () => {
 
     openPage(2);
     expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("runs a function a page hook returns when Main unmounts on that page", () => {
+    const cleanup = vi.fn();
+    const pages: Pages = [{ content: <p>One</p>, onMount: () => cleanup }];
+
+    const { unmount } = renderAt(pages, 1);
+    unmount();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(error).not.toHaveBeenCalled();
   });
 });
