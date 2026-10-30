@@ -1,5 +1,4 @@
 import * as Sentry from "@sentry/react";
-// `@types/mocha` also declares a global `it`, without `each`
 import { expect, it, vi } from "vitest";
 
 import { sentryProvider } from "./sentry";

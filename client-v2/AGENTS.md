@@ -50,8 +50,9 @@ first.
 
 Inside a block:
 
-- Take the test API from `import.meta.vitest`, `vi` included, and never the global `it`:
-  `@types/mocha` declares that global without `each`, because `src/utils/js-runtime` imports mocha.
+- Take the test API from `import.meta.vitest`, `vi` included, never from the globals: they are
+  typed in test files only (`tsconfig.app.json`, the second program `yarn test-types` checks,
+  leaves test files and `vitest/globals` out), so a global `it` in a block fails the type check.
 - Put the tests under one `describe` named after the module path from `src/` without extension
   (`features/persistence/model/project-id`), with the block's hooks and helpers inside it: vitest's `fullName` carries no
   file path, so the `describe` is what names the module in a failure.

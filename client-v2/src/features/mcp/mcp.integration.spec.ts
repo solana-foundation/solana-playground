@@ -1,5 +1,4 @@
 // @vitest-environment node
-// `@types/mocha` also declares a global `it`, without `each`
 import { it } from "vitest";
 import handler from "../../../api/mcp.mjs";
 import { jsonBody, postJson } from "../../test/api-handler";

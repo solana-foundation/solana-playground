@@ -318,6 +318,9 @@ describe("PgLesson.init -- real PgTutorialStorage default semantics", () => {
   });
 
   it("says so when progress cannot be saved, and toasts once", async () => {
+    // The store imports the toast lazily. Loaded here first, that import
+    // resolves at once, so a `flush` covers every toast the writes cause
+    await import("./SaveFailedToast");
     const logged = memoryProvider();
     initLogger({ providers: [logged] });
     (PgTutorial.getStorage as Mock).mockImplementation(() => ({
@@ -345,9 +348,6 @@ describe("PgLesson.init -- real PgTutorialStorage default semantics", () => {
         expect(entry.error?.message).toBe("quota exceeded");
         expect(entry.report).toBe(true);
       }
-      // The toast component is imported lazily, so it can land after `flush`
-      await vi.waitFor(() => expect(PgView.setToast).toHaveBeenCalled());
-      await flush();
       expect(PgView.setToast).toHaveBeenCalledTimes(1);
       expect(
         (PgView.setToast as ReturnType<typeof vi.fn>).mock.calls[0][1]

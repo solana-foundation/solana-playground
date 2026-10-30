@@ -162,7 +162,7 @@
     "sync-assistant-context": "node scripts/sync-assistant-context.mjs",
     "sync-readme": "node scripts/sync-readme.mjs",
     "test": "yarn test-types && yarn test-unit && yarn build:bundle",
-    "test-types": "tsc --noEmit",
+    "test-types": "tsc --noEmit && tsc --noEmit -p tsconfig.app.json",
     "test-unit": "vitest run",
     "test-api": "node --test --env-file-if-exists=.env \"*.test.mjs\" \"api/**/*.test.mjs\" \"scripts/**/*.test.mjs\" \"src/**/*.test.mjs\"",
     "db-migrate": "dbmate --no-dump-schema up",
