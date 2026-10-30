@@ -18,8 +18,11 @@ export interface DeployRunState {
 export interface DeployResult {
   /** The deploy or upgrade transaction; `null` when the RPC returned none */
   signature: string | null;
-  /** Lamports the paying wallets spent on the run, fees included */
-  cost: number;
+  /**
+   * Lamports the paying wallets spent on the run, fees included; `null` when
+   * the balance after it could not be read
+   */
+  cost: number | null;
   upgraded: boolean;
 }
 

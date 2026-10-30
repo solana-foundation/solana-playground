@@ -52,7 +52,7 @@ const currentUserId = () => PgSession.get()?.id ?? null;
 /**
  * The first sync client's mark: one hash of the whole snapshot, none per file.
  *
- * `hash` is `hashSnapshot` of everything the server accepted, the generated
+ * `hash` is one SHA-256 over everything the server accepted, the generated
  * workspace files included, so no single file can be compared against it.
  * Production browsers still hold these; the stored field names stay.
  */

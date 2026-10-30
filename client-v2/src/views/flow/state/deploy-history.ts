@@ -95,7 +95,8 @@ export class PgDeployHistory {
         cluster,
         programId,
         signature: ran?.signature ?? null,
-        ...(ran && { cost: ran.cost, upgraded: ran.upgraded }),
+        ...(ran && { upgraded: ran.upgraded }),
+        ...(ran?.cost != null && { cost: ran.cost }),
       });
     });
   }

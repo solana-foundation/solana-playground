@@ -407,12 +407,17 @@ const processDeploy = async (): Promise<DeployResult> => {
   // Deploy
   PgDeployRun.update({ step: "deploy" });
   const signature = await (programExists ? upgrade() : deployNew());
-  const balanceAfter = await spendable();
-  return {
-    signature: signature ?? null,
-    cost: Math.max(0, balanceBefore - balanceAfter),
-    upgraded: programExists,
-  };
+  // The program is on chain by now: a failed balance read costs the run its
+  // cost figure, never its success, or a retry would pay for an upgrade
+  let cost: number | null = null;
+  try {
+    cost = Math.max(0, balanceBefore - (await spendable()));
+  } catch (e) {
+    log.warn("could not read the balance after the deploy", {
+      context: { error: String(e) },
+    });
+  }
+  return { signature: signature ?? null, cost, upgraded: programExists };
 
   function deployNew() {
     return sendAndConfirmTxWithRetries(
@@ -558,6 +563,6 @@ const sendAndConfirmTxWithRetries = async (
       MAX_RETRIES.toString()
     )}).
 This might be an RPC related issue. Consider changing the endpoint from the settings.
-${err.message ? `Reason: ${err.message}` : ""}`
+${err?.message ? `Reason: ${err.message}` : ""}`
   );
 };

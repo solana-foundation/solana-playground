@@ -1100,6 +1100,32 @@ describe("both devices changed it", () => {
     expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
   });
 
+  it("writes folded typing to the store again after the re-open when the first write failed", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    editorHolds({ [`/${HELLO.name}/src/lib.rs`]: "a\nb\nC\nd\nE\n" });
+    const writeFile = PgFs.writeFile.bind(PgFs);
+    let failed = false;
+    vi.spyOn(PgFs, "writeFile").mockImplementation(async (path, data, opts) => {
+      if (!failed && data === "A\nb\nC\nd\nE\n") {
+        failed = true;
+        throw new Error("quota");
+      }
+      return writeFile(path, data, opts);
+    });
+
+    await PgProjectSync.pushCurrent();
+
+    expect(failed).toBe(true);
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "A\nb\nC\nd\nE\n"
+    );
+  });
+
   it("still keeps the base of folded typing, and says so, when the re-open fails", async () => {
     await startFrom(
       { "src/lib.rs": base },

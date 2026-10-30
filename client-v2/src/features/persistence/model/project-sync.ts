@@ -1091,6 +1091,11 @@ export class PgProjectSync {
           }
         } catch (e) {
           report(`catch up ${localName}: write ${path} (${when})`, e);
+          // The store lacks the fold: the next pass writes it again, and
+          // until one does, no base is kept for content the store never held
+          caughtUp.delete(path);
+          const at = folded.indexOf(path);
+          if (at !== -1) folded.splice(at, 1);
         }
       }
     };
@@ -1216,7 +1221,7 @@ export class PgProjectSync {
         const server = full.snapshot.files;
         const local = carried ?? (await snapshotOf(localName)).files;
         first ??= local;
-        // The same window `pushCurrent` refuses: the explorer mid-re-read
+        // The same window `push` refuses: the explorer mid-re-read
         // reads as a project with every file deleted, and merging that would
         // delete them on the server too
         if (!Object.keys(local).length) {

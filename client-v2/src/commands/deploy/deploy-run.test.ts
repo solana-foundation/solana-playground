@@ -147,6 +147,21 @@ describe("deploy run", () => {
     expect(PgDeployRun.state.step).toBeNull();
   });
 
+  it("reports a confirmed deploy with no cost when the balance after it cannot be read", async () => {
+    balance
+      .mockResolvedValueOnce(10_000_000_000) // read against what it needs
+      .mockResolvedValueOnce(10_000_000_000) // before the run spends
+      .mockRejectedValueOnce(new Error("rpc down")); // after it
+
+    const result = await deploy.handle!({} as never);
+
+    expect(result).toEqual({
+      signature: "sig-deploy",
+      cost: null,
+      upgraded: false,
+    });
+  });
+
   it("funds first, without a question, when the stage started it", async () => {
     const steps = recordSteps();
     balance.mockResolvedValueOnce(0);
