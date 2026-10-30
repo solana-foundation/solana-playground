@@ -59,6 +59,24 @@ not on Mainnet Beta until it is uploaded there. This mirrors how Solana itself
 works, and keeps the user from reading a Devnet IDL as proof of a mainnet
 program.
 
+```mermaid
+flowchart LR
+  src["Program source<br/>(Anchor, Native, Seahorse)"] --> build["Build<br/>(build server)"]
+  build --> bin["Program binary"]
+  build --> idl["IDL<br/>(Anchor and Seahorse only)"]
+  bin --> deploy["Deploy or upgrade<br/>(BPF Upgradeable Loader)"]
+  deploy --> cluster[("Selected cluster<br/>Playnet, Localnet, Devnet,<br/>Testnet, Mainnet Beta, custom")]
+  idl --> upload["IDL upload"]
+  upload --> pmp[("Program Metadata<br/>(default)")]
+  upload --> anchoridl[("Anchor IDL account<br/>(legacy)")]
+  pmp --> cluster
+  anchoridl --> cluster
+  cluster --> interact["Interact<br/>(simulate, send, logs)"]
+  bin -. export .-> scripts["Local deploy scripts<br/>(user's Solana CLI)"]
+  idl -. export .-> scripts
+  scripts -.-> cluster
+```
+
 ### Program Metadata is the default IDL source, the Anchor IDL account is legacy
 
 Both store an IDL for a program id, and the Explorer shows both. Program
@@ -77,6 +95,23 @@ maintain it. The playground does not build an IDL for such a program. Instead
 the user supplies one: a file, or JSON pasted or typed into an editor. Both
 paths give the same result. A local IDL is also how the user tries an edited
 copy of a published IDL. Loading one never writes to the chain.
+
+```mermaid
+flowchart TD
+  pid["Program id on the selected cluster"] --> read["Read the IDL from chain"]
+  read --> pmp{"Program Metadata<br/>has an IDL?"}
+  read --> anchor{"Anchor IDL account<br/>has an IDL?"}
+  pmp -- yes --> picker["Source picker<br/>(idl-source)"]
+  anchor -- yes --> picker
+  build["The project's build IDL"] --> picker
+  file["File"] --> local["Local IDL"]
+  paste["Pasted JSON<br/>(idl-paste)"] --> local
+  local --> picker
+  pmp -- no --> none["No IDL on chain:<br/>offer a local IDL"]
+  anchor -- no --> none
+  none --> local
+  picker -->|"default order: Program Metadata,<br/>Anchor IDL account, build;<br/>a loaded local IDL is selected"| form["Interact form"]
+```
 
 ### A mainnet deploy needs an explicit acceptance, every time
 
@@ -106,6 +141,29 @@ disclaimer, its version and when. It is a record kept by the playground, not
 proof: the user can edit or clear it, and the server never sees who ticked
 the box. The 182-day lifetime matches the Explorer's `idl_mainnet_accepted`
 cookie and was chosen while writing this change.
+
+```mermaid
+sequenceDiagram
+  actor User
+  participant Start as Deploy button, terminal or assistant
+  participant Dialog as Mainnet disclaimer (mainnet-guard)
+  participant Cookie as pg_mainnet_disclaimer cookie
+  participant Chain as Mainnet Beta
+  Start->>Dialog: deploy or IDL upload on Mainnet Beta (deploy_started)
+  Note over Dialog: shown every time, checkbox unticked
+  alt Cancel
+    User->>Dialog: Cancel
+    Dialog-->>Start: nothing sent (deploy_mainnet_warned: cancel)
+  else Download deploy scripts
+    User->>Dialog: Download deploy scripts
+    Dialog-->>User: export with scripts (deploy_mainnet_warned: scripts)
+  else Accept
+    User->>Dialog: tick "I understand the risk" (mainnet-guard-accept)
+    User->>Dialog: Deploy to mainnet (mainnet-guard-deploy)
+    Dialog->>Cookie: write disclaimer version and time
+    Dialog->>Chain: send deploy transactions (deploy_mainnet_warned: deploy)
+  end
+```
 
 TODO(ticket to file): store each acceptance on the server for a signed-in
 user (account, disclaimer version, time), so the record can be checked
