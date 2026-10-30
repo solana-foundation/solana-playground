@@ -22,9 +22,11 @@ export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
     [files, defaultOpenFile]
   );
 
-  // On component mount
+  // On component mount. As with the page hooks in `Main`, only a function
+  // `onMount` returns is a cleanup.
   useEffect(() => {
-    if (onMount) return onMount();
+    const cleanup = onMount?.();
+    if (typeof cleanup === "function") return cleanup;
   }, [onMount]);
 
   if (!PgTutorial.current) throw new Error("Current tutorial has not been set");
