@@ -10,6 +10,8 @@ import {
   PgProgramInfo,
   PgWallet,
 } from "../../../../utils";
+import { estimateDeployCostWithin } from "../../../../commands/deploy/estimate";
+import { networkName } from "@/features/deploy";
 import { PgLesson } from "../../../flow/lessons";
 
 /** A condensed view of the program's interface, cheaper than the whole IDL */
@@ -71,6 +73,11 @@ export interface PlaygroundBridge {
   build(): Promise<void>;
   /** @returns where the deployed program can be seen, when that is known */
   deploy(): Promise<{ programId: string; explorerUrl: string } | null>;
+  /**
+   * @returns the network a deploy would go to, by name, and its estimated
+   * cost in lamports (`null` when it cannot be estimated)
+   */
+  quoteDeploy(): Promise<{ network: string; cost: number | null }>;
 }
 
 const toRelative = (fullPath: string) => {
@@ -166,11 +173,19 @@ export const realBridge: PlaygroundBridge = {
     await PgCommand.build.execute();
   },
 
+  async quoteDeploy() {
+    const cluster = PgConnection.cluster;
+    return {
+      network: networkName(cluster),
+      cost: await estimateDeployCostWithin(),
+    };
+  },
+
   async deploy() {
     await PgCommand.deploy.execute();
 
-    // The deploy command prints the transaction to the terminal but does not
-    // return it; the program address is the stable thing to link to.
+    // The program address is the stable thing to link to: an upgrade keeps
+    // it, while the transaction differs on every deploy.
     const programId = PgProgramInfo.getPkStr();
     if (!programId) return null;
     return {

@@ -8,6 +8,7 @@
  */
 import { query, transaction } from "./db.mjs";
 import { DELETED_REASON } from "./deleted.mjs";
+import { NO_FILES_REASON } from "./project-write.mjs";
 
 export const listProjects = async (userId) => {
   const { rows } = await query(
@@ -166,7 +167,12 @@ const UPSERT_FILES = `
     set content = excluded.content
   where project_files.content is distinct from excluded.content`;
 
-/** Read after an adoption, in a statement of its own -- see `CREATE` */
+/**
+ * Read in a statement of its own, twice. After an adoption, so it sees a
+ * writer the adopting statement's snapshot did not -- see `CREATE`. After a
+ * patch that adds nothing, the only `saveProject` write that can empty a row,
+ * so it sees that patch's own `DELETE_NAMED`.
+ */
 const HAS_FILES = `
   select exists(
     select 1 from project_files where user_id = $1 and project_id = $2
@@ -174,10 +180,17 @@ const HAS_FILES = `
 
 /**
  * Thrown from inside the transaction so that it rolls back, and caught by
- * `saveProject` outside it. Returning a conflict instead would commit the
- * adoption's change to the row.
+ * `saveProject` outside it, which returns `outcome`. Returning the outcome
+ * instead would commit the swap's or the adoption's change to the row. A
+ * conflict `settle` reports is returned instead: it comes before any write,
+ * so there is nothing to roll back.
  */
-class AdoptionRefused extends Error {}
+class WriteRefused extends Error {
+  constructor(outcome) {
+    super(`write refused: ${JSON.stringify(outcome)}`);
+    this.outcome = outcome;
+  }
+}
 
 const DELETE_NAMED = `
   delete from project_files
@@ -231,17 +244,26 @@ const DELETE_OTHERS = `
  * A patch is only ever accepted together with a token, so "what it differs
  * from" is always the row the caller read.
  *
+ * A patch after which the row holds no files is refused and rolled back
+ * (`refused: "no-files"`). Such a row reads back as no snapshot, so no device
+ * can merge with it or take it, and `CREATE` lets any device that never read
+ * it overwrite it: the work on every other device is no longer reachable by
+ * merge. A full write is the caller's to keep non-empty: `api/projects.mjs`
+ * refuses an empty `files` before it gets here, and only a patch needs the
+ * row to judge.
+ *
  * @param {{id: string, name: string, kind: string, baseUpdatedAt?: string,
  *          files?: Record<string, string>,
  *          changed?: Record<string, string>, removed?: string[]}} input
  * @returns {Promise<{updatedAt: string} |
- *   {conflict: true, updatedAt: string | null, reason?: "deleted"}>}
+ *   {conflict: true, updatedAt: string | null, reason?: "deleted"} |
+ *   {refused: typeof NO_FILES_REASON}>}
  */
 export const saveProject = async (userId, input) => {
   try {
     return await transaction((q) => writeProject(q, userId, input));
   } catch (e) {
-    if (e instanceof AdoptionRefused) return e.outcome;
+    if (e instanceof WriteRefused) return e.outcome;
     throw e;
   }
 };
@@ -276,9 +298,7 @@ export const writeProject = async (q, userId, input) => {
       // The other writer's `updated_at` is gone -- this transaction just
       // overwrote it -- so the token is null, which only makes the client
       // read the project again.
-      const refused = new AdoptionRefused();
-      refused.outcome = { conflict: true, updatedAt: null };
-      throw refused;
+      throw new WriteRefused({ conflict: true, updatedAt: null });
     }
   }
 
@@ -293,13 +313,21 @@ export const writeProject = async (q, userId, input) => {
     if (removed?.length) await q(DELETE_NAMED, [userId, id, removed]);
     if (changed && Object.keys(changed).length) {
       await q(UPSERT_FILES, [userId, id, JSON.stringify(changed)]);
+    } else {
+      // Nothing added, so the row may now be empty -- or was already, and a
+      // swap would bump its token over an empty project. A full write needs
+      // no check: `saveProject`'s caller refuses an empty `files`.
+      const { rows: left } = await q(HAS_FILES, [userId, id]);
+      if (!left[0].has_files) {
+        throw new WriteRefused({ refused: NO_FILES_REASON });
+      }
     }
   }
   return outcome;
 };
 
 /**
- * Tombstone a project.
+ * Tombstone a project and erase what its chat said.
  *
  * The row stays so another device's next sync sees "deleted" rather than
  * "missing" and does not push its local copy back up. Its files go: a
@@ -311,6 +339,16 @@ export const writeProject = async (q, userId, input) => {
  * conversation left live here was handed to the new run as the previous
  * run's chat. Scoped by user as well as project: a tutorial's id is the same
  * string in every account that started it.
+ *
+ * What the conversations said goes too: their messages are deleted and their
+ * titles cleared, for every conversation under the project, including one a
+ * previous run of a tutorial left tombstoned. The conversation rows stay,
+ * holding only ids, owner, project and timestamps. While the project is
+ * deleted its own tombstone refuses every push; once a tutorial is started
+ * again under the same id, the conversation's tombstone is what answers a
+ * device still holding the old run's thread with `ThreadDeleted("thread")`
+ * instead of taking its push as a new thread. A push in flight during the
+ * delete is ordered against it by the lock `ensureThread` takes.
  */
 export const deleteProject = async (userId, id) => {
   await transaction(async (q) => {
@@ -326,6 +364,17 @@ export const deleteProject = async (userId, id) => {
     await q(
       `update conversations set deleted_at = now()
         where user_id = $1 and project_id = $2 and deleted_at is null`,
+      [userId, id]
+    );
+    await q(
+      `delete from messages m using conversations c
+        where m.conversation_id = c.id
+          and c.user_id = $1 and c.project_id = $2`,
+      [userId, id]
+    );
+    await q(
+      `update conversations set title = null
+        where user_id = $1 and project_id = $2 and title is not null`,
       [userId, id]
     );
   });

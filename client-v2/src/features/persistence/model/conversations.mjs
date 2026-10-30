@@ -95,6 +95,12 @@ const ensureThread = async (client, userId, thread) => {
   //
   // The select reads the statement's snapshot, which is from before the
   // insert: no row means the insert just made one, which is live.
+  //
+  // `for share` holds the row until this push commits, and `deleteProject`
+  // updates that row first. So a delete either waits for the push and then
+  // erases what it wrote, or lands first and the push, re-reading the row
+  // once the delete commits, is refused. Unlocked, a push that passed this
+  // check could write its messages after the delete had erased the thread.
   const { rows: project } = await run(
     client,
     `with ensured as (
@@ -102,7 +108,8 @@ const ensureThread = async (client, userId, thread) => {
        values ($1, $2, $1, $3)
        on conflict (user_id, id) do nothing
      )
-     select deleted_at from projects where user_id = $2 and id = $1`,
+     select deleted_at from projects where user_id = $2 and id = $1
+        for share`,
     [projectId, userId, kind]
   );
   if (project[0]?.deleted_at) throw new ThreadDeleted("project");

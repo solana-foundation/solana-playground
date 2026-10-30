@@ -49,6 +49,30 @@ const projectIdOf = (fileName: string) =>
 /** Who the marks belong to, or `null` when nobody is signed in */
 const currentUserId = () => PgSession.get()?.id ?? null;
 
+/**
+ * The first sync client's mark: one hash of the whole snapshot, none per file.
+ *
+ * `hash` is one SHA-256 over everything the server accepted, the generated
+ * workspace files included, so no single file can be compared against it.
+ * Production browsers still hold these; the stored field names stay.
+ */
+interface WholeSnapshotMark {
+  hash: string;
+  updatedAt: string;
+}
+
+/** Whether a parsed mark file is a {@link WholeSnapshotMark} (it has no `files`) */
+const isWholeSnapshotMark = (parsed: unknown): parsed is WholeSnapshotMark => {
+  const mark = parsed as Record<string, unknown> | null;
+  return (
+    !!mark &&
+    typeof mark === "object" &&
+    mark.files === undefined &&
+    typeof mark.hash === "string" &&
+    typeof mark.updatedAt === "string"
+  );
+};
+
 /** What this device and the server last agreed on, for one project */
 export interface SyncMark {
   /**
@@ -131,7 +155,11 @@ export class PgSyncMark {
         typeof parsed?.name !== "string" ||
         typeof parsed?.updatedAt !== "string"
       ) {
-        report(`sync mark ${projectId}: malformed`, null);
+        // Not a fault: every browser the first sync client synced holds
+        // these, and reconcile reads them through `readWholeSnapshotMark`
+        if (!isWholeSnapshotMark(parsed)) {
+          report(`sync mark ${projectId}: malformed`, null);
+        }
         return null;
       }
       return {
@@ -145,6 +173,37 @@ export class PgSyncMark {
       };
     } catch (e) {
       if (!isMissing(e)) report(`read sync mark ${projectId}`, e);
+      return null;
+    }
+  }
+
+  /**
+   * The one thing a whole-snapshot mark can still say: the
+   * row's `updated_at` when this device last agreed with it.
+   *
+   * It holds one hash of the whole snapshot and none per file, so it is no
+   * merge base, and `read` returns `null` for it. Reconcile uses it only to
+   * tell whether the row has moved since this device last agreed.
+   *
+   * @returns the timestamp, or `null` when the mark is absent or any other
+   * shape
+   */
+  static async readWholeSnapshotMark(
+    projectId: string
+  ): Promise<{ updatedAt: string } | null> {
+    const userId = currentUserId();
+    if (!userId) return null;
+
+    try {
+      const parsed = JSON.parse(
+        await PgFs.readToString(pathOf(userId, projectId))
+      );
+      return isWholeSnapshotMark(parsed)
+        ? { updatedAt: parsed.updatedAt }
+        : null;
+    } catch (e) {
+      if (!isMissing(e))
+        report(`read whole-snapshot sync mark ${projectId}`, e);
       return null;
     }
   }
@@ -340,7 +399,8 @@ export class PgSyncMark {
 }
 
 if (import.meta.vitest) {
-  const { describe, it, expect, vi, beforeEach } = import.meta.vitest;
+  const { describe, it, expect, vi, beforeAll, beforeEach } = import.meta
+    .vitest;
 
   describe("features/persistence/model/sync-mark", () => {
     const storedFiles = () =>
@@ -433,6 +493,49 @@ if (import.meta.vitest) {
           })
         );
         expect(await PgSyncMark.read("p1")).toBeNull();
+      });
+
+      describe("a whole-snapshot mark", () => {
+        let getFailures: typeof import("./diagnostics").getFailures;
+        let clearFailures: typeof import("./diagnostics").clearFailures;
+        beforeAll(async () => {
+          ({ getFailures, clearFailures } = await import("./diagnostics"));
+        });
+        beforeEach(() => clearFailures());
+
+        const wholeSnapshot = JSON.stringify({
+          hash: "whole-snapshot",
+          contentHash: "user-files",
+          name: "one",
+          updatedAt: "t1",
+          dirty: true,
+        });
+
+        it("tells reconcile when it last agreed, and nothing else", async () => {
+          storedFiles().set("/.config/sync/u1/p1.json", wholeSnapshot);
+          expect(await PgSyncMark.readWholeSnapshotMark("p1")).toEqual({
+            updatedAt: "t1",
+          });
+          expect(await PgSyncMark.read("p1")).toBeNull();
+        });
+
+        it("is not reported as malformed", async () => {
+          storedFiles().set("/.config/sync/u1/p1.json", wholeSnapshot);
+          await PgSyncMark.read("p1");
+          expect(getFailures()).toEqual([]);
+        });
+
+        it("is not mistaken for a per-file mark, or for none", async () => {
+          await PgSyncMark.write("p1", {
+            files: { a: "h1" },
+            name: "one",
+            updatedAt: "t1",
+            dirty: false,
+          });
+          expect(await PgSyncMark.readWholeSnapshotMark("p1")).toBeNull();
+          expect(await PgSyncMark.readWholeSnapshotMark("p2")).toBeNull();
+          expect(getFailures()).toEqual([]);
+        });
       });
 
       describe("one project's writes, one at a time", () => {

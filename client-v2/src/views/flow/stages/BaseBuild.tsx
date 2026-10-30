@@ -60,7 +60,7 @@ export interface BaseBuildProps {
   /** Sends a prompt to the assistant */
   onFix: (prompt: string) => void;
   onOpenFile: (path: string) => void;
-  /** Download IDL, shown with a successful build */
+  /** The build's downloads (IDL, program binary), shown with a successful build */
   idlActions: ReactNode;
 }
 

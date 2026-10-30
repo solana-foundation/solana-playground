@@ -84,7 +84,10 @@ const serverHas = (
     if (!found) return "gone";
     return {
       ...found,
-      snapshot: id in snapshots ? snapshots[id] : { files: {} },
+      // Not `{files: {}}`, which reconcile treats as unusable: the cases
+      // that mean an empty row say so
+      snapshot:
+        id in snapshots ? snapshots[id] : { files: { "src/lib.rs": "" } },
     };
   });
 };
@@ -603,6 +606,19 @@ describe("reconcile", () => {
     expect(switchSpy).not.toHaveBeenCalled();
   });
 
+  it("does not import a project whose row holds no files", async () => {
+    // Imported, it would be a workspace with nothing in it -- and, once
+    // marked, one whose next push uploads that nothing over the row
+    withLocal({});
+    const created = stubCreation();
+    serverHas([project("empty", "alpha")], { empty: { files: {} } });
+
+    const result = await reconcile();
+
+    expect(result.imported).toEqual([]);
+    expect(created).toEqual([]);
+  });
+
   it("adopts the server's id, so the two devices converge", async () => {
     withLocal({});
     const created = stubCreation();
@@ -621,7 +637,9 @@ describe("reconcile", () => {
       project("b", "beta"),
     ]);
     vi.spyOn(PgProjectSync, "fetch").mockImplementation(async (id: string) =>
-      id === "b" ? { ...project("b", "beta"), snapshot: { files: {} } } : null
+      id === "b"
+        ? { ...project("b", "beta"), snapshot: { files: { "src/lib.rs": "" } } }
+        : null
     );
 
     const result = await reconcile();

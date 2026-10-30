@@ -10,6 +10,7 @@ import {
 import { PgCommand, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Settings from "./Settings";
+import type { Faucet } from "./hooks";
 
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../utils", () => ({
@@ -35,7 +36,7 @@ vi.mock("../../utils", () => ({
 vi.mock("../../hooks", () => ({ useCopy: () => [false, vi.fn()] }));
 const airdropHook = vi.hoisted(() => ({
   airdrop: vi.fn(),
-  airdropCondition: false,
+  faucet: "none" as Faucet,
 }));
 vi.mock("./hooks", () => ({
   useAirdrop: () => airdropHook,
@@ -87,7 +88,7 @@ afterEach(() => {
   vi.clearAllMocks();
   resetLogger();
   told.length = 0;
-  airdropHook.airdropCondition = false;
+  airdropHook.faucet = "none";
   PgWallet.standardWallets.length = 0;
   PgWallet.accounts.length = 0;
 });
@@ -180,7 +181,7 @@ describe("wallet Settings menu", () => {
   // say so rather than leave an unhandled rejection
   it("tells the user when Airdrop fails", async () => {
     const failure = new Error("The terminal is not open.");
-    airdropHook.airdropCondition = true;
+    airdropHook.faucet = "available";
     airdropHook.airdrop.mockRejectedValueOnce(failure);
     render(<Host />);
     await openMenu();
@@ -217,6 +218,27 @@ describe("wallet Settings menu", () => {
       );
     }
   );
+
+  it("says the network has no faucet where Airdrop would be", async () => {
+    airdropHook.faucet = "none";
+    render(<Host />);
+    await openMenu();
+
+    const line = screen.getByRole("menuitem", {
+      name: "This network has no faucet.",
+    });
+    expect(line.getAttribute("aria-disabled")).toBe("true");
+    expect(screen.queryByRole("menuitem", { name: /Airdrop/ })).toBeNull();
+  });
+
+  it("shows neither Airdrop nor the no-faucet line before the cluster is known", async () => {
+    airdropHook.faucet = "unknown";
+    render(<Host />);
+    await openMenu();
+
+    expect(screen.queryByRole("menuitem", { name: /Airdrop/ })).toBeNull();
+    expect(screen.queryByText("This network has no faucet.")).toBeNull();
+  });
 
   it("says so when the imported file is not a keypair", async () => {
     vi.mocked(PgWallet.import).mockRejectedValueOnce(new KeypairFileError());
@@ -293,7 +315,7 @@ describe("wallet Settings menu", () => {
   // `PgSession.signInState` holds a known failure and the account row shows
   // it: logged as a failed click, never toasted a second time
   it("leaves a cancelled or blocked sign-in to the account row", async () => {
-    airdropHook.airdropCondition = true;
+    airdropHook.faucet = "available";
     airdropHook.airdrop.mockRejectedValueOnce(knownSignIn);
     render(<Host />);
     await openMenu();

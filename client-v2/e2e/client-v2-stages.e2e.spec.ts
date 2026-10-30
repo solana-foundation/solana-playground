@@ -157,7 +157,9 @@ test.describe("client-v2-stages", () => {
       .getByRole("status")
       .filter({ hasText: "Deployed to" });
     await expect(result).toContainText("Deployed to devnet", LONG);
-    await expect(result.locator("code")).toHaveText(PROGRAM_ID);
+    // Shortened in the middle, whole in its title
+    await expect(result.locator("code")).toHaveText("6PNd…AVkj");
+    await expect(result.locator("code")).toHaveAttribute("title", PROGRAM_ID);
     await expect(result.locator('[data-slot="copy-button"]')).toBeVisible();
   });
 });
@@ -185,12 +187,16 @@ test.describe("client-v2-stages: Interact", () => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
 
-    await expect(panel.getByText("Program: e2e_project")).toBeVisible(LONG);
     await expect(
-      panel.getByRole("heading", { name: "Instructions" })
-    ).toBeVisible();
+      panel.getByRole("button", { name: "Copy program id" })
+    ).toBeVisible(LONG);
     await expect(
-      panel.getByRole("button", { name: "initialize" })
+      panel
+        .getByRole("radiogroup", { name: "Instruction" })
+        .getByRole("radio", { name: "initialize" })
+    ).toBeChecked();
+    await expect(
+      panel.getByRole("button", { name: "Call initialize" })
     ).toBeVisible();
     await expect(panel.locator('[data-slot="stage-empty"]')).toHaveCount(0);
   });
@@ -313,7 +319,7 @@ test.describe("client-v2-search-field", () => {
   }) => {
     await stubProgramAccount(page, DEPLOYED_ACCOUNT);
     const panel = await buildThenInteract(page);
-    await panel.getByRole("button", { name: "initialize" }).click();
+    await panel.getByRole("radio", { name: "initialize" }).click();
 
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it

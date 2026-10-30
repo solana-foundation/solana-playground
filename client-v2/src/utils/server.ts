@@ -3,6 +3,9 @@ import type { Idl } from "@coral-xyz/anchor";
 import { PgCommon } from "./common";
 import { PgSettings } from "./settings";
 import type { TupleFiles } from "./explorer";
+import { PgServerError, UNREADABLE_BODY } from "./server-error";
+
+export { PgServerError };
 
 /** Rust `Option` type */
 type Option<T> = T | null;
@@ -138,16 +141,21 @@ export class PgServer {
       : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
     const requestUrl = PgCommon.joinPaths(serverUrl, path);
+    let response: Response;
     try {
-      const response = await fetch(requestUrl, requestInit);
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message);
-      }
-
-      return response;
+      response = await fetch(requestUrl, requestInit);
     } catch (e: any) {
-      throw new Error(`Server request failed (${requestUrl}): ${e?.message}`);
+      throw new PgServerError(requestUrl, null, e?.message || String(e), {
+        cause: e,
+      });
     }
+    if (!response.ok) {
+      // A body cut off mid-read still leaves the status to report; the
+      // placeholder says in the error's message that the body was lost
+      const body = await response.text().catch(() => UNREADABLE_BODY);
+      throw new PgServerError(requestUrl, response.status, body);
+    }
+
+    return response;
   }
 }

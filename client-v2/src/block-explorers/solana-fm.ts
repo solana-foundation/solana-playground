@@ -4,8 +4,8 @@ import { PgBlockExplorer, PgConnection } from "../utils";
 export const solanaFM = PgBlockExplorer.create({
   name: "Solana FM",
   url: "https://solana.fm",
-  getClusterParam: () => {
-    switch (PgConnection.cluster) {
+  getClusterParam: (cluster = PgConnection.cluster) => {
+    switch (cluster) {
       case "testnet":
         return "?cluster=testnet-solana";
       case "devnet":

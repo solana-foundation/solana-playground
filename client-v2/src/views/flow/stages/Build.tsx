@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { DownloadProgram } from "@/features/cli-deploy";
+
 import BaseBuild from "./BaseBuild";
 import IdlActions from "./IdlActions";
 import { buildSurface, ownOutput } from "./build-surface";
@@ -65,7 +67,12 @@ const Build = () => {
       onExport={() => PgFramework.exportWorkspace()}
       onFix={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
-      idlActions={<IdlActions mode="download" />}
+      idlActions={
+        <>
+          <IdlActions mode="download" />
+          <DownloadProgram from="build-stage" />
+        </>
+      }
     />
   );
 };

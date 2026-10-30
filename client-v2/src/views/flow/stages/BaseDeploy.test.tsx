@@ -17,17 +17,32 @@ import type {
   DeployStatus,
 } from "./BaseDeploy";
 import type { DeployRecord } from "../state/deploy-history";
+import type { DeployRunState } from "@/commands/deploy/run";
 
 const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
 
-const record = (id: string, signature: string | null): DeployRecord => ({
+const SHORT_ID = "6PNd…AVkj";
+const WALLET = "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU";
+
+const record = (
+  id: string,
+  signature: string | null,
+  cluster = "devnet"
+): DeployRecord => ({
   id,
   workspace: "counter",
-  cluster: "devnet",
+  cluster,
   programId: PROGRAM_ID,
   signature,
   at: Date.UTC(2026, 9, 15),
 });
+
+const IDLE_RUN: DeployRunState = {
+  step: null,
+  percent: 0,
+  funds: false,
+  upgrade: false,
+};
 
 const NO_DETAILS: DeployDetails = {
   upgradable: null,
@@ -41,18 +56,38 @@ const props = (state: {
   deploy: DeployStatus;
   history: DeployRecord[];
   details?: DeployDetails;
+  /** devnet unless the test is about the cluster */
+  cluster?: string | null;
+  onOpenCliGuide?: BaseDeployProps["onOpenCliGuide"];
+  run?: DeployRunState;
+  funding?: BaseDeployProps["funding"];
+  backup?: boolean;
+  payer?: BaseDeployProps["payer"];
 }): BaseDeployProps => ({
-  cluster: "devnet",
+  cluster: state.cluster === undefined ? "devnet" : state.cluster,
   built: state.built,
   deploy: state.deploy,
   programId: PROGRAM_ID,
   details: state.details ?? NO_DETAILS,
   history: state.history,
-  addressUrl: (id) => `https://explorer.test/address/${id}`,
-  txUrl: (sig) => `https://explorer.test/tx/${sig}`,
+  payer:
+    state.payer === undefined
+      ? { address: WALLET, balance: 4.2, playground: true }
+      : state.payer,
+  run: state.run ?? IDLE_RUN,
+  funding: state.funding ?? null,
+  backup: state.backup ?? false,
+  staleBuild: false,
+  addressUrl: (id, cluster) => `https://explorer.test/${cluster}/address/${id}`,
+  txUrl: (sig, cluster) => `https://explorer.test/${cluster}/tx/${sig}`,
   onDeploy: vi.fn(),
+  onSignIn: vi.fn(),
+  onSaveKeypair: vi.fn(),
+  onDismissBackup: vi.fn(),
+  onStaleBuildAnswer: vi.fn(),
   onInteract: vi.fn(),
   idlUpload: <button>Upload IDL</button>,
+  onOpenCliGuide: state.onOpenCliGuide ?? vi.fn(),
 });
 
 /** The app gives every screen a tooltip provider; the copy button needs one */
@@ -75,7 +110,123 @@ const lastIsActions = (container: HTMLElement) =>
     .querySelector('[data-slot="stage-empty"]')
     ?.lastElementChild?.getAttribute("data-slot");
 
+const mainnetWarning = () =>
+  screen.queryByRole("alert", { name: "Mainnet deploy warning" });
+
 describe("BaseDeploy", () => {
+  it("warns on mainnet without holding Deploy", () => {
+    const { container } = render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [],
+          cluster: "mainnet-beta",
+        })}
+      />
+    );
+
+    const warning = mainnetWarning();
+    expect(warning?.textContent).toContain("Mainnet uses real SOL");
+    expect(warning?.textContent).toContain("Playground wallet");
+    expect(warning?.textContent).toContain("your own machine");
+    const deploy = screen.getByRole("button", {
+      name: "Deploy to mainnet",
+    });
+    expect(deploy).toHaveProperty("disabled", false);
+    expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  it("opens the CLI guide from the warning's own words", () => {
+    const onOpenCliGuide = vi.fn();
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [],
+          cluster: "mainnet-beta",
+          onOpenCliGuide,
+        })}
+      />
+    );
+
+    const warning = mainnetWarning()!;
+    expect(warning.textContent).toContain(
+      "For a program that matters, deploy from your own machine with the Solana CLI or Anchor."
+    );
+    fireEvent.click(
+      within(warning).getByRole("button", {
+        name: "deploy from your own machine",
+      })
+    );
+    expect(onOpenCliGuide).toHaveBeenCalledWith("mainnet-warning");
+  });
+
+  it.each(["devnet", "mainnet-beta"])(
+    "offers the CLI guide beside Deploy on %s",
+    (cluster) => {
+      const onOpenCliGuide = vi.fn();
+      render(
+        <BaseDeploy
+          {...props({
+            built: false,
+            deploy: "idle",
+            history: [],
+            cluster,
+            onOpenCliGuide,
+          })}
+        />
+      );
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Deploy with the CLI" })
+      );
+      expect(onOpenCliGuide).toHaveBeenCalledWith("deploy-stage");
+    }
+  );
+
+  it("warns on mainnet before a build too", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: false,
+          deploy: "idle",
+          history: [],
+          cluster: "mainnet-beta",
+        })}
+      />
+    );
+
+    expect(mainnetWarning()).toBeTruthy();
+  });
+
+  it("keeps the warning beside a failed deploy's alert", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "failed",
+          history: [record("a", null)],
+          cluster: "mainnet-beta",
+        })}
+      />
+    );
+
+    expect(mainnetWarning()).toBeTruthy();
+    expect(screen.getAllByRole("alert")).toHaveLength(2);
+  });
+
+  it.each(["devnet", null])("does not warn on %s", (cluster) => {
+    render(
+      <BaseDeploy
+        {...props({ built: true, deploy: "idle", history: [], cluster })}
+      />
+    );
+
+    expect(mainnetWarning()).toBeNull();
+  });
+
   it("holds Deploy until a build succeeded", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
@@ -142,22 +293,22 @@ describe("BaseDeploy", () => {
     });
     const { container } = render(<BaseDeploy {...p} />);
 
-    const result = screen.getByRole("status");
+    const result = screen.getByRole("status", { name: "Deploy result" });
     expect(result.textContent).toContain("Deployed to devnet");
-    expect(result.querySelector("code")?.textContent).toBe(PROGRAM_ID);
+    expect(result.querySelector("code")?.textContent).toBe(SHORT_ID);
     expect(result.querySelector('[data-slot="copy-button"]')).toBeTruthy();
-    expect(
-      within(result)
-        .getByRole("link", {
-          name: `View latest deployment (${PROGRAM_ID}) on Explorer`,
-        })
-        .getAttribute("href")
-    ).toBe(`https://explorer.test/address/${PROGRAM_ID}`);
+    const explorer = within(result).getByRole("link", {
+      name: `View latest deployment (${PROGRAM_ID}) on Explorer (devnet)`,
+    });
+    expect(explorer.textContent).toBe("View on Explorer (devnet)");
+    expect(explorer.getAttribute("href")).toBe(
+      `https://explorer.test/devnet/address/${PROGRAM_ID}`
+    );
     expect(
       within(result).getByRole("link", {
-        name: "View latest deployment transaction (5sig) on Explorer",
-      })
-    ).toBeTruthy();
+        name: "View latest deployment transaction (5sig) on Explorer (devnet)",
+      }).textContent
+    ).toBe("Transaction (devnet)");
 
     fireEvent.click(within(result).getByRole("button", { name: "Interact" }));
     expect(p.onInteract).toHaveBeenCalled();
@@ -215,13 +366,148 @@ describe("BaseDeploy", () => {
     const history = screen.getByRole("region", { name: "History" });
     expect(
       within(history).getAllByRole("link", {
-        name: `View deployment (${PROGRAM_ID}) on Explorer`,
+        name: `View deployment (${PROGRAM_ID}) on Explorer (devnet)`,
       })
     ).toHaveLength(2);
   });
 
-  /** The prototype's first deploy: the pill, and Upload IDL under it */
-  it("before the first deploy it has no history, only Upload IDL", () => {
+  it("opens each history record on its own network, whatever is picked now", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          cluster: "testnet",
+          history: [record("a", null, "testnet"), record("b", null, "devnet")],
+        })}
+      />
+    );
+
+    const history = screen.getByRole("region", { name: "History" });
+    const links = within(history).getAllByRole("link");
+    expect(links.map((l) => l.textContent)).toEqual([
+      "Explorer (testnet)",
+      "Explorer (devnet)",
+    ]);
+    expect(links[1].getAttribute("href")).toBe(
+      `https://explorer.test/devnet/address/${PROGRAM_ID}`
+    );
+  });
+
+  it("leaves out an Explorer link the explorer cannot open", () => {
+    const p = props({
+      built: true,
+      deploy: "idle",
+      history: [record("a", "5sig", "playnet")],
+    });
+    p.addressUrl = () => null;
+    p.txUrl = () => null;
+    render(<BaseDeploy {...p} />);
+
+    expect(screen.queryAllByRole("link")).toHaveLength(0);
+  });
+
+  it("says an upgrade kept the program id, and what the deploy cost", () => {
+    const upgraded: DeployRecord = {
+      id: "a",
+      workspace: "counter",
+      cluster: "devnet",
+      programId: PROGRAM_ID,
+      signature: null,
+      at: Date.UTC(2026, 9, 15),
+      cost: 1_420_000_000,
+      upgraded: true,
+    };
+    render(
+      <BaseDeploy
+        {...props({ built: true, deploy: "idle", history: [upgraded] })}
+      />
+    );
+
+    const result = screen.getByRole("status", { name: "Deploy result" });
+    expect(result.textContent).toContain(
+      "Upgraded. The program id stays the same."
+    );
+    expect(result.textContent).toContain("1.42 SOL");
+  });
+
+  it("names the wallet that pays, or says one is created on the first deploy", () => {
+    const { rerender } = render(
+      <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      "Deploys from your Playground wallet · 7xKX…gAsU · 4.20 SOL"
+    );
+
+    rerender(
+      <BaseDeploy
+        {...props({ built: true, deploy: "idle", history: [], payer: null })}
+      />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      "Deploys from a Playground wallet created on your first deploy."
+    );
+    expect(
+      screen.getByRole("button", { name: "Deploy to devnet" })
+    ).toHaveProperty("disabled", false);
+  });
+
+  it("shows the run's steps while it deploys", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "running",
+          history: [],
+          run: { step: "write", percent: 40, funds: true, upgrade: false },
+        })}
+      />
+    );
+
+    expect(
+      screen.getByRole("status", { name: "Deploy progress" }).textContent
+    ).toContain("Writing program, 40%");
+    expect(screen.queryByLabelText("Who pays")).toBeNull();
+  });
+
+  it("shows why the wallet could not be funded, not a console failure", () => {
+    const p = props({
+      built: true,
+      deploy: "failed",
+      history: [],
+      funding: {
+        reason: "airdrop_failed",
+        balance: 0,
+        needed: 1_000_000_000,
+        address: WALLET,
+        cause: "429",
+      },
+    });
+    render(<BaseDeploy {...p} />);
+
+    const card = screen.getByRole("alert", { name: "Not enough SOL" });
+    expect(card.textContent).toContain("Not enough devnet SOL");
+    expect(screen.queryByText("Deploy failed - see the console.")).toBeNull();
+    fireEvent.click(within(card).getByRole("button", { name: "Try again" }));
+    expect(p.onDeploy).toHaveBeenCalledOnce();
+  });
+
+  it("offers the keypair backup under the result when asked to", () => {
+    const p = props({
+      built: true,
+      deploy: "idle",
+      history: [record("a", null)],
+      backup: true,
+    });
+    render(<BaseDeploy {...p} />);
+
+    const line = screen.getByLabelText("Keypair backup");
+    fireEvent.click(within(line).getByRole("button", { name: "Save keypair" }));
+    expect(p.onSaveKeypair).toHaveBeenCalledOnce();
+  });
+
+  /** The prototype's first deploy: the pill, Upload IDL and the CLI guide under it */
+  it("before the first deploy it has no history, only Upload IDL and the CLI guide", () => {
     const { container } = render(
       <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
     );
@@ -233,7 +519,11 @@ describe("BaseDeploy", () => {
     const labels = [...actions.querySelectorAll("button")].map(
       (b) => b.textContent
     );
-    expect(labels).toEqual(["Deploy to devnet", "Upload IDL"]);
+    expect(labels).toEqual([
+      "Deploy to devnet",
+      "Upload IDL",
+      "Deploy with the CLI",
+    ]);
   });
 
   /** After a deploy the stage reports: the history, and Upload IDL beside the pill */

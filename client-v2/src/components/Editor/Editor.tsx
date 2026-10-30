@@ -3,6 +3,9 @@ import styled, { css } from "styled-components";
 
 import { SpinnerWithBg } from "../Loading";
 import { PgCommon, PgExplorer, PgTheme, PgView } from "../../utils";
+import { createLogger } from "../../shared/lib/logger";
+
+const log = createLogger("editor:editor");
 
 const Home = lazy(() => import("./Home"));
 const Monaco = lazy(() => import("./Monaco"));
@@ -26,7 +29,7 @@ export const Editor = () => {
   useEffect(() => {
     // Save metadata to IndexedDB every 5s
     const saveMetadataIntervalId = PgCommon.setIntervalOnFocus(() => {
-      PgExplorer.saveMeta().catch();
+      PgExplorer.saveMeta().catch((e) => log.error(e, { report: true }));
     }, 5000);
 
     return () => clearInterval(saveMetadataIntervalId);

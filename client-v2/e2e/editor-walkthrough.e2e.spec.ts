@@ -36,6 +36,19 @@ const focusEditor = async (page: Page) => {
 const item = (page: Page, name: string) =>
   page.locator("#root-dir").getByText(name, { exact: true }).first();
 
+/**
+ * Renames an explorer item through its menu and dialog with no pause first, so
+ * it starts inside the autosave's delay, and returns once the new name shows
+ */
+const renameTo = async (page: Page, name: string, to: string) => {
+  await item(page, name).click({ button: "right" });
+  await page.getByRole("menuitem", { name: /Rename/ }).click();
+  const dialog = page.getByRole("dialog", { name: `Rename '${name}'` });
+  await dialog.getByRole("textbox").fill(to);
+  await page.keyboard.press("Enter");
+  await expect(item(page, to)).toBeVisible();
+};
+
 test.describe.serial("the editor", () => {
   let page: Page;
 
@@ -59,11 +72,10 @@ test.describe.serial("the editor", () => {
   });
 
   test("completes and checks TypeScript", async () => {
-    // Workaround: the editor's autosave debounce (500 ms) is cancelled, not
-    // flushed, when the editor unmounts, so closing the last tab right after
-    // an edit drops it (Monaco.tsx autosave effect). Remove this wait when
-    // that is fixed.
-    await page.waitForTimeout(1000);
+    // Opened inside the autosave's delay: the edit is saved to the file it
+    // was made in, not to the one the editor shows when the timer fires
+    await focusEditor(page);
+    await page.keyboard.type(" // switched");
     await item(page, "client").click();
     await page
       .locator("#root-dir")
@@ -91,6 +103,23 @@ test.describe.serial("the editor", () => {
     await expect(page.locator(".monaco-editor")).toHaveCount(1);
     await focusEditor(page);
     await expect.poll(() => editorText(page)).toMatch(/fn ugly\(\)/);
+    await expect.poll(() => editorText(page)).toContain("// switched");
+  });
+
+  test("keeps an edit made just before the last tab closes", async () => {
+    const tabs = page.locator('#tabs [data-slot="editor-tab"][id^="/"]');
+    await expect(tabs).toHaveCount(1);
+    await focusEditor(page);
+    await page.keyboard.type(" // kept");
+    // Closed inside the autosave's delay: the edit is saved as the editor
+    // unmounts, not dropped with its timer
+    const tab = tabs.first();
+    await tab.hover({ force: true });
+    await tab.getByRole("button", { name: /^Close / }).click({ force: true });
+    await expect(page.locator(".monaco-editor")).toHaveCount(0);
+    await item(page, "lib.rs").click();
+    await focusEditor(page);
+    await expect.poll(() => editorText(page)).toContain("// kept");
   });
 
   test("keeps the edit across a reload", async () => {
@@ -113,5 +142,80 @@ test.describe.serial("the editor", () => {
     await runInTerminal(page, "help");
     await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
     await expect(page.locator(".xterm")).toHaveCount(1);
+  });
+
+  test("keeps an edit made just before its file is renamed", async () => {
+    await item(page, "lib.rs").click();
+    await focusEditor(page);
+    await page.keyboard.type(" // renamed");
+    // Meant to land inside the autosave's delay, where the edit is saved before
+    // the move; on a slow runner the timer may win, so the event's ordering is
+    // pinned in `explorer.test.ts`, and this checks the user's path end to end
+    await renameTo(page, "lib.rs", "moved.rs");
+    await item(page, "moved.rs").click();
+    await focusEditor(page);
+    await expect.poll(() => editorText(page)).toContain("// renamed");
+    // And on disk: the write lands before the rename, not at the old path after
+    await page.reload();
+    await expect(page.locator("#root-dir")).toBeVisible();
+    if (!(await item(page, "moved.rs").isVisible())) {
+      await item(page, "src").click();
+    }
+    await expect(item(page, "lib.rs")).toBeHidden();
+    await item(page, "moved.rs").click();
+    await focusEditor(page);
+    await expect.poll(() => editorText(page)).toContain("// renamed");
+    await renameTo(page, "moved.rs", "lib.rs");
+  });
+
+  test("keeps an edit made just before its folder is renamed", async () => {
+    if (!(await item(page, "client.ts").isVisible())) {
+      await item(page, "client").click();
+    }
+    await item(page, "client.ts").click();
+    await focusEditor(page);
+    await page.keyboard.type(" // folder");
+    await renameTo(page, "client", "web");
+    if (!(await item(page, "client.ts").isVisible())) {
+      await item(page, "web").click();
+    }
+    await item(page, "client.ts").click();
+    await focusEditor(page);
+    await expect.poll(() => editorText(page)).toContain("// folder");
+    // On disk too, and the old folder is not written back
+    await page.reload();
+    await expect(item(page, "web")).toBeVisible();
+    await expect(item(page, "client")).toBeHidden();
+    if (!(await item(page, "client.ts").isVisible())) {
+      await item(page, "web").click();
+    }
+    await item(page, "client.ts").click();
+    await focusEditor(page);
+    await expect.poll(() => editorText(page)).toContain("// folder");
+    await renameTo(page, "web", "client");
+    // The reload may draw `src` closed, and the next test starts from `lib.rs`
+    if (!(await item(page, "lib.rs").isVisible())) {
+      await item(page, "src").click();
+    }
+  });
+
+  test("keeps a file deleted just after an edit deleted", async () => {
+    await item(page, "lib.rs").click();
+    await focusEditor(page);
+    await page.keyboard.type(" // gone");
+    // Deleted inside the autosave's delay: disposing its model flushes the
+    // edit, which must not write the file back
+    await item(page, "lib.rs").click({ button: "right" });
+    await page.getByRole("menuitem", { name: /Delete/ }).click();
+    await page.getByRole("button", { name: "Delete", exact: true }).click();
+    await expect(item(page, "lib.rs")).toBeHidden();
+    // Past the delay, so a save the delete left behind has run by the reload
+    await page.waitForTimeout(1000);
+    await page.reload();
+    await expect(item(page, "src")).toBeVisible();
+    // Whether the reload drew `src` open or closed, `lib.rs` is in neither
+    await expect(item(page, "lib.rs")).toBeHidden();
+    await item(page, "src").click();
+    await expect(item(page, "lib.rs")).toBeHidden();
   });
 });

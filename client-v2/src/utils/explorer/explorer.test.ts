@@ -602,3 +602,299 @@ describe("PgExplorer.getElFromPath", () => {
     });
   }
 });
+
+/**
+ * lightning-fs saves its folder tree 500 ms after the last write, so a page
+ * load inside that window loses whatever changed the tree: a file or folder
+ * created, renamed or deleted, and a workspace file written for the first
+ * time (a new project, or after sync replaced the files). Each of those is
+ * followed by a flush; a write that only changes a file's content is not,
+ * since the tree already holds the file.
+ *
+ * `writeWorkspaceFile` remembers which paths it flushed for the whole module;
+ * `createWorkspace` in `beforeEach` empties that through its create event.
+ */
+describe("writes that change the folder tree", () => {
+  beforeEach(async () => {
+    await reset();
+    await PgExplorer.createWorkspace("alpha", {
+      files: files("alpha"),
+      defaultOpenFile: "/alpha/src/lib.rs",
+    });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** The filesystem calls made from here on, in order, as `<method> <path>` */
+  const recordFs = () => {
+    const calls: string[] = [];
+    const fs = PgExplorer.fs as unknown as Record<
+      string,
+      (...args: unknown[]) => Promise<unknown>
+    >;
+    for (const method of [
+      "writeFile",
+      "createDir",
+      "rename",
+      "removeFile",
+      "removeDir",
+      "flush",
+    ]) {
+      const original = fs[method].bind(fs);
+      vi.spyOn(fs, method).mockImplementation(async (...args: unknown[]) => {
+        calls.push(args.length ? `${method} ${args[0]}` : method);
+        return original(...args);
+      });
+    }
+    return calls;
+  };
+
+  /** The call right after the last one that starts with `call` */
+  const after = (calls: string[], call: string) => {
+    const index = calls.findLastIndex((c) => c.startsWith(call));
+    expect(index).not.toBe(-1);
+    return calls[index + 1];
+  };
+
+  it("flushes after creating a file", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createItem("/alpha/src/new.rs", "fn main() {}");
+
+    expect(after(calls, "writeFile /alpha/src/new.rs")).toBe("flush");
+  });
+
+  it("flushes after creating a folder", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createItem("/alpha/src/nested/");
+
+    expect(after(calls, "createDir /alpha/src/nested/")).toBe("flush");
+  });
+
+  it("does not flush when it only replaces a file's content", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createItem("/alpha/src/lib.rs", "changed", {
+      override: true,
+    });
+
+    expect(after(calls, "writeFile /alpha/src/lib.rs")).not.toBe("flush");
+  });
+
+  it("flushes after renaming a file", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.renameItem("/alpha/src/lib.rs", "/alpha/src/renamed.rs");
+
+    expect(after(calls, "rename /alpha/src/lib.rs")).toBe("flush");
+  });
+
+  it("flushes after deleting a file", async () => {
+    await PgExplorer.createItem("/alpha/src/gone.rs", "");
+    const calls = recordFs();
+
+    await PgExplorer.deleteItem("/alpha/src/gone.rs");
+
+    expect(after(calls, "removeFile /alpha/src/gone.rs")).toBe("flush");
+  });
+
+  it("flushes after the metadata a new workspace writes", async () => {
+    const calls = recordFs();
+
+    await PgExplorer.createWorkspace("beta", {
+      files: files("beta"),
+      defaultOpenFile: "/beta/src/lib.rs",
+    });
+
+    expect(after(calls, "writeFile /beta/.workspace/metadata.json")).toBe(
+      "flush"
+    );
+  });
+
+  it("flushes the metadata again once sync replaced the files without it", async () => {
+    await PgExplorer.saveMeta();
+    // A snapshot from another device that has none of the files the metadata
+    // lists, so nothing is kept and the next save makes the file anew
+    await PgExplorer.replaceWorkspaceFiles("alpha", {
+      "src/other.rs": "from elsewhere",
+    });
+    const calls = recordFs();
+
+    await PgExplorer.saveMeta();
+
+    expect(after(calls, "writeFile /alpha/.workspace/metadata.json")).toBe(
+      "flush"
+    );
+  });
+
+  it("does not flush the metadata again once it has", async () => {
+    await PgExplorer.saveMeta();
+    const calls = recordFs();
+
+    await PgExplorer.saveMeta();
+
+    expect(calls).toEqual(["writeFile /alpha/.workspace/metadata.json"]);
+  });
+
+  it("flushes after deleting a folder", async () => {
+    // With a file in it: the in-memory store knows a folder by what is in it
+    await PgExplorer.createItem("/alpha/src/nested/a.rs", "");
+    const calls = recordFs();
+
+    await PgExplorer.deleteItem("/alpha/src/nested/");
+
+    expect(after(calls, "removeDir /alpha/src/nested/")).toBe("flush");
+  });
+
+  describe("when saving the tree fails", () => {
+    beforeEach(() => {
+      clearFailures();
+      vi.spyOn(PgExplorer.fs, "flush").mockRejectedValue(new Error("quota"));
+    });
+
+    // The change is on disk by then: failing the operation would leave the
+    // explorer showing what the store no longer holds
+    it("still creates the file, and reports the failure", async () => {
+      await PgExplorer.createItem("/alpha/src/new.rs", "");
+
+      expect(PgExplorer.getFile("/alpha/src/new.rs")).toBeDefined();
+      expect(getFailures().map((f) => f.what)).toContain(
+        "save the folder tree after a create"
+      );
+    });
+
+    it("still renames the file, and reports the failure", async () => {
+      await PgExplorer.renameItem("/alpha/src/lib.rs", "/alpha/src/renamed.rs");
+
+      expect(PgExplorer.getFile("/alpha/src/renamed.rs")).toBeDefined();
+      expect(PgExplorer.getFile("/alpha/src/lib.rs")).toBeNull();
+      expect(getFailures().map((f) => f.what)).toContain(
+        "save the folder tree after a rename"
+      );
+    });
+
+    it("still deletes the file, and reports the failure", async () => {
+      await PgExplorer.createItem("/alpha/src/gone.rs", "");
+      clearFailures();
+
+      await PgExplorer.deleteItem("/alpha/src/gone.rs");
+
+      expect(PgExplorer.getFile("/alpha/src/gone.rs")).toBeNull();
+      expect(getFailures().map((f) => f.what)).toContain(
+        "save the folder tree after a delete"
+      );
+    });
+  });
+
+  describe("a workspace whose folder is gone", () => {
+    /** Rejects writes and new folders under `root`, as lightning-fs does once it is deleted */
+    const goneUnder = (root: string) => {
+      const fs = PgExplorer.fs as unknown as Record<
+        string,
+        (...args: unknown[]) => Promise<unknown>
+      >;
+      const createDir = vi.fn();
+      for (const method of ["writeFile", "createDir"]) {
+        const original = fs[method].bind(fs);
+        vi.spyOn(fs, method).mockImplementation(async (...args: unknown[]) => {
+          if (method === "createDir") createDir(args[0]);
+          if (String(args[0]).startsWith(root)) {
+            throw Object.assign(new Error(`ENOENT: ${args[0]}`), {
+              code: "ENOENT",
+            });
+          }
+          return original(...args);
+        });
+      }
+      return { createDir };
+    };
+
+    it("gets no metadata, and its folder is not made again", async () => {
+      const { createDir } = goneUnder("/alpha/");
+
+      await expect(PgExplorer.saveMeta()).resolves.toBeUndefined();
+      expect(createDir).not.toHaveBeenCalledWith("/alpha/");
+    });
+
+    it("can still be left for another one", async () => {
+      await PgExplorer.createWorkspace("beta", { files: files("beta") });
+      goneUnder("/beta/");
+
+      await PgExplorer.switchWorkspace("alpha");
+
+      expect(PgExplorer.currentWorkspaceName).toBe("alpha");
+    });
+  });
+});
+
+describe("renaming an item", () => {
+  beforeEach(reset);
+
+  // The editor's autosave flushes on this event, so a pending edit is written
+  // at the old path and moved with the file; announced after the move, the
+  // save found its path gone and dropped the edit
+  it("announces the rename before anything moves", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    const order: string[] = [];
+    const rename = vi.spyOn(PgExplorer.fs, "rename");
+    rename.mockImplementation(async () => {
+      order.push("fs.rename");
+    });
+    const willRename = PgExplorer.onWillRenameItem((path) => {
+      order.push(`will ${path}`);
+      expect(PgExplorer.getFile(path)).not.toBeNull();
+    });
+
+    await PgExplorer.renameItem("src/lib.rs", "src/main.rs");
+    willRename.dispose();
+    rename.mockRestore();
+
+    expect(order).toEqual([
+      `will ${PgExplorer.convertToFullPath("src/lib.rs")}`,
+      "fs.rename",
+    ]);
+  });
+
+  it("carries a write made on the announcement to the new name", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "declare_id!();"],
+        ["/alpha/client/client.ts", "before"],
+      ],
+    });
+    const before = PgExplorer.convertToFullPath("client/client.ts");
+    // What the autosave does: state at once, the disk write started and not
+    // awaited, so only the fs's call order puts it ahead of the rename
+    const willRename = PgExplorer.onWillRenameItem(() => {
+      PgExplorer.saveFileToState(before, "edited");
+      void PgExplorer.fs.writeFile(before, "edited");
+    });
+
+    await PgExplorer.renameItem("client", "web");
+    willRename.dispose();
+
+    const moved = PgExplorer.convertToFullPath("web/client.ts");
+    expect(PgExplorer.getFile(moved)?.content).toBe("edited");
+    expect(await PgExplorer.fs.readToString(moved)).toBe("edited");
+  });
+
+  it("announces nothing for a rename it refuses", async () => {
+    await PgExplorer.createWorkspace("alpha", {
+      files: [
+        ["/alpha/src/lib.rs", "a"],
+        ["/alpha/src/b.rs", "b"],
+      ],
+    });
+    const announced = vi.fn();
+    const willRename = PgExplorer.onWillRenameItem(announced);
+
+    await expect(
+      PgExplorer.renameItem("src/lib.rs", "src/b.rs")
+    ).rejects.toThrow(PgExplorer.errors.ALREADY_EXISTS);
+    willRename.dispose();
+
+    expect(announced).not.toHaveBeenCalled();
+  });
+});

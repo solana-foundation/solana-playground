@@ -217,7 +217,8 @@ Two rules: a tab only pushes while it is visible, and a tab that has just become
 visible reconciles before it is allowed to push again. The pending upload is
 flushed on the way out (`visibilitychange` → `hidden`), where the document is
 still alive and an ordinary fetch completes — `beforeunload` is too late and
-`keepalive`/`sendBeacon` cap the body at ~64 KB against an 8 MB snapshot limit.
+`keepalive`/`sendBeacon` cap the body at ~64 KB against a 4 MB request-body limit
+(`MAX_PROJECT_BODY_BYTES`, under Vercel's 4.5 MB request cap).
 
 ### Identity and lifecycle of projects
 

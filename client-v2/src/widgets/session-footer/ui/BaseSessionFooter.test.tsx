@@ -34,6 +34,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   wallet: fields.wallet ?? null,
   cluster: fields.cluster ?? { name: "devnet", down: false },
   sending: fields.sending ?? false,
+  canFund: fields.canFund ?? false,
 });
 
 const MENU = (

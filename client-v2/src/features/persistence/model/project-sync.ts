@@ -10,6 +10,11 @@ import {
   settleConflicts,
   withLocalKeypair,
 } from "./merge";
+import {
+  MAX_PROJECT_BODY_BYTES,
+  NO_FILES_REASON,
+  projectKindOf,
+} from "./project-write.mjs";
 import { diffFiles, hashFiles, sameUserFiles, snapshotOf } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
@@ -31,6 +36,13 @@ import type { SyncMark } from "./sync-mark";
 import type { Disposable } from "../../../utils/types";
 
 type PushResult = "ok" | "conflict" | "skipped";
+
+/** `push`'s options -- see there */
+type PushOptions = {
+  immediate?: boolean;
+  merging?: boolean;
+  generation?: number;
+};
 
 /**
  * Why sync left a project alone as another account's.
@@ -88,7 +100,8 @@ const trimmedName = <T extends ServerProject>(project: T): T =>
  *
  * - `name-taken`: another live project in this account already holds this
  *   name, which the unique index on `(user_id, name)` will not have twice.
- * - `too-large`: the snapshot is over the size this endpoint accepts.
+ * - `too-large`: the request body is over `MAX_PROJECT_BODY_BYTES`. `push`
+ *   refuses one before sending it; the endpoint refuses one it receives.
  *
  * They share the conflict machinery because they need exactly what it gives:
  * pushes for the project stop (there is no point re-uploading every three
@@ -490,7 +503,7 @@ export class PgProjectSync {
     projectId: string,
     snapshot: Snapshot,
     name?: string,
-    opts: { immediate?: boolean; merging?: boolean; generation?: number } = {}
+    opts: PushOptions = {}
   ): Promise<PushResult> {
     // Held from reading the mark to writing the new one -- and through a
     // merge a refusal leads to -- so no other tab decides against a mark that
@@ -505,7 +518,10 @@ export class PgProjectSync {
     projectId: string,
     snapshot: Snapshot,
     name: string | undefined,
-    opts: { immediate?: boolean; merging?: boolean; generation?: number }
+    opts: PushOptions & {
+      /** Send the whole set even with a mark -- see the `no-files` 400 */
+      whole?: boolean;
+    }
   ): Promise<PushResult> {
     if (!(await PgProjectSync._ready())) return "skipped";
 
@@ -558,7 +574,7 @@ export class PgProjectSync {
     const storedName = pinned ? mark!.name : localName;
     // Relative to the last agreement, when there is one. Without a mark there
     // is nothing to be relative to.
-    const patch = mark ? diffFiles(mark.files, hashes) : null;
+    const patch = mark && !opts.whole ? diffFiles(mark.files, hashes) : null;
 
     // Before anything that can decline to send. What these files held at the
     // last agreement is the one thing a later merge cannot rebuild, and a
@@ -601,25 +617,38 @@ export class PgProjectSync {
       return "skipped";
     }
 
+    const body = JSON.stringify({
+      id: projectId,
+      name: storedName,
+      kind: projectKindOf(projectId),
+      ...(patch
+        ? {
+            changed: Object.fromEntries(
+              patch.changed.map((path) => [path, snapshot.files[path]])
+            ),
+            removed: patch.removed,
+          }
+        : { files: snapshot.files }),
+      baseUpdatedAt: mark?.updatedAt,
+    });
+
+    // Refused here, not sent to be refused: past the platform's own cap the
+    // handler never runs, and the platform's 413 is all the user would get.
+    // The same refusal the handler gives, so the banner cannot tell them
+    // apart -- and, like it, nothing is recorded.
+    const bytes = new TextEncoder().encode(body).length;
+    if (bytes > MAX_PROJECT_BODY_BYTES) {
+      report(`push project ${projectId}: ${bytes} bytes, over the limit`, null);
+      PgProjectSync._raise({ projectId, kind: "too-large" });
+      return "conflict";
+    }
+
     try {
       const response = await fetch("/api/projects", {
         method: "PUT",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          id: projectId,
-          name: storedName,
-          kind: projectId.startsWith("tut:") ? "tutorial" : "project",
-          ...(patch
-            ? {
-                changed: Object.fromEntries(
-                  patch.changed.map((path) => [path, snapshot.files[path]])
-                ),
-                removed: patch.removed,
-              }
-            : { files: snapshot.files }),
-          baseUpdatedAt: mark?.updatedAt,
-        }),
+        body,
         signal: timeoutSignal(LOCKED_REQUEST_MS),
       });
 
@@ -656,16 +685,42 @@ export class PgProjectSync {
         return "conflict";
       }
       if (!response.ok) {
-        report(`push project ${projectId}: HTTP ${response.status}`, null);
+        // The server's own words, when it sent any: a 400 names the check
+        // the body failed, which "HTTP 400" alone leaves to guesswork
+        const refusal = await response.json().then(
+          (answer) => answer,
+          // No readable body; the status is reported below all the same
+          () => undefined
+        );
+        // A patch that would leave the account's copy with no files. This
+        // device builds its patches from a non-empty snapshot, so the row is
+        // already empty -- emptied before the server refused that -- and the
+        // whole set puts the files back. Past the gate already, and a whole
+        // set is never refused for this, so it is sent once.
+        if (patch && refusal?.reason === NO_FILES_REASON) {
+          report(`push project ${projectId}: account copy was empty`, null);
+          return await PgProjectSync._push(projectId, snapshot, name, {
+            immediate: true,
+            merging: opts.merging,
+            generation: opts.generation,
+            whole: true,
+          });
+        }
+        const said = refusal?.error;
+        report(
+          `push project ${projectId}: HTTP ${response.status}` +
+            (typeof said === "string" ? ` (${said})` : ""),
+          null
+        );
         return "skipped";
       }
 
-      const body = await response.json();
+      const accepted = await response.json();
       await PgSyncMark.write(projectId, {
         files: hashes,
         name: storedName,
         ...(pinned ? { localName } : {}),
-        updatedAt: body.updatedAt,
+        updatedAt: accepted.updatedAt,
         dirty: false,
       });
       await PgSyncBase.accepted(
@@ -908,8 +963,9 @@ export class PgProjectSync {
       // change, and the generated ones ride along on the next upload.
       const owed = await PgProjectSync._catchUp(local, before, files);
       // The account's copy of a file typed into is its base from here on --
-      // see `PgSyncBase`. Kept now, while it is known: the re-open above
-      // re-took the shadow from the folded copy.
+      // see `PgSyncBase`. Kept now, while it is known: the shadow is re-taken
+      // from memory, which holds the folded copy once typing is folded in,
+      // before the re-open or after it.
       await PgSyncBase.capture(projectId, owed, agreed, files);
       // Typing folded into the server's copy is on this device alone. After
       // the mark above, which said the copy was exactly the server's, or the
@@ -930,7 +986,8 @@ export class PgProjectSync {
   /**
    * Bring every other copy of a workspace's files level with the store, once
    * sync has rewritten it: the editor's buffers, then -- for the current
-   * workspace -- the explorer's memory.
+   * workspace -- the explorer's memory, then any buffer that appeared during
+   * the re-open, as an editor that mounted in between has.
    *
    * `replaceWorkspaceFiles` writes the store and nothing else. The explorer
    * re-reads on a re-open, but Monaco keeps a model per path and reuses it on
@@ -954,70 +1011,120 @@ export class PgProjectSync {
     before: Record<string, string>,
     after: Record<string, string>
   ): Promise<string[]> {
-    const buffers = PgExplorer.editorBuffers;
-    const paths = new Set([...Object.keys(before), ...Object.keys(after)]);
+    const paths = [
+      ...new Set([...Object.keys(before), ...Object.keys(after)]),
+    ].sort();
     const folded: string[] = [];
+    // Paths a pass below has brought level, so the next one leaves them be.
+    // A path that failed is not among them, and the next pass tries it again.
+    const caughtUp = new Set<string>();
 
-    for (const path of buffers ? [...paths].sort() : []) {
-      const full = `/${localName}/${path}`;
-      let content: string | undefined;
-      try {
-        // Read and written with nothing awaited in between, so a keystroke
-        // cannot land after the read and be overwritten by the write
-        const buffer = buffers!.read(full);
-        if (buffer === undefined) continue;
-        const read = before[path];
+    const catchUpBuffers = async (when: "before re-open" | "after re-open") => {
+      // Read on every pass, not once: the editor can mount between them
+      const buffers = PgExplorer.editorBuffers;
+      if (!buffers) return;
 
-        if (!(path in after)) {
-          if (buffer !== read) {
-            report(
-              `catch up ${localName}: ${path} was edited here while sync removed it; the edit was discarded`,
-              null
-            );
+      for (const path of paths) {
+        if (caughtUp.has(path)) continue;
+        const full = `/${localName}/${path}`;
+        let content: string | undefined;
+        try {
+          // Read and written with nothing awaited in between, so a keystroke
+          // cannot land after the read and be overwritten by the write
+          const buffer = buffers.read(full);
+          if (buffer === undefined) continue;
+          const read = before[path];
+
+          if (!(path in after)) {
+            if (buffer !== read) {
+              report(
+                `catch up ${localName}: ${path} was edited here while sync removed it; the edit was discarded`,
+                null
+              );
+            }
+            buffers.discard(full);
+            caughtUp.add(path);
+            continue;
           }
-          buffers!.discard(full);
+
+          content = after[path];
+          if (read !== undefined && buffer !== read && buffer !== content) {
+            // Nobody is asked here: the typing is seconds old and the user is
+            // still in the file, so an overlap keeps the synced copy and says so
+            const merged = merge3(read, buffer, content);
+            if (merged.kind === "conflict") {
+              report(
+                `catch up ${localName}: what was typed in ${path} during sync overlaps what sync wrote; the synced copy was kept`,
+                null
+              );
+            } else {
+              content = merged.text;
+            }
+          }
+          if (buffer !== content) buffers.write(full, content);
+          caughtUp.add(path);
+          if (content !== after[path]) folded.push(path);
+          // Nothing more to do when nothing was folded in and the buffer held
+          // either copy: it holds `after` now, which the store has. A model
+          // the re-open built is already `after`, and writing it again would
+          // announce a change to the other tabs that is none.
+          if (
+            content === after[path] &&
+            (buffer === read || buffer === content)
+          ) {
+            continue;
+          }
+        } catch (e) {
+          report(`catch up ${localName}: editor buffer ${path} (${when})`, e);
           continue;
         }
 
-        content = after[path];
-        if (read !== undefined && buffer !== read && buffer !== content) {
-          // Nobody is asked here: the typing is seconds old and the user is
-          // still in the file, so an overlap keeps the synced copy and says so
-          const merged = merge3(read, buffer, content);
-          if (merged.kind === "conflict") {
-            report(
-              `catch up ${localName}: what was typed in ${path} during sync overlaps what sync wrote; the synced copy was kept`,
-              null
-            );
-          } else {
-            content = merged.text;
-            if (content !== after[path]) folded.push(path);
+        // The store too, after any autosave that fired during the rewrite
+        // with the old text. Before the re-open, so its re-read finds what
+        // the editor shows. After it, memory has been read already, so it is
+        // set here too: a fold that left the buffer as it was fires no
+        // autosave to bring memory along, and a build reads memory.
+        try {
+          await PgFs.writeFile(full, content, { createParents: true });
+          if (when === "after re-open") {
+            PgExplorer.saveFileToState(full, content);
           }
+        } catch (e) {
+          report(`catch up ${localName}: write ${path} (${when})`, e);
+          // The store lacks the fold: the next pass writes it again, and
+          // until one does, no base is kept for content the store never held
+          caughtUp.delete(path);
+          const at = folded.indexOf(path);
+          if (at !== -1) folded.splice(at, 1);
         }
-        if (buffer !== content) buffers!.write(full, content);
-        // Nothing more to do when the buffer was already the new content and
-        // nobody typed: the store has it. Otherwise the store is written too,
-        // after any autosave that fired during the rewrite with the old text,
-        // so the re-read below finds what the editor now shows.
-        if (content === after[path] && buffer === read) continue;
-      } catch (e) {
-        report(`catch up ${localName}: editor buffer ${path}`, e);
-        continue;
       }
+    };
 
-      try {
-        await PgFs.writeFile(full, content, { createParents: true });
-      } catch (e) {
-        report(`catch up ${localName}: write ${path}`, e);
-      }
-    }
+    await catchUpBuffers("before re-open");
 
     // Only the current workspace is held in memory. Re-opening it inside the
     // gate is safe now the gate is counted: the reconcile its switch starts
     // takes a hold of its own, and skips this project while a merge of it is
     // still running.
     if (localName === PgExplorer.currentWorkspaceName) {
-      await PgExplorer.switchWorkspace(localName);
+      // A failed re-open is reported, not thrown: the folds above are in the
+      // store already, and a caller that never gets `folded` keeps no base
+      // for them and leaves the mark clean, so the next exchange asked about
+      // the whole file, or never sent the typing at all
+      try {
+        await PgExplorer.switchWorkspace(localName);
+      } catch (e) {
+        report(`catch up ${localName}: re-open`, e);
+      }
+      // Again, for buffers the pass above could not reach. The editor
+      // registers its buffers only once its lazy chunk has loaded and
+      // `initLanguages` has resolved, which on a slow machine is after any
+      // rewrite that lands soon after load: the first reconcile's adoption,
+      // a banner answered at once. An editor that registered between the
+      // pass above and the re-read built its models from the text just
+      // replaced, and the re-open reused them, so the pane kept showing the
+      // replaced file. One that registers after this reads memory re-opened.
+      await catchUpBuffers("after re-open");
     }
 
     return folded;
@@ -1102,12 +1209,19 @@ export class PgProjectSync {
           PgProjectSync._raise({ projectId, kind: "deleted-elsewhere" });
           return "conflict";
         }
-        if (!full || !isUsableSnapshot(full.snapshot)) return "failed";
+        if (!full || !isUsableSnapshot(full.snapshot)) {
+          // Unreadable is reported where the read failed; a row holding
+          // nothing a merge can start from is reported here
+          if (full?.snapshot) {
+            report(`merge project ${projectId}: unusable snapshot`, null);
+          }
+          return "failed";
+        }
 
         const server = full.snapshot.files;
         const local = carried ?? (await snapshotOf(localName)).files;
         first ??= local;
-        // The same window `pushCurrent` refuses: the explorer mid-re-read
+        // The same window `push` refuses: the explorer mid-re-read
         // reads as a project with every file deleted, and merging that would
         // delete them on the server too
         if (!Object.keys(local).length) {
@@ -1264,8 +1378,8 @@ export class PgProjectSync {
           // What the merge wrote is the agreement for these files, or its
           // base is kept already -- the merged copy when its upload landed,
           // the server's when it did not. Kept now, as in `_adopt`: the
-          // re-open re-took the shadow from the folded copy, which no longer
-          // matches the mark.
+          // shadow is re-taken from memory, which holds the folded copy and
+          // so no longer matches the mark.
           const mark = await PgSyncMark.read(projectId);
           if (mark) {
             await PgSyncBase.capture(projectId, folded, mark.files, written!);
@@ -1843,6 +1957,11 @@ export const isCleanAgainst = async (
 /**
  * Whether a stored snapshot can be written to a workspace.
  *
+ * An empty file map is not: written, it is the workspace emptied, exactly as
+ * a malformed one would be. The server refuses any write that would leave
+ * one, but a row written before it did can hold one: a full write before it
+ * checked those, or a patch that removed every file before it checked that.
+ *
  * Exported because reconcile checks it before the same destructive call, and
  * both halves have to agree on what "usable" means.
  */
@@ -1851,5 +1970,9 @@ export const isUsableSnapshot = (
 ): snapshot is Snapshot => {
   const files = (snapshot as Snapshot | undefined)?.files;
   if (!files || typeof files !== "object" || Array.isArray(files)) return false;
-  return Object.values(files).every((content) => typeof content === "string");
+  const contents = Object.values(files);
+  return (
+    contents.length > 0 &&
+    contents.every((content) => typeof content === "string")
+  );
 };

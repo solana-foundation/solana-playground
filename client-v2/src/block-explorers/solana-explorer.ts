@@ -4,8 +4,8 @@ import { PgBlockExplorer, PgConnection } from "../utils";
 export const solanaExplorer = PgBlockExplorer.create({
   name: "Solana Explorer",
   url: "https://explorer.solana.com",
-  getClusterParam: () => {
-    switch (PgConnection.cluster) {
+  getClusterParam: (cluster = PgConnection.cluster) => {
+    switch (cluster) {
       case "testnet":
         return "?cluster=testnet";
       case "devnet":

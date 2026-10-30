@@ -267,6 +267,11 @@ module.exports = {
         path: false,
         zlib: false,
         vm: false, // parse-asn1's asn1.js 4 requires `vm` in a try/catch: unresolved it warns, stubbed it falls back
+
+        // ConnectorKit imports WalletConnect lazily, only when it is
+        // configured, and the app does not configure it
+        // (`entities/external-wallet`); the peer is not installed
+        "@walletconnect/universal-provider": false,
       };
 
       // Webpack treats `node:` as a URI scheme and rejects it before

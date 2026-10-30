@@ -37,7 +37,10 @@ const wallet = vi.hoisted(() => ({
   },
 }));
 const connect = vi.hoisted(() => ({ execute: vi.fn() }));
-const walletWindow = vi.hoisted(() => ({ show: false }));
+const walletWindow = vi.hoisted(() => ({
+  show: false,
+  accounts: [] as unknown[],
+}));
 const balance = vi.hoisted(() => ({ current: 2.4 as number | undefined }));
 const setToast = vi.hoisted(() => vi.fn());
 
@@ -56,6 +59,8 @@ vi.mock("@/utils", () => ({
   PgWallet: walletWindow,
   PgView: { setToast },
 }));
+// The Fund dialog has its own tests; here only the menu item that opens it counts
+vi.mock("@/features/fund-wallet", () => ({ FundDialog: () => null }));
 vi.mock("@/features/feedback", () => ({
   FeedbackMenuItems: () => null,
   useFeedbackSend: () => ({ sending: false, triggerRef: { current: null } }),
@@ -183,18 +188,18 @@ it("asks before signing out, and signs out only on the confirmation", async () =
 
   await pick("Sign out");
   const dialog = await screen.findByRole("dialog", {
-    name: "Sign out of GitHub?",
+    name: "Sign out of Playground?",
   });
   await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
   await waitFor(() => expect(dialog.isConnected).toBe(false));
   expect(signOut).not.toHaveBeenCalled();
 
   await pick("Sign out");
-  await screen.findByRole("dialog", { name: "Sign out of GitHub?" });
+  await screen.findByRole("dialog", { name: "Sign out of Playground?" });
   await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
   await waitFor(() =>
     expect(
-      screen.queryByRole("dialog", { name: "Sign out of GitHub?" })
+      screen.queryByRole("dialog", { name: "Sign out of Playground?" })
     ).toBeNull()
   );
   expect(signOut).toHaveBeenCalledOnce();
@@ -218,7 +223,7 @@ it("keeps the dialog busy while signing out, so it cannot run twice", async () =
   finish();
   await waitFor(() =>
     expect(
-      screen.queryByRole("dialog", { name: "Sign out of GitHub?" })
+      screen.queryByRole("dialog", { name: "Sign out of Playground?" })
     ).toBeNull()
   );
 });

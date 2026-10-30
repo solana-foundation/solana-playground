@@ -2,15 +2,25 @@ import { useEffect, useRef, useState } from "react";
 
 import BaseInteract from "./BaseInteract";
 import IdlActions from "./IdlActions";
+import InteractBody from "./InteractBody";
+import { builtAfterDeploy, solNeeded } from "./interact-callouts";
 import { interactFacts, interactSurface } from "./interact-surface";
-import Test from "../../sidebar/test/Component/Test";
+import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
+import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
+import { useAirdrop } from "../../../components/Wallet/hooks/useAirdrop";
 import {
   PgConnection,
   PgExplorer,
   PgProgramInfo,
   PgWeb3,
 } from "../../../utils";
-import { useExplorer, useProgramInfo } from "../../../hooks";
+import {
+  useBalance,
+  useExplorer,
+  useProgramInfo,
+  useRenderOnChange,
+  useWallet,
+} from "../../../hooks";
 import { PgFlow } from "../state/stage";
 import { PgDeployHistory } from "../state/deploy-history";
 import type { DeployRecord } from "../state/deploy-history";
@@ -82,6 +92,31 @@ const Interact = () => {
   const programInfo = useProgramInfo();
   const explorer = useExplorer();
   const surface = interactSurface(interactFacts(explorer, programInfo));
+  useRenderOnChange(PgConnection.onDidChangeCluster);
+  const cluster = PgConnection.cluster;
+  const programId = PgProgramInfo.getPkStr();
+
+  // The deployed program is older than the code: this session's last green
+  // build of this project against its newest deploy on this network
+  const build = useLastBuild();
+  const buildAt =
+    build && !build.failed && build.workspace === explorer.currentWorkspaceName
+      ? build.at
+      : null;
+  const deployAt = history.find((r) => r.cluster === cluster)?.at ?? null;
+
+  // The fee payer cannot pay one fee (Spec 12): only with a wallet to pay
+  const wallet = useWallet();
+  const balance = useBalance();
+  const { airdrop, faucet } = useAirdrop();
+  const short =
+    wallet && typeof balance === "number" && solNeeded(balance) && cluster
+      ? {
+          balance: +balance.toFixed(4),
+          cluster,
+          airdrop: faucet === "available" ? airdrop : null,
+        }
+      : null;
 
   const selectedIndex = history.findIndex((r) => r.id === selected);
   const selectedRecord = selectedIndex >= 0 ? history[selectedIndex] : null;
@@ -105,12 +140,31 @@ const Interact = () => {
       selected={selected}
       onPick={pick}
       surface={surface}
-      cluster={PgConnection.cluster}
+      cluster={cluster}
       onGoTo={(stage) => PgFlow.setStage(stage)}
       idlLoad={<IdlActions mode="upload" />}
-      form={programInfo.idl && <Test idl={programInfo.idl} />}
+      programId={programId}
+      builtAfterDeploy={builtAfterDeploy(buildAt, deployAt)}
+      solNeeded={short}
+      form={
+        programInfo.idl && (
+          <InteractBody
+            idl={programInfo.idl}
+            programId={programId}
+            cluster={cluster}
+            callBlocked={!!short}
+          />
+        )
+      }
     />
   );
+};
+
+/** The session's last build, kept current */
+const useLastBuild = () => {
+  const [build, setBuild] = useState<BuildOutput | null>(PgBuildOutput.latest);
+  useEffect(() => PgBuildOutput.onDidChange(setBuild).dispose, []);
+  return build;
 };
 
 /** A deployment as the picker lists it: newest first, marked "latest" */
