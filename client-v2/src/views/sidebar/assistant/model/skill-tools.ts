@@ -44,8 +44,8 @@ export const createSkillTools = (): ToolDefinition[] => [
     description:
       "Read a skill's main document. The document names its own reference " +
       "files; read those with read_skill_reference rather than guessing at " +
-      "their contents. Returns an error string if the id is unknown or the " +
-      "fetch fails.",
+      "their contents. Returns an error string if the id is unknown, the " +
+      "skill is switched off, or the fetch fails.",
     schema: {
       type: "object",
       properties: {
@@ -60,7 +60,7 @@ export const createSkillTools = (): ToolDefinition[] => [
     run: async (input) => {
       const id = str(input, "id");
       try {
-        const skill = requireSkill(id);
+        const skill = requireSkill(id, PgAssistant.enabledSkillIds);
         PgAssistant.addToolCall(`loaded the ${skill.name} skill`);
         return await loadSkill(skill);
       } catch (e) {
@@ -94,7 +94,7 @@ export const createSkillTools = (): ToolDefinition[] => [
       const id = str(input, "id");
       const path = str(input, "path");
       try {
-        const skill = requireSkill(id);
+        const skill = requireSkill(id, PgAssistant.enabledSkillIds);
         PgAssistant.addToolCall(`read ${skill.id}/${path}`);
         return await loadReference(skill, path);
       } catch (e) {

@@ -1559,6 +1559,24 @@ if (import.meta.vitest) {
       status: "allowed",
     };
 
+    describe("PgAssistant skills", () => {
+      let SKILLS: typeof import("./grounding").SKILLS;
+      let isCommunity: typeof import("./grounding").isCommunity;
+      beforeAll(async () => {
+        ({ SKILLS, isCommunity } = await import("./grounding"));
+      });
+
+      it("leaves a community skill out until the user checks it", () => {
+        const skill = SKILLS.find(isCommunity);
+        if (!skill) throw new Error("no community skill");
+
+        expect(PgAssistant.enabledSkillIds).not.toContain(skill.id);
+        PgAssistant.setSkillEnabled(skill.id, true);
+        expect(PgAssistant.enabledSkillIds).toContain(skill.id);
+        PgAssistant.setSkillEnabled(skill.id, false);
+      });
+    });
+
     describe("turnProducedApproval", () => {
       it("is false for a turn that only replied", () => {
         expect(turnProducedApproval([user("hi"), assistant("hello")])).toBe(

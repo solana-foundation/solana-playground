@@ -100,13 +100,36 @@ export const loadReference = async (skill: SkillEntry, path: string) => {
   return fetchText(resolveReference(skill.source.baseUrl, path));
 };
 
-/** Look a skill up by the id the model supplied */
-export const requireSkill = (id: string) => {
+/**
+ * Look a skill up by the id the model supplied.
+ *
+ * @throws if no skill has that id, or the user has not checked it: an unchecked skill's text never reaches the model
+ */
+export const requireSkill = (id: string, enabledIds: readonly string[]) => {
   const skill = findSkill(id);
   if (!skill) {
     throw new Error(
       `There is no skill with id "${id}". Call list_skills to see what exists.`
     );
   }
+  if (!enabledIds.includes(id)) {
+    throw new Error(
+      `The skill "${id}" is switched off. The user can switch it on in the Sources tab.`
+    );
+  }
   return skill;
 };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("views/sidebar/assistant/grounding/skills", () => {
+    it("refuses a skill the user has not checked", () => {
+      const off = SKILLS.find((skill) => skill.enabled === false);
+      if (!off) throw new Error("no skill starts unchecked");
+
+      expect(() => requireSkill(off.id, [])).toThrow(/switched off/);
+      expect(requireSkill(off.id, [off.id])).toBe(off);
+    });
+  });
+}

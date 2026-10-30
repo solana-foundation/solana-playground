@@ -21,7 +21,8 @@ import { HelpTip } from "@/shared/ui/help-tip";
 import ServerConsole from "./ServerConsole";
 import { useRenderOnChange } from "../../../../hooks";
 import { PgAssistant } from "../store";
-import { isAlwaysOn, SKILLS } from "../grounding";
+import { isAlwaysOn, isCommunity, SKILLS } from "../grounding";
+import type { SkillEntry } from "../grounding";
 import {
   LOCAL_MCP_SERVERS,
   parseServers,
@@ -31,8 +32,17 @@ import { MODEL_PROVIDER_PROFILES } from "../model/model-providers";
 import { PROVIDERS } from "../model/types";
 import type { McpServerEntry } from "@/features/mcp";
 
-const ENTRY_FORMAT_DOC =
+const ENTRY_FORMAT_DOC_URL =
   "https://github.com/solana-foundation/solana-playground/blob/master/client-v2/docs/agent-sources-and-tools.md";
+
+/** Each kind of entry's section in the doc, by the anchor GitHub gives its heading */
+const ENTRY_FORMAT_DOC = {
+  mcpServer: `${ENTRY_FORMAT_DOC_URL}#mcp-server-entries`,
+  skill: `${ENTRY_FORMAT_DOC_URL}#skill-entries`,
+};
+
+const FOUNDATION_SKILLS = SKILLS.filter((skill) => !isCommunity(skill));
+const COMMUNITY_SKILLS = SKILLS.filter(isCommunity);
 
 const EMPTY_LIST = "[]";
 
@@ -72,10 +82,67 @@ const SourceLabel = ({
   </FieldLabel>
 );
 
+const skillNote = (skill: SkillEntry) => {
+  // The description sits in the row's tip, so 35 rows stay one short line each
+  if (isCommunity(skill)) return skill.community.repo;
+  return isAlwaysOn(skill)
+    ? "bundled — always available"
+    : "fetched from GitHub when loaded";
+};
+
+const SkillRow = ({
+  skill,
+  checked,
+}: {
+  skill: SkillEntry;
+  checked: boolean;
+}) => (
+  <Field orientation="horizontal">
+    <Checkbox
+      id={`skill-${skill.id}`}
+      aria-labelledby={`skill-${skill.id}-name`}
+      aria-describedby={
+        isCommunity(skill)
+          ? `skill-${skill.id}-note skill-${skill.id}-about`
+          : `skill-${skill.id}-note`
+      }
+      checked={isAlwaysOn(skill) || checked}
+      // Checked and disabled shows it is on and cannot be switched off
+      disabled={isAlwaysOn(skill)}
+      onCheckedChange={(value) =>
+        PgAssistant.setSkillEnabled(skill.id, value === true)
+      }
+    />
+    {/* FieldContent switches the row to top alignment, so the box sits by the name, as in the server rows */}
+    <FieldContent>
+      <SourceLabel
+        htmlFor={`skill-${skill.id}`}
+        name={skill.name}
+        note={skillNote(skill)}
+      />
+      {isCommunity(skill) && (
+        // The tip's content exists only while open, so the checkbox reads this copy
+        <span id={`skill-${skill.id}-about`} className="sr-only">
+          {skill.description}
+        </span>
+      )}
+    </FieldContent>
+    {isCommunity(skill) && (
+      <HelpTip label={`About ${skill.name}`} className="mt-0.5 shrink-0">
+        {/* One block: the tooltip lays out its children as flex items */}
+        <p className="leading-relaxed">{skill.description}</p>
+      </HelpTip>
+    )}
+  </Field>
+);
+
 const Grounding = () => {
   useRenderOnChange(PgAssistant.onDidChange);
 
   const enabledSkills = PgAssistant.enabledSkillIds;
+  const communityOn = COMMUNITY_SKILLS.filter((skill) =>
+    enabledSkills.includes(skill.id)
+  ).length;
   const servers = PgAssistant.mcpServers;
   const providerId = PgAssistant.connection?.id;
   const providerName = PROVIDERS.find((p) => p.id === providerId)?.name;
@@ -130,41 +197,67 @@ const Grounding = () => {
   return (
     <Wrapper>
       <FieldSet>
-        <FieldLegend>Skills</FieldLegend>
+        <FieldLegend className="flex items-center gap-2">
+          Skills
+          <HelpTip label="About the skill entry format">
+            {/* One block: the tooltip lays out its children as flex items */}
+            <p className="leading-relaxed">
+              A skill is a SKILL.md document and the reference files it names.
+              Each entry needs an id, a name, a one-line description, and where
+              its files come from. Entry format lists every field.
+            </p>
+          </HelpTip>
+        </FieldLegend>
         <FieldDescription>
           Reference documents the assistant loads when it decides it needs them.
-          Only the names and descriptions below sit in the prompt.
+          Only the names and descriptions of checked skills sit in the prompt.{" "}
+          <a href={ENTRY_FORMAT_DOC.skill} target="_blank" rel="noreferrer">
+            Entry format ↗
+          </a>
         </FieldDescription>
 
         <FieldGroup data-slot="checkbox-group">
-          {SKILLS.map((skill) => (
-            <Field key={skill.id} orientation="horizontal">
-              <Checkbox
-                id={`skill-${skill.id}`}
-                aria-labelledby={`skill-${skill.id}-name`}
-                aria-describedby={`skill-${skill.id}-note`}
-                checked={isAlwaysOn(skill) || enabledSkills.includes(skill.id)}
-                // Checked and disabled shows it is on and cannot be switched off
-                disabled={isAlwaysOn(skill)}
-                onCheckedChange={(checked) =>
-                  PgAssistant.setSkillEnabled(skill.id, checked === true)
-                }
-              />
-              {/* FieldContent switches the row to top alignment, so the box sits by the name, as in the server rows */}
-              <FieldContent>
-                <SourceLabel
-                  htmlFor={`skill-${skill.id}`}
-                  name={skill.name}
-                  note={
-                    isAlwaysOn(skill)
-                      ? "bundled — always available"
-                      : "fetched from GitHub when loaded"
-                  }
-                />
-              </FieldContent>
-            </Field>
+          {FOUNDATION_SKILLS.map((skill) => (
+            <SkillRow
+              key={skill.id}
+              skill={skill}
+              checked={enabledSkills.includes(skill.id)}
+            />
           ))}
         </FieldGroup>
+
+        <Collapsible>
+          <CollapsibleHeading className="text-sm font-medium">
+            <CollapsibleChevron />
+            Community skills{" "}
+            <span className="font-normal text-muted-foreground">
+              · {communityOn} of {COMMUNITY_SKILLS.length} on
+            </span>
+          </CollapsibleHeading>
+          <CollapsibleContent className="pt-3">
+            <FieldDescription className="pb-3">
+              Written by third parties and listed on{" "}
+              <a
+                href="https://solana.com/skills"
+                target="_blank"
+                rel="noreferrer"
+              >
+                solana.com/skills ↗
+              </a>
+              . Each one is read from a fixed commit of its repository, and
+              reaches the assistant only once checked.
+            </FieldDescription>
+            <FieldGroup data-slot="checkbox-group">
+              {COMMUNITY_SKILLS.map((skill) => (
+                <SkillRow
+                  key={skill.id}
+                  skill={skill}
+                  checked={enabledSkills.includes(skill.id)}
+                />
+              ))}
+            </FieldGroup>
+          </CollapsibleContent>
+        </Collapsible>
       </FieldSet>
 
       {!takesTools && (
@@ -265,7 +358,11 @@ const Grounding = () => {
               <FieldDescription className="pb-2">
                 The gateway above owns its own list — these are extra entries,
                 and they are the only ones this editor changes.{" "}
-                <a href={ENTRY_FORMAT_DOC} target="_blank" rel="noreferrer">
+                <a
+                  href={ENTRY_FORMAT_DOC.mcpServer}
+                  target="_blank"
+                  rel="noreferrer"
+                >
                   Entry format ↗
                 </a>
               </FieldDescription>

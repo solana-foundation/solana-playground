@@ -201,6 +201,19 @@ Sources tab with its checkbox unchecked, and SHALL be absent from the prompt's s
 - **THEN** the skill's checkbox is unchecked, the prompt's catalogue does not name it, and after the user checks
   it the next turn's catalogue names it
 
+### Requirement: Every caller gets the community skills, switched off
+
+Every community skill in the shipped catalogue SHALL carry `enabled: false` and SHALL NOT be marked `signedIn`.
+The skills route SHALL list them to every caller, signed in or not, so a user with their own key sees the same
+community skills, unchecked, as a signed-in user on the default backend.
+
+#### Scenario: A user with their own key (manual)
+
+- **WHEN** no `SOURCES` is set, a signed-out user connects a provider with their own key, and opens the Sources
+  tab
+- **THEN** every community skill is listed unchecked, the prompt's catalogue names none, and after the user
+  checks one the next turn's catalogue names it and `load_skill` loads it
+
 ### Requirement: A community skill is pinned to a commit
 
 Every remote skill in the shipped catalogue other than `solana-dev` SHALL have a `baseUrl` on
