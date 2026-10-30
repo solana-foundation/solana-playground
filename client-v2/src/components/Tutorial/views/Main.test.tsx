@@ -1,5 +1,4 @@
 import { render } from "@testing-library/react";
-import { DefaultTheme, ThemeProvider } from "styled-components";
 import {
   afterAll,
   afterEach,
@@ -31,26 +30,17 @@ vi.mock("../../Resizable", () => ({ default: () => null }));
 vi.mock("../../Loading", () => ({ SpinnerWithBg: () => null }));
 vi.mock("../../Icons", () => ({ PointedArrow: () => null }));
 
-// Every theme path the styled wrappers read answers with the same stand-in,
-// which reads as an empty string where a style interpolates it.
-const theme: DefaultTheme = new Proxy({} as DefaultTheme, {
-  get: (_, key) =>
-    key === "toString" || key === Symbol.toPrimitive ? () => "" : theme,
-});
-
 type Pages = Parameters<typeof Main>[0]["pages"];
 
 const renderAt = (pages: Pages, pageNumber: number) => {
   const view = (page: number) => (
-    <ThemeProvider theme={theme}>
-      <Main
-        pages={pages}
-        pageNumber={page}
-        layout="content-only"
-        isStarted
-        start={async () => {}}
-      />
-    </ThemeProvider>
+    <Main
+      pages={pages}
+      pageNumber={page}
+      layout="content-only"
+      isStarted
+      start={async () => {}}
+    />
   );
   const { rerender, unmount } = render(view(pageNumber));
   return { openPage: (page: number) => rerender(view(page)), unmount };
