@@ -30,16 +30,13 @@ const StageRouter: FC<React.PropsWithChildren<StageRouterProps>> = ({
       className={cn(
         "flex min-h-0 flex-1 flex-col transition-[opacity] duration-150 ease-[ease] motion-reduce:transition-none",
         // The upstream tab strip (PgView.ids.TABS) butts its right-aligned
-        // Wallet button against the panel edge, which sits under the floating
-        // panel's rounded corner. Give it the same inset the panel uses
-        // elsewhere. Failure mode: if upstream renames the id the inset is
-        // simply lost, nothing breaks.
+        // Wallet button against the column edge. Give it the same inset the
+        // panel uses elsewhere. Failure mode: if upstream renames the id the
+        // inset is simply lost, nothing breaks.
         "[&_#tabs]:pr-3",
-        // Primary's own wrapper carries a border and a radius from
-        // theme.views.main.primary.default, which make it a floating panel on
-        // its own. Inside Flow it sits within Center, which already draws that
-        // chrome -- so it reads as a second rounded border nested inside the
-        // first.
+        // `Primary` draws its own border and radius, a card on its own.
+        // Inside Flow the frame is flush, with no card edges, so the stage
+        // panel strips them.
         "[&>div]:rounded-none [&>div]:border-0",
         stage === "write" ? "opacity-100" : "hidden opacity-0"
       )}

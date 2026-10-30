@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 
 import { PgSession } from "@/features/auth";
-import { onDidChangeSyncMarkers, syncMarkerOf } from "@/features/persistence";
+import {
+  onDidChangeSyncMarkers,
+  report,
+  syncMarkerOf,
+} from "@/features/persistence";
 import type { SyncMarker } from "@/features/persistence";
-import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer } from "@/utils";
-
-const log = createLogger("app-nav:sync-markers");
 
 /**
  * By workspace name. A `Map`, not an object: a workspace may be called
@@ -38,7 +39,7 @@ export const useSyncMarkers = (): Markers => {
     /** Every row's marker; a row whose read failed keeps the one it had */
     const readAll = async () => {
       const next = new Map<string, SyncMarker>();
-      const failed: string[] = [];
+      const failed: unknown[] = [];
       for (const name of PgExplorer.allWorkspaceNames ?? []) {
         const id = PgExplorer.workspaceIdOf(name);
         if (!id) continue;
@@ -47,16 +48,16 @@ export const useSyncMarkers = (): Markers => {
           if (marker) next.set(name, marker);
         } catch (e) {
           // "No marker" would tell the person the account holds this one
-          failed.push(String(e));
+          failed.push(e);
           const kept = shown.get(name);
           if (kept) next.set(name, kept);
         }
       }
-      // Once per pass, not per row: a fault in the store fails every row
+      // Once per pass, not per row: a fault in the store fails every row.
+      // Through diagnostics, like every persistence failure, so a store that
+      // stopped answering reaches Sentry instead of leaving stale rows unheard
       if (failed.length) {
-        log.warn("sync markers could not be read", {
-          context: { count: failed.length, first: failed[0] },
-        });
+        report(`sync markers: read ${failed.length} row(s)`, failed[0]);
       }
       return next;
     };
@@ -80,7 +81,7 @@ export const useSyncMarkers = (): Markers => {
       } catch (e) {
         // The explorer's list itself could not be read: the rows keep the
         // markers they had, and the next change reads again
-        log.warn("sync markers could not be read", { context: { e } });
+        report("sync markers: list workspaces", e);
       } finally {
         running = false;
       }

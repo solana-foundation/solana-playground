@@ -21,6 +21,8 @@ const state = vi.hoisted(() => ({
   names: [] as string[],
   markerOf: (async () => null) as (id: string, name: string) => Promise<Marker>,
 }));
+/** Persistence diagnostics, where a failed read must land */
+const report = vi.hoisted(() => vi.fn());
 const sources = vi.hoisted(() => ({
   sync: { fire: () => {} },
   session: { fire: () => {} },
@@ -33,6 +35,7 @@ vi.mock("@/features/persistence", () => {
   return {
     syncMarkerOf: (id: string, name: string) => state.markerOf(id, name),
     onDidChangeSyncMarkers: changes.on,
+    report,
   };
 });
 vi.mock("@/features/auth", () => {
@@ -62,6 +65,7 @@ vi.mock("@/utils", () => {
 });
 
 afterEach(() => {
+  report.mockReset();
   state.names = [];
   state.markerOf = async () => null;
 });
@@ -187,6 +191,8 @@ describe("useSyncMarkers", () => {
     act(() => sources.sync.fire());
     await tick();
     expect(shown(result.current)).toEqual({ counter: "not-synced" });
+    expect(report).toHaveBeenCalledOnce();
+    expect(report.mock.calls[0][1]).toEqual(new Error("store busy"));
   });
 
   it("keeps the same map when nothing moved, so rows do not re-render", async () => {

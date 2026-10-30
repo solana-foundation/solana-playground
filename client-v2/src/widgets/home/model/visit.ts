@@ -27,6 +27,10 @@ export const visitOf = (
   if (!names) return "unknown";
   if (names.length) return "return";
   if (session !== "answered") return "unknown";
+  // TODO(HOO-2391 follow-up): an account list that never reads (offline, a
+  // 5xx, sync unavailable) keeps this `unknown` with no retry, so Home leads
+  // with nothing; give a failed list the session's retry path. Deferred from
+  // the landing review of SF#74, raised with Lead
   return account === "signed-out" || account === "empty" ? "first" : "unknown";
 };
 
