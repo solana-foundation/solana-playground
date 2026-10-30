@@ -63,7 +63,7 @@ const MAKE_CHANGE: Record<
 
 const VERIFY_LABEL = { build: "Build", deploy: "Deploy" } as const;
 
-/** Under a reply left unfinished: its request failed mid-stream, or a reload cut it short (`PgAssistant.isCutOff`) */
+/** Under a reply left unfinished: its request failed mid-stream, a switch of backend cut its turn, or a reload cut it short (`PgAssistant.isCutOff`) */
 const CUT_OFF = "This reply was cut off.";
 
 /** Sends the last message again, under a stopped or cut-off reply */
