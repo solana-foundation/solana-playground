@@ -148,3 +148,24 @@ it("closes the dialog as imported when an example is opened", () => {
     "import-github"
   );
 });
+
+it("closes the dialog as imported once the URL's project is imported", async () => {
+  utils.PgGithub.import.mockResolvedValue(undefined);
+  const close = vi
+    .spyOn(PgViewDirect, "closeModal")
+    .mockImplementation(() => {});
+  draw();
+
+  fireEvent.change(screen.getByPlaceholderText("https://github.com/..."), {
+    target: { value: "https://github.com/c/d" },
+  });
+  // The dialog's own Import, the last one: each example has one above it
+  const imports = screen.getAllByRole("button", { name: /^import$/i });
+  fireEvent.click(imports[imports.length - 1]);
+
+  await waitFor(() =>
+    expect(close).toHaveBeenCalledWith(IMPORTED, "import-github")
+  );
+  expect(utils.PgGithub.import).toHaveBeenCalledWith("https://github.com/c/d");
+  close.mockRestore();
+});
