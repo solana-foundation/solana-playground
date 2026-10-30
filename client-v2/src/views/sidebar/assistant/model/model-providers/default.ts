@@ -55,7 +55,8 @@ const ownRefusal = (error: AiTurnError): string | undefined => {
  * How `/api/agent` relays a status the upstream answered with, as against a
  * fault of its own ("Upstream unreachable", its key refused upstream)
  */
-const RELAYED_STATUS = /^Upstream \d{3}\b/;
+// "Upstream 503: …", never its own "Upstream 200 with no body to stream."
+const RELAYED_STATUS = new RegExp(`^${UPSTREAM_RELAY}\\d{3}: `);
 
 /**
  * Whether an outage is this backend's own fault, ours to hear of: not its

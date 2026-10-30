@@ -384,6 +384,25 @@ describe("the assistant's provider", () => {
       expect(reported()).toEqual([]);
     });
 
+    it("of the default backend with nothing to stream is reported", async () => {
+      respond(
+        new Response(
+          JSON.stringify({ error: "Upstream 200 with no body to stream." }),
+          {
+            status: 502,
+            statusText: "Bad Gateway",
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toHaveLength(1);
+    });
+
     it("relayed by the default backend from its upstream is not reported", async () => {
       respond(
         new Response(
