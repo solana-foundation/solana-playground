@@ -14,6 +14,10 @@ export interface DeployRecord {
   programId: string;
   signature: string | null;
   at: number;
+  /** Lamports the paying wallets spent; absent when the finish reported none */
+  cost?: number;
+  /** The deploy upgraded a program already on the cluster */
+  upgraded?: boolean;
 }
 
 const KEY = "flow.deploys";
@@ -32,7 +36,9 @@ const isDeployRecord = (r: unknown): r is DeployRecord => {
     typeof rec.cluster === "string" &&
     typeof rec.programId === "string" &&
     (rec.signature === null || typeof rec.signature === "string") &&
-    typeof rec.at === "number"
+    typeof rec.at === "number" &&
+    (rec.cost === undefined || typeof rec.cost === "number") &&
+    (rec.upgraded === undefined || typeof rec.upgraded === "boolean")
   );
 };
 
@@ -82,13 +88,14 @@ export class PgDeployHistory {
       const cluster = PgConnection.cluster;
       if (!programId || !workspace || !cluster) return;
 
-      // Deploy command returns void, so signature is always null.
-      // A later task can populate this from elsewhere if needed.
+      // A finish from a command that reports no result keeps what it can
+      const ran = result.ok;
       PgDeployHistory.add({
         workspace,
         cluster,
         programId,
-        signature: null,
+        signature: ran?.signature ?? null,
+        ...(ran && { cost: ran.cost, upgraded: ran.upgraded }),
       });
     });
   }

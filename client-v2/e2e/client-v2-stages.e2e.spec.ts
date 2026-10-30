@@ -157,7 +157,9 @@ test.describe("client-v2-stages", () => {
       .getByRole("status")
       .filter({ hasText: "Deployed to" });
     await expect(result).toContainText("Deployed to devnet", LONG);
-    await expect(result.locator("code")).toHaveText(PROGRAM_ID);
+    // Shortened in the middle, whole in its title
+    await expect(result.locator("code")).toHaveText("6PNd…AVkj");
+    await expect(result.locator("code")).toHaveAttribute("title", PROGRAM_ID);
     await expect(result.locator('[data-slot="copy-button"]')).toBeVisible();
   });
 });

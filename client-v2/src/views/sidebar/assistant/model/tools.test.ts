@@ -73,3 +73,49 @@ describe("write_file", () => {
     ]);
   });
 });
+
+describe("build and deploy approvals", () => {
+  const commandBridge = (cost: number | null): PlaygroundBridge =>
+    ({
+      getProjectContext: () => ({
+        workspaceName: "hello_anchor",
+        cluster: "https://api.devnet.solana.com",
+        buildError: null,
+      }),
+      quoteDeploy: async () => ({ network: "devnet", cost }),
+      build: vi.fn(async () => {}),
+      deploy: vi.fn(async () => null),
+    } as unknown as PlaygroundBridge);
+
+  /** The question on the approval card a tool opened */
+  const askedWith = async (tool: "build" | "deploy", b: PlaygroundBridge) => {
+    const run = createTools(b)
+      .find((t) => t.name === tool)!
+      .run({});
+    await vi.waitFor(() => expect(PgAssistant.items).toHaveLength(1));
+    const card = PgAssistant.items[0];
+    PgAssistant.resolveApproval(card.id, false);
+    await run;
+    return card.kind === "approval" && card.request.type === "command"
+      ? card.request.question
+      : undefined;
+  };
+
+  it("asks whether to deploy the program to the network, naming the cost", async () => {
+    expect(await askedWith("deploy", commandBridge(1_420_000_000))).toBe(
+      "Deploy hello_anchor to devnet? It costs about 1.42 SOL."
+    );
+  });
+
+  it("leaves the cost out when it cannot be estimated", async () => {
+    expect(await askedWith("deploy", commandBridge(null))).toBe(
+      "Deploy hello_anchor to devnet?"
+    );
+  });
+
+  it("asks whether to build the program", async () => {
+    expect(await askedWith("build", commandBridge(null))).toBe(
+      "Build hello_anchor?"
+    );
+  });
+});

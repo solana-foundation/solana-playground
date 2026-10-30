@@ -76,6 +76,29 @@ describe("BaseApprovalCard", () => {
     expect(screen.getByText("Compiles the program")).toBeTruthy();
   });
 
+  it("a command asked as a question is titled with it", () => {
+    const asked: ApprovalItem = {
+      id: "card-3",
+      createdAt: CREATED,
+      kind: "approval",
+      status: "pending",
+      request: {
+        type: "command",
+        name: "deploy",
+        effect: "Sends a transaction to devnet",
+        question: "Deploy hello_anchor to devnet? It costs about 1.42 SOL.",
+      },
+    };
+    render(<BaseApprovalCard item={asked} onAnswer={vi.fn()} />);
+
+    expect(
+      screen.getByText(
+        "Deploy hello_anchor to devnet? It costs about 1.42 SOL."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText("wants to run deploy")).toBeNull();
+  });
+
   it("a command's lines are phrasing content inside the pre", () => {
     const { container } = render(
       <BaseApprovalCard item={commandCard("pending")} onAnswer={vi.fn()} />

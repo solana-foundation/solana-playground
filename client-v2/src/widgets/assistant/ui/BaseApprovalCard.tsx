@@ -46,6 +46,18 @@ const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
 // card is most likely to end up half under the keyboard
 const ANSWER = "h-11 md:h-8";
 
+// A question is read whole, so it wraps instead of truncating
+const QUESTION_TITLE = "font-sans text-sm whitespace-normal text-foreground";
+
+/** The card's title: the command's question, else the file or command name */
+const cardTitle = (request: ApprovalItem["request"]) => {
+  if (request.type === "patch") return { text: request.path };
+  if (request.question) {
+    return { text: request.question, className: QUESTION_TITLE };
+  }
+  return { text: `wants to run ${request.name}` };
+};
+
 /**
  * A change or a command the assistant wants to make, with the user's answer.
  *
@@ -62,13 +74,12 @@ export const BaseApprovalCard = ({
   const { request, status } = item;
   const pending = status === "pending";
   const patch = request.type === "patch";
+  const title = cardTitle(request);
 
   return (
     <Diff data-status={status} className={cn(pending && "border-primary")}>
       <DiffHeader>
-        <DiffTitle>
-          {patch ? request.path : `wants to run ${request.name}`}
-        </DiffTitle>
+        <DiffTitle className={title.className}>{title.text}</DiffTitle>
         {patch ? <PatchStat request={request} /> : <span className="ml-auto" />}
         <Badge
           variant={pending ? "default" : "outline"}
