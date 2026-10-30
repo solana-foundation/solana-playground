@@ -68,11 +68,14 @@ export const costOf = (usage, prices) =>
  *
  * - `refused`: the upstream answered non-2xx, or could not be reached, before
  *   streaming. Nothing was generated.
+ * - `abandoned`: the caller left before the upstream was dialled. Nothing was
+ *   sent.
  * - `completed`: the stream ended and the upstream reported its usage.
  * - `unfinished`: anything else that got past the upstream's acceptance -- the
  *   caller went away, the stream broke, or it ended without usage.
  *
  * @typedef {{ kind: "refused" }
+ *   | { kind: "abandoned" }
  *   | { kind: "completed"; usage: { prompt_tokens?: number; completion_tokens?: number } }
  *   | { kind: "unfinished" }} TurnEnd
  */
@@ -85,7 +88,7 @@ export const costOf = (usage, prices) =>
  * @param {{ input: number; output: number }} prices USD per million tokens
  */
 export const chargeFor = (end, reserved, prices) => {
-  if (end.kind === "refused") return 0;
+  if (end.kind === "refused" || end.kind === "abandoned") return 0;
   if (end.kind === "completed") return costOf(end.usage, prices);
   return reserved;
 };

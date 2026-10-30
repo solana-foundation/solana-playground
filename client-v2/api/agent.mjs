@@ -356,6 +356,10 @@ const relay = async (res, configured, body, tier, now) => {
   // end too, by which point the fetch has already settled.
   const abortUpstream = new AbortController();
   res.on("close", () => abortUpstream.abort());
+  // A caller who left while `reserve` waited on the database closed the
+  // response before the listener above existed, so the signal never aborts:
+  // nothing has been sent, and the reservation goes back
+  if (res.destroyed) return { kind: "abandoned" };
 
   let response;
   try {
@@ -491,8 +495,9 @@ const refusalCause = (status, text) => {
   let error;
   try {
     error = JSON.parse(text)?.error;
-  } catch {
+  } catch (e) {
     // Not JSON, so not the Gateway's: nothing to tell the causes apart by
+    warnNotJson("refusal-cause", status, e);
     return "unknown";
   }
   const message = String(error?.message ?? "");
@@ -512,10 +517,27 @@ const refusalCause = (status, text) => {
 const isPoolExhausted = (text) => {
   try {
     return POOL_EXHAUSTED_TYPES.includes(JSON.parse(text)?.error?.type);
-  } catch {
+  } catch (e) {
     // Not JSON, so not the Gateway's refusal: relayed as the upstream's 402
+    warnNotJson("pool-exhausted", 402, e);
     return false;
   }
 };
+
+/**
+ * Log which check could not read an upstream error body. Only the error's
+ * name: V8's `SyntaxError` quotes the text it failed on, and the body is
+ * logged, trimmed, where the route reports the refusal.
+ *
+ * @param {"refusal-cause" | "pool-exhausted"} check
+ * @param {number} status
+ * @param {unknown} e
+ */
+const warnNotJson = (check, status, e) =>
+  console.warn("agent: upstream error body is not JSON", {
+    check,
+    status,
+    error: e instanceof Error ? e.name : typeof e,
+  });
 
 export default withObservability("agent", handler);

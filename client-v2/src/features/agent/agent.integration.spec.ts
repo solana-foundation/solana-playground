@@ -36,10 +36,13 @@ const db = vi.hoisted(() => {
     /** Every query and upstream call, in order */
     log: [] as string[],
     down: false,
+    /** Runs while a statement is in flight, before it answers */
+    during: null as ((text: string) => void) | null,
   };
 
   const query = async (text: string, params: unknown[] = []) => {
     state.log.push("query");
+    state.during?.(text);
     if (state.down) throw new Error("connect ECONNREFUSED");
 
     if (text.includes("insert into agent_spend")) {
@@ -137,6 +140,7 @@ beforeEach(() => {
   db.state.spend.clear();
   db.state.log.length = 0;
   db.state.down = false;
+  db.state.during = null;
   // Dated, so a case not about the account age never looks it up
   db.state.users.set("user-1", {
     githubCreatedAt: OLD_ACCOUNT,
@@ -519,6 +523,22 @@ describe("POST /api/agent streaming", () => {
     }
   );
 
+  it("logs why a 403 that is not JSON names no cause, without its body", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const res = makeRes();
+    await call(res, {
+      ok: false,
+      status: 403,
+      text: async () => "Forbidden",
+    } as never);
+
+    expect(warned).toHaveBeenCalledWith(
+      "agent: upstream error body is not JSON",
+      { check: "refusal-cause", status: 403, error: "SyntaxError" }
+    );
+  });
+
   it("answers 502 to a success that has nothing to stream", async () => {
     const res = makeRes();
     await call(res, { ok: true, status: 204, body: null } as never);
@@ -897,6 +917,21 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
     });
 
+    it("never dials the upstream for a turn the caller stops during the reservation", async () => {
+      const res = makeRes();
+      const fetched = network();
+      db.state.during = (text) => {
+        if (!text.includes("insert into agent_spend")) return;
+        res.destroyed = true;
+        res.emit("close");
+      };
+
+      await handler(makeReq(TURN), res as never);
+
+      expect(fetched).not.toHaveBeenCalled();
+      expect(spend()).toEqual({ reserved: 0, spent: 0 });
+    });
+
     it("A turn the upstream refuses is not charged", async () => {
       network(() => new Response("overloaded", { status: 529 }));
 
@@ -1151,12 +1186,18 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("relays a 402 that is not the Gateway's budget as the upstream's", async () => {
+      const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
       network(() => new Response("Payment required", { status: 402 }));
 
       const res = await postJson(handler, TURN);
 
       expect(res.statusCode).toBe(402);
       expect(jsonBody<{ reason?: string }>(res).reason).toBeUndefined();
+      // Why it was relayed, without the body
+      expect(warned).toHaveBeenCalledWith(
+        "agent: upstream error body is not JSON",
+        { check: "pool-exhausted", status: 402, error: "SyntaxError" }
+      );
     });
   });
 

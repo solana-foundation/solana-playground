@@ -39,6 +39,7 @@ describe("ledger arithmetic", () => {
     assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 200);
     assert.equal(chargeFor({ kind: "unfinished" }, 9999, PRICES), 9999);
     assert.equal(chargeFor({ kind: "refused" }, 9999, PRICES), 0);
+    assert.equal(chargeFor({ kind: "abandoned" }, 9999, PRICES), 0);
   });
 });
 
