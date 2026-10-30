@@ -45,6 +45,7 @@ for (const [ref, expected] of [
   ["new-face-polish", SKIP],
   ["feat/scope/x", SKIP],
   ["integrations", SKIP],
+  ["feat/integration/x", SKIP],
   ["Master", SKIP],
   ["new-face-polish-2-fix", SKIP],
   // No ref, unset or empty, cannot be classified, so it builds

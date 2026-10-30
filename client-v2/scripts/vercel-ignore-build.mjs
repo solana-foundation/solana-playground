@@ -12,7 +12,8 @@ const target = process.env.VERCEL_ENV;
  * Whether `branch` is one whose preview reviewers use: `master`, or a branch
  * under a fixed prefix, `scope/` or `integration/`, so a new integration
  * branch needs only the right name. `new-face-polish-<n>` predates the
- * prefixes; TODO: drop it once the open polish round has landed.
+ * prefixes; TODO: drop it once `new-face-polish-3` has landed
+ * (solana-foundation#72).
  */
 const isIntegrationBranch = (branch) =>
   branch === "master" ||
