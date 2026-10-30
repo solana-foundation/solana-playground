@@ -41,5 +41,7 @@ export interface TurnProfile {
 
 /** One model provider's turn settings */
 export interface ModelProviderProfile {
+  /** Whether a turn declares tools at all; `false` sends none and hides the MCP servers */
+  supportsTools: boolean;
   profile(input: ModelProviderInput): TurnProfile;
 }

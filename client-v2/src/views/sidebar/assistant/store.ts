@@ -1,4 +1,4 @@
-import { DEFAULT_SKILL_IDS } from "./grounding";
+import { DEFAULT_SKILL_IDS, findSkill, isAlwaysOn } from "./grounding";
 import {
   closeConnection,
   listGatewayServers,
@@ -440,6 +440,8 @@ export class PgAssistant {
   }
 
   static setSkillEnabled(id: string, enabled: boolean) {
+    const skill = findSkill(id);
+    if (!enabled && skill && isAlwaysOn(skill)) return;
     const ids = PgAssistant._enabledSkillIds.filter((i) => i !== id);
     PgAssistant._enabledSkillIds = enabled ? [...ids, id] : ids;
     PgAssistant._emit();
@@ -459,7 +461,7 @@ export class PgAssistant {
   static get mcpServers(): readonly McpServerEntry[] {
     const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
     return [
-      ...PgAssistant._gatewayServers,
+      ...PgAssistant.gatewayMcpServers,
       ...PgAssistant._localServers.filter((s) => !gatewayIds.has(s.id)),
     ];
   }
@@ -470,9 +472,13 @@ export class PgAssistant {
     return PgAssistant._localServers.filter((s) => gatewayIds.has(s.id));
   }
 
-  /** The gateway's own upstreams, as it reported them */
+  /** The gateway's own upstreams, as it reported them, with the user's on/off state applied */
   static get gatewayMcpServers(): readonly McpServerEntry[] {
-    return PgAssistant._gatewayServers;
+    return PgAssistant._gatewayServers.map((server) =>
+      PgAssistant._gatewayServersOff.has(server.id)
+        ? { ...server, enabled: false }
+        : server
+    );
   }
 
   /** Only the entries the user added, which is what the editor edits */
@@ -490,6 +496,25 @@ export class PgAssistant {
     PgAssistant._replaceServers(() => {
       PgAssistant._localServers = servers;
     });
+    PgAssistant._emit();
+  }
+
+  /**
+   * Turn one server on or off. A gateway entry keeps the gateway's own copy
+   * and records the choice beside it; a local entry's `enabled` field is the
+   * choice, so the editor shows the same state.
+   */
+  static setMcpServerEnabled(id: string, enabled: boolean) {
+    if (PgAssistant._gatewayServers.some((server) => server.id === id)) {
+      const off = new Set(PgAssistant._gatewayServersOff);
+      if (enabled) off.delete(id);
+      else off.add(id);
+      PgAssistant._gatewayServersOff = off;
+    } else {
+      PgAssistant._localServers = PgAssistant._localServers.map((server) =>
+        server.id === id ? { ...server, enabled } : server
+      );
+    }
     PgAssistant._emit();
   }
 
@@ -1327,6 +1352,8 @@ export class PgAssistant {
   private static _pickingBackend = false;
   private static _enabledSkillIds: readonly string[] = DEFAULT_SKILL_IDS;
   private static _gatewayServers: readonly McpServerEntry[] = [];
+  // Kept apart from the gateway's list, which `loadMcpServers` replaces whole; in memory only, like `_localServers`
+  private static _gatewayServersOff: ReadonlySet<string> = new Set();
   // Copied, so editing a server in the UI never mutates the registry default
   private static _localServers: readonly McpServerEntry[] =
     LOCAL_MCP_SERVERS.map((server) => ({ ...server }));
@@ -1531,6 +1558,24 @@ if (import.meta.vitest) {
       request: { type: "patch", path: "src/lib.rs", before: "a", after: "b" },
       status: "allowed",
     };
+
+    describe("PgAssistant skills", () => {
+      let SKILLS: typeof import("./grounding").SKILLS;
+      let isCommunity: typeof import("./grounding").isCommunity;
+      beforeAll(async () => {
+        ({ SKILLS, isCommunity } = await import("./grounding"));
+      });
+
+      it("leaves a community skill out until the user checks it", () => {
+        const skill = SKILLS.find(isCommunity);
+        if (!skill) throw new Error("no community skill");
+
+        expect(PgAssistant.enabledSkillIds).not.toContain(skill.id);
+        PgAssistant.setSkillEnabled(skill.id, true);
+        expect(PgAssistant.enabledSkillIds).toContain(skill.id);
+        PgAssistant.setSkillEnabled(skill.id, false);
+      });
+    });
 
     describe("turnProducedApproval", () => {
       it("is false for a turn that only replied", () => {

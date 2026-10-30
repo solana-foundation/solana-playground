@@ -56,6 +56,7 @@ export const createProvider = (
   /** Prior turns, text only, when reopening a stored thread (`toReplayMessages`) */
   seed: readonly ReplayMessage[] = []
 ): Provider => {
+  const { supportsTools } = MODEL_PROVIDER_PROFILES[connection.id];
   const profile = MODEL_PROVIDER_PROFILES[connection.id].profile(connection);
   let history: ModelMessage[] = seed.map((m) => ({
     role: m.role,
@@ -92,7 +93,7 @@ export const createProvider = (
             },
           ],
           // Built per turn, so MCP tools discovered since the last one are offered
-          tools: ai.toSdkTools(createTools()),
+          tools: supportsTools ? ai.toSdkTools(createTools()) : undefined,
           providerOptions: profile.providerOptions,
           maxOutputTokens: profile.maxOutputTokens,
           signal,

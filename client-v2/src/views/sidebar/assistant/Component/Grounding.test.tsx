@@ -11,8 +11,9 @@ vi.mock("./ServerConsole", () => ({ __esModule: true, default: () => null }));
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ThemeProvider, type DefaultTheme } from "styled-components";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgAssistant } from "../store";
-import { SKILLS } from "../grounding";
+import { isAlwaysOn, isCommunity, SKILLS } from "../grounding";
 import Grounding from "./Grounding";
 
 // A theme that answers every key: the panel's styled rules read deep tokens
@@ -30,7 +31,9 @@ const theme: DefaultTheme = new Proxy(
 function renderGrounding() {
   return render(
     <ThemeProvider theme={theme}>
-      <Grounding />
+      <TooltipProvider>
+        <Grounding />
+      </TooltipProvider>
     </ThemeProvider>
   );
 }
@@ -40,11 +43,33 @@ describe("Grounding", () => {
     vi.restoreAllMocks();
   });
 
+  it("switches a server off by clicking its name, which the editor then shows", () => {
+    PgAssistant.setMcpServers([
+      { id: "docs", name: "Docs", url: "https://docs.test/mcp", enabled: true },
+    ]);
+    const setMcpServerEnabled = vi.spyOn(PgAssistant, "setMcpServerEnabled");
+
+    renderGrounding();
+    fireEvent.click(screen.getByText("Docs"));
+
+    expect(setMcpServerEnabled).toHaveBeenCalledWith("docs", false);
+    expect(
+      screen
+        .getByRole("checkbox", { name: "Docs" })
+        .getAttribute("aria-checked")
+    ).toBe("false");
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("MCP server configuration")
+        .value
+    ).toContain('"enabled": false');
+    PgAssistant.setMcpServers([]);
+  });
+
   it("switches a skill off by clicking its name", () => {
-    const skill = SKILLS.find((s) =>
-      PgAssistant.enabledSkillIds.includes(s.id)
+    const skill = SKILLS.find(
+      (s) => !isAlwaysOn(s) && PgAssistant.enabledSkillIds.includes(s.id)
     );
-    if (!skill) throw new Error("no skill is enabled by default");
+    if (!skill) throw new Error("no switchable skill is enabled by default");
     const setSkillEnabled = vi.spyOn(PgAssistant, "setSkillEnabled");
 
     renderGrounding();
@@ -59,5 +84,37 @@ describe("Grounding", () => {
         .getByRole("checkbox", { name: skill.name })
         .getAttribute("aria-checked")
     ).toBe("false");
+    PgAssistant.setSkillEnabled(skill.id, true);
+  });
+
+  it("A community skill that starts off: unchecked under the fold, and counted once checked", () => {
+    const community = SKILLS.filter(isCommunity);
+    const skill = community[0];
+    if (!skill) throw new Error("no community skill");
+
+    renderGrounding();
+    const fold = screen.getByRole("button", { name: /Community skills/ });
+    expect(fold.textContent).toContain(`0 of ${community.length} on`);
+
+    fireEvent.click(fold);
+    const box = screen.getByRole("checkbox", { name: skill.name });
+    expect(box.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(box);
+    expect(fold.textContent).toContain(`1 of ${community.length} on`);
+    PgAssistant.setSkillEnabled(skill.id, false);
+  });
+
+  it("shows a bundled skill checked and locked, and keeps it on when its name is clicked", () => {
+    const skill = SKILLS.find(isAlwaysOn);
+    if (!skill) throw new Error("no bundled skill");
+
+    renderGrounding();
+    fireEvent.click(screen.getByText(skill.name));
+
+    const box = screen.getByRole("checkbox", { name: skill.name });
+    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(box.hasAttribute("disabled")).toBe(true);
+    expect(PgAssistant.enabledSkillIds).toContain(skill.id);
   });
 });

@@ -12,10 +12,11 @@
  * With several, `tools/list` is merged with `<id>__` prefixes and `tools/call`
  * routes on that prefix, so the caller sees one MCP server.
  *
- * Upstreams are configured here and never taken from the request. A gateway
- * that dials a caller-supplied host is an SSRF and an open relay; refusing the
- * input removes the whole class. Adding one is a deploy, and the only thing the
- * environment may move is the URL of an upstream already named here.
+ * Upstreams come from the server's own configuration (`composeServers`: the
+ * catalogue in `features/mcp`, or `MCP_SERVERS`, filled from the environment)
+ * and never from the request. A gateway that dials a caller-supplied host is
+ * an SSRF and an open relay; refusing the input removes the whole class.
+ * Adding one is a deploy, or an operator setting the variables it names.
  *
  * Plain ESM on raw Node request/response APIs — see `api/health.mjs` for why.
  */
@@ -26,7 +27,11 @@ import {
   withObservability,
 } from "../src/features/api/server.mjs";
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
-import { mcpExplorerEnv } from "../src/shared/config/server-env.mjs";
+import {
+  composeServers,
+  protectionHeaders,
+} from "../src/features/mcp/server.mjs";
+import { mcpEnv } from "../src/shared/config/server-env.mjs";
 import {
   rpcError,
   rpcRequest,
@@ -40,12 +45,7 @@ const SEPARATOR = "__";
 
 /** @typedef {import("../src/shared/lib/json-rpc.mjs").RpcId} RpcId */
 
-/**
- * @typedef {object} Upstream
- * @property {string} name
- * @property {string} url
- * @property {Record<string, string>} [headers] sent on every request to it
- */
+/** @typedef {import("../src/features/mcp/model/types").McpServerEntry} Upstream */
 
 /** @typedef {Record<string, Upstream>} Upstreams by id */
 
@@ -58,44 +58,38 @@ const SEPARATOR = "__";
  * @property {Record<string, unknown>} [params]
  */
 
+/** @param {boolean} signedIn */
+const compose = (signedIn) =>
+  composeServers({ env: process.env, servers: mcpEnv().SERVERS, signedIn });
+
 /**
- * The upstreams this caller may use.
+ * The upstreams this request may use, by id.
  *
- * Explorer is present only when a bypass is supplied through the environment,
- * and only to a signed-in caller. Its endpoint sits behind bot protection its
- * owners chose to switch on, and our bypass secret rides on every request to
- * it, so an anonymous caller would get a way around that protection. Left
- * unset, the panel's Explorer entry has nothing to talk to, which is why it
- * also ships disabled. The Solana upstream is public and stays open: the
- * bring-your-own-key backends call it signed out.
+ * Which exist is the catalogue's business (`features/mcp/model/catalogue.mjs`):
+ * an entry whose variables are unset is absent, and a `signedIn` one is absent
+ * for an anonymous caller. An entry's bot-protection bypass is ours, so it is
+ * sent only for a signed-in caller on this site; anyone else reaches the same
+ * upstream without it.
  *
- * @param {{ signedIn: boolean }} caller
+ * @param {import("node:http").IncomingMessage} req
+ * @returns {Promise<Upstreams>}
  */
-const upstreams = (caller) => {
-  /** @type {Upstreams} */
-  const configured = {
-    solana: {
-      name: "Solana Developer MCP",
-      url: "https://mcp.solana.com/mcp",
-    },
-  };
+const upstreams = async (req) => {
+  const full = compose(true);
+  const open = compose(false);
+  // The session is a database read, so it is looked up only when signing in changes the answer
+  const signingInMatters =
+    full.length !== open.length || full.some((s) => s.protection);
+  // The origin first, so another site cannot borrow a visitor's session
+  const signedIn =
+    signingInMatters &&
+    isAllowedOrigin(req) &&
+    (await readSession(req)).status === "signed-in";
 
-  const explorer = mcpExplorerEnv();
-  if (explorer.BYPASS && caller.signedIn) {
-    configured.explorer = {
-      name: "Solana Explorer MCP",
-      url: explorer.URL,
-      headers: {
-        "x-vercel-protection-bypass": explorer.BYPASS,
-        // Explorer gates on MCP_ACCESS_KEYS when its deployment sets them
-        ...(explorer.TOKEN
-          ? { authorization: `Bearer ${explorer.TOKEN}` }
-          : {}),
-      },
-    };
-  }
-
-  return configured;
+  const servers = signedIn
+    ? full
+    : open.map((s) => ({ ...s, protection: undefined }));
+  return Object.fromEntries(servers.map((s) => [s.id, s]));
 };
 
 /**
@@ -107,30 +101,6 @@ const sendJson = (res, status, body) => {
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.end(JSON.stringify(body));
-};
-
-/** What a caller asking for Explorer is told, by why it is withheld */
-const EXPLORER_HINTS = {
-  "no-bypass": " Set MCP_EXPLORER_BYPASS on the server to enable explorer.",
-  "foreign-origin": " Explorer is offered only to requests from this site.",
-  unconfigured:
-    " Sign-in is not configured on this deployment, so explorer is off.",
-  unavailable: " Sign-in is unavailable right now. Try explorer again shortly.",
-  "signed-out": " Sign in with GitHub to use explorer.",
-};
-
-/**
- * Why Explorer is withheld from this request, or `null` when it is offered.
- *
- * @param {import("node:http").IncomingMessage} req
- * @returns {Promise<keyof typeof EXPLORER_HINTS | null>}
- */
-const explorerWithheld = async (req) => {
-  if (!mcpExplorerEnv().BYPASS) return "no-bypass";
-  // Before the session, so another site cannot borrow a visitor's; the lookup is also a database read
-  if (!isAllowedOrigin(req)) return "foreign-origin";
-  const session = await readSession(req);
-  return session.status === "signed-in" ? null : session.status;
 };
 
 /**
@@ -149,9 +119,8 @@ const sendRpcError = (res, id, code, message) =>
  *
  * @param {URL} url
  * @param {Upstreams} configured
- * @param {keyof typeof EXPLORER_HINTS | null} withheld why Explorer is absent, for the error
  */
-const selected = (url, configured, withheld) => {
+const selected = (url, configured) => {
   // Accepts `server[]=x` and `server=x`, repeated
   const asked = [
     ...url.searchParams.getAll("server[]"),
@@ -161,13 +130,10 @@ const selected = (url, configured, withheld) => {
 
   const unknown = asked.filter((id) => !configured[id]);
   if (unknown.length) {
-    // Explorer's absence has a reason of its own, not a typo
-    const hint =
-      unknown.includes("explorer") && withheld ? EXPLORER_HINTS[withheld] : "";
     throw new Error(
       `Unknown server: ${unknown.join(", ")}. Configured: ${
         Object.keys(configured).join(", ") || "none"
-      }.${hint}`
+      }.`
     );
   }
   return asked;
@@ -183,12 +149,21 @@ const selected = (url, configured, withheld) => {
  * @param {unknown} payload
  */
 const call = async (upstream, payload) => {
-  const response = await fetch(upstream.url, {
+  // The entry's `authToken` and `queryParams` mean here what they mean in the browser (`features/mcp`)
+  const url = new URL(upstream.url);
+  for (const [key, value] of Object.entries(upstream.queryParams ?? {})) {
+    url.searchParams.set(key, value);
+  }
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
       "mcp-protocol-version": PROTOCOL_VERSION,
+      ...(upstream.authToken
+        ? { authorization: `Bearer ${upstream.authToken}` }
+        : {}),
+      ...protectionHeaders(upstream.protection),
       ...upstream.headers,
     },
     body: JSON.stringify(payload),
@@ -293,12 +268,11 @@ const callTool = async (id, ids, configured, params) => {
  */
 async function handler(req, res) {
   warnAboutMissingObservabilityIds();
-  const withheld = await explorerWithheld(req);
-  const configured = upstreams({ signedIn: withheld === null });
+  const configured = await upstreams(req);
 
   // Discovery. The server decides which upstreams exist — the client asks
   // rather than carrying its own list, so adding one is a deploy and an
-  // operator can enable Explorer by setting its bypass with no client change.
+  // operator can enable one by setting its variables with no client change.
   // Ids and names only; nothing here reveals a credential.
   if (req.method === "GET") {
     return sendJson(res, 200, {
@@ -321,7 +295,7 @@ async function handler(req, res) {
   let ids;
   try {
     body = await readJson(req);
-    ids = selected(url, configured, withheld);
+    ids = selected(url, configured);
   } catch (e) {
     return sendJson(res, 400, { error: /** @type {Error} */ (e).message });
   }
