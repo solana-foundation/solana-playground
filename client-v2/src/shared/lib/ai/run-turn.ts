@@ -9,6 +9,8 @@ import type {
 } from "ai";
 
 import { createLogger } from "../logger";
+import { FAILURE_MESSAGE, failureKindOf, isReportedFailure } from "./failure";
+import type { AiFailureKind } from "./failure";
 import { isNetworkFailure } from "./network-failure";
 import { redactKey } from "./redact";
 
@@ -23,12 +25,18 @@ const FALLBACK_MAX_RESUMES = 3;
 /** Anthropic's raw stop reason for a turn it stopped early and expects resumed */
 const PAUSE_TURN = "pause_turn";
 
-/** Why a turn failed, so a caller can word each case for its own users */
-export type AiTurnErrorKind = "provider" | "refusal" | "paused" | "network";
+/**
+ * Why a turn failed, so a caller can word each case for its own users: a
+ * failed request is an {@link AiFailureKind} (`failure.ts` maps its status),
+ * then a refusal, a turn that kept pausing, or the connection dropping
+ */
+export type AiTurnErrorKind = AiFailureKind | "refusal" | "paused" | "network";
 
 /**
  * A turn the provider ended in failure: an error, a refusal, a turn that
- * kept pausing, or the connection dropping (`isNetworkFailure`). The message never carries the connection's key.
+ * kept pausing, or the connection dropping (`isNetworkFailure`). A failed
+ * request's message is Spec 08's words; the provider's own is in `detail`.
+ * Neither carries the connection's key.
  */
 export class AiTurnError extends Error {
   readonly kind: AiTurnErrorKind;
@@ -36,6 +44,11 @@ export class AiTurnError extends Error {
   readonly status?: number;
   /** The failed response's body with the key redacted, so a caller can read its own backend's fields */
   readonly body?: string;
+  /**
+   * What the provider said, status and body included, with the key redacted:
+   * for logs and details, never the first line a user reads
+   */
+  readonly detail?: string;
 
   constructor(
     message: string,
@@ -43,13 +56,20 @@ export class AiTurnError extends Error {
       kind = "provider",
       status,
       body,
-    }: { kind?: AiTurnErrorKind; status?: number; body?: string } = {}
+      detail,
+    }: {
+      kind?: AiTurnErrorKind;
+      status?: number;
+      body?: string;
+      detail?: string;
+    } = {}
   ) {
     super(message);
     this.name = "AiTurnError";
     this.kind = kind;
     this.status = status;
     this.body = body;
+    this.detail = detail;
   }
 }
 
@@ -100,14 +120,14 @@ const messageOf = (error: unknown): string => {
   return String(error);
 };
 
-/** Characters of an unparsed error body kept in the message */
-const BODY_IN_MESSAGE = 300;
+/** Characters of an unparsed error body kept in the detail */
+const BODY_IN_DETAIL = 300;
 
 /**
  * The SDK's message, or, for a failed response whose body did not match the
  * provider's error shape, the status, its text, and the start of the body.
  */
-const apiCallMessage = (error: APICallError, body: string | undefined) => {
+const apiCallDetail = (error: APICallError, body: string | undefined) => {
   // The SDK sets `data` only when it parsed the error; otherwise its message is the bare status text
   const unparsed =
     error.data === undefined &&
@@ -119,7 +139,7 @@ const apiCallMessage = (error: APICallError, body: string | undefined) => {
     .filter(Boolean)
     .join(" ");
   const detail = body.trim();
-  return detail ? `${status} — ${detail.slice(0, BODY_IN_MESSAGE)}` : status;
+  return detail ? `${status} — ${detail.slice(0, BODY_IN_DETAIL)}` : status;
 };
 
 const toTurnError = (error: unknown, apiKey: string | undefined) => {
@@ -131,16 +151,25 @@ const toTurnError = (error: unknown, apiKey: string | undefined) => {
     });
   }
   if (!APICallError.isInstance(error)) {
-    return new AiTurnError(redactKey(messageOf(error), apiKey));
+    // Neither the provider nor the connection: a bug of ours (a tool or a
+    // callback that threw), which a resend repeats, so the team hears of it
+    const detail = redactKey(messageOf(error), apiKey);
+    log.warn("model request failed", { report: true, context: { detail } });
+    return new AiTurnError(FAILURE_MESSAGE.provider, { detail });
   }
   const body =
     error.responseBody === undefined
       ? undefined
       : redactKey(error.responseBody, apiKey);
-  return new AiTurnError(redactKey(apiCallMessage(error, body), apiKey), {
-    status: error.statusCode,
-    body,
+  const status = error.statusCode;
+  const detail = redactKey(apiCallDetail(error, body), apiKey);
+  const kind = failureKindOf(status, body);
+  // Spec 08: the status and the server's words stay in the log
+  log.warn("model request failed", {
+    report: isReportedFailure(kind),
+    context: { status, detail },
   });
+  return new AiTurnError(FAILURE_MESSAGE[kind], { kind, status, body, detail });
 };
 
 // Anthropic reports the refusal category in its metadata; other providers give none

@@ -115,7 +115,10 @@ export const createProvider = (
         if (e.kind === "refusal") {
           throw new Error(`${e.message} Rephrase it, or switch backends.`);
         }
+        const own = profile.ownRefusal?.(e);
+        if (own) throw new Error(own, { cause: e });
         const refusal = profile.signedOutRefusal?.(e);
+        // Spec 08's words, never the status or the server's text
         if (!refusal) throw e;
         // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
         void PgSession.refresh();

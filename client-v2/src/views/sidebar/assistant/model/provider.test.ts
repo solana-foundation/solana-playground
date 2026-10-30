@@ -323,8 +323,28 @@ describe("the assistant's provider", () => {
 
     const failure = await provider.send("hi").catch((e: Error) => e.message);
 
-    expect(failure).toContain("Incorrect API key provided");
+    // Spec 08's AI-05: the provider's words stay in the log
+    expect(failure).toBe(
+      "The model's provider did not accept this key. Check it in Settings, or use the hosted model."
+    );
     expect(failure).not.toContain(KEY);
+  });
+
+  it("never shows the default backend's relay of an upstream failure", async () => {
+    respond(
+      new Response(
+        JSON.stringify({ error: 'Upstream 503: {"error":"overloaded"}' }),
+        {
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+
+    await expect(defaultBackend().send("hi")).rejects.toThrow(
+      /^Could not get an answer from the model\. Send your message again\.$/
+    );
   });
 
   it("shows the default backend's sentence for a failure it refuses", async () => {
@@ -338,7 +358,10 @@ describe("the assistant's provider", () => {
       })
     );
 
-    await expect(defaultBackend().send("hi")).rejects.toThrow(sentence);
+    // Its own refusal, written for people: shown whole, with no status
+    await expect(defaultBackend().send("hi")).rejects.toThrow(
+      new Error(sentence)
+    );
   });
 
   it("echoes Gemini's thought signature on its tool call in the next turn", async () => {
