@@ -90,13 +90,17 @@ export type Framework<N extends string = string> = RequiredKey<
 /** What `exportWorkspace` throws when it cannot tell a project's framework */
 const UNKNOWN_FRAMEWORK = "Could not identify framework";
 
-/** An import holding Rust or Python that no framework recognises (spec 10) */
+/**
+ * An import holding Rust or Python that no framework recognises (spec
+ * `project-without-program`, a repository with no program imports as a
+ * TypeScript project)
+ */
 const NOT_A_PROGRAM =
   "This doesn't look like a Solana program. Playground opens Anchor, native Rust and Seahorse programs.";
 
 /**
  * An import with nothing to open: no program and no TypeScript or JavaScript
- * (spec 10). Shared with `PgGithub`, which refuses an empty path before
+ * (spec `project-without-program`). Shared with `PgGithub`, which refuses an empty path before
  * downloading anything.
  *
  * @param source where the files came from, such as `owner/repo`
