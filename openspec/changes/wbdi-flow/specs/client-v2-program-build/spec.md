@@ -88,8 +88,8 @@ The build SHALL emit `build_started { framework }` when a build is sent,
 
 ### Requirement: Every Build action emits an event
 
-Every control on the Build screen that performs an action SHALL emit exactly
-one event when used, separate from the outcome events: Build emits
+Every control on the Build screen that performs an action SHALL emit its own
+event when used, separate from the outcome events: Build emits
 `build_started`, Download IDL `build_idl_downloaded`, Export project
 `build_project_exported` and Fix with assistant `build_fix_requested`, the
 last three with no parameters. A control without its event fails review.

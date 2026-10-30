@@ -87,18 +87,19 @@ at the same target and SHALL need the program's upgrade authority.
 ### Requirement: An IDL upload is per cluster
 
 An IDL uploaded on one cluster SHALL NOT be shown as uploaded on another. An
-upload started on Mainnet Beta SHALL open the mainnet guard and send nothing;
-the IDL upload script in the export publishes a mainnet IDL.
+upload started on Mainnet Beta SHALL open the mainnet disclaimer and send
+nothing until the user accepts it, as for a mainnet deploy.
 
 #### Scenario: Devnet upload is not on mainnet
 
 - **WHEN** the user uploads the IDL on Devnet and selects Mainnet Beta
 - **THEN** the playground shows no IDL for the program on Mainnet Beta
 
-#### Scenario: Mainnet upload opens the guard
+#### Scenario: Mainnet upload opens the disclaimer
 
 - **WHEN** the user uploads the IDL with Mainnet Beta selected
-- **THEN** the mainnet guard dialog opens and no transaction is sent
+- **THEN** the mainnet disclaimer opens and no transaction is sent until the
+  user accepts it
 
 ### Requirement: IDL telemetry
 
@@ -117,7 +118,7 @@ The IDL slice SHALL emit `idl_loaded { source, format }`,
 
 ### Requirement: Every IDL action emits an event
 
-Every IDL control that performs an action SHALL emit exactly one event when
+Every IDL control that performs an action SHALL emit its own event when
 used, separate from the outcome events: the source picker
 `idl_source_selected { source }`, Load IDL file `idl_file_picker_opened`,
 Paste IDL `idl_paste_opened`, Clear local IDL `idl_local_cleared`, the upload

@@ -78,30 +78,47 @@ the user supplies one: a file, or JSON pasted or typed into an editor. Both
 paths give the same result. A local IDL is also how the user tries an edited
 copy of a published IDL. Loading one never writes to the chain.
 
-### The playground does not deploy to mainnet
+### A mainnet deploy needs an explicit acceptance, every time
 
 The playground wallet is a keypair in localStorage. Funding it for a mainnet
 deploy means sending real SOL to a key any script on the page can read. The
-playground cannot make that safe, so it does not deploy to Mainnet Beta and
-sends the user to the alternative: the same program, with the same program
-id, deployed from the user's machine with the scripts in the export.
+playground cannot make that safe, so a mainnet deploy stays possible only
+after the user accepts that risk, and the disclaimer recommends the
+alternative: the same program, with the same program id, deployed from the
+user's machine with the scripts in the export.
 
-The block sits in front of the deploy itself, not in front of one button, so
-the terminal `deploy` command and the assistant's tools reach it too. An
-extension wallet does not lift it, because a deploy with an extension still
-moves the cost into the playground wallet, which signs the loader
-transactions. IDL uploads are blocked the same way; the IDL upload script
-covers them. Sending an instruction from Interact stays allowed on Mainnet
-Beta: it calls a program, it does not deploy one.
+The disclaimer sits in front of the deploy itself, not in front of one
+button, so the terminal `deploy` command and the assistant's tools reach it
+too, and an extension wallet does not skip it: a deploy with an extension
+still moves the cost into the playground wallet, which signs the loader
+transactions. IDL uploads wait for it the same way. Sending an instruction
+from Interact keeps its own confirmation: it calls a program, it does not
+deploy one.
+
+The acceptance is a checkbox in a dialog, not a tooltip: a tooltip opens on
+hover, so it never appears on a phone or for a keyboard user, and it cannot
+hold a required action. The checkbox starts unticked on every deploy, and a
+stored acceptance never skips the dialog, because a remembered yes would let
+a later deploy started by the assistant spend real SOL unasked.
+
+The cookie `pg_mainnet_disclaimer` records that this browser accepted the
+disclaimer, its version and when. It is a record kept by the playground, not
+proof: the user can edit or clear it, and the server never sees who ticked
+the box. The 182-day lifetime matches the Explorer's `idl_mainnet_accepted`
+cookie and was chosen while writing this change.
+
+TODO(ticket to file): store each acceptance on the server for a signed-in
+user (account, disclaimer version, time), so the record can be checked
+later; the cookie stays as the browser-side record.
 
 Alternatives considered:
 
-- Warn and let the user deploy anyway, asking each time. Rejected: a key
-  stored in the browser is not made safe by a dialog, and every path that can
-  start a deploy (the assistant among them) has to be guarded without gaps.
-- Allow mainnet with an extension wallet only. Rejected while the extension
-  only funds the playground wallet. Worth revisiting once the extension signs
-  the deploy end to end, which this change leaves out of scope.
+- Block mainnet deploys from the playground. Rejected: the user may have a
+  reason to deploy from here, and the disclaimer plus the scripts leave the
+  choice with them.
+- Remember the acceptance and skip the dialog for a while, as the Explorer
+  does. Rejected: the assistant and the terminal can start a deploy, and each
+  mainnet deploy must have a click of its own.
 
 The Interact confirmation on the first mainnet send per session follows the
 Explorer's behaviour; it was chosen while writing this change, not requested. It is per
@@ -157,9 +174,13 @@ from the user's IDL.
 
 - [The Program Metadata program or its client changes format] → read and
   write through one client package, pinned, so a format change is one bump.
-- [A user deploys to mainnet anyway and the key leaks] → the guard states the
-  risk in the dialog text; the playground cannot remove the risk while it
-  signs with a browser key.
+- [A user accepts the disclaimer and the browser key leaks] → the disclaimer
+  names the risk and recommends the scripts; the playground cannot remove the
+  risk while it signs with a browser key.
+- [A deploy path skips the disclaimer] → the disclaimer guards the deploy
+  itself, and the scenarios for the terminal and the assistant test it.
+- [The cookie is cleared or edited] → it is a browser-side record only; the
+  server record in the TODO above is what makes an acceptance checkable.
 - [Two on-chain IDLs disagree] → the source picker shows which one is in use,
   and the default is the one the Explorer reads first.
 - [The Anchor migration slips] → the 0.30+ and Codama tasks for projects built

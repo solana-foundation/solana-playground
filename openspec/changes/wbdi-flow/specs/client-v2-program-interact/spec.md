@@ -158,7 +158,7 @@ or `confirm`. No event carries a program id, address or signature.
 ### Requirement: Every Interact action emits an event
 
 Every control on the Interact screen that performs an action, a dialog choice
-and Cancel included, SHALL emit exactly one event when used, separate from the
+and Cancel included, SHALL emit its own event when used, separate from the
 outcome events. No event carries an instruction name, which comes from the
 user's IDL. A control without its event fails review. The requirements that
 follow name each control's event.

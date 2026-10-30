@@ -23,14 +23,17 @@ describes and emits its spec's events with memory-provider tests.
 - [ ] 2.2 Track deploy state per cluster so a program on Devnet shows as not
   deployed on Testnet; verify with the "Devnet deploy is not on testnet"
   scenario (ticket to file; after 2.1)
-- [ ] 2.3 Block every deploy to Mainnet Beta, whichever wallet pays and
-  whether the button, the terminal `deploy` command or the assistant starts
-  it, and open the mainnet guard dialog (`mainnet-guard`) with Download
-  deploy scripts and Close, emitting `deploy_mainnet_warned`; verify with the
-  guard scenarios (ticket to file; after 2.1)
+- [ ] 2.3 Put the mainnet disclaimer dialog (`mainnet-guard`) in front of
+  every Mainnet Beta deploy, whichever wallet pays and whether the button,
+  the terminal `deploy` command or the assistant starts it, shown every time
+  with the unticked "I understand the risk" checkbox
+  (`mainnet-guard-accept`) gating Deploy to mainnet (`mainnet-guard-deploy`),
+  writing `pg_mainnet_disclaimer` on acceptance and emitting
+  `deploy_mainnet_warned` and `deploy_mainnet_accept_toggled`; verify with
+  the disclaimer and cookie scenarios (ticket to file; after 2.1)
 - [ ] 2.4 Add the deploy script, the IDL upload script and the README steps to
   the export of every framework, and wire Download deploy scripts in the
-  guard with `deploy_scripts_exported`; verify by running both scripts
+  disclaimer with `deploy_scripts_exported`; verify by running both scripts
   against `solana-test-validator` and with the export scenarios (ticket to
   file; after 2.3)
 - [ ] 2.5 Add program keypair export, import and create to the Deploy stage,
@@ -55,7 +58,7 @@ describes and emits its spec's events with memory-provider tests.
   (ticket to file; after 3.1)
 - [ ] 3.5 Upload the project's IDL to the Program Metadata program, and to
   the Anchor IDL account as the legacy option, on the deployed cluster with
-  the authority check, and blocked on Mainnet Beta by the mainnet guard; verify on
+  the authority check, and behind the mainnet disclaimer on Mainnet Beta; verify on
   Devnet with the upload scenarios and `idl_uploaded` (ticket to file; after
   3.2 and 2.3)
 
