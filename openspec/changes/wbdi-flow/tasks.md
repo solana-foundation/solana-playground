@@ -10,10 +10,13 @@ describes and emits its spec's events with memory-provider tests.
   `build_started`, `build_succeeded` and `build_failed` around
   `commands/build`, and verify with memory-provider tests for each
   `framework` and `reason` (ticket to file)
-- [ ] 1.2 Cover the existing build requirements with e2e specs titled
+- [ ] 1.2 Keep the previous IDL when a build fails: the `build` command writes
+  `result.idl` into `PgProgramInfo` even after a compile error, so a failed
+  build erases the saved IDL; verify with a test of a successful build
+  followed by a failed one, failing before the fix (ticket to file)
+- [ ] 1.3 Cover the build requirements with e2e specs titled
   `client-v2-program-build: <scenario>`, the build server stubbed with
-  `page.route`, and verify they pass on the code as it is (ticket to file;
-  after 1.1)
+  `page.route`, and verify they pass (ticket to file; after 1.1 and 1.2)
 
 ## 2. Deploy
 

@@ -224,15 +224,17 @@ SHALL emit `deploy_program_id_copied` with no parameters.
 
 ### Requirement: Program keypair controls are tracked
 
-Export, Import and New keypair SHALL emit `deploy_keypair_exported`,
-`deploy_keypair_imported` and `deploy_keypair_created`, with no parameters.
-The warning before replacing a deployed program's keypair SHALL emit
+Export and New keypair SHALL emit `deploy_keypair_exported` and
+`deploy_keypair_created`. Import SHALL emit `deploy_keypair_import_started`
+on the click and `deploy_keypair_imported` once the keypair is replaced. The
+warning before replacing a deployed program's keypair SHALL emit
 `deploy_keypair_replace_warned { choice }`, `choice` being `replace` or
-`cancel`.
+`cancel`. Unlisted parameters are none.
 
 #### Scenario: Replacing a keypair is cancelled
 
 - **WHEN** the user imports a keypair for a deployed program and cancels the
   warning
-- **THEN** the memory provider records `deploy_keypair_replace_warned` with
-  `{ choice: "cancel" }` and no `deploy_keypair_imported`
+- **THEN** the memory provider records `deploy_keypair_import_started`, then
+  `deploy_keypair_replace_warned` with `{ choice: "cancel" }`, and no
+  `deploy_keypair_imported`

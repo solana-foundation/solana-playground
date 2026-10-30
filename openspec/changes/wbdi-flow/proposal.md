@@ -65,7 +65,8 @@ its own event, so a user's path through the flow can be rebuilt. Events added
   `deploy_paused`, `deploy_resumed`, `deploy_cancelled`,
   `deploy_buffer_close_answered`, `deploy_stale_warned`,
   `deploy_airdrop_requested`, `deploy_program_id_copied`,
-  `deploy_keypair_exported`, `deploy_keypair_imported`,
+  `deploy_keypair_exported`, `deploy_keypair_import_started`,
+  `deploy_keypair_imported`,
   `deploy_keypair_created`, `deploy_keypair_replace_warned`,
   `deploy_mainnet_warned`, `deploy_mainnet_accept_toggled`,
   `deploy_scripts_exported`.
