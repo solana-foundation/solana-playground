@@ -25,6 +25,10 @@ const signedOutRefusal = (error: AiTurnError): string | undefined => {
 /**
  * How `/api/agent` prefixes an upstream failure it relays. Its text is the
  * upstream's, status and body included, so it is never shown.
+ *
+ * TODO(after polish-3 and ai-rail land): `api/agent.mjs` writes this prefix
+ * itself; mark the relay with a field both import (as `SIGNED_OUT_REASON`)
+ * instead. Kept as polish-3 has it until then, so the landing merge stays clean.
  */
 const UPSTREAM_RELAY = "Upstream ";
 
@@ -47,6 +51,10 @@ const ownRefusal = (error: AiTurnError): string | undefined => {
   }
 };
 
+// TODO(after polish-3 and ai-rail land): a 403 or 404 from `/api/agent` is a
+// deployment of ours gone wrong (origin not allowed, route or model missing),
+// yet reads as the user's key or model and goes unreported; give this profile
+// its own words and reporting for them
 export const defaultProfile: ModelProviderProfile = {
   // The model is the server's to pick, so none is sent and none is shown
   profile: () => ({

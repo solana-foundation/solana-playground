@@ -166,7 +166,7 @@ const toTurnError = (error: unknown, apiKey: string | undefined) => {
   const kind = failureKindOf(status, body);
   // Spec 08: the status and the server's words stay in the log
   log.warn("model request failed", {
-    report: isReportedFailure(kind),
+    report: isReportedFailure(kind, status),
     context: { status, detail },
   });
   return new AiTurnError(FAILURE_MESSAGE[kind], { kind, status, body, detail });

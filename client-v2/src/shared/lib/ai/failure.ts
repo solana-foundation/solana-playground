@@ -16,10 +16,21 @@ export type AiFailureKind =
 /**
  * How providers word a request past the model's context in a 400: Anthropic
  * ("prompt is too long"), OpenAI (`context_length_exceeded`, "maximum context
- * length") and the OpenAI-compatible servers that copy either
+ * length"), Gemini ("exceeds the maximum number of tokens") and the
+ * OpenAI-compatible servers that copy them
  */
 const TOO_LONG =
-  /prompt is too long|context_length_exceeded|maximum context length|context window/i;
+  /prompt is too long|context_length_exceeded|maximum context length|context window|exceeds the maximum number of tokens/i;
+
+/** Gemini refuses a bad key with a 400, not a 401 */
+const KEY_INVALID = /API_KEY_INVALID|API key not valid/i;
+
+/**
+ * A provider or its host that is down or overloaded: Anthropic's 529, and the
+ * 502, 503 and 504 of a gateway. Its status page says so, a resend repeats it,
+ * and the default backend's own 503 refusals are among them.
+ */
+const OUTAGE = new Set([502, 503, 504, 529]);
 
 /** The kind of a failed response, from its status and its (redacted) body */
 export const failureKindOf = (
@@ -31,8 +42,11 @@ export const failureKindOf = (
   if (status === 403) return "forbidden";
   if (status === 404) return "no-model";
   if (status === 413) return "too-long";
-  if (status === 400)
+  if (status === 422) return "invalid";
+  if (status === 400) {
+    if (body && KEY_INVALID.test(body)) return "key-refused";
     return body && TOO_LONG.test(body) ? "too-long" : "invalid";
+  }
   return "provider";
 };
 
@@ -62,8 +76,12 @@ export const FAILURE_MESSAGE: Record<AiFailureKind, string> = {
  * key, model or conversation, or a busy provider, and a resend repeats it, so
  * reporting it would send one event per attempt.
  */
-export const isReportedFailure = (kind: AiFailureKind) =>
-  kind === "invalid" || kind === "provider";
+export const isReportedFailure = (
+  kind: AiFailureKind,
+  status: number | undefined
+) =>
+  kind === "invalid" ||
+  (kind === "provider" && (status === undefined || !OUTAGE.has(status)));
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -86,15 +104,35 @@ if (import.meta.vitest) {
     it.each([
       '{"type":"error","error":{"type":"invalid_request_error","message":"prompt is too long: 210000 tokens > 200000 maximum"}}',
       '{"error":{"code":"context_length_exceeded","message":"This model\'s maximum context length is 128000 tokens."}}',
+      '{"error":{"code":400,"message":"The input token count (1200000) exceeds the maximum number of tokens allowed (1048576).","status":"INVALID_ARGUMENT"}}',
     ])("a 400 past the context is too-long: %s", (body) => {
       expect(failureKindOf(400, body)).toBe("too-long");
     });
 
     it("reports only what is ours to fix", () => {
       const reported = (Object.keys(FAILURE_MESSAGE) as AiFailureKind[]).filter(
-        isReportedFailure
+        (kind) => isReportedFailure(kind, 500)
       );
       expect(reported).toEqual(["invalid", "provider"]);
+    });
+
+    it.each([502, 503, 504, 529])(
+      "an outage (%i) is not reported",
+      (status) => {
+        expect(isReportedFailure(failureKindOf(status, "{}"), status)).toBe(
+          false
+        );
+      }
+    );
+
+    it("a 422 is invalid", () => {
+      expect(failureKindOf(422, "{}")).toBe("invalid");
+    });
+
+    it("Gemini's 400 for a bad key is key-refused", () => {
+      const body =
+        '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}';
+      expect(failureKindOf(400, body)).toBe("key-refused");
     });
 
     it("never tells the user to resend a request that fails the same way again", () => {

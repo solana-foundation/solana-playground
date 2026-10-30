@@ -184,6 +184,14 @@ describe("runTurn", () => {
       expect(failure.detail).toBe(
         '502 Bad Gateway — {"error":"Upstream 500: [your key] was not used."}'
       );
+      // An outage: the provider's status page says so, and a resend repeats it
+      expect(reported()).toEqual([]);
+    });
+
+    it("a server error that is not an outage is reported", async () => {
+      const failure = await failOn(openAiError(500, "internal error"));
+
+      expect(failure.kind).toBe("provider");
       expect(reported()).toHaveLength(1);
     });
 
