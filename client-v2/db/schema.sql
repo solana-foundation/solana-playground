@@ -46,6 +46,19 @@ CREATE TABLE public.account (
 
 
 --
+-- Name: agent_spend; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_spend (
+    user_id text NOT NULL,
+    day date NOT NULL,
+    reserved bigint DEFAULT 0 NOT NULL,
+    spent bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT agent_spend_amounts_check CHECK (((reserved >= 0) AND (spent >= 0)))
+);
+
+
+--
 -- Name: conversations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -138,7 +151,8 @@ CREATE TABLE public."user" (
     image text,
     "createdAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
     "updatedAt" timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    login text
+    login text,
+    "githubCreatedAt" timestamp with time zone
 );
 
 
@@ -162,6 +176,14 @@ CREATE TABLE public.verification (
 
 ALTER TABLE ONLY public.account
     ADD CONSTRAINT account_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: agent_spend agent_spend_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_spend
+    ADD CONSTRAINT agent_spend_pkey PRIMARY KEY (user_id, day);
 
 
 --
@@ -302,6 +324,14 @@ ALTER TABLE ONLY public.account
 
 
 --
+-- Name: agent_spend agent_spend_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_spend
+    ADD CONSTRAINT agent_spend_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
 -- Name: conversations conversations_project_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -382,6 +412,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20260915124433
 20260916032901
 20260929120000
+20261029120000
 \.
 
 

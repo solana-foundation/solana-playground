@@ -19,8 +19,47 @@ export interface Provider {
    *
    * @param input what the user typed
    * @param signal aborts the turn; rejects with the abort reason
+   * @throws {TurnFailure} when the backend, the model or the backend's cost
+   *   gate ended the turn without an answer; any other rejection is the abort
+   *   reason or a failure raised on this side
    */
   send(input: string, signal?: AbortSignal): Promise<void>;
+}
+
+/**
+ * Why a turn ended without an answer: the backend answered with an error or
+ * did not answer (`provider`), the model refused the prompt (`refusal`), the
+ * turn kept pausing past the resume limit (`paused`), or the backend refused
+ * it under its cost gate (`capped`).
+ */
+export type TurnFailureReason = "provider" | "refusal" | "paused" | "capped";
+
+/**
+ * A turn the provider ended without an answer. `message` is what the thread
+ * shows; `reason` and `status` are for telemetry to report, so the widget
+ * reads neither the SDK's error class, which is loaded on demand, nor the
+ * message's text. `cause` keeps the SDK's error, with its stack and the
+ * redacted response body, for a log.
+ */
+export class TurnFailure extends Error {
+  readonly reason: TurnFailureReason;
+  /** The HTTP status, when the backend answered with an error status */
+  readonly status?: number;
+
+  constructor(
+    message: string,
+    {
+      reason,
+      status,
+      cause,
+    }: { reason: TurnFailureReason; status?: number; cause?: unknown }
+  ) {
+    super(message, { cause });
+    // For a stack trace or a log; `instanceof` is what classifies a failure
+    this.name = "TurnFailure";
+    this.reason = reason;
+    this.status = status;
+  }
 }
 
 /** Reasoning depth, and the main cost lever on the Anthropic backend */

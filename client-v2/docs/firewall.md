@@ -5,7 +5,8 @@ This page lists the rules that tab must hold, with the reason for each. Never ad
 Protection Bypass for Automation secret here.
 
 The application decides who may call each route. `POST /api/agent` answers only a signed-in user from our own origin
-([`api/agent.mjs`](../api/agent.mjs)), the sync routes need a session too, and `/api/mcp` offers its Explorer upstream
+([`api/agent.mjs`](../api/agent.mjs)) and holds each one to a daily spend cap
+([Default backend spend](deploy-client-vercel.md#default-backend-spend)), the sync routes need a session too, and `/api/mcp` offers its Explorer upstream
 only to a signed-in user. The firewall adds what the application cannot: a cap on how fast one client sends requests,
 and an emergency switch that needs no redeploy.
 
@@ -27,7 +28,7 @@ with what the rule does, so the dashboard list shows the emergency switches with
 
 | Rule | Covers | Without it |
 | --- | --- | --- |
-| `Rate limit /api/agent (IP)` | `/api/agent` | One signed-in account, or a script holding its cookie, spends the paid model key as fast as it can send |
+| `Rate limit /api/agent (IP)` | `/api/agent` | One signed-in account, or a script holding its cookie, spends its whole daily cap on the paid model key as fast as it can send |
 | `Rate limit /api/mcp (IP)` | `/api/mcp` | Anyone relays requests to `mcp.solana.com` through our functions, unmetered |
 | `Rate limit sign-in (IP)` | `/api/auth/sign-in/` | A script starts GitHub OAuth flows without limit |
 | `Rate limit sync (IP)` | `/api/projects`, `/api/conversations` | A signed-in script writes to Postgres as fast as it can send |
@@ -54,7 +55,7 @@ Every rate limit uses the Fixed Window algorithm and answers `429` once a client
 
 ```text
 Name: Rate limit /api/agent (IP)
-Description: 30/60s per IP, 429 over the limit. Each request is one model turn on the paid key, and a turn that calls tools sends several. Signed-in users only: api/agent.mjs refuses everyone else. ^/api/agent(\.mjs)?$
+Description: 30/60s per IP, 429 over the limit. Each request is one model turn on the paid key, and a turn that calls tools sends several. Signed-in users only, each held to a daily spend cap by api/agent.mjs; this limits how fast, the cap how much. ^/api/agent(\.mjs)?$
 Status: Enabled
 Rule:
     If `Request Path` `Matches expression` `^/api/agent(\.mjs)?$`

@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "greploop": {
+      "source": "greptileai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/greploop/SKILL.md",
+      "computedHash": "d37000d0e461ccf46116abdf371ad9b0beaaf7d2ed7365fb91f10903bc51cd85"
+    }
+  }
+}
