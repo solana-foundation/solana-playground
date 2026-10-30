@@ -20,6 +20,7 @@ import { PgFramework, PgProgramInfo, PgSettings, PgView } from "@/utils";
 import {
   ImportFs,
   ImportGithub,
+  isImported,
 } from "@/views/sidebar/explorer/Component/Modals";
 import { groupSettings, sectionTitle } from "../model/sections";
 import type { SectionId } from "../model/sections";
@@ -77,7 +78,11 @@ const LiveSettingsPage = ({ focus, onClose }: SettingsPageProps) => {
         />
       ),
     },
-    { id: PROJECT, title: "Project", content: <Project phone={phone} /> },
+    {
+      id: PROJECT,
+      title: "Project",
+      content: <Project phone={phone} onImported={() => onClose("import")} />,
+    },
   ];
   const groups = groupSettings(PgSettings.all).map(({ id, settings }) => ({
     id,
@@ -129,37 +134,48 @@ export default SettingsPage;
 /** On a phone the prototype's buttons: a fingertip tall in the control type */
 const PHONE_BUTTON = "h-12 rounded-xl text-control font-act";
 
-const Project = ({ phone }: { phone: boolean }) => (
-  <div className={cn("flex gap-2", phone ? "flex-col" : "flex-wrap")}>
-    <AsyncButton
-      variant="outline"
-      className={phone ? PHONE_BUTTON : undefined}
-      onClick={() => PgFramework.exportWorkspace()}
-      onError={reportButtonFailure("export the project")}
-    >
-      <ExportFile data-icon="inline-start" />
-      Export project (zip)
-    </AsyncButton>
-    <AsyncButton
-      variant="outline"
-      className={phone ? PHONE_BUTTON : undefined}
-      onClick={() => PgView.setModal(ImportGithub)}
-      onError={reportButtonFailure("open the GitHub import")}
-    >
-      <Github data-icon="inline-start" />
-      From GitHub
-    </AsyncButton>
-    <AsyncButton
-      variant="outline"
-      className={phone ? PHONE_BUTTON : undefined}
-      onClick={() => PgView.setModal(ImportFs)}
-      onError={reportButtonFailure("open the file import")}
-    >
-      <ImportFile data-icon="inline-start" />
-      From files
-    </AsyncButton>
-  </div>
-);
+interface ProjectProps {
+  phone: boolean;
+  /** A project was imported and opened: the page gets out of its way */
+  onImported: () => void;
+}
+
+const Project = ({ phone, onImported }: ProjectProps) => {
+  const open = (dialog: typeof ImportGithub | typeof ImportFs) => async () => {
+    if (isImported(await PgView.setModal(dialog))) onImported();
+  };
+  return (
+    <div className={cn("flex gap-2", phone ? "flex-col" : "flex-wrap")}>
+      <AsyncButton
+        variant="outline"
+        className={phone ? PHONE_BUTTON : undefined}
+        onClick={() => PgFramework.exportWorkspace()}
+        onError={reportButtonFailure("export the project")}
+      >
+        <ExportFile data-icon="inline-start" />
+        Export project (zip)
+      </AsyncButton>
+      <AsyncButton
+        variant="outline"
+        className={phone ? PHONE_BUTTON : undefined}
+        onClick={open(ImportGithub)}
+        onError={reportButtonFailure("open the GitHub import")}
+      >
+        <Github data-icon="inline-start" />
+        From GitHub
+      </AsyncButton>
+      <AsyncButton
+        variant="outline"
+        className={phone ? PHONE_BUTTON : undefined}
+        onClick={open(ImportFs)}
+        onError={reportButtonFailure("open the file import")}
+      >
+        <ImportFile data-icon="inline-start" />
+        From files
+      </AsyncButton>
+    </div>
+  );
+};
 
 /** The wallet's and the program's pages in the chosen explorer, when there are any */
 const ExplorerLinks = ({ phone }: { phone: boolean }) => {

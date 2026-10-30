@@ -50,6 +50,7 @@ const utils = vi.hoisted(() => {
 });
 vi.mock("../../../../../utils", () => utils);
 
+import { IMPORTED } from "./imported";
 import { ImportGithub } from "./ImportGithub";
 
 /** Answers every key: the modal's styles read deep theme keys, none of which matters here */
@@ -94,14 +95,18 @@ const importExample = () => {
   fireEvent.click(within(row).getByRole("button", { name: /^import$/i }));
 };
 
-it("closes the dialog once an example is imported", async () => {
+it("closes the dialog as imported once an example is imported", async () => {
   utils.PgGithub.import.mockResolvedValue(undefined);
   draw();
 
   importExample();
 
+  // The settings page closes on that answer, so the opened project shows
   await waitFor(() =>
-    expect(utils.PgView.closeModal).toHaveBeenCalledWith(null, "import-github")
+    expect(utils.PgView.closeModal).toHaveBeenCalledWith(
+      IMPORTED,
+      "import-github"
+    )
   );
   expect(toast).not.toHaveBeenCalled();
 });
@@ -127,4 +132,19 @@ it("tells the user an example that failed to import", async () => {
 
   await waitFor(() => expect(toast).toHaveBeenCalledTimes(1));
   expect(utils.PgView.closeModal).not.toHaveBeenCalled();
+});
+
+it("closes the dialog as imported when an example is opened", () => {
+  draw();
+  const row = screen.getByText("Anchor - Hello").closest("div")!.parentElement!;
+
+  fireEvent.click(within(row).getByRole("button", { name: /^open$/i }));
+
+  expect(utils.PgRouter.navigate).toHaveBeenCalledWith(
+    "/https://github.com/a/b"
+  );
+  expect(utils.PgView.closeModal).toHaveBeenCalledWith(
+    IMPORTED,
+    "import-github"
+  );
 });
