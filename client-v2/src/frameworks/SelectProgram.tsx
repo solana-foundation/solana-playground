@@ -1,9 +1,9 @@
 import { FC, useState } from "react";
 import { InfoIcon } from "lucide-react";
-import styled, { css } from "styled-components";
 
 import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { cn } from "@/shared/lib/utils";
 
 interface SelectProgramProps {
   /** Program names to select from */
@@ -24,7 +24,7 @@ export const SelectProgram: FC<React.PropsWithChildren<SelectProgramProps>> = ({
         onSubmit: () => selected,
       }}
     >
-      <Content>
+      <div className="max-w-[32rem]">
         <Callout variant="info">
           <InfoIcon />
           <CalloutDescription>
@@ -33,51 +33,23 @@ export const SelectProgram: FC<React.PropsWithChildren<SelectProgramProps>> = ({
           </CalloutDescription>
         </Callout>
 
-        <ProgramsWrapper>
+        <div className="mt-4">
           {programNames.map((name) => (
-            <Program
+            <div
               key={name}
-              isSelected={name === selected}
+              className={cn(
+                "my-3 cursor-pointer rounded-[12px] border px-4 py-2 font-bold transition-all duration-150 ease-linear hover:text-[var(--text-primary)]",
+                name === selected
+                  ? "border-primary text-[var(--text-primary)]"
+                  : "border-border text-[var(--text-secondary)] hover:border-[var(--text-primary)]"
+              )}
               onClick={() => setSelected((s) => (s === name ? null : name))}
             >
               {name}
-            </Program>
+            </div>
           ))}
-        </ProgramsWrapper>
-      </Content>
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  max-width: 32rem;
-`;
-
-const ProgramsWrapper = styled.div`
-  margin-top: 1rem;
-`;
-
-const Program = styled.div<{ isSelected: boolean }>`
-  ${({ theme, isSelected }) => css`
-    margin: 0.75rem 0;
-    padding: 0.5rem 1rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font-weight: bold;
-    transition: all ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-
-    &:hover {
-      cursor: pointer;
-      border-color: ${!isSelected && theme.colors.default.textPrimary};
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    ${isSelected &&
-    `
-      border-color: ${theme.colors.default.primary};
-      color: ${theme.colors.default.textPrimary};
-      `}
-  `}
-`;

@@ -1,7 +1,7 @@
 import { FC, useState } from "react";
 import { InfoIcon } from "lucide-react";
-import styled, { css } from "styled-components";
 
+import { cn } from "@/shared/lib/utils";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
@@ -45,9 +45,9 @@ export const ImportGithub = () => {
         disabled: !!error,
       }}
     >
-      <Wrapper>
-        <GithubUrlWrapper>
-          <GithubUrlInputLabel>GitHub URL</GithubUrlInputLabel>
+      <div className="max-w-[39rem]">
+        <div>
+          <div className="mb-2 font-bold">GitHub URL</div>
           <Input
             autoFocus
             value={url}
@@ -57,20 +57,20 @@ export const ImportGithub = () => {
             setError={setError}
             placeholder="https://github.com/..."
           />
-        </GithubUrlWrapper>
+        </div>
 
-        <Description>
+        <div className="my-4 text-[0.75rem] break-all text-[color:var(--text-secondary)]">
           Projects can be imported or viewed from their GitHub URL.
-        </Description>
+        </div>
 
-        <ExamplesSectionWrapper>
-          <ExamplesTitle>Examples</ExamplesTitle>
-          <ExamplesWrapper>
+        <div className="my-4">
+          <div className="font-bold">Examples</div>
+          <div className="mt-2">
             {PgFramework.all.map((framework) => (
               <Example key={framework.name} framework={framework} />
             ))}
-          </ExamplesWrapper>
-        </ExamplesSectionWrapper>
+          </div>
+        </div>
 
         <Callout variant="info">
           <InfoIcon />
@@ -86,7 +86,7 @@ export const ImportGithub = () => {
             </p>
           </CalloutDescription>
         </Callout>
-      </Wrapper>
+      </div>
     </ModalFrame>
   );
 };
@@ -96,38 +96,6 @@ const GITHUB_PROGRAM_URL =
 
 const VIEW_URL = PgRouter.getPathUrl(GITHUB_PROGRAM_URL);
 
-const Wrapper = styled.div`
-  max-width: 39rem;
-`;
-
-const GithubUrlWrapper = styled.div``;
-
-const GithubUrlInputLabel = styled.div`
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-`;
-
-const Description = styled.div`
-  ${({ theme }) => css`
-    margin: 1rem 0;
-    font-size: ${theme.font.code.size.small};
-    color: ${theme.colors.default.textSecondary};
-    word-break: break-all;
-  `}
-`;
-
-const ExamplesSectionWrapper = styled.div`
-  margin: 1rem 0;
-`;
-
-const ExamplesTitle = styled.div`
-  font-weight: bold;
-`;
-
-const ExamplesWrapper = styled.div`
-  margin-top: 0.5rem;
-`;
-
 interface ExampleProps {
   framework: Framework;
 }
@@ -135,15 +103,18 @@ interface ExampleProps {
 const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
   const id = useModalId();
   return (
-    <ExampleWrapper>
-      <FrameworkWrapper>
-        <FrameworkImage src={framework.icon} $circle={framework.circleImage} />
-        <FrameworkName>
+    <div className="my-4 flex items-center justify-between">
+      <div className="flex w-fit items-center justify-center rounded-[12px] px-4 py-2">
+        <Img
+          src={framework.icon}
+          className={cn("size-4", framework.circleImage && "rounded-[50%]")}
+        />
+        <span className="ml-2 font-bold text-[color:var(--text-secondary)]">
           {framework.name} - {framework.githubExample.name}
-        </FrameworkName>
-      </FrameworkWrapper>
+        </span>
+      </div>
 
-      <ExampleButtonsWrapper>
+      <div className="flex [&>*]:ml-6">
         <AsyncButton
           type="button"
           variant="outline"
@@ -185,47 +156,7 @@ const Example: FC<React.PropsWithChildren<ExampleProps>> = ({ framework }) => {
             <Github data-icon="inline-end" />
           </a>
         </Button>
-      </ExampleButtonsWrapper>
-    </ExampleWrapper>
+      </div>
+    </div>
   );
 };
-
-const ExampleWrapper = styled.div`
-  margin: 1rem 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const ExampleButtonsWrapper = styled.div`
-  display: flex;
-
-  & > * {
-    margin-left: 1.5rem;
-  }
-`;
-
-const FrameworkWrapper = styled.div`
-  ${({ theme }) => css`
-    padding: 0.5rem 1rem;
-    width: fit-content;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: ${theme.default.borderRadius};
-  `}
-`;
-
-const FrameworkImage = styled(Img)<{ $circle?: boolean }>`
-  ${({ $circle }) => css`
-    width: 1rem;
-    height: 1rem;
-    border-radius: ${$circle && "50%"};
-  `}
-`;
-
-const FrameworkName = styled.span`
-  margin-left: 0.5rem;
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.default.textSecondary};
-`;

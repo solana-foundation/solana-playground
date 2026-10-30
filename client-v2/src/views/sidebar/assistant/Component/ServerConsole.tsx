@@ -1,6 +1,6 @@
 import { useState } from "react";
-import styled, { css } from "styled-components";
 
+import { cn } from "@/shared/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 import { PgAssistant } from "../store";
 import { PgConnection } from "../../../../utils";
@@ -12,6 +12,13 @@ interface ServerConsoleProps {
   /** The connected backend's name, when one is connected */
   providerName?: string;
 }
+
+const MUTED = "text-[0.7rem] text-[var(--text-secondary)]";
+
+const FIELD_LABEL = cn(MUTED, "block pt-2 pb-1 tracking-[0.06em]");
+
+const ACTION =
+  "cursor-pointer rounded-panel border border-border bg-transparent px-2.5 py-[0.3125rem] text-[0.7rem] text-[var(--text-secondary)] hover:enabled:bg-surface-hover hover:enabled:text-[var(--text-primary)] disabled:cursor-default disabled:opacity-45";
 
 /** Descriptions past this many characters start collapsed */
 const LONG_DESCRIPTION = 220;
@@ -139,22 +146,28 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
   };
 
   return (
-    <Card>
-      <Head>
-        <Name>{server.name || server.id}</Name>
-      </Head>
+    <div className="mb-3 rounded-panel border border-border p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[0.75rem] text-[var(--text-primary)]">
+          {server.name || server.id}
+        </div>
+      </div>
 
-      <Note>Callable straight from here — no backend, no key, no tokens.</Note>
+      <div className={cn(MUTED, "pt-1.5 leading-[1.55]")}>
+        Callable straight from here — no backend, no key, no tokens.
+      </div>
 
-      <Actions>
-        <Action onClick={discover} disabled={busy}>
+      <div className="flex gap-1.5 pt-2">
+        <button className={ACTION} onClick={discover} disabled={busy}>
           {busy ? "Working…" : tools.length ? "Refresh tools" : "Connect"}
-        </Action>
-      </Actions>
+        </button>
+      </div>
 
       {tools.length > 0 && (
         <>
-          <Label htmlFor={`mcp-tool-${server.id}`}>TOOL</Label>
+          <label htmlFor={`mcp-tool-${server.id}`} className={FIELD_LABEL}>
+            TOOL
+          </label>
           <NativeSelect
             size="sm"
             className="w-full [&_select]:font-mono [&_select]:text-xs"
@@ -172,9 +185,16 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
 
           {selected && (
             <>
-              <Description $clamped={!descriptionOpen && descriptionIsLong}>
+              <div
+                className={cn(
+                  MUTED,
+                  "pt-1.5 leading-normal whitespace-pre-wrap",
+                  // Clamped rather than sliced, so the full text stays selectable
+                  !descriptionOpen && descriptionIsLong && "line-clamp-3"
+                )}
+              >
                 {description}
-              </Description>
+              </div>
               {descriptionIsLong && (
                 <button
                   type="button"
@@ -186,166 +206,52 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
                 </button>
               )}
 
-              <Label htmlFor={`mcp-args-${server.id}`}>ARGUMENTS</Label>
-              <Json
+              <label htmlFor={`mcp-args-${server.id}`} className={FIELD_LABEL}>
+                ARGUMENTS
+              </label>
+              <textarea
                 id={`mcp-args-${server.id}`}
                 value={args}
                 onChange={(ev) => setArgs(ev.target.value)}
                 spellCheck={false}
                 rows={5}
+                className="w-full resize-y rounded-panel border border-border bg-surface-base px-2 py-1.5 font-pg-code text-[0.75rem] leading-normal text-[var(--text-primary)]"
               />
 
-              <Actions>
-                <Action onClick={call} disabled={busy}>
+              <div className="flex gap-1.5 pt-2">
+                <button className={ACTION} onClick={call} disabled={busy}>
                   {busy ? "Calling…" : "Call"}
-                </Action>
+                </button>
                 {PgAssistant.isConnected && (
-                  <Action onClick={askAssistant} disabled={busy}>
+                  <button
+                    className={ACTION}
+                    onClick={askAssistant}
+                    disabled={busy}
+                  >
                     Ask {providerName ?? "the assistant"}
-                  </Action>
+                  </button>
                 )}
-              </Actions>
+              </div>
             </>
           )}
         </>
       )}
 
-      {error && <ErrorText role="alert">{error}</ErrorText>}
-      {result !== null && <Result>{result}</Result>}
-    </Card>
+      {error && (
+        <div
+          role="alert"
+          className="pt-2 text-[0.7rem] leading-normal text-error"
+        >
+          {error}
+        </div>
+      )}
+      {result !== null && (
+        <pre className="mt-2 max-h-56 overflow-auto rounded-panel border border-border bg-surface-base p-2 font-pg-code text-[0.7rem] leading-normal [word-break:break-word] whitespace-pre-wrap text-[var(--text-primary)]">
+          {result}
+        </pre>
+      )}
+    </div>
   );
 };
-
-const Card = styled.div`
-  ${({ theme }) => css`
-    margin-bottom: 0.75rem;
-    padding: 0.625rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-  `}
-`;
-
-const Head = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
-
-const Name = styled.div`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textPrimary};
-    font-size: ${theme.font.code.size.small};
-  `}
-`;
-
-const Note = styled.div`
-  ${({ theme }) => css`
-    padding: 0.375rem 0 0;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.55;
-  `}
-`;
-
-const Label = styled.label`
-  ${({ theme }) => css`
-    display: block;
-    padding: 0.5rem 0 0.25rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.06em;
-  `}
-`;
-
-const Description = styled.div<{ $clamped: boolean }>`
-  ${({ theme, $clamped }) => css`
-    padding-top: 0.375rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-    white-space: pre-wrap;
-
-    ${$clamped &&
-    css`
-      /* Clamped rather than sliced, so the full text stays selectable */
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 3;
-      overflow: hidden;
-    `}
-  `}
-`;
-
-const Json = styled.textarea`
-  ${({ theme }) => css`
-    width: 100%;
-    resize: vertical;
-    padding: 0.375rem 0.5rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.small};
-    line-height: 1.5;
-  `}
-`;
-
-const Actions = styled.div`
-  display: flex;
-  gap: 0.375rem;
-  padding-top: 0.5rem;
-`;
-
-const Action = styled.button`
-  ${({ theme }) => css`
-    padding: 0.3125rem 0.625rem;
-    background: transparent;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      background: ${theme.colors.state.hover.bg};
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    &:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-  `}
-`;
-
-const ErrorText = styled.div`
-  ${({ theme }) => css`
-    padding-top: 0.5rem;
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-  `}
-`;
-
-const Result = styled.pre`
-  ${({ theme }) => css`
-    margin: 0.5rem 0 0;
-    max-height: 14rem;
-    overflow: auto;
-    padding: 0.5rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-  `}
-`;
 
 export default ServerConsole;

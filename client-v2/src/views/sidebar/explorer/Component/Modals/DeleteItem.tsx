@@ -1,19 +1,37 @@
 import { FC } from "react";
-import styled, { css } from "styled-components";
 
 import { ModalFrame } from "@/widgets/overlays";
-import { Warning } from "../../../../../components/Icons";
 import { PgCommon, PgExplorer } from "../../../../../utils";
 
 interface DeleteItemProps {
   path: string;
 }
 
+/** How many files sit under a folder path, at any depth */
+const countFilesIn = (folderPath: string) => {
+  const prefix = PgCommon.appendSlash(PgExplorer.convertToFullPath(folderPath));
+  return Object.entries(PgExplorer.files).filter(
+    ([itemPath, item]) =>
+      itemPath.startsWith(prefix) && item.content !== undefined
+  ).length;
+};
+
+/** "Delete lib.rs?", or a folder's name with the files that go with it */
+const titleOf = (path: string) => {
+  const itemName = PgExplorer.getItemNameFromPath(path);
+  const count = path.endsWith("/") ? countFilesIn(path) : 0;
+  if (count === 0) return `Delete ${itemName}?`;
+  const files = count === 1 ? "the 1 file" : `the ${count} files`;
+  return `Delete ${itemName} and ${files} in it?`;
+};
+
+/**
+ * Spec 11's file and folder delete: names the item, counts a folder's files,
+ * and opens on Cancel so Enter does not delete.
+ */
 export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
   path,
 }) => {
-  const itemName = PgExplorer.getItemNameFromPath(path);
-
   const deleteItem = async () => {
     await PgExplorer.deleteItem(path);
 
@@ -35,56 +53,17 @@ export const DeleteItem: FC<React.PropsWithChildren<DeleteItemProps>> = ({
   return (
     <ModalFrame
       name="delete-item"
-      title
+      title={titleOf(path)}
+      openFocus="cancel"
       buttonProps={{
         text: "Delete",
         variant: "destructive",
         onSubmit: deleteItem,
       }}
     >
-      <Content>
-        <Icon>
-          <Warning color="warning" />
-        </Icon>
-        <ContentText>
-          <Main>Are you sure you want to delete '{itemName}'?</Main>
-          <Desc>This action is irreversible.</Desc>
-        </ContentText>
-      </Content>
+      <p className="text-control font-read text-muted-foreground">
+        You can't undo this.
+      </p>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-`;
-
-const Icon = styled.div`
-  width: 2rem;
-  height: 2rem;
-
-  & > svg {
-    width: 100%;
-    height: 100%;
-  }
-`;
-
-const ContentText = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-left: 1rem;
-`;
-
-const Main = styled.span`
-  font-weight: bold;
-`;
-
-const Desc = styled.span`
-  ${({ theme }) => css`
-    margin-top: 0.5rem;
-    font-size: ${theme.font.code.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;

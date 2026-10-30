@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import styled, { css } from "styled-components";
 
 import ConsoleDrawer from "./console/ConsoleDrawer";
 import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
@@ -16,7 +15,6 @@ import StageRouter from "./stages/StageRouter";
 import { PgDeployHistory } from "./state/deploy-history";
 import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
 import type { FlowState } from "./state/stage";
-import { GAP } from "./tokens";
 import { FeedbackHost } from "@/features/feedback";
 import {
   SETTINGS_TRIGGER_ATTR,
@@ -237,13 +235,17 @@ const FlowFrame = () => {
   }, [described?.step.id]);
 
   return (
-    <Wrapper>
+    // `h-dvh` is the visible height: on iPad and iPhone Safari 100vh is the
+    // height with the toolbar hidden, so the foot of the navigation started
+    // under it. `isolate` is the window's stacking context, so the pattern can
+    // sit under it all
+    <div className="relative isolate flex h-dvh w-screen flex-col overflow-hidden bg-surface-base">
       {/* One ground for the whole window, as the prototype lays it, so the
           grid runs on unbroken wherever a pane lets it through: faint, a
           quarter of the landing's strength, rising from the bottom edge, and
           lit where the pointer is. The nav and the files cover it. It sits
           below everything in the window's own stacking context (`isolation`
-          on the Wrapper), on a compositing layer of its own: the light
+          on the window's root), on a compositing layer of its own: the light
           repaints it on every frame it moves, and nothing above it should
           repaint with it. */}
       <Pattern
@@ -262,9 +264,9 @@ const FlowFrame = () => {
       >
         {/* In flow, not floating: it is a blocking question, and the file it
           names has to stay visible beneath it */}
-        <BannerSlot>
+        <div className="px-2 pb-2 empty:hidden">
           <SyncBanner />
-        </BannerSlot>
+        </div>
         <LayoutShell
           home={homeSlot(
             page.view,
@@ -345,14 +347,25 @@ const FlowFrame = () => {
             />
           )}
           stage={() => (
-            <Center>
+            // The stage's column. The frame is flush (design.md, "Frame
+            // chrome (5.25)"): no card edges and no fill of its own, so a
+            // stage with nothing in it yet shows the window's pattern, as the
+            // prototype's does; the editor paints its own ground over it. The
+            // shell draws the dividers.
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
               <ObjectiveBand
                 state={lesson}
                 onRead={read}
                 onOpenGallery={openGallery}
                 phone={phone}
               />
-              <Stage>
+              {/* `flex` matters: Primary's own wrapper sizes itself with
+                  flex: 1; min-height: 0, which only takes effect inside a flex
+                  container. Without it the editor's height collapses to its
+                  content size and Monaco never gets a real box to paint into.
+                  `relative`: the lesson reader covers the stage, not the whole
+                  layout */}
+              <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden">
                 <StageRouter stage={state.stage} />
                 {reading && described && (
                   <Reader
@@ -362,7 +375,7 @@ const FlowFrame = () => {
                     onClose={() => setReading(false)}
                   />
                 )}
-              </Stage>
+              </div>
               {/* On a phone the step's controls sit at the foot of the code,
                   under the thumb; the band above folds to the ask */}
               {phone && (
@@ -372,13 +385,15 @@ const FlowFrame = () => {
                   onOpenGallery={openGallery}
                 />
               )}
-            </Center>
+            </div>
           )}
           console={({ open, toggle }) => (
             <ConsoleDrawer open={open} onToggle={toggle} />
           )}
           assistant={({ open, toggle, ...widen }) => (
-            <Right>
+            // No fill, so the conversation sits on the window's pattern, as
+            // the prototype's does
+            <aside className="relative flex h-full w-full flex-col overflow-hidden">
               {/* The head carries "Collapse assistant", and Widen while the
                 shell says it can widen. Hidden, the column takes no width and
                 the stage bar carries "Expand assistant" (design.md, "Frame
@@ -390,7 +405,7 @@ const FlowFrame = () => {
                   openConnect={openConnectDialog}
                 />
               )}
-            </Right>
+            </aside>
           )}
         />
 
@@ -407,79 +422,8 @@ const FlowFrame = () => {
 
       <ModalHost />
       <ToastHost />
-    </Wrapper>
+    </div>
   );
 };
 
 export default Flow;
-
-// The three utilities repeat what the styled rule below already sets, so the
-// screen does not change. They are here so that Tailwind reaching the page
-// can be checked on a screen every visit renders: `e2e/tailwind.e2e.spec.ts`
-// reads their rules out of the utilities layer, and CI greps the built CSS.
-const Wrapper = styled.div.attrs({
-  className: "flex flex-col overflow-hidden",
-})`
-  ${({ theme }) => css`
-    width: 100vw;
-    height: 100vh;
-    /* The visible height: on iPad and iPhone Safari 100vh is the height with
-       the toolbar hidden, so the foot of the navigation started under it */
-    height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    position: relative;
-    overflow: hidden;
-    /* The window's stacking context, so the pattern can sit under it all */
-    isolation: isolate;
-    background: ${theme.colors.default.bgPrimary};
-  `}
-`;
-
-// Empty while there is no conflict, and then takes no room at all
-const BannerSlot = styled.div`
-  padding: 0 ${GAP} ${GAP};
-
-  &:empty {
-    display: none;
-  }
-`;
-
-// The stage's column. The frame is flush (design.md, "Frame chrome (5.25)"):
-// no card edges and no fill of its own, so a stage with nothing in it yet
-// shows the window's pattern, as the prototype's does; the editor paints its
-// own ground over it. The shell draws the dividers.
-const Center = styled.div`
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-`;
-
-// display: flex here matters: Primary's own wrapper sizes itself with
-// flex: 1; min-height: 0 (from theme.views.main.primary.default), which
-// only takes effect inside a flex container. Without this, the editor's
-// height collapses to its content size and Monaco never gets a real box
-// to paint into.
-const Stage = styled.div`
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  /* The lesson reader covers the stage, not the whole layout */
-  position: relative;
-`;
-
-// The assistant's column: no fill, so the conversation sits on the window's
-// pattern, as the prototype's does
-const Right = styled.aside`
-  position: relative;
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-`;

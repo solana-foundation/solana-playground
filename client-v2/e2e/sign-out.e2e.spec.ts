@@ -7,7 +7,7 @@ import type { Page } from "@playwright/test";
  * The session cookie is HttpOnly, so it survives a refused sign-out, and a
  * footer that showed signed out anyway was undone by the next reload. Sync is
  * stubbed off, so the sign-out uploads nothing first: what is under test is
- * the account control and its dialog, not the hand-over.
+ * the account control and its question, not the hand-over.
  */
 
 const USER = { id: "u1", name: "Tester", image: null, login: "t" };
@@ -42,66 +42,81 @@ const signedInWith = async (
   await seedWorkspace(page);
   await expect(account(page)).toHaveAccessibleName("Account: t", LONG);
 
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
-  const confirm = dialog.getByRole("button", { name: "Sign out" });
+  const menu = page.getByRole("menu", { name: "Account" });
+  const question = menu.getByText("Sign out of Playground?");
+  const confirm = menu.getByRole("menuitem", { name: /^Sign out/ });
 
-  /** Opens the dialog from the account menu and confirms */
+  /** Asks from the account menu, in place, and confirms */
   const signOut = async () => {
     await account(page).click();
-    await page.getByRole("menuitem", { name: "Sign out" }).click();
+    await menu.getByRole("menuitem", { name: "Sign out" }).click();
+    await expect(question).toBeVisible();
     await confirm.click();
   };
 
-  return { dialog, confirm, signOut };
+  /** Closes the menu, which hides the rest of the page while it is open */
+  const closeMenu = async () => {
+    await page.keyboard.press("Escape");
+    await expect(menu).toBeHidden();
+  };
+
+  return { question, confirm, signOut, closeMenu };
 };
 
 test("client-v2-auth: A sign-out", async ({ page }) => {
   test.setTimeout(120_000);
   // Held until the in-progress state is checked: the upload and the request
-  // can take seconds, and the dialog's button says so meanwhile
+  // can take seconds, and the menu's Sign out item says so meanwhile
   let accept: () => void = () => {};
   const accepted = new Promise<void>((resolve) => {
     accept = resolve;
   });
-  const { dialog, confirm, signOut } = await signedInWith(page, async () => {
-    await accepted;
-    return "accepted";
-  });
+  const { question, confirm, signOut, closeMenu } = await signedInWith(
+    page,
+    async () => {
+      await accepted;
+      return "accepted";
+    }
+  );
 
   await signOut();
 
-  // Busy, and the dialog open, until the server answers
+  // Busy, and the question open, until the server answers
   await expect(confirm).toHaveAttribute("aria-busy", "true", LONG);
 
   accept();
 
+  // The menu stays open, signed out
+  await expect(question).toBeHidden(LONG);
+  await closeMenu();
   await expect(account(page)).toHaveAccessibleName("Account, signed out", LONG);
-  await expect(dialog).toBeHidden();
   await expect(page.getByText("Could not sign out.")).toBeHidden();
 });
 
 test("client-v2-auth: A sign-out that fails", async ({ page }) => {
   test.setTimeout(120_000);
   let refuse = true;
-  const { dialog, signOut } = await signedInWith(page, async () =>
+  const { question, signOut, closeMenu } = await signedInWith(page, async () =>
     refuse ? "refused" : "accepted"
   );
 
   await signOut();
 
   await expect(page.getByText("Could not sign out.")).toBeVisible(LONG);
-  // The dialog stays, and behind it the user is still signed in. The page
-  // under a modal dialog is hidden from the accessibility tree, so the
-  // account is read once the dialog is dismissed.
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toBeHidden();
+  // The question stays, and the user is still signed in. The page under the
+  // open menu is hidden from the accessibility tree, so the account is read
+  // once the menu is closed.
+  await expect(question).toBeVisible();
+  await page.getByRole("menuitem", { name: "Cancel" }).click();
+  await expect(question).toBeHidden();
+  await closeMenu();
   await expect(account(page)).toHaveAccessibleName("Account: t");
 
   // A retry the server accepts signs out
   refuse = false;
   await signOut();
 
+  await expect(question).toBeHidden(LONG);
+  await closeMenu();
   await expect(account(page)).toHaveAccessibleName("Account, signed out", LONG);
-  await expect(dialog).toBeHidden();
 });

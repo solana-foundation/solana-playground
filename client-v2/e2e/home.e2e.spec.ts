@@ -201,7 +201,7 @@ test.describe("from an open project", () => {
     await menu.getByRole("menuitem", { name: "Delete alpha" }).click();
     await page
       .getByRole("dialog")
-      .getByRole("button", { name: /^delete$/i })
+      .getByRole("button", { name: "Delete project" })
       .click();
 
     await expect(home(page)).toBeVisible(LONG);

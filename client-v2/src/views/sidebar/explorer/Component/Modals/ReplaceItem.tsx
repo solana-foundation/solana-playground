@@ -1,5 +1,4 @@
 import { FC } from "react";
-import styled, { css } from "styled-components";
 
 import { ModalFrame } from "@/widgets/overlays";
 import { Warning } from "../../../../../components/Icons";
@@ -32,49 +31,19 @@ export const ReplaceItem: FC<React.PropsWithChildren<ReplaceItemProps>> = ({
         onSubmit: replaceItem,
       }}
     >
-      <Content>
-        <Icon>
+      <div className="flex items-center justify-center">
+        <div className="size-8 [&>svg]:size-full">
           <Warning color="warning" />
-        </Icon>
-        <ContentText>
-          <Main>'{itemName}' already exists. Do you want to replace it?</Main>
-          <Desc>This action is irreversible.</Desc>
-        </ContentText>
-      </Content>
+        </div>
+        <div className="ml-4 flex flex-col">
+          <span className="font-bold">
+            '{itemName}' already exists. Do you want to replace it?
+          </span>
+          <span className="mt-2 text-[0.75rem] text-[color:var(--text-secondary)]">
+            This action is irreversible.
+          </span>
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-`;
-
-const Icon = styled.div`
-  width: 2rem;
-  height: 2rem;
-
-  & > svg {
-    width: 100%;
-    height: 100%;
-  }
-`;
-
-const ContentText = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-left: 1rem;
-`;
-
-const Main = styled.span`
-  font-weight: bold;
-`;
-
-const Desc = styled.span`
-  ${({ theme }) => css`
-    margin-top: 0.5rem;
-    font-size: ${theme.font.code.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;

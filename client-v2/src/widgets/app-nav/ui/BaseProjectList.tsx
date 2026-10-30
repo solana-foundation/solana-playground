@@ -4,6 +4,7 @@ import {
   Download,
   EllipsisVertical,
   Folder,
+  GraduationCap,
   Pencil,
   Pin,
   PinOff,
@@ -29,7 +30,11 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSkeleton,
 } from "@/shared/ui/sidebar";
+import { StatusDot } from "@/shared/ui/status-dot";
+import { cn } from "@/shared/lib/utils";
+import type { SyncMarker } from "@/features/persistence";
 import type { ProjectAction } from "../model/project-action";
 import type { ProjectEntry } from "../model/project-entries";
 
@@ -38,6 +43,8 @@ type Via = "click" | "key";
 export interface BaseProjectListProps {
   /** Projects and started lessons, in one list as the prototype draws it */
   projects: ProjectEntry[];
+  /** The names are still being read from browser storage: skeleton rows, no entries */
+  loading: boolean;
   /** The open workspace's name, or `null` when none is open */
   current: string | null;
   /** The entry whose row is the rename field, or `null` */
@@ -79,16 +86,20 @@ const pinAction = (entry: ProjectEntry): ProjectAction =>
 
 /**
  * The navigation's projects, lessons among them, as the prototype draws
- * them: a row per workspace with the folder glyph, the open one marked,
- * pinned ones with a pin, and a menu of its actions whose letters work while
- * it is open. A lesson differs only in its menu. Draws only what it is
- * given; `ProjectList` connects it.
+ * them: a row per workspace with the folder glyph (a lesson's with the
+ * tutorial glyph, Spec 11), the open one marked, pinned ones with a pin, and
+ * a menu of its actions whose letters work while it is open. Three skeleton
+ * rows stand in while the names load, so no empty list flashes first. Draws
+ * only what it is given; `ProjectList` connects it.
  */
 const BaseProjectList = (props: BaseProjectListProps) => (
   <Group label="Projects" entries={props.projects} list={props} />
 );
 
 export default BaseProjectList;
+
+/** Keys for the loading rows, three as Spec 11's "List loading" state draws */
+const SKELETON_ROWS = ["first", "second", "third"];
 
 const Group = ({
   label,
@@ -113,15 +124,22 @@ const Group = ({
         {label}
       </SidebarGroupLabel>
       <SidebarMenu className="gap-px">
-        {entries.map((entry) => (
-          <SidebarMenuItem key={entry.name}>
-            {list.renaming === entry.name ? (
-              <RenameField entry={entry} list={list} />
-            ) : (
-              <Row entry={entry} list={list} />
-            )}
-          </SidebarMenuItem>
-        ))}
+        {list.loading &&
+          SKELETON_ROWS.map((row) => (
+            <SidebarMenuItem key={row}>
+              <SidebarMenuSkeleton showIcon />
+            </SidebarMenuItem>
+          ))}
+        {!list.loading &&
+          entries.map((entry) => (
+            <SidebarMenuItem key={entry.name}>
+              {list.renaming === entry.name ? (
+                <RenameField entry={entry} list={list} />
+              ) : (
+                <Row entry={entry} list={list} />
+              )}
+            </SidebarMenuItem>
+          ))}
       </SidebarMenu>
     </SidebarGroup>
   );
@@ -138,7 +156,9 @@ const Row = ({
   // Rename swaps the row for a field that takes focus; the menu handing
   // focus back to its trigger on close would blur the field at once
   const keepFocus = useRef(false);
+  const markerId = useId();
   const isCurrent = entry.name === list.current;
+  const Glyph = entry.isLesson ? GraduationCap : Folder;
 
   const run = (action: ProjectAction, via: Via) => {
     if (!allowed(entry, action)) return;
@@ -164,19 +184,34 @@ const Row = ({
       <SidebarMenuButton
         isActive={isCurrent}
         aria-current={isCurrent ? "page" : undefined}
+        // The marker describes the row and leaves its name alone: the row is
+        // found by its name
+        aria-describedby={entry.marker ? markerId : undefined}
+        // Room for the marker, so a long name truncates before it
+        className={entry.marker ? "pr-24" : undefined}
         onClick={() => list.onAction(entry, "open", "click")}
       >
-        <Folder
+        <Glyph
           aria-hidden
+          data-glyph={entry.isLesson ? "lesson" : "project"}
           className={isCurrent ? "text-primary" : undefined}
         />
         <span>{entry.name}</span>
       </SidebarMenuButton>
-      {entry.pinned && (
-        <span className="pointer-events-none absolute top-1.5 right-7 flex items-center gap-1 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden">
-          <span title="Pinned">
-            <Pin aria-hidden className="size-3" />
-          </span>
+      {(entry.pinned || entry.marker) && (
+        <span
+          className={cn(
+            "pointer-events-none absolute top-1.5 right-7 flex items-center gap-1.5 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden",
+            // On a phone's taller rows the marker sits on the name's line
+            entry.marker && "max-md:top-1/2 max-md:-translate-y-1/2"
+          )}
+        >
+          {entry.marker && <Marker id={markerId} marker={entry.marker} />}
+          {entry.pinned && (
+            <span title="Pinned">
+              <Pin aria-hidden className="size-3" />
+            </span>
+          )}
         </span>
       )}
       <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -256,6 +291,28 @@ const Row = ({
     </>
   );
 };
+
+/** Spec 02's words for each marker */
+const MARKER_TEXT: Record<SyncMarker, string> = {
+  "this-browser": "This browser",
+  "not-synced": "Not synced",
+};
+
+/**
+ * Where a project's work lives, when the account does not hold it. Spec 02
+ * names the words, not the look: quiet caption text where the pin sits, so the
+ * row's action keeps its place, and "Not synced" with a warning dot
+ */
+const Marker = ({ id, marker }: { id: string; marker: SyncMarker }) => (
+  <span
+    id={id}
+    data-sync-marker={marker}
+    className="flex items-center gap-1 whitespace-nowrap text-subtle"
+  >
+    {marker === "not-synced" && <StatusDot variant="warning" />}
+    {MARKER_TEXT[marker]}
+  </span>
+);
 
 const Item = ({
   icon: Icon,

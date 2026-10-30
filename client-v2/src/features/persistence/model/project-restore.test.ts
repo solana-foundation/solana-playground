@@ -1,3 +1,4 @@
+import { PgAccountList } from "./account-list";
 import { reconcile, releaseLocalProjects } from "./project-restore";
 import { PgProjectSync } from "./project-sync";
 import { hashFiles } from "./snapshot";
@@ -381,6 +382,33 @@ describe("reconcile", () => {
       latest: null,
     });
     expect(await PgSyncMark.read("p1")).not.toBeNull();
+  });
+
+  describe("publishing what the account holds, for Home's first visit", () => {
+    afterEach(() => PgAccountList.forget());
+
+    it("marks an account with no projects empty", async () => {
+      withLocal({});
+      serverHas([]);
+      await reconcile();
+      expect(PgAccountList.state).toBe("empty");
+    });
+
+    it("marks an account with projects as holding them", async () => {
+      withLocal({ alpha: "p1" });
+      withFiles("alpha", { "src/lib.rs": "same" });
+      await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+      serverHas([project("p1", "alpha", "t1")]);
+      await reconcile();
+      expect(PgAccountList.state).toBe("holds");
+    });
+
+    it("leaves it unknown when the list could not be read", async () => {
+      withLocal({});
+      vi.spyOn(PgProjectSync, "list").mockResolvedValue(null);
+      await reconcile();
+      expect(PgAccountList.state).toBe("unknown");
+    });
   });
 
   it("asks before finishing a delete over unsaved work", async () => {

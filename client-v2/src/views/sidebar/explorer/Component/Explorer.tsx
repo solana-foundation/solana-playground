@@ -1,5 +1,3 @@
-import styled from "styled-components";
-
 import Folders from "./Folders";
 import NoWorkspace from "./NoWorkspace";
 import Workspaces from "./Workspaces";
@@ -19,18 +17,11 @@ const Explorer = () => {
   }
 
   return (
-    <Wrapper>
+    <div className="flex w-full flex-col select-none">
       <Workspaces />
       <Folders />
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  user-select: none;
-`;
 
 export default Explorer;

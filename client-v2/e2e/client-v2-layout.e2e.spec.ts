@@ -827,11 +827,11 @@ test("client-v2-layout: A corrupt saved layout is reported", async ({
 test("the wallet window's close button is clickable at the top of the work area", async ({
   seededPage: page,
 }) => {
-  // Connected from the account menu; the account row then shows the wallet
+  // Connected from the account menu; the menu's wallet group then shows it
   await account(page).click();
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(account(page)).toContainText("SOL");
+  await expectWalletInMenu(page, /SOL/);
   // The window is opened by the editor tab bar's "Wallet" button. Its icon's
   // alt text joins its accessible name ("Wallet Wallet"), so it is found by
   // its text, which is the label alone.
@@ -1380,7 +1380,8 @@ test("client-v2-layout: Signing in from the account menu", async ({
   await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
 
   const footer = nav(page).locator('[data-slot="sidebar-footer"]');
-  await expect(footer.getByText("Signing in...")).toBeVisible();
+  await expect(footer.getByText("Signing in…")).toBeVisible();
+  await expect(footer.getByText("Waiting for GitHub…")).toBeVisible();
   await expect(footer.getByRole("button", { name: "Cancel" })).toBeVisible();
   release();
   await expect(account(page)).toContainText("Sign in");
@@ -1397,17 +1398,25 @@ test("client-v2-layout: Signing out asks first", async ({ page }) => {
   });
   await expect(account(page)).toHaveAccessibleName("Account: t");
 
+  const menu = page.getByRole("menu", { name: "Account" });
+  const question = menu.getByText("Sign out of Playground?");
   await account(page).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
-  await dialog.getByRole("button", { name: "Cancel" }).click();
-  await expect(dialog).toBeHidden();
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(question).toBeVisible();
+  // Asked in place, Cancel first in line
+  await expect(menu.getByRole("menuitem", { name: "Cancel" })).toBeFocused();
+  await menu.getByRole("menuitem", { name: "Cancel" }).click();
+  await expect(question).toBeHidden();
+  // The menu's items are back, and nothing was signed out
+  await expect(menu.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
   expect(signedOut).toBe(false);
-  await expect(account(page)).toHaveAccessibleName("Account: t");
 
-  await account(page).click();
-  await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await dialog.getByRole("button", { name: "Sign out" }).click();
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(question).toBeVisible();
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  // The menu stays open, signed out; the page behind it is read once it closes
+  await expect(question).toBeHidden();
+  await page.keyboard.press("Escape");
   await expect(account(page)).toHaveAccessibleName("Account, signed out");
   expect(signedOut).toBe(true);
 });
@@ -1439,8 +1448,12 @@ test("client-v2-layout: The wallet in the menu", async ({
   await page.getByRole("menuitem", { name: "Connect wallet" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
 
-  await expect(account(page)).toContainText(/\w{4}…\w{4} · /);
+  // In the menu's wallet group, not on the account row (Spec 02)
+  await expect(account(page)).not.toContainText(/\w{4}…\w{4}/);
   await account(page).click();
+  await expect(
+    page.getByRole("menuitem", { name: /\w{4}…\w{4}.*SOL/ })
+  ).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "Disconnect wallet" })
   ).toBeVisible();
@@ -1505,7 +1518,18 @@ const createWallet = async (page: Page) => {
 
 const connectWallet = async (page: Page) => {
   await createWallet(page);
-  await expect(account(page)).toContainText(/\w{4}…\w{4}/);
+  await expectWalletInMenu(page);
+};
+
+/**
+ * The connected wallet, read from the account menu's wallet group: Spec 02
+ * keeps the wallet off the account row. Closes the menu again.
+ */
+const expectWalletInMenu = async (page: Page, pattern = /\w{4}…\w{4}/) => {
+  await account(page).click();
+  await expect(page.getByRole("menuitem", { name: pattern })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu", { name: "Account" })).toBeHidden();
 };
 
 // An unreachable cluster leaves `PgConnection.isClusterDown` at `null`, not
@@ -1596,7 +1620,7 @@ test("the wallet asks about the validator when localnet does not answer", async 
   await expect(howTo).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(howTo).toBeHidden();
-  await expect(account(page)).toContainText(/\w{4}…\w{4}/);
+  await expectWalletInMenu(page);
 
   await page.locator("#tabs").getByRole("button", { name: "Wallet" }).click();
   await expect(
@@ -1663,7 +1687,7 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
   await page.getByRole("button", { name: "Collapse navigation" }).click();
 
   await page.getByRole("button", { name: "Expand navigation" }).click();
-  await expect(navigation.getByText("Signing in...")).toBeVisible();
+  await expect(navigation.getByText("Signing in…")).toBeVisible();
   await expect(
     navigation.getByRole("button", { name: "Cancel" })
   ).toBeVisible();

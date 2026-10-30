@@ -267,6 +267,10 @@
                 {
                   "name": "cn",
                   "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
+                },
+                {
+                  "name": "styled-components",
+                  "message": "Style with Tailwind over the design-system tokens; styled-components is leaving (HOO-2077). Only the wallet, the layout shell and the theme provider keep it until they move."
                 }
               ],
               "patterns": [
@@ -296,6 +300,60 @@
             {
               "selector": "CallExpression[callee.property.name=/^(catch|then)$/] > Identifier.arguments[name='reportButtonFailure']",
               "message": "reportButtonFailure takes what did not happen first: .catch(reportButtonFailure(\"<action>\")). Passed bare, it returns a handler nobody calls and the failure is swallowed."
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/widgets/layout-shell/**"
+        ],
+        "rules": {
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "uuid",
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "name": "cn",
+                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
+                }
+              ],
+              "patterns": [
+                {
+                  "group": [
+                    "uuid/*"
+                  ],
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**"
+        ],
+        "excludedFiles": [
+          "src/{app,features,shared,entities,widgets}/**",
+          "src/components/Wallet/**",
+          "src/providers/theme/**",
+          "src/types/declarations.d.ts"
+        ],
+        "rules": {
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "styled-components",
+                  "message": "Style with Tailwind over the design-system tokens; styled-components is leaving (HOO-2077). Only the wallet, the layout shell and the theme provider keep it until they move."
+                }
+              ]
             }
           ]
         }

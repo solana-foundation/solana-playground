@@ -2,6 +2,7 @@ import {
   AUTH_CHANNEL_NAME,
   AUTH_COMPLETE_ROUTE,
   AUTH_MESSAGE_TYPE,
+  AUTH_NOT_CONFIGURED,
   FLOW_MAX_AGE_SECONDS,
   SIGN_OUT_TIMEOUT_MS,
 } from "../config.mjs";
@@ -22,6 +23,26 @@ class SignInFailed extends Error {
 
 const reasonOf = (error: unknown): SignInFailure =>
   error instanceof SignInFailed ? error.reason : "request-failed";
+
+/**
+ * Spec 02's words for a sign-in the server could not start, and for any
+ * failure at no known step (`messageOf`), such as the request never leaving
+ */
+const UNAVAILABLE =
+  "Sign-in isn't available. Your work is saved in this browser.";
+
+/**
+ * Spec 02's words for a popup that gave no answer in time or refused, and for
+ * a session unreadable after GitHub answered
+ */
+const DID_NOT_FINISH = "Sign-in did not finish.";
+
+/**
+ * What the person reads for a failed sign-in: a known step's own words, and
+ * for anything else the unavailable line, never the raw error
+ */
+const messageOf = (error: unknown) =>
+  error instanceof SignInFailed ? error.message : UNAVAILABLE;
 
 /**
  * Whether a rejected `PgSession.signIn` ended at a known step (cancelled,
@@ -72,6 +93,69 @@ export type SignInState =
 const IDLE: SignInState = { status: "idle" };
 
 /**
+ * The non-2xx statuses that are an answer: nobody is signed in (401), or this
+ * host has no auth route (404). Any other 4xx (a firewall's 403, a 408, 429)
+ * says nothing about who is signed in.
+ */
+const ANSWERS = new Set([401, 404]);
+
+/**
+ * How long a session read may hang before it counts as no answer: a read
+ * that never settles would leave `readState` unread and Home with nothing
+ * to lead with or retry
+ */
+const READ_TIMEOUT_MS = 10_000;
+
+/**
+ * How a session read can go: none settled yet, `failed` (no answer, a 5xx
+ * other than the not-configured 503, a 4xx other than `ANSWERS`, or JSON
+ * that does not parse), when `get()` says nothing new about who is signed
+ * in, or `answered`
+ */
+export type ReadState = "unread" | "failed" | "answered";
+
+/**
+ * A 2xx body, or `null` when it is an HTML page: a host with no auth route
+ * serves its app shell there, which says nobody can be signed in. Any other
+ * body that does not parse (a cut-off answer, a portal's text) throws, and
+ * the read fails.
+ */
+const jsonOrPage = async (response: Response) => {
+  if (response.headers?.get("content-type")?.includes("text/html")) {
+    log.warn("session read answered a page, not JSON", {
+      context: { status: response.status },
+    });
+    return null;
+  }
+  return await response.json();
+};
+
+/**
+ * The auth route's 503 for a deployment with no sign-in configured. Only a
+ * JSON body can say so; any other 503, a body that does not parse included,
+ * is an outage.
+ */
+const notConfigured = async (response: Response) => {
+  if (response.status !== 503) return false;
+  if (!response.headers?.get("content-type")?.includes("application/json")) {
+    return false;
+  }
+  try {
+    const body = await response.json();
+    if (body?.error !== AUTH_NOT_CONFIGURED) return false;
+    // A deployment that lost its sign-in variables answers the same; say so
+    log.warn("sign-in is not configured here", {
+      context: { missing: body.missing },
+    });
+    return true;
+  } catch (e) {
+    // The 5xx branch reports the 503 with its status; the parse error is detail
+    log.debug("session read 503 body did not parse", { context: { e } });
+    return false;
+  }
+};
+
+/**
  * The signed-in user, from our backend rather than from GitHub.
  *
  * `GithubAuth` answers "which GitHub account is this", which is what the
@@ -91,8 +175,12 @@ export class PgSession {
   /**
    * Re-read the session cookie.
    *
-   * Never throws: a failed read leaves the user signed out, since nobody can be
-   * proved signed in, and is logged (reported when it threw or answered 5xx).
+   * Never throws. A read that fails (see `ReadState`) keeps the user it had,
+   * signed out on a first read; no answer, a 5xx other than the
+   * not-configured 503, or JSON that does not parse is reported, any other
+   * failing status only logged. A 401, a 404 and an HTML page (no auth route
+   * here) are answers -- nobody -- except while a user is known, when the
+   * last two are a proxy's and fail.
    */
   static refresh(): Promise<void> {
     const read = PgSession._read().finally(() => {
@@ -103,27 +191,47 @@ export class PgSession {
   }
 
   /**
+   * How session reads have gone (`ReadState`). Once one has answered it stays
+   * `answered`: a later failed read says nothing new about who is signed in.
+   * A change in this value fires `onDidChange` even if the user is unchanged.
+   */
+  static get readState(): ReadState {
+    return PgSession._readState;
+  }
+
+  /** Whether a session read has settled, failed or answered */
+  static get hasRead(): boolean {
+    return PgSession._readState !== "unread";
+  }
+
+  /**
    * Settles once the session has been read: at once after any read, on the
    * read in flight if there is one, or on a first read started here. It never
    * reads again, so a caller deciding on `get()` waits for the page's own read
    * without turning a later sign-in elsewhere into a change seen here, which
-   * the session effect would take for a sign-in of its own.
+   * the session effect would take for a sign-in of its own. It never rejects:
+   * a failed read settles too, as `readState` `failed`.
    */
   static whenRead(): Promise<void> {
-    if (PgSession._hasRead) return Promise.resolve();
+    if (PgSession.hasRead) return Promise.resolve();
     return PgSession._reading ?? PgSession.refresh();
   }
 
   private static async _read() {
     let next: SessionUser | null = null;
+    let failed = false;
 
     try {
       const response = await fetch("/api/auth/get-session", {
         credentials: "include",
         cache: "no-store",
+        signal: timeoutSignal(READ_TIMEOUT_MS),
       });
       if (response.ok) {
-        const body = await response.json();
+        const body = await jsonOrPage(response);
+        // A page where this user's session came from is a proxy's, not this
+        // host lacking the route: it says nothing about them
+        if (body === null && PgSession._user) failed = true;
         next = body?.user
           ? {
               id: String(body.user.id),
@@ -132,22 +240,39 @@ export class PgSession {
               login: body.user.login ?? null,
             }
           : null;
+      } else if (await notConfigured(response)) {
+        // This deployment has no sign-in, so nobody is signed in: an answer
+      } else if (response.status === 404 && PgSession._user) {
+        // As with a page: a host that served this user a session has the route
+        failed = true;
+        log.warn(`session read answered 404 for a known user`, {
+          context: { status: response.status },
+        });
+      } else if (ANSWERS.has(response.status)) {
+        log.warn(`session read answered ${response.status}`, {
+          context: { status: response.status },
+        });
       } else if (response.status >= 500) {
+        failed = true;
         log.error(new Error(`session read answered ${response.status}`), {
           report: true,
           context: { status: response.status },
         });
       } else {
+        // Expected under load or behind a firewall: logged, not reported
+        failed = true;
         log.warn(`session read answered ${response.status}`, {
           context: { status: response.status },
         });
       }
     } catch (error) {
+      failed = true;
       log.error(error, { report: true, context: { step: "refresh" } });
     }
 
-    PgSession._hasRead = true;
-    PgSession._set(next);
+    // A failed read keeps the user it had: it says nothing new about them
+    if (failed) PgSession._setRead("failed", PgSession._user);
+    else PgSession._setRead("answered", next);
   }
 
   /**
@@ -190,7 +315,7 @@ export class PgSession {
       PgSession._setSignIn({
         status: "failed",
         reason: reasonOf(error),
-        message: error instanceof Error ? error.message : String(error),
+        message: messageOf(error),
       });
       throw error;
     } finally {
@@ -221,15 +346,18 @@ export class PgSession {
       }),
     });
     if (!response.ok) {
-      throw new SignInFailed("request-failed", "Could not start sign-in");
+      // The person reads one line for every way the start fails; the team
+      // gets the answer it was
+      log.warn("sign-in could not start", {
+        context: { status: response.status },
+      });
+      throw new SignInFailed("request-failed", UNAVAILABLE);
     }
 
     const { url } = await response.json();
     if (!url) {
-      throw new SignInFailed(
-        "request-failed",
-        "Sign-in returned no authorize URL"
-      );
+      log.warn("sign-in start answered no authorize URL");
+      throw new SignInFailed("request-failed", UNAVAILABLE);
     }
 
     const isOurs = (data: unknown) =>
@@ -260,19 +388,14 @@ export class PgSession {
     if (!receipt.delivered) {
       throw new SignInFailed(
         receipt.reason,
-        receipt.reason === "cancelled"
-          ? "Sign-in cancelled."
-          : "Sign-in did not complete."
+        receipt.reason === "cancelled" ? "Sign-in cancelled." : DID_NOT_FINISH
       );
     }
 
     await PgSession.refresh();
     // `refresh` never throws, so a failed read would otherwise pass for a sign-in
     if (!PgSession.get()) {
-      throw new SignInFailed(
-        "request-failed",
-        "Signed in with GitHub, but the session could not be read. Try again."
-      );
+      throw new SignInFailed("request-failed", DID_NOT_FINISH);
     }
   }
 
@@ -395,8 +518,7 @@ export class PgSession {
 
   /** Test seam: set the user without a network round trip */
   static async refreshWith(user: SessionUser | null) {
-    PgSession._hasRead = true;
-    PgSession._set(user);
+    PgSession._setRead("answered", user);
   }
 
   /** Test seam: open a stub channel instead of a real popup */
@@ -416,7 +538,7 @@ export class PgSession {
     PgSession._ending = false;
     PgSession._pending = undefined;
     PgSession._signInState = IDLE;
-    PgSession._hasRead = false;
+    PgSession._readState = "unread";
     PgSession._reading = undefined;
   }
 
@@ -428,8 +550,8 @@ export class PgSession {
   private static readonly _listeners = new Set<() => void>();
 
   private static _pending: Promise<void> | undefined;
-  /** A session read has answered, so `get()` is what the server said */
-  private static _hasRead = false;
+  /** How session reads have gone, sticky once `answered`; see `readState` */
+  private static _readState: ReadState = "unread";
   private static _reading: Promise<void> | undefined;
   private static _signInState: SignInState = IDLE;
 
@@ -449,16 +571,31 @@ export class PgSession {
     for (const cb of PgSession._listeners) cb();
   }
 
-  private static _set(user: SessionUser | null) {
+  /** Settle a read: its state, then its user, with one change for both */
+  private static _setRead(state: ReadState, user: SessionUser | null) {
+    const next =
+      state === "failed" && PgSession._readState === "answered"
+        ? "answered"
+        : state;
+    const stateChanged = PgSession._readState !== next;
+    PgSession._readState = next;
+    if (!PgSession._set(user) && stateChanged) {
+      for (const cb of PgSession._listeners) cb();
+    }
+  }
+
+  /** Set the user; whether it changed, and so whether listeners heard */
+  private static _set(user: SessionUser | null): boolean {
     const unchanged =
       PgSession._user?.id === user?.id &&
       PgSession._user?.name === user?.name &&
       PgSession._user?.image === user?.image &&
       PgSession._user?.login === user?.login;
-    if (unchanged) return;
+    if (unchanged) return false;
 
     PgSession._user = user;
     for (const cb of PgSession._listeners) cb();
+    return true;
   }
 }
 
@@ -528,6 +665,220 @@ if (import.meta.vitest) {
         await PgSession.whenRead();
 
         expect(request).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        ["no answer", () => Promise.reject(new Error("offline")), true],
+        [
+          "a 503",
+          () =>
+            Promise.resolve({
+              ok: false,
+              status: 503,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => ({ error: "upstream" }),
+            }),
+          true,
+        ],
+        ["a 401", () => Promise.resolve({ ok: false, status: 401 }), false],
+        ["a 429", () => Promise.resolve({ ok: false, status: 429 }), true],
+        ["a 408", () => Promise.resolve({ ok: false, status: 408 }), true],
+        ["a 425", () => Promise.resolve({ ok: false, status: 425 }), true],
+        ["a 403", () => Promise.resolve({ ok: false, status: 403 }), true],
+        ["a 404", () => Promise.resolve({ ok: false, status: 404 }), false],
+        ["a 502", () => Promise.resolve({ ok: false, status: 502 }), true],
+        [
+          "a 503 that is a page",
+          () =>
+            Promise.resolve({
+              ok: false,
+              status: 503,
+              headers: new Headers({ "content-type": "text/html" }),
+            }),
+          true,
+        ],
+        [
+          "a 200 that is a page (no auth route here)",
+          () =>
+            Promise.resolve({
+              ok: true,
+              status: 200,
+              headers: new Headers({ "content-type": "text/html" }),
+              json: async () => {
+                throw new SyntaxError("Unexpected token '<'");
+              },
+            }),
+          false,
+        ],
+        [
+          "a 200 whose JSON is cut off",
+          () =>
+            Promise.resolve({
+              ok: true,
+              status: 200,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => {
+                throw new SyntaxError("Unexpected end of JSON input");
+              },
+            }),
+          true,
+        ],
+        ["a 400", () => Promise.resolve({ ok: false, status: 400 }), true],
+        [
+          "a 503 whose JSON body does not parse",
+          () =>
+            Promise.resolve({
+              ok: false,
+              status: 503,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => {
+                throw new SyntaxError("Unexpected end of JSON input");
+              },
+            }),
+          true,
+        ],
+        [
+          "a 503 saying sign-in is not configured",
+          () =>
+            Promise.resolve({
+              ok: false,
+              status: 503,
+              headers: new Headers({ "content-type": "application/json" }),
+              json: async () => ({ error: AUTH_NOT_CONFIGURED }),
+            }),
+          false,
+        ],
+        [
+          "nobody",
+          () =>
+            Promise.resolve({ ok: true, json: async () => ({ user: null }) }),
+          false,
+        ],
+      ])(
+        "marks a read that got %s as failed: %s",
+        async (_, answer, failed) => {
+          initLogger({ providers: [memoryProvider()] });
+          vi.spyOn(globalThis, "fetch").mockImplementation(
+            answer as unknown as typeof fetch
+          );
+
+          await PgSession.whenRead();
+
+          expect(PgSession.hasRead).toBe(true);
+          expect(PgSession.readState).toBe(failed ? "failed" : "answered");
+          expect(PgSession.get()).toBeNull();
+        }
+      );
+
+      it("tells listeners when a failed read is answered, though nobody is signed in", async () => {
+        initLogger({ providers: [memoryProvider()] });
+        const request = vi
+          .spyOn(globalThis, "fetch")
+          .mockRejectedValueOnce(new Error("offline"));
+        await PgSession.refresh();
+        expect(PgSession.readState).toBe("failed");
+
+        const heard = vi.fn();
+        PgSession.onDidChange(heard);
+        request.mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ user: null }),
+        } as Response);
+        await PgSession.refresh();
+
+        expect(PgSession.readState).toBe("answered");
+        expect(heard).toHaveBeenCalledTimes(1);
+      });
+
+      it("stays answered when a later read fails", async () => {
+        initLogger({ providers: [memoryProvider()] });
+        const request = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ user: null }),
+        } as Response);
+        await PgSession.refresh();
+        request.mockRejectedValueOnce(new Error("offline"));
+        await PgSession.refresh();
+
+        expect(PgSession.readState).toBe("answered");
+      });
+
+      it.each([
+        [502, true],
+        [429, false],
+        [403, false],
+      ])("reports a read that answered %i: %s", async (status, reported) => {
+        const logs = memoryProvider();
+        initLogger({ providers: [logs] });
+        vi.spyOn(globalThis, "fetch").mockResolvedValue({
+          ok: false,
+          status,
+        } as Response);
+
+        await PgSession.refresh();
+
+        expect(PgSession.readState).toBe("failed");
+        expect(logs.entries.some((e) => e.report)).toBe(reported);
+      });
+
+      it("gives up on a read that hangs, as no answer", async () => {
+        initLogger({ providers: [memoryProvider()] });
+        const request = vi
+          .spyOn(globalThis, "fetch")
+          .mockRejectedValue(new DOMException("timed out", "TimeoutError"));
+
+        await PgSession.refresh();
+
+        expect(request.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal);
+        expect(PgSession.readState).toBe("failed");
+      });
+
+      it("tells listeners when the first read fails, and not again when the next one does", async () => {
+        initLogger({ providers: [memoryProvider()] });
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+        const heard = vi.fn();
+        PgSession.onDidChange(heard);
+
+        await PgSession.refresh();
+        expect(heard).toHaveBeenCalledTimes(1);
+        await PgSession.refresh();
+        expect(heard).toHaveBeenCalledTimes(1);
+      });
+
+      it.each([
+        [
+          "a page",
+          {
+            ok: true,
+            status: 200,
+            headers: new Headers({ "content-type": "text/html" }),
+          },
+        ],
+        ["a 404", { ok: false, status: 404 }],
+      ])("keeps a known user through %s", async (_, answer) => {
+        initLogger({ providers: [memoryProvider()] });
+        const request = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ user: { id: "u1", name: null, image: null } }),
+        } as Response);
+        await PgSession.refresh();
+        request.mockResolvedValueOnce(answer as Response);
+        await PgSession.refresh();
+
+        expect(PgSession.get()?.id).toBe("u1");
+      });
+
+      it("keeps a signed-in user through a read that fails", async () => {
+        initLogger({ providers: [memoryProvider()] });
+        const request = vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ user: { id: "u1", name: null, image: null } }),
+        } as Response);
+        await PgSession.refresh();
+        request.mockRejectedValueOnce(new Error("offline"));
+        await PgSession.refresh();
+
+        expect(PgSession.get()?.id).toBe("u1");
       });
 
       it("is signed out before any refresh", () => {
@@ -751,7 +1102,7 @@ if (import.meta.vitest) {
         }));
 
         await expect(PgSession.signIn()).rejects.toThrow(
-          "Signed in with GitHub, but the session could not be read. Try again."
+          "Sign-in did not finish."
         );
       });
 
@@ -786,6 +1137,59 @@ if (import.meta.vitest) {
         expect(PgSession.get()).toBeNull();
       });
 
+      it("says a popup that never answered did not finish", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({ url: "https://x/" }),
+          }) as unknown as typeof fetch
+        );
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({
+            delivered: false as const,
+            reason: "expired" as const,
+          }),
+          cancel: () => {},
+        }));
+
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Sign-in did not finish."
+        );
+      });
+
+      it("says sign-in isn't available when the start answers no authorize URL", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({}),
+          }) as unknown as typeof fetch
+        );
+        const open = vi.fn();
+        PgSession.setOpenChannel(open as never);
+
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Sign-in isn't available. Your work is saved in this browser."
+        );
+        expect(PgSession.signInState()).toMatchObject({
+          reason: "request-failed",
+        });
+        expect(open).not.toHaveBeenCalled();
+      });
+
+      it("never shows a raw error as the reason a sign-in failed", async () => {
+        vi.spyOn(globalThis, "fetch").mockRejectedValue(
+          new TypeError("Failed to fetch")
+        );
+
+        await expect(PgSession.signIn()).rejects.toThrow("Failed to fetch");
+        expect(PgSession.signInState()).toEqual({
+          status: "failed",
+          reason: "request-failed",
+          message:
+            "Sign-in isn't available. Your work is saved in this browser.",
+        });
+      });
+
       it("throws rather than opening a popup when sign-in cannot start", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(
           vi.fn().mockResolvedValue({
@@ -797,7 +1201,9 @@ if (import.meta.vitest) {
         const open = vi.fn();
         PgSession.setOpenChannel(open as never);
 
-        await expect(PgSession.signIn()).rejects.toThrow(/sign-in/i);
+        await expect(PgSession.signIn()).rejects.toThrow(
+          "Sign-in isn't available. Your work is saved in this browser."
+        );
         expect(open).not.toHaveBeenCalled();
       });
 

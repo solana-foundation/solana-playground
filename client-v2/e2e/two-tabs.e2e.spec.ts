@@ -343,7 +343,7 @@ test("a project deleted in one tab is not re-uploaded by the other", async ({
   // Through the navigation's project list, the way a person would
   const menu = await projectMenu(a, "Shared");
   await menu.getByRole("menuitem", { name: "Delete Shared" }).click();
-  await a.getByRole("button", { name: "Delete", exact: true }).click();
+  await a.getByRole("button", { name: "Delete project", exact: true }).click();
   await expect.poll(() => state.deleted, LONG).toBe(true);
 
   // B still lists `Shared` from when it loaded, and the delete took the sync

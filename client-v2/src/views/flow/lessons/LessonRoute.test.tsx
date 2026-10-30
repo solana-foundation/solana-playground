@@ -2,8 +2,8 @@ import type { Mock } from "vitest";
 // Only `PgTutorial` is mocked -- `useRenderOnChange` (from `../../../hooks`)
 // is the real hook, so this test exercises the actual subscription, not a
 // stand-in for it. `SpinnerWithBg` and `LessonSurface` are replaced with
-// markers: the former needs a styled-components theme this test does not
-// set up, and the latter renders the real editor, which is its own concern.
+// markers: the former is not what is under test, and the latter renders the
+// real editor, which is its own concern.
 vi.mock("../../../utils", () => ({
   PgTutorial: {
     isStarted: vi.fn(),

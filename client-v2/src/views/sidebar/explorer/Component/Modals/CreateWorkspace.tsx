@@ -1,6 +1,6 @@
 import { FC, useState } from "react";
-import styled, { css } from "styled-components";
 
+import { cn } from "@/shared/lib/utils";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import { ModalFrame } from "@/widgets/overlays";
@@ -31,9 +31,9 @@ export const CreateWorkspace = () => {
         disabled: !!error || !selected,
       }}
     >
-      <Content>
-        <WorkspaceNameWrapper>
-          <MainText>Project name</MainText>
+      <div className="flex flex-col justify-center">
+        <div>
+          <div className="mb-2 text-[0.875rem] font-bold">Project name</div>
           <Input
             autoFocus
             value={name}
@@ -43,11 +43,13 @@ export const CreateWorkspace = () => {
             setError={setError}
             placeholder="my project..."
           />
-        </WorkspaceNameWrapper>
+        </div>
 
-        <FrameworkSectionWrapper>
-          <MainText>Choose a framework</MainText>
-          <FrameworksWrapper>
+        <div className="mt-4 mb-2">
+          <div className="mb-2 text-[0.875rem] font-bold">
+            Choose a framework
+          </div>
+          <div className="flex gap-8">
             {PgFramework.all.map((f) => (
               <Framework
                 key={f.name}
@@ -58,35 +60,12 @@ export const CreateWorkspace = () => {
                 {...f}
               />
             ))}
-          </FrameworksWrapper>
-        </FrameworkSectionWrapper>
-      </Content>
+          </div>
+        </div>
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-`;
-
-const WorkspaceNameWrapper = styled.div``;
-
-const MainText = styled.div`
-  margin-bottom: 0.5rem;
-  font-weight: bold;
-  font-size: ${({ theme }) => theme.font.code.size.large};
-`;
-
-const FrameworkSectionWrapper = styled.div`
-  margin: 1rem 0 0.5rem 0;
-`;
-
-const FrameworksWrapper = styled.div`
-  display: flex;
-  gap: 2rem;
-`;
 
 interface FrameworkProps extends FrameworkType {
   isSelected: boolean;
@@ -101,57 +80,32 @@ const Framework: FC<React.PropsWithChildren<FrameworkProps>> = ({
   isSelected,
   select,
 }) => (
-  <FrameworkWrapper isSelected={isSelected} onClick={select}>
-    <FrameworkImageWrapper circle={circleImage}>
+  <div
+    className={cn(
+      "group w-fit rounded-[12px] border p-4 transition-all duration-150 ease-linear hover:cursor-pointer",
+      isSelected
+        ? "border-primary"
+        : "border-border hover:border-[color:var(--text-primary)]"
+    )}
+    onClick={select}
+  >
+    <div
+      className={cn(
+        "flex size-32 items-center [&>img]:w-full",
+        circleImage && "[&>img]:rounded-[50%]"
+      )}
+    >
       <Img src={icon} alt={name} />
-    </FrameworkImageWrapper>
-    <FrameworkName>
+    </div>
+    <div
+      className={cn(
+        "mt-3 text-center font-bold group-hover:text-[color:var(--text-primary)]",
+        isSelected
+          ? "text-[color:var(--text-primary)]"
+          : "text-[color:var(--text-secondary)]"
+      )}
+    >
       {name}({language})
-    </FrameworkName>
-  </FrameworkWrapper>
+    </div>
+  </div>
 );
-
-const FrameworkWrapper = styled.div<{ isSelected?: boolean }>`
-  ${({ theme, isSelected }) => css`
-    width: fit-content;
-    padding: 1rem;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    transition: all ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-    border-color: ${isSelected && theme.colors.default.primary};
-    & div:nth-child(2) {
-      color: ${isSelected && theme.colors.default.textPrimary};
-    }
-
-    &:hover {
-      cursor: pointer;
-      border-color: ${!isSelected && theme.colors.default.textPrimary};
-
-      & div:nth-child(2) {
-        color: ${theme.colors.default.textPrimary};
-      }
-    }
-  `}
-`;
-
-const FrameworkImageWrapper = styled.div<{ circle?: boolean }>`
-  ${({ circle }) => css`
-    width: 8rem;
-    height: 8rem;
-    display: flex;
-    align-items: center;
-
-    & > img {
-      width: 100%;
-      border-radius: ${circle && "50%"};
-    }
-  `}
-`;
-
-const FrameworkName = styled.div`
-  margin-top: 0.75rem;
-  text-align: center;
-  font-weight: bold;
-  color: ${({ theme }) => theme.colors.default.textSecondary};
-`;

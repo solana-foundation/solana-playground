@@ -2,8 +2,6 @@
 import * as Sentry from "@sentry/react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ThemeProvider } from "styled-components";
-import type { DefaultTheme } from "styled-components";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -31,7 +29,16 @@ vi.mock("@/utils", () => ({
   },
   PgView: { setToast: (...args: unknown[]) => setToast(...args) },
 }));
-vi.mock("@/hooks", () => ({ useRenderOnChange: () => undefined }));
+// Only what the widget reads: the font its portaled menu and modal are set in
+const theme = {
+  font: { code: { family: "monospace", size: { medium: "13px" } } },
+};
+vi.mock("@/hooks", () => ({
+  useRenderOnChange: () => undefined,
+}));
+vi.mock("@/shared/lib/hooks/use-pg-theme", () => ({
+  usePgTheme: () => theme,
+}));
 
 type Transport = NonNullable<
   NonNullable<Parameters<typeof Sentry.init>[0]>["transport"]
@@ -44,11 +51,6 @@ type FeedbackItem = [
     contexts?: { feedback?: Record<string, unknown> };
   }
 ];
-
-// Only what the widget reads: the font its portaled menu and modal are set in
-const theme = {
-  font: { code: { family: "monospace", size: { medium: "13px" } } },
-} as unknown as DefaultTheme;
 
 const envelopes: Envelope[] = [];
 let statusCode = 200;
@@ -105,9 +107,7 @@ const AccountControl = () => {
  * Sheet unmounts it on close
  */
 const page = ({ footer }: { footer: boolean }) => (
-  <ThemeProvider theme={theme}>
-    <FeedbackHost>{footer && <AccountControl />}</FeedbackHost>
-  </ThemeProvider>
+  <FeedbackHost>{footer && <AccountControl />}</FeedbackHost>
 );
 
 const account = () => screen.getByRole("button", { name: "Account" });

@@ -34,6 +34,7 @@ const view = (fields: Partial<AccountView>): AccountView => ({
   wallet: fields.wallet ?? null,
   cluster: fields.cluster ?? { name: "devnet", down: false },
   sending: fields.sending ?? false,
+  online: fields.online ?? true,
 });
 
 const MENU = (
@@ -94,23 +95,45 @@ it("opens the account menu from the account row and reports it", async () => {
   expect(onMenuOpenChange).toHaveBeenCalledWith(true);
 });
 
-it("shows the login and the wallet on the account row", () => {
+const WALLET = {
+  address: "7Hq5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaXk2P",
+  balance: 2.4,
+  name: null,
+};
+
+it("shows the name over the @login on the account row, and no wallet", () => {
   draw({
     account: view({
       session: {
         status: "signed-in",
         user: { name: "Tester", login: "t", image: null },
       },
-      wallet: {
-        address: "7Hq5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaXk2P",
-        balance: 2.4,
-        name: null,
-      },
+      wallet: WALLET,
     }),
   });
   const row = screen.getByRole("button", { name: "Account: t" });
-  expect(row.textContent).toContain("t");
-  expect(row.textContent).toContain("7Hq5…Xk2P · 2.40 SOL");
+  expect(row.textContent).toBe("Tester@t");
+});
+
+it("says signed-out work is saved in this browser, with a wallet or without", () => {
+  draw({ account: view({ wallet: WALLET }) });
+  const row = screen.getByRole("button", { name: "Account, signed out" });
+  expect(row.textContent).toBe("Sign inSaved in this browser");
+});
+
+it("says signed-in work saves here while offline", () => {
+  draw({
+    account: view({
+      session: {
+        status: "signed-in",
+        user: { name: "Tester", login: "t", image: null },
+      },
+      online: false,
+    }),
+  });
+  expect(screen.getByRole("button", { name: "Account: t" }).textContent).toBe(
+    "TesterOffline · saving here"
+  );
 });
 
 it("announces Couldn't sign in under the row after a failure, the reason on hover", () => {
@@ -130,27 +153,7 @@ it("announces Couldn't sign in under the row after a failure, the reason on hove
   );
 });
 
-it("keeps the wallet under a failed sign-in", () => {
-  draw({
-    account: view({
-      session: {
-        status: "failed",
-        reason: "popup-blocked",
-        message: "Allow popups for this site to sign in.",
-      },
-      wallet: {
-        address: "7Hq5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaXk2P",
-        balance: 2.4,
-        name: null,
-      },
-    }),
-  });
-  const row = screen.getByRole("button", { name: "Account, signed out" });
-  expect(row.textContent).toContain("Couldn't sign in");
-  expect(row.textContent).toContain("7Hq5…Xk2P · 2.40 SOL");
-});
-
-it("says nothing under the row of a sign-in the user cancelled", () => {
+it("goes back to where work is saved after a cancelled sign-in", () => {
   draw({
     account: view({
       session: {
@@ -161,12 +164,14 @@ it("says nothing under the row of a sign-in the user cancelled", () => {
     }),
   });
   expect(screen.queryByText("Couldn't sign in")).toBeNull();
+  expect(screen.getByText("Saved in this browser")).toBeTruthy();
 });
 
 it("offers Cancel beside the row while signing in", async () => {
   const onCancelSignIn = vi.fn();
   draw({ account: view({ session: { status: "pending" } }), onCancelSignIn });
-  expect(screen.getByText("Signing in...")).toBeTruthy();
+  expect(screen.getByText("Signing in…")).toBeTruthy();
+  expect(screen.getByText("Waiting for GitHub…")).toBeTruthy();
   await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
   expect(onCancelSignIn).toHaveBeenCalledOnce();
 });

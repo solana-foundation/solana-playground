@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
+
 import BaseBuild from "./BaseBuild";
 import IdlActions from "./IdlActions";
 import { buildSurface, ownOutput } from "./build-surface";
@@ -40,6 +42,9 @@ const Build = () => {
     };
   }, []);
 
+  const elapsedMs = useElapsed(
+    flow.build === "running" ? flow.buildStartedAt : null
+  );
   const own = ownOutput(out, PgExplorer.currentWorkspaceName ?? null);
   const surface = buildSurface({ flow, own });
 
@@ -60,6 +65,7 @@ const Build = () => {
       building={flow.build === "running"}
       host={serverHost()}
       ms={flow.buildMs}
+      elapsedMs={elapsedMs}
       onBuild={() => PgCommand.build.execute()}
       onContinue={() => PgFlow.setStage("deploy")}
       onExport={() => PgFramework.exportWorkspace()}

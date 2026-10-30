@@ -1,5 +1,4 @@
 import { render } from "@testing-library/react";
-import { DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 
@@ -19,19 +18,8 @@ vi.mock("../../hooks", () => ({ useRenderOnChange: () => {} }));
 // The test needs only the tutorial's mount effect, not the page it shows.
 vi.mock("./views", () => ({ About: () => null, Main: () => null }));
 
-// Every theme path the styled wrapper reads answers with the same stand-in,
-// which reads as an empty string where a style interpolates it.
-const theme: DefaultTheme = new Proxy({} as DefaultTheme, {
-  get: (_, key) =>
-    key === "toString" || key === Symbol.toPrimitive ? () => "" : theme,
-});
-
 const renderWith = (onMount: () => unknown) =>
-  render(
-    <ThemeProvider theme={theme}>
-      <Tutorial about="About" pages={[]} files={[]} onMount={onMount} />
-    </ThemeProvider>
-  );
+  render(<Tutorial about="About" pages={[]} files={[]} onMount={onMount} />);
 
 describe("Tutorial onMount", () => {
   // React reports a bad cleanup on the console; a passing run logs nothing.

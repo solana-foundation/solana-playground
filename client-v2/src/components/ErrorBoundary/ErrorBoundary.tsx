@@ -1,11 +1,11 @@
 import { Component, ErrorInfo, ReactNode, type JSX } from "react";
-import styled, { css } from "styled-components";
 
 import Fallback from "./Fallback";
 import ThrowError from "./ThrowError";
 import { Refresh } from "../Icons";
 import type { Fn } from "../../utils";
 import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 interface Props {
@@ -134,14 +134,21 @@ class ErrorBoundary extends Component<Props, State> {
   }
 }
 
-const Wrapper = styled.div<{ iconOnly?: boolean }>`
-  ${({ iconOnly }) => css`
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-direction: ${iconOnly ? "row-reverse" : "column"};
-    gap: ${iconOnly ? "0.25rem" : "1rem"};
-  `}
-`;
+const Wrapper = ({
+  iconOnly,
+  children,
+}: {
+  iconOnly?: boolean;
+  children: ReactNode;
+}) => (
+  <div
+    className={cn(
+      "flex items-center justify-center",
+      iconOnly ? "flex-row-reverse gap-1" : "flex-col gap-4"
+    )}
+  >
+    {children}
+  </div>
+);
 
 export default ErrorBoundary;

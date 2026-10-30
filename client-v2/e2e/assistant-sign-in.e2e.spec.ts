@@ -148,10 +148,12 @@ test("assistant-own-key: Signing out while connected to the default backend", as
   });
   await account.click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await page
-    .getByRole("dialog", { name: "Sign out of GitHub?" })
-    .getByRole("button", { name: "Sign out" })
-    .click();
+  // Asked in the menu, in place of its items
+  await expect(page.getByText("Sign out of Playground?")).toBeVisible();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  // The menu stays open, signed out; the page behind it is read once it closes
+  await expect(page.getByText("Sign out of Playground?")).toBeHidden(LONG);
+  await page.keyboard.press("Escape");
   await expect(
     page.getByRole("button", { name: "Account, signed out" })
   ).toBeVisible(LONG);

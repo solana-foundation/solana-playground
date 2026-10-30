@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
   ArrowUpRight,
@@ -18,6 +18,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from "@/shared/ui/dropdown-menu";
+import { MenuNote } from "@/shared/ui/menu-extras";
+import { Spinner } from "@/shared/ui/spinner";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { cn } from "@/shared/lib/utils";
 import { shortAddress } from "@/shared/lib/short-address";
@@ -25,9 +28,13 @@ import {
   DOCS_URL,
   formatBalance,
   githubProfileUrl,
+  failureOf,
+  leftoversText,
   profileName,
+  SIGN_OUT_CONSEQUENCE,
+  SIGN_OUT_QUESTION,
 } from "../model/account";
-import type { AccountItem, AccountView } from "../model/account";
+import type { AccountItem, AccountView, SignOutState } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
 import GithubMark from "./GithubMark";
 
@@ -41,9 +48,19 @@ export interface BaseAccountMenuProps {
   settingsShortcut: string;
   onPick: (item: AccountItem) => void;
   /**
+   * Where the sign-out question stands: `asking` replaces the items with it,
+   * `done` puts the leftovers line above them
+   */
+  signOut: SignOutState;
+  /** Signs out; rejects, leaving the person signed in, when it could not */
+  onSignOutConfirm: () => Promise<void>;
+  /** The question's Cancel: the items come back */
+  onSignOutCancel: () => void;
+  /**
    * A phone's page, as the prototype draws the account there: the whole
    * screen, titled, with a close, its rows a fingertip tall and, signed out,
-   * Sign in with GitHub pinned at the foot with what signing in is for
+   * the sign-in item (`signInLabel`) pinned at the foot with what signing in
+   * is for
    */
   page?: boolean;
 }
@@ -112,7 +129,14 @@ const SessionItems = ({
             </a>
           </DropdownMenuItem>
         )}
-        <DropdownMenuItem onSelect={() => onPick("sign-out")}>
+        <DropdownMenuItem
+          onSelect={(ev) => {
+            // Keeps the menu open: the question is asked in place (Spec 02,
+            // "Sign-out asks in the menu")
+            ev.preventDefault();
+            onPick("sign-out");
+          }}
+        >
           <LogOut /> Sign out
         </DropdownMenuItem>
       </>
@@ -122,20 +146,17 @@ const SessionItems = ({
     return (
       <>
         <DropdownMenuLabel className="font-normal text-muted-foreground">
-          Signing in...
+          Waiting for GitHub…
         </DropdownMenuLabel>
         <DropdownMenuItem onSelect={() => onPick("cancel-sign-in")}>
-          Cancel
+          Cancel sign-in
         </DropdownMenuItem>
       </>
     );
   }
   // The reason is said in full here: the row has room for "Couldn't sign
   // in" only, and the rail for nothing at all
-  const failure =
-    session.status === "failed" && session.reason !== "cancelled"
-      ? session.message
-      : null;
+  const failure = failureOf(account);
   return (
     <>
       {failure && (
@@ -145,20 +166,90 @@ const SessionItems = ({
       )}
       {/* On a page, signing in is the foot's (`SignInFoot`) */}
       {!page && (
-        <DropdownMenuItem onSelect={() => onPick("sign-in")}>
-          <GithubMark className="size-4" /> Sign in with GitHub
+        <DropdownMenuItem
+          disabled={!account.online}
+          onSelect={() => onPick("sign-in")}
+        >
+          <GithubMark className="size-4" /> {signInLabel(account)}
         </DropdownMenuItem>
       )}
     </>
   );
 };
 
+/** Spec 02's words on the sign-in item: off while offline, a retry after a failure */
+const signInLabel = (account: AccountView) => {
+  if (!account.online) return "You're offline";
+  if (failureOf(account)) return "Try again";
+  return "Sign in with GitHub";
+};
+
 /** Whether the page's foot offers signing in: signed out, no sign-in under way */
 const signsIn = (account: AccountView) =>
   account.session.status === "idle" || account.session.status === "failed";
 
+/**
+ * The sign-out question, in place of the menu's items (Spec 02, "Sign-out
+ * asks in the menu"): Cancel holds focus and brings the items back; Sign out
+ * stays busy, with the menu open, until the sign-out settles
+ */
+const SignOutQuestion = ({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => Promise<void>;
+  onCancel: () => void;
+}) => {
+  const cancel = useRef<HTMLDivElement>(null);
+  const [busy, setBusy] = useState(false);
+  // After Radix has moved focus into the content on open
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => cancel.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, []);
+  const confirm = () => {
+    if (busy) return;
+    setBusy(true);
+    onConfirm()
+      .catch(reportButtonFailure("sign out"))
+      .finally(() => setBusy(false));
+  };
+  return (
+    <>
+      <DropdownMenuLabel className="text-foreground">
+        {SIGN_OUT_QUESTION}
+      </DropdownMenuLabel>
+      <MenuNote className="max-w-64 pt-0">{SIGN_OUT_CONSEQUENCE}</MenuNote>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem
+        ref={cancel}
+        onSelect={(ev) => {
+          ev.preventDefault();
+          if (!busy) onCancel();
+        }}
+      >
+        Cancel
+      </DropdownMenuItem>
+      <DropdownMenuItem
+        variant="destructive"
+        aria-busy={busy || undefined}
+        onSelect={(ev) => {
+          ev.preventDefault();
+          confirm();
+        }}
+      >
+        <LogOut /> Sign out
+        {busy && <Spinner aria-label="Signing out" className="ml-auto" />}
+      </DropdownMenuItem>
+    </>
+  );
+};
+
 /** The page's foot while signed out: what signing in is for, and the button */
-const SignInFoot = ({ onPick }: Pick<BaseAccountMenuProps, "onPick">) => {
+const SignInFoot = ({
+  account,
+  onPick,
+}: Pick<BaseAccountMenuProps, "account" | "onPick">) => {
   // The page covers the account row it opened from, and this button sits
   // where that row was: the finger that opened the page lifts over it, and a
   // menu item takes a release with no press on it for a pick (Radix's drag
@@ -175,6 +266,7 @@ const SignInFoot = ({ onPick }: Pick<BaseAccountMenuProps, "onPick">) => {
         SOL.
       </p>
       <DropdownMenuItem
+        disabled={!account.online}
         onPointerDown={() => {
           pressed.current = true;
         }}
@@ -200,7 +292,7 @@ const SignInFoot = ({ onPick }: Pick<BaseAccountMenuProps, "onPick">) => {
         }}
         className="h-12 justify-center gap-2 rounded-xl bg-foreground text-body font-act text-background focus:bg-foreground/90 focus:text-background not-data-[variant=destructive]:focus:**:text-background [&_svg]:size-5"
       >
-        <GithubMark className="text-background" /> Sign in with GitHub
+        <GithubMark className="text-background" /> {signInLabel(account)}
       </DropdownMenuItem>
     </div>
   );
@@ -222,9 +314,14 @@ const BaseAccountMenu = ({
   side,
   settingsShortcut,
   onPick,
+  signOut,
+  onSignOutConfirm,
+  onSignOutCancel,
   page = false,
 }: BaseAccountMenuProps) => {
   const { cluster, wallet } = account;
+  const leftovers =
+    signOut.status === "done" ? leftoversText(signOut.kept) : null;
   // A pick that opens the settings waits for the menu to close: while the
   // menu is mounted its focus trap pulls back the focus the settings take as
   // they open, and as it closes it puts focus back on its trigger
@@ -234,63 +331,73 @@ const BaseAccountMenu = ({
       deferred.current = item;
     else onPick(item);
   };
-  const items = (
-    <>
-      {cluster.down && (
-        <>
-          <DropdownMenuItem
-            variant="destructive"
-            {...settingsTrigger}
-            onSelect={() => pick("cluster-down")}
-          >
-            <TriangleAlert /> {cluster.name} is not answering
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-        </>
-      )}
-      <SessionItems account={account} onPick={pick} page={page} />
-      {/* Signed out, a page's sign-in is its foot: nothing to rule off,
+  const items =
+    signOut.status === "asking" ? (
+      <SignOutQuestion
+        onConfirm={onSignOutConfirm}
+        onCancel={onSignOutCancel}
+      />
+    ) : (
+      <>
+        {leftovers && <MenuNote className="max-w-64">{leftovers}</MenuNote>}
+        {cluster.down && (
+          <>
+            <DropdownMenuItem
+              variant="destructive"
+              {...settingsTrigger}
+              onSelect={() => pick("cluster-down")}
+            >
+              <TriangleAlert /> {cluster.name} is not answering
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+          </>
+        )}
+        <SessionItems account={account} onPick={pick} page={page} />
+        {/* Signed out, a page's sign-in is its foot: nothing to rule off,
           unless a failure is said above */}
-      {!(page && account.session.status === "idle") && (
-        <DropdownMenuSeparator />
-      )}
-      <DropdownMenuItem {...settingsTrigger} onSelect={() => pick("settings")}>
-        <Settings /> Settings
-        <DropdownMenuShortcut>{settingsShortcut}</DropdownMenuShortcut>
-      </DropdownMenuItem>
-      <DropdownMenuItem asChild>
-        <a
-          href={DOCS_URL}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={() => pick("docs")}
+        {!(page && account.session.status === "idle") && (
+          <DropdownMenuSeparator />
+        )}
+        <DropdownMenuItem
+          {...settingsTrigger}
+          onSelect={() => pick("settings")}
         >
-          <BookOpen /> Docs
-          <External />
-        </a>
-      </DropdownMenuItem>
-      {feedback}
-      <DropdownMenuSeparator />
-      {wallet ? (
-        <>
-          <DropdownMenuItem onSelect={() => pick("wallet")}>
-            <Wallet />
-            <span className="font-mono">{shortAddress(wallet.address)}</span>
-            <span className="ml-auto text-success">
-              {formatBalance(wallet.balance)}
-            </span>
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => pick("disconnect-wallet")}>
-            <Unplug /> Disconnect {wallet.name ?? "wallet"}
-          </DropdownMenuItem>
-        </>
-      ) : (
-        <DropdownMenuItem onSelect={() => pick("connect-wallet")}>
-          <Wallet /> Connect wallet
+          <Settings /> Settings
+          <DropdownMenuShortcut>{settingsShortcut}</DropdownMenuShortcut>
         </DropdownMenuItem>
-      )}
-    </>
-  );
+        <DropdownMenuItem asChild>
+          <a
+            href={DOCS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => pick("docs")}
+          >
+            <BookOpen /> Docs
+            <External />
+          </a>
+        </DropdownMenuItem>
+        {feedback}
+        <DropdownMenuSeparator />
+        {wallet ? (
+          <>
+            <DropdownMenuItem onSelect={() => pick("wallet")}>
+              <Wallet />
+              <span className="font-mono">{shortAddress(wallet.address)}</span>
+              <span className="ml-auto text-success">
+                {formatBalance(wallet.balance)}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => pick("disconnect-wallet")}>
+              <Unplug /> Disconnect {wallet.name ?? "wallet"}
+            </DropdownMenuItem>
+          </>
+        ) : (
+          <DropdownMenuItem onSelect={() => pick("connect-wallet")}>
+            <Wallet /> Connect wallet
+          </DropdownMenuItem>
+        )}
+      </>
+    );
   const closeAfterPick = (ev: Event) => {
     const item = deferred.current;
     if (!item) return;
@@ -330,7 +437,7 @@ const BaseAccountMenu = ({
         >
           {items}
         </div>
-        {signsIn(account) && <SignInFoot onPick={pick} />}
+        {signsIn(account) && <SignInFoot account={account} onPick={pick} />}
       </DropdownMenuContent>
     );
   }

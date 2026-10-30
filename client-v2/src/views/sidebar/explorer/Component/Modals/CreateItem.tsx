@@ -1,6 +1,5 @@
 import { FC, useCallback, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
-import styled from "styled-components";
 
 import Input from "../../../../../components/Input";
 import LangIcon from "../../../../../components/LangIcon";
@@ -108,7 +107,11 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
   }, [El]);
 
   return (
-    <Wrapper ref={newFileRef} depth={depth}>
+    <div
+      ref={newFileRef}
+      className="flex items-center py-1 [&>input]:ml-1.5 [&>input]:h-6!"
+      style={{ paddingLeft: `${depth}rem` }}
+    >
       <LangIcon path={itemName} />
       <Input
         autoFocus
@@ -118,18 +121,6 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
         setError={setError}
         validator={PgExplorer.isItemNameValid}
       />
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div<{ depth: number }>`
-  display: flex;
-  align-items: center;
-  padding: 0.25rem 0;
-  padding-left: ${({ depth }) => depth + "rem"};
-
-  & > input {
-    height: 1.5rem;
-    margin-left: 0.375rem;
-  }
-`;

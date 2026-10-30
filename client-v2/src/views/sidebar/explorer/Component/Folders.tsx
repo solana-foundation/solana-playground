@@ -12,7 +12,6 @@ import {
   useState,
 } from "react";
 import { cn } from "@/shared/lib/utils";
-import styled, { css, useTheme } from "styled-components";
 
 import ExplorerButtons from "./ExplorerButtons";
 import Dnd, { DragStartEvent, DragEndEvent } from "../../../../components/Dnd";
@@ -33,8 +32,36 @@ import { useExplorerContextMenu } from "./useExplorerContextMenu";
 import { useResetCtxSelected } from "./useResetCtxSelected";
 import { useHandleItemState } from "./useHandleItemState";
 import { useKeybind } from "../../../../hooks";
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
+/*
+ * The rows are styled from the root, on the class names `PgExplorer` toggles
+ * in the DOM (`selected`, `ctx-selected`), so the runtime toggling restyles
+ * them. Nothing in a row gives: text will not compress below its own width,
+ * so a flex row with a long name would take the slack out of the indent and
+ * the chevron instead, and a deeply nested folder would lose the control that
+ * expands it. Names are never shortened either; a row wider than the panel
+ * scrolls it rather than hiding characters.
+ */
+const ROOT_CLASSES = cn(
+  "py-1.5",
+  "[&_:is(.folder,.file)]:mx-1.5 [&_:is(.folder,.file)]:flex [&_:is(.folder,.file)]:items-center",
+  "[&_:is(.folder,.file)]:cursor-pointer [&_:is(.folder,.file)]:rounded-[0.5rem]",
+  "[&_:is(.folder,.file)]:border [&_:is(.folder,.file)]:border-transparent",
+  "[&_:is(.folder,.file)]:px-2.5 [&_:is(.folder,.file)]:py-[0.3125rem] [&_:is(.folder,.file)]:text-[0.75rem]",
+  "[&_:is(.folder,.file).selected]:bg-[color-mix(in_srgb,var(--primary)_9%,transparent)]",
+  "[&_:is(.folder,.file).ctx-selected]:bg-[color-mix(in_srgb,var(--primary)_9%,transparent)] [&_:is(.folder,.file).ctx-selected]:border-[color-mix(in_srgb,var(--primary)_39%,transparent)] [&_:is(.folder,.file).ctx-selected]:rounded-[12px]",
+  "[&_:is(.folder,.file):hover]:bg-[color-mix(in_srgb,var(--primary)_9%,transparent)]",
+  "[&_:is(.folder,.file)>*]:shrink-0 [&_:is(.folder,.file)>span]:whitespace-nowrap"
+);
+
+const SECTION_TOP_CLASSES =
+  "mb-1 ml-4 flex items-center text-[color:var(--text-secondary)] not-first:mt-4 [&>button]:ml-2 [&>button:nth-child(2)]:ml-3";
+
+const SECTION_HEADER_CLASSES =
+  "text-[0.7rem] font-semibold tracking-[0.1em] uppercase";
 
 const Folders = () => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -70,14 +97,15 @@ const Folders = () => {
 
       <ExplorerDndContext>
         <ExplorerContextMenu {...ctxMenu}>
-          <RootWrapper
+          <div
             ref={wrapperRef}
+            className={ROOT_CLASSES}
             id={PgView.ids.ROOT_DIR}
             data-path={relativeRootPath}
           >
             {/* Program */}
-            <SectionTopWrapper data-section>
-              <SectionHeader>Program</SectionHeader>
+            <div className={SECTION_TOP_CLASSES} data-section>
+              <div className={SECTION_HEADER_CLASSES}>Program</div>
               {folders.includes(PgExplorer.PATHS.SRC_DIRNAME) ? (
                 <>
                   <SectionButton
@@ -106,7 +134,7 @@ const Folders = () => {
                   Add
                 </SectionButton>
               )}
-            </SectionTopWrapper>
+            </div>
             <FolderGroup
               folders={folders.filter(
                 (f) => f === PgExplorer.PATHS.SRC_DIRNAME
@@ -115,8 +143,8 @@ const Folders = () => {
             />
 
             {/* Client and tests */}
-            <SectionTopWrapper data-section>
-              <SectionHeader>Client</SectionHeader>
+            <div className={SECTION_TOP_CLASSES} data-section>
+              <div className={SECTION_HEADER_CLASSES}>Client</div>
               {folders.includes(PgExplorer.PATHS.CLIENT_DIRNAME) ? (
                 <SectionButton
                   onClick={ctxMenu.runClientFolder}
@@ -154,7 +182,7 @@ const Folders = () => {
                   Add tests
                 </SectionButton>
               )}
-            </SectionTopWrapper>
+            </div>
             <FolderGroup
               folders={folders.filter(
                 (f) =>
@@ -166,15 +194,15 @@ const Folders = () => {
 
             {/* Other */}
             {otherFolders.length > 0 && (
-              <SectionTopWrapper data-section>
-                <SectionHeader>Other</SectionHeader>
-              </SectionTopWrapper>
+              <div className={SECTION_TOP_CLASSES} data-section>
+                <div className={SECTION_HEADER_CLASSES}>Other</div>
+              </div>
             )}
             <FolderGroup
               folders={otherFolders}
               relativeRootPath={relativeRootPath}
             />
-          </RootWrapper>
+          </div>
         </ExplorerContextMenu>
       </ExplorerDndContext>
     </>
@@ -236,8 +264,8 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
 
   const Item = activeItemProps
     ? PgExplorer.getItemTypeFromPath(activeItemProps.path).file
-      ? StyledFile
-      : StyledFolder
+      ? File
+      : Folder
     : null;
 
   return (
@@ -343,7 +371,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
     PgExplorer.openFolder(el.firstChild as HTMLDivElement);
   }, []);
 
-  const theme = useTheme();
+  const theme = usePgTheme();
   const overStyle: CSSProperties = useMemo(
     () => ({
       background: PgTheme.alpha(theme.colors.default.primary, "low"),
@@ -356,7 +384,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
     <Dnd.Droppable id={path} onDragOver={handleDragOver} overStyle={overStyle}>
       <Dnd.Draggable
         id={path}
-        Item={StyledFolder}
+        Item={Folder}
         itemProps={{
           path,
           name: folderName,
@@ -366,8 +394,12 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
         }}
       />
 
-      <FolderInsideWrapper
-        className={`${PgView.classNames.FOLDER_INSIDE} ${PgView.classNames.HIDDEN}`}
+      <div
+        className={cn(
+          PgView.classNames.FOLDER_INSIDE,
+          PgView.classNames.HIDDEN,
+          "[&.hidden]:hidden"
+        )}
       >
         {folders
           .sort((a, b) => a.localeCompare(b))
@@ -384,7 +416,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
             <Dnd.Draggable
               key={fileName}
               id={PgCommon.joinPaths(path, fileName)}
-              Item={StyledFile}
+              Item={File}
               itemProps={{
                 path: PgCommon.joinPaths(path, fileName),
                 name: fileName,
@@ -394,7 +426,7 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
               }}
             />
           ))}
-      </FolderInsideWrapper>
+      </div>
     </Dnd.Droppable>
   );
 };
@@ -408,11 +440,22 @@ interface FileOrFolderProps {
 type FolderProps = FileOrFolderProps & ComponentPropsWithoutRef<"div">;
 
 const Folder = forwardRef<HTMLDivElement, FolderProps>(
-  ({ path, name, depth, ...props }, ref) => (
-    <div ref={ref} data-path={path} {...props}>
-      <PaddingLeft depth={depth} />
+  ({ path, name, depth, className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-path={path}
+      className={cn(
+        // The chevron: sized and turned from the row, as `ShortArrow` takes
+        // no class
+        "[&_svg]:size-[0.875rem] [&_svg]:[transition:transform_50ms_linear]",
+        "[&.open_svg]:[transform:rotate(90deg)]",
+        className
+      )}
+      {...props}
+    >
+      <div className="h-full" style={{ width: `${depth}rem` }} />
       <ShortArrow color="textSecondary" />
-      <span>{name}</span>
+      <span className="ml-2 text-primary">{name}</span>
     </div>
   )
 );
@@ -420,131 +463,18 @@ const Folder = forwardRef<HTMLDivElement, FolderProps>(
 type FileProps = FileOrFolderProps & ComponentPropsWithoutRef<"div">;
 
 const File = forwardRef<HTMLDivElement, FileProps>(
-  ({ path, name, depth, ...props }, ref) => (
-    <div ref={ref} data-path={path} {...props}>
-      <PaddingLeft depth={depth} />
+  ({ path, name, depth, className, ...props }, ref) => (
+    <div
+      ref={ref}
+      data-path={path}
+      className={cn("[&_img]:ml-0.5", className)}
+      {...props}
+    >
+      <div className="h-full" style={{ width: `${depth}rem` }} />
       <LangIcon path={path} />
-      <span>{name}</span>
+      <span className="ml-1.5 text-[color:var(--text-primary)]">{name}</span>
     </div>
   )
 );
-
-const RootWrapper = styled.div`
-  ${({ theme }) => css`
-  padding: 0.375rem 0;
-
-  & .${PgView.classNames.FOLDER}, & .${PgView.classNames.FILE} {
-    display: flex;
-    align-items: center;
-    margin: 0 0.375rem;
-    padding: 0.3125rem 0.625rem;
-    cursor: pointer;
-    border: 1px solid transparent;
-    border-radius: 0.5rem;
-    font-size: ${theme.font.code.size.small};
-
-    &.${PgView.classNames.SELECTED} {
-      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
-    }
-
-    &.${PgView.classNames.CTX_SELECTED} {
-      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
-      border-color: ${PgTheme.alpha(theme.colors.default.primary, "medium")};
-      border-radius: ${theme.default.borderRadius};
-    }
-
-    &:hover {
-      background: ${PgTheme.alpha(theme.colors.default.primary, "low")};
-    }
-
-    /*
-     * Nothing in a row gives. Text will not compress below its own width, so
-     * a flex row with a long name takes the slack out of the indent and the
-     * chevron instead -- both collapse to zero and a deeply nested folder
-     * loses the control that expands it. Names are never shortened either;
-     * a row wider than the panel scrolls it rather than hiding characters.
-     */
-    & > * {
-      flex-shrink: 0;
-    }
-
-    & > span {
-      white-space: nowrap;
-    }
-`}
-`;
-
-const SectionTopWrapper = styled.div`
-  ${({ theme }) => css`
-    display: flex;
-    align-items: center;
-    margin-left: 1rem;
-    margin-bottom: 0.25rem;
-    color: ${theme.colors.default.textSecondary};
-
-    &:not(:first-child) {
-      margin-top: 1rem;
-    }
-
-    & > button {
-      margin-left: 0.5rem;
-    }
-
-    & > button:nth-child(2) {
-      margin-left: 0.75rem;
-    }
-  `}
-`;
-
-const SectionHeader = styled.div`
-  ${({ theme }) => css`
-    font-size: ${theme.font.code.size.xsmall};
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  `}
-`;
-
-const FolderInsideWrapper = styled.div`
-  &.${PgView.classNames.HIDDEN} {
-    display: none;
-  }
-`;
-
-const StyledFolder = styled(Folder)`
-  ${({ theme }) => css`
-    & span {
-      color: ${theme.colors.default.primary};
-      margin-left: 0.5rem;
-    }
-
-    & svg {
-      width: 0.875rem;
-      height: 0.875rem;
-      transition: transform ${theme.default.transition.duration.short}
-        ${theme.default.transition.type};
-    }
-
-    &.${PgView.classNames.OPEN} svg {
-      transform: rotate(90deg);
-    }
-  `}
-`;
-
-const StyledFile = styled(File)`
-  & img {
-    margin-left: 0.125rem;
-  }
-
-  & span {
-    color: ${({ theme }) => theme.colors.default.textPrimary};
-    margin-left: 0.375rem;
-  }
-`;
-
-const PaddingLeft = styled.div<{ depth: number }>`
-  width: ${({ depth }) => depth}rem;
-  height: 100%;
-`;
 
 export default Folders;

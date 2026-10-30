@@ -163,7 +163,7 @@ test("client-v2-layout: Deleting from the list", async ({ page }) => {
   await menu.getByRole("menuitem", { name: "Delete alpha" }).click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: /^delete$/i })
+    .getByRole("button", { name: "Delete project" })
     .click();
 
   await expect(projectRow(page, "alpha")).toHaveCount(0, LONG);

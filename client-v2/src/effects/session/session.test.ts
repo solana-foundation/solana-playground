@@ -1,6 +1,7 @@
 import type { MockInstance } from "vitest";
 import { session } from "./session";
 import { PgSession } from "../../features/auth";
+import { PgAccountList } from "../../features/persistence/model/account-list";
 import { PgChatStorage } from "../../features/persistence/model/chat-storage";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
@@ -92,6 +93,38 @@ describe("the session effect", () => {
       "pushChats",
       "reconcile",
     ]);
+    effect.dispose();
+  });
+
+  it("takes on the account when Home read the session before the effects mounted", async () => {
+    // Effects mount after a delay, and Home starts the page's read as it
+    // draws: the user is known before this effect exists, so no change fires
+    await PgSession.refreshWith(user);
+    calls = [];
+
+    const effect = session();
+    await settle();
+
+    expect(calls).toContain("reconcile");
+    expect(switchWorkspace).not.toHaveBeenCalled();
+    // The effect's own hold, given back once by the restore
+    expect(calls.filter((c) => c === "hold")).toHaveLength(1);
+    expect(calls.filter((c) => c === "release")).toHaveLength(1);
+    effect.dispose();
+  });
+
+  it("takes a sign-in after a signed-out read Home made before the effects mounted as a sign-in", async () => {
+    sync.mockResolvedValue(result({ latest: "Newest" }));
+    await PgSession.refreshWith(null);
+    (PgSession.refresh as unknown as MockInstance).mockResolvedValue(undefined);
+
+    const effect = session();
+    await settle();
+    expect(calls).not.toContain("reconcile");
+    await PgSession.refreshWith(user);
+    await settle();
+
+    expect(switchWorkspace).toHaveBeenCalledWith("Newest");
     effect.dispose();
   });
 
@@ -290,6 +323,97 @@ describe("the session effect", () => {
     });
   });
 
+  it("takes a retry that answers after a failed first read as the restore, not a sign-in", async () => {
+    sync.mockResolvedValue(result({ latest: "Newest" }));
+    (PgSession.refresh as unknown as MockInstance).mockRestore();
+    vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user }),
+      } as never);
+
+    const effect = session();
+    await settle();
+    expect(PgSession.readState).toBe("failed");
+    // Home's retry of the account check
+    await PgSession.refresh();
+    await settle();
+
+    expect(PgSession.get()?.id).toBe("u1");
+    expect(switchWorkspace).not.toHaveBeenCalled();
+    effect.dispose();
+  });
+
+  it("opens the newest project for a sign-in that follows a failed load read", async () => {
+    sync.mockResolvedValue(result({ latest: "Newest" }));
+    (PgSession.refresh as unknown as MockInstance).mockRestore();
+    let loadRead = true;
+    vi.spyOn(globalThis, "fetch").mockImplementation((async (url: string) => {
+      if (url === "/api/auth/get-session") {
+        if (loadRead) {
+          loadRead = false;
+          throw new Error("offline");
+        }
+        return { ok: true, json: async () => ({ user }) };
+      }
+      return {
+        ok: true,
+        json: async () => ({ url: "https://github.com/login/oauth/x" }),
+      };
+    }) as never);
+    PgSession.setOpenChannel(() => ({
+      receive: async () => ({ delivered: true as const, data: {} }),
+      cancel: () => {},
+    }));
+
+    const effect = session();
+    await settle();
+    expect(PgSession.readState).toBe("failed");
+    await PgSession.signIn();
+    await settle();
+
+    expect(switchWorkspace).toHaveBeenCalledWith("Newest");
+    effect.dispose();
+  });
+
+  it("holds pushes again for a restore that answers after a failed load read", async () => {
+    (PgSession.refresh as unknown as MockInstance).mockRestore();
+    vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ user }),
+      } as never);
+
+    const effect = session();
+    await settle();
+    expect(calls.filter((c) => c === "release")).toHaveLength(1);
+
+    await PgSession.refresh();
+    await settle();
+
+    // Held before the late reconcile, released once after it
+    expect(calls.indexOf("hold", 1)).toBeLessThan(
+      calls.lastIndexOf("reconcile")
+    );
+    expect(calls.filter((c) => c === "hold")).toHaveLength(2);
+    expect(calls.filter((c) => c === "release")).toHaveLength(2);
+    effect.dispose();
+  });
+
+  it("forgets what the last account's list held once the user changes, however the session ended", async () => {
+    const effect = session();
+    await settle();
+    PgAccountList.listed(0);
+
+    // A re-read that finds nobody, not a sign-out through the app
+    await PgSession.refreshWith(null);
+
+    expect(PgAccountList.state).toBe("unknown");
+    effect.dispose();
+  });
+
   it("opens the newest project when the user actually signs in", async () => {
     sync.mockResolvedValue(result({ latest: "Newest" }));
 
@@ -478,6 +602,8 @@ describe("signing out", () => {
       order.push("pushProject");
       return "ok";
     });
+    vi.spyOn(PgChatSync, "adoptAccountThreads").mockResolvedValue(undefined);
+    vi.spyOn(restore, "reconcile").mockResolvedValue(result());
     vi.spyOn(PgChatSync, "forget").mockImplementation(async () => {
       order.push("forgetChats");
     });
@@ -506,6 +632,15 @@ describe("signing out", () => {
     PgProjectSync.forgetAccount();
   });
 
+  // The user is known before the effect mounts, so it takes the account on
+  // first; that pass settles before anything here is recorded
+  const mount = async () => {
+    const effect = session();
+    await settle();
+    order.length = 0;
+    return effect;
+  };
+
   const serverSignsOut = (answer: Partial<Response>) =>
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
       order.push("request");
@@ -523,7 +658,7 @@ describe("signing out", () => {
     // before the close lands ahead of `forget`, which then keeps that thread.
     serverSignsOut({ ok: true });
 
-    const effect = session();
+    const effect = await mount();
     await PgSession.signOut();
 
     expect(order).toEqual([
@@ -549,7 +684,7 @@ describe("signing out", () => {
     expect(PgAssistant.threadId).toBeNull();
     PgAssistant.addUserMessage("from the last account");
 
-    const effect = session();
+    const effect = await mount();
     await PgSession.signOut();
 
     expect(PgAssistant.items).toEqual([]);
@@ -561,7 +696,7 @@ describe("signing out", () => {
     // the next account's sign-in dump uploads them into that account
     serverSignsOut({ ok: true });
 
-    const effect = session();
+    const effect = await mount();
     await PgSession.signOut();
 
     expect(PgChatSync.forget).toHaveBeenCalledWith(handed);
@@ -574,7 +709,7 @@ describe("signing out", () => {
     serverSignsOut({ ok: false, status: 500 });
     PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
 
-    const effect = session();
+    const effect = await mount();
     await expect(PgSession.signOut()).rejects.toThrow();
 
     expect(order).toEqual(["pushChats", "pushProject", "request"]);
@@ -587,7 +722,7 @@ describe("signing out", () => {
     vi.spyOn(PgChatSync, "pushAll").mockRejectedValue(new Error("offline"));
     serverSignsOut({ ok: true });
 
-    const effect = session();
+    const effect = await mount();
     await PgSession.signOut();
 
     // The threads were not uploaded, so nothing is forgotten and they are
@@ -605,7 +740,7 @@ describe("signing out", () => {
     serverSignsOut({ ok: true });
     PgProjectSync.raise({ projectId: "tut:hello", kind: "divergent" });
 
-    const effect = session();
+    const effect = await mount();
     await PgSession.signOut();
 
     // A tutorial's id is identical across accounts, so a banner left over from

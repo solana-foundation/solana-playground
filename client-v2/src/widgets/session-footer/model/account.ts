@@ -1,5 +1,4 @@
 import type { SessionUser, SignInState } from "@/features/auth";
-import { shortAddress } from "@/shared/lib/short-address";
 import type { ClusterStatus } from "./use-cluster-status";
 
 /** What a user can pick in the account menu (and the row's Cancel), for telemetry */
@@ -47,13 +46,60 @@ export interface AccountView {
   cluster: ClusterStatus;
   /** A feedback send is in flight behind a closed form */
   sending: boolean;
+  /** What the browser says of the network (`navigator.onLine`) */
+  online: boolean;
 }
 
-/** The line under the account's name */
+/**
+ * The one line under the account's name (Spec 02, "The account row says who
+ * and where"): where work is saved, where a sign-in stands, who is signed
+ * in, or that the network is down and work saves here. The wallet is not on
+ * the row; the menu's wallet group carries it.
+ */
 export type AccountLine =
+  | { kind: "saved-here" }
   | { kind: "signing-in" }
   | { kind: "failed"; message: string }
-  | ({ kind: "wallet" } & AccountWallet);
+  | { kind: "login"; login: string }
+  | { kind: "offline" };
+
+/** Where the sign-out question stands inside the account menu */
+export type SignOutState =
+  | { status: "idle" }
+  | { status: "asking" }
+  /** Signed out; `kept` projects stayed in this browser */
+  | { status: "done"; kept: number };
+
+/**
+ * What the menu shows of the sign-out question, given the session now. A
+ * question with no session left to end (another tab signed out) is not asked,
+ * unless its own sign-out is running and stays busy until it settles; the
+ * leftovers line belongs to the signed-out menu, and a new session drops it.
+ */
+export const shownSignOutState = (
+  state: SignOutState,
+  now: { signedIn: boolean; running: boolean }
+): SignOutState => {
+  if (state.status === "asking" && !now.signedIn && !now.running) {
+    return { status: "idle" };
+  }
+  if (state.status === "done" && now.signedIn) return { status: "idle" };
+  return state;
+};
+
+export const SIGN_OUT_QUESTION = "Sign out of Playground?";
+
+export const SIGN_OUT_CONSEQUENCE =
+  "Projects saved to your account leave this browser. Anything not saved stays here.";
+
+/** Spec 02's leftovers line, or `null` when nothing stayed */
+export const leftoversText = (kept: number) => {
+  if (kept <= 0) return null;
+  if (kept === 1) {
+    return "1 project stayed in this browser because it wasn't saved to your account.";
+  }
+  return `${kept} projects stayed in this browser because they weren't saved to your account.`;
+};
 
 export const DOCS_URL = "https://solana.com/docs";
 
@@ -66,10 +112,10 @@ export const formatBalance = (balance: number | null) =>
 export const accountUser = ({ session }: AccountView) =>
   session.status === "signed-in" ? session.user : null;
 
-/** The short name on the account row: the handle first */
+/** The short name in the account controls' label: the handle first */
 const displayName = (user: AccountUser) => user.login ?? user.name ?? "Account";
 
-/** The name at the head of the menu: the display name first, never empty */
+/** The name on the row and at the head of the menu: the display name first, never empty */
 export const profileName = (user: AccountUser) =>
   user.name ?? user.login ?? "Account";
 
@@ -79,47 +125,69 @@ export const accountLabel = (view: AccountView) => {
   return user ? `Account: ${displayName(user)}` : "Account, signed out";
 };
 
-const sessionLine = (session: AccountSession): AccountLine | null => {
-  if (session.status === "pending") return { kind: "signing-in" };
-  // The user chose to stop; there is nothing to report
-  if (session.status === "failed" && session.reason !== "cancelled") {
-    return { kind: "failed", message: session.message };
-  }
+/** Signed in: offline first, then the handle under the display name */
+const signedInLine = (
+  user: AccountUser,
+  view: Pick<AccountView, "online">
+): AccountLine | null => {
+  if (!view.online) return { kind: "offline" };
+  // Without a display name the handle is already the name above
+  if (user.login && user.name) return { kind: "login", login: user.login };
   return null;
 };
 
 /**
- * The account row's name, and the lines under it: where a sign-in stands,
- * then the wallet. Both show: a failed sign-in stays failed in `PgSession`
- * until the next attempt, and must not hide a wallet connected meanwhile
+ * A failed sign-in's reason, unless the person cancelled it: a cancel is
+ * their choice, and there is nothing to report. The row and the menu both
+ * say a failure from this
+ */
+export const failureOf = ({ session }: Pick<AccountView, "session">) =>
+  session.status === "failed" && session.reason !== "cancelled"
+    ? session.message
+    : null;
+
+/** Signed out: a sign-in under way or failed, else where work is saved */
+const signedOutLine = (session: AccountSession): AccountLine => {
+  if (session.status === "pending") return { kind: "signing-in" };
+  const failure = failureOf({ session });
+  if (failure) return { kind: "failed", message: failure };
+  return { kind: "saved-here" };
+};
+
+/**
+ * The account row's name, and the one line under it. A sign-in failure the
+ * person did not cancel holds the line until the next attempt or a session
  */
 export const accountLines = (
   view: AccountView
-): { primary: string; lines: AccountLine[] } => {
+): { primary: string; line: AccountLine | null } => {
   const user = accountUser(view);
-  const lines: AccountLine[] = [];
-  const fromSession = sessionLine(view.session);
-  if (fromSession) lines.push(fromSession);
-  if (view.wallet) {
-    lines.push({
-      kind: "wallet",
-      address: view.wallet.address,
-      balance: view.wallet.balance,
-      name: view.wallet.name,
-    });
+  if (user) {
+    return {
+      primary: profileName(user),
+      line: signedInLine(user, view),
+    };
   }
-  return { primary: user ? displayName(user) : "Sign in", lines };
+  return {
+    primary: view.session.status === "pending" ? "Signing in…" : "Sign in",
+    line: signedOutLine(view.session),
+  };
 };
 
 /** A line, in words */
 export const lineText = (line: AccountLine) => {
   switch (line.kind) {
+    case "saved-here":
+      return "Saved in this browser";
     case "signing-in":
-      return "Signing in...";
+      return "Waiting for GitHub…";
     case "failed":
+      // The prototype's row; the reason is said in full in the menu
       return "Couldn't sign in";
-    case "wallet":
-      return `${shortAddress(line.address)} · ${formatBalance(line.balance)}`;
+    case "login":
+      return `@${line.login}`;
+    case "offline":
+      return "Offline · saving here";
   }
 };
 
@@ -159,14 +227,13 @@ if (import.meta.vitest) {
       wallet: fields.wallet ?? null,
       cluster: fields.cluster ?? UP,
       sending: fields.sending ?? false,
+      online: fields.online ?? true,
     });
 
     const TESTER = { name: "Tester", login: "t", image: null };
     const NAME_ONLY = { name: "Tester", login: null, image: null };
     const NAMELESS = { name: null, login: null, image: null };
-    const signedIn = (
-      user: typeof TESTER | typeof NAME_ONLY
-    ): AccountSession => ({
+    const signedIn = (user: AccountUser): AccountSession => ({
       status: "signed-in",
       user,
     });
@@ -212,26 +279,40 @@ if (import.meta.vitest) {
         message: "Allow popups for this site to sign in.",
       } as const;
 
-      it("asks to sign in with nothing under it", () => {
+      it("says signed-out work is saved in this browser", () => {
         expect(accountLines(view({}))).toEqual({
           primary: "Sign in",
-          lines: [],
+          line: { kind: "saved-here" },
         });
       });
 
-      it("says a sign-in is under way", () => {
+      it("keeps the wallet off the row, signed out or in", () => {
+        expect(accountLines(view({ wallet: WALLET })).line).toEqual({
+          kind: "saved-here",
+        });
         expect(
-          accountLines(view({ session: { status: "pending" } })).lines
-        ).toEqual([{ kind: "signing-in" }]);
+          accountLines(view({ session: signedIn(TESTER), wallet: WALLET })).line
+        ).toEqual({ kind: "login", login: "t" });
+      });
+
+      it("says a sign-in is under way, in the name and the line", () => {
+        expect(accountLines(view({ session: { status: "pending" } }))).toEqual({
+          primary: "Signing in…",
+          line: { kind: "signing-in" },
+        });
       });
 
       it("says a sign-in failed, with its reason", () => {
-        expect(accountLines(view({ session: FAILED })).lines).toEqual([
-          { kind: "failed", message: "Allow popups for this site to sign in." },
-        ]);
+        expect(accountLines(view({ session: FAILED }))).toEqual({
+          primary: "Sign in",
+          line: {
+            kind: "failed",
+            message: "Allow popups for this site to sign in.",
+          },
+        });
       });
 
-      it("says nothing of a sign-in the user cancelled", () => {
+      it("goes back to where work is saved after a cancelled sign-in", () => {
         expect(
           accountLines(
             view({
@@ -241,67 +322,97 @@ if (import.meta.vitest) {
                 message: "Sign-in cancelled.",
               },
             })
-          ).lines
-        ).toEqual([]);
+          ).line
+        ).toEqual({ kind: "saved-here" });
       });
 
-      it("keeps the wallet under a failed sign-in, not instead of it", () => {
-        expect(
-          accountLines(view({ session: FAILED, wallet: WALLET })).lines
-        ).toEqual([
-          { kind: "failed", message: "Allow popups for this site to sign in." },
-          {
-            kind: "wallet",
-            address: WALLET.address,
-            balance: 2.4,
-            name: null,
-          },
-        ]);
-      });
-
-      it("shows the login and the wallet once signed in", () => {
-        expect(
-          accountLines(view({ session: signedIn(TESTER), wallet: WALLET }))
-        ).toEqual({
-          primary: "t",
-          lines: [
-            {
-              kind: "wallet",
-              address: WALLET.address,
-              balance: 2.4,
-              name: null,
-            },
-          ],
+      it("shows the display name over the @login once signed in", () => {
+        expect(accountLines(view({ session: signedIn(TESTER) }))).toEqual({
+          primary: "Tester",
+          line: { kind: "login", login: "t" },
         });
       });
 
-      it("falls back to the name for an account with no login", () => {
-        expect(
-          accountLines(view({ session: signedIn(NAME_ONLY) })).primary
-        ).toBe("Tester");
+      it("shows the name alone for an account with no login", () => {
+        expect(accountLines(view({ session: signedIn(NAME_ONLY) }))).toEqual({
+          primary: "Tester",
+          line: null,
+        });
       });
 
-      it("shows a wallet while signed out too", () => {
-        expect(accountLines(view({ wallet: WALLET })).lines[0]?.kind).toBe(
-          "wallet"
-        );
+      it("says signed-in work saves here while offline", () => {
+        expect(
+          accountLines(view({ session: signedIn(TESTER), online: false })).line
+        ).toEqual({ kind: "offline" });
+      });
+
+      it("keeps saying where signed-out work is saved while offline", () => {
+        expect(accountLines(view({ online: false })).line).toEqual({
+          kind: "saved-here",
+        });
       });
     });
 
     describe("lineText", () => {
-      it("says each line in words", () => {
-        expect(lineText({ kind: "signing-in" })).toBe("Signing in...");
+      it("says each line in Spec 02's words", () => {
+        expect(lineText({ kind: "saved-here" })).toBe("Saved in this browser");
+        expect(lineText({ kind: "signing-in" })).toBe("Waiting for GitHub…");
         expect(lineText({ kind: "failed", message: "x" })).toBe(
           "Couldn't sign in"
         );
+        expect(lineText({ kind: "login", login: "t" })).toBe("@t");
+        expect(lineText({ kind: "offline" })).toBe("Offline · saving here");
+      });
+    });
+
+    describe("shownSignOutState", () => {
+      const ASKING = { status: "asking" } as const;
+      const DONE = { status: "done", kept: 2 } as const;
+
+      it("drops a question whose session ended elsewhere", () => {
         expect(
-          lineText({
-            kind: "wallet",
-            address: WALLET.address,
-            balance: 2.4,
-            name: null,
+          shownSignOutState(ASKING, { signedIn: false, running: false })
+        ).toEqual({ status: "idle" });
+      });
+
+      it("keeps a question whose own sign-out is running", () => {
+        expect(
+          shownSignOutState(ASKING, { signedIn: false, running: true })
+        ).toBe(ASKING);
+        expect(
+          shownSignOutState(ASKING, { signedIn: true, running: false })
+        ).toBe(ASKING);
+      });
+
+      it("drops the leftovers line once a session is back", () => {
+        expect(
+          shownSignOutState(DONE, { signedIn: true, running: false })
+        ).toEqual({ status: "idle" });
+        expect(
+          shownSignOutState(DONE, { signedIn: false, running: false })
+        ).toBe(DONE);
+      });
+    });
+
+    it("leaves the @login out when it is already the name", () => {
+      expect(
+        accountLines(
+          view({
+            session: signedIn({ name: null, login: "t", image: null }),
           })
-        ).toBe("7Hq5…Xk2P · 2.40 SOL");
+        )
+      ).toEqual({ primary: "t", line: null });
+    });
+
+    describe("leftoversText", () => {
+      it("counts what stayed, and says nothing when nothing did", () => {
+        expect(leftoversText(0)).toBeNull();
+        expect(leftoversText(1)).toBe(
+          "1 project stayed in this browser because it wasn't saved to your account."
+        );
+        expect(leftoversText(3)).toBe(
+          "3 projects stayed in this browser because they weren't saved to your account."
+        );
       });
     });
 

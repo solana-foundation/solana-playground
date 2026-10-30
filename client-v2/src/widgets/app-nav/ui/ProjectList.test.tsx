@@ -42,10 +42,11 @@ const app = vi.hoisted(() => {
     return { dispose: () => listeners.delete(cb) };
   };
   const state = {
-    names: [] as string[],
+    names: [] as string[] | undefined,
     ids: {} as Record<string, string>,
     current: null as string | null,
     lessons: [] as string[],
+    temporary: false,
   };
   return {
     state,
@@ -53,6 +54,9 @@ const app = vi.hoisted(() => {
     PgExplorer: {
       get allWorkspaceNames() {
         return state.names;
+      },
+      get isTemporary() {
+        return state.temporary;
       },
       get currentWorkspaceName() {
         return state.current;
@@ -94,6 +98,15 @@ vi.mock("../model/workspace-files", async (importOriginal) => ({
   readWorkspaceFiles: files.readWorkspaceFiles,
 }));
 
+// The markers' reading is `use-sync-markers.test.tsx`'s; here, only where
+// they land
+const syncMarkers = vi.hoisted(() => ({
+  current: new Map<string, "this-browser" | "not-synced">(),
+}));
+vi.mock("./use-sync-markers", () => ({
+  useSyncMarkers: () => syncMarkers.current,
+}));
+
 import { PINS_KEY } from "../model/pins";
 import ProjectList from "./ProjectList";
 
@@ -121,6 +134,7 @@ beforeEach(() => {
   app.state.ids = { alpha: "id-a", beta: "id-b", "Hello Anchor": "id-h" };
   app.state.current = "beta";
   app.state.lessons = ["Hello Anchor"];
+  app.state.temporary = false;
   vi.clearAllMocks();
   app.PgExplorer.renameWorkspace.mockResolvedValue(undefined);
   app.PgExplorer.createWorkspace.mockResolvedValue(undefined);
@@ -136,6 +150,7 @@ afterEach(() => {
   localStorage.clear();
   resetTelemetry();
   resetLogger();
+  syncMarkers.current = new Map();
 });
 
 const onPickCurrent = vi.fn();
@@ -170,6 +185,51 @@ const toasts = () =>
   );
 
 describe("ProjectList", () => {
+  it("puts each workspace's sync marker on its own row, by name", () => {
+    syncMarkers.current = new Map([["alpha", "this-browser"]]);
+    draw();
+    const projects = screen.getByRole("group", { name: "Projects" });
+    const describedBy = (name: string) =>
+      within(projects)
+        .getByRole("button", { name })
+        .getAttribute("aria-describedby");
+    expect(
+      document.getElementById(describedBy("alpha") ?? "")?.textContent
+    ).toBe("This browser");
+    expect(describedBy("beta")).toBeNull();
+  });
+
+  it("shows no skeleton rows once the names are read and there are none", () => {
+    app.state.names = [];
+    draw();
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(0);
+  });
+
+  it("shows no skeleton rows in a preview, which has no workspaces to read", () => {
+    app.state.names = undefined;
+    app.state.temporary = true;
+    draw();
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(0);
+  });
+
+  it("shows skeleton rows until the explorer has read the names", () => {
+    app.state.names = undefined;
+    draw();
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(3);
+    app.state.names = ["alpha"];
+    act(() => app.emit());
+    expect(
+      document.querySelectorAll('[data-sidebar="menu-skeleton"]')
+    ).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "alpha" })).toBeTruthy();
+  });
+
   it("pins by key, keeps the pin by id, and lists the pinned first", () => {
     draw();
     expect(projectNames()).toEqual(["alpha", "beta"]);

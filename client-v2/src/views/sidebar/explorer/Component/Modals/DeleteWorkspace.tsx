@@ -1,8 +1,8 @@
 import type { FC } from "react";
-import styled, { css } from "styled-components";
 
+import { PgSession } from "@/features/auth";
 import { ModalFrame } from "@/widgets/overlays";
-import { Warning } from "../../../../../components/Icons";
+import { useRenderOnChange } from "../../../../../hooks/useRenderOnChange";
 import { PgExplorer } from "../../../../../utils";
 
 interface DeleteWorkspaceProps {
@@ -12,69 +12,39 @@ interface DeleteWorkspaceProps {
   isLesson?: boolean;
 }
 
+/**
+ * Spec 11's project delete: names the project and says what goes, with
+ * Cancel focused so Enter does not delete.
+ */
 export const DeleteWorkspace: FC<
   React.PropsWithChildren<DeleteWorkspaceProps>
 > = ({ name, isLesson }) => {
   const workspaceName = name ?? PgExplorer.currentWorkspaceName;
+  // Read here, not passed in: the session may still be loading when the
+  // dialog opens, and the account line must appear once it is read
+  useRenderOnChange(PgSession.onDidChange);
+  const signedIn = PgSession.get() !== null;
 
   return (
     <ModalFrame
       name="delete-workspace"
-      title
+      title={`Delete ${workspaceName}?`}
+      openFocus="cancel"
       buttonProps={{
-        text: "Delete",
+        text: "Delete project",
         variant: "destructive",
         onSubmit: () => PgExplorer.deleteWorkspace(workspaceName),
       }}
     >
-      <Content>
-        <IconWrapper>
-          <Warning color="warning" />
-        </IconWrapper>
-        <ContentText>
-          <Main>
-            Are you sure you want to delete workspace '{workspaceName}'?
-          </Main>
-          <Desc>This action is irreversible!</Desc>
-          <Desc>- All files and folders will be deleted.</Desc>
-          <Desc>- Program credentials will be deleted.</Desc>
-          {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
-              directory about to be removed */}
-          {isLesson && <Desc>- Your progress through the lesson is lost.</Desc>}
-        </ContentText>
-      </Content>
+      <div className="flex flex-col gap-2 text-control font-read text-muted-foreground">
+        <p>Its files and its program keypair are deleted from this browser.</p>
+        {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
+            directory about to be removed */}
+        {isLesson && <p>Your progress in this lesson is lost.</p>}
+        {signedIn && (
+          <p>It's also deleted from your account and your other devices.</p>
+        )}
+      </div>
     </ModalFrame>
   );
 };
-
-const Content = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-`;
-
-const IconWrapper = styled.div`
-  & > svg {
-    width: 3rem;
-    height: 3rem;
-  }
-`;
-
-const ContentText = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-left: 1rem;
-`;
-
-const Main = styled.span`
-  font-weight: bold;
-  word-break: break-all;
-`;
-
-const Desc = styled.span`
-  ${({ theme }) => css`
-    margin-top: 0.5rem;
-    font-size: ${theme.font.code.size.small};
-    color: ${theme.colors.default.textSecondary};
-  `}
-`;

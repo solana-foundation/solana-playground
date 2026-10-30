@@ -1,4 +1,3 @@
-import styled from "styled-components";
 import { InfoIcon } from "lucide-react";
 
 import { createLogger } from "@/shared/lib/logger";
@@ -39,13 +38,15 @@ const Workspaces = () => {
   if (PgExplorer.isTemporary) return <TemporaryWarning />;
 
   return (
-    <Wrapper>
-      <TopWrapper>
-        <MainText>Projects</MainText>
+    <div className="mx-2 mt-6 px-2">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-[0.7rem] font-semibold tracking-[0.1em] text-[color:var(--text-secondary)] uppercase">
+          Projects
+        </div>
         <WorkspaceButtons />
-      </TopWrapper>
+      </div>
       <WorkspaceSelect />
-    </Wrapper>
+    </div>
   );
 };
 
@@ -58,7 +59,7 @@ const WorkspaceButtons = () => {
   const handleFsExport = () => PgView.setModal(ExportWorkspace);
 
   return (
-    <ButtonsWrapper>
+    <div className="ml-2 flex items-center gap-x-2">
       <WorkspaceButton
         onClick={handleCreate}
         title="Create"
@@ -107,7 +108,7 @@ const WorkspaceButtons = () => {
       >
         <ExportFile />
       </WorkspaceButton>
-    </ButtonsWrapper>
+    </div>
   );
 };
 
@@ -201,40 +202,11 @@ export const WorkspaceSelect = () => {
   );
 };
 
-const Wrapper = styled.div`
-  margin: 1.5rem 0.5rem 0 0.5rem;
-  padding: 0 0.5rem;
-`;
-
-const TopWrapper = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
-`;
-
-const MainText = styled.div`
-  ${({ theme }) => `
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-  `}
-`;
-
-const ButtonsWrapper = styled.div`
-  margin-left: 0.5rem;
-  display: flex;
-  align-items: center;
-  gap: 0 0.5rem;
-`;
-
 const TemporaryWarning = () => {
   const handleImport = () => PgView.setModal(ImportTemporary);
 
   return (
-    <TemporaryWarningWrapper>
+    <div className="px-2 py-4 [&>button]:mt-3">
       <Callout variant="info">
         <InfoIcon />
         <CalloutDescription>
@@ -250,16 +222,8 @@ const TemporaryWarning = () => {
         <ImportWorkspace data-icon="inline-start" />
         Import
       </AsyncButton>
-    </TemporaryWarningWrapper>
+    </div>
   );
 };
-
-const TemporaryWarningWrapper = styled.div`
-  padding: 1rem 0.5rem;
-
-  & > button {
-    margin-top: 0.75rem;
-  }
-`;
 
 export default Workspaces;

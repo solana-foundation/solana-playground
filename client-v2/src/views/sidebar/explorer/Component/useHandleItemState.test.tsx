@@ -1,6 +1,5 @@
 import { render } from "@testing-library/react";
-import { useRef, type ReactElement } from "react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { useRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgExplorer } from "../../../../utils";
@@ -56,7 +55,10 @@ vi.mock("../../../../utils", () => ({
   },
 }));
 
-const theme = { name: "test" } as unknown as DefaultTheme;
+// The hook only reads the theme name, to resubscribe when the theme changes
+vi.mock("@/shared/lib/hooks/use-pg-theme", () => ({
+  usePgTheme: () => ({ name: "test" }),
+}));
 
 /**
  * The tree of `workspace` (`w1` by default): its `src/`, closed or open when
@@ -87,11 +89,7 @@ const Tree = ({
   );
 };
 
-const inTheme = (tree: ReactElement) => (
-  <ThemeProvider theme={theme}>{tree}</ThemeProvider>
-);
-
-const draw = (open?: boolean) => render(inTheme(<Tree open={open} />));
+const draw = (open?: boolean) => render(<Tree open={open} />);
 
 const srcIsOpen = (workspace = "w1") =>
   document
@@ -156,17 +154,17 @@ describe("useHandleItemState when a project opens", () => {
   // and React draws the new project's tree some time after both: on a loaded
   // machine, after any fixed wait
   it("opens the open file's folder once the tree that holds it is drawn", () => {
-    const view = render(inTheme(<Tree workspace={null} />));
+    const view = render(<Tree workspace={null} />);
     openFile("/w2/src/lib.rs");
     fire.switchWorkspace();
 
-    view.rerender(inTheme(<Tree workspace="w2" />));
+    view.rerender(<Tree workspace="w2" />);
     expect(srcIsOpen("w2")).toBe(true);
     expect(PgExplorer.setSelectedEl).toHaveBeenCalledWith(libEl("w2"));
   });
 
   it("opens it again after the switch shuts a tree already drawn", () => {
-    render(inTheme(<Tree workspace="w2" />));
+    render(<Tree workspace="w2" />);
     openFile("/w2/src/lib.rs");
     fire.switchWorkspace();
 
@@ -180,39 +178,39 @@ describe("useHandleItemState when a project opens", () => {
   });
 
   it("opens it once: a folder the user shuts stays shut", () => {
-    const view = render(inTheme(<Tree workspace={null} />));
+    const view = render(<Tree workspace={null} />);
     openFile("/w2/src/lib.rs");
-    view.rerender(inTheme(<Tree workspace="w2" />));
+    view.rerender(<Tree workspace="w2" />);
 
     document.querySelector("[data-path='/w2/src/']")!.classList.remove("open");
-    view.rerender(inTheme(<Tree workspace="w2" />));
+    view.rerender(<Tree workspace="w2" />);
     expect(srcIsOpen("w2")).toBe(false);
   });
 
   // A reveal that waited on the tree comes renders after the open, and a
   // context menu the user opened since owns the context selection
   it("keeps the context selection when the reveal waited on the tree", () => {
-    const view = render(inTheme(<Tree workspace={null} />));
+    const view = render(<Tree workspace={null} />);
     openFile("/w2/src/lib.rs");
-    view.rerender(inTheme(<Tree workspace="w2" />));
+    view.rerender(<Tree workspace="w2" />);
 
     expect(PgExplorer.removeCtxSelectedEl).not.toHaveBeenCalled();
   });
 
   it("clears the context selection when the file opens in a drawn tree", () => {
-    render(inTheme(<Tree workspace="w2" />));
+    render(<Tree workspace="w2" />);
     openFile("/w2/src/lib.rs");
 
     expect(PgExplorer.removeCtxSelectedEl).toHaveBeenCalledTimes(1);
   });
 
   it("opens nothing for a file closed before its tree was drawn", () => {
-    const view = render(inTheme(<Tree workspace={null} />));
+    const view = render(<Tree workspace={null} />);
     openFile("/w1/src/lib.rs");
     openFile(null);
     fire.switchWorkspace();
 
-    view.rerender(inTheme(<Tree workspace="w1" />));
+    view.rerender(<Tree workspace="w1" />);
     expect(srcIsOpen()).toBe(false);
   });
 });

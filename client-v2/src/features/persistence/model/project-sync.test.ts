@@ -1853,3 +1853,45 @@ describe("a refusal the user has to clear", () => {
     expect(deleteWorkspace).not.toHaveBeenCalled();
   });
 });
+
+describe("PgSyncMark.onDidChange", () => {
+  beforeEach(reset);
+
+  it("says when this account's mark is written, flagged dirty and removed", async () => {
+    await signedIn();
+    const heard: string[] = [];
+    const sub = PgSyncMark.onDidChange((id, change) =>
+      heard.push(`${id}:${change}`)
+    );
+
+    await agreedOn("p1", "one", { a: "1" });
+    await PgSyncMark.markDirty("p1");
+    // Already dirty: nothing written, nothing said
+    await PgSyncMark.markDirty("p1");
+    await PgSyncMark.remove("p1");
+    sub.dispose();
+    await agreedOn("p1", "one", { a: "1" });
+
+    expect(heard).toEqual(["p1:written", "p1:dirtied", "p1:removed"]);
+  });
+
+  it("keeps the write and the other listeners whole when a listener throws", async () => {
+    await signedIn();
+    clearFailures();
+    const heard: string[] = [];
+    const first = PgSyncMark.onDidChange(() => {
+      throw new Error("listener broke");
+    });
+    const second = PgSyncMark.onDidChange((id, change) =>
+      heard.push(`${id}:${change}`)
+    );
+
+    await expect(agreedOn("p1", "one", { a: "1" })).resolves.toBeUndefined();
+    first.dispose();
+    second.dispose();
+
+    expect(heard).toEqual(["p1:written"]);
+    expect(await PgSyncMark.read("p1")).not.toBeNull();
+    expect(getFailures().map((f) => f.what)).toContain("sync mark listener p1");
+  });
+});

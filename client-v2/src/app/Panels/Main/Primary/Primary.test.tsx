@@ -1,7 +1,4 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import type { ReactElement } from "react";
-import { ThemeProvider } from "styled-components";
-import type { DefaultTheme } from "styled-components";
 import { expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
@@ -17,7 +14,6 @@ vi.mock("../../../../utils", async () => {
   return {
     PgCommon,
     PgView,
-    PgTheme: { getScrollbarCSS: () => "", convertToCSS: () => "" },
   };
 });
 vi.mock("../../../../hooks", async () => ({
@@ -40,32 +36,23 @@ vi.mock("../../../../components/ErrorBoundary", () => ({
     ),
 }));
 
-/** Only what `Primary`'s styles read */
-const THEME = {
-  views: { main: { primary: { default: {} } } },
-  default: { transition: { duration: { long: "0s" }, type: "linear" } },
-} as unknown as DefaultTheme;
-const withTheme = (ui: ReactElement) => (
-  <ThemeProvider theme={THEME}>{ui}</ThemeProvider>
-);
-
 const { PgView } = await import("../../../../utils");
 const { default: Primary } = await import("./Primary");
 
 it("shows the route's view again when it mounts a second time", async () => {
-  const first = render(withTheme(<Primary />));
+  const first = render(<Primary />);
   void PgView.setMainPrimary(() => <p>route view</p>);
   expect(await screen.findByText("route view")).toBeTruthy();
   first.unmount();
 
-  render(withTheme(<Primary />));
+  render(<Primary />);
   expect(await screen.findByText("route view")).toBeTruthy();
 });
 
 it("reports a view that fails to load, and shows the failure", async () => {
   const logs = memoryProvider();
   initLogger({ providers: [logs] });
-  render(withTheme(<Primary />));
+  render(<Primary />);
   void PgView.setMainPrimary(async () => {
     throw new Error("route failed");
   });

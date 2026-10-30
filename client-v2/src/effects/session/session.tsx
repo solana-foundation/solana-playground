@@ -7,6 +7,7 @@ import {
   reconcile,
   releaseLocalProjects,
 } from "../../features/persistence/model/project-restore";
+import { PgAccountList } from "../../features/persistence/model/account-list";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { openThread } from "../chat-thread/open-thread";
@@ -30,7 +31,9 @@ import type { Disposable } from "../../utils/types";
  * circular -- so the composition happens out here, in the effect layer that is
  * allowed to know about both.
  *
- * `refresh` never throws; it treats any failure as signed out.
+ * `refresh` never throws; a failed read keeps the user it had (signed out on
+ * a first read) and settles `readState` as `failed`, unless an earlier read
+ * answered, which stays `answered`.
  */
 export const session = (): Disposable => {
   /**
@@ -185,6 +188,8 @@ export const session = (): Disposable => {
    * project look unsynced and none of them removable.
    */
   const relinquish = async () => {
+    // The next account's list is not known until its own pass reads it
+    PgAccountList.forget();
     // Independently, not one `try` around both, here and in the teardown: the
     // conversations and the projects are separate data, and one failing is no
     // reason to skip the other.
@@ -245,31 +250,56 @@ export const session = (): Disposable => {
     PgProjectSync.releasePushes();
   };
 
-  // The first transition is the cookie being restored on load, not the user
-  // signing in -- `refresh` fires it before its own promise settles. Anything
-  // after that is a real sign-in, and only that one takes the user somewhere.
+  // The first answered read that no sign-in started is the cookie being
+  // restored on load -- `refresh` fires it before its own promise settles,
+  // Home's read may have settled it before this effect mounted, and when the
+  // load's read failed, Home's retry is the one that answers. A
+  // sign-in's own read, and any transition after the restore, is a real
+  // sign-in, and only that one takes the user somewhere.
   let restored = false;
-  let signedIn = !!PgSession.get();
-  const onChange = PgSession.onDidChange(() => {
+  let signedIn = false;
+  let userId: string | null = null;
+  const onSessionChange = () => {
     const nowSignedIn = !!PgSession.get();
+    // Another account, or none: what the last one's list held says nothing
+    // of this one's, however the session ended
+    const nowUserId = PgSession.get()?.id ?? null;
+    if (nowUserId !== userId) PgAccountList.forget();
+    userId = nowUserId;
+    const restoring =
+      !restored &&
+      PgSession.readState === "answered" &&
+      PgSession.signInState().status !== "pending";
     // Nothing awaits this, so a failure here would otherwise surface as an
     // unhandled rejection and nowhere else. It is reported and swallowed: the
     // app has to keep working offline, and `__pgSyncDiagnostics.failures()` is
     // where a sync that did not happen can be found.
     if (nowSignedIn && !signedIn) {
+      // A failed load read gave the hold back; the restore that answers late
+      // holds again, so the editor's push cannot beat its reconcile either
+      if (restoring && !holding) {
+        holding = true;
+        PgProjectSync.holdPushes();
+      }
       // A panel sign-in happens mid-task, with a prompt written for the open project
       const fromPanel = PgSession.signingInFrom === "assistant";
-      void adopt({ openLatest: restored && !fromPanel }).catch((e) =>
+      void adopt({ openLatest: !restoring && !fromPanel }).catch((e) =>
         report("adopt", e)
       );
     }
     signedIn = nowSignedIn;
-  });
+    if (restoring || PgSession.readState === "answered") restored = true;
+  };
+  const onChange = PgSession.onDidChange(onSessionChange);
+  // Effects mount after a delay, and Home starts the page's read as it draws:
+  // a read that settled before this effect existed fired its change unheard
+  if (PgSession.hasRead) onSessionChange();
 
   PgSession.setOnSignOut(relinquish);
 
   void PgSession.refresh().then(() => {
-    restored = true;
+    // A failed read restores nothing: the read that later answers does
+    if (PgSession.readState === "answered") restored = true;
     // Signed out, so no reconcile is coming and nothing should be waiting on
     // one. `adopt` releases in its own right when there is a session.
     if (!PgSession.get()) releaseHold();

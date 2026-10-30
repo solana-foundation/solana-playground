@@ -110,20 +110,20 @@ const Tab = forwardRef<HTMLDivElement, TabProps>(
         <ContextMenuContent>
           <ContextMenuItem onSelect={closeFile}>
             <MenuItemText>Close</MenuItemText>
-            <ContextMenuShortcut>ALT+W</ContextMenuShortcut>
+            <ContextMenuShortcut>Alt+W</ContextMenuShortcut>
           </ContextMenuItem>
           {PgExplorer.tabs.length > 1 && (
             <ContextMenuItem onSelect={closeOthers}>
-              <MenuItemText>Close Others</MenuItemText>
+              <MenuItemText>Close others</MenuItemText>
             </ContextMenuItem>
           )}
           {PgExplorer.tabs.length - 1 > index && (
             <ContextMenuItem onSelect={closeToTheRight}>
-              <MenuItemText>Close To The Right</MenuItemText>
+              <MenuItemText>Close to the right</MenuItemText>
             </ContextMenuItem>
           )}
           <ContextMenuItem onSelect={closeAll}>
-            <MenuItemText>Close All</MenuItemText>
+            <MenuItemText>Close all</MenuItemText>
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>

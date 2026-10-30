@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
 } from "react";
-import styled, { css } from "styled-components";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Button } from "@/shared/ui/button";
@@ -54,36 +53,24 @@ const ImportButton: FC<PropsWithChildren<ImportButtonProps>> = ({
   };
 
   return (
-    <Wrapper>
+    <div className="flex items-center">
       <input
         ref={inputRef}
         type="file"
+        className="hidden"
         onChange={handleChange}
         accept={accept}
       />
       <Button variant={variant} title={title} onClick={handleClick}>
         {children}
       </Button>
-      {showImportText && importText && <ImportInfo>{importText}</ImportInfo>}
-    </Wrapper>
+      {showImportText && importText && (
+        <span className="ml-2 text-[0.75rem] text-[var(--text-secondary)]">
+          {importText}
+        </span>
+      )}
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  display: flex;
-  align-items: center;
-
-  & input[type="file"] {
-    display: none;
-  }
-`;
-
-const ImportInfo = styled.span`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.small};
-    margin-left: 0.5rem;
-  `}
-`;
 
 export default ImportButton;

@@ -1,17 +1,10 @@
 import type { ChangeEvent, ComponentProps } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as reportModule from "@/shared/lib/report-button-failure";
 
 import ImportButton from ".";
-
-// The import note reads two theme keys; the full theme cannot be built here.
-const theme = {
-  colors: { default: { textSecondary: "gray" } },
-  font: { code: { size: { small: "12px" } } },
-} as unknown as DefaultTheme;
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -19,11 +12,9 @@ describe("ImportButton", () => {
   it("opens the file picker and names the chosen file", async () => {
     const onImport = vi.fn().mockResolvedValue(undefined);
     const { container } = render(
-      <ThemeProvider theme={theme}>
-        <ImportButton onImport={onImport} showImportText>
-          Import
-        </ImportButton>
-      </ThemeProvider>
+      <ImportButton onImport={onImport} showImportText>
+        Import
+      </ImportButton>
     );
     const input = container.querySelector(
       'input[type="file"]'
@@ -100,11 +91,9 @@ const renderImport = (
   onImport: ComponentProps<typeof ImportButton>["onImport"]
 ) =>
   render(
-    <ThemeProvider theme={theme}>
-      <ImportButton onImport={onImport} showImportText>
-        Import
-      </ImportButton>
-    </ThemeProvider>
+    <ImportButton onImport={onImport} showImportText>
+      Import
+    </ImportButton>
   );
 
 const fileInput = (container: HTMLElement) =>

@@ -1,9 +1,13 @@
+import type { SyncMarker } from "@/features/persistence";
+
 export interface ProjectEntry {
   name: string;
   /** The stable workspace id pins key on; `null` while the explorer has none */
   id: string | null;
   isLesson: boolean;
   pinned: boolean;
+  /** Where its work lives, when not in the account (`syncMarkerOf`) */
+  marker: SyncMarker | null;
 }
 
 /**
@@ -19,6 +23,8 @@ export const listProjects = (
   deps: {
     idOf: (name: string) => string | undefined;
     isLesson: (name: string) => boolean;
+    /** The last marker read for the workspace, by name */
+    markerOf: (name: string) => SyncMarker | null;
   },
   pins: readonly string[]
 ) => {
@@ -29,6 +35,7 @@ export const listProjects = (
       id,
       isLesson: deps.isLesson(name),
       pinned: id !== null && pins.includes(id),
+      marker: deps.markerOf(name),
     };
   });
   return pinnedFirst(projects);
@@ -51,6 +58,8 @@ if (import.meta.vitest) {
     const deps = {
       idOf: (name: string) => ids[name],
       isLesson: (name: string) => name.startsWith("Hello "),
+      markerOf: (name: string): SyncMarker | null =>
+        name === "beta" ? "this-browser" : null,
     };
 
     describe("listProjects", () => {
@@ -82,7 +91,16 @@ if (import.meta.vitest) {
           id: null,
           isLesson: false,
           pinned: false,
+          marker: null,
         });
+      });
+
+      it("carries each project's sync marker", () => {
+        const projects = listProjects(["beta", "alpha"], deps, []);
+        expect(projects.map((p) => [p.name, p.marker])).toEqual([
+          ["beta", "this-browser"],
+          ["alpha", null],
+        ]);
       });
 
       it("handles an empty list", () => {

@@ -5,13 +5,15 @@ import {
   useRef,
   useState,
 } from "react";
-import styled, { css } from "styled-components";
 
-import { PgTheme } from "../../utils";
+import { cn } from "@/shared/lib/utils";
 
 interface CardProps extends ComponentPropsWithoutRef<"div"> {}
 
-const Card: FC<React.PropsWithChildren<CardProps>> = (props) => {
+const Card: FC<React.PropsWithChildren<CardProps>> = ({
+  className,
+  ...props
+}) => {
   const [isClickable, setIsClickable] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
@@ -31,70 +33,36 @@ const Card: FC<React.PropsWithChildren<CardProps>> = (props) => {
     setIsClickable(hasHref);
   }, [props.onClick]);
 
-  const Card = <Wrapper ref={ref} {...props} />;
+  const Card = (
+    <div
+      ref={ref}
+      className={cn(
+        "border border-[color-mix(in_srgb,var(--border)_39%,transparent)] bg-surface-base p-4 text-[var(--text-primary)]",
+        "rounded-[12px] transition-all duration-150 ease-linear",
+        className
+      )}
+      {...props}
+    />
+  );
 
-  if (isClickable) return <Gradient>{Card}</Gradient>;
+  if (isClickable) {
+    return (
+      <div
+        className={cn(
+          "relative p-1 [transform-style:preserve-3d] transition-transform duration-150 ease-linear",
+          // The gradient frame behind the card, shown on hover
+          "after:absolute after:inset-0 after:m-auto after:h-full after:w-full after:rounded-[12px] after:opacity-0",
+          "after:transition-opacity after:duration-150 after:ease-linear after:content-['']",
+          "after:[transform:translateZ(-1px)] after:bg-[linear-gradient(45deg,var(--primary),var(--track-brand))]",
+          "[&>div]:overflow-hidden",
+          "hover:cursor-pointer hover:[transform:translateY(-0.5rem)] hover:[&>div]:bg-surface-hover hover:after:opacity-100"
+        )}
+      >
+        {Card}
+      </div>
+    );
+  }
   return Card;
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    padding: 1rem;
-    background: ${theme.colors.default.bgPrimary};
-    color: ${theme.colors.default.textPrimary};
-    border: 1px solid ${PgTheme.alpha(theme.colors.default.border, "medium")};
-    border-radius: ${theme.default.borderRadius};
-    transition: all ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-
-    ${PgTheme.convertToCSS(theme.components.card)};
-  `}
-`;
-
-const Gradient = styled.div`
-  ${({ theme }) => css`
-    position: relative;
-    padding: 0.25rem;
-    transform-style: preserve-3d;
-    transition: transform ${theme.default.transition.duration.medium}
-      ${theme.default.transition.type};
-
-    &::after {
-      content: "";
-      position: absolute;
-      transform: translateZ(-1px);
-      height: 100%;
-      width: 100%;
-      inset: 0;
-      margin: auto;
-      border-radius: ${theme.default.borderRadius};
-      background: linear-gradient(
-        45deg,
-        ${theme.colors.default.primary},
-        ${theme.colors.default.secondary}
-      );
-      opacity: 0;
-      transition: opacity ${theme.default.transition.duration.medium}
-        ${theme.default.transition.type};
-    }
-
-    & > div {
-      overflow: hidden;
-    }
-
-    &:hover {
-      cursor: pointer;
-      transform: translateY(-0.5rem);
-
-      & > div {
-        background: ${theme.colors.state.hover.bg};
-      }
-
-      &::after {
-        opacity: 1;
-      }
-    }
-  `}
-`;
 
 export default Card;

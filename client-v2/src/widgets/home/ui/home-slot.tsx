@@ -40,6 +40,12 @@ export const homeSlot = (
         />
       );
     }
-    return <Home onAsk={openAssistant} onOpenPage={openPage} />;
+    return (
+      <Home
+        onAsk={openAssistant}
+        onContinue={onContinue}
+        onOpenPage={openPage}
+      />
+    );
   };
 };

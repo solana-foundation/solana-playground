@@ -1,0 +1,1055 @@
+/*
+ * GitHub's markdown styles over the design-system tokens, for every
+ * `Markdown`. Unlayered on purpose, as the styled-components rules it
+ * replaces were, so a utility passed in `className` does not change the
+ * prose (the code font of `codeFontOnly` included).
+ */
+.pg-markdown {
+  --border-radius: 12px;
+  --color-prettylights-syntax-comment: var(--syntax-comment);
+  --color-prettylights-syntax-constant: var(--syntax-type);
+  --color-prettylights-syntax-entity: var(--syntax-function);
+  --color-prettylights-syntax-storage-modifier-import: var(--text-primary);
+  --color-prettylights-syntax-entity-tag: var(--syntax-function);
+  --color-prettylights-syntax-keyword: var(--syntax-keyword);
+  --color-prettylights-syntax-string: var(--syntax-string);
+  --color-prettylights-syntax-variable: var(--syntax-number);
+  --color-prettylights-syntax-brackethighlighter-unmatched: var(--error);
+  --color-prettylights-syntax-invalid-illegal-text: var(--text-primary);
+  --color-prettylights-syntax-invalid-illegal-bg: color-mix(
+    in srgb,
+    var(--error) 9%,
+    transparent
+  );
+  --color-prettylights-syntax-carriage-return-text: var(--text-primary);
+  --color-prettylights-syntax-carriage-return-bg: color-mix(
+    in srgb,
+    var(--error) 9%,
+    transparent
+  );
+  --color-prettylights-syntax-string-regexp: var(--syntax-function);
+  --color-prettylights-syntax-markup-list: var(--syntax-number);
+  --color-prettylights-syntax-markup-heading: var(--syntax-type);
+  --color-prettylights-syntax-markup-italic: var(--text-primary);
+  --color-prettylights-syntax-markup-bold: var(--text-primary);
+  --color-prettylights-syntax-markup-deleted-text: var(--error);
+  --color-prettylights-syntax-markup-deleted-bg: color-mix(
+    in srgb,
+    var(--error) 9%,
+    transparent
+  );
+  --color-prettylights-syntax-markup-inserted-text: var(--success);
+  --color-prettylights-syntax-markup-inserted-bg: color-mix(
+    in srgb,
+    var(--success) 9%,
+    transparent
+  );
+  --color-prettylights-syntax-markup-changed-text: var(--warning);
+  --color-prettylights-syntax-markup-changed-bg: color-mix(
+    in srgb,
+    var(--warning) 9%,
+    transparent
+  );
+  --color-prettylights-syntax-markup-ignored-text: var(--text-primary);
+  --color-prettylights-syntax-markup-ignored-bg: var(--info);
+  --color-prettylights-syntax-meta-diff-range: var(--syntax-function);
+  --color-prettylights-syntax-brackethighlighter-angle: var(--syntax-comment);
+  --color-prettylights-syntax-sublimelinter-gutter-mark: var(--syntax-comment);
+  --color-prettylights-syntax-constant-other-reference-link: var(
+    --syntax-string
+  );
+  --color-fg-default: var(--text-primary);
+  --color-fg-muted: var(--text-secondary);
+  --color-fg-subtle: var(--text-tertiary);
+  --color-canvas-default: inherit;
+  --color-canvas-subtle: var(--surface-panel);
+  --color-border-default: var(--border);
+  --color-border-muted: color-mix(in srgb, var(--border) 73%, transparent);
+  --color-neutral-muted: var(--surface-hover);
+  --color-accent-fg: var(--primary);
+  --color-accent-emphasis: var(--primary);
+  --color-attention-subtle: color-mix(in srgb, var(--warning) 9%, transparent);
+  --color-danger-fg: var(--error);
+}
+
+.pg-markdown {
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
+  word-wrap: break-word;
+  background: inherit;
+  color: var(--text-primary);
+  line-height: 1.5;
+  font-family: var(--font-text);
+  margin: 0;
+  font-size: 1rem;
+}
+
+.pg-markdown .octicon {
+  fill: currentColor;
+  vertical-align: text-bottom;
+  display: inline-block;
+}
+
+.pg-markdown h1:hover .anchor .octicon-link:before,
+.pg-markdown h2:hover .anchor .octicon-link:before,
+.pg-markdown h3:hover .anchor .octicon-link:before,
+.pg-markdown h4:hover .anchor .octicon-link:before,
+.pg-markdown h5:hover .anchor .octicon-link:before,
+.pg-markdown h6:hover .anchor .octicon-link:before {
+  content: " ";
+  background: currentColor;
+  width: 16px;
+  height: 16px;
+  display: inline-block;
+  -webkit-mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' version='1.1' aria-hidden='true'><path fill-rule='evenodd' d='M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z'></path></svg>");
+  mask-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' version='1.1' aria-hidden='true'><path fill-rule='evenodd' d='M7.775 3.275a.75.75 0 001.06 1.06l1.25-1.25a2 2 0 112.83 2.83l-2.5 2.5a2 2 0 01-2.83 0 .75.75 0 00-1.06 1.06 3.5 3.5 0 004.95 0l2.5-2.5a3.5 3.5 0 00-4.95-4.95l-1.25 1.25zm-4.69 9.64a2 2 0 010-2.83l2.5-2.5a2 2 0 012.83 0 .75.75 0 001.06-1.06 3.5 3.5 0 00-4.95 0l-2.5 2.5a3.5 3.5 0 004.95 4.95l1.25-1.25a.75.75 0 00-1.06-1.06l-1.25 1.25a2 2 0 01-2.83 0z'></path></svg>");
+}
+
+.pg-markdown details,
+.pg-markdown figcaption,
+.pg-markdown figure {
+  display: block;
+}
+
+.pg-markdown summary {
+  display: list-item;
+}
+
+.pg-markdown [hidden] {
+  display: none !important;
+}
+
+.pg-markdown a {
+  color: var(--color-accent-fg);
+  background: none;
+  text-decoration: none;
+}
+
+.pg-markdown a:active,
+.pg-markdown a:hover {
+  outline-width: 0;
+}
+
+.pg-markdown abbr[title] {
+  border-bottom: none;
+  -webkit-text-decoration: underline dotted;
+  text-decoration: underline dotted;
+}
+
+.pg-markdown b,
+.pg-markdown strong {
+  font-weight: 500;
+}
+
+.pg-markdown dfn {
+  font-style: italic;
+}
+
+.pg-markdown h1 {
+  border-bottom: 1px solid var(--color-border-muted);
+  margin: 0.67em 0;
+  padding-bottom: 0.3em;
+  font-size: 2em;
+  font-weight: 500;
+}
+
+.pg-markdown mark {
+  background: var(--color-attention-subtle);
+  color: var(--color-text-primary);
+}
+
+.pg-markdown small {
+  font-size: 90%;
+}
+
+.pg-markdown sub,
+.pg-markdown sup {
+  vertical-align: baseline;
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+}
+
+.pg-markdown sub {
+  bottom: -0.25em;
+}
+
+.pg-markdown sup {
+  top: -0.5em;
+}
+
+.pg-markdown img {
+  box-sizing: content-box;
+  background: var(--color-canvas-default);
+  border-style: none;
+  max-width: 100%;
+}
+
+.pg-markdown code,
+.pg-markdown kbd,
+.pg-markdown pre,
+.pg-markdown samp {
+  font-family: monospace;
+  font-size: 1em;
+}
+
+.pg-markdown figure {
+  margin: 1em 40px;
+}
+
+.pg-markdown hr {
+  box-sizing: content-box;
+  border-bottom: 1px solid var(--color-border-muted);
+  background: none;
+  background: var(--color-border-default);
+  border: 0;
+  height: 0.25em;
+  margin: 24px 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.pg-markdown input {
+  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  margin: 0;
+  overflow: visible;
+}
+
+.pg-markdown [type="button"],
+.pg-markdown [type="reset"],
+.pg-markdown [type="submit"] {
+  -webkit-appearance: button;
+}
+
+.pg-markdown [type="button"]::-moz-focus-inner {
+  border-style: none;
+  padding: 0;
+}
+
+.pg-markdown [type="reset"]::-moz-focus-inner {
+  border-style: none;
+  padding: 0;
+}
+
+.pg-markdown [type="submit"]::-moz-focus-inner {
+  border-style: none;
+  padding: 0;
+}
+
+:is(.pg-markdown [type="button"]:-moz-focusring, .pg-markdown
+    [type="reset"]:-moz-focusring, .pg-markdown
+    [type="submit"]:-moz-focusring) {
+  outline: 1px dotted buttontext;
+}
+
+.pg-markdown [type="checkbox"],
+.pg-markdown [type="radio"] {
+  box-sizing: border-box;
+  padding: 0;
+}
+
+.pg-markdown [type="number"]::-webkit-inner-spin-button {
+  height: auto;
+}
+
+.pg-markdown [type="number"]::-webkit-outer-spin-button {
+  height: auto;
+}
+
+.pg-markdown [type="search"] {
+  -webkit-appearance: textfield;
+  outline-offset: -2px;
+}
+
+.pg-markdown [type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+}
+
+.pg-markdown [type="search"]::-webkit-search-decoration {
+  -webkit-appearance: none;
+}
+
+.pg-markdown ::-webkit-input-placeholder {
+  color: inherit;
+  opacity: 0.54;
+}
+
+.pg-markdown ::-webkit-file-upload-button {
+  -webkit-appearance: button;
+  font: inherit;
+}
+
+.pg-markdown a:hover {
+  text-decoration: underline;
+}
+
+.pg-markdown hr:before {
+  content: "";
+  display: table;
+}
+
+.pg-markdown hr:after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.pg-markdown table {
+  border-spacing: 0;
+  border-collapse: collapse;
+  width: max-content;
+  max-width: 100%;
+  display: block;
+  overflow: auto;
+}
+
+.pg-markdown td,
+.pg-markdown th {
+  padding: 0;
+}
+
+.pg-markdown details summary {
+  cursor: pointer;
+}
+
+.pg-markdown details:not([open]) > :not(summary) {
+  display: none !important;
+}
+
+.pg-markdown kbd {
+  font: 0.75rem var(--pg-font-code, var(--font-code));
+  color: var(--color-fg-default);
+  vertical-align: middle;
+  background: var(--color-canvas-subtle);
+  border: solid 1px var(--color-neutral-muted);
+  border-bottom-color: var(--color-neutral-muted);
+  border-radius: var(--border-radius);
+  box-shadow: inset 0 -1px 0 var(--color-neutral-muted);
+  padding: 3px 5px;
+  line-height: 10px;
+  display: inline-block;
+}
+
+.pg-markdown h1,
+.pg-markdown h2,
+.pg-markdown h3,
+.pg-markdown h4,
+.pg-markdown h5,
+.pg-markdown h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.pg-markdown h2 {
+  border-bottom: 1px solid var(--color-border-muted);
+  padding-bottom: 0.3em;
+  font-size: 1.5em;
+  font-weight: 500;
+}
+
+.pg-markdown h3 {
+  font-size: 1.25em;
+  font-weight: 500;
+}
+
+.pg-markdown h4 {
+  font-size: 1em;
+  font-weight: 500;
+}
+
+.pg-markdown h5 {
+  font-size: 0.875em;
+  font-weight: 500;
+}
+
+.pg-markdown h6 {
+  color: var(--color-fg-muted);
+  font-size: 0.85em;
+  font-weight: 500;
+}
+
+.pg-markdown p {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+
+.pg-markdown blockquote {
+  color: var(--color-fg-muted);
+  border-left: 0.25em solid var(--color-border-default);
+  margin: 0;
+  padding: 0 1em;
+}
+
+.pg-markdown ul,
+.pg-markdown ol {
+  margin-top: 0;
+  margin-bottom: 0;
+  padding-left: 2em;
+}
+
+.pg-markdown ol ol,
+.pg-markdown ul ol {
+  list-style-type: lower-roman;
+}
+
+.pg-markdown ul ul ol,
+.pg-markdown ul ol ol,
+.pg-markdown ol ul ol,
+.pg-markdown ol ol ol {
+  list-style-type: lower-alpha;
+}
+
+.pg-markdown dd {
+  margin-left: 0;
+}
+
+.pg-markdown tt,
+.pg-markdown code {
+  font-family: var(--pg-font-code, var(--font-code));
+  font-size: 0.8125rem;
+}
+
+.pg-markdown pre {
+  font-family: var(--pg-font-code, var(--font-code));
+  word-wrap: normal;
+  margin-top: 0;
+  margin-bottom: 0;
+  font-size: 0.8125rem;
+}
+
+.pg-markdown .octicon {
+  vertical-align: text-bottom;
+  fill: currentColor;
+  display: inline-block;
+  overflow: visible !important;
+}
+
+.pg-markdown ::placeholder {
+  color: var(--color-fg-subtle);
+  opacity: 1;
+}
+
+.pg-markdown input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.pg-markdown input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.pg-markdown .pl-c {
+  color: var(--color-prettylights-syntax-comment);
+}
+
+.pg-markdown .pl-c1,
+.pg-markdown .pl-s .pl-v {
+  color: var(--color-prettylights-syntax-constant);
+}
+
+.pg-markdown .pl-e,
+.pg-markdown .pl-en {
+  color: var(--color-prettylights-syntax-entity);
+}
+
+.pg-markdown .pl-smi,
+.pg-markdown .pl-s .pl-s1 {
+  color: var(--color-prettylights-syntax-storage-modifier-import);
+}
+
+.pg-markdown .pl-ent {
+  color: var(--color-prettylights-syntax-entity-tag);
+}
+
+.pg-markdown .pl-k {
+  color: var(--color-prettylights-syntax-keyword);
+}
+
+.pg-markdown .pl-s,
+.pg-markdown .pl-pds,
+.pg-markdown .pl-s .pl-pse .pl-s1,
+.pg-markdown .pl-sr,
+.pg-markdown .pl-sr .pl-cce,
+.pg-markdown .pl-sr .pl-sre,
+.pg-markdown .pl-sr .pl-sra {
+  color: var(--color-prettylights-syntax-string);
+}
+
+.pg-markdown .pl-v,
+.pg-markdown .pl-smw {
+  color: var(--color-prettylights-syntax-variable);
+}
+
+.pg-markdown .pl-bu {
+  color: var(--color-prettylights-syntax-brackethighlighter-unmatched);
+}
+
+.pg-markdown .pl-ii {
+  color: var(--color-prettylights-syntax-invalid-illegal-text);
+  background: var(--color-prettylights-syntax-invalid-illegal-bg);
+}
+
+.pg-markdown .pl-c2 {
+  color: var(--color-prettylights-syntax-carriage-return-text);
+  background: var(--color-prettylights-syntax-carriage-return-bg);
+}
+
+.pg-markdown .pl-sr .pl-cce {
+  color: var(--color-prettylights-syntax-string-regexp);
+  font-weight: bold;
+}
+
+.pg-markdown .pl-ml {
+  color: var(--color-prettylights-syntax-markup-list);
+}
+
+.pg-markdown .pl-mh,
+.pg-markdown .pl-mh .pl-en,
+.pg-markdown .pl-ms {
+  color: var(--color-prettylights-syntax-markup-heading);
+  font-weight: bold;
+}
+
+.pg-markdown .pl-mi {
+  color: var(--color-prettylights-syntax-markup-italic);
+  font-style: italic;
+}
+
+.pg-markdown .pl-mb {
+  color: var(--color-prettylights-syntax-markup-bold);
+  font-weight: bold;
+}
+
+.pg-markdown .pl-md {
+  color: var(--color-prettylights-syntax-markup-deleted-text);
+  background: var(--color-prettylights-syntax-markup-deleted-bg);
+}
+
+.pg-markdown .pl-mi1 {
+  color: var(--color-prettylights-syntax-markup-inserted-text);
+  background: var(--color-prettylights-syntax-markup-inserted-bg);
+}
+
+.pg-markdown .pl-mc {
+  color: var(--color-prettylights-syntax-markup-changed-text);
+  background: var(--color-prettylights-syntax-markup-changed-bg);
+}
+
+.pg-markdown .pl-mi2 {
+  color: var(--color-prettylights-syntax-markup-ignored-text);
+  background: var(--color-prettylights-syntax-markup-ignored-bg);
+}
+
+.pg-markdown .pl-mdr {
+  color: var(--color-prettylights-syntax-meta-diff-range);
+  font-weight: bold;
+}
+
+.pg-markdown .pl-ba {
+  color: var(--color-prettylights-syntax-brackethighlighter-angle);
+}
+
+.pg-markdown .pl-sg {
+  color: var(--color-prettylights-syntax-sublimelinter-gutter-mark);
+}
+
+.pg-markdown .pl-corl {
+  color: var(--color-prettylights-syntax-constant-other-reference-link);
+  text-decoration: underline;
+}
+
+.pg-markdown [data-catalyst] {
+  display: block;
+}
+
+.pg-markdown g-emoji {
+  vertical-align: -0.075em;
+  font-family: Apple Color Emoji, Segoe UI Emoji, Segoe UI Symbol;
+  font-size: 1em;
+  font-weight: 400;
+  line-height: 1;
+  font-style: normal !important;
+}
+
+.pg-markdown g-emoji img {
+  width: 1em;
+  height: 1em;
+}
+
+.pg-markdown :before {
+  content: "";
+  display: table;
+}
+
+.pg-markdown :after {
+  clear: both;
+  content: "";
+  display: table;
+}
+
+.pg-markdown > :first-child {
+  margin-top: 0 !important;
+}
+
+.pg-markdown > :last-child {
+  margin-bottom: 0 !important;
+}
+
+.pg-markdown a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pg-markdown .absent {
+  color: var(--color-danger-fg);
+}
+
+.pg-markdown .anchor {
+  float: left;
+  margin-left: -20px;
+  padding-right: 4px;
+  line-height: 1;
+}
+
+.pg-markdown .anchor:focus {
+  outline: none;
+}
+
+.pg-markdown p,
+.pg-markdown blockquote,
+.pg-markdown ul,
+.pg-markdown ol,
+.pg-markdown dl,
+.pg-markdown table,
+.pg-markdown pre,
+.pg-markdown details {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+.pg-markdown blockquote > :first-child {
+  margin-top: 0;
+}
+
+.pg-markdown blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+.pg-markdown sup > a:before {
+  content: "[";
+}
+
+.pg-markdown sup > a:after {
+  content: "]";
+}
+
+.pg-markdown h1 .octicon-link,
+.pg-markdown h2 .octicon-link,
+.pg-markdown h3 .octicon-link,
+.pg-markdown h4 .octicon-link,
+.pg-markdown h5 .octicon-link,
+.pg-markdown h6 .octicon-link {
+  color: var(--color-fg-default);
+  vertical-align: middle;
+  visibility: hidden;
+}
+
+.pg-markdown h1:hover .anchor,
+.pg-markdown h2:hover .anchor,
+.pg-markdown h3:hover .anchor,
+.pg-markdown h4:hover .anchor,
+.pg-markdown h5:hover .anchor,
+.pg-markdown h6:hover .anchor {
+  text-decoration: none;
+}
+
+.pg-markdown h1:hover .anchor .octicon-link,
+.pg-markdown h2:hover .anchor .octicon-link,
+.pg-markdown h3:hover .anchor .octicon-link,
+.pg-markdown h4:hover .anchor .octicon-link,
+.pg-markdown h5:hover .anchor .octicon-link,
+.pg-markdown h6:hover .anchor .octicon-link {
+  visibility: visible;
+}
+
+.pg-markdown h1 tt,
+.pg-markdown h1 code,
+.pg-markdown h2 tt,
+.pg-markdown h2 code,
+.pg-markdown h3 tt,
+.pg-markdown h3 code,
+.pg-markdown h4 tt,
+.pg-markdown h4 code,
+.pg-markdown h5 tt,
+.pg-markdown h5 code,
+.pg-markdown h6 tt,
+.pg-markdown h6 code {
+  font-size: inherit;
+  padding: 0 0.2em;
+}
+
+.pg-markdown ul.no-list,
+.pg-markdown ol.no-list {
+  padding: 0;
+  list-style-type: none;
+}
+
+.pg-markdown ol[type="1"] {
+  list-style-type: decimal;
+}
+
+.pg-markdown ol[type="a"] {
+  list-style-type: lower-alpha;
+}
+
+.pg-markdown ol[type="i"] {
+  list-style-type: lower-roman;
+}
+
+.pg-markdown div > ol:not([type]) {
+  list-style-type: decimal;
+}
+
+.pg-markdown ul ul,
+.pg-markdown ul ol,
+.pg-markdown ol ol,
+.pg-markdown ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+.pg-markdown li > p {
+  margin-top: 16px;
+}
+
+.pg-markdown li + li {
+  margin-top: 0.25em;
+}
+
+.pg-markdown dl {
+  padding: 0;
+}
+
+.pg-markdown dl dt {
+  margin-top: 16px;
+  padding: 0;
+  font-size: 1em;
+  font-style: italic;
+  font-weight: 500;
+}
+
+.pg-markdown dl dd {
+  margin-bottom: 16px;
+  padding: 0 16px;
+}
+
+.pg-markdown table th {
+  font-weight: 500;
+}
+
+.pg-markdown table th,
+.pg-markdown table td {
+  border: 1px solid var(--color-border-default);
+  padding: 6px 13px;
+}
+
+.pg-markdown table tr {
+  background: var(--color-canvas-default);
+  border-top: 1px solid var(--color-border-muted);
+}
+
+.pg-markdown table tr:nth-child(2n) {
+  background: var(--color-canvas-subtle);
+}
+
+.pg-markdown table img {
+  background: none;
+}
+
+.pg-markdown img[align="right"] {
+  padding-left: 20px;
+}
+
+.pg-markdown img[align="left"] {
+  padding-right: 20px;
+}
+
+.pg-markdown .emoji {
+  vertical-align: text-top;
+  background: none;
+  max-width: none;
+}
+
+.pg-markdown span.frame {
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.frame > span {
+  float: left;
+  border: 1px solid var(--color-border-default);
+  width: auto;
+  margin: 13px 0 0;
+  padding: 7px;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.frame span img {
+  float: left;
+  display: block;
+}
+
+.pg-markdown span.frame span span {
+  clear: both;
+  color: var(--color-fg-default);
+  padding: 5px 0 0;
+  display: block;
+}
+
+.pg-markdown span.align-center {
+  clear: both;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.align-center > span {
+  text-align: center;
+  margin: 13px auto 0;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.align-center span img {
+  text-align: center;
+  margin: 0 auto;
+}
+
+.pg-markdown span.align-right {
+  clear: both;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.align-right > span {
+  text-align: right;
+  margin: 13px 0 0;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.align-right span img {
+  text-align: right;
+  margin: 0;
+}
+
+.pg-markdown span.float-left {
+  float: left;
+  margin-right: 13px;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.float-left span {
+  margin: 13px 0 0;
+}
+
+.pg-markdown span.float-right {
+  float: right;
+  margin-left: 13px;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown span.float-right > span {
+  text-align: right;
+  margin: 13px auto 0;
+  display: block;
+  overflow: hidden;
+}
+
+.pg-markdown code,
+.pg-markdown tt {
+  background: var(--color-neutral-muted);
+  border-radius: var(--border-radius);
+  margin: 0;
+  padding: 0.2em 0.4em;
+  font-size: 85%;
+}
+
+.pg-markdown code br,
+.pg-markdown tt br {
+  display: none;
+}
+
+.pg-markdown del code {
+  -webkit-text-decoration: inherit;
+  text-decoration: inherit;
+}
+
+.pg-markdown pre code {
+  font-size: 100%;
+}
+
+.pg-markdown pre > code {
+  word-break: normal;
+  white-space: pre;
+  background: none;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.pg-markdown .highlight {
+  margin-bottom: 16px;
+}
+
+.pg-markdown .highlight pre {
+  word-break: normal;
+  margin-bottom: 0;
+}
+
+.pg-markdown .highlight pre,
+.pg-markdown pre {
+  padding: 16px;
+  font-size: 85%;
+  line-height: 1.45;
+  overflow: auto;
+}
+
+.pg-markdown pre code,
+.pg-markdown pre tt {
+  line-height: inherit;
+  word-wrap: normal;
+  font-family: inherit;
+  font-size: inherit;
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: inline;
+  overflow: visible;
+}
+
+.pg-markdown .csv-data td,
+.pg-markdown .csv-data th {
+  text-align: left;
+  white-space: nowrap;
+  padding: 5px;
+  font-size: 12px;
+  line-height: 1;
+  overflow: hidden;
+}
+
+.pg-markdown .csv-data .blob-num {
+  text-align: right;
+  background: var(--color-canvas-default);
+  border: 0;
+  padding: 10px 8px 9px;
+}
+
+.pg-markdown .csv-data tr {
+  border-top: 0;
+}
+
+.pg-markdown .csv-data th {
+  background: var(--color-canvas-subtle);
+  border-top: 0;
+  font-weight: 500;
+}
+
+.pg-markdown .footnotes {
+  color: var(--color-fg-muted);
+  border-top: 1px solid var(--color-border-default);
+  font-size: 12px;
+}
+
+.pg-markdown .footnotes ol {
+  padding-left: 16px;
+}
+
+.pg-markdown .footnotes li {
+  position: relative;
+}
+
+.pg-markdown .footnotes li:target:before {
+  pointer-events: none;
+  content: "";
+  border: 2px solid var(--color-accent-emphasis);
+  border-radius: var(--border-radius);
+  position: absolute;
+  inset: -8px -8px -8px -24px;
+}
+
+.pg-markdown .footnotes li:target {
+  color: var(--color-fg-default);
+}
+
+.pg-markdown .footnotes .data-footnote-backref g-emoji {
+  font-family: monospace;
+}
+
+.pg-markdown .task-list-item {
+  list-style-type: none;
+}
+
+.pg-markdown .task-list-item label {
+  font-weight: 400;
+}
+
+.pg-markdown .task-list-item.enabled label {
+  cursor: pointer;
+}
+
+.pg-markdown .task-list-item + .task-list-item {
+  margin-top: 3px;
+}
+
+.pg-markdown .task-list-item .handle {
+  display: none;
+}
+
+.pg-markdown .task-list-item-checkbox {
+  vertical-align: middle;
+  margin: 0 0.2em 0.25em -1.6em;
+}
+
+.pg-markdown
+  .contains-task-list:is(:lang(ae), :lang(ar), :lang(arc), :lang(bcc), :lang(bqi), :lang(ckb), :lang(dv), :lang(fa), :lang(glk), :lang(he), :lang(ku), :lang(mzn), :lang(nqo), :lang(pnb), :lang(ps), :lang(sd), :lang(ug), :lang(ur), :lang(yi))
+  .task-list-item-checkbox {
+  margin: 0 -1.6em 0.25em 0.2em;
+}
+
+.pg-markdown ::-webkit-calendar-picker-indicator {
+  filter: invert(50%);
+}
+
+.pg-markdown {
+  height: fit-content;
+}
+
+/* GitHub's sheet leaves lists and images to the browser; preflight, in
+   \`base\`, takes the bullets and makes an image a block, so they are named
+   here. The nested-list rules above still pick their own markers. */
+.pg-markdown :where(ul) {
+  list-style-type: disc;
+}
+
+.pg-markdown :where(ol) {
+  list-style-type: decimal;
+}
+
+.pg-markdown img {
+  display: inline;
+  vertical-align: baseline;
+}
+
+.pg-markdown.pg-markdown-code-font {
+  font-family: var(--pg-font-code, var(--font-code)) !important;
+  font-size: 0.8125rem !important;
+}

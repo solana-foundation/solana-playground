@@ -309,6 +309,7 @@ class _PgView {
     TOAST_SET: "viewtoastset",
     TOAST_CLOSE: "viewtoastclose",
     NEW_ITEM_PORTAL_SET: "viewnewitemportalset",
+    FILES_REQUEST: "viewfilesrequest",
   };
 
   /** DOM class names */
@@ -334,7 +335,6 @@ class _PgView {
     TABS: "tabs",
     WALLET_MAIN: "wallet-main",
     WALLET_RENAME_INPUT: "wallet-rename-input",
-    HOME: "home",
   };
 
   /**
@@ -641,6 +641,25 @@ class _PgView {
       PgView.events.NEW_ITEM_PORTAL_SET,
       Element
     );
+  }
+
+  /**
+   * Ask the layout to show the Files column, or the Files page on a phone.
+   * The editor sits inside the layout and cannot reach its state, so it asks
+   * through this event; the layout ignores it where it shows no work.
+   */
+  static showFiles() {
+    PgCommon.createAndDispatchCustomEvent(PgView.events.FILES_REQUEST);
+  }
+
+  /**
+   * Run `cb` whenever something asks to show the Files column.
+   *
+   * @param cb callback function to run
+   * @returns a disposable to stop listening
+   */
+  static onDidRequestFiles(cb: () => void): Disposable {
+    return PgCommon.onDidChange(PgView.events.FILES_REQUEST, cb);
   }
 
   /**

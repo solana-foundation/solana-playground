@@ -1,5 +1,4 @@
 import { Dispatch, FC, SetStateAction, useCallback, useMemo } from "react";
-import styled, { css } from "styled-components";
 
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Label } from "@/shared/ui/label";
@@ -21,20 +20,17 @@ const FilePicker: FC<React.PropsWithChildren<FilePickerProps>> = ({
   const ref = useDifferentBackground();
 
   return (
-    <Wrapper ref={ref}>
+    <div ref={ref} className="rounded-[12px] py-2">
       <RecursiveFolder
         path={path}
         filePaths={filePaths}
         setFilePaths={setFilePaths}
       />
-    </Wrapper>
+    </div>
   );
 };
 
-const Wrapper = styled.div`
-  padding: 0.5rem 0;
-  border-radius: ${({ theme }) => theme.default.borderRadius};
-`;
+const LABEL_CLASSES = "h-8 px-2 py-1.5";
 
 type RecursiveFolderProps = FilePickerProps;
 
@@ -93,16 +89,19 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
   );
 
   return (
-    <Folder>
-      <FolderName>
-        <StyledLabel $depth={depth}>
+    <div className="[&_label:hover]:bg-surface-hover [&_label]:w-full [&_label]:[transition:all_50ms_linear]">
+      <div className="flex">
+        <Label
+          className={LABEL_CLASSES}
+          style={{ marginLeft: `${depth + 1}rem` }}
+        >
           <Checkbox
             checked={isChecked(path)}
             onCheckedChange={(checked) => toggleCheck(path, checked === true)}
           />
           {folderName}
-        </StyledLabel>
-      </FolderName>
+        </Label>
+      </div>
 
       {folders
         .sort((a, b) => {
@@ -122,61 +121,26 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
       {files
         .sort((a, b) => a.localeCompare(b))
         .map((name) => (
-          <File key={name}>
-            <StyledLabel $depth={depth + 1}>
+          <div key={name} className="flex items-center">
+            <Label
+              className={LABEL_CLASSES}
+              style={{ marginLeft: `${depth + 2}rem` }}
+            >
               <Checkbox
                 checked={isChecked(PgCommon.joinPaths(path, name))}
                 onCheckedChange={(checked) =>
                   toggleCheck(PgCommon.joinPaths(path, name), checked === true)
                 }
               />
-              <FileNameWrapper>
+              <div className="flex items-center">
                 <LangIcon path={name} />
-                <FileName>{name}</FileName>
-              </FileNameWrapper>
-            </StyledLabel>
-          </File>
+                <span className="ml-1">{name}</span>
+              </div>
+            </Label>
+          </div>
         ))}
-    </Folder>
+    </div>
   );
 };
-
-const Folder = styled.div`
-  ${({ theme }) => css`
-    & label {
-      width: 100%;
-      transition: all ${theme.default.transition.duration.short}
-        ${theme.default.transition.type};
-
-      &:hover {
-        background: ${theme.colors.state.hover.bg};
-      }
-    }
-  `}
-`;
-
-const FolderName = styled.div`
-  display: flex;
-`;
-
-const File = styled.div`
-  display: flex;
-  align-items: center;
-`;
-
-const FileNameWrapper = styled.div`
-  display: flex;
-  align-items: center;
-`;
-
-const FileName = styled.span`
-  margin-left: 0.25rem;
-`;
-
-const StyledLabel = styled(Label)<{ $depth: number }>`
-  margin-left: ${({ $depth }) => $depth + 1}rem;
-  padding: 0.375rem 0.5rem;
-  height: 2rem;
-`;
 
 export default FilePicker;
