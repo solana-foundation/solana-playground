@@ -6,6 +6,25 @@ Lets the user call a deployed program's instructions through its IDL, on any
 cluster and for any program id, and see what each call did, the way Solana
 Explorer's Interactive IDL does.
 
+```mermaid
+flowchart TD
+  open["Open a program id (interact-program-id)"] --> idl["IDL from the picker"]
+  idl --> form["Instruction forms"]
+  form --> fill["Fill arguments and accounts:<br/>wallet signers, known programs,<br/>PDAs from IDL seeds, From seed"]
+  fill --> check{"Arguments valid?"}
+  check -- no --> invalid["Mark the field (phase: validation)"]
+  check -- yes --> action{"Simulate or Send?"}
+  action -- Simulate --> sim["Simulate: logs, compute units,<br/>nothing signed"]
+  action -- Send --> mn{"First mainnet send<br/>this session?"}
+  mn -- yes --> confirm["Confirm (interact-mainnet-confirm)"] --> pre
+  mn -- no --> pre{"Simulate before send?<br/>(simulate-before-send)"}
+  pre -- on --> presim["Simulate first"] --> passed{"Passed?"}
+  passed -- no --> stop["Not sent, logs shown"]
+  passed -- yes --> send["Sign and send"]
+  pre -- off --> send
+  send --> result["Result: confirmation, logs,<br/>IDL error name, explorer link"]
+```
+
 ## ADDED Requirements
 
 ### Requirement: Interact opens any program id

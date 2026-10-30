@@ -6,6 +6,18 @@ Turns a Solana program's Rust source into the two outputs a deploy needs, the
 program binary and the IDL, and keeps both with the project until the next
 build replaces them.
 
+```mermaid
+flowchart TD
+  start["Build (build_started)"] --> kp{"Program keypair?"}
+  kp -- no --> mint["Create the program keypair"] --> declare
+  kp -- yes --> declare["Write its public key into declare_id!"]
+  declare --> server["Send the source to the build server"]
+  server --> ok{"Compiled?"}
+  ok -- yes --> keep["Keep the binary reference and the IDL<br/>with the project (build_succeeded)"]
+  ok -- no --> prev["Keep the previous binary and IDL,<br/>warn before deploying them (build_failed)"]
+  keep --> dl["Download IDL (build_idl_downloaded)"]
+```
+
 ## ADDED Requirements
 
 ### Requirement: A build produces the program binary and the IDL

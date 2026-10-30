@@ -6,6 +6,24 @@ Puts a built program on one cluster at a time, from the playground or from the
 user's own machine, and lets a mainnet deploy from the playground happen only
 after the user accepts, each time, the risk of spending real SOL.
 
+```mermaid
+flowchart TD
+  start["Deploy: button, terminal or assistant<br/>(deploy_started)"] --> net{"Mainnet Beta?"}
+  net -- yes --> dlg["Mainnet disclaimer (mainnet-guard),<br/>checkbox unticked"]
+  dlg -- Cancel --> stop["Nothing sent"]
+  dlg -- Download deploy scripts --> scripts["Export with scripts"]
+  dlg -- "ticked, Deploy to mainnet" --> cookie["Write pg_mainnet_disclaimer"] --> bal
+  net -- no --> bal{"Enough SOL?"}
+  bal -- "no, off mainnet" --> air["Offer an airdrop"] --> bal
+  bal -- yes --> exists{"Program at the keypair address?"}
+  exists -- no --> buffer["Write the buffer<br/>(pause, resume, cancel)"] --> first["First deploy"]
+  exists -- yes --> auth{"Wallet is the upgrade authority?"}
+  auth -- no --> refuse["Stop, name the authority"]
+  auth -- yes --> buffer2["Write the buffer<br/>(pause, resume, cancel)"] --> upgrade["Upgrade"]
+  first --> done["Deployed on this cluster only<br/>(deploy_succeeded)"]
+  upgrade --> done
+```
+
 ## ADDED Requirements
 
 ### Requirement: A deploy targets the selected cluster

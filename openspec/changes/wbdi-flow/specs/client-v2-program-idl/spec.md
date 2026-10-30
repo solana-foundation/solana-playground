@@ -6,6 +6,26 @@ Says which IDL describes a program: one read from the chain, one from the
 project's build, or one the user supplies, and how the playground publishes
 the project's IDL on chain next to the program.
 
+```mermaid
+flowchart LR
+  subgraph read["Read, for any program id on the selected cluster"]
+    pmp[("Program Metadata")] --> picker["Source picker (idl-source)"]
+    anchor[("Anchor IDL account, legacy")] --> picker
+    build["Project build"] --> picker
+    file["File"] --> local["Local IDL"]
+    paste["Pasted JSON (idl-paste)"] --> local
+    local --> picker
+  end
+  picker --> format{"Anchor before 0.30,<br/>Anchor 0.30+ or Codama?"}
+  format -- no --> refuse["Refused with the reason,<br/>previous IDL stays"]
+  format -- yes --> use["IDL in use"]
+  subgraph write["Upload, after a deploy, on the deployed cluster"]
+    project["Project IDL"] --> target{"Target"}
+    target -- default --> pmpw[("Program Metadata")]
+    target -- legacy --> anchorw[("Anchor IDL account")]
+  end
+```
+
 ## ADDED Requirements
 
 ### Requirement: The playground reads three IDL formats
