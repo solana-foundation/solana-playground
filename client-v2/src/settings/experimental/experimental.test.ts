@@ -13,7 +13,7 @@ vi.mock("../../utils", () => ({
 
 // Upstream defaults this to `NODE_ENV !== "production"`. This fork builds
 // against hosted servers that have no `unstable` routes, so the default is
-// off everywhere and turning it on is the deliberate act (D37).
+// off everywhere and turning it on is the deliberate act.
 describe("experimental.unstable", () => {
   const setting = experimental.find((s) => s.id === "experimental.unstable");
 

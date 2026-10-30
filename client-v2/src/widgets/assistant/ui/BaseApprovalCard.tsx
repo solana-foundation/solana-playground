@@ -3,6 +3,8 @@ import { useMemo } from "react";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
+import { CopyButton } from "@/shared/ui/copy-button";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Diff,
   DiffContent,
@@ -42,6 +44,17 @@ const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
   unanswered: "not applied -- the session ended before you answered",
 };
 
+/** An undo that did not finish is a warning; a patch still applied, a success */
+const outcomeTone = (
+  status: ApprovalStatus,
+  undone: boolean,
+  stranded: boolean
+) => {
+  if (stranded) return "text-warning";
+  if (status === "allowed" && !undone) return "text-success";
+  return "text-muted-foreground";
+};
+
 // The answers sit in one row of thumb-sized targets on a phone, where the
 // card is most likely to end up half under the keyboard
 const ANSWER = "h-11 md:h-8";
@@ -50,18 +63,27 @@ const ANSWER = "h-11 md:h-8";
  * A change or a command the assistant wants to make, with the user's answer.
  *
  * Draws only: `onAnswer` is called with the user's answer, and whether a card
- * is still open to an answer is its `status`, which the store owns.
+ * is still open to an answer is its `status`, which the store owns. An
+ * applied patch offers Undo patch only when the caller passes `onUndo`, which
+ * it does while the patch can still be taken back.
  */
 export const BaseApprovalCard = ({
   item,
   onAnswer,
+  onUndo,
+  original,
 }: {
   item: ApprovalItem;
   onAnswer: (answer: ApprovalAnswer) => void;
+  onUndo?: () => void;
+  /** The file before the patch, offered to copy when Undo could not finish */
+  original?: string;
 }) => {
   const { request, status } = item;
   const pending = status === "pending";
   const patch = request.type === "patch";
+  const undone = item.undo === "done";
+  const stranded = item.undo === "stranded";
 
   return (
     <Diff data-status={status} className={cn(pending && "border-primary")}>
@@ -72,9 +94,9 @@ export const BaseApprovalCard = ({
         {patch ? <PatchStat request={request} /> : <span className="ml-auto" />}
         <Badge
           variant={pending ? "default" : "outline"}
-          className={cn(status === "allowed" && "text-success")}
+          className={cn(status === "allowed" && !undone && "text-success")}
         >
-          {STATUS_LABEL[status]}
+          {undone ? "Undone" : STATUS_LABEL[status]}
         </Badge>
       </DiffHeader>
 
@@ -113,14 +135,35 @@ export const BaseApprovalCard = ({
             </Button>
           </>
         ) : (
-          <span
-            className={cn(
-              "text-xs",
-              status === "allowed" ? "text-success" : "text-muted-foreground"
+          <>
+            <span
+              className={cn("text-xs", outcomeTone(status, undone, stranded))}
+            >
+              {item.outcome ?? OUTCOME[status]}
+            </span>
+            {original !== undefined && (
+              <CopyButton
+                value={original}
+                label="Copy the original"
+                className="ml-auto size-11 md:size-8"
+                onError={reportButtonFailure("copy the original")}
+              />
             )}
-          >
-            {item.outcome ?? OUTCOME[status]}
-          </span>
+            {onUndo && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={cn(
+                  "min-w-11 md:min-w-0",
+                  original === undefined && "ml-auto",
+                  ANSWER
+                )}
+                onClick={onUndo}
+              >
+                Undo patch
+              </Button>
+            )}
+          </>
         )}
       </DiffFooter>
     </Diff>

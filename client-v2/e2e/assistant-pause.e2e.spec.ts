@@ -64,7 +64,9 @@ const connectDefault = async (page: Page, name: string) => {
   });
   await expect(composer).toBeVisible(LONG);
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+  await page
+    .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+    .click();
   const dialog = page.getByRole("dialog", { name: "Connect a model" });
   await dialog.getByRole("button", { name: "Start", exact: true }).click(LONG);
   await expect(dialog).toBeHidden(LONG);

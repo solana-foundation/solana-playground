@@ -178,10 +178,32 @@ const isStoredItem = (value: unknown): value is StoredItem => {
  * An `updatedAt` that does not parse is dropped rather than costing the item:
  * the item falls back to `createdAt` as its version. Kept, it would be
  * uploaded with every push of the thread, and the server refuses a whole
- * thread over one item it cannot cast.
+ * thread over one item it cannot cast. An approval card's `undo` that the
+ * card cannot have is dropped too (`withValidUndo`).
  */
 export const decodeItem = (stored: unknown): ChatItem | null => {
   if (!isStoredItem(stored)) return null;
+  return withValidUndo(withValidVersion(stored));
+};
+
+/**
+ * An approval card keeps an undo state only where Undo patch can leave one
+ * (`PgAssistant.markUndone`, `markUndoStranded`, `clearUndoStranded`): on an
+ * allowed patch card, as one of its states
+ */
+const withValidUndo = (item: ChatItem): ChatItem => {
+  if (item.kind !== "approval" || item.undo === undefined) return item;
+  const valid =
+    item.status === "allowed" &&
+    item.request.type === "patch" &&
+    (item.undo === "done" || item.undo === "stranded");
+  if (valid) return item;
+  const card = { ...item };
+  delete card.undo;
+  return card;
+};
+
+const withValidVersion = (stored: ChatItem): ChatItem => {
   if (stored.updatedAt === undefined) return stored;
   if (
     typeof stored.updatedAt === "string" &&
@@ -291,6 +313,35 @@ if (import.meta.vitest) {
         );
       });
 
+      it("keeps an undone patch undone and a reply's state", () => {
+        const undone: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "approval",
+          status: "allowed",
+          undo: "done",
+          request: {
+            type: "patch",
+            path: "src/lib.rs",
+            before: "a",
+            after: "b",
+          },
+        };
+        const cut: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "assistant",
+          text: "The program",
+          state: "cut-off",
+        };
+
+        expect(encodeItem(undone)).toMatchObject({ undo: "done" });
+        expect(encodeItem(cut)).toMatchObject({ state: "cut-off" });
+        // And back, through JSON as storage and the server hold it
+        const stored = JSON.parse(JSON.stringify([undone, cut]));
+        expect(decodeThread(stored)).toEqual([undone, cut]);
+      });
+
       it("stores a pending approval as unanswered, since it can never resume", () => {
         const item: ChatItem = {
           ...base,
@@ -362,6 +413,66 @@ if (import.meta.vitest) {
           encodeItem({ ...approval, status: "pending" } as ChatItem)
         ).toMatchObject({ status: "unanswered", updatedAt });
         expect(decodeItem(encodeItem(reply))).toMatchObject({ updatedAt });
+      });
+    });
+
+    describe("decodeItem", () => {
+      /** A stored patch card, as another build or a hand edit may have left it */
+      const storedCard = (status: string, undo: unknown, type = "patch") => ({
+        id: base.id,
+        createdAt: base.createdAt,
+        kind: "approval",
+        status,
+        undo,
+        request:
+          type === "patch"
+            ? { type, path: "src/lib.rs", before: "a", after: "b" }
+            : { type, name: "build" },
+      });
+      const undoOf = (item: ChatItem | null) =>
+        item?.kind === "approval" ? item.undo : "not a card";
+
+      it("keeps an allowed patch card's undo state", () => {
+        expect(undoOf(decodeItem(storedCard("allowed", "stranded")))).toBe(
+          "stranded"
+        );
+      });
+
+      it("keeps a refused key's backend and a reply's origin, through storage and a merge", () => {
+        const refused: ChatItem = {
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "error",
+          text: "OpenAI did not accept this key.",
+          recover: { provider: "openai", model: "gpt-x" },
+        };
+        const reply: ChatItem = {
+          id: "22222222-2222-4222-8222-222222222222",
+          createdAt: base.createdAt,
+          kind: "assistant",
+          text: "hi",
+          origin: { provider: "anthropic", effort: "high" },
+        };
+
+        const stored = JSON.parse(
+          JSON.stringify(encodeThread([refused, reply]))
+        );
+        const decoded = decodeThread(stored);
+
+        expect(decoded).toEqual([refused, reply]);
+        expect(mergeThreads(decoded, [])).toEqual([refused, reply]);
+      });
+
+      it("drops an undo state the card cannot have", () => {
+        expect(
+          undoOf(decodeItem(storedCard("denied", "done")))
+        ).toBeUndefined();
+        expect(
+          undoOf(decodeItem(storedCard("allowed", "done", "command")))
+        ).toBeUndefined();
+        expect(
+          undoOf(decodeItem(storedCard("allowed", "maybe")))
+        ).toBeUndefined();
       });
     });
 

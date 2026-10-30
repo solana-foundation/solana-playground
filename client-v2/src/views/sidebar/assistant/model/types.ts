@@ -19,11 +19,24 @@ export interface Provider {
    *
    * @param input what the user typed
    * @param signal aborts the turn; rejects with the abort reason
+   * @param context what goes with this message; everything when absent. A
+   * provider must pass it to `describeProject`: `openFile: false` is the user
+   * leaving that file's content out, and sending it anyway breaks that
    * @throws {TurnFailure} when the backend, the model or the backend's cost
    *   gate ended the turn without an answer; any other rejection is the abort
    *   reason or a failure raised on this side
    */
-  send(input: string, signal?: AbortSignal): Promise<void>;
+  send(
+    input: string,
+    signal?: AbortSignal,
+    context?: TurnContext
+  ): Promise<void>;
+}
+
+/** What the user chose to send with one message */
+export interface TurnContext {
+  /** `false` when the user left the open file's content out of it */
+  openFile: boolean;
 }
 
 /**
@@ -36,10 +49,11 @@ export type TurnFailureReason = "provider" | "refusal" | "paused" | "capped";
 
 /**
  * A turn the provider ended without an answer. `message` is what the thread
- * shows; `reason` and `status` are for telemetry to report, so the widget
+ * shows; `reason` and `status` are for telemetry to report, so telemetry
  * reads neither the SDK's error class, which is loaded on demand, nor the
- * message's text. `cause` keeps the SDK's error, with its stack and the
- * redacted response body, for a log.
+ * message's text. `cause` keeps the SDK's error, with its stack, the redacted
+ * response body and its finer `kind`: the widget reads that kind by name to
+ * offer a refused key again and to cut off a reply whose stream dropped.
  */
 export class TurnFailure extends Error {
   readonly reason: TurnFailureReason;

@@ -161,22 +161,22 @@ the page below.
 
 While a tutorial that is not started is on screen, the files column SHALL
 hold nothing (no callout, no "Create a new project", no other project's
-files). While, in addition, no project is open, the assistant's head SHALL
-read the tutorial's name and its empty conversation SHALL be titled "Ask
-about <tutorial>"; an open project keeps the assistant under its own name,
-since the conversation and the tools still act on it. Once the tutorial
-starts, both follow the tutorial's project as for any project.
+files). While, in addition, no project is open, the assistant's empty
+conversation SHALL be titled "Ask about <tutorial>"; an open project keeps
+the conversation under its own name, since the conversation and the tools
+still act on it. Once the tutorial starts, the conversation follows the
+tutorial's project as for any project. The assistant's head names the model,
+not the project or the tutorial (assistant-model-name).
 
 #### Scenario: The assistant beside Hello Anchor
 
 - **WHEN** a user with no project opens Hello Anchor's About page
-- **THEN** the assistant's head reads "Hello Anchor", its empty state reads
-  "Ask about Hello Anchor", and the files column shows no "Create a new
-  project"
+- **THEN** the assistant's empty state reads "Ask about Hello Anchor", and
+  the files column shows no "Create a new project"
 
 #### Scenario: Beside another project
 
 - **WHEN** a user whose project e2e-project is open opens Hello Anchor's
   About page
-- **THEN** the assistant's head reads "e2e-project" and the files column
-  shows neither e2e-project's files nor "Create a new project"
+- **THEN** the assistant's conversation stays e2e-project's and the files
+  column shows neither e2e-project's files nor "Create a new project"

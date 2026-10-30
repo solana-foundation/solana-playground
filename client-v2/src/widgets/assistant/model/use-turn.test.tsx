@@ -12,12 +12,26 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import * as reportModule from "@/shared/lib/report-button-failure";
+// The class itself, which the slice entry exports as a type only
+import { AiTurnError } from "@/shared/lib/ai/run-turn";
 import { PgSession } from "@/features/auth";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import {
+  PgAssistant,
+  isConnectionLost,
+} from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import type { Connection } from "../../../views/sidebar/assistant/store";
-import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
+import {
+  TurnFailure,
+  type Provider,
+} from "../../../views/sidebar/assistant/model/types";
+import type {
+  BackendParams,
+  Connection,
+} from "../../../views/sidebar/assistant/store";
+import {
+  REMEMBERED_BACKEND_KEY,
+  rememberBackend,
+} from "../../../views/sidebar/assistant/model/remembered-backend";
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
@@ -157,6 +171,58 @@ describe("useTurn", () => {
     expect(provider.send.mock.calls[0][0]).toBe("first");
     act(() => result.current.stop());
     await waitFor(() => expect(result.current.busy).toBe(false));
+  });
+
+  it("sends the next message without the open file once it is left out, then with it again", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    vi.spyOn(PgExplorer, "currentFilePath", "get").mockReturnValue(
+      "/src/lib.rs"
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
+    expect(result.current.openFileLeftOut).toBe("/src/lib.rs");
+    await act(() => result.current.send("first"));
+    expect(provider.send.mock.calls[0][2]).toEqual({ openFile: false });
+    expect(result.current.openFileLeftOut).toBeNull();
+
+    await act(() => result.current.send("second"));
+    expect(provider.send.mock.calls[1][2]).toEqual({ openFile: true });
+  });
+
+  it("leaves nothing out with no file open and nothing left out", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    vi.spyOn(PgExplorer, "currentFilePath", "get").mockReturnValue(null);
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(provider.send.mock.calls[0][2]).toEqual({ openFile: true });
+  });
+
+  it("sends a file the user switched to in full, though another was left out", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    const current = vi
+      .spyOn(PgExplorer, "currentFilePath", "get")
+      .mockReturnValue("/src/lib.rs");
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
+    current.mockReturnValue("/src/other.rs");
+    await act(() => result.current.send("first"));
+
+    expect(provider.send.mock.calls[0][2]).toEqual({ openFile: true });
+  });
+
+  it("keeps the open file left out when a send opens Connect instead of starting a turn", async () => {
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
+    await act(() => result.current.send("hi"));
+
+    expect(open).toHaveBeenCalled();
+    expect(provider.send).not.toHaveBeenCalled();
+    expect(result.current.openFileLeftOut).toBe("/src/lib.rs");
   });
 
   it("says Stopped once for two Stops before the turn unwinds", async () => {
@@ -317,6 +383,87 @@ describe("useTurn", () => {
     await waitFor(() => expect(result.current.busy).toBe(false));
   });
 
+  it.each([
+    ["a 401", 401],
+    ["Gemini's 400", 400],
+  ])("names the backend and offers its key again on %s", async (_, status) => {
+    const own: Connection = {
+      id: "openai",
+      apiKey: "sk-test",
+      endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
+    };
+    PgAssistant.connect(own);
+    // As the provider rejects: the SDK's error kept as the cause
+    provider.send.mockRejectedValue(
+      new TurnFailure("Unauthorized", {
+        reason: "provider",
+        status,
+        cause: new AiTurnError("Unauthorized", { kind: "key-refused", status }),
+      })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.items.at(-1)).toMatchObject({
+      kind: "error",
+      text: "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model.",
+      recover: {
+        provider: "openai",
+        model: "gpt-x",
+        baseUrl: "https://api.example.test/v1",
+      },
+    });
+    expect(JSON.stringify(PgAssistant.items)).not.toContain("sk-test");
+    expect(eventNames()).toContainEqual([
+      "assistant_key_rejected",
+      { provider: "openai" },
+    ]);
+  });
+
+  it.each([
+    ["a 403, which a valid key without access gets too", "forbidden", 403],
+    ["a 500", "provider", 500],
+  ] as const)("shows the turn's own words for %s", async (_, kind, status) => {
+    PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+    provider.send.mockRejectedValue(
+      new TurnFailure("Provider says no", {
+        reason: "provider",
+        status,
+        cause: new AiTurnError("Provider says no", { kind, status }),
+      })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    const error = PgAssistant.items.at(-1);
+    expect(error).toMatchObject({ kind: "error", text: "Provider says no" });
+    expect(error).not.toHaveProperty("recover");
+    expect(eventNames().map(([name]) => name)).not.toContain(
+      "assistant_key_rejected"
+    );
+  });
+
+  it("keeps the ordinary error for a 401 from the default", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockRejectedValue(
+      new TurnFailure("Unauthorized", {
+        reason: "provider",
+        status: 401,
+        cause: new AiTurnError("Unauthorized", {
+          kind: "key-refused",
+          status: 401,
+        }),
+      })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.items.at(-1)).not.toHaveProperty("recover");
+  });
+
   it("reports a failed turn as an error item", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     provider.send.mockRejectedValue(new Error("quota"));
@@ -379,6 +526,21 @@ describe("useTurn", () => {
 
     expect(result.current.input).toBe("Explain this error");
     expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("puts a requested prompt in the composer and focuses it, with nothing connected", async () => {
+    const { result } = renderHook(() => useTestTurn());
+    const before = result.current.focusRequest;
+
+    act(() => PgAssistant.requestPrompt("Explain this error", { send: false }));
+
+    await waitFor(() =>
+      expect(result.current.input).toBe("Explain this error")
+    );
+    expect(result.current.focusRequest).toBeGreaterThan(before);
+    // Nothing is to be sent, so nothing asks for a backend
+    expect(open).not.toHaveBeenCalled();
+    expect(result.current.promptWaiting).toBe(false);
   });
 
   it("sends a requested prompt when connected", async () => {
@@ -514,6 +676,107 @@ describe("useTurn", () => {
     act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
     expect(result.current.promptWaiting).toBe(false);
     expect(result.current.input).toBe("Explain this error");
+  });
+});
+
+describe("useTurn when the key is gone", () => {
+  afterEach(() => localStorage.clear());
+  const OPENAI = {
+    provider: "openai" as const,
+    model: "gpt-x",
+    baseUrl: "https://api.example.test/v1",
+  };
+  /** The open thread, last answered by `origin`, as a new tab finds it */
+  const threadAnsweredBy = (origin: BackendParams) =>
+    vi.spyOn(PgAssistant, "items", "get").mockReturnValue([
+      {
+        kind: "user",
+        id: "u",
+        createdAt: "2026-10-28T00:00:00.000Z",
+        text: "q",
+      },
+      {
+        kind: "assistant",
+        id: "a",
+        createdAt: "2026-10-28T00:00:01.000Z",
+        text: "r",
+        origin,
+      },
+    ]);
+
+  it("opens Connect on the thread's own backend instead of the default", async () => {
+    defaultBackend(true);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection).toBeNull();
+    expect(open).toHaveBeenCalledWith("thread", OPENAI);
+    expect(result.current.input).toBe("hi");
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("opens Connect on the thread's own backend over a default the reload reconnected", async () => {
+    defaultBackend(true);
+    rememberBackend({ id: "default", apiKey: "" });
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+    await waitFor(() => expect(PgAssistant.connection?.id).toBe("default"));
+
+    await act(() => result.current.send("hi"));
+
+    expect(open).toHaveBeenCalledWith("thread", OPENAI);
+    expect(result.current.input).toBe("hi");
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("sends to the default the user picked for a thread another backend answered", async () => {
+    defaultBackend(true);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+    act(() => PgAssistant.connect({ id: "default", apiKey: "" }));
+
+    await act(() => result.current.send("hi"));
+
+    expect(open).not.toHaveBeenCalled();
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("connects the default for a thread the default answered", async () => {
+    defaultBackend(true);
+    threadAnsweredBy({ provider: "default" });
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection?.id).toBe("default");
+    expect(provider.send).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens Connect on the last chosen backend for a thread with no reply", async () => {
+    defaultBackend(true);
+    localStorage.setItem(REMEMBERED_BACKEND_KEY, JSON.stringify(OPENAI));
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection).toBeNull();
+    expect(open).toHaveBeenCalledWith("send", OPENAI);
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps a requested prompt waiting on the thread's own backend", async () => {
+    defaultBackend(true);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => PgAssistant.requestPrompt("Explain this error"));
+
+    await waitFor(() => expect(open).toHaveBeenCalledWith("thread", OPENAI));
+    expect(PgAssistant.connection).toBeNull();
+    expect(result.current.input).toBe("Explain this error");
+    expect(provider.send).not.toHaveBeenCalled();
   });
 });
 
@@ -788,6 +1051,175 @@ describe("useTurn's failures and races", () => {
     await waitFor(() => expect(report).toHaveBeenCalledWith(failure));
     expect(reportFor).toHaveBeenCalledWith("send the prompt");
     expect(result.current.input).toBe("Explain this error");
+  });
+
+  describe("a reply cut off mid-stream", () => {
+    const failAfter = (text: string, error: unknown) =>
+      provider.send.mockImplementation(async () => {
+        if (text) {
+          const id = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(id, text);
+        }
+        throw error;
+      });
+
+    it("keeps the text and marks the reply cut off on a network error", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter("The program", new TypeError("network error"));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("What does this program do?"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(reply).toMatchObject({ text: "The program", state: "cut-off" });
+      expect(PgAssistant.isCutOff(reply)).toBe(true);
+      expect(PgAssistant.items.some((i) => i.kind === "error")).toBe(false);
+      expect(eventNames()).toContainEqual([
+        "assistant_reply_failed",
+        { reason: "interrupted" },
+      ]);
+      expect(logged()).toContainEqual(["assistant:turn", "warn", false]);
+    });
+
+    it("marks the reply cut off on the network failure runTurn reports", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter(
+        "The program",
+        new TurnFailure("network error", {
+          reason: "provider",
+          cause: new AiTurnError("network error", { kind: "network" }),
+        })
+      );
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("What does this program do?"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(reply).toMatchObject({ text: "The program", state: "cut-off" });
+      expect(PgAssistant.items.some((i) => i.kind === "error")).toBe(false);
+    });
+
+    it("says the connection dropped, in words, when it drops before any text", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter("", new TypeError("Load failed"));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const last = PgAssistant.items.at(-1)!;
+      expect(last.kind).toBe("error");
+      expect(isConnectionLost(last)).toBe(true);
+      expect(PgAssistant.items.some((i) => i.kind === "assistant")).toBe(false);
+      expect(eventNames()).toContainEqual([
+        "assistant_reply_failed",
+        { reason: "connection-lost" },
+      ]);
+      expect(logged()).toContainEqual(["assistant:turn", "warn", false]);
+    });
+
+    it("shows a programming TypeError after text as an error, not a cut-off", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter(
+        "The program",
+        new TypeError("Cannot read properties of undefined (reading 'x')")
+      );
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(PgAssistant.isCutOff(reply)).toBe(false);
+      expect(PgAssistant.items.at(-1)).toMatchObject({ kind: "error" });
+    });
+
+    it("cuts off nothing when the request drops after a finished reply and a tool", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      provider.send.mockImplementation(async () => {
+        const id = PgAssistant.startAssistantMessage();
+        PgAssistant.appendToAssistantMessage(id, "Let me read it.");
+        PgAssistant.addToolCall("read src/lib.rs");
+        throw new TypeError("Failed to fetch");
+      });
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(PgAssistant.isCutOff(reply)).toBe(false);
+      expect(isConnectionLost(PgAssistant.items.at(-1)!)).toBe(true);
+    });
+
+    it.each([
+      "Failed to fetch",
+      "fetch failed",
+      "network error",
+      "NetworkError when attempting to fetch resource.",
+      "Error in input stream",
+      "Load failed",
+      "The network connection was lost.",
+      "terminated",
+    ])("reads %j after text as a cut-off reply", async (message) => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter("The program", new TypeError(message));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(PgAssistant.isCutOff(reply)).toBe(true);
+    });
+
+    it.each([
+      [
+        "a TypeError that only contains a network message",
+        new TypeError("prefix failed to fetch"),
+      ],
+      [
+        "a network message that is not a TypeError",
+        new Error("Failed to fetch"),
+      ],
+      [
+        "a network message with more after it",
+        new TypeError("Failed to fetch: x"),
+      ],
+    ])("shows %s after text as an error", async (_, error) => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter("The program", error);
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(PgAssistant.isCutOff(reply)).toBe(false);
+      expect(PgAssistant.items.at(-1)).toMatchObject({ kind: "error" });
+    });
+
+    it("shows a TypeError that only mentions fetch as an error", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter("The program", new TypeError("x.fetch is not a function"));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(PgAssistant.isCutOff(reply)).toBe(false);
+      expect(PgAssistant.items.at(-1)).toMatchObject({ kind: "error" });
+    });
+
+    it("shows any other failure after text as an error", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      failAfter("The program", new Error("The model refused"));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      expect(PgAssistant.isCutOff(reply)).toBe(false);
+      expect(PgAssistant.items.at(-1)).toMatchObject({
+        kind: "error",
+        text: "The model refused",
+      });
+    });
   });
 
   it("logs, and reports, an error a stopped turn ends with", async () => {

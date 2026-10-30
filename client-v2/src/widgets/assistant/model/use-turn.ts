@@ -1,5 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
+import { isNetworkFailure } from "@/shared/lib/ai";
+import type { AiTurnError } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
@@ -8,10 +10,21 @@ import { report, toReplayMessages } from "@/features/persistence";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import {
   isDefaultBackendRemembered,
+  rememberedChoice,
   rememberedConnection,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
+import { threadBackend } from "../../../views/sidebar/assistant/model/thread-backend";
+import {
+  isDefaultBackend,
+  PROVIDERS,
+} from "../../../views/sidebar/assistant/model/types";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import {
+  CONNECTION_LOST,
+  paramsOf,
+  PgAssistant,
+  STOPPED_NOTICE,
+} from "../../../views/sidebar/assistant/store";
 import type {
   Connection,
   PromptRequest,
@@ -39,6 +52,35 @@ const isAbort = (error: unknown) =>
   error !== null &&
   "name" in error &&
   error.name === "AbortError";
+
+/**
+ * The SDK's `AiTurnError` a turn failed with, which the provider keeps as its
+ * `TurnFailure`'s `cause`. By name, since the slice entry
+ * exports `AiTurnError` as a type only: the class loads with the SDK.
+ */
+const turnErrorOf = (error: unknown): AiTurnError | undefined => {
+  if (!(error instanceof Error)) return undefined;
+  if (error.name === "AiTurnError") return error as AiTurnError;
+  return error.name === "TurnFailure" ? turnErrorOf(error.cause) : undefined;
+};
+
+/**
+ * Whether a turn ended on the provider refusing the key: kind `key-refused`,
+ * a 401 or Gemini's 400 (`failureKindOf`). Not a 403, which providers also
+ * answer for a valid key without access to the model, a region or an
+ * organisation's policy; asking for the key again there loops, so a 403 gets
+ * the `forbidden` words.
+ */
+const isRejectedKey = (error: unknown) =>
+  turnErrorOf(error)?.kind === "key-refused";
+
+/**
+ * Whether the turn ended on the connection dropping: `runTurn` reports it as
+ * an `AiTurnError` of kind `network`; a send that failed before reaching it
+ * throws the dropped fetch itself.
+ */
+const isDroppedConnection = (error: unknown) =>
+  isNetworkFailure(error) || turnErrorOf(error)?.kind === "network";
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
@@ -85,6 +127,14 @@ export interface Turn {
   promptWaiting: boolean;
   /** Bumped whenever the composer's input should take focus */
   focusRequest: number;
+  /** The file whose content the next message leaves out, or `null` */
+  openFileLeftOut: string | null;
+  /**
+   * Leaves `path`'s content out of the next message, whoever sends it, as
+   * long as it is still the open file then: another file the user switched
+   * to goes in full, as its chip says
+   */
+  leaveOutOpenFile(path: string): void;
 }
 
 /**
@@ -125,6 +175,44 @@ const connectDefault = async (): Promise<Connection | null> => {
   return PgAssistant.connection;
 };
 
+/** Where a send with nothing connected goes */
+type SendBackend =
+  /** The default, if this deployment serves it to this user */
+  | { kind: "default" }
+  /** A key-based backend: the user has to give its key in Connect a model */
+  | { kind: "ask"; via: "thread" | "send"; preset: ConnectPreset };
+
+/**
+ * The backend a send with nothing connected goes to: the one that last
+ * answered the open thread, else the one this browser last chose, else the
+ * default. A key-based answer is never replaced by the default, which would
+ * continue the user's conversation with their own model on another one
+ * behind their back (HOO-1719).
+ */
+const resolveSendBackend = (): SendBackend => {
+  const thread = threadBackend(PgAssistant.items);
+  if (thread) {
+    return isDefaultBackend(thread.provider)
+      ? { kind: "default" }
+      : { kind: "ask", via: "thread", preset: thread };
+  }
+  const choice = rememberedChoice();
+  if (choice && !isDefaultBackend(choice.provider)) {
+    return { kind: "ask", via: "send", preset: choice };
+  }
+  return { kind: "default" };
+};
+
+/**
+ * Connections the page made on its own, reconnecting a remembered default:
+ * nobody chose them for the thread now open. A send treats one as nothing
+ * connected when that thread was last answered by a key-based backend, so
+ * project A's conversation never goes to the default the user picked in
+ * project B (HOO-1719). A pick in Connect a model connects a new object, and
+ * from then on the user's choice holds.
+ */
+const restored = new WeakSet<Connection>();
+
 export const useTurn = ({ open }: TurnOptions): Turn => {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
@@ -137,6 +225,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // the panel's job, not the conversation's: a notice item would outlive the
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
+  const [openFileLeftOut, setOpenFileLeftOut] = useState<string | null>(null);
+  // Read by `start`, which a requested prompt runs from an older render
+  const leftOut = useRef<string | null>(null);
+  const leaveOutOpenFile = (path: string) => {
+    leftOut.current = path;
+    setOpenFileLeftOut(path);
+  };
 
   const provider = useRef<{
     connection: Connection;
@@ -192,7 +287,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * the page asks once (again only after a failure).
    *
    * Neither overrules a live connection or a choice in progress in Connect a
-   * model. A Forget key stays forgotten because `forgetBackend` drops what
+   * model. A default reconnected here never answers a thread a key-based
+   * backend answered (`restored`). A Forget key stays forgotten because `forgetBackend` drops what
    * both would read.
    */
   useEffect(() => {
@@ -209,6 +305,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
           if (PgAssistant.connection || PgAssistant.isPickingBackend) return;
           if (!isDefaultBackendRemembered() || !PgSession.get()) return;
           PgAssistant.connect(DEFAULT_CONNECTION);
+          if (PgAssistant.connection) restored.add(PgAssistant.connection);
         })
         .catch((error: unknown) => {
           // Nothing on screen asked for it: the panel opens unconnected, and
@@ -264,9 +361,24 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Only a send with nothing connected waits, so a connected one has started
     // its turn by the time it first yields
     let current = usableConnection();
-    // Nothing connected: try the default. Connected to the default with no
-    // session falls through to Connect a model, which offers sign-in
+    if (current && restored.has(current)) {
+      const backend = resolveSendBackend();
+      if (backend.kind === "ask") {
+        setInput(text);
+        openConnect(backend.via, backend.preset);
+        return true;
+      }
+    }
+    // Nothing connected: the thread's own backend, or the default. Connected
+    // to the default with no session falls through to Connect a model, which
+    // offers sign-in
     if (!current && !PgAssistant.connection) {
+      const backend = resolveSendBackend();
+      if (backend.kind === "ask") {
+        setInput(text);
+        openConnect(backend.via, backend.preset);
+        return true;
+      }
       const project = PgExplorer.currentWorkspaceId;
       starting.current = true;
       try {
@@ -316,15 +428,63 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
     setInput("");
+    // For this message only: the file goes with the next one again
+    const context = {
+      openFile:
+        leftOut.current === null ||
+        leftOut.current !== PgExplorer.currentFilePath,
+    };
+    leftOut.current = null;
+    setOpenFileLeftOut(null);
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
 
     try {
-      await instance.send(trimmed, controller.signal);
+      await instance.send(trimmed, controller.signal, context);
     } catch (e) {
-      if (!controller.signal.aborted) {
+      const cutReply = isDroppedConnection(e)
+        ? PgAssistant.turnReplyWithText()
+        : null;
+      if (
+        !controller.signal.aborted &&
+        isRejectedKey(e) &&
+        !isDefaultBackend(current.id)
+      ) {
+        // The key-based backend refused the key: say which, and offer to enter
+        // it again on the same backend rather than leaving the generic words
+        const { id } = current;
+        const name = PROVIDERS.find((p) => p.id === id)?.name ?? id;
+        PgAssistant.addError(
+          `${name} did not accept this key. Check it and enter it again, or pick another model.`,
+          paramsOf(current)
+        );
+        assistantTelemetry.track("assistant_key_rejected", {
+          provider: current.id,
+        });
+        connectLog.warn("the provider refused the key", {
+          context: { provider: current.id },
+        });
+      } else if (!controller.signal.aborted && cutReply) {
+        // The reply keeps what it streamed and says it was cut off
+        PgAssistant.markCutOff(cutReply);
+        log.warn("the connection dropped mid-reply", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        assistantTelemetry.track("assistant_reply_failed", {
+          reason: "interrupted",
+        });
+      } else if (!controller.signal.aborted && isDroppedConnection(e)) {
+        // No reply text to keep: say so in words, with Try again (`isConnectionLost`)
+        PgAssistant.addError(CONNECTION_LOST);
+        log.warn("the connection dropped before the reply", {
+          context: { error: e instanceof Error ? e.message : String(e) },
+        });
+        assistantTelemetry.track("assistant_reply_failed", {
+          reason: "connection-lost",
+        });
+      } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
       } else if (isAbort(e)) {
         // Aborted by `stop`, which has already written its notice, or by the
@@ -374,7 +534,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     if (!turn.current || turn.current.signal.aborted) return;
     turn.current.abort();
     PgAssistant.cancelPending();
-    PgAssistant.addNotice("Stopped.");
+    PgAssistant.addNotice(STOPPED_NOTICE);
     assistantTelemetry.track("assistant_turn_stopped", {});
   };
 
@@ -409,9 +569,24 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     };
     return PgAssistant.onDidRequestPrompt(
       (request) => {
+        // Nothing is sent, so no backend is needed: the prompt takes the
+        // composer and its focus whether or not one is connected
+        if (!request.send) {
+          place(request.text);
+          return;
+        }
         if (usableConnection()) {
           run(request);
           return;
+        }
+        if (!PgAssistant.connection) {
+          const backend = resolveSendBackend();
+          if (backend.kind === "ask") {
+            setInput(request.text);
+            setPromptWaiting(true);
+            openConnect(backend.via, backend.preset);
+            return;
+          }
         }
         const project = PgExplorer.currentWorkspaceId;
         Promise.all([probeDefaultBackend(), isSignedIn()])
@@ -437,7 +612,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
               run(request);
               return;
             }
-            setInput(request.text);
+            // Focused first, so Connect a model gives focus back to the
+            // composer holding the prompt when it closes
+            place(request.text);
             setPromptWaiting(true);
             openConnect("send");
           })
@@ -464,5 +641,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     openConnect,
     promptWaiting,
     focusRequest,
+    openFileLeftOut,
+    leaveOutOpenFile,
   };
 };

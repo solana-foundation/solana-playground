@@ -142,6 +142,21 @@ describe("ConnectDialog", () => {
     ]);
   });
 
+  it("opens on the thread's own backend, and says so", () => {
+    renderHost();
+
+    act(() =>
+      openConnectDialog("thread", { provider: "openai", model: "gpt-x" })
+    );
+
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-model")?.value
+    ).toBe("gpt-x");
+    expect(eventNames()).toEqual([
+      ["assistant_connect_opened", { via: "thread" }],
+    ]);
+  });
+
   it("does not open a second one over the first", () => {
     renderHost();
 

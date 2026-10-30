@@ -68,6 +68,8 @@ export interface PlaygroundBridge {
   listOpenFiles(): string[];
   readFile(path: string): string | null;
   applyPatch(patch: Patch): Promise<void>;
+  /** Removes a file; what Undo patch does to a file the patch created */
+  deleteFile(path: string): Promise<void>;
   build(): Promise<void>;
   /** @returns where the deployed program can be seen, when that is known */
   deploy(): Promise<{ programId: string; explorerUrl: string } | null>;
@@ -160,6 +162,10 @@ export const realBridge: PlaygroundBridge = {
       .getModels()
       .find((m) => m.uri.path === fullPath);
     if (model && model.getValue() !== content) model.setValue(content);
+  },
+
+  async deleteFile(path) {
+    await PgExplorer.deleteItem(PgExplorer.convertToFullPath(path));
   },
 
   async build() {

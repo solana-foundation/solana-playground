@@ -37,6 +37,17 @@ export interface TurnProfile {
   maxOutputTokens?: number;
   /** Which of our backend's refusals a failed turn is, or `undefined` for any other failure */
   backendRefusal?: (error: AiTurnError) => BackendRefusal | undefined;
+  /**
+   * A refusal this backend wrote for people, shown as it is, or `undefined`
+   * for a failure that gets Spec 08's words (`AiTurnError.message`)
+   */
+  ownRefusal?: (error: AiTurnError) => string | undefined;
+  /**
+   * For a backend we run, whether a 502, 503, 504 or 529 (`isOutage`) is its
+   * own fault and ours to hear of; `runTurn` reports no outage, a third
+   * party's being on its own status page
+   */
+  reportsOutage?: (error: AiTurnError) => boolean;
 }
 
 /** One model provider's turn settings */

@@ -8,8 +8,10 @@ const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 /**
  * How a condition is evaluated, which decides which ledger edges the
  * step has and how the band offers them. No condition maps to
- * `on-demand` yet: the class exists so D26's `logs`/`test` later only
- * extend this switch, without reopening the transition table.
+ * `on-demand` yet: the class exists so the planned `logs` (a declarative
+ * check) and `test` (an authored test run against the deployed program)
+ * conditions only extend this switch, without reopening the transition
+ * table.
  */
 export type GraderClass = "synchronous" | "on-demand" | "attestation";
 

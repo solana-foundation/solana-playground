@@ -319,7 +319,9 @@ test.describe("assistant-own-key", () => {
   }) => {
     await seedWorkspace(page, "own-key-change");
     await page.getByRole("button", { name: "More", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
     const dialog = page.getByRole("dialog", { name: "Connect a model" });
     await expect(dialog.locator("#assistant-api-key")).toBeVisible(LONG);
 
@@ -478,5 +480,242 @@ test.describe("assistant-own-key", () => {
       .poll(async () => (await indexedDbDump(page)).text, LONG)
       .toContain(REPLY);
     expect((await indexedDbDump(page)).text).not.toContain(KEY);
+  });
+  /**
+   * A thread answered by the user's own key, then a new tab: signed in, on a
+   * deployment that serves a default whose turns are counted, so a send that
+   * fell back to it would show
+   */
+  const keyedThreadInNewTab = async (page: Page) => {
+    const defaultTurns: string[] = [];
+    await page.context().route("**/api/agent", (route) => {
+      if (route.request().method() === "GET")
+        return json(route, {
+          configured: true,
+          model: "z-ai/glm-5.3-flash:US",
+        });
+      defaultTurns.push(route.request().postData() ?? "");
+      return route.fulfill({ status: 500 });
+    });
+    await page.context().route(COMPLETIONS_URL, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify({
+          choices: [{ delta: { content: REPLY }, finish_reason: "stop" }],
+        })}\n\ndata: [DONE]\n\n`,
+      })
+    );
+    await signIn(page);
+    await seedWorkspace(page, "own-key-thread");
+    await connectOwn(page);
+    await composer(page).fill("hello");
+    await composer(page).press("Enter");
+    await expect(page.getByText(REPLY)).toBeVisible(LONG);
+
+    const second = await page.context().newPage();
+    await signIn(second);
+    await second.goto("/");
+    await expect(second.getByText(REPLY)).toBeVisible(LONG);
+    await composer(second).fill("again");
+    await composer(second).press("Enter");
+    return { second, defaultTurns };
+  };
+
+  test("assistant-own-key: A new tab does not continue a keyed thread on the default", async ({
+    page,
+  }) => {
+    const { second, defaultTurns } = await keyedThreadInNewTab(page);
+
+    const dialog = second.getByRole("dialog", { name: "Connect a model" });
+    await expect(dialog).toBeVisible(LONG);
+    await expect(
+      dialog.getByRole("radio", { name: /^OpenAI-compatible/ })
+    ).toBeChecked();
+    await expect(second.locator("#assistant-base-url")).toHaveValue(
+      OWN.endpoint.baseUrl
+    );
+    await expect(second.locator("#assistant-model")).toHaveValue("gpt-x");
+    await expect(second.locator("#assistant-api-key")).toHaveValue("");
+    // The dialog hides the panel behind it; closed, the prompt is still there
+    await second.keyboard.press("Escape");
+    await expect(composer(second)).toHaveValue("again");
+    expect(defaultTurns).toEqual([]);
+  });
+
+  test("assistant-own-key: Entering the key continues the same thread", async ({
+    page,
+  }) => {
+    const { second, defaultTurns } = await keyedThreadInNewTab(page);
+
+    await second.locator("#assistant-api-key").fill(KEY);
+    await second
+      .getByRole("dialog", { name: "Connect a model" })
+      .getByRole("button", { name: "Connect" })
+      .click();
+    await composer(second).press("Enter");
+
+    await expect(second.getByText(REPLY)).toHaveCount(2, LONG);
+    const log = second.getByRole("log", { name: "Conversation" });
+    await expect(log).toContainText("You: hello");
+    await expect(log).toContainText("You: again");
+    expect(defaultTurns).toEqual([]);
+  });
+  /**
+   * A conversation on the user's own key, then Connect a model open over it
+   * with another model typed in: a different connection, which used to start
+   * a new conversation
+   */
+  const switchingModel = async (page: Page) => {
+    const turns: { model?: string; messages?: unknown[] }[] = [];
+    await page.route(COMPLETIONS_URL, (route) => {
+      turns.push(JSON.parse(route.request().postData() ?? "{}"));
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: `data: ${JSON.stringify({
+          choices: [{ delta: { content: REPLY }, finish_reason: "stop" }],
+        })}\n\ndata: [DONE]\n\n`,
+      });
+    });
+    await seedWorkspace(page, "own-key-switch");
+    await connectOwn(page);
+    await composer(page).fill("hello");
+    await composer(page).press("Enter");
+    await expect(page.getByText(REPLY)).toBeVisible(LONG);
+
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Connect a model" });
+    await dialog.locator("#assistant-model").fill("gpt-y");
+    return { dialog, turns };
+  };
+
+  test("assistant-own-key: Switching backends keeps the thread", async ({
+    page,
+  }) => {
+    const { dialog, turns } = await switchingModel(page);
+    await dialog.getByRole("button", { name: "Switch" }).click();
+    await expect(dialog).toBeHidden(LONG);
+
+    const log = page.getByRole("log", { name: "Conversation" });
+    await expect(log).toContainText("You: hello");
+    await composer(page).fill("again");
+    await composer(page).press("Enter");
+    await expect(page.getByText(REPLY)).toHaveCount(2, LONG);
+    expect(turns.map((t) => t.model)).toEqual(["gpt-x", "gpt-y"]);
+    expect(JSON.stringify(turns[1].messages)).toContain("hello");
+  });
+
+  test("assistant-own-key: No warning about a new conversation", async ({
+    page,
+  }) => {
+    const { dialog } = await switchingModel(page);
+
+    await expect(dialog.locator("#assistant-model")).toHaveValue("gpt-y");
+    await expect(dialog).not.toContainText("new conversation");
+  });
+  test("assistant-own-key: A 401 offers Enter key", async ({ page }) => {
+    await page.route(COMPLETIONS_URL, (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Incorrect API key" } }),
+      })
+    );
+    await seedWorkspace(page, "own-key-401");
+    await connectOwn(page);
+    await composer(page).fill("hello");
+    await composer(page).press("Enter");
+
+    await expect(
+      page.getByText(
+        "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model."
+      )
+    ).toBeVisible(LONG);
+    await page.locator("#assistant-enter-key").click();
+
+    const dialog = page.getByRole("dialog", { name: "Connect a model" });
+    await expect(dialog).toBeVisible(LONG);
+    await expect(dialog.locator("#assistant-model")).toHaveValue("gpt-x");
+    await expect(dialog.locator("#assistant-api-key")).toHaveValue("");
+  });
+  /** A deployment serving a default whose turns are counted, signed in */
+  const countedDefault = async (page: Page) => {
+    const defaultTurns: string[] = [];
+    await page.context().route("**/api/agent", (route) => {
+      if (route.request().method() === "GET")
+        return json(route, {
+          configured: true,
+          model: "z-ai/glm-5.3-flash:US",
+        });
+      defaultTurns.push(route.request().postData() ?? "");
+      return route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: 'data: {"choices":[{"delta":{"content":"Hello"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n\n',
+      });
+    });
+    await signIn(page);
+    return defaultTurns;
+  };
+
+  test("assistant-own-key: The remembered choice holds no key", async ({
+    page,
+  }) => {
+    await seedWorkspace(page, "own-key-choice");
+    await connectOwn(page);
+
+    const stored = await storedValues(page, "localStorage");
+    expect(JSON.parse(stored["assistant.backend"] ?? "null")).toEqual({
+      provider: "openai",
+      model: "gpt-x",
+      baseUrl: OWN.endpoint.baseUrl,
+    });
+    expect(JSON.stringify(stored)).not.toContain(KEY);
+  });
+
+  test("assistant-own-key: A new thread takes the last chosen backend", async ({
+    page,
+  }) => {
+    const defaultTurns = await countedDefault(page);
+    await seedWorkspace(page, "own-key-new-thread");
+    await connectOwn(page);
+
+    const second = await page.context().newPage();
+    await signIn(second);
+    await second.goto("/");
+    await composer(second).fill("hi");
+    await composer(second).press("Enter");
+
+    const dialog = second.getByRole("dialog", { name: "Connect a model" });
+    await expect(dialog).toBeVisible(LONG);
+    await expect(dialog.locator("#assistant-model")).toHaveValue("gpt-x");
+    await expect(dialog.locator("#assistant-api-key")).toHaveValue("");
+    expect(defaultTurns).toEqual([]);
+  });
+
+  test("assistant-own-key: A thread answered by the default reconnects the default", async ({
+    page,
+  }) => {
+    const defaultTurns = await countedDefault(page);
+    await seedWorkspace(page, "own-key-default-thread");
+    await composer(page).fill("hi");
+    await composer(page).press("Enter");
+    await expect(page.getByText("Hello", { exact: true })).toBeVisible(LONG);
+
+    const second = await page.context().newPage();
+    await signIn(second);
+    await second.goto("/");
+    await expect(second.getByText("Hello", { exact: true })).toBeVisible(LONG);
+    await composer(second).fill("again");
+    await composer(second).press("Enter");
+
+    await expect.poll(() => defaultTurns.length, LONG).toBe(2);
+    await expect(
+      second.getByRole("dialog", { name: "Connect a model" })
+    ).toHaveCount(0);
   });
 });

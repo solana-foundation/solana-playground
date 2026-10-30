@@ -81,7 +81,9 @@ test("client-v2-assistant: A backend with an effort ladder", async ({
   await openProject(page, "effort-ladder");
 
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+  await page
+    .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+    .click();
   await page.getByRole("radio", { name: "Anthropic" }).click();
   await page.locator("#assistant-api-key").fill("sk-ant-fake-key");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
@@ -288,7 +290,9 @@ test("client-v2-assistant: Stopping a turn is reported once", async ({
 /** Connect a model, opened from the head's More */
 const openConnect = async (page: Page) => {
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+  await page
+    .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+    .click();
   const dialog = page.getByRole("dialog", { name: "Connect a model" });
   await expect(dialog).toBeVisible(LONG);
   return dialog;
@@ -338,7 +342,9 @@ test.describe("Connect a model", () => {
       const work = page.getByRole("region", { name: "Work" });
       await expect(work).toBeInViewport();
       await work.getByRole("button", { name: "More", exact: true }).click();
-      await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+      await page
+        .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+        .click();
       const dialog = page.getByRole("dialog", { name: "Connect a model" });
       await expect(dialog).toBeVisible(LONG);
 
@@ -559,6 +565,48 @@ test.describe("The thread", () => {
     await expect(thread(page).getByText(/more more/)).toBeInViewport(LONG);
   });
 
+  // HOO-2293: a reader who scrolled up and then sent saw the reply stream
+  // off-screen, since a new message did not turn following back on
+  test("a message sent while scrolled up brings the reply into view", async ({
+    page,
+  }) => {
+    await stubSession(page);
+    await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body:
+          'data: {"choices":[{"delta":{"content":"The reply you sent for"}}]}\n\n' +
+          "data: [DONE]\n\n",
+      })
+    );
+    await openProject(page, "thread-send-scrolled-up");
+
+    await storeReady(page);
+    await page.evaluate(() => {
+      const store = (window as ThreadWindow).__pgAssistant!;
+      for (let i = 0; i < 30; i++) store.addUserMessage(`Message ${i}`);
+    });
+    await expect(thread(page).getByText("Message 29")).toBeInViewport(LONG);
+
+    const viewport = page.locator("[data-slot=message-scroller-viewport]");
+    await viewport.hover();
+    await page.mouse.wheel(0, -100_000);
+    await expect
+      .poll(() => viewport.evaluate((el) => el.scrollTop))
+      .toBeLessThan(10);
+
+    await input(page).fill("Where is my reply");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+
+    await expect(
+      thread(page).getByText("The reply you sent for")
+    ).toBeInViewport(LONG);
+    await expect(
+      page.getByRole("button", { name: "Scroll to end" })
+    ).toHaveAttribute("data-active", "false");
+  });
+
   test("client-v2-assistant: Reloading with a card pending", async ({
     page,
   }) => {
@@ -613,4 +661,104 @@ test.describe("The thread", () => {
     expect(answered[0]).toContain("kind: patch");
     expect(answered[0]).toContain("answer: allow");
   });
+});
+
+/** A turn that calls `write_file` with `content` for `path`, then ends */
+const writeFileTurn = (path: string, content: string) => {
+  const call = {
+    choices: [
+      {
+        delta: {
+          tool_calls: [
+            {
+              index: 0,
+              id: "call_write",
+              function: {
+                name: "write_file",
+                arguments: JSON.stringify({ path, content }),
+              },
+            },
+          ],
+        },
+      },
+    ],
+  };
+  const finish = { choices: [{ delta: {}, finish_reason: "tool_calls" }] };
+  return `data: ${JSON.stringify(call)}\n\ndata: ${JSON.stringify(
+    finish
+  )}\n\ndata: [DONE]\n\n`;
+};
+
+test("assistant-patch-undo: Undoing an edit", async ({ page }) => {
+  let turns = 0;
+  await stubSession(page);
+  await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) => {
+    turns += 1;
+    if (turns > 1) return answer(route);
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body: writeFileTurn("src/lib.rs", "// patched by the assistant\n"),
+    });
+  });
+  await openProject(page, "patch-undo");
+  const editor = page.locator(".monaco-editor .view-lines").first();
+  await expect(editor).toContainText("anchor_lang", LONG);
+
+  await input(page).fill("Patch lib.rs");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByRole("button", { name: "Apply" }).click(LONG);
+  await expect(editor).toContainText("patched by the assistant", LONG);
+
+  const card = page.locator("[data-slot=diff][data-status=allowed]");
+  await card.getByRole("button", { name: "Undo patch" }).click(LONG);
+
+  await expect(card.getByText("Undone", { exact: true })).toBeVisible(LONG);
+  await expect(card.getByRole("button", { name: "Undo patch" })).toHaveCount(0);
+  await expect(editor).toContainText("anchor_lang", LONG);
+});
+
+test("assistant-turn-states: Try again after Stop", async ({ page }) => {
+  const bodies: string[] = [];
+  await stubSession(page);
+  await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) => {
+    bodies.push(route.request().postData() ?? "");
+    // The first turn never answers, so it can be stopped
+    if (bodies.length === 1) return new Promise<void>(() => {});
+    return answer(route);
+  });
+  await openProject(page, "try-again");
+
+  await input(page).fill("What does this program do?");
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await page.getByRole("button", { name: "Stop", exact: true }).click(LONG);
+
+  const thread = page.getByRole("log", { name: "Conversation" });
+  await expect(thread.getByText("Stopped.")).toBeVisible(LONG);
+  await thread.getByRole("button", { name: "Try again" }).click(LONG);
+
+  await expect(thread.getByText("Hello", { exact: true })).toBeVisible(LONG);
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).toContain("What does this program do?");
+  await expect(thread.getByRole("button", { name: "Try again" })).toHaveCount(
+    0
+  );
+});
+
+test("assistant-composer-context: Connect a model from the + menu", async ({
+  page,
+}) => {
+  await stubAgent(page, { configured: false, model: null }, answer);
+  const lines = linesOn(page);
+  await openProject(page, "add-menu");
+
+  await page.getByRole("button", { name: "Add context" }).click();
+  await page.getByRole("menuitem", { name: /Connect a model…/ }).click();
+
+  await expect(
+    page.getByRole("dialog", { name: "Connect a model" })
+  ).toBeVisible(LONG);
+  await expect
+    .poll(() => lineOf(lines, "assistant_connect_opened"))
+    .toMatch(/via\W+add/);
 });

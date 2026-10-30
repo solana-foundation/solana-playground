@@ -1,4 +1,5 @@
 import { loadAi } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
 import { createTools } from "./tools";
 import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
@@ -11,6 +12,8 @@ import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { ModelProviderInput } from "./model-providers";
 import { TurnFailure, type Provider } from "./types";
+
+const log = createLogger("assistant:provider");
 
 /** What a provider needs to be built: structurally the store's `Connection` */
 export interface ProviderConnection extends ModelProviderInput {
@@ -67,7 +70,7 @@ export const createProvider = (
     id: connection.id,
     label: profile.label,
 
-    async send(input, signal) {
+    async send(input, signal, context) {
       const ai = await loadAi();
       signal?.throwIfAborted();
       model ??= ai.createModel(profile.connection);
@@ -88,7 +91,10 @@ export const createProvider = (
             },
             {
               role: "system",
-              content: `Current project state:\n\n${describeProject()}`,
+              content: `Current project state:\n\n${describeProject(
+                undefined,
+                context
+              )}`,
             },
           ],
           // Built per turn, so MCP tools discovered since the last one are offered
@@ -117,14 +123,7 @@ export const createProvider = (
           );
         }
         const refusal = profile.backendRefusal?.(e);
-        if (!refusal) {
-          throw new TurnFailure(e.message, {
-            reason: e.kind,
-            status: e.status,
-            cause: e,
-          });
-        }
-        if (refusal.kind === "signed-out") {
+        if (refusal?.kind === "signed-out") {
           // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
           void PgSession.refresh();
           throw new TurnFailure(refusal.message, {
@@ -133,14 +132,37 @@ export const createProvider = (
             cause: e,
           });
         }
-        // The conversation and the session stay: switching to a key-based
-        // backend is how the user keeps going today
-        agentTelemetry.track("agent_refused", {
-          reason: refusal.reason,
-          tier: refusal.tier,
-        });
-        throw new TurnFailure(refusal.message, {
-          reason: "capped",
+        if (refusal) {
+          // The conversation and the session stay: switching to a key-based
+          // backend is how the user keeps going today
+          agentTelemetry.track("agent_refused", {
+            reason: refusal.reason,
+            tier: refusal.tier,
+          });
+          throw new TurnFailure(refusal.message, {
+            reason: "capped",
+            status: e.status,
+            cause: e,
+          });
+        }
+        // After the cap, whose 503 is a refusal of ours with its own words
+        const own = profile.ownRefusal?.(e);
+        if (own) {
+          throw new TurnFailure(own, {
+            reason: "provider",
+            status: e.status,
+            cause: e,
+          });
+        }
+        if (ai.isOutage(e.status) && profile.reportsOutage?.(e)) {
+          log.warn("the backend we run is down", {
+            report: true,
+            context: { status: e.status, detail: e.detail },
+          });
+        }
+        // Spec 08's words, never the status or the server's text
+        throw new TurnFailure(e.message, {
+          reason: e.kind === "paused" ? "paused" : "provider",
           status: e.status,
           cause: e,
         });

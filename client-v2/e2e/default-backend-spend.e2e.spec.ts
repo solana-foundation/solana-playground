@@ -73,10 +73,15 @@ const answersOnceThenRefuses = async (
   await stubSession(page);
 };
 
-/** The Connect a model dialog, opened from the composer's menu */
+/**
+ * The Connect a model dialog, opened from the composer's menu, whose item
+ * reads "Connection and key…" once a backend is connected
+ */
 const openConnect = async (page: Page) => {
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+  await page
+    .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+    .click();
   return page.getByRole("dialog", { name: "Connect a model" });
 };
 

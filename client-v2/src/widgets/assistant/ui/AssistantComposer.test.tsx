@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -79,13 +79,18 @@ const anthropic: Connection = {
  * dialog opens on is `ConnectDialog`'s to test
  */
 const openConnect = vi.fn();
+const openSources = vi.fn();
 
 /** The composer with the turn held by its parent, as the widget holds it */
 function Harness() {
   const turn = useTurn({ open: openConnect });
   return (
     <TooltipProvider>
-      <AssistantComposer turn={turn} />
+      <AssistantComposer
+        turn={turn}
+        onSources={openSources}
+        focusPicked={() => false}
+      />
     </TooltipProvider>
   );
 }
@@ -116,6 +121,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.unstubAllGlobals();
   openConnect.mockReset();
+  openSources.mockReset();
   // The harness is still mounted here: RTL's own cleanup runs after this hook
   act(() => PgAssistant.disconnect());
   PgSession.reset();
@@ -125,12 +131,141 @@ afterEach(() => {
 });
 
 describe("AssistantComposer, context chips", () => {
+  // Removing a chip focuses it first, and its tooltip watches its size
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
+  it("names each chip by what it sends", () => {
+    render(<Harness />);
+    expect(
+      screen.getByText("Sent with this message: lib.rs, the open file, in full")
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Sent with this message: the path of 1 file")
+    ).toBeTruthy();
+  });
+
+  it("leaves the open file out of the next message only, and reports it", async () => {
+    const send = vi.fn(() => Promise.resolve());
+    vi.spyOn(
+      await import("../../../views/sidebar/assistant/model"),
+      "createProvider"
+    ).mockReturnValue({ id: "anthropic", label: "stub", send });
+    render(<Harness />);
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Leave lib.rs out of the next message",
+      })
+    );
+
+    expect(screen.queryByText("lib.rs")).toBeNull();
+    expect(tracked()).toContainEqual(["assistant_file_chip_removed", {}]);
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Message the assistant" }),
+      "hi{Enter}"
+    );
+
+    // The send starts after the default backend's probe; slow under load
+    await waitFor(
+      () =>
+        expect(send).toHaveBeenCalledWith("hi", expect.anything(), {
+          openFile: false,
+        }),
+      { timeout: 5_000 }
+    );
+    expect(
+      await screen.findByText("lib.rs", {}, { timeout: 5_000 })
+    ).toBeTruthy();
+  });
+});
+
+describe("AssistantComposer, a left-out file", () => {
+  // Removing a chip focuses it first, and its tooltip watches its size
+  beforeEach(() => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    );
+  });
+
+  it("shows the chip of a file the user switches to, and that file's goes back", async () => {
+    const { PgExplorer } = await import("../../../utils/explorer/explorer");
+    const explorer = PgExplorer as { currentFilePath: string };
+    render(<Harness />);
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "Leave lib.rs out of the next message",
+      })
+    );
+    expect(screen.queryByText("lib.rs")).toBeNull();
+
+    try {
+      explorer.currentFilePath = "src/other.rs";
+      // Any change in the store redraws the composer
+      act(() => PgAssistant.setStatus("idle"));
+      expect(screen.getByText("other.rs")).toBeTruthy();
+    } finally {
+      explorer.currentFilePath = "src/lib.rs";
+    }
+  });
+});
+
+describe("AssistantComposer, the + menu", () => {
+  it("opens Sources and tools", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+    await user.click(
+      screen.getByRole("menuitem", { name: /Sources and tools/ })
+    );
+    expect(openSources).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Connection and key… once connected, and opens Connect from +", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+    await user.click(
+      screen.getByRole("menuitem", { name: /Connection and key…/ })
+    );
+    expect(openConnect).toHaveBeenCalledWith("add", undefined);
+  });
+
+  it("offers Connect a model… with nothing connected", async () => {
+    PgAssistant.disconnect();
+    render(<Harness />);
+    await openMenu(/Add context/);
+    expect(
+      screen.getByRole("menuitem", { name: /Connect a model…/ })
+    ).toBeTruthy();
+  });
+});
+
+describe("AssistantComposer, chip order", () => {
   it("names the active file before the file count, as the prototype orders them", () => {
     render(<Harness />);
     // Each chip is its tooltip's trigger, which takes over its data-slot
     const chips = Array.from(
       document.querySelectorAll('[data-slot="composer-context"] > *')
-    ).map((chip) => chip.textContent);
+    ).map(
+      // The short label; the chip also carries its spoken name for a reader
+      (chip) => chip.querySelector('[aria-hidden="true"]')?.textContent
+    );
     expect(chips).toEqual(["lib.rs", "1 file"]);
   });
 });
@@ -167,7 +302,7 @@ describe("AssistantComposer, connected", () => {
     expect(PgAssistant.items.length).toBe(1);
   });
 
-  it("connects the default from a keyed backend and clears the thread", async () => {
+  it("connects the default from a keyed backend and keeps the thread", async () => {
     await PgSession.refreshWith({
       id: "u1",
       name: null,
@@ -181,7 +316,7 @@ describe("AssistantComposer, connected", () => {
     );
 
     expect(PgAssistant.connection?.id).toBe("default");
-    expect(PgAssistant.items.length).toBe(0);
+    expect(PgAssistant.items.length).toBe(1);
     expect(tracked()).toEqual([
       ["assistant_model_picked", { provider: "default", via: "menu" }],
     ]);
@@ -330,6 +465,29 @@ describe("AssistantComposer, nothing connected", () => {
     render(<Harness />);
     await typeIn();
     expect(sendBlocked()).toBe(true);
+  });
+
+  // With no model, a message waits for one rather than going nowhere
+  it("sends nothing on Enter with no model, keeps the text, and offers Connect a model", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "absent" };
+    const add = vi.spyOn(PgAssistant, "addUserMessage");
+    render(<Harness />);
+    await typeIn();
+    await userEvent.setup().keyboard("{Enter}");
+
+    expect(add).not.toHaveBeenCalled();
+    expect(
+      (
+        screen.getByRole("textbox", {
+          name: "Message the assistant",
+        }) as HTMLTextAreaElement
+      ).value
+    ).toBe("hello");
+    expect(sendBlocked()).toBe(true);
+    expect(
+      screen.getByRole("button", { name: "Connect a model" })
+    ).toBeTruthy();
   });
 
   it.each([

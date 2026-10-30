@@ -1,5 +1,6 @@
 import { createTools } from "./tools";
 import { PgAssistant } from "../store";
+import { PgPatchUndo } from "../patch-undo";
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
 
 vi.mock("./skill-tools", () => ({ createSkillTools: () => [] }));
@@ -71,5 +72,37 @@ describe("write_file", () => {
       [expect.objectContaining({ path: "src/a.rs" }), "wrote src/a.rs"],
       [expect.objectContaining({ path: "src/b.rs" }), "wrote src/b.rs"],
     ]);
+  });
+
+  it("leaves an applied patch undoable, and a failed or rejected one not", async () => {
+    const file = { content: "old" };
+    const b = {
+      readFile: () => file.content,
+      applyPatch: vi.fn(async ({ content }: { content: string }) => {
+        file.content = content;
+      }),
+    } as unknown as PlaygroundBridge;
+
+    const applied = writeFile(b).run({ path: "src/lib.rs", content: "new" });
+    await Promise.resolve();
+    const card = latestCard();
+    PgAssistant.resolveApproval(card, true);
+    await applied;
+
+    const item = PgAssistant.items.find((i) => i.id === card);
+    expect(item?.kind === "approval" && PgPatchUndo.can(item, b)).toBe(true);
+
+    vi.mocked(b.applyPatch).mockRejectedValueOnce(new Error("disk"));
+    const failed = writeFile(b).run({ path: "src/lib.rs", content: "newer" });
+    await Promise.resolve();
+    const failedCard = latestCard();
+    PgAssistant.resolveApproval(failedCard, true);
+    await failed;
+
+    file.content = "newer";
+    const failedItem = PgAssistant.items.find((i) => i.id === failedCard);
+    expect(
+      failedItem?.kind === "approval" && PgPatchUndo.can(failedItem, b)
+    ).toBe(false);
   });
 });

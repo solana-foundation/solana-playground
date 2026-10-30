@@ -293,8 +293,12 @@ test.describe("client-v2-lessons", () => {
     ]) {
       await expect(page.getByRole("button", { name })).toBeVisible();
     }
-    // Each chip is its tooltip's trigger, which takes over its data-slot
-    const chips = page.locator('[data-slot="composer-context"] > *');
+    // Each chip is its tooltip's trigger, which takes over its data-slot;
+    // its short label is the part hidden from screen readers, which hear
+    // what it sends instead
+    const chips = page.locator(
+      '[data-slot="composer-context"] > * > [aria-hidden="true"]'
+    );
     await expect(chips).toHaveText(["Step 1 of 4", "lib.rs", "1 file"]);
   });
 
