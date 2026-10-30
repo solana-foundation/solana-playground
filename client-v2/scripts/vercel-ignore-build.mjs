@@ -9,14 +9,16 @@ const ref = process.env.VERCEL_GIT_COMMIT_REF;
 const target = process.env.VERCEL_ENV;
 
 /**
- * Whether `branch` is one whose preview reviewers use. The design polish
- * rounds are integration branches outside `scope/`, one per round, so their
- * whole family matches and a ticket branch named after one does not.
+ * Whether `branch` is one whose preview reviewers use: `master`, or a branch
+ * under a fixed prefix, `scope/` or `integration/`, so a new integration
+ * branch needs only the right name. `new-face-polish-<n>` predates the
+ * prefixes; TODO: drop it once the open polish round has landed.
  */
 const isIntegrationBranch = (branch) =>
   branch === "master" ||
-  /^new-face-polish-\d+$/.test(branch) ||
-  branch.startsWith("scope/");
+  branch.startsWith("scope/") ||
+  branch.startsWith("integration/") ||
+  /^new-face-polish-\d+$/.test(branch);
 
 const subject = `${ref || "a deployment with no Git ref"} (${
   target ?? "no VERCEL_ENV"
