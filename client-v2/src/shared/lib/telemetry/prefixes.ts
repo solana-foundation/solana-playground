@@ -1,5 +1,6 @@
 /** Slice name to the prefix its event names start with; a prefix is never reused */
 export const EVENT_PREFIXES = {
+  agent: "agent",
   auth: "auth",
   "app-nav": "nav",
   assistant: "assistant",
