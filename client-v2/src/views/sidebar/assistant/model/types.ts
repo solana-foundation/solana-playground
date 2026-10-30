@@ -49,10 +49,11 @@ export type TurnFailureReason = "provider" | "refusal" | "paused" | "capped";
 
 /**
  * A turn the provider ended without an answer. `message` is what the thread
- * shows; `reason` and `status` are for telemetry to report, so the widget
+ * shows; `reason` and `status` are for telemetry to report, so telemetry
  * reads neither the SDK's error class, which is loaded on demand, nor the
- * message's text. `cause` keeps the SDK's error, with its stack and the
- * redacted response body, for a log.
+ * message's text. `cause` keeps the SDK's error, with its stack, the redacted
+ * response body and its finer `kind`: the widget reads that kind by name to
+ * offer a refused key again and to cut off a reply whose stream dropped.
  */
 export class TurnFailure extends Error {
   readonly reason: TurnFailureReason;

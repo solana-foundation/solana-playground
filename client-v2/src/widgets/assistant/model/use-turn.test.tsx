@@ -427,7 +427,11 @@ describe("useTurn", () => {
   ] as const)("shows the turn's own words for %s", async (_, kind, status) => {
     PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
     provider.send.mockRejectedValue(
-      new AiTurnError("Provider says no", { kind, status })
+      new TurnFailure("Provider says no", {
+        reason: "provider",
+        status,
+        cause: new AiTurnError("Provider says no", { kind, status }),
+      })
     );
     const { result } = renderHook(() => useTestTurn());
 
@@ -444,7 +448,14 @@ describe("useTurn", () => {
   it("keeps the ordinary error for a 401 from the default", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     provider.send.mockRejectedValue(
-      new AiTurnError("Unauthorized", { kind: "key-refused", status: 401 })
+      new TurnFailure("Unauthorized", {
+        reason: "provider",
+        status: 401,
+        cause: new AiTurnError("Unauthorized", {
+          kind: "key-refused",
+          status: 401,
+        }),
+      })
     );
     const { result } = renderHook(() => useTestTurn());
 

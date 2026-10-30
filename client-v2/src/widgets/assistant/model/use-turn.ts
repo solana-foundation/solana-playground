@@ -54,8 +54,8 @@ const isAbort = (error: unknown) =>
   error.name === "AbortError";
 
 /**
- * The SDK's `AiTurnError` a turn failed with: thrown as it is, or kept as the
- * `cause` of the provider's `TurnFailure`. By name, since the slice entry
+ * The SDK's `AiTurnError` a turn failed with, which the provider keeps as its
+ * `TurnFailure`'s `cause`. By name, since the slice entry
  * exports `AiTurnError` as a type only: the class loads with the SDK.
  */
 const turnErrorOf = (error: unknown): AiTurnError | undefined => {

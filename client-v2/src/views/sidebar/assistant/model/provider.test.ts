@@ -1,4 +1,12 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest";
 
 import {
   anthropicText,
@@ -677,6 +685,10 @@ describe("the assistant's provider", () => {
     });
 
     it("shows the pool-exhausted sentence and tracks it once", async () => {
+      // A cap of ours, not an outage: the team does not hear of each one
+      const log = memoryLog();
+      initLogger({ providers: [log] });
+      onTestFinished(() => resetLogger());
       refuses(503, {
         error: "server text",
         reason: "pool-exhausted",
@@ -692,6 +704,7 @@ describe("the assistant's provider", () => {
           params: { reason: "pool-exhausted", tier: "established" },
         },
       ]);
+      expect(log.entries.filter((entry) => entry.report)).toEqual([]);
     });
 
     it("tracks a refusal without a tier as unknown", async () => {
