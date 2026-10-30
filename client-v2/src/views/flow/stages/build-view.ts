@@ -23,8 +23,14 @@ export interface DiagnosticView {
   lines: SourceLine[] | null;
   /** rustc's own gutter excerpt */
   excerpt: string;
-  /** What "Fix with assistant" sends */
-  prompt: string;
+  /** What the card's Explain and Fix send to the assistant */
+  prompts: AssistantPrompts;
+}
+
+/** A failure's two asks of the assistant (Spec 04, "Explain a build error") */
+export interface AssistantPrompts {
+  explain: string;
+  fix: string;
 }
 
 /**
@@ -80,16 +86,29 @@ export const diagnosticView = (
     file: d.file,
     lines: sourceLines(d, content),
     excerpt: d.excerpt,
-    prompt: [
-      "Explain this build error and propose a fix:",
-      d.code,
-      d.title,
-      d.file && `at ${d.file}${d.line ? `:${d.line}` : ""}`,
-    ]
-      .filter(Boolean)
-      .join(" "),
+    prompts: askAbout(
+      [d.code, d.title, d.file && `at ${d.file}${d.line ? `:${d.line}` : ""}`]
+        .filter(Boolean)
+        .join(" "),
+      "error",
+      " "
+    ),
   };
 };
+
+/**
+ * Explain and Fix for one failure, `subject` quoted after the ask: after a
+ * space for a one-line diagnostic, on a line of its own for the compiler's
+ * whole output
+ */
+const askAbout = (
+  subject: string,
+  what: "error" | "failure",
+  gap: " " | "\n"
+): AssistantPrompts => ({
+  explain: `Explain this build ${what} in plain words:${gap}${subject}`,
+  fix: `Fix this build ${what}:${gap}${subject}`,
+});
 
 /**
  * The card for a failure the parser could not split into diagnostics: it
@@ -97,14 +116,15 @@ export const diagnosticView = (
  */
 const unparsedView = (stderr: string): DiagnosticView => ({
   code: null,
-  title: "Unparsed compiler error",
+  title: "The compiler stopped",
+  // Spec 08 BUILD-02's message
   explanation:
-    "The compiler reported an error without a parseable diagnostic; see raw output.",
+    "The compiler stopped with an error we can't read line by line. The compiler output is below.",
   label: null,
   file: null,
   lines: null,
   excerpt: "",
-  prompt: "Explain this build failure and propose a fix:\n" + stderr,
+  prompts: askAbout(stderr, "failure", "\n"),
 });
 
 /** What the failed Build surface draws */
@@ -140,11 +160,11 @@ export const failedView = (
   };
 };
 
-/** `flow.buildMs` as a plain `2.9s`, or `null` while it is unknown */
+/** `flow.buildMs` as Spec 09 writes it, `2.9 s`, or `null` while unknown */
 export const msLabel = (ms: number | null) =>
-  ms === null ? null : `${(ms / 1000).toFixed(1)}s`;
+  ms === null ? null : `${(ms / 1000).toFixed(1)} s`;
 
-/** A failed build's figures: `2 errors · 2.9s · api.solpg.io` */
+/** A failed build's figures: `2 errors · 2.9 s · api.solpg.io` */
 export const errorMeta = (n: number | null, ms: number | null, host: string) =>
   [n && `${n} error${n === 1 ? "" : "s"}`, msLabel(ms), host]
     .filter(Boolean)
@@ -246,17 +266,23 @@ if (import.meta.vitest) {
       });
 
       it("asks the assistant about the error and its place", () => {
-        expect(diagnosticView(diagnosticAt("src/lib.rs", 5), FILE).prompt).toBe(
-          "Explain this build error and propose a fix: " +
+        const { prompts } = diagnosticView(diagnosticAt("src/lib.rs", 5), FILE);
+        expect(prompts.explain).toBe(
+          "Explain this build error in plain words: " +
             "E0308 mismatched types at src/lib.rs:5"
+        );
+        expect(prompts.fix).toBe(
+          "Fix this build error: E0308 mismatched types at src/lib.rs:5"
         );
       });
     });
 
     describe("diagnosticView without a location", () => {
       it("asks about the error alone", () => {
-        expect(diagnosticView(diagnosticAt(null, null), null).prompt).toBe(
-          "Explain this build error and propose a fix: E0308 mismatched types"
+        expect(
+          diagnosticView(diagnosticAt(null, null), null).prompts.explain
+        ).toBe(
+          "Explain this build error in plain words: E0308 mismatched types"
         );
       });
     });
@@ -291,10 +317,16 @@ if (import.meta.vitest) {
         const view = failedView("boom", 2, readNothing);
         expect(view.errorCount).toBe(2);
         expect(view.diagnostics).toHaveLength(1);
-        expect(view.diagnostics[0].title).toBe("Unparsed compiler error");
-        expect(view.diagnostics[0].prompt).toBe(
-          "Explain this build failure and propose a fix:\nboom"
+        // Spec 08 BUILD-02, in words a learner reads
+        expect(view.diagnostics[0].title).toBe("The compiler stopped");
+        expect(view.diagnostics[0].explanation).toBe(
+          "The compiler stopped with an error we can't read line by line. " +
+            "The compiler output is below."
         );
+        expect(view.diagnostics[0].prompts).toEqual({
+          explain: "Explain this build failure in plain words:\nboom",
+          fix: "Fix this build failure:\nboom",
+        });
       });
 
       it("claims no count when neither side has one", () => {
@@ -305,16 +337,22 @@ if (import.meta.vitest) {
     describe("errorMeta", () => {
       it("names the count, time and host", () => {
         expect(errorMeta(2, 2900, "api.solpg.io")).toBe(
-          "2 errors · 2.9s · api.solpg.io"
+          "2 errors · 2.9 s · api.solpg.io"
         );
       });
 
       it("leaves out a count it does not know", () => {
-        expect(errorMeta(null, 2900, "h")).toBe("2.9s \u00b7 h");
+        expect(errorMeta(null, 2900, "h")).toBe("2.9 s \u00b7 h");
       });
 
       it("leaves out a time it does not know", () => {
         expect(errorMeta(1, null, "h")).toBe("1 error · h");
+      });
+    });
+
+    describe("msLabel", () => {
+      it("puts a space before the unit, as Spec 09 writes it", () => {
+        expect(msLabel(41200)).toBe("41.2 s");
       });
     });
 

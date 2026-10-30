@@ -2,11 +2,16 @@ import {
   PgBuildOutput,
   stripKnownNoise,
 } from "../../sidebar/assistant/bridge/build-output";
+import { emptyFileOf } from "../../../commands/build/empty-source";
 import { PgCommand, PgExplorer, PgGlobal, PgProgramInfo } from "../../../utils";
+import { isStopped } from "../../../utils/stopped";
 import type { Disposable } from "../../../utils";
 
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";
+
+/** A run the console strip can stop */
+export type RunKind = "build" | "deploy";
 
 export interface FlowState {
   stage: Stage;
@@ -24,13 +29,50 @@ export interface FlowState {
    * run. Lets a stage tell a stale `PgBuildOutput` apart from the one that
    * belongs to this run. */
   buildStartedAt: number | null;
+  /** `buildStartedAt` of the run before the one in flight, which a stopped
+   * build goes back to, so the report it settled on stays current. Set by
+   * `build-start`, read only by `build-stop`. */
+  buildStartedBefore: number | null;
+  /** Why the last build never reached the compiler, for Build's surface
+   * and its "Show details"; `null` once a build settles otherwise */
+  buildFailure: BuildFailure | null;
+  /** What Deploy showed when the last deploy started, which a stopped
+   * deploy goes back to; `null` until the first deploy starts. Set by
+   * `deploy-start`, read only by `deploy-stop`. */
+  deployBeforeRun: StageStatus | null;
+  /** Which run the person stopped last, for the console strip's words;
+   * `null` once the next run starts */
+  stopped: RunKind | null;
 }
+
+/**
+ * A build that failed before the compiler said anything: `no-answer` when the
+ * build server never replied (Spec 08's BUILD-04), `empty-source` when the
+ * program file was empty and nothing was sent (Spec 09), `other` for anything
+ * else (ANY-00). `message` is the command's own error, for the details.
+ */
+export type BuildFailure =
+  | { kind: "no-answer" | "other"; message: string }
+  | { kind: "empty-source"; message: string; file: string };
 
 export type FlowEvent =
   | { type: "build-start"; at: number }
-  | { type: "build-finish"; failed: boolean; errorCount: number; ms: number }
+  | {
+      type: "build-finish";
+      failed: boolean;
+      errorCount: number;
+      ms: number;
+      /** Why a build never reached the compiler */
+      failure?: BuildFailure;
+    }
+  /** The person stopped the build: no result is kept, the stage goes back to
+   * its settled status */
+  | { type: "build-stop" }
   | { type: "deploy-start" }
   | { type: "deploy-finish"; ok: boolean }
+  /** The person stopped the deploy before its last step: the program on
+   * chain is as it was, and the stage goes back to where it was */
+  | { type: "deploy-stop" }
   | { type: "set-stage"; stage: Stage }
   | { type: "workspace-change" }
   /**
@@ -49,6 +91,10 @@ export const INITIAL_FLOW_STATE: FlowState = {
   buildErrorCount: 0,
   buildMs: null,
   buildStartedAt: null,
+  buildStartedBefore: null,
+  buildFailure: null,
+  deployBeforeRun: null,
+  stopped: null,
 };
 
 export const STAGES: readonly Stage[] = [
@@ -72,6 +118,24 @@ export const countErrors = (stderr: string) =>
       const head = l.match(ERROR_HEADER);
       return !!head && !SUMMARY.test(head[1]);
     }).length;
+
+/**
+ * What a `build` command's rejection says: about the server, or about an
+ * empty program file it never sent. By shape, not `instanceof
+ * PgServerRequestError`: the flow's tests stand the utils barrel in with a
+ * mock.
+ */
+const buildFailureOf = (err: unknown): BuildFailure => {
+  const { answered, message } = (err ?? {}) as {
+    answered?: unknown;
+    message?: unknown;
+  };
+  const text = typeof message === "string" ? message : String(err);
+  const emptyFile = emptyFileOf(err);
+  if (emptyFile)
+    return { kind: "empty-source", message: text, file: emptyFile };
+  return { kind: answered === false ? "no-answer" : "other", message: text };
+};
 
 /**
  * The dev loop as state. Pure reducer plus a tiny store; `init` wires the
@@ -100,6 +164,20 @@ export class PgFlow {
           stage: "build",
           build: "running",
           buildStartedAt: ev.at,
+          // A second start mid-run keeps the run before both, not the one in flight
+          buildStartedBefore:
+            state.build === "running"
+              ? state.buildStartedBefore
+              : state.buildStartedAt,
+          stopped: null,
+        };
+      case "build-stop":
+        if (state.build !== "running") return state;
+        return {
+          ...state,
+          build: state.buildSettled,
+          buildStartedAt: state.buildStartedBefore,
+          stopped: "build",
         };
       case "build-finish":
         return ev.failed
@@ -110,6 +188,7 @@ export class PgFlow {
               buildSettled: "failed",
               buildErrorCount: ev.errorCount,
               buildMs: ev.ms,
+              buildFailure: ev.failure ?? null,
             }
           : {
               // Stay wherever the user is: the Build surface carries the
@@ -121,9 +200,27 @@ export class PgFlow {
               deploy: state.deploy === "upcoming" ? "active" : state.deploy,
               buildErrorCount: 0,
               buildMs: ev.ms,
+              buildFailure: null,
             };
       case "deploy-start":
-        return { ...state, stage: "deploy", deploy: "running" };
+        // A second Deploy click pauses or resumes the run in flight and
+        // starts again: what Deploy showed before is the first click's
+        if (state.deploy === "running") return state;
+        return {
+          ...state,
+          stage: "deploy",
+          deploy: "running",
+          deployBeforeRun: state.deploy,
+          stopped: null,
+        };
+      case "deploy-stop":
+        if (state.deploy !== "running") return state;
+        return {
+          ...state,
+          deploy: state.deployBeforeRun ?? "active",
+          // A stop of the build a deploy runs first is the build's stop
+          stopped: state.stopped === "build" ? "build" : "deploy",
+        };
       case "deploy-finish":
         return ev.ok
           ? { ...state, stage: "deploy", deploy: "done", interact: "active" }
@@ -191,6 +288,10 @@ export class PgFlow {
       // *this* run already arrived and handled it.
       PgCommand.build.onDidFinish((result) => {
         if (!("err" in result)) return;
+        if (isStopped(result.err)) {
+          PgFlow._dispatch({ type: "build-stop" });
+          return;
+        }
         const out = PgBuildOutput.latest;
         if (out && out.at >= startedAt) return;
         PgFlow._dispatch({
@@ -198,6 +299,7 @@ export class PgFlow {
           failed: true,
           errorCount: 0,
           ms: startedAt === 0 ? 0 : Date.now() - startedAt,
+          failure: buildFailureOf(result.err),
         });
       }),
       PgCommand.deploy.onDidStart(() =>
@@ -211,6 +313,10 @@ export class PgFlow {
         // "ready" before a genuine finish, success or failure, so that is
         // the only value that means the deploy actually ended.
         if (PgGlobal.deployState !== "ready") return;
+        if ("err" in result && isStopped(result.err)) {
+          PgFlow._dispatch({ type: "deploy-stop" });
+          return;
+        }
         PgFlow._dispatch({
           type: "deploy-finish",
           ok: !("err" in result),

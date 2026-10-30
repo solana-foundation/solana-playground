@@ -246,7 +246,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
         {p.deploy === "failed" && (
           <Callout variant="error" role="alert">
             <CalloutDescription>
-              Deploy failed - see the console.
+              Deploy failed — see the terminal.
             </CalloutDescription>
           </Callout>
         )}

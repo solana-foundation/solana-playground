@@ -218,7 +218,7 @@ it("opens on the tab it is given", async () => {
   expect(named("catalog_tab_switched")).toEqual([]);
 });
 
-it("counts programs it could not read as ? and offers Retry", async () => {
+it("counts programs it could not read as ? and offers Try again", async () => {
   utils.PgCommon.fetchJSON
     .mockReset()
     .mockRejectedValueOnce(new Error("offline"))
@@ -227,7 +227,7 @@ it("counts programs it could not read as ? and offers Retry", async () => {
 
   const alert = await screen.findByRole("alert");
   expect(choice(/Programs/).textContent).toBe("Programs?");
-  fireEvent.click(within(alert).getByRole("button", { name: "Retry" }));
+  fireEvent.click(within(alert).getByRole("button", { name: "Try again" }));
   expect(
     await screen.findByRole("button", { name: "Open drift" })
   ).toBeTruthy();

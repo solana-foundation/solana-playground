@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { BaseThread } from "./BaseThread";
+import type { BusyRetryView } from "./BaseThread";
 import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
@@ -20,6 +21,7 @@ const renderThread = (
     unsaved?: boolean;
     project?: string | null;
     onSuggestion?: (text: string) => void;
+    retry?: BusyRetryView;
   } = {}
 ) =>
   render(
@@ -32,6 +34,7 @@ const renderThread = (
       onSuggestion={overrides.onSuggestion ?? vi.fn()}
       actionsFor={() => undefined}
       onAnswer={vi.fn()}
+      retry={overrides.retry}
     />
   );
 
@@ -101,6 +104,48 @@ describe("BaseThread", () => {
     expect(
       screen.queryByRole("status", { name: "Assistant is working" })
     ).toBeNull();
+  });
+
+  describe("a busy model (Spec 08 AI-03)", () => {
+    const USER_ITEM: ChatItem = {
+      kind: "user",
+      id: "u1",
+      createdAt: CREATED,
+      text: "hi",
+    };
+    const busy = (canTryNow: boolean) => ({
+      secondsLeft: 7,
+      canTryNow,
+      onTryNow: vi.fn(),
+      onStop: vi.fn(),
+    });
+
+    it("counts down under the message with Try now and Stop", () => {
+      const retry = busy(true);
+      renderThread([USER_ITEM], { retry });
+
+      expect(screen.getByText("The model is busy")).toBeTruthy();
+      expect(screen.getByText("Trying again in 7 s.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Try now" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      expect(retry.onTryNow).toHaveBeenCalled();
+      expect(retry.onStop).toHaveBeenCalled();
+    });
+
+    it("keeps Try now off while the server's wait runs", () => {
+      renderThread([USER_ITEM], { retry: busy(false) });
+
+      expect(
+        (screen.getByRole("button", { name: "Try now" }) as HTMLButtonElement)
+          .disabled
+      ).toBe(true);
+    });
+
+    it("says nothing about it when no message waits", () => {
+      renderThread([USER_ITEM]);
+
+      expect(screen.queryByText("The model is busy")).toBeNull();
+    });
   });
 
   it("every item is a scroller item", () => {

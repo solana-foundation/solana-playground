@@ -16,6 +16,7 @@ import {
   PgProgramInfo,
 } from "../../../utils";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { toldByStage } from "./stage-failure";
 import { PgDeployHistory } from "../state/deploy-history";
 import type { DeployRecord } from "../state/deploy-history";
 import { PgFlow } from "../state/stage";
@@ -88,7 +89,11 @@ const Deploy = () => {
         // imported id; redeploying always targets the project's own key,
         // never whatever Interact last selected.
         PgProgramInfo.update({ customPk: null });
-        PgCommand.deploy.execute().catch(reportButtonFailure("deploy"));
+        // `toldByStage` rethrows, so the button's report comes last
+        PgCommand.deploy
+          .execute()
+          .catch(toldByStage("deploy"))
+          .catch(reportButtonFailure("deploy"));
       }}
       onInteract={() => PgFlow.setStage("interact")}
       idlUpload={<IdlActions mode="upload" />}

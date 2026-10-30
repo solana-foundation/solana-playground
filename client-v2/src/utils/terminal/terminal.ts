@@ -7,6 +7,7 @@ import { PgHistory } from "./history";
 import { PgShell } from "./shell";
 import { PgTty } from "./tty";
 import { PgCommon } from "../common";
+import { isStopped } from "../stopped";
 import { createLogger } from "@/shared/lib/logger";
 import {
   markFailureShown,
@@ -156,8 +157,10 @@ export class PgTerminal {
       // `PgTerm.process` has shown `Process error: …` in the terminal by now,
       // so a button that started this must not show the failure a second
       // time. Only while the console is open: printed into a folded one, the
-      // user saw nothing, and the button's toast is all they get
-      if (PgTerminal._consoleOpen) markFailureShown(e);
+      // user saw nothing here, so the button's toast tells them, unless the
+      // place they clicked shows it itself (`toldByStage`). A stop is never
+      // toasted, folded or not: the person asked for it
+      if (PgTerminal._consoleOpen || isStopped(e)) markFailureShown(e);
       throw e;
     }
   }
@@ -678,7 +681,10 @@ export class PgTerm {
       // The previous line is not available until the next event loop
       await PgCommon.sleep(0);
 
-      const msg = `Process error: ${e?.message ? e.message : e}`;
+      // A stop says what it stopped and what it left, as a plain line
+      const msg = isStopped(e)
+        ? e.message
+        : `Process error: ${e?.message ? e.message : e}`;
       const previousLine = this._tty.getLine(1)?.translateToString().trim();
       if (previousLine !== msg) this.println(msg);
 
@@ -704,10 +710,22 @@ export class PgTerm {
 
       switch (key) {
         case "C":
-          if (ev.shiftKey) {
+          // Ctrl+C copies a selection; with nothing selected it reaches the
+          // shell, which stops a running command
+          if (ev.shiftKey || (ev.ctrlKey && this._xterm.hasSelection())) {
             ev.preventDefault();
             const selection = this._xterm.getSelection();
             navigator.clipboard.writeText(selection);
+            return false;
+          }
+
+          return true;
+
+        // ⌘. stops a running command on a Mac, as in a Mac terminal
+        case ".":
+          if (ev.metaKey && !this._shell.isPrompting()) {
+            ev.preventDefault();
+            this._shell.stopCommand();
             return false;
           }
 

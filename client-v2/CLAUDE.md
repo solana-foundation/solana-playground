@@ -367,7 +367,10 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   rules and this repository's, plus the governing OpenSpec change and the
   Solana guidance where they apply. An author without the plugin skips the
   run, and the human review is the gate. Human reviewers read the diff and
-  click through the preview; they do not re-run the review. Fix every
+  click through the preview; they do not re-run the review. A ticket branch
+  gets no Vercel preview, only the integration branches do
+  (`scripts/vercel-ignore-build.mjs`), so a PR that changes the UI shows it
+  in its screenshots. Fix every
   critical finding in the same PR, and every important one the PR needs; an
   important you defer gets a `TODO` at the site naming why or the follow-up,
   so the next run reads it as acknowledged. A finding outside the PR's scope

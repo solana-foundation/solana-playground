@@ -47,6 +47,10 @@ describe("statusOf, for the write stage", () => {
       buildErrorCount: 0,
       buildMs: null,
       buildStartedAt: null,
+      buildStartedBefore: null,
+      buildFailure: null,
+      deployBeforeRun: null,
+      stopped: null,
     };
     expect(statusOf(restored, "write")).toBe("done");
   });

@@ -1,5 +1,6 @@
 import * as monaco from "monaco-editor";
 
+import { editorFont } from "@/shared/lib/editor-font";
 import { mergeHunkVariants } from "@/shared/ui/merge";
 import { canHideLines, setHiddenLines } from "./hidden-areas";
 import { hunkLineClass } from "./hunk-class";
@@ -46,6 +47,8 @@ export interface MergeEditorOptions {
   /** Every fold opened */
   showAll: boolean;
   fontFamily?: string;
+  /** The phone layout: the code a step up, as in the code editor */
+  phone?: boolean;
 }
 
 /** A hunk's top in each pane, in px from the top of the pane's body */
@@ -172,6 +175,7 @@ class MonacoMergeEditor implements MergeEditor {
         automaticLayout: true,
         fontLigatures: true,
         fontFamily: this._options.fontFamily,
+        ...editorFont({ phone: this._options.phone ?? false }),
         minimap: { enabled: false },
         folding: false,
         glyphMargin: false,
@@ -258,6 +262,11 @@ class MonacoMergeEditor implements MergeEditor {
     if (options.fontFamily !== undefined) {
       for (const editor of Object.values(this._editors)) {
         editor.updateOptions({ fontFamily: options.fontFamily });
+      }
+    }
+    if (options.phone !== undefined) {
+      for (const editor of Object.values(this._editors)) {
+        editor.updateOptions(editorFont({ phone: options.phone }));
       }
     }
     this._refresh();

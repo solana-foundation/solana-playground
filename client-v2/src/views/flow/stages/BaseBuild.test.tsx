@@ -7,7 +7,8 @@ import BaseBuild from "./BaseBuild";
 import type { BaseBuildProps, BuildSurfaceView } from "./BaseBuild";
 import type { DiagnosticView } from "./build-view";
 
-const typeError = (prompt: string, label: string | null): DiagnosticView => ({
+/** A type error whose Explain and Fix send `explain <name>` and `fix <name>` */
+const typeError = (name: string, label: string | null): DiagnosticView => ({
   code: "E0308",
   title: "Wrong type",
   explanation: "The value is a different type.",
@@ -19,7 +20,7 @@ const typeError = (prompt: string, label: string | null): DiagnosticView => ({
     { num: 6, text: "}", failing: false },
   ],
   excerpt: "",
-  prompt,
+  prompts: { explain: `explain ${name}`, fix: `fix ${name}` },
 });
 
 const RAW = "error[E0308]: mismatched types\nwarning: unused";
@@ -35,16 +36,19 @@ const failed = (diagnostics: DiagnosticView[]): BuildSurfaceView => ({
 /** Every prop, named; each test passes the surface it is about */
 const props = (
   surface: BuildSurfaceView,
-  building = false
+  building = false,
+  slow = false
 ): BaseBuildProps => ({
   surface,
   building,
+  slow,
   host: "api.solpg.io",
+  serverUrl: "https://api.solpg.io",
   ms: 2900,
   onBuild: vi.fn(() => Promise.resolve()),
   onContinue: vi.fn(),
   onExport: vi.fn(() => Promise.resolve()),
-  onFix: vi.fn(),
+  onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   idlActions: null,
 });
@@ -82,7 +86,7 @@ describe("BaseBuild", () => {
   it("says where a first build runs while it runs", () => {
     render(<BaseBuild {...props({ kind: "empty" }, true)} />);
 
-    expect(screen.getByRole("heading", { name: "Building..." })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Building…" })).toBeTruthy();
     expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
     const busy = screen.getByRole("button", { name: /Building/ });
     expect(busy).toHaveProperty("disabled", true);
@@ -96,7 +100,7 @@ describe("BaseBuild", () => {
     expect(
       screen.getByRole("heading", { name: "Build succeeded" })
     ).toBeTruthy();
-    expect(screen.getByText(/2\.9s/)).toBeTruthy();
+    expect(screen.getByText("Built in 2.9 s")).toBeTruthy();
     expect(brandButtons(container)).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Continue to Deploy" }));
     expect(p.onContinue).toHaveBeenCalled();
@@ -104,18 +108,49 @@ describe("BaseBuild", () => {
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
 
-  it("names the build server when the compiler was never reached", async () => {
-    const p = props({ kind: "unreached" });
+  it("says a build that never reached the compiler did not start (BUILD-04)", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: { kind: "no-answer", message: "Failed to fetch" },
+    });
     render(<BaseBuild {...p} />);
 
-    expect(screen.getByRole("heading", { name: "Build failed" })).toBeTruthy();
     expect(
-      screen.getByText(/could not be reached: api\.solpg\.io/)
+      screen.getByRole("heading", { name: "Build did not start" })
     ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "The Playground server did not answer. Your code is unchanged."
+      )
+    ).toBeTruthy();
+    // The server and the raw error wait behind Show details
+    expect(screen.queryByText(/api\.solpg\.io/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(
+      screen.getByText(/Build server: https:\/\/api\.solpg\.io/)
+    ).toBeTruthy();
+    expect(screen.getByText(/Failed to fetch/)).toBeTruthy();
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Retry build" }));
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     });
     expect(p.onBuild).toHaveBeenCalled();
+  });
+
+  // A server that replied with an error, or any other failure: not BUILD-04
+  it("says it could not build when the server did answer (ANY-00)", () => {
+    const p = props({
+      kind: "unreached",
+      failure: { kind: "other", message: "Server request failed: boom" },
+    });
+    render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "Could not build" })
+    ).toBeTruthy();
+    expect(screen.getByText("The full log has the details.")).toBeTruthy();
+    expect(screen.queryByText(/did not answer/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(screen.getByText(/Server request failed: boom/)).toBeTruthy();
   });
 
   it("says a failed build happened before the reload", () => {
@@ -139,11 +174,11 @@ describe("BaseBuild", () => {
   });
 
   it("marks the faulty line of a failed build", async () => {
-    const p = props(failed([typeError("fix it", "expected u32")]));
+    const p = props(failed([typeError("it", "expected u32")]));
     const { container } = render(<BaseBuild {...p} />);
 
     expect(screen.getByRole("heading", { name: "Build failed" })).toBeTruthy();
-    expect(screen.getByText("1 error · 2.9s · api.solpg.io")).toBeTruthy();
+    expect(screen.getByText("1 error · 2.9 s · api.solpg.io")).toBeTruthy();
     expect(container.querySelectorAll('[data-slot="diagnostic"]')).toHaveLength(
       1
     );
@@ -154,12 +189,14 @@ describe("BaseBuild", () => {
     expect(fault?.textContent).toContain("let x");
     expect(fault?.textContent).toContain("expected u32");
 
-    fireEvent.click(screen.getByRole("button", { name: "Fix with assistant" }));
-    expect(p.onFix).toHaveBeenCalledWith("fix it");
+    fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+    expect(p.onAsk).toHaveBeenCalledWith("explain it");
+    fireEvent.click(screen.getByRole("button", { name: "Fix" }));
+    expect(p.onAsk).toHaveBeenCalledWith("fix it");
     fireEvent.click(screen.getByRole("button", { name: "Open in editor" }));
     expect(p.onOpenFile).toHaveBeenCalledWith("src/lib.rs");
     await act(async () => {
-      fireEvent.click(screen.getByRole("button", { name: "Rebuild" }));
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
     });
     expect(p.onBuild).toHaveBeenCalled();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
@@ -168,7 +205,7 @@ describe("BaseBuild", () => {
   /** rustc prints no text after the carets for some errors */
   it("marks the faulty line when rustc gave it no label", () => {
     const { container } = render(
-      <BaseBuild {...props(failed([typeError("fix it", null)]))} />
+      <BaseBuild {...props(failed([typeError("it", null)]))} />
     );
 
     const fault = container.querySelector("[data-fault]");
@@ -184,9 +221,10 @@ describe("BaseBuild", () => {
     );
 
     expect(brandButtons(container)).toHaveLength(1);
-    expect(
-      screen.getAllByRole("button", { name: "Fix with assistant" })
-    ).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Explain" })).toHaveLength(2);
+    expect(screen.getAllByRole("button", { name: "Fix" })).toHaveLength(2);
+    // The brand one is the first card's Explain (Spec 08 BUILD-01)
+    expect(brandButtons(container)[0].textContent).toBe("Explain");
   });
 
   it("shows rustc's excerpt when the source cannot be read", () => {
@@ -198,7 +236,7 @@ describe("BaseBuild", () => {
       file: null,
       lines: null,
       excerpt: "5 | let x: u32 = 1;",
-      prompt: "fix",
+      prompts: { explain: "explain", fix: "fix" },
     };
     const { container } = render(<BaseBuild {...props(failed([view]))} />);
 
@@ -217,7 +255,7 @@ describe("BaseBuild", () => {
       file: null,
       lines: null,
       excerpt: "",
-      prompt: "fix",
+      prompts: { explain: "explain", fix: "fix" },
     };
     const { container } = render(<BaseBuild {...props(failed([view]))} />);
 
@@ -229,17 +267,17 @@ describe("BaseBuild", () => {
   it("names no count when none is known", () => {
     const surface: BuildSurfaceView = {
       kind: "failed",
-      diagnostics: [typeError("fix", "a")],
+      diagnostics: [typeError("a", "a")],
       errorCount: null,
       raw: RAW,
     };
     render(<BaseBuild {...props(surface)} />);
 
-    expect(screen.getByText("2.9s · api.solpg.io")).toBeTruthy();
+    expect(screen.getByText("2.9 s · api.solpg.io")).toBeTruthy();
   });
 
   it("folds the compiler's output away until asked", () => {
-    render(<BaseBuild {...props(failed([typeError("fix", "a")]))} />);
+    render(<BaseBuild {...props(failed([typeError("a", "a")]))} />);
 
     const toggle = screen.getByRole("button", {
       name: /Show compiler output/,
@@ -255,5 +293,86 @@ describe("BaseBuild", () => {
         .getAttribute("aria-expanded")
     ).toBe("true");
     expect(screen.getByText(/warning: unused/)).toBeTruthy();
+  });
+
+  // Spec 04: focus stays on the card, and a polite line says where the
+  // answer goes
+  it("says where the answer goes once Explain or Fix is pressed", () => {
+    render(<BaseBuild {...props(failed([typeError("it", "a")]))} />);
+
+    const status = screen.getByRole("status");
+    expect(status.textContent).toBe("");
+    const explain = screen.getByRole("button", { name: "Explain" });
+    explain.focus();
+    fireEvent.click(explain);
+    expect(status.textContent).toBe(
+      "The assistant is answering in the side panel."
+    );
+    expect(document.activeElement).toBe(explain);
+  });
+
+  // A polite region speaks only when its text changes
+  it("says it again for a second ask, and forgets it once a rebuild starts", () => {
+    const surface = failed([typeError("it", "a")]);
+    const { rerender } = render(<BaseBuild {...props(surface)} />);
+
+    const status = screen.getByRole("status");
+    fireEvent.click(screen.getByRole("button", { name: "Explain" }));
+    const first = status.textContent;
+    fireEvent.click(screen.getByRole("button", { name: "Fix" }));
+    expect(status.textContent).not.toBe(first);
+    expect(status.textContent?.trim()).toBe(
+      "The assistant is answering in the side panel."
+    );
+
+    rerender(<BaseBuild {...props(surface, true)} />);
+    rerender(<BaseBuild {...props(surface)} />);
+    expect(screen.queryByText(/The assistant is answering/)).toBeNull();
+  });
+
+  // Spec 08 BUILD-05: a slow build is not a broken one
+  it.each([
+    ["the first build", { kind: "empty" } as BuildSurfaceView],
+    ["a rebuild", { kind: "succeeded" } as BuildSurfaceView],
+  ])("says %s is taking longer than usual once it is slow", (_, surface) => {
+    const { rerender } = render(<BaseBuild {...props(surface, true)} />);
+    expect(screen.queryByText(/taking longer than usual/)).toBeNull();
+
+    rerender(<BaseBuild {...props(surface, true, true)} />);
+    expect(
+      screen.getByText("This build is taking longer than usual.")
+    ).toBeTruthy();
+  });
+
+  it("drops the slow line once the build is over", () => {
+    render(<BaseBuild {...props({ kind: "succeeded" }, false, true)} />);
+
+    expect(screen.queryByText(/taking longer than usual/)).toBeNull();
+  });
+
+  // Spec 09: an empty lib.rs is named, and nothing went to the server
+  it("says lib.rs is empty instead of building it", () => {
+    const p = props({
+      kind: "unreached",
+      failure: {
+        kind: "empty-source",
+        file: "src/lib.rs",
+        message: "lib.rs is empty.",
+      },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    expect(
+      screen.getByRole("heading", { name: "lib.rs is empty" })
+    ).toBeTruthy();
+    expect(
+      screen.getByText("Write a program, or ask the assistant for one.")
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open lib.rs" }));
+    expect(p.onOpenFile).toHaveBeenCalledWith("src/lib.rs");
+    fireEvent.click(screen.getByRole("button", { name: "Build" }));
+    expect(p.onBuild).toHaveBeenCalled();
+    expect(brandButtons(container)).toHaveLength(1);
   });
 });

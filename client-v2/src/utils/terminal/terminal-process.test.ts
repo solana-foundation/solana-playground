@@ -4,6 +4,7 @@ import {
   unavailableHere,
   wasFailureShown,
 } from "@/shared/lib/report-button-failure";
+import { StoppedError } from "../stopped";
 import { isTerminalUnmounted, PgTerminal } from "./terminal";
 
 beforeEach(() => {
@@ -63,6 +64,21 @@ describe("PgTerminal.process", () => {
     await expect(PgTerminal.process(() => 42)).rejects.toBe(failure);
 
     expect(wasFailureShown(failure)).toBe(false);
+  });
+
+  // The person asked for it: the terminal says what stopped, and no button
+  // may toast "Could not build" for it, folded console or not
+  it("marks a stopped run as shown, even in a folded console", async () => {
+    PgTerminal.setConsoleOpen(false);
+    const stopped = new StoppedError("Stopped.");
+
+    await expect(
+      PgTerminal.process(() => {
+        throw stopped;
+      })
+    ).rejects.toBe(stopped);
+
+    expect(wasFailureShown(stopped)).toBe(true);
   });
 
   it("leaves a success alone", async () => {

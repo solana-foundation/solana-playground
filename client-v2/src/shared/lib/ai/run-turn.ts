@@ -22,8 +22,16 @@ const FALLBACK_MAX_RESUMES = 3;
 /** Anthropic's raw stop reason for a turn it stopped early and expects resumed */
 const PAUSE_TURN = "pause_turn";
 
-/** Why a turn failed, so a caller can word each case for its own users */
-export type AiTurnErrorKind = "provider" | "refusal" | "paused";
+/**
+ * Why a turn failed, so a caller can word each case for its own users:
+ * `busy` is a 429, `key-refused` a 401, `provider` any other failure
+ */
+export type AiTurnErrorKind =
+  | "provider"
+  | "busy"
+  | "key-refused"
+  | "refusal"
+  | "paused";
 
 /**
  * A turn the provider ended in failure: an error, a refusal, or a turn that
@@ -35,6 +43,13 @@ export class AiTurnError extends Error {
   readonly status?: number;
   /** The failed response's body with the key redacted, so a caller can read its own backend's fields */
   readonly body?: string;
+  /**
+   * What the provider said, status and body included, with the key redacted:
+   * for logs and details, never the first line a user reads
+   */
+  readonly detail?: string;
+  /** Seconds the server asked to wait (`retry-after`), on a `busy` failure */
+  readonly retryAfter?: number;
 
   constructor(
     message: string,
@@ -42,13 +57,23 @@ export class AiTurnError extends Error {
       kind = "provider",
       status,
       body,
-    }: { kind?: AiTurnErrorKind; status?: number; body?: string } = {}
+      detail,
+      retryAfter,
+    }: {
+      kind?: AiTurnErrorKind;
+      status?: number;
+      body?: string;
+      detail?: string;
+      retryAfter?: number;
+    } = {}
   ) {
     super(message);
     this.name = "AiTurnError";
     this.kind = kind;
     this.status = status;
     this.body = body;
+    this.detail = detail;
+    this.retryAfter = retryAfter;
   }
 }
 
@@ -106,7 +131,7 @@ const BODY_IN_MESSAGE = 300;
  * The SDK's message, or, for a failed response whose body did not match the
  * provider's error shape, the status, its text, and the start of the body.
  */
-const apiCallMessage = (error: APICallError, body: string | undefined) => {
+const apiCallDetail = (error: APICallError, body: string | undefined) => {
   // The SDK sets `data` only when it parsed the error; otherwise its message is the bare status text
   const unparsed =
     error.data === undefined &&
@@ -124,16 +149,63 @@ const apiCallMessage = (error: APICallError, body: string | undefined) => {
 const toTurnError = (error: unknown, apiKey: string | undefined) => {
   if (error instanceof AiTurnError) return error;
   if (!APICallError.isInstance(error)) {
-    return new AiTurnError(redactKey(messageOf(error), apiKey));
+    // A dropped stream or a fetch that never reached the provider: Spec 08's
+    // words on screen, the raw text in the log
+    const detail = redactKey(messageOf(error), apiKey);
+    // Not reported: an offline user would send one event per message
+    log.warn("model request failed", { context: { detail } });
+    return new AiTurnError(FAILURE_MESSAGE.provider, { detail });
   }
   const body =
     error.responseBody === undefined
       ? undefined
       : redactKey(error.responseBody, apiKey);
-  return new AiTurnError(redactKey(apiCallMessage(error, body), apiKey), {
-    status: error.statusCode,
-    body,
+  const status = error.statusCode;
+  const detail = redactKey(apiCallDetail(error, body), apiKey);
+  const kind = kindOf(status);
+  // Spec 08: the status and the server's words stay in the log. A refused
+  // key or a busy model is the user's or the provider's; anything else the
+  // team hears of
+  log.warn("model request failed", {
+    report: kind === "provider",
+    context: { status, detail },
   });
+  return new AiTurnError(FAILURE_MESSAGE[kind], {
+    kind,
+    status,
+    body,
+    detail,
+    retryAfter: kind === "busy" ? retryAfterOf(error) : undefined,
+  });
+};
+
+/**
+ * Which failure an HTTP status is, for the words a user reads. Only a 401
+ * says the key was refused: a 403 is as often a region, a policy or a quota,
+ * and "check your key" would send the user to the wrong fix.
+ */
+const kindOf = (status: number | undefined) => {
+  if (status === 429) return "busy";
+  if (status === 401) return "key-refused";
+  return "provider";
+};
+
+/**
+ * Spec 08's words for a failed model request (AI-03, AI-05, and the
+ * assistant's "Could not …" fallback): no status, JSON or server text
+ */
+const FAILURE_MESSAGE: Record<ReturnType<typeof kindOf>, string> = {
+  busy: "The model is busy.",
+  "key-refused":
+    "The model's provider did not accept this key. Check it in Settings, or use the hosted model.",
+  provider: "Could not get an answer from the model. Send your message again.",
+};
+
+/** The `retry-after` header in seconds; an HTTP date is not worth parsing here */
+const retryAfterOf = (error: APICallError) => {
+  const raw = error.responseHeaders?.["retry-after"];
+  const seconds = raw === undefined ? NaN : Number(raw);
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds : undefined;
 };
 
 // Anthropic reports the refusal category in its metadata; other providers give none

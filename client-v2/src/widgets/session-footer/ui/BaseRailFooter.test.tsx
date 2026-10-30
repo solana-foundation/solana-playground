@@ -81,7 +81,7 @@ it("opens the settings on the cluster from the dot", async () => {
 it("says a cluster that is down in the dot's name, not by colour alone", () => {
   draw({ account: view({ cluster: { name: "devnet", down: true } }) });
   expect(
-    screen.getByRole("button", { name: "Cluster: devnet, down" })
+    screen.getByRole("button", { name: "Cluster: devnet, not answering" })
   ).toBeTruthy();
 });
 

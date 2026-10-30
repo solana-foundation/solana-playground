@@ -13,6 +13,7 @@ import {
   TupleFiles,
 } from "../../../../../utils";
 import { useMounted } from "../../../../../hooks";
+import { IMPORTED } from "./imported";
 
 interface ImportFsProps {
   name?: string;
@@ -64,7 +65,10 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       title="Import project"
       buttonProps={{
         text: "Import",
-        onSubmit: () => PgExplorer.createWorkspace(name, { files }),
+        onSubmit: async () => {
+          await PgExplorer.createWorkspace(name, { files });
+          return IMPORTED;
+        },
         disabled: !files || !!nameError || !!importError,
       }}
     >

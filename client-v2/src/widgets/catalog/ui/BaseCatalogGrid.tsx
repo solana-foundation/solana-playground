@@ -78,7 +78,7 @@ const BaseCatalogGrid = ({
       <div role="alert" className="flex items-center gap-3 text-control">
         <span className="text-error">{list.message}</span>
         <Button variant="outline" onClick={list.onRetry}>
-          Retry
+          Try again
         </Button>
       </div>
     );

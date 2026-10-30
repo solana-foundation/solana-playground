@@ -37,6 +37,11 @@ export interface TurnProfile {
   maxOutputTokens?: number;
   /** Which of our backend's refusals a failed turn is, or `undefined` for any other failure */
   backendRefusal?: (error: AiTurnError) => BackendRefusal | undefined;
+  /**
+   * A refusal this backend wrote for people, shown as it is, or `undefined`
+   * for a failure that gets Spec 08's words (`AiTurnError.message`)
+   */
+  ownRefusal?: (error: AiTurnError) => string | undefined;
 }
 
 /** One model provider's turn settings */

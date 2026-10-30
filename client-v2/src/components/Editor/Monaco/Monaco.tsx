@@ -30,6 +30,8 @@ import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
 import { createMountOpen } from "./mount-open";
 import { leavesFocusElsewhere } from "./open-focus";
 import { createLogger } from "@/shared/lib/logger";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { editorFont } from "@/shared/lib/editor-font";
 
 const log = createLogger("editor:monaco");
 
@@ -219,14 +221,16 @@ const Monaco = () => {
     if (editor) return () => editor.dispose();
   }, [editor]);
 
-  // Set font
+  // Set font: a step up on a phone (`editorFont`)
+  const phone = useViewport() === "phone";
   useEffect(() => {
     if (!editor) return;
 
     editor.updateOptions({
       fontFamily: theme.components.editor.default.fontFamily,
+      ...editorFont({ phone }),
     });
-  }, [editor, theme]);
+  }, [editor, theme, phone]);
 
   // Set tab size
   useEffect(() => {

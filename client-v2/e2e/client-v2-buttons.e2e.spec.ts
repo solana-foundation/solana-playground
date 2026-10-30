@@ -175,13 +175,12 @@ test.describe("client-v2-buttons", () => {
     expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
   });
 
-  test("client-v2-buttons: A failure printed to a folded console is still told", async ({
+  test("client-v2-buttons: A failed build is told once, by the Build stage", async ({
     seededPage: page,
   }) => {
     test.setTimeout(120_000);
-    await page.route("**/build", (route) =>
-      route.fulfill({ status: 500, body: "boom" })
-    );
+    // The build server never answers: Spec 08's BUILD-04
+    await page.route("**/build", (route) => route.abort("connectionrefused"));
 
     const drawer = page.getByRole("button", { name: "Terminal", exact: true });
     if ((await drawer.getAttribute("aria-expanded")) === "true") {
@@ -191,8 +190,12 @@ test.describe("client-v2-buttons", () => {
     await page.locator("#flow-stage-tab-build").click();
     await page.getByRole("button", { name: "Build", exact: true }).click();
 
-    // The terminal printed it where the user cannot see it
-    await expect(page.getByText("Could not build.")).toBeVisible();
+    // The console is folded, but the stage itself says the build failed
+    await expect(
+      page.getByRole("heading", { name: "Build did not start" })
+    ).toBeVisible();
+    await page.waitForTimeout(TOAST_RENDER_MS);
+    expect(await page.locator("[data-sonner-toast]").count()).toBe(0);
   });
 
   test("client-v2-buttons: Build cannot be started twice", async ({
