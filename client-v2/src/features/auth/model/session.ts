@@ -164,12 +164,38 @@ export class PgSession {
    * rather than per-window, so the reply only has to say "finished" and this
    * side re-reads the session. Rejects when that read finds nobody signed in.
    */
-  static signIn({ from }: { from?: SignInOrigin } = {}): Promise<void> {
+  static signIn({
+    from,
+    scopes,
+  }: {
+    from?: SignInOrigin;
+    /**
+     * GitHub scopes to ask for on top of sign-in's own, for a feature that
+     * needs more than identity (gist sharing asks for `gist`). Better Auth
+     * appends them to its defaults. Signing the same user in again only
+     * refreshes the stored token, so no user change fires.
+     */
+    scopes?: string[];
+  } = {}): Promise<void> {
     // One popup and one nonce at a time: a second click while the first flow
     // waits joins it instead of racing it for the session cookie, and keeps
-    // the first one's origin
-    PgSession._pending ??= PgSession._signIn(from).finally(() => {
+    // the first one's origin. A flow that lacks scopes this caller needs
+    // cannot answer it, so the caller waits for it to settle and asks again.
+    const pending = PgSession._pending;
+    if (pending) {
+      const covered = (scopes ?? []).every((scope) =>
+        PgSession._pendingScopes.includes(scope)
+      );
+      if (covered) return pending;
+      return pending.then(
+        () => PgSession.signIn({ from, scopes }),
+        () => PgSession.signIn({ from, scopes })
+      );
+    }
+    PgSession._pendingScopes = scopes ?? [];
+    PgSession._pending = PgSession._signIn(from, scopes).finally(() => {
       PgSession._pending = undefined;
+      PgSession._pendingScopes = [];
     });
     return PgSession._pending;
   }
@@ -179,12 +205,15 @@ export class PgSession {
     return PgSession._signInState;
   }
 
-  private static async _signIn(from: SignInOrigin | undefined) {
+  private static async _signIn(
+    from: SignInOrigin | undefined,
+    scopes: string[] | undefined
+  ) {
     authTelemetry.track("auth_sign_in_started", {});
     PgSession._signingInFrom = from ?? null;
     PgSession._setSignIn({ status: "pending" });
     try {
-      await PgSession._signInThroughPopup();
+      await PgSession._signInThroughPopup(scopes);
     } catch (error) {
       authTelemetry.track("auth_sign_in_failed", { reason: reasonOf(error) });
       PgSession._setSignIn({
@@ -208,7 +237,7 @@ export class PgSession {
     return PgSession._signingInFrom;
   }
 
-  private static async _signInThroughPopup() {
+  private static async _signInThroughPopup(scopes: string[] | undefined) {
     const nonce = randomNonce();
 
     const response = await fetch("/api/auth/sign-in/social", {
@@ -218,6 +247,7 @@ export class PgSession {
       body: JSON.stringify({
         provider: "github",
         callbackURL: `${AUTH_COMPLETE_ROUTE}?nonce=${nonce}`,
+        ...(scopes?.length ? { scopes } : {}),
       }),
     });
     if (!response.ok) {
@@ -415,6 +445,7 @@ export class PgSession {
     PgSession._signingOut = undefined;
     PgSession._ending = false;
     PgSession._pending = undefined;
+    PgSession._pendingScopes = [];
     PgSession._signInState = IDLE;
     PgSession._hasRead = false;
     PgSession._reading = undefined;
@@ -428,6 +459,8 @@ export class PgSession {
   private static readonly _listeners = new Set<() => void>();
 
   private static _pending: Promise<void> | undefined;
+  /** The scopes `_pending` asked GitHub for, on top of sign-in's own */
+  private static _pendingScopes: string[] = [];
   /** A session read has answered, so `get()` is what the server said */
   private static _hasRead = false;
   private static _reading: Promise<void> | undefined;
@@ -697,6 +730,74 @@ if (import.meta.vitest) {
         );
       });
 
+      it("asks GitHub for extra scopes only when the caller names them", async () => {
+        const bodies: Array<Record<string, unknown>> = [];
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string, init: RequestInit) => {
+            if (url === "/api/auth/sign-in/social") {
+              bodies.push(JSON.parse(init.body as string));
+              return Promise.resolve({
+                ok: true,
+                json: async () => ({ url: "https://x/" }),
+              });
+            }
+            return Promise.resolve({
+              ok: true,
+              json: async () => ({ user: { id: "u1" } }),
+            });
+          }) as unknown as typeof fetch
+        );
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({ delivered: true as const, data: {} }),
+          cancel: () => {},
+        }));
+
+        await PgSession.signIn();
+        await PgSession.signIn({ scopes: ["gist"] });
+
+        expect("scopes" in bodies[0]).toBe(false);
+        expect(bodies[1].scopes).toEqual(["gist"]);
+      });
+
+      it("fires no user change when a scope grant signs the same user in again", async () => {
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockImplementation((url: string) =>
+            Promise.resolve({
+              ok: true,
+              json: async () =>
+                url === "/api/auth/sign-in/social"
+                  ? { url: "https://x/" }
+                  : {
+                      user: {
+                        id: "u1",
+                        name: "Ada",
+                        image: null,
+                        login: "ada",
+                      },
+                    },
+            })
+          ) as unknown as typeof fetch
+        );
+        PgSession.setOpenChannel(() => ({
+          receive: async () => ({ delivered: true as const, data: {} }),
+          cancel: () => {},
+        }));
+        await PgSession.refreshWith({
+          id: "u1",
+          name: "Ada",
+          image: null,
+          login: "ada",
+        });
+        const users: Array<string | undefined> = [];
+        PgSession.onDidChange(() => users.push(PgSession.get()?.id));
+
+        await PgSession.signIn({ scopes: ["gist"] });
+
+        // Only the sign-in state moved (pending, then idle); the user did not
+        expect(PgSession.get()?.id).toBe("u1");
+        expect(users).toEqual(["u1", "u1"]);
+      });
+
       it("only accepts a reply carrying this flow's nonce", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(
           vi.fn().mockImplementation((url: string, init: RequestInit) =>
@@ -870,6 +971,33 @@ if (import.meta.vitest) {
 
         expect(popup.open).toHaveBeenCalledTimes(1);
         expect(global.fetch).toHaveBeenCalledTimes(1);
+      });
+
+      it("asks for scopes after a pending sign-in that lacked them, not inside it", async () => {
+        const popup = heldPopup();
+        const bodies: Array<Record<string, unknown>> = [];
+        (global.fetch as Mock).mockImplementation(
+          async (url: string, init?: RequestInit) => {
+            if (url === "/api/auth/sign-in/social") {
+              bodies.push(JSON.parse(init!.body as string));
+            }
+            return { ok: true, json: async () => ({ url: "https://x/" }) };
+          }
+        );
+
+        const plain = PgSession.signIn();
+        const scoped = PgSession.signIn({ scopes: ["gist"] });
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalledTimes(1));
+        popup.cancel();
+        await expect(plain).rejects.toThrow(/cancelled/i);
+        await vi.waitFor(() => expect(popup.open).toHaveBeenCalledTimes(2));
+        popup.cancel();
+        await expect(scoped).rejects.toThrow(/cancelled/i);
+
+        expect(bodies.map((body) => body.scopes)).toEqual([
+          undefined,
+          ["gist"],
+        ]);
       });
 
       it("clears a failed sign-in when the next one starts, and settles idle on success", async () => {

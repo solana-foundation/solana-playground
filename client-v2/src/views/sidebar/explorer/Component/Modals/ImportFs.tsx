@@ -40,7 +40,17 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
         importFiles.push([userFile.path, content]);
       }
 
-      const pgFiles = await PgFramework.convertToPlaygroundLayout(importFiles);
+      // A dropped folder's name leads every path; a project with no program
+      // drops it rather than nest the project under it
+      const folders = new Set(
+        importFiles.map(([path]) => /^\/?([^/]+)\//.exec(path)?.[1])
+      );
+      const [root] = folders.size === 1 ? [...folders] : [];
+      const pgFiles = await PgFramework.convertToPlaygroundLayout(
+        importFiles,
+        root,
+        { source: root }
+      );
 
       // Closed while the files were read: open it again with them
       if (!mounted.current) {

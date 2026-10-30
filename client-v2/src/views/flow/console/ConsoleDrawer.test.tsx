@@ -70,6 +70,7 @@ const flowState = (build: StageStatus): FlowState => ({
   buildErrorCount: 0,
   buildMs: null,
   buildStartedAt: build === "running" ? 1000 : null,
+  hasProgram: true,
 });
 
 beforeEach(() => {

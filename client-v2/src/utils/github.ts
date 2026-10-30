@@ -1,5 +1,5 @@
 import { PgExplorer, TupleFiles } from "./explorer";
-import { PgFramework } from "./framework";
+import { noProgramCode, PgFramework } from "./framework";
 import { PgLanguage } from "./language";
 
 /** Single entry of a Git tree */
@@ -87,6 +87,10 @@ export const filterRepoFiles = (tree: GithubTreeItem[], path: string) => {
   });
 };
 
+/** How a refusal names an imported repository, and the folder in it if any */
+const sourceOf = (owner: string, repo: string, path: string) =>
+  path ? `${path} in ${owner}/${repo}` : `${owner}/${repo}`;
+
 export class PgGithub {
   /**
    * Get whether the given URL is a GitHub URL.
@@ -129,7 +133,9 @@ export class PgGithub {
     const { owner, repo, path } = this.parseUrl(url);
     const githubWorkspaceName = `github-${owner}/${repo}/${path}`;
 
-    if (PgExplorer.allWorkspaceNames?.includes(githubWorkspaceName)) {
+    // Read from the store: a repository link's temporary view holds no list
+    const names = await PgExplorer.getAllWorkspaceNames();
+    if (names.includes(githubWorkspaceName)) {
       // Switch to the existing workspace
       await PgExplorer.switchWorkspace(githubWorkspaceName);
     } else {
@@ -150,8 +156,15 @@ export class PgGithub {
    * @returns explorer files
    */
   static async getFiles(url: string, onProgress?: OnProgress) {
-    const { files } = await this._getRepository(url, onProgress);
-    const convertedFiles = await PgFramework.convertToPlaygroundLayout(files);
+    const { files, path, owner, repo } = await this._getRepository(
+      url,
+      onProgress
+    );
+    const convertedFiles = await PgFramework.convertToPlaygroundLayout(
+      files,
+      path,
+      { source: sourceOf(owner, repo, path) }
+    );
     return convertedFiles;
   }
 
@@ -181,12 +194,8 @@ export class PgGithub {
     }
 
     const items = filterRepoFiles(tree.tree, path);
-    if (!items.length) {
-      const location = path ? `"${path}" in ` : "";
-      throw new Error(
-        `No source files found in ${location}"${owner}/${repo}".`
-      );
-    }
+    if (!items.length)
+      throw new Error(noProgramCode(sourceOf(owner, repo, path)));
 
     const files = await this._getFileContents(
       owner,

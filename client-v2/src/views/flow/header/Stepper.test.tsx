@@ -18,6 +18,7 @@ const failedBuild: FlowState = {
   buildErrorCount: 3,
   buildMs: null,
   buildStartedAt: 1000,
+  hasProgram: true,
 };
 
 /** Every element a `ResizeObserver` watches (the fold's stepper root, the
@@ -82,6 +83,24 @@ describe("Stepper", () => {
     expect(
       screen.getByRole("tab", { name }).getAttribute("aria-selected")
     ).toBe("true");
+  });
+
+  it("shows only Write for a project with no program", () => {
+    const noProgram: FlowState = {
+      stage: "write",
+      build: "upcoming",
+      buildSettled: "upcoming",
+      deploy: "upcoming",
+      interact: "upcoming",
+      buildErrorCount: 0,
+      buildMs: null,
+      buildStartedAt: null,
+      hasProgram: false,
+    };
+    render(<Stepper state={noProgram} onSelect={vi.fn()} />);
+    expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
+      "flow-stage-tab-write",
+    ]);
   });
 
   it("selects a stage on click", async () => {

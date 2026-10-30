@@ -583,6 +583,32 @@ describe("importing a workspace under a name already in use", () => {
   });
 });
 
+// A repository or gist link opens as a temporary view, which drops the
+// workspace list from memory; importing from there must still reach it
+describe("creating a workspace from a temporary view", () => {
+  beforeEach(reset);
+
+  it("adds it beside the stored ones and leaves the temporary view", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
+    expect(PgExplorer.isTemporary).toBe(true);
+
+    await PgExplorer.createWorkspace("beta", { files: files("beta") });
+
+    expect(PgExplorer.isTemporary).toBe(false);
+    expect(PgExplorer.allWorkspaceNames).toEqual(["alpha", "beta"]);
+    expect(PgExplorer.currentWorkspaceName).toBe("beta");
+  });
+
+  it("lists the stored workspaces while the view is temporary", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
+
+    expect(await PgExplorer.getAllWorkspaceNames()).toEqual(["alpha"]);
+    expect(PgExplorer.isTemporary).toBe(true);
+  });
+});
+
 // The tree finds an item by its path on every render while a file waits to
 // be shown (`useHandleItemState`), so a path the selector cannot hold must
 // not throw: a file name may carry a quote
