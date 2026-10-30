@@ -16,22 +16,6 @@ The flow has two outputs and three destinations. A build turns the source into
 a program binary and an IDL. A deploy uploads both to one cluster. Interact
 calls the deployed program through an IDL.
 
-```mermaid
-flowchart LR
-  classDef kept fill:#dff5e1,stroke:#2e7d32,color:#1b1b1b
-  classDef added fill:#fff3cd,stroke:#b26a00,color:#1b1b1b
-  build["Build: binary and IDL"]:::kept --> deploy["Deploy and upgrade,<br/>pause, resume, cancel"]:::kept
-  deploy --> guard["Mainnet disclaimer,<br/>every time"]:::added
-  build --> upload["IDL upload on chain:<br/>Program Metadata, Anchor IDL account"]:::added
-  upload --> guard
-  build --> export["Export with<br/>local deploy scripts"]:::added
-  deploy --> interact["Interact: form, PDA seeds,<br/>From seed, IDL file"]:::kept
-  interact --> any["Any program id, IDL picker,<br/>pasted IDL, simulate"]:::added
-  interact --> modern["Anchor 0.30+ and Codama IDLs"]:::added
-```
-
-Green is kept, amber is added.
-
 Functions client-v2 has, recorded so they are kept:
 
 - Build of an Anchor, Native or Seahorse project on the build server, returning

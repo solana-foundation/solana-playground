@@ -4,36 +4,6 @@ Groups 1 to 4 can start in parallel. Within a group, tasks run in order unless
 a task says otherwise. Every task is one PR, and every slice task declares,
 describes and emits its spec's events with memory-provider tests.
 
-An arrow points from a task to the task that waits for it; a task with no
-incoming arrow can start now.
-
-```mermaid
-flowchart LR
-  t1_1["1.1 build slice"] --> t1_3["1.3 build e2e"]
-  t1_2["1.2 keep IDL on failure"] --> t1_3
-  t2_1["2.1 deploy slice"] --> t2_2["2.2 per-cluster state"]
-  t2_1 --> t2_3["2.3 mainnet disclaimer"]
-  t2_1 --> t2_5["2.5 keypair controls"]
-  t2_3 --> t2_4["2.4 deploy scripts"]
-  t3_1["3.1 idl slice"] --> t3_2["3.2 read from chain"]
-  t3_1 --> t3_4["3.4 paste editor"]
-  t3_2 --> t3_3["3.3 source picker"]
-  t3_2 --> t3_5["3.5 IDL upload"]
-  t2_3 --> t3_5
-  t3_2 --> t4_1["4.1 interact slice"]
-  t4_1 --> t4_2["4.2 simulate and result"]
-  t4_1 --> t4_5["4.5 interact e2e"]
-  t4_2 --> t4_4["4.4 mainnet send confirm"]
-  t4_3["4.3 PDA seeds program"]
-  mig(["Anchor 0.29 to 1.1.2 migration"]) --> t5_1["5.1 Anchor 0.30+ form"]
-  mig --> t5_2["5.2 Codama form"]
-  t4_1 --> t5_1
-  t4_1 --> t5_2
-  t2_4 --> t6_1["6.1 Devnet walk-through"]
-  t3_5 --> t6_1
-  t4_2 --> t6_1
-```
-
 ## 1. Build
 
 - [ ] 1.1 Create the `program-build` slice with the `build` prefix, emit
