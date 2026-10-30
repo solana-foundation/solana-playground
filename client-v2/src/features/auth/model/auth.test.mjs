@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 
-import { getAuth, isAllowedOrigin, readSession } from "./auth.mjs";
+import { parseAdditionalUserInputFromProviderProfile } from "better-auth/db";
+
+import {
+  getAuth,
+  isAllowedOrigin,
+  mapGithubProfile,
+  readSession,
+} from "./auth.mjs";
 
 const SIGN_IN = {
   DATABASE_URL: "postgres://u:p@127.0.0.1:1/none",
@@ -88,4 +95,57 @@ describe("isAllowedOrigin", () => {
       assert.equal(isAllowedOrigin(req({ origin })), expected);
     });
   }
+});
+
+describe("GitHub profile fields", () => {
+  let restore;
+  beforeEach(() => {
+    restore = withEnv(SIGN_IN);
+  });
+  afterEach(() => restore());
+
+  const PROFILE = {
+    login: "ada",
+    created_at: "2011-01-25T18:44:36Z",
+  };
+
+  test("maps the login and the account's creation date", () => {
+    assert.deepEqual(mapGithubProfile(PROFILE), {
+      login: "ada",
+      githubCreatedAt: new Date("2011-01-25T18:44:36Z"),
+    });
+  });
+
+  test("leaves out a creation date GitHub sends malformed", () => {
+    assert.equal(
+      mapGithubProfile({ login: "ada", created_at: "soon" }).githubCreatedAt,
+      undefined
+    );
+    assert.equal(mapGithubProfile({ login: "ada" }).githubCreatedAt, undefined);
+  });
+
+  // Better Auth runs the mapped profile through this before creating the user,
+  // and drops every field declared `input: false`: `login` was never stored
+  test("survives Better Auth's parsing into the created user", () => {
+    const created = parseAdditionalUserInputFromProviderProfile(
+      getAuth().options,
+      mapGithubProfile(PROFILE),
+      "create"
+    );
+    assert.equal(created.login, "ada");
+    assert.deepEqual(created.githubCreatedAt, new Date("2011-01-25T18:44:36Z"));
+  });
+
+  // `input: true` above is safe only while no endpoint lets a user write their
+  // own fields: `githubCreatedAt` decides their spend on `/api/agent`
+  test("answers 404 to update-user, so a user cannot set their own fields", async () => {
+    const res = await getAuth().handler(
+      new Request("http://localhost:3000/api/auth/update-user", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ githubCreatedAt: "2000-01-01T00:00:00Z" }),
+      })
+    );
+    assert.equal(res.status, 404);
+  });
 });

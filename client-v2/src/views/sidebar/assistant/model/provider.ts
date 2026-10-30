@@ -4,12 +4,13 @@ import { describeProject, systemPrompt } from "./prompt";
 import { PgAssistant } from "../store";
 import { MAX_RESUMES, MAX_STEPS } from "../config";
 import { PgSession } from "../../../../features/auth";
+import { agentTelemetry } from "@/features/agent";
 import { MODEL_PROVIDER_PROFILES } from "./model-providers";
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
 import type { ModelProviderInput } from "./model-providers";
-import type { Provider } from "./types";
+import { TurnFailure, type Provider } from "./types";
 
 /** What a provider needs to be built: structurally the store's `Connection` */
 export interface ProviderConnection extends ModelProviderInput {
@@ -110,13 +111,39 @@ export const createProvider = (
       } catch (e) {
         if (!(e instanceof ai.AiTurnError)) throw e;
         if (e.kind === "refusal") {
-          throw new Error(`${e.message} Rephrase it, or switch backends.`);
+          throw new TurnFailure(
+            `${e.message} Rephrase it, or switch backends.`,
+            { reason: "refusal", cause: e }
+          );
         }
-        const refusal = profile.signedOutRefusal?.(e);
-        if (!refusal) throw e;
-        // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
-        void PgSession.refresh();
-        throw new Error(refusal);
+        const refusal = profile.backendRefusal?.(e);
+        if (!refusal) {
+          throw new TurnFailure(e.message, {
+            reason: e.kind,
+            status: e.status,
+            cause: e,
+          });
+        }
+        if (refusal.kind === "signed-out") {
+          // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
+          void PgSession.refresh();
+          throw new TurnFailure(refusal.message, {
+            reason: "provider",
+            status: e.status,
+            cause: e,
+          });
+        }
+        // The conversation and the session stay: switching to a key-based
+        // backend is how the user keeps going today
+        agentTelemetry.track("agent_refused", {
+          reason: refusal.reason,
+          tier: refusal.tier,
+        });
+        throw new TurnFailure(refusal.message, {
+          reason: "capped",
+          status: e.status,
+          cause: e,
+        });
       }
 
       history = result.messages;
