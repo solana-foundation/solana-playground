@@ -7,8 +7,11 @@ export type SettingsFocus = "page" | "network";
 /** What opened the settings: the cluster row, the rail's dot, the account menu or ⌘, */
 export type SettingsEntry = "cluster" | "rail" | "menu" | "key";
 
-/** What closed the settings: "Back to app", Escape or ⌘, */
-export type SettingsExit = "back" | "escape" | "key";
+/**
+ * What closed the settings: "Back to app", Escape, ⌘, or a project imported
+ * from the page, which shows the project it opened
+ */
+export type SettingsExit = "back" | "escape" | "key" | "import";
 
 /**
  * A request to open (or, while open, close) the settings. `returnTo` is the

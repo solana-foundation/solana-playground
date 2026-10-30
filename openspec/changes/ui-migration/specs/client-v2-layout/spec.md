@@ -438,6 +438,16 @@ the page.
 - **WHEN** the user opens it again and presses ⌘,
 - **THEN** the settings page and the dialog both close
 
+#### Scenario: Importing a project from the settings shows it (manual)
+
+- **WHEN** a user imports a project with "From GitHub" or "From files" on
+  the settings page
+- **THEN** the dialog and the settings page both close and the imported
+  project shows
+- **WHEN** the user opens "From GitHub" on the settings page and closes it
+  without importing
+- **THEN** the settings page stays open
+
 #### Scenario: A fresh load focuses no settings trigger
 
 - **WHEN** a user loads the page at 1440 or 834 px wide and does nothing
@@ -460,7 +470,8 @@ the page.
 
 The product SHALL send `settings_opened` with where it was opened from
 (`cluster`, `rail`, `menu` or `key`), `settings_closed` with how it was
-closed (`back`, `escape` or `key`), and `settings_section_picked` with the
+closed (`back`, `escape`, `key`, or `import` when a project imported from
+the page closed it), and `settings_section_picked` with the
 section, each time a user picks one in the section list.
 
 #### Scenario: Opening and closing the settings is counted

@@ -1723,7 +1723,7 @@ they are answered. One PR.
     to the one that opens the navigation. The failure notice closes on
     Escape too, its own listener in place of the page's.
 - **Telemetry**, prefix `settings`: `settings_opened {from: cluster | rail |
-  menu | key}`, `settings_closed {via: back | escape | key}` and
+  menu | key}`, `settings_closed {via: back | escape | key | import}` and
   `settings_section_picked {section}`. Export and import failures keep going
   through `reportButtonFailure`; the widget logs under `settings-page:*`.
 
