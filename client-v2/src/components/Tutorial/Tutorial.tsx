@@ -22,8 +22,8 @@ export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
     [files, defaultOpenFile]
   );
 
-  // On component mount. As with the page hooks in `Main`, only a function
-  // `onMount` returns is a cleanup.
+  // Run the tutorial's `onMount`. React would call any value it returns as
+  // the cleanup, so only a returned function is used as one.
   useEffect(() => {
     const cleanup = onMount?.();
     if (typeof cleanup === "function") return cleanup;
