@@ -448,7 +448,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         !isDefaultBackend(current.id)
       ) {
         // The key-based backend refused the key: say which, and offer to enter
-        // it again on the same backend rather than leaving a bare 401
+        // it again on the same backend rather than leaving the generic words
         const { id } = current;
         const name = PROVIDERS.find((p) => p.id === id)?.name ?? id;
         PgAssistant.addError(

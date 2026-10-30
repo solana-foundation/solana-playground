@@ -31,6 +31,12 @@ export interface TurnProfile {
    * for a failure that gets Spec 08's words (`AiTurnError.message`)
    */
   ownRefusal?: (error: AiTurnError) => string | undefined;
+  /**
+   * A backend we run, whose outage (its upstream down, its key refused there)
+   * is ours to hear of; `runTurn` reports no outage, a third party's being on
+   * its own status page
+   */
+  reportsOutages?: boolean;
 }
 
 /** One model provider's turn settings */

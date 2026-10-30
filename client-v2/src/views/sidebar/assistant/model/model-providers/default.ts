@@ -63,5 +63,6 @@ export const defaultProfile: ModelProviderProfile = {
     showsReasoning: false,
     signedOutRefusal,
     ownRefusal,
+    reportsOutages: true,
   }),
 };

@@ -218,6 +218,25 @@ describe("runTurn", () => {
       }
     );
 
+    it("Gemini's 400 for a bad key is key-refused", async () => {
+      const failure = await failOn(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 400,
+              message: "API key not valid. Please pass a valid API key.",
+              status: "INVALID_ARGUMENT",
+              details: [{ reason: "API_KEY_INVALID" }],
+            },
+          }),
+          { status: 400, headers: { "content-type": "application/json" } }
+        )
+      );
+
+      expect(failure.kind).toBe("key-refused");
+      expect(reported()).toEqual([]);
+    });
+
     it("a 400 the provider could not read is reported, and not resent", async () => {
       const failure = await failOn(openAiError(400, "Invalid 'messages[0]'"));
 

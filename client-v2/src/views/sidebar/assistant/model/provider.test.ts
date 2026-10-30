@@ -8,6 +8,7 @@ import {
   openAiToolCall,
   sse,
 } from "@/shared/lib/ai/__fixtures__/fake-provider";
+import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
 import { createProvider } from "./provider";
 import { PgAssistant, type ChatItem } from "../store";
 import { PgSession } from "../../../../features/auth";
@@ -328,6 +329,73 @@ describe("the assistant's provider", () => {
       "The model's provider did not accept this key. Check it in Settings, or use the hosted model."
     );
     expect(failure).not.toContain(KEY);
+  });
+
+  describe("an outage", () => {
+    let entries: ReturnType<typeof memoryProvider>["entries"];
+
+    beforeEach(() => {
+      const memory = memoryProvider();
+      entries = memory.entries;
+      initLogger({ providers: [memory] });
+    });
+
+    afterEach(() => resetLogger());
+
+    const reported = () => entries.filter((entry) => entry.report);
+
+    it("of the default backend is reported: it is ours", async () => {
+      respond(
+        new Response(
+          JSON.stringify({
+            error: "The default backend's key was refused upstream (401).",
+          }),
+          {
+            status: 502,
+            statusText: "Bad Gateway",
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toHaveLength(1);
+    });
+
+    it("is not reported for the default backend's own refusal", async () => {
+      respond(
+        new Response(
+          JSON.stringify({ error: "Sign-in is unavailable right now." }),
+          {
+            status: 503,
+            statusText: "Service Unavailable",
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toEqual([]);
+    });
+
+    it("of a third-party provider is not reported", async () => {
+      respond(openAiError(503, "overloaded"));
+      const provider = createProvider({
+        id: "openai",
+        apiKey: KEY,
+        endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
+      });
+
+      await provider.send("hi").catch((e: unknown) => e);
+
+      expect(reported()).toEqual([]);
+    });
   });
 
   it("never shows the default backend's relay of an upstream failure", async () => {

@@ -380,7 +380,10 @@ describe("useTurn", () => {
     await waitFor(() => expect(result.current.busy).toBe(false));
   });
 
-  it("names the backend and offers its key again on a 401", async () => {
+  it.each([
+    ["a 401", 401],
+    ["Gemini's 400", 400],
+  ])("names the backend and offers its key again on %s", async (_, status) => {
     const own: Connection = {
       id: "openai",
       apiKey: "sk-test",
@@ -388,7 +391,7 @@ describe("useTurn", () => {
     };
     PgAssistant.connect(own);
     provider.send.mockRejectedValue(
-      new AiTurnError("Unauthorized", { kind: "key-refused", status: 401 })
+      new AiTurnError("Unauthorized", { kind: "key-refused", status })
     );
     const { result } = renderHook(() => useTestTurn());
 

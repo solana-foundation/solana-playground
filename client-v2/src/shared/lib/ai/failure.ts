@@ -25,12 +25,16 @@ const TOO_LONG =
 /** Gemini refuses a bad key with a 400, not a 401 */
 const KEY_INVALID = /API_KEY_INVALID|API key not valid/i;
 
-/**
- * A provider or its host that is down or overloaded: Anthropic's 529, and the
- * 502, 503 and 504 of a gateway. Its status page says so, a resend repeats it,
- * and the default backend's own 503 refusals are among them.
- */
+/** Anthropic's 529, and the 502, 503 and 504 of a gateway */
 const OUTAGE = new Set([502, 503, 504, 529]);
+
+/**
+ * Whether a status says a provider or its host is down or overloaded. A third
+ * party's outage is on its status page, so `isReportedFailure` leaves it out;
+ * a backend we run reports its own (`TurnProfile.reportsOutages`).
+ */
+export const isOutage = (status: number | undefined) =>
+  status !== undefined && OUTAGE.has(status);
 
 /** The kind of a failed response, from its status and its (redacted) body */
 export const failureKindOf = (
@@ -79,9 +83,7 @@ export const FAILURE_MESSAGE: Record<AiFailureKind, string> = {
 export const isReportedFailure = (
   kind: AiFailureKind,
   status: number | undefined
-) =>
-  kind === "invalid" ||
-  (kind === "provider" && (status === undefined || !OUTAGE.has(status)));
+) => kind === "invalid" || (kind === "provider" && !isOutage(status));
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -124,6 +126,11 @@ if (import.meta.vitest) {
         );
       }
     );
+
+    it("a failure with no status is reported, an unreadable request even in an outage", () => {
+      expect(isReportedFailure("provider", undefined)).toBe(true);
+      expect(isReportedFailure("invalid", 503)).toBe(true);
+    });
 
     it("a 422 is invalid", () => {
       expect(failureKindOf(422, "{}")).toBe("invalid");
