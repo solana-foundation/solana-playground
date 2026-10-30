@@ -20,4 +20,8 @@ export interface SkillEntry {
   /** One line the model reads when deciding whether to load this */
   description: string;
   source: SkillSource;
+  /** `false` lists the skill unchecked, so its text reaches the model only after the user checks it */
+  enabled?: boolean;
+  /** Set on a skill from solana.com/skills, which a third party writes: its GitHub repository */
+  community?: { repo: `${string}/${string}` };
 }

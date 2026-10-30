@@ -56,10 +56,11 @@ half; this change states the shape for both halves.
 - The shipped catalogue carries the 37 community skills that
   [solana.com/skills](https://solana.com/skills) lists, each a remote skill
   whose `baseUrl` is on `raw.githubusercontent.com` at the commit the page
-  pins. A skill entry may carry `enabled: false` and then starts unchecked;
-  the community skills that help write, test, or inspect programs in this
-  environment start checked, the rest unchecked. The Foundation skills the
-  page lists are reference files of `solana-dev`, which the assistant already
+  pins. A skill entry may carry `enabled: false` and then starts unchecked.
+  Every community skill starts unchecked and none is marked `signedIn`, so a
+  user with their own key gets the same list as a signed-in user. The
+  Foundation skills the page lists are reference files of `solana-dev`,
+  which the assistant already
   loads, so they get no entries of their own.
 - The Sources tab shows a checkbox for every source, skill or server, gateway
   or user-added. An unchecked server contributes no tools to the next turn and
@@ -123,8 +124,9 @@ half; this change states the shape for both halves.
   community skills.
 - Dependencies: none added or removed.
 - Users: the Sources tab gains a checkbox per server, and a server switched
-  off is absent from the next turn. The community skills appear, some
-  checked; each checked one adds its name and description to the prompt. A
+  off is absent from the next turn. The community skills appear unchecked,
+  for every backend; each one the user checks adds its name and description
+  to the prompt. A
   deployment can now withhold a skill or a server, in which case it is absent
   from the tab for every backend. A signed-out user keeps the Solana
   upstream, gains Explorer, and keeps every source the catalogue does not

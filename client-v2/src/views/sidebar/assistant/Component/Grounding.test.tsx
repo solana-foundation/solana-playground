@@ -13,7 +13,7 @@ import { ThemeProvider, type DefaultTheme } from "styled-components";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgAssistant } from "../store";
-import { isAlwaysOn, SKILLS } from "../grounding";
+import { isAlwaysOn, isCommunity, SKILLS } from "../grounding";
 import Grounding from "./Grounding";
 
 // A theme that answers every key: the panel's styled rules read deep tokens
@@ -85,6 +85,24 @@ describe("Grounding", () => {
         .getAttribute("aria-checked")
     ).toBe("false");
     PgAssistant.setSkillEnabled(skill.id, true);
+  });
+
+  it("A community skill that starts off: unchecked under the fold, and counted once checked", () => {
+    const community = SKILLS.filter(isCommunity);
+    const skill = community[0];
+    if (!skill) throw new Error("no community skill");
+
+    renderGrounding();
+    const fold = screen.getByRole("button", { name: /Community skills/ });
+    expect(fold.textContent).toContain(`0 of ${community.length} on`);
+
+    fireEvent.click(fold);
+    const box = screen.getByRole("checkbox", { name: skill.name });
+    expect(box.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(box);
+    expect(fold.textContent).toContain(`1 of ${community.length} on`);
+    PgAssistant.setSkillEnabled(skill.id, false);
   });
 
   it("shows a bundled skill checked and locked, and keeps it on when its name is clicked", () => {

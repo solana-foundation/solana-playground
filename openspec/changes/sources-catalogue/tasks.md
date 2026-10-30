@@ -69,16 +69,18 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
       catalogue naming only the loaded skills
 - [ ] 2.3 Community skills: the 37 entries from solana.com/skills in
       `SOURCES_CATALOGUE`, each remote at the commit the page pins, with a
-      one-sentence description and `enabled` per the list in
-      [design.md](design.md), "Community skills from solana.com/skills";
+      one-sentence description, `enabled: false`, and no `signedIn`, as
+      [design.md](design.md), "Community skills from solana.com/skills", says;
       `enabled: false` honoured by `validateSkills` and the store's initial
       `enabledSkillIds`; the Sources tab's community fold with its count; a
       help tip and "Entry format" link for skills, as the additional-servers
       section has; a "Skill entries" section in
       `client-v2/docs/agent-sources-and-tools.md` (depends on 2.2); verify a
-      node test fails on a community `baseUrl` that names a branch, the PR
+      node test fails on a community `baseUrl` that names a branch and on a
+      community entry that is not `enabled: false` or is `signedIn`, the PR
       lists every entry's `SKILL.md` answering 200 at its pinned URL, and the
-      tab's tests hold "A community skill that starts off"
+      tab's tests hold "A community skill that starts off" and "A user with
+      their own key"
 
 ## 3. The selection
 
