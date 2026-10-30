@@ -11,11 +11,11 @@ Both tasks are HOO-2078, one PR each, in this order.
       and `status`; the refusal and the signed-out refusal keep their text; a
       `backendRefusal` of kind `limit` gives reason `capped` with its status,
       after HOO-1751's `agent_refused` is tracked), and the thread's text for
-      each case is unchanged (HOO-2078; stacked on HOO-1751's PR 71); verify
+      each case is unchanged (HOO-2078); verify
       `provider.test.ts` has a row per reason, a network failure with no
       status and both limit refusals included, asserting the class, the
       reason, the status and the message, each failing against the provider
-      of PR 71, and `yarn run check` passes
+      HOO-1751 merged (`56be278f`), and `yarn run check` passes
 
 ## 2. The events
 
@@ -38,7 +38,5 @@ Both tasks are HOO-2078, one PR each, in this order.
 
 ## Workflow follow-up
 
-- Rebase 1.1's PR onto master once HOO-1751's PR 71 merges; until then it
-  carries PR 71's commits.
 - Archive the change once a human says so, in the PR that ticks 2.1
   (`client-v2/CLAUDE.md`, "Specs and changes" 5).

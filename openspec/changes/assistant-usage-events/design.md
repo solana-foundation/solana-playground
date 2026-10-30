@@ -19,7 +19,8 @@ so the hook gets typed data for some failures and text for others.
 `shared/lib/ai` is loaded on demand (`loadAi()`), so the widget cannot test
 `instanceof AiTurnError` without pulling the SDK into the boot chunk.
 
-The cost gate (HOO-1751, change `default-backend-cost-gate`, PR 71) refuses
+The cost gate (HOO-1751, change `default-backend-cost-gate`, merged in
+`56be278f`) refuses
 a turn with a JSON body carrying `reason` and the user's `tier`: a 429 with
 `daily-cap`, or a 503 with `pool-exhausted`. On the client it turns the
 profile's `signedOutRefusal` into `backendRefusal`, which answers
@@ -27,7 +28,7 @@ profile's `signedOutRefusal` into `backendRefusal`, which answers
 `{ kind: "limit", reason, tier, message }` with the panel's own sentence, and
 the provider tracks `agent_refused {reason, tier}` from `features/agent` for
 every limit refusal. An upstream 429 is still relayed with its own status and
-no `reason`. This change is stacked on that PR.
+no `reason`. This change builds on that merged code.
 
 ## Goals / Non-Goals
 
@@ -120,9 +121,7 @@ failure message quotes the prompt and asserts the prompt is absent.
 - [A new error class in `views/`, a legacy root] → It is a type for the
   slice's own provider, next to `Provider`, not UI; it moves with the
   provider when that code moves by the UI move rule.
-- [Stacked on PR 71] → Task 1.1's PR carries HOO-1751's commits until that
-  PR merges, then rebases onto master; the `capped` rows in
-  `provider.test.ts` go through the real `backendRefusal`, so nothing stands
-  in for the gate.
+- [Built on HOO-1751] → the `capped` rows in `provider.test.ts` go through
+  the real `backendRefusal`, so nothing stands in for the gate.
 - [`provider` is sent on every event although the store knows it] → It is
   what the report is grouped by, and a GA4 report cannot join events.
