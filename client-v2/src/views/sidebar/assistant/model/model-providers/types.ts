@@ -32,11 +32,11 @@ export interface TurnProfile {
    */
   ownRefusal?: (error: AiTurnError) => string | undefined;
   /**
-   * A backend we run, whose outage (its upstream down, its key refused there)
-   * is ours to hear of; `runTurn` reports no outage, a third party's being on
-   * its own status page
+   * For a backend we run, whether a 502, 503, 504 or 529 (`isOutage`) is its
+   * own fault and ours to hear of; `runTurn` reports no outage, a third
+   * party's being on its own status page
    */
-  reportsOutages?: boolean;
+  reportsOutage?: (error: AiTurnError) => boolean;
 }
 
 /** One model provider's turn settings */

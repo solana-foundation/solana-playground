@@ -51,6 +51,31 @@ const ownRefusal = (error: AiTurnError): string | undefined => {
   }
 };
 
+/**
+ * How `/api/agent` relays a status the upstream answered with, as against a
+ * fault of its own ("Upstream unreachable", its key refused upstream)
+ */
+const RELAYED_STATUS = /^Upstream \d{3}\b/;
+
+/**
+ * Whether an outage is this backend's own fault, ours to hear of: not its
+ * relay of the upstream's status, which is on the provider's status page. Its
+ * own 503 sentences never reach here (`ownRefusal` shows them first), and a
+ * deployment with no default backend is one of them, served as designed.
+ */
+const reportsOutage = (error: AiTurnError): boolean => {
+  if (!error.body) return true;
+  try {
+    const parsed = JSON.parse(error.body);
+    return !(
+      typeof parsed?.error === "string" && RELAYED_STATUS.test(parsed.error)
+    );
+  } catch {
+    // Not JSON, so not `/api/agent`'s relay: a platform page in front of it, ours
+    return true;
+  }
+};
+
 // TODO(after polish-3 and ai-rail land): a 403 or 404 from `/api/agent` is a
 // deployment of ours gone wrong (origin not allowed, route or model missing),
 // yet reads as the user's key or model and goes unreported; give this profile
@@ -63,6 +88,6 @@ export const defaultProfile: ModelProviderProfile = {
     showsReasoning: false,
     signedOutRefusal,
     ownRefusal,
-    reportsOutages: true,
+    reportsOutage,
   }),
 };

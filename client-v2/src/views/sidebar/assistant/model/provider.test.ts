@@ -384,6 +384,26 @@ describe("the assistant's provider", () => {
       expect(reported()).toEqual([]);
     });
 
+    it("relayed by the default backend from its upstream is not reported", async () => {
+      respond(
+        new Response(
+          JSON.stringify({
+            error: 'Upstream 529: {"type":"overloaded_error"}',
+          }),
+          {
+            status: 529,
+            headers: { "content-type": "application/json" },
+          }
+        )
+      );
+
+      await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(reported()).toEqual([]);
+    });
+
     it("of a third-party provider is not reported", async () => {
       respond(openAiError(503, "overloaded"));
       const provider = createProvider({

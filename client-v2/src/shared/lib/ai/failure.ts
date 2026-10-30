@@ -31,7 +31,7 @@ const OUTAGE = new Set([502, 503, 504, 529]);
 /**
  * Whether a status says a provider or its host is down or overloaded. A third
  * party's outage is on its status page, so `isReportedFailure` leaves it out;
- * a backend we run reports its own (`TurnProfile.reportsOutages`).
+ * a backend we run reports its own (`TurnProfile.reportsOutage`).
  */
 export const isOutage = (status: number | undefined) =>
   status !== undefined && OUTAGE.has(status);
@@ -76,9 +76,10 @@ export const FAILURE_MESSAGE: Record<AiFailureKind, string> = {
 
 /**
  * Whether the team hears of a failure: a request the provider could not read
- * is ours to fix, and so is a server error. Everything else is the user's
- * key, model or conversation, or a busy provider, and a resend repeats it, so
- * reporting it would send one event per attempt.
+ * is ours to fix, and so is a server error that is not an outage (`isOutage`;
+ * a backend we run reports its own, `TurnProfile.reportsOutage`). Everything
+ * else is the user's key, model or conversation, or a busy provider, and a
+ * resend repeats it, so reporting it would send one event per attempt.
  */
 export const isReportedFailure = (
   kind: AiFailureKind,
@@ -127,9 +128,8 @@ if (import.meta.vitest) {
       }
     );
 
-    it("a failure with no status is reported, an unreadable request even in an outage", () => {
+    it("a failure with no status is reported", () => {
       expect(isReportedFailure("provider", undefined)).toBe(true);
-      expect(isReportedFailure("invalid", 503)).toBe(true);
     });
 
     it("a 422 is invalid", () => {

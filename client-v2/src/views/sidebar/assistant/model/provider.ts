@@ -120,7 +120,7 @@ export const createProvider = (
         }
         const own = profile.ownRefusal?.(e);
         if (own) throw new Error(own, { cause: e });
-        if (profile.reportsOutages && ai.isOutage(e.status)) {
+        if (ai.isOutage(e.status) && profile.reportsOutage?.(e)) {
           log.warn("the backend we run is down", {
             report: true,
             context: { status: e.status, detail: e.detail },
