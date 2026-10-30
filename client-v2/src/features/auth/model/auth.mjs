@@ -214,6 +214,28 @@ export const missingConfig = () => {
 };
 
 /**
+ * The user fields taken from a GitHub profile at sign-in, beyond Better Auth's
+ * own `name`, `email` and `image`.
+ *
+ * `githubCreatedAt` decides the user's tier on `/api/agent`: an account
+ * younger than `AGENT_NEWCOMER_AGE_DAYS` is a `newcomer`. A date GitHub sends
+ * malformed is left out rather than stored as an invalid one, and
+ * `/api/agent` looks it up after the user's next turn.
+ *
+ * Exported for tests.
+ *
+ * @param {{ login?: string; created_at?: string }} profile GitHub's `/user`
+ * @returns {{ login?: string; githubCreatedAt?: Date }}
+ */
+export const mapGithubProfile = (profile) => {
+  const created = new Date(profile.created_at ?? NaN);
+  return {
+    login: profile.login,
+    githubCreatedAt: Number.isNaN(created.getTime()) ? undefined : created,
+  };
+};
+
+/**
  * The auth instance, created on first use.
  *
  * @returns {ReturnType<typeof betterAuth> | null} the instance, or `null` when
@@ -230,12 +252,23 @@ export const getAuth = () => {
       baseURL: resolveBaseURL(),
       secret: env.AUTH_SECRET,
       plugins: oauthProxyPlugins(),
+      // The one endpoint that lets a signed-in user write their own user
+      // fields. The panel never calls it, and `githubCreatedAt` must not be
+      // the user's to set: it decides how much they may spend on
+      // `/api/agent`. With it gone, a user field is written only from the
+      // GitHub profile at sign-in, which is what lets the fields below be
+      // `input: true` -- Better Auth 1.7.5 drops an `input: false` field
+      // that `mapProfileToUser` returns (`parseAdditionalUserInputFromProviderProfile`),
+      // so `login` had never been stored.
+      disabledPaths: ["/update-user"],
       user: {
         additionalFields: {
           // The @handle. Better Auth's core schema has `name` and `image` but
           // not the login, and the account row and menu render it. Never an identity
           // key -- a login can be changed; ownership keys off `user.id`.
-          login: { type: "string", required: false, input: false },
+          login: { type: "string", required: false, input: true },
+          // GitHub's `created_at`, for the tier on `/api/agent`
+          githubCreatedAt: { type: "date", required: false, input: true },
         },
       },
       socialProviders: {
@@ -244,8 +277,14 @@ export const getAuth = () => {
           clientSecret: env.GITHUB_CLIENT_SECRET,
           // Not applied to a sign-in through the OAuth proxy, whose payload
           // carries only Better Auth's own user fields: a preview's user has
-          // no `login` (see "Sign-in on previews" in the deploy doc).
-          mapProfileToUser: (profile) => ({ login: profile.login }),
+          // no `login` (see "Sign-in on previews" in the deploy doc), and
+          // `/api/agent` learns its `githubCreatedAt` after a turn.
+          //
+          // Runs on every sign-in, but Better Auth stores what it returns
+          // only when it creates the user (`overrideUserInfoOnSignIn` is
+          // off). A user created before these fields gets them from neither
+          // path here; `/api/agent` covers `githubCreatedAt` the same way.
+          mapProfileToUser: mapGithubProfile,
           // Scope is deliberately not set. Better Auth already requests
           // `read:user user:email`, and the option appends rather than
           // replaces -- passing `["read:user"]` only duplicated it in the

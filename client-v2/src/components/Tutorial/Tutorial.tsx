@@ -21,9 +21,11 @@ export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
     [files, defaultOpenFile]
   );
 
-  // On component mount
+  // Run the tutorial's `onMount`. React would call any value it returns as
+  // the cleanup, so only a returned function is used as one.
   useEffect(() => {
-    if (onMount) return onMount();
+    const cleanup = onMount?.();
+    if (typeof cleanup === "function") return cleanup;
   }, [onMount]);
 
   if (!PgTutorial.current) throw new Error("Current tutorial has not been set");
