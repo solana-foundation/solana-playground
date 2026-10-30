@@ -8,8 +8,19 @@ import {
   openAiToolCall,
   sse,
 } from "@/shared/lib/ai/__fixtures__/fake-provider";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { createProvider } from "./provider";
 import { ModelBusyError } from "./model-busy";
+import { TurnFailure } from "./types";
+import {
+  DAILY_CAP_REASON,
+  POOL_EXHAUSTED_REASON,
+  REFUSAL_MESSAGES,
+} from "@/features/agent";
 import { PgAssistant, type ChatItem } from "../store";
 import { PgSession } from "../../../../features/auth";
 import { DEFAULT_BACKEND_URL, MAX_RESUMES, MAX_STEPS } from "../config";
@@ -47,7 +58,7 @@ vi.mock("./tools", async () => {
 const KEY = "sk-test-0123456789abcdef";
 
 /** Answer the turn's requests in order, recording each one */
-const respond = (...answers: Response[]) => {
+const respond = (...answers: Parameters<typeof fakeFetch>) => {
   const { fetch, sent } = fakeFetch(...answers);
   vi.spyOn(globalThis, "fetch").mockImplementation(fetch);
   return sent;
@@ -276,7 +287,7 @@ describe("the assistant's provider", () => {
     );
 
     await expect(anthropic().send("hi")).rejects.toMatchObject({
-      kind: "paused",
+      reason: "paused",
     });
     expect(sent).toHaveLength(MAX_RESUMES + 1);
   });
@@ -412,9 +423,10 @@ describe("the assistant's provider", () => {
     );
 
     // Its own refusal, written for people: shown whole, with no status
-    await expect(defaultBackend().send("hi")).rejects.toThrow(
-      new Error(sentence)
-    );
+    await expect(defaultBackend().send("hi")).rejects.toMatchObject({
+      message: sentence,
+      reason: "provider",
+    });
   });
 
   it("echoes Gemini's thought signature on its tool call in the next turn", async () => {
@@ -537,5 +549,266 @@ describe("the assistant's provider", () => {
       expect(failure).not.toBe(refusal);
       expect(PgSession.refresh).not.toHaveBeenCalled();
     });
+
+    it("is the provider's own 401 to telemetry, with the refusal as its text", async () => {
+      respond(unauthorized({ error: refusal, reason: "signed-out" }));
+
+      const failure = await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(TurnFailure);
+      expect(failure).toMatchObject({
+        reason: "provider",
+        status: 401,
+        message: refusal,
+      });
+    });
+  });
+
+  describe("a refusal by a limit of the default backend", () => {
+    let tracked: ReturnType<typeof memoryProvider>;
+
+    beforeEach(() => {
+      tracked = memoryProvider();
+      initTelemetry({ providers: [tracked] });
+      vi.spyOn(PgSession, "refresh").mockResolvedValue();
+    });
+
+    afterEach(() => {
+      resetTelemetry();
+      vi.restoreAllMocks();
+    });
+
+    /** `/api/agent` answers `status` with `body` */
+    const refuses = (status: number, body: Record<string, unknown>) =>
+      respond(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        })
+      );
+
+    const refused = () =>
+      tracked.events.filter((event) => event.name === "agent_refused");
+
+    it("shows the daily-cap sentence, tracks it once, and keeps the conversation and session", async () => {
+      PgAssistant.addUserMessage("earlier");
+      refuses(429, {
+        error: "server text",
+        reason: "daily-cap",
+        tier: "newcomer",
+      });
+
+      await expect(defaultBackend().send("hi")).rejects.toThrow(
+        /^You have used today's free assistant allowance\. It resets at 00:00 UTC, or bring your own key to keep going\.$/
+      );
+      expect(refused()).toEqual([
+        {
+          name: "agent_refused",
+          params: { reason: "daily-cap", tier: "newcomer" },
+        },
+      ]);
+      expect(
+        PgAssistant.items.some(
+          (item) => item.kind === "user" && item.text === "earlier"
+        )
+      ).toBe(true);
+      // Ending it would reopen the picker on sign-in, not on the backends
+      expect(PgSession.refresh).not.toHaveBeenCalled();
+    });
+
+    it("shows the pool-exhausted sentence and tracks it once", async () => {
+      refuses(503, {
+        error: "server text",
+        reason: "pool-exhausted",
+        tier: "established",
+      });
+
+      await expect(defaultBackend().send("hi")).rejects.toThrow(
+        /^The free assistant is out of capacity for today\. It resets at 00:00 UTC, or bring your own key to keep going\.$/
+      );
+      expect(refused()).toEqual([
+        {
+          name: "agent_refused",
+          params: { reason: "pool-exhausted", tier: "established" },
+        },
+      ]);
+    });
+
+    it("tracks a refusal without a tier as unknown", async () => {
+      refuses(429, { reason: "daily-cap" });
+
+      await expect(defaultBackend().send("hi")).rejects.toThrow(
+        /^You have used today's free assistant allowance\./
+      );
+
+      expect(refused()).toEqual([
+        {
+          name: "agent_refused",
+          params: { reason: "daily-cap", tier: "unknown" },
+        },
+      ]);
+    });
+
+    it("tracks nothing for a signed-out refusal", async () => {
+      refuses(401, { error: "Sign in.", reason: "signed-out" });
+
+      await expect(defaultBackend().send("hi")).rejects.toThrow(/^Sign in\.$/);
+
+      expect(refused()).toEqual([]);
+    });
+
+    it("reads another backend's 429 in the same shape as busy, not as a cap", async () => {
+      refuses(429, { error: "server text", reason: "daily-cap" });
+      const ownKey = createProvider({
+        id: "openai",
+        apiKey: KEY,
+        endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
+      });
+
+      const failure = await ownKey.send("hi").catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(ModelBusyError);
+      expect(refused()).toEqual([]);
+    });
+
+    it("does not read a reason sent with the other limit's status", async () => {
+      refuses(503, { reason: "daily-cap", tier: "newcomer" });
+
+      const failure = await defaultBackend()
+        .send("hi")
+        .catch((e: Error) => e.message);
+
+      expect(failure).toMatch(
+        /^Could not get an answer from the model\. Send your message again\.$/
+      );
+      expect(refused()).toEqual([]);
+    });
+  });
+});
+
+describe("a turn's failure", () => {
+  const json = { "content-type": "application/json" };
+  const refusal = () =>
+    anthropicText("", "refusal", { type: "refusal", category: "cyber" });
+  const paused = () =>
+    Array.from({ length: MAX_RESUMES + 2 }, () =>
+      anthropicText("", "pause_turn")
+    );
+  /** `/api/agent` refuses with `status` and `body` */
+  const refuses = (status: number, body: Record<string, unknown>) =>
+    new Response(JSON.stringify(body), { status, headers: json });
+
+  beforeEach(() => initTelemetry({ providers: [memoryProvider()] }));
+  afterEach(() => resetTelemetry());
+
+  it.each([
+    {
+      name: "a backend error, with its status",
+      provider: defaultBackend,
+      answers: () => [openAiError(500, "boom")],
+      reason: "provider",
+      status: 500,
+      // Spec 08's words, never the backend's text
+      message:
+        /^Could not get an answer from the model\. Send your message again\.$/,
+    },
+    {
+      name: "a refusal, with no status",
+      provider: anthropic,
+      answers: () => [refusal()],
+      reason: "refusal",
+      status: undefined,
+      message: /Rephrase it, or switch backends\.$/,
+    },
+    {
+      name: "a turn that kept pausing, with no status",
+      provider: anthropic,
+      answers: paused,
+      reason: "paused",
+      status: undefined,
+      message: new RegExp(
+        `^The turn paused ${MAX_RESUMES + 1} times without finishing\\.$`
+      ),
+    },
+    {
+      name: "a backend that did not answer, with no status",
+      provider: defaultBackend,
+      answers: () => [
+        () => {
+          throw new TypeError("Failed to fetch");
+        },
+      ],
+      reason: "provider",
+      status: undefined,
+      message:
+        /^Could not get an answer from the model\. Send your message again\.$/,
+    },
+    {
+      // The panel's own sentence for the limit, not the SDK's wrapper around the status
+      name: "the daily cap, as capped with the 429",
+      provider: defaultBackend,
+      answers: () => [
+        refuses(429, { reason: DAILY_CAP_REASON, tier: "newcomer" }),
+      ],
+      reason: "capped",
+      status: 429,
+      message: new RegExp(`^${REFUSAL_MESSAGES[DAILY_CAP_REASON]}$`),
+    },
+    {
+      name: "an exhausted pool, as capped with the 503",
+      provider: defaultBackend,
+      answers: () => [
+        // `error` as the route sends it, so the cap is read before the 503's own sentence
+        refuses(503, {
+          error: "server text",
+          reason: POOL_EXHAUSTED_REASON,
+          tier: "established",
+        }),
+      ],
+      reason: "capped",
+      status: 503,
+      message: new RegExp(`^${REFUSAL_MESSAGES[POOL_EXHAUSTED_REASON]}$`),
+    },
+    {
+      // Relayed by the default backend with the upstream's own status and no `reason`
+      name: "an upstream rate limit, as the provider's 429 and not a cap",
+      provider: defaultBackend,
+      answers: () => [openAiError(429, "Rate limited")],
+      reason: "provider",
+      status: 429,
+      message: /^The model is busy\./,
+    },
+  ])(
+    "rejects with $name",
+    async ({ provider, answers, reason, status, message }) => {
+      respond(...answers());
+
+      const failure = await provider()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(TurnFailure);
+      expect(failure).toMatchObject({ reason, status });
+      expect((failure as Error).message).toMatch(message);
+      // The SDK's error travels with it, for a log
+      expect((failure as Error).cause).toMatchObject({ name: "AiTurnError" });
+    }
+  );
+
+  it("passes a failure raised on this side through unchanged", async () => {
+    respond(
+      ...Array.from({ length: MAX_STEPS }, (_, i) =>
+        openAiToolCall(`c${i}`, "write_file", {})
+      )
+    );
+
+    const failure = await defaultBackend()
+      .send("loop")
+      .catch((e: unknown) => e);
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).not.toBeInstanceOf(TurnFailure);
   });
 });
