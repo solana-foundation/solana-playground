@@ -9,16 +9,17 @@ const ref = process.env.VERCEL_GIT_COMMIT_REF;
 const target = process.env.VERCEL_ENV;
 
 /**
- * Whether `branch` is one whose preview reviewers use: `master`, or a branch
- * under a fixed prefix, `scope/` or `integration/`, so a new integration
- * branch needs only the right name. `new-face-polish-<n>` predates the
- * prefixes; TODO: drop it once `new-face-polish-3` has landed
- * (solana-foundation#72).
+ * Whether `branch` is one whose preview reviewers use: `master`, the release
+ * branch `master-production`, or a branch under a fixed prefix, `scope/` or
+ * `integration/`, so a new integration branch needs only the right name.
  */
 const isIntegrationBranch = (branch) =>
   branch === "master" ||
+  branch === "master-production" ||
   branch.startsWith("scope/") ||
   branch.startsWith("integration/") ||
+  // TODO: drop once `new-face-polish-3` has landed (solana-foundation#72);
+  // the polish rounds predate the prefixes.
   /^new-face-polish-\d+$/.test(branch);
 
 const subject = `${ref || "a deployment with no Git ref"} (${

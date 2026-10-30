@@ -36,6 +36,7 @@ test("builds production with no ref", () => {
 
 for (const [ref, expected] of [
   ["master", BUILD],
+  ["master-production", BUILD],
   ["scope/interface", BUILD],
   ["scope/typescript", BUILD],
   ["integration/release", BUILD],
@@ -47,6 +48,7 @@ for (const [ref, expected] of [
   ["integrations", SKIP],
   ["feat/integration/x", SKIP],
   ["Master", SKIP],
+  ["master-production-fix", SKIP],
   ["new-face-polish-2-fix", SKIP],
   // No ref, unset or empty, cannot be classified, so it builds
   [undefined, BUILD],
