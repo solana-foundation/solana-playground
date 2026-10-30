@@ -12,13 +12,13 @@
  */
 
 /**
- * @returns {{ push: (chunk: Uint8Array) => void; usage: () => Usage | null }}
+ * @returns {{ push: (chunk: Uint8Array) => void; usage: () => Usage | undefined }}
  */
 export const usageReader = () => {
   const decoder = new TextDecoder();
   let buffer = "";
-  /** @type {Usage | null} */
-  let usage = null;
+  /** @type {Usage | undefined} */
+  let usage;
   let warned = false;
 
   return {

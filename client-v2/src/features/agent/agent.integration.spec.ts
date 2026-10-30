@@ -50,10 +50,11 @@ const db = vi.hoisted(() => {
         params as [string, string, number, number, number, number];
       const user = state.users.get(userId);
       if (!user) return { rows: [] };
-      const dated = user.githubCreatedAt !== null;
+      const createdAt = user.githubCreatedAt;
+      const dated = createdAt !== null;
       const tier =
-        dated &&
-        user.githubCreatedAt!.getTime() < Date.now() - ageDays * 86400_000
+        createdAt !== null &&
+        createdAt.getTime() < Date.now() - ageDays * 86400_000
           ? "established"
           : "newcomer";
       const cap = tier === "established" ? establishedCap : newcomerCap;
@@ -613,7 +614,8 @@ describe("POST /api/agent streaming", () => {
 
 /**
  * The spend gate, one `describe` per requirement of the
- * `assistant-default-backend-spend` spec, by its scenarios.
+ * `assistant-default-backend-spend` spec, and a test per scenario, its name
+ * reworded to start with what the route does.
  */
 describe("POST /api/agent spend gate", () => {
   const GITHUB = "https://api.github.com/user";
@@ -650,6 +652,9 @@ describe("POST /api/agent spend gate", () => {
     db.state.spend.get(`${userId}|${today()}`) ?? { reserved: 0, spent: 0 };
   const spendSoFar = (userId: string, spent: number) =>
     db.state.spend.set(`${userId}|${today()}`, { reserved: 0, spent });
+  /** The stored GitHub account age; `undefined` for a user the fake lacks */
+  const accountAge = (userId = "user-1") =>
+    db.state.users.get(userId)?.githubCreatedAt;
 
   /** An upstream stream: one text event, then the usage unless `usage` is null */
   const streamed = (usage: object | null = USAGE) => {
@@ -701,7 +706,7 @@ describe("POST /api/agent spend gate", () => {
   };
 
   describe("A user's daily spend is capped", () => {
-    it("A turn past the cap is refused without an upstream call", async () => {
+    it("refuses a turn past the cap without an upstream call", async () => {
       spendSoFar("user-1", CAP.established);
       const fetched = network();
 
@@ -717,7 +722,7 @@ describe("POST /api/agent spend gate", () => {
       expect(fetched).not.toHaveBeenCalled();
     });
 
-    it("The cap resets at 00:00 UTC", async () => {
+    it("resets the cap at 00:00 UTC", async () => {
       vi.setSystemTime(new Date("2026-10-29T23:59:00Z"));
       spendSoFar("user-1", CAP.established);
       network();
@@ -728,7 +733,7 @@ describe("POST /api/agent spend gate", () => {
       expect((await postJson(handler, TURN)).statusCode).toBe(200);
     });
 
-    it("Users do not share a cap", async () => {
+    it("keeps one user's spend out of another's cap", async () => {
       spendSoFar("user-1", CAP.established);
       const fetched = network();
       session.userId = "user-2";
@@ -741,7 +746,7 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("Concurrent turns cannot pass the cap together", () => {
-    it("Parallel turns at the edge of the cap", async () => {
+    it("admits one of two parallel turns at the edge of the cap", async () => {
       spendSoFar("user-1", CAP.established - RESERVED);
       const fetched = network();
 
@@ -821,7 +826,7 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("A turn is charged what it cost", () => {
-    it("A completed turn is charged its reported usage", async () => {
+    it("charges a completed turn its reported usage", async () => {
       network();
 
       await postJson(handler, TURN);
@@ -829,7 +834,7 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: USAGE_COST });
     });
 
-    it("A turn that ends without reported usage is charged the reservation", async () => {
+    it("charges the reservation to a turn that ends without reported usage", async () => {
       network(() => streamed(null));
 
       await postJson(handler, TURN);
@@ -837,7 +842,7 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: RESERVED });
     });
 
-    it("A turn the caller abandons is charged the reservation", async () => {
+    it("charges the reservation to a turn the caller abandons", async () => {
       // The usage would come last; the caller leaves after the first event
       const res = makeRes({
         write: (chunk) => {
@@ -932,7 +937,7 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: 0 });
     });
 
-    it("A turn the upstream refuses is not charged", async () => {
+    it("charges nothing for a turn the upstream refuses", async () => {
       network(() => new Response("overloaded", { status: 529 }));
 
       const res = await postJson(handler, TURN);
@@ -941,7 +946,7 @@ describe("POST /api/agent spend gate", () => {
       expect(spend()).toEqual({ reserved: 0, spent: 0 });
     });
 
-    it("A turn that cannot reach the upstream is not charged", async () => {
+    it("charges nothing for a turn that cannot reach the upstream", async () => {
       vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("ENOTFOUND")));
 
       const res = await postJson(handler, TURN);
@@ -952,7 +957,7 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("One request's cost is bounded", () => {
-    it("An oversized body is refused", async () => {
+    it("refuses an oversized body", async () => {
       vi.stubEnv("AGENT_MAX_BODY_BYTES", "16");
       const fetched = network();
 
@@ -963,7 +968,7 @@ describe("POST /api/agent spend gate", () => {
       expect(db.state.spend.size).toBe(0);
     });
 
-    it("The caller cannot raise the output limit", async () => {
+    it("keeps the output limit when the caller asks for more", async () => {
       const fetched = network();
 
       await postJson(
@@ -994,7 +999,7 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("Turns are served only by the configured providers", () => {
-    it("The upstream request names the providers", async () => {
+    it("names the configured providers in the upstream request", async () => {
       vi.stubEnv("AGENT_PROVIDERS", "baseten,fireworks");
       const fetched = network();
 
@@ -1005,7 +1010,7 @@ describe("POST /api/agent spend gate", () => {
       });
     });
 
-    it("The caller cannot widen the list", async () => {
+    it("ignores the providers the caller names", async () => {
       vi.stubEnv("AGENT_PROVIDERS", "baseten,fireworks");
       const fetched = network();
 
@@ -1025,7 +1030,9 @@ describe("POST /api/agent spend gate", () => {
       expect(body).not.toHaveProperty("provider");
     });
 
-    it("No providers configured", async () => {
+    it("sends no routing restriction when AGENT_PROVIDERS is set but empty", async () => {
+      // Set, not unset: an unset variable takes the Gateway's default
+      // providers instead ("restricts the Gateway to its default providers")
       vi.stubEnv("AGENT_PROVIDERS", "");
       const fetched = network();
 
@@ -1039,7 +1046,7 @@ describe("POST /api/agent spend gate", () => {
     const createdDaysAgo = (days: number) =>
       new Date(Date.now() - days * 86400_000);
 
-    it("A new account is a newcomer", async () => {
+    it("treats a new account as a newcomer", async () => {
       db.state.users.set("user-1", {
         githubCreatedAt: createdDaysAgo(3),
         token: "gho_1",
@@ -1057,7 +1064,7 @@ describe("POST /api/agent spend gate", () => {
       expect(sent(fetched).key).toBe("Bearer newcomer-key");
     });
 
-    it("An old account is established", async () => {
+    it("treats an old account as established", async () => {
       spendSoFar("user-1", CAP.newcomer);
       const fetched = network();
 
@@ -1067,7 +1074,7 @@ describe("POST /api/agent spend gate", () => {
       expect(sent(fetched).key).toBe("Bearer established-key");
     });
 
-    it("An unknown account age is treated as new", async () => {
+    it("treats an unknown account age as new", async () => {
       db.state.users.set("user-1", { githubCreatedAt: null, token: null });
       vi.spyOn(console, "warn").mockImplementation(() => {});
       const fetched = network();
@@ -1096,20 +1103,18 @@ describe("POST /api/agent spend gate", () => {
       db.state.users.set("user-1", { githubCreatedAt: null, token: "gho_1" });
     });
 
-    it("The first turn learns the age", async () => {
+    it("learns the account age on the first turn", async () => {
       const fetched = network();
 
       await postJson(handler, TURN);
       await postJson(handler, TURN);
 
       expect(sent(fetched, 0).key).toBe("Bearer newcomer-key");
-      expect(db.state.users.get("user-1")!.githubCreatedAt).toEqual(
-        OLD_ACCOUNT
-      );
+      expect(accountAge()).toEqual(OLD_ACCOUNT);
       expect(sent(fetched, 1).key).toBe("Bearer established-key");
     });
 
-    it("The lookup starts after the response ends", async () => {
+    it("starts the age lookup after the response ends", async () => {
       let answerGitHub!: (response: Response) => void;
       const res = makeRes();
       network(
@@ -1126,15 +1131,13 @@ describe("POST /api/agent spend gate", () => {
       await vi.waitFor(() => expect(answerGitHub).toBeDefined());
 
       expect(res.ended).toBe(true);
-      expect(db.state.users.get("user-1")!.githubCreatedAt).toBeNull();
+      expect(accountAge()).toBeNull();
       answerGitHub(json({ created_at: OLD_ACCOUNT.toISOString() }));
       await pending;
-      expect(db.state.users.get("user-1")!.githubCreatedAt).toEqual(
-        OLD_ACCOUNT
-      );
+      expect(accountAge()).toEqual(OLD_ACCOUNT);
     });
 
-    it("A failed lookup is tried again", async () => {
+    it("tries a failed age lookup again on the next turn", async () => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       const fetched = network(
         () => streamed(),
@@ -1142,7 +1145,7 @@ describe("POST /api/agent spend gate", () => {
       );
 
       await postJson(handler, TURN);
-      expect(db.state.users.get("user-1")!.githubCreatedAt).toBeNull();
+      expect(accountAge()).toBeNull();
       await postJson(handler, TURN);
 
       expect(sent(fetched, 1).key).toBe("Bearer newcomer-key");
@@ -1158,17 +1161,15 @@ describe("POST /api/agent spend gate", () => {
 
       expect((await postJson(handler, TURN)).statusCode).toBe(429);
 
-      expect(db.state.users.get("user-1")!.githubCreatedAt).toEqual(
-        OLD_ACCOUNT
-      );
+      expect(accountAge()).toEqual(OLD_ACCOUNT);
     });
   });
 
   describe("An exhausted pool is reported as such", () => {
     it.each([
-      ["The tier's pool is empty", "quota_for_entity_exceeded"],
-      ["The credit balance is empty", "insufficient_funds"],
-    ])("%s", async (_, type) => {
+      ["the tier's pool is empty", "quota_for_entity_exceeded"],
+      ["the credit balance is empty", "insufficient_funds"],
+    ])("reports an exhausted pool when %s", async (_, type) => {
       vi.spyOn(console, "warn").mockImplementation(() => {});
       network(() =>
         json({ error: { message: "spent", type } }, { status: 402 })
@@ -1202,7 +1203,7 @@ describe("POST /api/agent spend gate", () => {
   });
 
   describe("The gate fails closed", () => {
-    it("The ledger is unreachable", async () => {
+    it("refuses the turn when the ledger is unreachable", async () => {
       vi.spyOn(console, "error").mockImplementation(() => {});
       db.state.down = true;
       const fetched = network();

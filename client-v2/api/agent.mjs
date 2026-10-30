@@ -504,6 +504,9 @@ const refusalCause = (status, text) => {
   if (error?.type === "customer_verification_required") {
     return "payment-method";
   }
+  // The Gateway gives these two no `type` of their own (the free-tier refusal
+  // comes as `no_providers_available`, the allowlist's as `forbidden`, both
+  // shared with other causes); its FAQ tells them apart by the message
   if (/free tier/i.test(message)) return "free-tier";
   if (/restrict|allowlist/i.test(message)) return "allowlist";
   return "unknown";

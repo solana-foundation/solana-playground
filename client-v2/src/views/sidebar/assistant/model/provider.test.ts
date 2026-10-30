@@ -494,7 +494,8 @@ describe("the assistant's provider", () => {
     const refused = () =>
       tracked.events.filter((event) => event.name === "agent_refused");
 
-    it("shows the daily-cap sentence and tracks it once", async () => {
+    it("shows the daily-cap sentence, tracks it once, and keeps the conversation and session", async () => {
+      PgAssistant.addUserMessage("earlier");
       refuses(429, {
         error: "server text",
         reason: "daily-cap",
@@ -510,6 +511,13 @@ describe("the assistant's provider", () => {
           params: { reason: "daily-cap", tier: "newcomer" },
         },
       ]);
+      expect(
+        PgAssistant.items.some(
+          (item) => item.kind === "user" && item.text === "earlier"
+        )
+      ).toBe(true);
+      // Ending it would reopen the picker on sign-in, not on the backends
+      expect(PgSession.refresh).not.toHaveBeenCalled();
     });
 
     it("shows the pool-exhausted sentence and tracks it once", async () => {
@@ -533,9 +541,9 @@ describe("the assistant's provider", () => {
     it("tracks a refusal without a tier as unknown", async () => {
       refuses(429, { reason: "daily-cap" });
 
-      await defaultBackend()
-        .send("hi")
-        .catch(() => undefined);
+      await expect(defaultBackend().send("hi")).rejects.toThrow(
+        /^You have used today's free assistant allowance\./
+      );
 
       expect(refused()).toEqual([
         {
@@ -548,28 +556,9 @@ describe("the assistant's provider", () => {
     it("tracks nothing for a signed-out refusal", async () => {
       refuses(401, { error: "Sign in.", reason: "signed-out" });
 
-      await defaultBackend()
-        .send("hi")
-        .catch(() => undefined);
+      await expect(defaultBackend().send("hi")).rejects.toThrow(/^Sign in\.$/);
 
       expect(refused()).toEqual([]);
-    });
-
-    it("keeps the conversation and does not end the session", async () => {
-      PgAssistant.addUserMessage("earlier");
-      refuses(429, { reason: "daily-cap", tier: "newcomer" });
-
-      await defaultBackend()
-        .send("hi")
-        .catch(() => undefined);
-
-      expect(
-        PgAssistant.items.some(
-          (item) => item.kind === "user" && item.text === "earlier"
-        )
-      ).toBe(true);
-      // Ending it would reopen the picker on sign-in, not on the backends
-      expect(PgSession.refresh).not.toHaveBeenCalled();
     });
 
     it("keeps the SDK's message for another backend's 429 in the same shape", async () => {

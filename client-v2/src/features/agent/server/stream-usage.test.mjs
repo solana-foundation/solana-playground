@@ -25,11 +25,11 @@ describe("usageReader", () => {
   });
 
   it("reports none for a stream without usage", () => {
-    assert.equal(feed('data: {"choices":[{"delta":{}}]}\n\n'), null);
+    assert.equal(feed('data: {"choices":[{"delta":{}}]}\n\n'), undefined);
   });
 
   it("reports none for an event cut off before it ended", () => {
-    assert.equal(feed(last.slice(0, -2)), null);
+    assert.equal(feed(last.slice(0, -2)), undefined);
   });
 
   it("skips a malformed event and keeps reading", (t) => {
