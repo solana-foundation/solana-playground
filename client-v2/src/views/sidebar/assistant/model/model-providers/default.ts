@@ -23,6 +23,7 @@ const signedOutRefusal = (error: AiTurnError): string | undefined => {
 };
 
 export const defaultProfile: ModelProviderProfile = {
+  supportsTools: true,
   // The model is the server's to pick, so none is sent and none is shown
   profile: () => ({
     connection: { provider: "default", url: DEFAULT_BACKEND_URL },

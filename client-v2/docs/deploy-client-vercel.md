@@ -283,6 +283,25 @@ the panel never offers a backend that would refuse every turn. Sign-in limits wh
 spends the key, not how much: per-session and daily caps are HOO-1751, and the
 request rate per client is capped by the [firewall](firewall.md) rules.
 
+## MCP gateway
+
+`api/mcp.mjs` serves the MCP upstreams the assistant panel lists. Which ones
+exist is the catalogue in
+[`src/features/mcp/model/catalogue.mjs`](../src/features/mcp/model/catalogue.mjs),
+each entry in the JSON format of the panel's "Additional servers" editor plus
+`signedIn` (offered to signed-in callers only). A `${NAME}` in any string is
+filled from the environment, and an entry naming an unset variable is left
+out, so a variable is the switch for its entry; `${NAME:-}` marks a header or
+query value as optional. The browser never carries the list: it asks
+`GET /api/mcp` at startup.
+
+| Variable | Meaning |
+| --- | --- |
+| `MCP_SERVERS` | Optional. A JSON array in the catalogue's format that replaces the catalogue entirely; its placeholders are filled the same way |
+| `MCP_EXPLORER_BYPASS` | Switches the catalogue's Explorer entry on: Vercel's Protection Bypass for Automation secret of the Explorer deployment. Store it as a Secret |
+| `MCP_EXPLORER_URL` | Optional, defaults to `https://explorer.solana.com/mcp` |
+| `MCP_EXPLORER_TOKEN` | Optional. Sent as a bearer token when the Explorer deployment gates on `MCP_ACCESS_KEYS` |
+
 ## Conversation and project sync
 
 Off unless configured, and off again the moment `SYNC_ENABLED` is not exactly

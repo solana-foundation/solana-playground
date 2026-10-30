@@ -7,6 +7,7 @@ import type { ModelProviderProfile } from "./types";
  * moves between turns); `updates` returns the progress notes.
  */
 export const anthropicProfile: ModelProviderProfile = {
+  supportsTools: true,
   profile: ({ apiKey, settings }) => {
     const { model, effort } =
       settings ??

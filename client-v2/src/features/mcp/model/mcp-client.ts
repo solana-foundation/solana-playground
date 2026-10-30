@@ -409,6 +409,25 @@ if (import.meta.vitest) {
       }
     });
 
+    it("sends a protected entry's bypass in the query, where CORS lets it through", async () => {
+      const requests = fakeServer();
+
+      await listTools({
+        id: "guarded",
+        name: "Guarded",
+        url: "https://mcp.test/mcp",
+        enabled: true,
+        protection: { provider: "vercel", secret: "b-1" },
+      });
+
+      expect(requests.length).toBeGreaterThan(0);
+      for (const request of requests) {
+        expect(request.url).toBe(
+          "https://mcp.test/mcp?x-vercel-protection-bypass=b-1"
+        );
+      }
+    });
+
     interface Edit {
       url?: string;
       authToken?: string;

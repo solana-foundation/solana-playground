@@ -1,4 +1,6 @@
 import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import styled, { css } from "styled-components";
 
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
@@ -15,6 +17,13 @@ interface ServerConsoleProps {
 
 /** Descriptions past this many characters start collapsed */
 const LONG_DESCRIPTION = 220;
+
+/** A line that opens with an all-caps label, `IDENTIFIER:` or `ACCOUNT TYPES RETURNED (by entity.kind):` */
+const CAPS_LABEL = /^([A-Z][A-Z0-9 _-]*[A-Z0-9](?: \([^)\n]*\))?:)/gm;
+
+/** Tool descriptions are Markdown by convention; servers that write `LABEL:` headings get them in bold */
+const emphasiseLabels = (description: string) =>
+  description.replace(CAPS_LABEL, "**$1**");
 
 /** Argument names that mean the Solana cluster, whatever the server calls it */
 const CLUSTER_KEYS = ["cluster", "network"];
@@ -173,7 +182,9 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
           {selected && (
             <>
               <Description $clamped={!descriptionOpen && descriptionIsLong}>
-                {description}
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {emphasiseLabels(description)}
+                </ReactMarkdown>
               </Description>
               {descriptionIsLong && (
                 <button
@@ -196,14 +207,15 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
               />
 
               <Actions>
-                <Action onClick={call} disabled={busy}>
-                  {busy ? "Calling…" : "Call"}
-                </Action>
+                {/* Asking the model is the usual next step after the arguments, so it comes first in tab order; Call ends the form */}
                 {PgAssistant.isConnected && (
                   <Action onClick={askAssistant} disabled={busy}>
                     Ask {providerName ?? "the assistant"}
                   </Action>
                 )}
+                <Action onClick={call} disabled={busy}>
+                  {busy ? "Calling…" : "Call"}
+                </Action>
               </Actions>
             </>
           )}
@@ -220,6 +232,7 @@ const Card = styled.div`
   ${({ theme }) => css`
     margin-bottom: 0.75rem;
     padding: 0.625rem;
+    background: ${theme.colors.default.bgPrimary};
     border: 1px solid ${theme.colors.default.border};
     border-radius: ${theme.default.borderRadius};
   `}
@@ -263,16 +276,52 @@ const Description = styled.div<{ $clamped: boolean }>`
     padding-top: 0.375rem;
     color: ${theme.colors.default.textSecondary};
     font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-    white-space: pre-wrap;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+
+    & p,
+    & ul,
+    & ol {
+      margin: 0 0 0.5rem;
+    }
+    & > :last-child {
+      margin-bottom: 0;
+    }
+    & ul,
+    & ol {
+      padding-left: 1.125rem;
+    }
+    & ul {
+      list-style: disc;
+    }
+    & ol {
+      list-style: decimal;
+    }
+    & li + li {
+      margin-top: 0.25rem;
+    }
+    & li > ul,
+    & li > p {
+      margin: 0.25rem 0 0;
+    }
+    & strong {
+      color: ${theme.colors.default.textPrimary};
+      font-weight: 600;
+    }
+    & code {
+      padding: 0.0625rem 0.25rem;
+      background: ${theme.colors.state.hover.bg};
+      border-radius: 0.25rem;
+      font-family: ${theme.font.code.family};
+      font-size: 0.95em;
+    }
 
     ${$clamped &&
     css`
-      /* Clamped rather than sliced, so the full text stays selectable */
-      display: -webkit-box;
-      -webkit-box-orient: vertical;
-      -webkit-line-clamp: 3;
+      /* Cut by height rather than sliced, so the full text stays selectable; the fade marks the cut */
+      max-height: 4.75em;
       overflow: hidden;
+      mask-image: linear-gradient(to bottom, black 60%, transparent);
     `}
   `}
 `;

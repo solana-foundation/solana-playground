@@ -6,6 +6,7 @@ import type { ModelProviderProfile } from "./types";
 export const openAiCompatibleProfile = (
   id: OpenAiCompatibleProvider
 ): ModelProviderProfile => ({
+  supportsTools: true,
   profile: ({ apiKey, endpoint }) => {
     const { baseUrl, model } =
       endpoint ?? PROVIDERS.find((p) => p.id === id)!.endpoint!;
