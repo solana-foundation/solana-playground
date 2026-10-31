@@ -99,16 +99,13 @@ copy of a published IDL. Loading one never writes to the chain.
 ```mermaid
 flowchart TD
   pid["Program id on the selected cluster"] --> read["Read the IDL from chain"]
-  read --> pmp{"Program Metadata<br/>has an IDL?"}
-  read --> anchor{"Anchor IDL account<br/>has an IDL?"}
-  pmp -- yes --> picker["Source picker<br/>(idl-source)"]
-  anchor -- yes --> picker
+  read --> found{"Program Metadata or<br/>Anchor IDL account<br/>has an IDL?"}
+  found -- "yes: each source that has one" --> picker["Source picker<br/>(idl-source)"]
+  found -- "neither has one" --> none["No IDL on chain:<br/>offer a local IDL"]
   build["The project's build IDL"] --> picker
   file["File"] --> local["Local IDL"]
   paste["Pasted JSON<br/>(idl-paste)"] --> local
   local --> picker
-  pmp -- no --> none["No IDL on chain:<br/>offer a local IDL"]
-  anchor -- no --> none
   none --> local
   picker -->|"default order: Program Metadata,<br/>Anchor IDL account, build;<br/>a loaded local IDL is selected"| form["Interact form"]
 ```
@@ -149,7 +146,11 @@ sequenceDiagram
   participant Dialog as Mainnet disclaimer (mainnet-guard)
   participant Cookie as pg_mainnet_disclaimer cookie
   participant Chain as Mainnet Beta
-  Start->>Dialog: deploy or IDL upload on Mainnet Beta (deploy_started)
+  alt Program deploy
+    Start->>Dialog: deploy on Mainnet Beta (deploy_started)
+  else IDL upload
+    Start->>Dialog: IDL upload on Mainnet Beta (idl_upload_started)
+  end
   Note over Dialog: shown every time, checkbox unticked
   alt Cancel
     User->>Dialog: Cancel
