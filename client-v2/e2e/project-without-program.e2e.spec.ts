@@ -90,6 +90,38 @@ test("project-without-program: A client and its tests", async ({
   await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1);
 });
 
+test("project-without-program: A repository with an Anchor program", async ({
+  seededPage: page,
+}) => {
+  await stubRepository(page, {
+    "programs/counter/src/lib.rs":
+      "use anchor_lang::prelude::*;\n#[program]\nmod counter {}",
+    "client/index.ts": "export {};",
+    "tests/counter.ts": "export {};",
+  });
+  await importRepository(page);
+
+  // The Anchor layout: the program's `src/`, the client, and each test as
+  // `<name>.test.ts`. None of it is read as a project with no program.
+  await expect(item(page, "src/lib.rs")).toHaveCount(1, LONG);
+  await expect(item(page, "client/index.ts")).toHaveCount(1);
+  await expect(item(page, "tests/counter.test.ts")).toHaveCount(1);
+  await expect(item(page, "client/programs/counter/src/lib.rs")).toHaveCount(0);
+});
+
+test("project-without-program: Two files for one place", async ({
+  seededPage: page,
+}) => {
+  await stubRepository(page, {
+    "a.ts": "export const top = 1;",
+    "client/a.ts": "export const nested = 2;",
+  });
+  await importRepository(page);
+
+  await expect(item(page, "client/a.ts")).toHaveCount(1, LONG);
+  await expect(item(page, "client/client/a.ts")).toHaveCount(1);
+});
+
 test("project-without-program: Folders are kept", async ({
   seededPage: page,
 }) => {

@@ -274,3 +274,46 @@ test("gist-sharing: A failure is counted by reason", async ({ page }) => {
     .poll(() => lineOf(lines, "gist_export_failed"))
     .toContain("reason: rate-limited");
 });
+
+test("gist-sharing: Too large is caught before sending", async ({ page }) => {
+  test.setTimeout(120_000);
+  await stubAuth(page, { signedIn: true });
+  const requests = await stubGists(page);
+  // A repository whose one source file is over 4 MB, imported as the project
+  await page.route("https://api.github.com/repos/alice/big/git/trees/**", (r) =>
+    json(r, {
+      truncated: false,
+      tree: [{ path: "index.ts", type: "blob", sha: "index.ts" }],
+    })
+  );
+  await page.route("https://raw.githubusercontent.com/alice/big/**", (r) =>
+    r.fulfill({ body: "//" + "x".repeat(4 * 1024 * 1024 + 1024) })
+  );
+  await seedWorkspace(page);
+  await page.locator("[data-settings-trigger]").first().click();
+  await page
+    .getByRole("region", { name: "Settings" })
+    .getByRole("button", { name: "From GitHub" })
+    .click();
+  const importer = page.getByRole("dialog");
+  await importer
+    .getByPlaceholder("https://github.com/... or https://gist.github.com/...")
+    .fill("https://github.com/alice/big");
+  await importer.locator('button[type="submit"]').click();
+  await expect(page.getByRole("dialog")).toHaveCount(0, LONG);
+  await page.getByRole("button", { name: "Back to app" }).click();
+  await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
+
+  const big = "github-alice/big/";
+  const menu = await projectMenu(page, big);
+  await menu.getByRole("menuitem", { name: `Share ${big} as a gist` }).click();
+  await page
+    .getByRole("dialog", { name: `Share ${big} as a gist` })
+    .getByRole("button", { name: "Create public gist" })
+    .click();
+
+  await expect(
+    page.getByText(`${big} is too large to share as a gist`)
+  ).toBeVisible(LONG);
+  expect(requests).toHaveLength(0);
+});
