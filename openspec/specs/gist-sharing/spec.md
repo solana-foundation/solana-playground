@@ -130,16 +130,20 @@ A name already taken, or equal to the manifest's, SHALL get `-2`, `-3`, ...
 before its extension. Names SHALL be assigned in path order, so the same
 project always gives the same names.
 
-#### Scenario: Nested paths
+#### Scenario: Nested paths (manual)
 
 - **WHEN** a project holding `src/lib.rs` and `client/client.ts` is flattened
 - **THEN** the gist holds `src__lib.rs` and `client__client.ts`
+- Pinned by client-v2/src/features/gist/lib/format.ts: "nested paths become __
+  names"
 
-#### Scenario: A clash
+#### Scenario: A clash (manual)
 
 - **WHEN** a project holds both `src/a.rs` and a root file `src__a.rs`
 - **THEN** one is named `src__a.rs` and the other `src__a-2.rs`, the same way
   on every export
+- Pinned by client-v2/src/features/gist/lib/format.ts: "a clash gets -2 before
+  the last extension, the same way every time"
 
 ### Requirement: Carry a manifest that reverses the flattening
 
@@ -149,18 +153,22 @@ Every exported gist SHALL hold `.playground.json`:
 `empty` and not uploaded. Opening the gist SHALL give back exactly the
 exported paths and contents.
 
-#### Scenario: Round trip
+#### Scenario: Round trip (manual)
 
 - **WHEN** a project's exportable files, including an empty `tests/.keep`, are
   flattened and then read back from the resulting gist files
 - **THEN** the paths and contents equal the originals, and the project name is
   the one exported
+- Pinned by client-v2/src/features/gist/lib/format.ts: "round trip keeps
+  paths, contents and name"
 
-#### Scenario: An unknown manifest version
+#### Scenario: An unknown manifest version (manual)
 
 - **WHEN** a gist's manifest says `"version": 2`
 - **THEN** reading it fails with reason `unsupported-version`, and nothing is
   written
+- Pinned by client-v2/src/features/gist/lib/format.ts: "rejects another
+  manifest version"
 
 ### Requirement: Treat a gist's manifest as untrusted
 
@@ -170,15 +178,19 @@ maps a name to a path that is absolute, contains `.`, `..` or an empty
 segment, or is one the export never writes, or names a gist file that is not
 in the gist.
 
-#### Scenario: A path that climbs out
+#### Scenario: A path that climbs out (manual)
 
 - **WHEN** a manifest maps `x.rs` to `../../etc/x.rs`
 - **THEN** reading fails with reason `unsafe-path`
+- Pinned by client-v2/src/features/gist/lib/format.ts: "rejects the unsafe
+  path %s"
 
-#### Scenario: A manifest entry with no file
+#### Scenario: A manifest entry with no file (manual)
 
 - **WHEN** a manifest maps `src__lib.rs` but the gist holds no such file
 - **THEN** reading fails with reason `missing-file`
+- Pinned by client-v2/src/features/gist/lib/format.ts: "rejects a manifest
+  entry whose file is missing"
 
 ### Requirement: Place a hand-made gist's files by kind
 
@@ -190,12 +202,14 @@ Playground does not support are dropped. The result SHALL say which way the
 files were placed (`manifest` or `loose`). A gist with no file left SHALL fail
 with reason `no-supported-files`.
 
-#### Scenario: A hand-made gist
+#### Scenario: A hand-made gist (manual)
 
 - **WHEN** a gist without `.playground.json` holds `lib.rs`, `app.test.ts`,
   `client.ts` and `notes.docx`
 - **THEN** reading gives `src/lib.rs`, `tests/app.test.ts` and
   `client/client.ts`, and no `notes.docx`
+- Pinned by client-v2/src/features/gist/lib/format.ts: "places a hand-made
+  gist's files by kind"
 
 ### Requirement: Create the gist on the server with the user's token
 
@@ -210,24 +224,32 @@ rejects the token; `429` when GitHub rate-limits; `413` over the size limit;
 other GitHub failure; and `503` when sign-in is not configured, or the session
 or the stored token cannot be read for a reason other than a missing grant.
 
-#### Scenario: Creating a gist
+#### Scenario: Creating a gist (manual)
 
 - **WHEN** a signed-in user whose token has the `gist` scope posts a valid
   body
 - **THEN** GitHub receives `POST /gists` with `public: true` and the files,
   and the route answers `201` with the gist's `html_url` and `id`
+- Pinned by client-v2/api/gists.test.mjs and
+  client-v2/src/features/gist/model/create-gist.test.mjs: "creates the gist
+  with the user's token and answers 201" and "creates a public gist and
+  answers its url and id"
 
-#### Scenario: A token without the scope
+#### Scenario: A token without the scope (manual)
 
 - **WHEN** GitHub answers `404` or `403` and its `X-OAuth-Scopes` header does
   not list `gist`
 - **THEN** the route answers `403 {reason: "needs-gist-scope"}`
+- Pinned by client-v2/src/features/gist/model/create-gist.test.mjs: "reads a
+  404 from a token without the gist scope as needs-gist-scope"
 
-#### Scenario: Signed out
+#### Scenario: Signed out (manual)
 
 - **WHEN** the request carries no session
 - **THEN** the route answers `401 {reason: "signed-out"}` and calls GitHub not
   at all
+- Pinned by client-v2/api/gists.test.mjs: "401s a signed-out request and never
+  calls GitHub"
 
 ### Requirement: Measure the share flow
 
