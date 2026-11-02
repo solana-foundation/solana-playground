@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
 // `GET /api/ai/status` is the one answer the client gates AI surfaces on
@@ -294,5 +295,36 @@ describe("GET /api/ai/status", () => {
       reason: null,
       model: null,
     });
+  });
+});
+
+// The route lives in `api/ai.mjs`, so `/api/ai/status` reaches it only through
+// a rewrite; without one the single-page fallback would answer with HTML
+describe("vercel.json routing of /api/ai/status", () => {
+  /** A rewrite's `source` as Vercel matches it: `:name+` is one or more segments, the rest a regex */
+  const matches = (source, path) =>
+    new RegExp(`^${source.replace(/:[A-Za-z]+\+/g, "[^/]+(?:/[^/]+)*")}$`).test(
+      path
+    );
+
+  const firstRewrite = async (path) => {
+    const config = JSON.parse(
+      await readFile(new URL("../vercel.json", import.meta.url), "utf8")
+    );
+    return config.rewrites.find(({ source }) => matches(source, path));
+  };
+
+  it("assistant-ai-status: The platform's routing serves the path", async () => {
+    assert.equal(
+      (await firstRewrite("/api/ai/status"))?.destination,
+      "/api/ai"
+    );
+  });
+
+  it("sends a client route to the single-page fallback, as a control", async () => {
+    assert.equal(
+      (await firstRewrite("/tutorials"))?.destination,
+      "/index.html"
+    );
   });
 });
