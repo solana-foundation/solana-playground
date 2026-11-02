@@ -51,8 +51,12 @@ const storage = {
   },
 };
 
-/** A tutorial workspace's storage file, relative to the workspace */
-const storageDataPath = () =>
+/**
+ * A tutorial workspace's storage file, relative to the workspace. Exported
+ * so the conversation engine's store can tell a missing file from an
+ * unreadable one against the same path `getStorage` writes.
+ */
+export const storageDataPath = () =>
   PgCommon.joinPaths(
     PgExplorer.PATHS.WORKSPACE_DIRNAME,
     "tutorial-storage.json"

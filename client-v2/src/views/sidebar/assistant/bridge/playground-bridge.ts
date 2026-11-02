@@ -1,4 +1,5 @@
 import { PgBuildOutput, stripKnownNoise } from "./build-output";
+import { applyFile } from "../../../../utils/explorer/apply-file";
 import { describeLesson } from "./lesson-context";
 import type { LessonContext } from "./lesson-context";
 import {
@@ -136,30 +137,7 @@ export const realBridge: PlaygroundBridge = {
   },
 
   async applyPatch({ path, content }) {
-    const fullPath = PgExplorer.convertToFullPath(path);
-
-    // Write without touching tabs; the editor is synced separately below
-    await PgExplorer.createItem(fullPath, content, {
-      override: true,
-      openOptions: { dontOpen: true },
-    });
-
-    /**
-     * Push the new text into the editor too.
-     *
-     * Writing alone is not enough: when a file is reopened, the editor reuses
-     * an existing Monaco model if one exists for that path
-     * (`components/Editor/Monaco/Monaco.tsx`), and that model still holds the
-     * old text. So a patch applied to the file the user is looking at would be
-     * saved correctly and stay invisible until a reload.
-     *
-     * Setting the model's value also gives the user a normal editor undo.
-     */
-    const monaco = await import("monaco-editor");
-    const model = monaco.editor
-      .getModels()
-      .find((m) => m.uri.path === fullPath);
-    if (model && model.getValue() !== content) model.setValue(content);
+    await applyFile(path, content);
   },
 
   async build() {

@@ -41,12 +41,13 @@ for; tasks with "after nothing" start at once.
 
 ## 3. Conversation
 
-- [ ] 3.1 The conversation engine: the reducer over definition and
+- [x] 3.1 The conversation engine: the reducer over definition and
       progress, the runner's clock, saving to `tutorial-storage.json` under
       `conversation`, reload (turns whole, runs interrupted), Start over,
       `tutorial_started` and `tutorial_finished`. Verify: unit tests that walk
       Hello Anchor's definition from intro to finish with stubbed runs, and
-      reload at every beat (HOO-2350; fleet; M 1.5; after 1.1)
+      reload at every beat (HOO-2350; fleet; M 1.5; after 1.1;
+      plan: [plans/3.1-conversation-engine.md](plans/3.1-conversation-engine.md))
 - [ ] 3.2 Step goals on real results: `build`, `deploy` and `call` checks
       in the feature slice, reusing `VerifyCondition`'s logic from
       `verify.ts` rather than extending the lessons type, `read` dropped,
