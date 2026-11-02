@@ -1,7 +1,10 @@
 import { useEffect, useState } from "react";
 
-/** Spec 08's slow threshold for Build (draft, "to agree with dev") */
-const SLOW_BUILD_MS = 60_000;
+/**
+ * Spec 08's slow threshold for Build (draft, "to agree with dev"); a first
+ * build's own line (spec `client-v2-first-run`) starts at the same mark
+ */
+export const SLOW_BUILD_MS = 60_000;
 
 /**
  * Whether the build that started at `startedAt` has run past

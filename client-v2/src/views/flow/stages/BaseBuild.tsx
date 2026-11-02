@@ -40,6 +40,7 @@ import {
 import { errorMeta, msLabel, warningCount } from "./build-view";
 import type { BuildSurface } from "./build-surface";
 import type { BuildFailure } from "../state/stage";
+import { SLOW_BUILD_MS } from "./use-slow-build";
 import type { DiagnosticView, FailedView } from "./build-view";
 import {
   STAGE_BODY,
@@ -170,9 +171,6 @@ const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
     {!p.building && <BrandButtonIcon />}
   </BrandButton>
 );
-
-/** From when a first build reads as slow (spec `client-v2-first-run`) */
-const SLOW_BUILD_MS = 60_000;
 
 const Empty = (p: BaseBuildProps) => (
   <Surface
