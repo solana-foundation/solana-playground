@@ -222,11 +222,12 @@ const pushedRevisions = () => {
       "log",
       "--name-only",
       "--format=",
+      "-z",
       sha,
       "--not",
       "--remotes",
     ]);
-    for (const file of log.split("\n").filter(Boolean)) {
+    for (const file of log.split("\0").filter(Boolean)) {
       revisions.set(file, sha);
     }
   }
