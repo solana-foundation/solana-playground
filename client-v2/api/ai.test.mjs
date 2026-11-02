@@ -41,7 +41,11 @@ const VARS = [
   "AGENT_MODEL",
   "AUTH_OAUTH_PROXY_URL",
   "AUTH_OAUTH_PROXY_SECRET",
-  ...Object.keys(SIGN_IN),
+  // The names in `SIGN_IN`
+  "DATABASE_URL",
+  "GITHUB_CLIENT_ID",
+  "GITHUB_CLIENT_SECRET",
+  "AUTH_SECRET",
 ];
 
 const configureHostedKey = () => {
