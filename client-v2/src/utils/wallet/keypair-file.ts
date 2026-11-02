@@ -8,7 +8,7 @@ export class KeypairFileError extends Error {
   /** @param cause what rejected the file, kept for debugging */
   constructor(cause?: unknown) {
     super(
-      "This file isn't a Solana keypair. Pick a .json file saved from Playground or the Solana CLI.",
+      "That file is not a keypair. Pick a .json file saved from Playground or the Solana CLI.",
       { cause }
     );
     this.name = "KeypairFileError";
@@ -68,7 +68,9 @@ if (import.meta.vitest) {
       ["64 entries that are not numbers", JSON.stringify(Array(64).fill("a"))],
     ])("parseKeypairFile rejects %s with a message for the user", (_, text) => {
       expect(() => parseKeypairFile(text)).toThrow(KeypairFileError);
-      expect(() => parseKeypairFile(text)).toThrow(/isn't a Solana keypair/);
+      expect(() => parseKeypairFile(text)).toThrow(
+        /^That file is not a keypair\. Pick a \.json file saved from Playground or the Solana CLI\.$/
+      );
     });
   });
 }

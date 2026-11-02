@@ -1,5 +1,5 @@
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
-import type { FlowState, StageStatus } from "../state/stage";
+import type { BuildFailure, FlowState, StageStatus } from "../state/stage";
 
 /**
  * The build report this workspace may show, or `null`.
@@ -46,7 +46,8 @@ export const isRestoredBuild = (
 /** Which of the Build stage's surfaces is on screen */
 export type BuildSurface =
   | { kind: "restored"; failed: boolean }
-  | { kind: "unreached" }
+  /** `failure` is why the run never reached the compiler, when known */
+  | { kind: "unreached"; failure: BuildFailure | null }
   | { kind: "empty" }
   | { kind: "succeeded" }
   | { kind: "failed"; stderr: string };
@@ -58,7 +59,7 @@ export type BuildSurface =
  * unreachable build server fails in milliseconds, and swapping surfaces for
  * that round trip reads as a blink (failed -> building -> failed). While a
  * run is in flight the previous surface stays put and only its action shows
- * "Building...".
+ * "Building…".
  */
 export const buildSurface = ({
   flow,
@@ -66,7 +67,7 @@ export const buildSurface = ({
 }: {
   flow: Pick<
     FlowState,
-    "build" | "buildSettled" | "buildStartedAt" | "buildMs"
+    "build" | "buildSettled" | "buildStartedAt" | "buildMs" | "buildFailure"
   >;
   own: BuildOutput | null;
 }): BuildSurface => {
@@ -88,9 +89,11 @@ export const buildSurface = ({
   if (isRestoredBuild(settled, own, flow.buildMs)) {
     return { kind: "restored", failed: settled === "failed" };
   }
-  if (settled === "failed" && (!own || stale)) return { kind: "unreached" };
+  if (settled === "failed" && (!own || stale)) {
+    return { kind: "unreached", failure: flow.buildFailure };
+  }
   // Also reached while the very first build is in flight: there is no
-  // previous surface to hold onto, so the empty state says "Building...".
+  // previous surface to hold onto, so the empty state says "Building…".
   if (!own) return { kind: "empty" };
   if (!own.failed) return { kind: "succeeded" };
   return { kind: "failed", stderr: own.stderr };
@@ -167,7 +170,18 @@ if (import.meta.vitest) {
       buildSettled: StageStatus,
       buildStartedAt: number | null,
       buildMs: number | null = buildStartedAt === null ? null : 100
-    ) => ({ build, buildSettled, buildStartedAt, buildMs });
+    ) => ({
+      build,
+      buildSettled,
+      buildStartedAt,
+      buildMs,
+      buildFailure: NO_ANSWER,
+    });
+
+    const NO_ANSWER = {
+      kind: "no-answer",
+      message: "Failed to fetch",
+    } as const;
 
     const report = (failed: boolean, at: number): BuildOutput => ({
       stderr: failed ? "error[E0308]: mismatched types" : "",
@@ -201,7 +215,7 @@ if (import.meta.vitest) {
       it("blames the server when a run left no report", () => {
         expect(
           buildSurface({ flow: flowOf("failed", "failed", 5), own: null })
-        ).toEqual({ kind: "unreached" });
+        ).toEqual({ kind: "unreached", failure: NO_ANSWER });
       });
 
       /** A report from an earlier run is not this run's verdict */
@@ -211,7 +225,7 @@ if (import.meta.vitest) {
             flow: flowOf("failed", "failed", 5),
             own: report(false, 1),
           })
-        ).toEqual({ kind: "unreached" });
+        ).toEqual({ kind: "unreached", failure: NO_ANSWER });
       });
 
       /** Swapping surfaces for the round trip of a run reads as a blink */
@@ -245,6 +259,7 @@ if (import.meta.vitest) {
               buildSettled: "failed",
               buildStartedAt: 5,
               buildMs: null,
+              buildFailure: null,
             },
             own: null,
           })

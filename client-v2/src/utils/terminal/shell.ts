@@ -159,8 +159,15 @@ export class PgShell {
 
   /** Handle terminal -> tty input. */
   handleTermData = (data: string) => {
-    // Only Allow CTRL+C through
-    if (!this.isPrompting() && data !== "\x03") return;
+    // While a command runs and asks nothing, Ctrl+C stops it and every
+    // other key is dropped. Neither may reach the prompt bookkeeping below:
+    // read from the empty line under the output, the prompt prefix would
+    // become "", every line would look like a prompt, and `_prompt` would
+    // never print a new one after the command
+    if (!this.isPrompting()) {
+      if (data === "\x03") this.stopCommand();
+      return;
+    }
 
     if (this._tty.firstInit && this._activePrompt) {
       const line = this._tty.getLine();
@@ -260,11 +267,16 @@ export class PgShell {
     }
   };
 
-  /** Handle a single piece of information from the terminal -> tty. */
-  private _handleData = (data: string) => {
-    // Only Allow CTRL+C Through
-    if (!this.isPrompting() && data !== "\x03") return;
+  /** Stop the command in flight (Ctrl+C, ⌘. on a Mac). */
+  stopCommand() {
+    this._cmdManager.stop();
+  }
 
+  /**
+   * Handle a single piece of information from the terminal -> tty. Only
+   * reached while prompting: `handleTermData` owns input during a command.
+   */
+  private _handleData = (data: string) => {
     const ord = data.charCodeAt(0);
 
     // Handle ANSI escape sequences
@@ -467,8 +479,8 @@ export class PgShell {
           this._handleCursorMove(-1);
           break;
 
-        // TODO: implement stopping commands
-        // case "\x03": // CTRL+C
+        // CTRL+C does nothing at a prompt, nor at a question a command
+        // asks; the strip's Stop is the way out of a question
 
         case "\x05": // CTRL+E
           this._tty.setCursor(this._tty.input.length);

@@ -291,7 +291,7 @@ test("client-v2-layout: The terminal greets once", async ({
   await expect(consoleHandle(page)).toHaveAttribute("aria-expanded", "true");
   await drag(page, consoleSeparator(page), 0, -600);
   const rows = page.locator(".xterm-rows");
-  await expect(rows).toContainText("Type help to see all commands");
+  await expect(rows).toContainText("Type help to see commands");
   await expect
     .poll(() =>
       page
@@ -305,7 +305,9 @@ test("client-v2-layout: The terminal greets once", async ({
       (row.textContent ?? "").replace(/\u00a0/g, " ").trimEnd()
     ).filter((line) => line !== "")
   );
-  expect(lines.filter((line) => line.includes("Welcome to"))).toHaveLength(1);
+  expect(
+    lines.filter((line) => line.includes("Output from Build"))
+  ).toHaveLength(1);
   expect(lines.at(-1)).toBe("$");
 });
 
@@ -479,6 +481,15 @@ test.describe("on a phone", () => {
     await seedThenNarrow(page);
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
+    // The code is read at arm's length, a step up from the desktop's
+    await expect(lines.locator(".view-line").first()).toHaveCSS(
+      "font-size",
+      "15px"
+    );
+    await expect(lines.locator(".view-line").first()).toHaveCSS(
+      "line-height",
+      "23px"
+    );
     await page.locator(".monaco-editor textarea.inputarea").focus();
     await page.keyboard.press("ControlOrMeta+Home");
     await page.keyboard.type("// phone\n");
@@ -513,6 +524,70 @@ test.describe("on a phone", () => {
     await expect(composer).toHaveValue("hello");
   });
 
+  // The page's pager and a sheet, as read under one motion preference
+  const motionOf = async (page: Page) => {
+    const pager = page.getByTestId("phone-pager");
+    const scroll = await pager.evaluate(
+      (el) => getComputedStyle(el).scrollBehavior
+    );
+    await page.getByRole("button", { name: /^Files, .* open$/ }).click();
+    const files = page.getByRole("dialog", { name: "Files" });
+    await expect(files).toBeVisible();
+    const sheet = await files.evaluate(
+      (el) => getComputedStyle(el).animationName
+    );
+    const overlay = await page
+      .locator('[data-slot="sheet-overlay"]')
+      .evaluate((el) => getComputedStyle(el).animationName);
+    return { scroll, sheet, overlay };
+  };
+
+  test("client-v2-layout: Reduced motion on a phone", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await seedThenNarrow(page);
+    const lines = linesOn(page);
+    // The page change does not animate: the pager jumps, it does not glide,
+    // and a sheet and its scrim appear without sliding or fading
+    expect(await motionOf(page)).toEqual({
+      scroll: "auto",
+      sheet: "none",
+      overlay: "none",
+    });
+    // and leave the same way. A 200 ms exit animation would keep them mounted
+    // two frames after the key, so the check is made in the page, not by a
+    // retrying assertion that would wait the animation out
+    const goneAtOnce = await page.evaluate(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+      for (let i = 0; i < 2; i++) {
+        await new Promise((done) => requestAnimationFrame(done));
+      }
+      return !document.querySelector(
+        '[role="dialog"], [data-slot="sheet-overlay"]'
+      );
+    });
+    expect(goneAtOnce).toBe(true);
+    // The jump lands on the page asked for, and its settle is no swipe
+    await page.getByRole("button", { name: "Preview the build" }).click();
+    await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
+    await page.waitForTimeout(400);
+    const shown = lines.filter((line) =>
+      line.startsWith("[telemetry:event] layout_page_shown ")
+    );
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toContain("via: button");
+  });
+
+  test("client-v2-layout: Motion on a phone by default", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await seedThenNarrow(page);
+    const motion = await motionOf(page);
+    expect(motion.scroll).toBe("smooth");
+    expect(motion.sheet).not.toBe("none");
+    expect(motion.overlay).not.toBe("none");
+  });
+
   test("client-v2-layout: Turning a phone across 768 px", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await seedWorkspace(page);
@@ -535,9 +610,16 @@ test.describe("on a phone", () => {
     await expect(lines).toContainText("// across");
     const before = await savedLayout(page);
 
+    // The code is a step up on a phone and Monaco's own size again off one
+    const viewLine = lines.locator(".view-line").first();
+    const wide = await viewLine.evaluate((el) => getComputedStyle(el).fontSize);
     for (const width of [390, 767, 768, 1024, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(lines).toContainText("// across");
+      await expect(viewLine).toHaveCSS(
+        "font-size",
+        width < 768 ? "15px" : wide
+      );
     }
     await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
     expect(await savedLayout(page)).toBe(before);
@@ -745,6 +827,49 @@ test("client-v2-layout: A fresh load focuses no settings trigger", async ({
     ).toBe(false);
     await expect(page.getByRole("tooltip")).toHaveCount(0);
   }
+});
+
+test.describe("on an iPhone", () => {
+  // Monaco mounts its keyboard button only where it reads iOS: an iPhone's
+  // user agent on a touch screen. Without both the button is never there
+  test.use({
+    viewport: { width: 390, height: 844 },
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    hasTouch: true,
+  });
+
+  test("client-v2-layout: The editor's keyboard button on an iPhone", async ({
+    page,
+  }) => {
+    // A project is started from the desktop's Home, as "on a phone" does
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const lines = page.locator(".monaco-editor .view-lines");
+    await expect(lines).toContainText("use anchor_lang");
+    // A tap on the code does not always raise the keyboard on an iPhone, so
+    // the editor's own button for it stays, drawn as one of the product's
+    const button = page.locator(".monaco-editor .iPadShowKeyboard");
+    await expect(button).toBeVisible();
+    await expect(button).toHaveCSS("width", "48px");
+    await expect(button).toHaveCSS("height", "48px");
+    await expect(button).toHaveCSS("border-radius", "14px");
+    await expect(button).toHaveCSS("border-top-width", "1px");
+    // The product's border, not the editor's own 4 px grey frame
+    // (#252526 dark, #F6F6F6 light)
+    const border = await button.evaluate(
+      (el) => getComputedStyle(el).borderTopColor
+    );
+    expect(["rgb(37, 37, 38)", "rgb(246, 246, 246)"]).not.toContain(border);
+    // A tap hands the focus to the code, which takes typing
+    await button.tap();
+    await expect(
+      page.locator(".monaco-editor textarea.inputarea")
+    ).toBeFocused();
+    await page.keyboard.type("// iphone\n");
+    await expect(lines).toContainText("// iphone");
+  });
 });
 
 test.describe("on a compact window", () => {
@@ -1463,7 +1588,7 @@ test("client-v2-layout: A cluster that is down", async ({
   await page.reload();
 
   const row = nav(page).getByRole("button", {
-    name: "Change cluster, currently devnet, down",
+    name: "Change cluster, currently devnet, not answering",
   });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await account(page).click();
@@ -1517,7 +1642,7 @@ test("a cluster that does not answer is down", async ({ seededPage: page }) => {
 
   await expect(
     nav(page).getByRole("button", {
-      name: "Change cluster, currently devnet, down",
+      name: "Change cluster, currently devnet, not answering",
     })
   ).toBeVisible({ timeout: 15_000 });
 });
@@ -1540,7 +1665,7 @@ test("a stalled cluster that moves again is not down", async ({
   });
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, down",
+    "Change cluster, currently devnet, not answering",
     { timeout: 15_000 }
   );
 
@@ -1557,7 +1682,7 @@ test("a cluster that answers again is not down", async ({
   await refuseCluster(page);
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, down",
+    "Change cluster, currently devnet, not answering",
     { timeout: 15_000 }
   );
 

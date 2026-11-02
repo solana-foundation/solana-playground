@@ -53,7 +53,11 @@ A click whose action fails SHALL tell the user what did not happen, in one
 sentence naming the action ("Could not copy."), never the raw error. A failure
 the action already showed (a terminal command printed it to the open console)
 SHALL NOT be shown again; one printed into a folded console SHALL still be
-told. Every failure SHALL still be logged under
+told, except where the clicked place itself shows the failure: a Build or
+Deploy run that leaves its stage failed is shown there, so its button toasts
+nothing, folded console or not (Spec 08: one cause, one message). A run that
+never starts, such as one with no terminal mounted to run it, is told by the
+toast. Every failure SHALL still be logged under
 `ui:button`, not marked for reporting (a user-caused or already-shown failure
 must not reach error tracking), and the button SHALL stay usable.
 A click whose action cannot run where it was clicked (a terminal command
@@ -65,7 +69,7 @@ out instead ("Can't build here: open a project to use the terminal.").
 - **WHEN** a button's action rejects
 - **THEN** the failure is logged under `ui:button`, not marked for reporting, a toast says what did not happen, and the button is enabled again
 
-Covered by unit tests, not e2e, because the toast and the button's re-enabling together need an action that rejects on demand: `report-button-failure.test.tsx`, `terminal-process.test.ts`, `shared-ui-buttons.test.tsx`, `SyncBanner.test.tsx`, `ImportButton.test.tsx` and `use-turn.test.tsx`. The e2e tests for real failed clicks are the refused clipboard above and the two failed builds below.
+Covered by unit tests, not e2e, because the toast and the button's re-enabling together need an action that rejects on demand: `report-button-failure.test.tsx`, `terminal-process.test.ts`, `shared-ui-buttons.test.tsx`, `SyncBanner.test.tsx`, `ImportButton.test.tsx` and `use-turn.test.tsx`. The e2e tests for real failed clicks are the refused clipboard above and the two failed builds below; the folded-console rule is proven by `terminal-process.test.ts` ("does not mark a failure the folded console hid").
 
 #### Scenario: A command clicked with no terminal mounted says how to run it (manual)
 
@@ -79,7 +83,7 @@ The toast is covered by `report-button-failure.test.tsx` and `terminal-process.t
 - **WHEN** a build started from the Build button fails while the console is open
 - **THEN** the console shows the error and no toast appears
 
-#### Scenario: A failure printed to a folded console is still told
+#### Scenario: A failed build is told once, by the Build stage
 
 - **WHEN** a build started from the Build button fails while the console is folded
-- **THEN** a toast says "Could not build."
+- **THEN** the Build stage says "Build did not start" and no toast appears

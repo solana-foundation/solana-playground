@@ -3,7 +3,13 @@
 // Everything the component decides -- which controls show, what a take does
 // to the file, when Apply is enabled -- is the real code.
 vi.mock("./merge-editor/controller", () => ({
-  createMergeEditor: (file: import("./merge-editor/merge-file").MergeFile) => {
+  createMergeEditor: (
+    file: import("./merge-editor/merge-file").MergeFile,
+    _hosts: unknown,
+    options: import("./merge-editor/controller").MergeEditorOptions
+  ) => {
+    // Kept for a test to read what the editor was made with
+    (globalThis as { __mergeOptions?: unknown }).__mergeOptions = options;
     const overlay = () =>
       document.body.appendChild(document.createElement("div"));
     const overlays = { left: overlay(), result: overlay(), right: overlay() };
@@ -119,6 +125,41 @@ describe("BaseConflictResolver", () => {
     act(() => root.unmount());
     container.remove();
     vi.unstubAllGlobals();
+    delete (globalThis as { __mergeOptions?: unknown }).__mergeOptions;
+  });
+
+  it("makes the panes at Monaco's own size off a phone", () => {
+    expect(
+      (globalThis as { __mergeOptions?: { phone?: boolean } }).__mergeOptions
+        ?.phone
+    ).toBe(false);
+  });
+
+  it("makes the panes a step up on a phone, as the code editor is", async () => {
+    act(() => root.unmount());
+    vi.stubGlobal("matchMedia", (media: string) => ({
+      matches: media === "(width < 768px)",
+      media,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    root = createRoot(container);
+    await act(async () =>
+      root.render(
+        <BaseConflictResolver
+          files={FILES}
+          onApply={onApply}
+          onKeepLocal={vi.fn()}
+          onTakeServer={vi.fn()}
+          onCancel={onCancel}
+          onHunkResolved={onHunkResolved}
+        />
+      )
+    );
+    expect(
+      (globalThis as { __mergeOptions?: { phone?: boolean } }).__mergeOptions
+        ?.phone
+    ).toBe(true);
   });
 
   it("keeps Apply disabled until every hunk of every file is resolved", async () => {

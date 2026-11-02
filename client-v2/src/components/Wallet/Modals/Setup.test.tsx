@@ -15,6 +15,7 @@ import { Setup } from "./Setup";
 vi.mock("../../../utils", () => ({
   PgWallet: {
     accounts: [{ name: "Wallet 1", kp: [] }],
+    currentIndex: 0,
     add: vi.fn(),
     export: vi.fn(),
     import: vi.fn(),
@@ -56,7 +57,11 @@ afterEach(() => {
 describe("wallet Setup", () => {
   it("keeps the current wallet when a keypair is imported", async () => {
     vi.mocked(PgWallet.import).mockResolvedValueOnce({
-      keypair: { publicKey: { toBase58: () => "NewAddress" } },
+      keypair: {
+        publicKey: {
+          toBase58: () => "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+        },
+      },
       added: true,
     } as never);
     renderSetup();
@@ -64,9 +69,25 @@ describe("wallet Setup", () => {
     fireEvent.click(screen.getByRole("button", { name: "Import keypair" }));
 
     expect(
-      await screen.findByText("Imported address: NewAddress")
+      await screen.findByText("Imported 7xKX…gAsU as Wallet 1.")
     ).toBeTruthy();
     expect(PgWallet.remove).not.toHaveBeenCalled();
+  });
+
+  it("says the import switched to a wallet that already held the keypair", async () => {
+    vi.mocked(PgWallet.import).mockResolvedValueOnce({
+      keypair: { publicKey: { toBase58: () => "9ohTQmMg" } },
+      added: false,
+    } as never);
+    renderSetup();
+
+    fireEvent.click(screen.getByRole("button", { name: "Import keypair" }));
+
+    expect(
+      await screen.findByText(
+        "Wallet 1 already holds that keypair, so it is now the current wallet."
+      )
+    ).toBeTruthy();
   });
 
   it("says nothing when the file picker is closed", async () => {
@@ -83,7 +104,7 @@ describe("wallet Setup", () => {
 
     // The earlier failure is cleared, not left standing as if it were current
     await waitFor(() => expect(screen.queryByText(failure.message)).toBeNull());
-    expect(screen.queryByText(/Imported address|Could not/)).toBeNull();
+    expect(screen.queryByText(/Imported|Could not/)).toBeNull();
     expect(PgWallet.remove).not.toHaveBeenCalled();
     expect(logs.entries).toEqual([]);
   });

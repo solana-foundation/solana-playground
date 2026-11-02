@@ -1,7 +1,9 @@
 import { CirclePlayIcon } from "lucide-react";
 
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Marker, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,
@@ -17,6 +19,15 @@ import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { BaseThreadItem } from "./BaseThreadItem";
 import type { ReplyActions } from "./BaseThreadItem";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
+
+/** A message the model turned away for load, counting down to its next send */
+export interface BusyRetryView {
+  secondsLeft: number;
+  /** Off while the server's own wait runs */
+  canTryNow: boolean;
+  onTryNow: () => Promise<void>;
+  onStop: () => void;
+}
 
 /**
  * The conversation, drawn from props only.
@@ -35,6 +46,7 @@ export const BaseThread = ({
   onSuggestion,
   actionsFor,
   onAnswer,
+  retry,
 }: {
   items: readonly ChatItem[];
   /** The turn is running and the last item is not a reply with text: before the first token and while tools run */
@@ -48,6 +60,8 @@ export const BaseThread = ({
   /** The moves offered on a reply, for the one reply that offers them */
   actionsFor: (id: string) => ReplyActions | undefined;
   onAnswer: (id: string, answer: ApprovalAnswer) => void;
+  /** Spec 08's AI-03, under the message that waits; never a stored item */
+  retry?: BusyRetryView;
 }) => (
   <MessageScrollerProvider autoScroll>
     <MessageScroller className="flex-1">
@@ -78,6 +92,7 @@ export const BaseThread = ({
               </MessageScrollerItem>
             ))
           )}
+          {retry && <BusyRetry retry={retry} />}
           {working && (
             <Marker role="status" aria-label="Assistant is working">
               <MarkerIcon>
@@ -90,6 +105,28 @@ export const BaseThread = ({
       <MessageScrollerButton />
     </MessageScroller>
   </MessageScrollerProvider>
+);
+
+const BusyRetry = ({ retry }: { retry: BusyRetryView }) => (
+  <Callout variant="warning">
+    <CalloutTitle>The model is busy</CalloutTitle>
+    <CalloutDescription>
+      Trying again in {retry.secondsLeft} s.
+    </CalloutDescription>
+    <div className="flex gap-2">
+      <AsyncButton
+        size="sm"
+        disabled={!retry.canTryNow}
+        onClick={retry.onTryNow}
+        onError={reportButtonFailure("send your message again")}
+      >
+        Try now
+      </AsyncButton>
+      <Button size="sm" variant="ghost" onClick={retry.onStop}>
+        Stop
+      </Button>
+    </div>
+  </Callout>
 );
 
 const EmptyThread = ({

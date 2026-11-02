@@ -12,6 +12,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   execute: vi.fn(),
   report: vi.fn(),
+  markShown: vi.fn(),
+  flow: { build: "done", deploy: "active" },
   deployState: "ready",
   history: [] as unknown[],
   update: vi.fn(),
@@ -40,7 +42,9 @@ vi.mock("../../../hooks", () => ({
 }));
 vi.mock("../state/stage", () => ({
   PgFlow: {
-    state: { build: "done", deploy: "active" },
+    get state() {
+      return mocks.flow;
+    },
     onDidChange: mocks.noop,
   },
 }));
@@ -51,6 +55,7 @@ vi.mock("./IdlActions", () => ({ default: () => null }));
 vi.mock("@/shared/lib/report-button-failure", () => ({
   reportButtonFailure: (action: string) =>
     action === "deploy" ? mocks.report : vi.fn(),
+  markFailureShown: mocks.markShown,
 }));
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
@@ -61,6 +66,7 @@ const render = (ui: ReactElement) =>
   rtlRender(<TooltipProvider>{ui}</TooltipProvider>);
 
 afterEach(() => {
+  mocks.flow = { build: "done", deploy: "active" };
   mocks.deployState = "ready";
   mocks.history = [];
   vi.clearAllMocks();
@@ -76,6 +82,35 @@ describe("Deploy stage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Deploy to devnet" }))
     );
 
+    expect(mocks.report).toHaveBeenCalledWith(failure);
+  });
+
+  // The stage's Callout says it failed; a toast would say it twice
+  it("marks a failed deploy as shown by the stage", async () => {
+    const failure = new Error("insufficient balance");
+    mocks.execute.mockImplementation(async () => {
+      mocks.flow = { build: "done", deploy: "failed" };
+      throw failure;
+    });
+    render(<Deploy />);
+
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Deploy to devnet" }))
+    );
+
+    expect(mocks.markShown).toHaveBeenCalledWith(failure);
+  });
+
+  it("leaves a deploy that never started to the toast", async () => {
+    const failure = new Error("no terminal");
+    mocks.execute.mockRejectedValue(failure);
+    render(<Deploy />);
+
+    await act(async () =>
+      fireEvent.click(screen.getByRole("button", { name: "Deploy to devnet" }))
+    );
+
+    expect(mocks.markShown).not.toHaveBeenCalled();
     expect(mocks.report).toHaveBeenCalledWith(failure);
   });
 

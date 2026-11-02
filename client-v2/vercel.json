@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "ignoreCommand": "node scripts/vercel-ignore-build.mjs",
   "installCommand": "bash scripts/vercel-install.sh",
   "buildCommand": "node scripts/check-agent-env.mjs && REACT_APP_VERCEL_ENV=$VERCEL_ENV REACT_APP_VERCEL_GIT_COMMIT_SHA=$VERCEL_GIT_COMMIT_SHA NODE_OPTIONS='--max-old-space-size=6144' yarn build:bundle",
   "devCommand": "yarn dev-cra",

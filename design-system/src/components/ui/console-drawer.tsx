@@ -89,7 +89,7 @@ function ConsoleDrawerBar({
         data-slot="console-drawer-trigger"
         aria-expanded={open}
         aria-controls={id}
-        aria-label={triggerLabel ?? (open ? "Close the console" : "Open the console")}
+        aria-label={triggerLabel ?? (open ? "Close the terminal" : "Open the terminal")}
         onClick={() => setOpen(!open)}
         className="grid size-6 place-items-center rounded-md text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
       >
@@ -115,7 +115,7 @@ function ConsoleDrawerContent({ className, ...props }: React.ComponentProps<"div
     <div
       id={id}
       role="region"
-      aria-label="Console"
+      aria-label="Terminal"
       data-slot="console-drawer-content"
       data-state={open ? "open" : "closed"}
       inert={!open}

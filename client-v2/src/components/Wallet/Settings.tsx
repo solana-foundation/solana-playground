@@ -21,13 +21,13 @@ import {
   Trash,
 } from "../Icons";
 import { createLogger } from "@/shared/lib/logger";
-import { shortAddress } from "@/shared/lib/short-address";
 import {
   markFailureShown,
   reportButtonFailure,
 } from "@/shared/lib/report-button-failure";
 import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
+import { importedText } from "./imported-text";
 import { useAirdrop, useDarken } from "./hooks";
 import { isSignInFailure } from "../../features/auth";
 import { useCopy } from "../../hooks";
@@ -49,9 +49,7 @@ const openModal = async (action: string, load: () => Promise<unknown>) => {
   }
 };
 
-// The toast says what the import did, in Spec 12's words: `PgWallet.add`
-// switches to an account that already holds the keypair instead of adding it,
-// which would otherwise look like nothing happened. A file that is not a
+// The toast says what the import did (`importedText`). A file that is not a
 // keypair is the user's to fix, so the toast says why; anything else is a
 // failed click. A closed picker resolves with nothing and says nothing.
 const importWallet = async () => {
@@ -60,11 +58,7 @@ const importWallet = async () => {
     if (!imported) return;
 
     const { name } = PgWallet.accounts[PgWallet.currentIndex];
-    const text = imported.added
-      ? `Imported ${shortAddress(
-          imported.keypair.publicKey.toBase58()
-        )} as ${name}.`
-      : `${name} already holds that keypair, so it is now the current wallet.`;
+    const text = importedText(imported, name);
     PgView.setToast(() => <span>{text}</span>, {
       options: { name: "wallet-imported" },
     });
