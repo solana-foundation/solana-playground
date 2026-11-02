@@ -30,9 +30,13 @@ checks on what that build emits. `ci.yml`
 and `client-v2.yml` run on pushes to `master` and on every PR: a
 `pull_request` run reads the workflow from the PR's merge commit, and no
 `pull_request` workflow runs while the PR has a merge conflict.
-`preview.yml` deploys a labelled PR's preview and `preview-sweep.yml`
-cleans up after it on a schedule; both run only in the repository the
-`PREVIEW_REPOSITORY` variable names, once `NEON_PROJECT_ID` is set there.
+The Vercel Git integration previews every PR on the shared preview database
+`solpg_preview`, which `preview-shared-db.yml` migrates on push to `master`.
+`preview.yml` deploys a labelled PR's preview with a database of its own and
+`preview-sweep.yml` cleans up after it on a schedule; all three run only in
+the repository the `PREVIEW_REPOSITORY` variable names, once
+`PREVIEW_DB_PROVIDER` is `cloud-sql` (or, for the Neon path being retired,
+`NEON_PROJECT_ID` is set) there.
 GitHub runs scheduled workflows only from the default branch.
 
 `cicd.yml` deploys App Engine from a tagged commit on `master`. A push to

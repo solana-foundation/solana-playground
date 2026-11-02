@@ -6,9 +6,10 @@
 # A preview's database comes from preview-name.mjs. `production` migrates
 # CLOUD_SQL_DATABASE, which `make migrate-production-db` reads from Vercel's
 # Production environment, as an operator: no CI identity holds a role on the
-# production instance.
+# production instance. `shared` migrates the preview instance's shared
+# database, from preview-shared-db.yml on push to master only.
 #
-#   migration-url (--pr <number> | --branch <name> | production) [-- <command>...]
+#   migration-url (--pr <number> | --branch <name> | production | shared) [-- <command>...]
 #
 # With a command, runs it with DATABASE_URL set and stops the proxy after.
 # Without, prints the URL and leaves the proxy running, naming its pid.
@@ -16,14 +17,14 @@ set -euo pipefail
 . "$(dirname "$0")/../lib.sh"
 
 split_command "$@"
-parse_target production ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}
+parse_target "production|shared" ${TARGET_ARGS[@]+"${TARGET_ARGS[@]}"}
 
-if [ "$TARGET_KIND" = production ]; then
-  name=${CLOUD_SQL_DATABASE:?CLOUD_SQL_DATABASE is unset: no Production database to migrate}
-else
-  name=$(preview_db_name)
-fi
 . "$DB_SCRIPTS/cloud-sql/proxy.sh"
+case "$TARGET_KIND" in
+  production) name=${CLOUD_SQL_DATABASE:?CLOUD_SQL_DATABASE is unset: no Production database to migrate} ;;
+  shared) name=$SHARED_PREVIEW_DB ;;
+  *) name=$(preview_db_name) ;;
+esac
 
 start_proxy
 trap stop_proxy EXIT

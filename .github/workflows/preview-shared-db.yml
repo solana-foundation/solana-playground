@@ -1,0 +1,89 @@
+name: preview-shared-db
+
+# Keeps the preview instance's shared databases at master's migrations:
+# `solpg_preview`, which every preview the Vercel Git integration builds
+# reads, and the template `solpg_preview_base`, which preview.yml clones for a
+# labelled PR (client-v2/docs/preview-databases.md).
+#
+# Only from master. A `push` run reads this workflow and the migrations from
+# the commit pushed to master, which a reviewer has seen; a `pull_request` run
+# reads them from the PR's merge commit, so a PR that migrated the shared
+# database would impose its schema on every other preview. A PR that needs its
+# migrations in its preview takes the `preview` label instead.
+#
+# Runs where PREVIEW_REPOSITORY names this repository and PREVIEW_DB_PROVIDER
+# is `cloud-sql`, with the same Cloud SQL variables as preview.yml. A failed
+# run leaves the databases behind master until a manual dispatch succeeds; a
+# labelled PR's clone still applies what the template lacks.
+on:
+  push:
+    branches: [master]
+    paths:
+      - client-v2/db/migrations/**
+  workflow_dispatch:
+
+permissions: {}
+
+defaults:
+  run:
+    # Explicit, for pipefail: the implicit default runs `bash -e` without it.
+    shell: bash
+
+# One at a time, and never cancelled: a migration stopped halfway leaves its
+# transaction rolled back but the template open to connections until
+# migrate-preview-base's exit trap runs.
+concurrency:
+  group: preview-shared-db
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    name: migrate the shared preview databases
+    if: vars.PREVIEW_DB_PROVIDER == 'cloud-sql' && github.repository == vars.PREVIEW_REPOSITORY
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      CLOUD_SQL_INSTANCE: ${{ vars.PREVIEW_CLOUD_SQL_INSTANCE }}
+      CLOUD_SQL_USER: ${{ vars.PREVIEW_CLOUD_SQL_USER }}
+      CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          sparse-checkout: |
+            .github/scripts
+            client-v2/db
+            client-v2/scripts/db
+
+      - name: Check configuration
+        run: |
+          : "${CLOUD_SQL_INSTANCE:?PREVIEW_CLOUD_SQL_INSTANCE variable is unset}"
+          : "${CLOUD_SQL_USER:?PREVIEW_CLOUD_SQL_USER variable is unset}"
+          : "${CLOUD_SQL_LOGIN_USER:?GCP_CI_SERVICE_ACCOUNT variable is unset}"
+
+      - name: Google Cloud credentials
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Install the Cloud SQL Auth Proxy
+        run: bash .github/scripts/install-cloud-sql-proxy.sh
+
+      # Same pinned version as preview.yml and client-v2.yml.
+      - name: Install dbmate
+        run: |
+          curl -fsSL -o /usr/local/bin/dbmate \
+            https://github.com/amacneil/dbmate/releases/download/v2.35.1/dbmate-linux-amd64
+          chmod +x /usr/local/bin/dbmate
+
+      # The shared database first: it is what live previews read.
+      - name: Migrate solpg_preview
+        working-directory: client-v2
+        run: bash scripts/db/cloud-sql/migration-url shared -- dbmate --wait --wait-timeout 60s --no-dump-schema up
+
+      - name: Migrate the template
+        working-directory: client-v2
+        run: bash scripts/db/cloud-sql/migrate-preview-base

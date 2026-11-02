@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Bring the template `solpg_preview_base` up to client-v2/db/migrations, so
-# new previews replay fewer migrations. Run by hand when that replay grows
-# long; a clone works without it.
+# Bring the template `solpg_preview_base` up to client-v2/db/migrations, so a
+# new preview's clone starts current. preview-shared-db.yml runs it on every
+# push to master that adds a migration; run it by hand after a failed run. A
+# clone works without it, replaying what the base lacks.
 #
 # The base refuses connections outside this script, because cloning fails
 # while any session is connected to a template. This lifts that for the run

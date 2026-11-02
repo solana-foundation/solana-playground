@@ -28,6 +28,11 @@ if exists; then
 # A second run racing this one may create it between the check and here
 elif admin_sql "create database \"$name\" template $PREVIEW_BASE owner \"$CLOUD_SQL_USER\"" || exists; then
   echo "created database $name on $CLOUD_SQL_INSTANCE from $PREVIEW_BASE" >&2
+  # Postgres keeps no creation time; preview-sweep.yml reads this to spare a
+  # database younger than its minimum age. A failure here costs the sweep
+  # nothing worse than keeping the database.
+  admin_sql "comment on database \"$name\" is 'created-at:$(date +%s)'" ||
+    echo "WARNING: $name has no creation stamp; preview-sweep.yml will keep it" >&2
 else
   exit 1
 fi

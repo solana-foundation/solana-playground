@@ -24,6 +24,11 @@ PROXY_PORT=${CLOUD_SQL_PROXY_PORT:-5434}
 # The template every preview database is cloned from, and that
 # migrate-preview-base keeps migrated
 PREVIEW_BASE=solpg_preview_base
+# The database every unlabelled preview reads, named by the Preview
+# environment on Vercel and migrated from master by preview-shared-db.yml
+SHARED_PREVIEW_DB=solpg_preview
+# The databases preview.yml creates and preview-sweep.yml may drop
+PREVIEW_PR_DB_PATTERN='^solpg_preview_pr_[0-9]+$'
 
 # Every name below is interpolated into SQL as a quoted identifier
 [[ "$CLOUD_SQL_USER" =~ ^[A-Za-z0-9@._-]+$ ]] || {

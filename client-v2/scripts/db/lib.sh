@@ -16,23 +16,24 @@ usage() {
 }
 
 # Sets TARGET_KIND (pr | branch) and TARGET (the number or the branch).
-# `$1` names an extra mode the caller accepts in place of the pair, such as
-# `production`; it sets TARGET_KIND to that word.
+# `$1` names the extra modes the caller accepts in place of the pair, joined
+# by `|`, such as `production|shared`; one of them sets TARGET_KIND to that
+# word.
 parse_target() {
   local extra=$1
   shift
-  if [ -n "$extra" ] && [ "$#" -eq 1 ] && [ "$1" = "$extra" ]; then
-    TARGET_KIND=$extra TARGET=
+  if [ -n "$extra" ] && [ "$#" -eq 1 ] && [[ "|$extra|" == *"|$1|"* ]]; then
+    TARGET_KIND=$1 TARGET=
     return
   fi
-  [ "$#" -eq 2 ] || usage "$extra"
+  [ "$#" -eq 2 ] || usage "${extra//|/ | }"
   case "$1" in
     --pr) TARGET_KIND=pr ;;
     --branch) TARGET_KIND=branch ;;
-    *) usage "$extra" ;;
+    *) usage "${extra//|/ | }" ;;
   esac
   TARGET=$2
-  [ -n "$TARGET" ] || usage "$extra"
+  [ -n "$TARGET" ] || usage "${extra//|/ | }"
 }
 
 # Splits "$@" at `--`: TARGET_ARGS before it, COMMAND after (empty without

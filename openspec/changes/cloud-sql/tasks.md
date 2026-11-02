@@ -98,10 +98,12 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       `solpg-preview` matching `^solpg_preview_pr_[0-9]+$` through the proxy and
       drop those whose PR is closed or unlabelled, honouring `MIN_AGE_MINUTES`
       and `dry_run`, and never touching `solpg_preview`, `solpg_preview_base`,
-      or `solpg_preview_br_*`. Document the label, the variable, and the shared
-      database in `client-v2/docs/neon.md` (renamed to
-      `client-v2/docs/preview-databases.md`, with `neon.md` left as a one-line
-      pointer). Verify with a labelled PR whose comment names the database and
+      or `solpg_preview_br_*`; a database's age is the creation stamp
+      `create-preview-db` writes as its comment, and one without a stamp is
+      kept. Document the label, the variable, and the shared database in
+      `client-v2/docs/preview-databases.md`, with `neon.md` kept for the Neon
+      path and pointing to it, so the follow-up that removes Neon deletes it
+      whole. Verify with a labelled PR whose comment names the database and
       whose preview URL answers `{ "enabled": true, "db": "ok" }` on
       `GET /api/sync`; removing the label drops the database; a dry-run sweep
       lists nothing for an open labelled PR and never lists `solpg_preview`.
@@ -121,7 +123,9 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       `client-v2/db/migrations`, writes the preview comment through
       `.github/scripts/preview-comment.sh` naming `solpg_preview` and
       suggesting the label; on a PR from a fork, a `::warning::` and a step
-      summary instead. Runs wherever the deploy job could. Verify with a PR
+      summary instead. Runs where `PREVIEW_REPOSITORY` names the repository
+      and `PREVIEW_DB_PROVIDER` is `cloud-sql`: without the shared database
+      there is nothing to warn about. Verify with a PR
       adding a migration (comment written), the same PR labelled (comment
       replaced by the deploy's), and a PR without one (no comment).
       Depends on 2.2. Ticket to file.

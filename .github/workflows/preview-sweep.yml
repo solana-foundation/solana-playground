@@ -1,9 +1,17 @@
 name: preview-sweep
 
-# The safety net under preview.yml: deletes Neon preview branches no open,
-# labelled PR still needs. preview.yml drops a branch on close or unlabel, but a
-# cancelled or failed teardown leaves one behind, and every one left counts
-# against the project's branch cap.
+# The safety net under preview.yml: deletes the preview databases no open,
+# labelled PR still needs. preview.yml drops one on close or unlabel, but a
+# cancelled or failed teardown leaves one behind.
+#
+# With PREVIEW_DB_PROVIDER `cloud-sql`, it drops `solpg_preview_pr_<n>` on the
+# preview instance, and nothing else there: not the shared `solpg_preview`,
+# not the template, not a laptop's `solpg_preview_br_*`
+# (client-v2/scripts/db/cloud-sql/list-preview-dbs lists PR databases only).
+# The `scope` input does not apply.
+#
+# Unset, it deletes Neon branches, every one of which counts against the
+# project's branch cap.
 #
 # Scope `managed` (the schedule) touches only `preview/pr-<n>`, the names
 # preview.yml creates. Scope `all-preview` also takes any other `preview/*`
@@ -41,17 +49,24 @@ concurrency:
 jobs:
   sweep:
     name: sweep preview branches
-    # Runs only where PREVIEW_REPOSITORY names this repository and
-    # NEON_PROJECT_ID is set (see preview.yml's header).
-    if: vars.NEON_PROJECT_ID != '' && github.repository == vars.PREVIEW_REPOSITORY
+    # Runs only where PREVIEW_REPOSITORY names this repository and a provider
+    # is configured (see preview.yml's header).
+    if: >-
+      (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
+      github.repository == vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
     env:
       NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
       NEON_PROJECT_ID: ${{ vars.NEON_PROJECT_ID }}
+      PREVIEW_DB_PROVIDER: ${{ vars.PREVIEW_DB_PROVIDER }}
+      CLOUD_SQL_INSTANCE: ${{ vars.PREVIEW_CLOUD_SQL_INSTANCE }}
+      CLOUD_SQL_USER: ${{ vars.PREVIEW_CLOUD_SQL_USER }}
+      CLOUD_SQL_LOGIN_USER: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
       GH_TOKEN: ${{ github.token }}
       # A scheduled run has no inputs: it deletes, managed scope only.
       SCOPE: ${{ inputs.scope || 'managed' }}
@@ -64,9 +79,22 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            client-v2/scripts/db
 
-      - name: Sweep
+      - name: Google Cloud credentials
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          workload_identity_provider: ${{ vars.GCP_CI_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
+
+      - name: Install the Cloud SQL Auth Proxy
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        run: bash .github/scripts/install-cloud-sql-proxy.sh
+
+      - name: Open PRs
         run: |
           limit=1000
           gh pr list --repo "$GITHUB_REPOSITORY" --state open --limit "$limit" \
@@ -76,6 +104,39 @@ jobs:
             echo "::error::$limit or more open PRs; raise the limit before sweeping"
             exit 1
           fi
+
+      # A listing that fails fails the step before anything is dropped.
+      - name: Sweep Cloud SQL databases
+        if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
+        run: |
+          keep=$(jq -r --arg l "$PREVIEW_LABEL" '.[] | select(any(.labels[]; .name == $l)) | .number' prs.json)
+          bash client-v2/scripts/db/cloud-sql/list-preview-dbs > dbs.txt
+          deleted=0 kept=0 failed=0
+          while read -r pr age; do
+            name=solpg_preview_pr_$pr
+            # An age that is not a number (no creation stamp) is kept, never read as old.
+            if grep -qxF "$pr" <<<"$keep" || ! [[ "$age" =~ ^[0-9]+$ ]] || [ "$age" -lt "$MIN_AGE_MINUTES" ]; then
+              kept=$((kept + 1))
+              continue
+            fi
+            if [ "$DRY_RUN" = true ]; then
+              echo "would drop $name (age ${age}m)"
+            elif ! bash client-v2/scripts/db/cloud-sql/drop-preview-db --pr "$pr"; then
+              # One failure must not stop the rest of the sweep.
+              echo "::warning::could not drop $name"
+              failed=$((failed + 1))
+              continue
+            fi
+            deleted=$((deleted + 1))
+          done < dbs.txt
+
+          verb=$([ "$DRY_RUN" = true ] && echo "Would drop" || echo "Dropped")
+          echo "$verb $deleted preview databases, kept $kept, failed $failed; $(wc -l < dbs.txt) PR databases on the instance before the sweep." | tee -a "$GITHUB_STEP_SUMMARY"
+          [ "$failed" -eq 0 ]
+
+      - name: Sweep Neon branches
+        if: env.PREVIEW_DB_PROVIDER != 'cloud-sql'
+        run: |
           # PRs whose preview/pr-<n> is live, and head branches with an open PR.
           keep_managed=$(jq -r --arg l "$PREVIEW_LABEL" '.[] | select(any(.labels[]; .name == $l)) | "preview/pr-\(.number)"' prs.json)
           keep_legacy=$(jq -r '.[] | "preview/\(.headRefName)"' prs.json)
@@ -121,9 +182,11 @@ jobs:
   # Without this job a half-configured repository skips `sweep` silently.
   configuration:
     name: check preview configuration
-    if: vars.NEON_PROJECT_ID != '' && github.repository != vars.PREVIEW_REPOSITORY
+    if: >-
+      (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
+      github.repository != vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest
     timeout-minutes: 1
     permissions: {}
     steps:
-      - run: echo "::warning::Previews are half-configured; NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/neon.md, \"Configuration\")."
+      - run: echo "::warning::Previews are half-configured; PREVIEW_DB_PROVIDER or NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/preview-databases.md, \"Configuration\")."
