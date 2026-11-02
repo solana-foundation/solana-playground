@@ -88,6 +88,7 @@ const isServed = (urlPath) => {
 /** What the app actually calls. Better Auth's own routes are the nested ones. */
 const CALLED_PATHS = [
   "/api/agent",
+  "/api/ai/status",
   "/api/auth-complete",
   "/api/auth/callback/github",
   "/api/auth/get-session",
