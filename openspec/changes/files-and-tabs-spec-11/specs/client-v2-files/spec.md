@@ -44,7 +44,7 @@ follows. The Close item's key hint SHALL read "Alt+W".
 
 The project delete dialog SHALL be titled "Delete {name}?" and say "Its files
 and its program keypair are deleted from this browser." It SHALL add "Your
-progress in this lesson is lost." for a lesson project, and "It's also deleted
+progress in this tutorial is lost." for a lesson project, and "It's also deleted
 from your account and your other devices." when the person is signed in. Its
 buttons SHALL read "Delete project" and "Cancel", and Cancel SHALL have focus
 when it opens. Enter SHALL NOT confirm the delete from anywhere but the button;

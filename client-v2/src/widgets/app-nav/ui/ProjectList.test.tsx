@@ -282,9 +282,9 @@ describe("ProjectList", () => {
   });
 
   it.each([
-    ["beta", "A project named beta already exists."],
-    ["bad/name", "Use letters, digits, spaces, - and _."],
-    ["   ", "Use letters, digits, spaces, - and _."],
+    ["beta", "A project already has that name."],
+    ["bad/name", "Use letters, numbers, spaces, - or _."],
+    ["   ", "Use letters, numbers, spaces, - or _."],
   ])("keeps the field open for %j and says why", (value, message) => {
     draw();
     fireEvent.keyDown(menuOf("alpha"), { key: "r" });
@@ -457,7 +457,7 @@ describe("ProjectList", () => {
 
   it.each([
     ["Workspace not found", "alpha is no longer in your projects."],
-    ["Already exists", "A project named gamma already exists."],
+    ["Already exists", "A project already has that name."],
   ])(
     "says in the field, unreported, why a rename was refused: %s",
     async (refusal, message) => {

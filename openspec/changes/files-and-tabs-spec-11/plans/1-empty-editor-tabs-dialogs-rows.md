@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- Copy is exact: "No file open", "Show files", "Close", "Close others", "Close to the right", "Close all", "Alt+W", "Delete {name}?", "Its files and its program keypair are deleted from this browser.", "Your progress in this lesson is lost.", "It's also deleted from your account and your other devices.", "Delete project", "Cancel", "Delete {name} and the {n} files in it?", "the 1 file", "You can't undo this.", "Delete".
+- Copy is exact: "No file open", "Show files", "Close", "Close others", "Close to the right", "Close all", "Alt+W", "Delete {name}?", "Its files and its program keypair are deleted from this browser.", "Your progress in this tutorial is lost.", "It's also deleted from your account and your other devices.", "Delete project", "Cancel", "Delete {name} and the {n} files in it?", "the 1 file", "You can't undo this.", "Delete".
 - No telemetry event added; "Show files" sends `layout_panel_toggled` `{ panel: "files", open: true, via: "button" }` through the existing path.
 - Ids, aria-labels and test ids that exist stay: `Actions for {name}`, `Delete {name}`, `Close {name}`, modal names `delete-workspace`, `delete-item`.
 

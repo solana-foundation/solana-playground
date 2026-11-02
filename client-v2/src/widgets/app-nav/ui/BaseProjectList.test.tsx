@@ -300,11 +300,14 @@ describe("BaseProjectList", () => {
   });
 
   it("shows a rename error in place", () => {
-    draw({ renaming: "alpha", renameError: "A project named beta exists." });
+    draw({
+      renaming: "alpha",
+      renameError: "A project already has that name.",
+    });
     const field = screen.getByRole("textbox", { name: "Rename alpha" });
     expect(field.getAttribute("aria-invalid")).toBe("true");
     expect(screen.getByRole("alert").textContent).toBe(
-      "A project named beta exists."
+      "A project already has that name."
     );
   });
 });
