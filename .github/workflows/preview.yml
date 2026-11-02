@@ -141,8 +141,11 @@ jobs:
 
       # The same chain as Makefile.vercel's deploy-client-to-vercel-preview,
       # with its CLI version: pull, pin the Root Directory, build here, deploy
-      # the prebuilt output. The Git integration deploys the same push on its
-      # own; this deployment differs in its DATABASE_URL, the PR's Neon branch.
+      # the prebuilt output. The Git integration deploys an integration
+      # branch's push on its own and skips a ticket branch's
+      # (client-v2/scripts/vercel-ignore-build.mjs); this deployment differs in
+      # its DATABASE_URL, the PR's Neon branch, and is a ticket branch's only
+      # preview. A prebuilt deploy never runs the ignore step.
       - name: Build and deploy
         id: deploy
         env:

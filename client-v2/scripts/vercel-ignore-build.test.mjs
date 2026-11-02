@@ -30,17 +30,25 @@ test("builds production from any branch", () => {
   assert.equal(exitCode("hoo-2378-vercel-build-skip", "production"), BUILD);
 });
 
+test("builds production with no ref", () => {
+  assert.equal(exitCode(undefined, "production"), BUILD);
+});
+
 for (const [ref, expected] of [
   ["master", BUILD],
+  ["master-production", BUILD],
   ["scope/interface", BUILD],
   ["scope/typescript", BUILD],
+  ["integration/release", BUILD],
   ["new-face-polish-2", BUILD],
   ["new-face-polish-3", BUILD],
   ["hoo-2378-vercel-build-skip", SKIP],
   ["new-face-polish", SKIP],
   ["feat/scope/x", SKIP],
+  ["integrations", SKIP],
+  ["feat/integration/x", SKIP],
   ["Master", SKIP],
-  ["master-2.0", SKIP],
+  ["master-production-fix", SKIP],
   ["new-face-polish-2-fix", SKIP],
   // No ref, unset or empty, cannot be classified, so it builds
   [undefined, BUILD],

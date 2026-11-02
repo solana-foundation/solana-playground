@@ -1,6 +1,6 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, any other branch to a preview. `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a Neon branch of its own ([Neon preview databases](neon.md)). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
+Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label or a local deploy. `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a Neon branch of its own ([Neon preview databases](neon.md)). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
 
 ## Release checklist: `client-v2` to production
 
@@ -81,7 +81,7 @@ runs against the newer schema; revisit this once one is not.
 | Framework Preset | Other |
 | Root Directory | `client-v2` |
 | Production Branch | `master` |
-| Ignored Build Step | Automatic |
+| Ignored Build Step | set by `vercel.json` `ignoreCommand` (`scripts/vercel-ignore-build.mjs`) |
 
 The Production Branch row was confirmed on 2026-10-19.
 
@@ -131,7 +131,7 @@ Both paths build `client-v2`, each from its own setting:
 
 1. Create the project. Framework: Other. Root Directory: `client-v2`.
 2. Build Machine: Enhanced on Enterprise; default on Pro.
-3. Production Branch: `master`. Ignored Build Step: Automatic.
+3. Production Branch: `master`. Ignored Build Step: leave it; `vercel.json`'s `ignoreCommand` overrides it.
 4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
 5. Link the local checkout (from repo root):
 
@@ -146,7 +146,7 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 
 ## Deploy
 
-- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to any other branch deploys a preview, reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
+- **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
 - **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
 - **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending.
 - **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
@@ -552,9 +552,10 @@ its session reads as signed out, and `isAllowedOrigin` answers its writes with
 `500` from `/api/auth`, and "try again" from the routes that read the session.
 Production is unaffected: `AUTH_BASE_URL` wins, and it is the one origin there.
 
-A PR labelled `preview` has two deployments per push: the Git integration's,
-on the Preview-scoped `DATABASE_URL`, and `preview.yml`'s, on the PR's Neon
-branch. The branch alias follows whichever deployed last. To be sure of the
+A labelled PR from an integration branch has two deployments per push: the
+Git integration's, on the Preview-scoped `DATABASE_URL`, and `preview.yml`'s,
+on the PR's Neon branch. The branch alias follows whichever deployed last. A
+ticket branch's PR has only `preview.yml`'s, since the Git integration skips it. To be sure of the
 database behind it, use the per-commit URL `preview.yml` posts on the PR.
 
 ### Known gaps
