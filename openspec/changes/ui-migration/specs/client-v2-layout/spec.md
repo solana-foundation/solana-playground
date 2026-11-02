@@ -89,16 +89,17 @@ between by a swipe or by the buttons in each page's bar: the menu (the
 navigation), the work page (the assistant or the code, switched by Chat and
 Code) and the preview (the current stage over the console). A load SHALL
 land on the work page showing the code. The code editor SHALL edit at every
-width. The 768 px value SHALL be held in one place.
+width, and on a phone SHALL set its code at 15 px on a 23 px line, a step
+up from the desktop's, since a phone is read at arm's length. The 768 px value SHALL be held in one place.
 
 #### Scenario: A phone
 
 - **WHEN** a user on a 390 px wide screen opens a project, types in the
   editor, picks another file from "Files", opens "Preview the build", goes
   "Back to the code", opens "Menu" and then Chat
-- **THEN** the code changes, the other file opens, the Build stage shows
-  over the console, the code is shown again, the navigation fills the
-  screen, and the assistant accepts a prompt
+- **THEN** the code is set at 15 px on a 23 px line, the code changes, the
+  other file opens, the Build stage shows over the console, the code is shown
+  again, the navigation fills the screen, and the assistant accepts a prompt
 
 #### Scenario: Turning a phone across 768 px
 
@@ -112,6 +113,43 @@ width. The 768 px value SHALL be held in one place.
 - **WHEN** a user opens a project on a 768 px wide screen and types in the
   editor
 - **THEN** the code changes
+
+### Requirement: A phone moves only as the system allows
+
+On a phone, moving between pages SHALL glide and a sheet and its scrim SHALL
+slide and fade in and out, unless the system asks for reduced motion. Then
+the pager SHALL jump to the page asked for, a sheet and its scrim SHALL
+appear and leave with no animation, and the jump SHALL be reported once, as
+the button that asked for it, never as a swipe.
+
+#### Scenario: Reduced motion on a phone
+
+- **WHEN** a user whose system asks for reduced motion opens "Files" on a
+  390 px wide screen, closes it with Escape, then opens "Preview the build"
+- **THEN** the sheet and its scrim appear and leave without sliding or
+  fading, the pager jumps to the preview instead of gliding, and one
+  `layout_page_shown` event is sent, `via: button`
+
+#### Scenario: Motion on a phone by default
+
+- **WHEN** a user whose system states no motion preference opens "Files" on a
+  390 px wide screen
+- **THEN** the pager scrolls smoothly, and the sheet and its scrim animate
+
+### Requirement: The editor's keyboard button on an iPhone
+
+On iOS the code editor SHALL keep its own button that raises the on-screen
+keyboard, because a tap on the code does not always raise it. The button
+SHALL be drawn as one of the product's controls: 48 px square, 14 px
+corners, a 1 px border in the product's border colour, not the editor's own
+grey frame. A tap on it SHALL focus the code.
+
+#### Scenario: The editor's keyboard button on an iPhone
+
+- **WHEN** a user on an iPhone opens a project and taps the editor's keyboard
+  button
+- **THEN** the button is 48 px square with 14 px corners and the product's
+  border, the code takes the focus, and typing changes it
 
 ### Requirement: The editor does not take focus from a field
 
@@ -825,7 +863,7 @@ The product SHALL send `layout_viewport` with the `viewport` class (`wide`,
 panel (`nav`, `files`, `assistant` or `console`; the files column's earlier
 name, `left`, is not sent), whether it is open, and whether a button, a key, a
 drag of the panel's edge or the product itself did it (the product opens the
-console on a deploy and the assistant on "Fix with assistant", and closes the
+console on a deploy and the assistant on a build error's Explain or Fix, and closes the
 phone's Files sheet when a modal opens, since the sheet would keep focus from
 it);
 `layout_page_shown` with the page (`menu`, `work` or `preview`) and whether
