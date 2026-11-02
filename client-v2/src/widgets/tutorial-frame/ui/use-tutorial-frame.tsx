@@ -45,13 +45,14 @@ export interface UseTutorialFrame {
 }
 
 /**
- * The open tutorial, from the route, while it has a definition and has been
- * started. Before Start its About page keeps today's layout: the feed's
- * intro card (`tutorial-flow-v2` 3.3) is what replaces it.
+ * The open tutorial, from the route, while it has a definition and its
+ * workspace. The route creates the workspace on the first open
+ * (`openOnIntro`), so the frame shows from the intro card on; until that
+ * write lands, the tutorial reads as not started and the frame waits.
  */
 const useDefinitionTutorial = () => {
   useRenderOnChange(PgTutorial.onDidChangeCurrent);
-  // Start creates the workspace well after the route has changed, and on a
+  // The route creates the workspace (`openOnIntro`) after it has changed, and on a
   // cold load the explorer initialises after the first render
   useRenderOnChange(PgTutorial.onDidChange);
   useRenderOnChange(PgExplorer.onDidInit);

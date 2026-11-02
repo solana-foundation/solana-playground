@@ -28,6 +28,7 @@ export type {
 } from "./model/ports";
 export { judgeGoal } from "./model/goals";
 export { WorkspaceMovedError, realWorkspace } from "./model/real-workspace";
+export { openOnIntro } from "./model/open";
 export {
   INITIAL_CONVERSATION_STATE,
   PgConversation,

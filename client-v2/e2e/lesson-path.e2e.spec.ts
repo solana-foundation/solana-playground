@@ -50,6 +50,11 @@ test("opens an unstarted tutorial from an active project", async ({ page }) => {
 test("a lesson step is finished by the toolchain, not by a click", async ({
   page,
 }) => {
+  test.fixme(
+    true,
+    "the assistant left the frame's chat for the conversation (tutorial-flow-v2 3.3); it returns under the feed with the composer (3.6), and task 7.1 retires the v1 lesson's assistant"
+  );
+
   // Opening the gallery, opening a tutorial and letting the assistant
   // panel mount are each their own async settle; well past the 30s
   // default.
@@ -70,13 +75,9 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
     .click();
   await expect(home(page)).toBeHidden();
 
-  // Open lands on upstream's own About/Start screen for a lesson tutorial
-  // that has never been started -- Start is what creates the workspace
-  // (`PgTutorial.start()` -> `PgExplorer.createWorkspace()`) and is what
-  // flips `LessonRoute` over to the lesson chrome. `exact` keeps the
-  // locator off any other name holding "Start", such as Connect a model's
-  // own Start while that dialog is open.
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  // Opening creates the workspace (`openOnIntro` -> `PgTutorial.start()` ->
+  // `PgExplorer.createWorkspace()`): Hello Anchor has a definition, so it has
+  // no About page, and `LessonRoute` shows the lesson chrome at once.
 
   // The rail switches to the lesson's steps, and the band names step 1.
   // `hello-anchor.ts` has four steps, so this is also a count check.

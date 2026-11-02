@@ -123,6 +123,7 @@ describe("useTutorialProgress", () => {
         version: 1,
         passed: ["program", "deploy"],
         finishedAt: null,
+        startedAt: 1000,
       },
     });
     const { result } = renderHook(() => useTutorialProgress());
@@ -139,7 +140,12 @@ describe("useTutorialProgress", () => {
   it("shows a conversation tutorial done once its finish has shown", async () => {
     state.workspaces = ["Hello Conversation"];
     state.storage.set("Hello Conversation", {
-      conversation: { version: 1, passed: ["program"], finishedAt: 1 },
+      conversation: {
+        version: 1,
+        passed: ["program"],
+        finishedAt: 1,
+        startedAt: 1000,
+      },
     });
     const { result } = renderHook(() => useTutorialProgress());
 
@@ -150,22 +156,48 @@ describe("useTutorialProgress", () => {
     );
   });
 
-  it("reads a definition tutorial with no saved conversation by its page, silently", async () => {
-    state.workspaces = ["Hello Conversation"];
+  it("reads a definition tutorial opened but never started as new, silently", async () => {
+    state.workspaces = ["Hello Conversation", "Hello Anchor"];
     state.metadata.set("Hello Conversation", {
-      pageNumber: 3,
+      pageNumber: 1,
       completed: false,
     });
+    state.metadata.set("Hello Anchor", { pageNumber: 2, completed: false });
+    const { result } = renderHook(() => useTutorialProgress());
+
+    // Hello Anchor's page shows once the read has landed
+    await waitFor(() =>
+      expect(result.current("Hello Anchor")).toEqual({
+        state: "started",
+        page: 2,
+        pages: 6,
+      })
+    );
+    expect(result.current("Hello Conversation")).toEqual({ state: "new" });
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it("reads a conversation saved before Start, or after Start over, as new", async () => {
+    state.workspaces = ["Hello Conversation", "Hello Anchor"];
+    state.storage.set("Hello Conversation", {
+      conversation: {
+        version: 1,
+        passed: [],
+        finishedAt: null,
+        startedAt: null,
+      },
+    });
+    state.metadata.set("Hello Anchor", { pageNumber: 2, completed: false });
     const { result } = renderHook(() => useTutorialProgress());
 
     await waitFor(() =>
-      expect(result.current("Hello Conversation")).toEqual({
+      expect(result.current("Hello Anchor")).toEqual({
         state: "started",
-        page: 3,
-        pages: 4,
+        page: 2,
+        pages: 6,
       })
     );
-    expect(error).not.toHaveBeenCalled();
+    expect(result.current("Hello Conversation")).toEqual({ state: "new" });
   });
 
   it("reports a storage file it cannot read, and shows the page", async () => {

@@ -140,22 +140,25 @@ open from the banner SHALL send `catalog_open_failed` with `page`
 A tutorial's About page SHALL show "Go back to tutorials", the tutorial's
 name as its heading, "by" and its authors, its description, and its details:
 Level as a coloured tag ("BEGINNER" in green for Beginner), Framework and
-Languages each as an icon and its name in title case ("Anchor", "Rust",
-"TypeScript") in a soft box, not the upper-case tag the level uses. Its action SHALL read "Start",
+Languages each as an icon and its name in title case ("Seahorse",
+"Python", "TypeScript") in a soft box, not the upper-case tag the level uses. Its action SHALL read "Start",
 "Continue" once started, or "Completed" with a tick once completed, in that
 case, beside the heading from 768 px and pinned full width at the foot of
-the page below.
+the page below. A tutorial with a conversation definition has no About
+page: it opens on its intro card (`tutorial-flow-v2`,
+`tutorial-conversation`).
 
 #### Scenario: Starting from the About page
 
-- **WHEN** a user opens Hello Anchor's About page and presses Start
+- **WHEN** a user opens Hello Seahorse's About page and presses Start
 - **THEN** the tutorial starts at its first page
 
 #### Scenario: The details read as text
 
-- **WHEN** a user opens Hello Anchor's About page
+- **WHEN** a user opens Hello Seahorse's About page
 - **THEN** Level shows "BEGINNER" and Framework and Languages read
-  "Anchor", "Rust" and "TypeScript" (manual: green tag, title-case boxes)
+  "Seahorse", "Python" and "TypeScript" (manual: green tag, title-case
+  boxes)
 
 ### Requirement: Beside a tutorial not yet started, the files column is empty and the assistant names it when no project is open
 
@@ -167,16 +170,16 @@ about <tutorial>"; an open project keeps the assistant under its own name,
 since the conversation and the tools still act on it. Once the tutorial
 starts, both follow the tutorial's project as for any project.
 
-#### Scenario: The assistant beside Hello Anchor
+#### Scenario: The assistant beside Hello Seahorse
 
-- **WHEN** a user with no project opens Hello Anchor's About page
-- **THEN** the assistant's head reads "Hello Anchor", its empty state reads
-  "Ask about Hello Anchor", and the files column shows no "Create a new
-  project"
+- **WHEN** a user with no project opens Hello Seahorse's About page
+- **THEN** the assistant's head reads "Hello Seahorse", its empty state
+  reads "Ask about Hello Seahorse", and the files column shows no "Create a
+  new project"
 
 #### Scenario: Beside another project
 
-- **WHEN** a user whose project e2e-project is open opens Hello Anchor's
+- **WHEN** a user whose project e2e-project is open opens Hello Seahorse's
   About page
 - **THEN** the assistant's head reads "e2e-project" and the files column
   shows neither e2e-project's files nor "Create a new project"

@@ -57,12 +57,16 @@ for; tasks with "after nothing" start at once.
       Verify: unit tests per goal, including a call before the upgrade that
       does not pass the argument goal (HOO-1790; fleet; S 1; after 1.1;
       plan: [plans/3.2-step-goals.md](plans/3.2-step-goals.md))
-- [ ] 3.3 The feed: intro card, dividers, step bar with its states and keys,
+- [x] 3.3 The feed: intro card, dividers, step bar with its states and keys,
       say and quote, wrote card, the act card (stages, "n of m", the stage
       bar, disabling, call-act fields) and the result card shell, records,
-      the back pill, `role="log"`.
+      the back pill, `role="log"`, the read-only preview, the wrote card's
+      appended note with its confirmed Reset (the step restarted),
+      `tutorial_opened`, `tutorial_step_reset`,
+      `tutorial_step_jumped` and `tutorial_step_back`.
       Verify: component tests for every record line in the spec and the jump
-      from step 3 to step 1 (HOO-2351; fleet; M 1.5; after 2.1, 3.1)
+      from step 3 to step 1 (HOO-2351; fleet; M 1.5; after 2.1, 3.1;
+      plan: [plans/3.3-feed.md](plans/3.3-feed.md))
 - [ ] 3.4 Win and finish cards: Next with ↵, "Open Call" / "Write it in
       client.ts", the finish's Transaction details with the Copy receipt
       icon, "What you learned", the "steps · time · devnet only" line,

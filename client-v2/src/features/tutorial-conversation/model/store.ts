@@ -170,6 +170,16 @@ export class PgConversation {
     PgConversation._dispatch({ type: "next", at: Date.now() });
   }
 
+  /**
+   * The live step back to how it was entered: its files to the step's
+   * start, its beats unreached, so it plays again from its first beat. The
+   * appended wrote card's Reset; refused while an act runs or once the step
+   * has passed.
+   */
+  static restartStep() {
+    PgConversation._dispatch({ type: "restartStep", at: Date.now() });
+  }
+
   /** Back to the intro. The frame confirms first; the assistant's thread stays */
   static startOver() {
     PgConversation._dispatch({ type: "startOver", at: Date.now() });
@@ -594,7 +604,9 @@ export class PgConversation {
           PgConversation._dispatch({
             type: "written",
             beatId: effect.beatId,
-            wrote: { file: effect.file, lines: placed.lines },
+            wrote: placed.appended
+              ? { file: effect.file, lines: placed.lines, appended: true }
+              : { file: effect.file, lines: placed.lines },
             at: effect.at,
           });
         } catch (e) {

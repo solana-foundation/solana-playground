@@ -112,9 +112,8 @@ test("a tutorial conversation is restored after a reload", async ({ page }) => {
     .click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
 
-  // Opening only routes there -- Start is what creates the workspace, and
-  // without one there is no id to key a conversation on
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  // Opening it creates the workspace, which the assistant's thread belongs
+  // to: a tutorial with a definition has no About page to Start from
   // The thread id is the conversation's own, not the workspace's: a project
   // may hold several. What matters here is that opening the lesson opened a
   // conversation at all.

@@ -30,11 +30,11 @@ export const definitionTutorials = (others: TutorialData[]): TutorialData[] => {
     thumbnail: DEFINITION_FILES[slug].thumbnail ?? d.thumbnail,
     pageCount: d.steps.length,
     unixTimestamp: DEFINITION_FILES[slug].unixTimestamp,
-    // TODO(tutorial-flow-v2 3.3): open the conversation. The engine (3.1)
-    // and the frame (2.1) are in; the feed mounts the engine in the frame's
-    // chat. Until then this component is the About page with Start, which
-    // the intro card replaces, named as `createTutorial` names it (only
-    // Hello Anchor has one)
+    // Never rendered for a definition: the route opens it on its intro
+    // (`openOnIntro`), so it is started before `LessonRoute` would show this
+    // About page. Kept because `TutorialData` requires one, named as
+    // `createTutorial` names it (only Hello Anchor has one); task 7.1
+    // retires it with the v1 lesson
     importComponent: () => import(`./${slug}/${d.name.replaceAll(" ", "")}`),
     definition: d,
   }));

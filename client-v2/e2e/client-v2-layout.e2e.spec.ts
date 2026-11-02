@@ -40,8 +40,7 @@ const startTutorial = async (page: Page) => {
   await homeRegion(page)
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
-  // `exact`: Connect a model's dialog has a "Start" of its own
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  // Opening it creates its workspace: it has a definition, so no About page
   await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 

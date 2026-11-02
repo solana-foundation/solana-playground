@@ -155,6 +155,8 @@ export interface Placed {
   code: string;
   /** The lines the block took, counted from 1 */
   lines: number[];
+  /** The block could not land in place and went to the end of the file */
+  appended?: true;
 }
 
 /**
@@ -177,7 +179,11 @@ export const insertBlock = (
     const head = file.replace(/\s+$/, "");
     const code = head ? `${head}\n\n${block}` : block;
     const from = head ? head.split("\n").length + 2 : 1;
-    return { code, lines: block.split("\n").map((_, i) => from + i) };
+    return {
+      code,
+      lines: block.split("\n").map((_, i) => from + i),
+      appended: true,
+    };
   };
   const placed = placement(file, block, reference, start);
   if (!placed) return append();
@@ -285,6 +291,7 @@ if (import.meta.vitest) {
 
       it("lands the struct at the end, after the module", () => {
         const placed = insertBlock(`${HEAD}\n\n${MOD}`, STRUCT, TARGET, "");
+        expect(placed.appended).toBeUndefined();
         expect(placed.code).toBe(TARGET.trimEnd());
         expect(placed.lines).toEqual([15, 16]);
       });
@@ -294,6 +301,7 @@ if (import.meta.vitest) {
         const placed = insertBlock(file, MOD, TARGET, "");
         expect(placed.code).toBe(`${file}\n\n${MOD}`);
         expect(placed.lines[0]).toBe(7);
+        expect(placed.appended).toBe(true);
         expect(landsInPlace(file, MOD, TARGET)).toBe(false);
         expect(landsInPlace(HEAD, MOD, TARGET)).toBe(true);
       });

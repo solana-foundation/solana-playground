@@ -33,7 +33,7 @@ for (const size of SIZES) {
     await expect(page.getByText("Where should we begin?")).toBeVisible(LONG);
     expect(await documentFits(page)).toEqual({ fits: true, scrollTop: 0 });
 
-    await page.goto("/tutorials/hello-anchor");
+    await page.goto("/tutorials/hello-seahorse");
     await expect(
       page.getByRole("button", { name: "Start", exact: true })
     ).toBeVisible(LONG);

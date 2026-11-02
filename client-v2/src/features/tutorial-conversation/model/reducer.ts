@@ -112,6 +112,7 @@ export type Action =
   | { type: "fixMyself"; beatId: string; at: number }
   | { type: "next"; at: number }
   | { type: "finish"; at: number }
+  | { type: "restartStep"; at: number }
   | { type: "startOver"; at: number };
 
 export type Effect =
@@ -134,6 +135,12 @@ export type Effect =
       startedAt: number;
     }
   | { kind: "event"; name: "tutorial_started"; params: { tutorial: string } }
+  | {
+      kind: "event";
+      name: "tutorial_step_reset";
+      /** `step` is 1-based */
+      params: { tutorial: string; step: number };
+    }
   | {
       kind: "event";
       name: "tutorial_finished";
@@ -876,6 +883,46 @@ export const reduce = (
           },
         ]
       );
+    }
+
+    case "restartStep": {
+      // The appended wrote card's Reset: the step as Start or Next left it,
+      // the learner's own lines gone with the blocks written since
+      const step = stepAt(definition, p.cursor);
+      if (!step || passed(p, step) || running(p)) return same(state);
+      const ids = new Set(
+        [...step.beats, ...(step.onFail ?? [])].map((b) => b.id)
+      );
+      const without = <T>(records: Record<string, T>) =>
+        Object.fromEntries(
+          Object.entries(records).filter(([id]) => !ids.has(id))
+        );
+      const restarted: ConversationProgress = {
+        ...p,
+        cursor: { kind: "step", stepId: step.id, beat: 0, fail: false },
+        beats: without(p.beats),
+        runs: without(p.runs),
+        times: { ...p.times, [step.id]: { from: action.at, to: null } },
+      };
+      const flowed = flow(ctx, restarted, action.at);
+      return withProgress(state, flowed.progress, [
+        {
+          kind: "restore",
+          files: step.start,
+          // A file the step creates, such as client.ts, goes until its
+          // write comes round again
+          remove: Object.keys(step.target).filter((f) => !(f in step.start)),
+        },
+        {
+          kind: "event",
+          name: "tutorial_step_reset",
+          params: {
+            tutorial: ctx.slug,
+            step: definition.steps.findIndex((s) => s.id === step.id) + 1,
+          },
+        },
+        ...flowed.effects,
+      ]);
     }
 
     case "startOver":
@@ -2131,6 +2178,76 @@ if (import.meta.vitest) {
         expect(reduce(ctx(), before, { type: "finish", at: 9000 }).state).toBe(
           before
         );
+      });
+    });
+
+    describe("restart the step", () => {
+      it("plays the live step again from its start files, keeping other steps", () => {
+        const picked = play([start, rightPick]).state;
+        const r = reduce(ctx(), picked, { type: "restartStep", at: 9000 });
+        const step1 = hello.steps[0];
+        expect(r.state.progress.cursor).toMatchObject({
+          kind: "step",
+          stepId: step1.id,
+        });
+        // The answered question is asked again
+        expect(r.state.progress.beats["s1.q1"]).toMatchObject({
+          kind: "open",
+          wrong: [],
+        });
+        expect(r.state.progress.times[step1.id]).toEqual({
+          from: 9000,
+          to: null,
+        });
+        expect(r.state.progress.startedAt).toBe(1000);
+        expect(r.effects[0]).toEqual({
+          kind: "restore",
+          files: step1.start,
+          remove: [],
+        });
+        expect(r.effects[1]).toEqual({
+          kind: "event",
+          name: "tutorial_step_reset",
+          params: { tutorial: "hello-anchor", step: 1 },
+        });
+        // Its first beat, the boilerplate's write, comes round again
+        expect(r.effects).toContainEqual(
+          expect.objectContaining({ kind: "write", beatId: "s1.boil" })
+        );
+      });
+
+      it("takes away a file the step creates", () => {
+        const step3 = hello.steps[2];
+        const on3 = play([start]).state;
+        on3.progress.cursor = {
+          kind: "step",
+          stepId: step3.id,
+          beat: 1,
+          fail: false,
+        };
+        const r = reduce(ctx(), on3, { type: "restartStep", at: 9000 });
+        expect(r.effects[0]).toEqual({
+          kind: "restore",
+          files: step3.start,
+          remove: ["client/client.ts"],
+        });
+      });
+
+      it("is refused on the intro, once the step passed, and while an act runs", () => {
+        expect(
+          reduce(ctx(), INITIAL_ENGINE_STATE, { type: "restartStep", at: 9 })
+            .state
+        ).toBe(INITIAL_ENGINE_STATE);
+        const won = play([start, rightPick]).state;
+        won.progress.passed = [hello.steps[0].id];
+        expect(
+          reduce(ctx(), won, { type: "restartStep", at: 9000 }).state
+        ).toBe(won);
+        const busy = play([start, rightPick]).state;
+        busy.progress.runs = { "s1.build": [{ status: "started", at: 6000 }] };
+        expect(
+          reduce(ctx(), busy, { type: "restartStep", at: 9000 }).state
+        ).toBe(busy);
       });
     });
 

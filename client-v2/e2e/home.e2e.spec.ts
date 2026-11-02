@@ -66,22 +66,14 @@ test.describe("on a desktop window", () => {
     await expect(home(page)).toBeVisible();
 
     await homeRegion(page)
-      .getByRole("button", { name: /^Open (?!a program)/ })
-      .first()
+      .getByRole("button", { name: "Open Hello Anchor" })
       .click();
 
-    await expect(page).toHaveURL(/\/tutorials\//);
-    // Opening only routes there; the About screen's Start is what a tutorial
-    // that was never started shows (see lesson-path.e2e.spec.ts)
-    await expect(
-      page.getByRole("button", { name: "Start", exact: true })
-    ).toBeVisible();
+    // Hello Anchor has a definition: opening it creates its workspace and
+    // opens it on its code, with no About page
+    await expect(page).toHaveURL(/\/tutorials\/hello-anchor\/1$/, LONG);
     await expect(home(page)).toBeHidden();
-
-    await page.getByRole("button", { name: "Start", exact: true }).click();
-    // The lesson panel's Steps | Files switch is a Segmented: its items are
-    // radios (5.19)
-    await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
+    await expect(page.locator(".monaco-editor .view-lines")).toBeVisible(LONG);
   });
 
   test("client-v2-layout: Tiles that open a page", async ({ page }) => {

@@ -19,8 +19,9 @@ const NEW: TutorialProgress = { state: "new" };
  * tutorial reads as new. A started tutorial whose saved progress cannot be
  * read shows as started on page 1: a missing file is logged as a warning, any
  * other failure is reported, and none is thrown into the render. A tutorial
- * with a definition counts the steps its conversation passed, and falls back
- * to its page while it has saved no conversation.
+ * with a definition counts the steps its conversation passed, and is new
+ * until its Start is pressed, workspace or not; it falls back to its page
+ * only when its storage cannot be read.
  */
 export const useTutorialProgress = (): ((name: string) => TutorialProgress) => {
   const [progress, setProgress] = useState<Map<string, TutorialProgress>>(
@@ -69,10 +70,12 @@ const read = async (): Promise<Map<string, TutorialProgress>> => {
       if (!PgTutorial.isStarted(t.name)) return [t.name, NEW] as const;
       if (t.definition) {
         const steps = t.definition.steps.map((s) => s.id);
-        const saved = await readConversation(t.name);
-        const progress = conversationProgressOf(saved, steps);
-        if (progress) return [t.name, progress] as const;
-        if (saved !== undefined) {
+        const conversation = await readConversation(t.name);
+        if (conversation !== READ_FAILED) {
+          // Opened, never started: opening creates the workspace before Start
+          if (conversation === undefined) return [t.name, NEW] as const;
+          const progress = conversationProgressOf(conversation, steps);
+          if (progress) return [t.name, progress] as const;
           log.warn(`saved conversation of ${t.name} is unreadable`, {
             context: { tutorial: t.name },
           });
@@ -94,18 +97,22 @@ const read = async (): Promise<Map<string, TutorialProgress>> => {
   return new Map(entries);
 };
 
+/** The storage file was there and could not be read, already reported */
+const READ_FAILED = Symbol("read failed");
+
 /**
- * What a conversation tutorial saved under `conversation`, or undefined. A
- * missing file is a tutorial still on its old lesson pages and is silent;
- * any other failure is reported, and the card falls back to the page.
+ * What a conversation tutorial saved under `conversation`, or undefined when
+ * it saved none (a missing file included, silently). Any other failure is
+ * reported and reads as `READ_FAILED`, and the card falls back to the page.
  */
-const readConversation = async (name: string): Promise<unknown> => {
+const readConversation = async (
+  name: string
+): Promise<unknown | typeof READ_FAILED> => {
   try {
     return (await PgTutorial.getStorageData(name)).conversation;
   } catch (e) {
-    if (!isMissing(e)) {
-      log.error(e, { report: true, context: { tutorial: name } });
-    }
-    return undefined;
+    if (isMissing(e)) return undefined;
+    log.error(e, { report: true, context: { tutorial: name } });
+    return READ_FAILED;
   }
 };

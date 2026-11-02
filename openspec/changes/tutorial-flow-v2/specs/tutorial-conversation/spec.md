@@ -28,6 +28,8 @@ card SHALL show:
 The words "start", "begin" or "go" typed in the composer SHALL start as well.
 On Start the intro SHALL leave the feed, and the first step's divider SHALL
 appear. The workspace SHALL swap the preview for the step's start files.
+Opening a tutorial SHALL not start it: its cards count it as started only
+once Start is pressed, and after Start over only from the next Start.
 There SHALL be no separate About page, Lesson tab or Assistant tab.
 While the tutorial loads, the chat column SHALL show one spinner, with no
 skeleton of the column.
@@ -160,7 +162,12 @@ light the lines again. A write that creates a file SHALL show "Created
 <path>" with a "New file" tag. A block that cannot land in place (the learner
 changed the code around it) SHALL be appended at the end. Its card then reads
 "I put it at the end: your own lines are kept." and offers "Reset <file> to
-this step's start".
+this step's start" while the step has not passed. Reset SHALL ask first
+("Reset <file> to this step's start?", Cancel or Reset). A confirmed Reset
+SHALL put the step
+back as it was entered: its files as the step starts them, a file the step
+creates taken away, and its beats played again from the first, so the
+learner sees what they saw on entering it.
 
 #### Scenario: Created client.ts
 
@@ -354,6 +361,9 @@ exchanges after the restart.
 
 The tutorial slice SHALL emit:
 
+- `tutorial_opened` when opening a tutorial creates its workspace and shows
+  its intro card, once per workspace, with:
+  - `tutorial`: the slug;
 - `tutorial_started` on Start, with:
   - `tutorial`: the slug;
 - `tutorial_question_answered` when a question resolves, with:
@@ -375,6 +385,20 @@ The tutorial slice SHALL emit:
   - `step`;
   - `source`: `typed`, or `chip` when a finish chip is pressed (the event
     fires for chips too, though their answer needs no model).
+- `tutorial_step_reset` when a confirmed Reset on an appended wrote card
+  puts the live step back as it was entered, with:
+  - `tutorial`;
+  - `step`: 1 to 6.
+- `tutorial_step_jumped` when a step bar segment, an item of its narrow
+  menu, or ⌥↑ / ⌥↓ moves the feed to a step's divider, with:
+  - `tutorial`;
+  - `step`: the divider's step, 1 to 6;
+  - `from`: the live step;
+  - `via`: `bar`, `menu` or `key`.
+- `tutorial_step_back` when the back pill takes the learner back to the
+  live card, with:
+  - `tutorial`;
+  - `step`: the live step, or 0 before Start.
 
 The text of the question is never sent.
 
@@ -383,3 +407,11 @@ The text of the question is never sent.
 - **WHEN** the learner picks a wrong option, then the right one
 - **THEN** one `tutorial_question_answered` reaches the memory provider with
   `result: "retry"` and `attempts: 2`
+
+#### Scenario: Counting a jump back
+
+- **WHEN** on step 3 the learner clicks the step bar's first segment, then
+  the "Back to step 3" pill
+- **THEN** `tutorial_step_jumped` reaches the memory provider with
+  `step: 1`, `from: 3` and `via: "bar"`, then `tutorial_step_back` with
+  `step: 3`

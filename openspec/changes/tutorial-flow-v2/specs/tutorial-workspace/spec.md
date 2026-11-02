@@ -34,8 +34,7 @@ it is reset. The column order SHALL not be swappable.
 ### Requirement: The navigation folds to its rail in a tutorial
 
 Entering a tutorial (Start, Continue or a card) SHALL fold the navigation to
-its icon rail, whatever was saved. Until the intro card replaces the About
-page, entering is Start, or opening a tutorial already started. In a tutorial:
+its icon rail, whatever was saved. In a tutorial:
 
 - **Open:** the mark's button or ⌘B SHALL open the navigation as an overlay
   over the chat with a scrim. The chat SHALL stay where it was: the overlay

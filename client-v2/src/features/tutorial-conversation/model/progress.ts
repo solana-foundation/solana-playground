@@ -99,6 +99,9 @@ export interface Wrote {
   file: string;
   lines: number[];
   created?: true;
+  /** The learner's own lines kept the block from its place: it went to the
+   * end of the file, and its card offers to restart the step */
+  appended?: true;
 }
 
 /**
@@ -266,9 +269,10 @@ const parseWrote = (v: unknown): Wrote | null => {
   if (!isRecord(v) || typeof v.file !== "string" || !isIndexes(v.lines)) {
     return null;
   }
-  return v.created === true
-    ? { file: v.file, lines: v.lines, created: true }
-    : { file: v.file, lines: v.lines };
+  const wrote: Wrote = { file: v.file, lines: v.lines };
+  if (v.created === true) wrote.created = true;
+  if (v.appended === true) wrote.appended = true;
+  return wrote;
 };
 
 /** The fields every resolved question carries, or null when one is off */
@@ -538,6 +542,7 @@ if (import.meta.vitest) {
             wrote: {
               file: "src/lib.rs",
               lines: [5, 6, 7, 8, 9, 10, 11, 12, 13],
+              appended: true,
             },
           },
           "s2.q2": { kind: "open", at: 2000, wrong: [1], hintedAt: 2050 },

@@ -57,6 +57,9 @@ in `widgets/assistant/ui/Assistant.tsx`); the files column shows
   marks the tutorial to start on open, then opens it; the About page takes
   the mark on mount and calls its own `start`. The mark is one module-level
   name, taken once, so a later visit to the About page stops there as usual.
+  A tutorial with a definition has no About page: opening it creates its
+  workspace on the intro card (`tutorial-flow-v2`), so it needs no mark, and
+  the banner only opens it.
 - **The art is ours, in the slice.** The voxel mark (`IsoVoxels`, an SVG of
   cubes from the stand) and the framework cover are product art, not
   design-system parts: they go into `widgets/catalog/ui/art/` rewritten

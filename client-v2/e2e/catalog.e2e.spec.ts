@@ -113,7 +113,9 @@ test("client-v2-layout: The pages by link", async ({ page }) => {
 test("Back from a page's link returns past it", async ({
   seededPage: page,
 }) => {
-  await page.goto("/tutorials/hello-anchor");
+  // A tutorial with no definition, so it stays on its About page: one with a
+  // definition creates its workspace and moves on to its first page
+  await page.goto("/tutorials/hello-seahorse");
   await expect(
     page.getByRole("button", { name: "Start", exact: true })
   ).toBeVisible(LONG);
@@ -122,7 +124,7 @@ test("Back from a page's link returns past it", async ({
   await expect(page).toHaveURL(/\/$/);
 
   await page.goBack();
-  await expect(page).toHaveURL(/\/tutorials\/hello-anchor/);
+  await expect(page).toHaveURL(/\/tutorials\/hello-seahorse/);
 });
 
 // The explorer switches to the open project on every route's init; that

@@ -42,21 +42,29 @@ export interface ConversationSave {
   passed: string[];
   /** When the finish card showed, in ms, or null before it has */
   finishedAt: number | null;
+  /** When Start was pressed, in ms; null before Start and after Start over */
+  startedAt: number | null;
 }
 
 /**
  * A conversation tutorial's progress from its `ConversationSave`. `page` is
- * then the number of steps passed, 0 to m, so the card reads "2 of 4". Null
- * when `saved` is not one, for a tutorial still on its old lesson pages.
+ * then the number of steps passed, 0 to m, so the card reads "2 of 4". A save
+ * whose Start was never pressed, or pressed before a Start over, is new:
+ * opening the tutorial creates its workspace and save, but only Start starts
+ * it. Null when `saved` is not one.
  */
 export const conversationProgressOf = (
   saved: unknown,
   stepIds: readonly string[]
 ): TutorialProgress | null => {
   if (typeof saved !== "object" || saved === null) return null;
-  const { version, passed, finishedAt } = saved as Record<string, unknown>;
+  const { version, passed, finishedAt, startedAt } = saved as Record<
+    string,
+    unknown
+  >;
   if (version !== 1 || !Array.isArray(passed)) return null;
   if (typeof finishedAt === "number") return { state: "completed" };
+  if (typeof startedAt !== "number") return { state: "new" };
   const done = new Set(passed.filter((id) => stepIds.includes(id as string)));
   return { state: "started", page: done.size, pages: stepIds.length };
 };
@@ -98,10 +106,15 @@ if (import.meta.vitest) {
 
     describe("conversationProgressOf", () => {
       const STEPS = ["program", "deploy", "client", "name"];
-      const saved = (passed: unknown, finishedAt: unknown = null) => ({
+      const saved = (
+        passed: unknown,
+        finishedAt: unknown = null,
+        startedAt: unknown = 1000
+      ) => ({
         version: 1,
         passed,
         finishedAt,
+        startedAt,
       });
 
       it("counts the passed steps of the definition's steps", () => {
@@ -120,6 +133,20 @@ if (import.meta.vitest) {
         expect(
           conversationProgressOf(saved(["program", "program", "gone"]), STEPS)
         ).toEqual({ state: "started", page: 1, pages: 4 });
+      });
+
+      it("is new until Start is pressed, and again after Start over", () => {
+        expect(conversationProgressOf(saved([], null, null), STEPS)).toEqual({
+          state: "new",
+        });
+      });
+
+      it("is started on Start, before any step passes", () => {
+        expect(conversationProgressOf(saved([]), STEPS)).toEqual({
+          state: "started",
+          page: 0,
+          pages: 4,
+        });
       });
 
       it("is nothing to go on without a saved conversation", () => {

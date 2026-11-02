@@ -36,12 +36,16 @@ import { PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
-import { Assistant, AssistantConversation } from "@/widgets/assistant";
+import { Assistant } from "@/widgets/assistant";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
+import {
+  TutorialConversation,
+  useConversationStartOver,
+} from "@/widgets/tutorial-conversation";
 import { useTutorialFrame } from "@/widgets/tutorial-frame";
 import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
 
@@ -230,13 +234,16 @@ const FlowFrame = () => {
   const described = describeStep(lesson);
 
   // A tutorial with a definition opens in its frame (`tutorial-flow-v2`
-  // 2.1). Until the feed lands (3.3) its chat holds the assistant's own
-  // thread, and Start over, which the engine runs, stays disabled.
+  // 2.1), its chat holding the conversation (3.3), whose engine runs Start
+  // over. The composer under the feed is 3.6's.
+  const conversation = useConversationStartOver();
   const tutorial = useTutorialFrame({
     // Back to the list the tutorial came from; the navigation's own way
     // there, so it reads as `nav`
     onBack: () => catalogPage.open("tutorials", "nav"),
-    body: <AssistantConversation openConnect={openConnectDialog} />,
+    onStartOver: conversation.onStartOver,
+    passed: conversation.passed,
+    body: <TutorialConversation />,
   });
 
   const read = () => setReading(true);

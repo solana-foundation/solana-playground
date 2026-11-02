@@ -10,14 +10,15 @@ const navColumn = (page: Page) =>
   page.locator('[data-slot="sidebar-container"]');
 const scrim = (page: Page) => page.getByTestId("tutorial-nav-scrim");
 
-/** Hello Anchor has a definition: Start opens it in the frame */
+/** Hello Anchor has a definition: opening it opens the frame */
 const startHelloAnchor = async (page: Page) => {
   // No default backend, whatever the dev server is configured with
   await page.route("**/api/agent", (route) =>
     route.fulfill({ json: { configured: false, model: null } })
   );
+  // A tutorial with a definition has no About page: opening it creates its
+  // workspace and opens the frame
   await page.goto("/tutorials/hello-anchor");
-  await page.getByRole("button", { name: "Start", exact: true }).click(LONG);
   await expect(chat(page)).toBeVisible(LONG);
 };
 
@@ -58,8 +59,13 @@ test.describe("tutorial-workspace", () => {
         await expect(
           page.getByRole("button", { name: "Collapse assistant" })
         ).toHaveCount(0);
+        // The head's name: the intro card in the feed names it too
         await expect(
-          chat(page).getByRole("heading", { name: "Hello Anchor", exact: true })
+          chat(page).getByRole("heading", {
+            level: 1,
+            name: "Hello Anchor",
+            exact: true,
+          })
         ).toBeVisible();
       }
     );

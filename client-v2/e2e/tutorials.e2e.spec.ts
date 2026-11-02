@@ -10,17 +10,20 @@ const startButton = (page: Page) =>
 const assistantHead = (page: Page, name: string) =>
   page.getByRole("heading", { level: 2, name, exact: true });
 
-test("client-v2-tutorials: The assistant beside Hello Anchor", async ({
+// These open Hello Seahorse, which has no definition: a tutorial with one,
+// such as Hello Anchor, opens on its intro card and has no About page
+
+test("client-v2-tutorials: The assistant beside Hello Seahorse", async ({
   page,
 }) => {
-  await page.goto("/tutorials/hello-anchor");
+  await page.goto("/tutorials/hello-seahorse");
   await expect(startButton(page)).toBeVisible(LONG);
 
   // Before Start there is no project: the assistant names the tutorial and
   // the files column offers nothing to create
-  await expect(assistantHead(page, "Hello Anchor")).toBeVisible();
+  await expect(assistantHead(page, "Hello Seahorse")).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Ask about Hello Anchor" })
+    page.getByRole("heading", { name: "Ask about Hello Seahorse" })
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Create a new project" })
@@ -38,7 +41,7 @@ test("client-v2-tutorials: Starting from the About page", async ({ page }) => {
 });
 
 test("client-v2-tutorials: The details read as text", async ({ page }) => {
-  await page.goto("/tutorials/hello-anchor");
+  await page.goto("/tutorials/hello-seahorse");
   await expect(startButton(page)).toBeVisible(LONG);
 
   // Found by the data's text; `useInnerText` reads it as drawn, so a case
@@ -48,13 +51,15 @@ test("client-v2-tutorials: The details read as text", async ({ page }) => {
       useInnerText: true,
     });
   await drawn("Beginner", "BEGINNER");
-  for (const name of ["Anchor", "Rust", "TypeScript"]) await drawn(name, name);
+  for (const name of ["Seahorse", "Python", "TypeScript"]) {
+    await drawn(name, name);
+  }
 });
 
 test("client-v2-tutorials: Beside another project", async ({
   seededPage: page,
 }) => {
-  await page.goto("/tutorials/hello-anchor");
+  await page.goto("/tutorials/hello-seahorse");
   await expect(startButton(page)).toBeVisible(LONG);
 
   // The open project keeps the assistant, whose thread and tools are its;
