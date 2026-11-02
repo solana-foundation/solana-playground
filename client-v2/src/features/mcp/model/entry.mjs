@@ -102,6 +102,12 @@ export const validateServers = (parsed, reservedIds = []) => {
     if (typeof id !== "string" || !ID_PATTERN.test(id)) {
       fail(`${where}: "id" must be letters, digits, dashes or underscores.`);
     }
+    // The gateway finds a tool's server by the first "__" in the tool's name
+    if (id.includes("__")) {
+      fail(
+        `${where}: "id" must not contain "__", which separates a server's id from its tool names.`
+      );
+    }
     // Tool names are prefixed with the id, so one server's tools would replace the other's
     if (seen.has(id)) {
       fail(

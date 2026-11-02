@@ -434,7 +434,7 @@ query value as optional. The browser never carries the list: it asks
 | Variable | Meaning |
 | --- | --- |
 | `MCP_SERVERS` | Optional. A JSON array in the catalogue's format that replaces the catalogue entirely; its placeholders are filled the same way |
-| `MCP_EXPLORER_BYPASS` | Switches the catalogue's Explorer entry on: Vercel's Protection Bypass for Automation secret of the Explorer deployment. Store it as a Secret |
+| `MCP_EXPLORER_BYPASS` | Optional. Vercel's Protection Bypass for Automation secret of the Explorer deployment, needed only when that deployment sits behind bot protection. Explorer is listed whether or not it is set; the gateway sends it only for a caller signed in on this site. Store it as a Secret |
 | `MCP_EXPLORER_URL` | Optional, defaults to `https://explorer.solana.com/mcp` |
 | `MCP_EXPLORER_TOKEN` | Optional. Sent as a bearer token when the Explorer deployment gates on `MCP_ACCESS_KEYS` |
 

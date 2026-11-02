@@ -101,5 +101,15 @@ export const composeServers = ({ env, servers, signedIn }) => {
     )
     .filter((entry) => entry !== undefined);
 
-  return validateServers(resolved).filter((server) => server.enabled);
+  const validated = validateServers(resolved);
+  // A relative url is this site's gateway to the browser; the gateway has no base to resolve it against
+  const relative = validated.find(
+    (server) => !server.url.startsWith("https://")
+  );
+  if (relative) {
+    throw new Error(
+      `MCP_SERVERS: server "${relative.id}" needs an https:// url; a relative url works only in the browser's list.`
+    );
+  }
+  return validated.filter((server) => server.enabled);
 };

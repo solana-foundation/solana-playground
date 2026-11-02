@@ -153,4 +153,28 @@ describe("composeServers", () => {
       /duplicate id "a"/
     );
   });
+
+  test("rejects an id holding the tool-name separator", () => {
+    assert.throws(
+      () =>
+        composeServers({
+          env: {},
+          servers: entry({ id: "team__docs", url: "https://mcp.test/mcp" }),
+          signedIn: true,
+        }),
+      /must not contain "__"/
+    );
+  });
+
+  test("rejects a relative url, which only the browser can resolve", () => {
+    assert.throws(
+      () =>
+        composeServers({
+          env: {},
+          servers: entry({ id: "docs", url: "/api/docs-mcp" }),
+          signedIn: true,
+        }),
+      /server "docs" needs an https:\/\/ url/
+    );
+  });
 });

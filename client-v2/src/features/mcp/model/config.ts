@@ -8,10 +8,7 @@ import type { McpServerEntry } from "./types";
  * **Not the source of truth.** The gateway (`api/mcp.mjs`) owns the list,
  * composed from `model/catalogue.mjs` and the environment by
  * `composeServers`, and the panel asks it at startup, so enabling an upstream
- * is a deploy plus an env var rather than a client change — that is how an
- * operator turns Explorer on without shipping anything. Why the gateway
- * withholds Explorer from a request is `explorerWithheld` in `api/mcp.mjs`,
- * with `EXPLORER_HINTS` saying what to do about each reason.
+ * is a deploy plus an env var rather than a client change.
  *
  * This list is only for servers wanted *in addition*: something CORS-open a
  * page can reach directly. Empty by default, and deliberately not a mirror of
