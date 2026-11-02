@@ -5,6 +5,7 @@ import pg from "pg";
 import {
   chargeFor,
   costOf,
+  recordCapped,
   reserve,
   secondsToReset,
   settle,
@@ -40,6 +41,22 @@ describe("ledger arithmetic", () => {
     assert.equal(chargeFor({ kind: "unfinished" }, 9999, PRICES), 9999);
     assert.equal(chargeFor({ kind: "refused" }, 9999, PRICES), 0);
     assert.equal(chargeFor({ kind: "abandoned" }, 9999, PRICES), 0);
+  });
+
+  // The upstream's usage is not ours: a count that cannot be priced charges
+  // the reservation, never NaN, a negative or an overflow
+  for (const bad of ["x", -1, 2.5, 2 ** 31, Number.NaN, null]) {
+    it(`charges the reservation for a completed turn reporting ${String(
+      bad
+    )} tokens`, () => {
+      const usage = { prompt_tokens: bad, completion_tokens: 100 };
+      assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 9999);
+    });
+  }
+
+  it("prices a count the upstream left out as none", () => {
+    const usage = { completion_tokens: 100 };
+    assert.equal(chargeFor({ kind: "completed", usage }, 9999, PRICES), 50);
   });
 });
 
@@ -78,7 +95,41 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     await query("delete from agent_spend where user_id = any($1)", [
       [NEW, OLD, OTHER],
     ]);
+    await query("delete from agent_turn where user_id = any($1)", [
+      [NEW, OLD, OTHER],
+    ]);
   });
+
+  /** The turns recorded for `userId`, oldest first */
+  const turns = async (userId) => {
+    const { rows } = await query(
+      `select to_char(day, 'YYYY-MM-DD') as day, tier, outcome, prompt_tokens,
+            completion_tokens, charged::int
+       from agent_turn where user_id = $1 order by id`,
+      [userId]
+    );
+    return rows;
+  };
+
+  /** A settle of a newcomer's turn that ended `unfinished`, unless told otherwise */
+  const close = (userId, reserved, charge, turn = {}, run = query) =>
+    settle(run, {
+      userId,
+      day: DAY,
+      reserved,
+      charge,
+      tier: turn.tier ?? "newcomer",
+      end: turn.end ?? { kind: "unfinished" },
+    });
+
+  /** The count of capped turns on `userId`'s day row */
+  const capped = async (userId) => {
+    const { rows } = await query(
+      `select capped from agent_spend where user_id = $1 and day = $2`,
+      [userId, DAY]
+    );
+    return rows[0]?.capped;
+  };
 
   /** A reservation of `amount` for `userId` on `day` */
   const take = (userId, amount, day = DAY, run = query) =>
@@ -164,23 +215,102 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("settles a reservation to its charge", async () => {
     await take(NEW, 5000);
-    await settle(query, {
-      userId: NEW,
-      day: DAY,
-      reserved: 5000,
-      charge: 1200,
-    });
+    await close(NEW, 5000, 1200);
     assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
+  });
+
+  it("records the settled turn with its tokens and charge", async () => {
+    await take(OLD, 5000);
+    await close(OLD, 5000, 1200, {
+      tier: "established",
+      end: {
+        kind: "completed",
+        usage: { prompt_tokens: 100, completion_tokens: 20 },
+      },
+    });
+    assert.deepEqual(await turns(OLD), [
+      {
+        day: DAY,
+        tier: "established",
+        outcome: "completed",
+        prompt_tokens: 100,
+        completion_tokens: 20,
+        charged: 1200,
+      },
+    ]);
+    assert.equal((await row(OLD)).spent, 1200);
+  });
+
+  it("records an unfinished turn with no tokens, charged its reservation", async () => {
+    await take(NEW, 5000);
+    await close(NEW, 5000, 5000);
+    assert.deepEqual(await turns(NEW), [
+      {
+        day: DAY,
+        tier: "newcomer",
+        outcome: "unfinished",
+        prompt_tokens: null,
+        completion_tokens: null,
+        charged: 5000,
+      },
+    ]);
+  });
+
+  it("records the turn even when the day has no row to settle", async () => {
+    await close(NEW, 10, 0, { end: { kind: "refused" } });
+    assert.equal((await turns(NEW)).length, 1);
+    assert.equal(await row(NEW), undefined);
+  });
+
+  // The upstream's usage is not ours: a count `agent_turn` cannot hold must not
+  // fail the statement that settles the charge
+  for (const bad of [2.5, "12", -1, 2 ** 31, Number.NaN]) {
+    it(`settles a turn whose upstream reported ${String(
+      bad
+    )} tokens`, async () => {
+      await take(NEW, 5000);
+      await close(NEW, 5000, 1200, {
+        end: {
+          kind: "completed",
+          usage: { prompt_tokens: bad, completion_tokens: 7 },
+        },
+      });
+      assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
+      const [turn] = await turns(NEW);
+      assert.equal(turn.prompt_tokens, null);
+      assert.equal(turn.completion_tokens, 7);
+    });
+  }
+
+  it("refuses tokens on a turn that did not complete", async () => {
+    await assert.rejects(
+      query(
+        `insert into agent_turn (user_id, day, tier, outcome, prompt_tokens)
+         values ($1, $2, 'newcomer', 'refused', 5)`,
+        [NEW, DAY]
+      ),
+      /agent_turn_tokens_check/
+    );
+  });
+
+  it("counts turns the cap refused on the day's row, without a turn row", async () => {
+    await take(NEW, CAPS.newcomer);
+    await recordCapped(query, { userId: NEW, day: DAY });
+    await recordCapped(query, { userId: NEW, day: DAY });
+    assert.equal(await capped(NEW), 2);
+    assert.deepEqual(await row(NEW), { reserved: CAPS.newcomer, spent: 0 });
+    assert.deepEqual(await turns(NEW), []);
+  });
+
+  it("counts a refusal on a day with no row yet", async () => {
+    await recordCapped(query, { userId: NEW, day: DAY });
+    assert.equal(await capped(NEW), 1);
+    assert.deepEqual(await row(NEW), { reserved: 0, spent: 0 });
   });
 
   it("counts settled spend against the cap", async () => {
     await take(NEW, 90000);
-    await settle(query, {
-      userId: NEW,
-      day: DAY,
-      reserved: 90000,
-      charge: 90000,
-    });
+    await close(NEW, 90000, 90000);
     assert.equal((await take(NEW, 20000)).admitted, false);
     assert.equal((await take(NEW, 10000)).admitted, true);
   });
@@ -205,7 +335,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
     await take(NEW, 10, DAY, counted);
     assert.equal(count, 1);
-    await settle(counted, { userId: NEW, day: DAY, reserved: 10, charge: 5 });
+    await close(NEW, 10, 5, {}, counted);
     assert.equal(count, 2);
   });
 

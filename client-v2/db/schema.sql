@@ -54,8 +54,49 @@ CREATE TABLE public.agent_spend (
     day date NOT NULL,
     reserved bigint DEFAULT 0 NOT NULL,
     spent bigint DEFAULT 0 NOT NULL,
+    capped integer DEFAULT 0 NOT NULL,
     CONSTRAINT agent_spend_amounts_check CHECK (((reserved >= 0) AND (spent >= 0)))
 );
+
+
+--
+-- Name: agent_turn; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.agent_turn (
+    id bigint NOT NULL,
+    user_id text NOT NULL,
+    day date NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    tier text NOT NULL,
+    outcome text NOT NULL,
+    prompt_tokens integer,
+    completion_tokens integer,
+    charged bigint DEFAULT 0 NOT NULL,
+    CONSTRAINT agent_turn_charged_check CHECK ((charged >= 0)),
+    CONSTRAINT agent_turn_outcome_check CHECK ((outcome = ANY (ARRAY['completed'::text, 'unfinished'::text, 'refused'::text, 'abandoned'::text]))),
+    CONSTRAINT agent_turn_tier_check CHECK ((tier = ANY (ARRAY['newcomer'::text, 'established'::text]))),
+    CONSTRAINT agent_turn_tokens_check CHECK ((((prompt_tokens IS NULL) OR (prompt_tokens >= 0)) AND ((completion_tokens IS NULL) OR (completion_tokens >= 0)) AND ((outcome = 'completed'::text) OR ((prompt_tokens IS NULL) AND (completion_tokens IS NULL)))))
+);
+
+
+--
+-- Name: agent_turn_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.agent_turn_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: agent_turn_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.agent_turn_id_seq OWNED BY public.agent_turn.id;
 
 
 --
@@ -171,6 +212,13 @@ CREATE TABLE public.verification (
 
 
 --
+-- Name: agent_turn id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn ALTER COLUMN id SET DEFAULT nextval('public.agent_turn_id_seq'::regclass);
+
+
+--
 -- Name: account account_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -184,6 +232,14 @@ ALTER TABLE ONLY public.account
 
 ALTER TABLE ONLY public.agent_spend
     ADD CONSTRAINT agent_spend_pkey PRIMARY KEY (user_id, day);
+
+
+--
+-- Name: agent_turn agent_turn_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn
+    ADD CONSTRAINT agent_turn_pkey PRIMARY KEY (id);
 
 
 --
@@ -274,6 +330,13 @@ CREATE INDEX "account_userId_idx" ON public.account USING btree ("userId");
 
 
 --
+-- Name: agent_turn_user_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX agent_turn_user_at ON public.agent_turn USING btree (user_id, at);
+
+
+--
 -- Name: conversations_project_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -329,6 +392,14 @@ ALTER TABLE ONLY public.account
 
 ALTER TABLE ONLY public.agent_spend
     ADD CONSTRAINT agent_spend_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
+-- Name: agent_turn agent_turn_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.agent_turn
+    ADD CONSTRAINT agent_turn_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
 
 
 --
@@ -413,6 +484,7 @@ COPY public.schema_migrations (version) FROM stdin;
 20260916032901
 20260929120000
 20261029120000
+20261102190000
 \.
 
 
