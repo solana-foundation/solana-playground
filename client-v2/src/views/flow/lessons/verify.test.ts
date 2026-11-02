@@ -92,6 +92,28 @@ describe("idl", () => {
     expect(isSatisfied(c, state, IDL_WITH_ARG)).toBe(true);
   });
 
+  it("matches snake_case against the camelCase an IDL may carry", () => {
+    const idl = {
+      version: "0.1.0",
+      name: "hello_anchor",
+      instructions: [
+        {
+          name: "greetByName",
+          accounts: [],
+          args: [{ name: "userName", type: "string" }],
+        },
+      ],
+      accounts: [{ name: "GreetingLog", type: { kind: "struct", fields: [] } }],
+    } as Idl;
+    const c = {
+      kind: "idl",
+      instruction: "greet_by_name",
+      arg: "user_name",
+      account: "greeting_log",
+    } as const;
+    expect(isSatisfied(c, state, idl)).toBe(true);
+  });
+
   it("is not satisfied by a matching IDL while the build is not done", () => {
     // The IDL can be stale from a previous project during the window
     // right after a workspace switch, before `PgProgramInfo.idl`

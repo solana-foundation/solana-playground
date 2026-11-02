@@ -138,6 +138,17 @@ export type Effect =
       name: "tutorial_finished";
       params: { tutorial: string; seconds: number };
     }
+  | {
+      kind: "event";
+      name: "tutorial_step_passed";
+      params: {
+        tutorial: string;
+        /** 1-based */
+        step: number;
+        via: PassedVia;
+        seconds: number;
+      };
+    }
   /** Put the caret where the answer lands, or on the error's line */
   | { kind: "focus"; file: string; line: number | "landing" }
   /** An unplanned failure to explain through the live assistant (task 4.1) */
@@ -399,6 +410,31 @@ const withProgress = (
   progress: ConversationProgress,
   effects: Effect[] = []
 ): Reduced => ({ state: { ...state, progress }, effects });
+
+/** The step passes (see `pass`), and `tutorial_step_passed` says how and how long */
+const passStep = (
+  ctx: EngineContext,
+  state: EngineState,
+  p: ConversationProgress,
+  step: Step,
+  at: number,
+  via: PassedVia
+): Reduced => {
+  const from = p.times[step.id]?.from ?? at;
+  return withProgress(state, pass(ctx, p, step, at, via), [
+    {
+      kind: "event",
+      name: "tutorial_step_passed",
+      params: {
+        tutorial: ctx.slug,
+        step: ctx.definition.steps.indexOf(step) + 1,
+        via,
+        // Two devices' clocks can disagree; a pass never takes negative time
+        seconds: Math.max(0, Math.round((at - from) / 1000)),
+      },
+    },
+  ]);
+};
 
 export const reduce = (
   ctx: EngineContext,
@@ -668,7 +704,7 @@ export const reduce = (
       if (!result.ok) return same(cleared);
       if (!passed(recorded, step) && ctx.judge(step.goal, result)) {
         const via: PassedVia = beat.act === "run" ? "client" : "chat";
-        return withProgress(cleared, pass(ctx, recorded, step, action.at, via));
+        return passStep(ctx, cleared, recorded, step, action.at, via);
       }
       // Only the act the cursor just passed moves the lesson on: a run that
       // outlived its step, or a run again of an act the flow already went
@@ -694,7 +730,7 @@ export const reduce = (
       if (!step || passed(p, step) || !ctx.judge(step.goal, action.result)) {
         return same(state);
       }
-      return withProgress(state, pass(ctx, p, step, action.at, action.via));
+      return passStep(ctx, state, p, step, action.at, action.via);
     }
 
     case "explain": {
@@ -818,9 +854,11 @@ if (import.meta.vitest) {
 
   describe("features/tutorial-conversation/model/reducer", () => {
     let hello: TutorialDefinition;
+    let judgeGoal: typeof import("./goals").judgeGoal;
     beforeAll(async () => {
       hello = (await import("../../../tutorials/hello-anchor/tutorial.json"))
         .default as unknown as TutorialDefinition;
+      judgeGoal = (await import("./goals")).judgeGoal;
     });
 
     const ctx = (): EngineContext => ({
@@ -1264,6 +1302,65 @@ if (import.meta.vitest) {
         });
       });
 
+      it("emits tutorial_step_passed once per step, with how and how long", () => {
+        const stepPassed = (effects: Effect[]) =>
+          effects.filter(
+            (e) => e.kind === "event" && e.name === "tutorial_step_passed"
+          );
+        const CALLED: RunResult = {
+          act: "call",
+          ok: true,
+          seconds: 1,
+          signatures: ["x"],
+          line: null,
+          called: [],
+        };
+        const { effects } = play([
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: OK_BUILD, at: 8600 },
+          { type: "next", at: 9000 },
+          { type: "passed", via: "call_panel", result: CALLED, at: 12000 },
+          // On step 2's win: the step has passed, so nothing more fires
+          { type: "passed", via: "call_panel", result: CALLED, at: 12500 },
+          { type: "next", at: 13000 },
+          { type: "passed", via: "client", result: CALLED, at: 20400 },
+        ]);
+        expect(stepPassed(effects)).toEqual([
+          {
+            kind: "event",
+            name: "tutorial_step_passed",
+            params: {
+              tutorial: "hello-anchor",
+              step: 1,
+              via: "chat",
+              seconds: 8,
+            },
+          },
+          {
+            kind: "event",
+            name: "tutorial_step_passed",
+            params: {
+              tutorial: "hello-anchor",
+              step: 2,
+              via: "call_panel",
+              seconds: 3,
+            },
+          },
+          {
+            kind: "event",
+            name: "tutorial_step_passed",
+            params: {
+              tutorial: "hello-anchor",
+              step: 3,
+              via: "client",
+              seconds: 7,
+            },
+          },
+        ]);
+      });
+
       it("drops a result whose start is not the run's", () => {
         const before = play([start, rightPick, build(7000)]).state;
         const stale = reduce(ctx(), before, {
@@ -1312,6 +1409,7 @@ if (import.meta.vitest) {
               seconds: 1,
               signatures: [],
               line: null,
+              called: [],
             },
             at: 10500,
           },
@@ -1466,6 +1564,7 @@ if (import.meta.vitest) {
               seconds: 1,
               signatures: ["x"],
               line: "Program log: Hello, World!",
+              called: [],
             },
             at: 15000,
           },
@@ -1476,12 +1575,12 @@ if (import.meta.vitest) {
         expect(s4.progress.times["call-client"]).toMatchObject({
           via: "client",
         });
-        // The step's goal is the call, so a judge that matches kinds (as
-        // 3.2's will) refuses the deploy and the lesson flows on to the call
+        // The step's goal is the call, so the real judge refuses the deploy
+        // and the lesson flows on to the call
         const strict: EngineContext = {
           definition: hello,
           slug: "hello-anchor",
-          judge: (goal, result) => result.ok && goal.kind === result.act,
+          judge: judgeGoal,
         };
         const flowed = reduce(strict, s4.state, {
           type: "ended",
@@ -1509,6 +1608,61 @@ if (import.meta.vitest) {
           beat: 4,
           fail: false,
         });
+        expect(
+          flowed.effects.filter(
+            (e) => e.kind === "event" && e.name === "tutorial_step_passed"
+          )
+        ).toEqual([]);
+
+        // A call the deployed program decodes with no `name` (before the
+        // upgrade) logs a line step 4's pattern also matches, and passes nothing
+        const call = (
+          state: EngineState,
+          at: number,
+          args: Record<string, string>
+        ) => {
+          const acted = reduce(strict, state, {
+            type: "act",
+            beatId: "s4.call",
+            args,
+            at,
+          }).state;
+          return reduce(strict, acted, {
+            type: "ended",
+            beatId: "s4.call",
+            result: {
+              act: "call",
+              ok: true,
+              seconds: 1,
+              signatures: ["x"],
+              line: `Program log: Hello, ${args.name ?? "World"}!`,
+              called: [{ instruction: "hello", args }],
+            },
+            at: at + 1000,
+          });
+        };
+        const early = call(flowed.state, 20000, {});
+        expect(early.state.progress.passed).not.toContain("greet-by-name");
+        expect(early.effects).toEqual([]);
+
+        const named = call(early.state, 22000, { name: "Alex" });
+        expect(named.state.progress.passed).toContain("greet-by-name");
+        expect(
+          named.effects.filter(
+            (e) => e.kind === "event" && e.name === "tutorial_step_passed"
+          )
+        ).toEqual([
+          {
+            kind: "event",
+            name: "tutorial_step_passed",
+            params: {
+              tutorial: "hello-anchor",
+              step: 4,
+              via: "chat",
+              seconds: 7,
+            },
+          },
+        ]);
       });
     });
 
@@ -1818,6 +1972,7 @@ if (import.meta.vitest) {
               seconds: 1,
               signatures: ["x"],
               line: null,
+              called: [],
             },
             at: 9500,
           },
@@ -1854,6 +2009,7 @@ if (import.meta.vitest) {
             seconds: 1,
             signatures: [],
             line: null,
+            called: [],
           },
           at: 9500,
         },
@@ -1867,6 +2023,7 @@ if (import.meta.vitest) {
             seconds: 1,
             signatures: [],
             line: null,
+            called: [],
           },
           at: 10500,
         },
@@ -1880,6 +2037,7 @@ if (import.meta.vitest) {
             seconds: 1,
             signatures: [],
             line: null,
+            called: [],
           },
           at: 11500,
         },

@@ -3,7 +3,8 @@ import type { TutorialDefinition } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
 
 import { insertBlock, typedKey, withOwnText } from "./landing";
-import { failedResult, passingJudge } from "./ports";
+import { judgeGoal } from "./goals";
+import { failedResult } from "./ports";
 import type { Judge, Runner, Workspace } from "./ports";
 import { WorkspaceMovedError } from "./real-workspace";
 import { freshProgress, parseProgress } from "./progress";
@@ -62,8 +63,10 @@ export interface ConversationPorts {
   /** Required: a frame that forgets it fails to compile, rather than ship a
    * lesson whose every act fails with "not wired" */
   runner: Runner;
-  /** Required for the same reason: `passingJudge` would pass step 4 on the
-   * upgrade before any call; task 3.2's judge is the one to wire */
+  /** Required, so a frame or a test says which judge it means. `judgeGoal`
+   * is the real one, and the store's fallback when a tutorial opens before
+   * `init`: a judge that passed any ok result would pass step 4 on the
+   * upgrade before any call */
   judge: Judge;
 }
 
@@ -225,7 +228,7 @@ export class PgConversation {
     const context: EngineContext = {
       definition,
       slug: slugOf(definition.name),
-      judge: ports?.judge ?? passingJudge,
+      judge: ports?.judge ?? judgeGoal,
     };
 
     // A save of this tutorial still in flight lands first, so the read

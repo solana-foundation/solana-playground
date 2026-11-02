@@ -2,6 +2,7 @@ export { tutorialTelemetry } from "./model/telemetry";
 export { freshProgress, parseProgress } from "./model/progress";
 export type {
   BuildError,
+  Called,
   ConversationProgress,
   Cursor,
   PassedVia,
@@ -15,7 +16,6 @@ export type {
 export {
   failedResult,
   memoryWorkspace,
-  passingJudge,
   stubRunner,
   unwiredRunner,
 } from "./model/ports";
@@ -26,6 +26,7 @@ export type {
   Runner,
   Workspace,
 } from "./model/ports";
+export { judgeGoal } from "./model/goals";
 export { WorkspaceMovedError, realWorkspace } from "./model/real-workspace";
 export {
   INITIAL_CONVERSATION_STATE,

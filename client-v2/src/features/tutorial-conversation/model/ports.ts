@@ -79,7 +79,7 @@ export const unwiredRunner: Runner = {
   run: async (act) => failedResult(act, `The ${act} act is not wired yet.`),
 };
 
-/** Whether a run's result passes a step's goal (task 3.2 supplies the real checks) */
+/** Whether a run's result passes a step's goal; `judgeGoal` is the real one */
 export type Judge = (goal: Goal, result: RunResult) => boolean;
 
 /** An in-memory workspace, for tests. `files` is live: read it after a write */
@@ -123,9 +123,6 @@ export const stubRunner = (
     },
   };
 };
-
-/** Any run that ends well passes its goal, until 3.2's checks replace it */
-export const passingJudge: Judge = (_goal, result) => result.ok;
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -179,27 +176,6 @@ if (import.meta.vitest) {
       await expect(
         unwiredRunner.run("run", { beatId: "x" }, () => {})
       ).resolves.toMatchObject({ ok: false });
-    });
-
-    it("passingJudge passes on ok alone", () => {
-      const goal: Goal = { kind: "build" };
-      expect(
-        passingJudge(goal, {
-          act: "build",
-          ok: true,
-          seconds: 1,
-          instructions: [],
-        })
-      ).toBe(true);
-      expect(
-        passingJudge(goal, {
-          act: "build",
-          ok: false,
-          seconds: 1,
-          error: null,
-          log: "",
-        })
-      ).toBe(false);
     });
   });
 }

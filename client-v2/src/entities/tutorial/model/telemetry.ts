@@ -17,6 +17,19 @@ type TutorialEvents = {
    * win. `seconds` is the time from Start.
    */
   tutorial_finished: { tutorial: string; seconds: number };
+  /**
+   * A step's goal passed on a real result. `via` is how: `chat` (an act
+   * card), `client` (a client run) or `call_panel`. `step` is 1-based;
+   * `seconds` is whole seconds from entering the step to its pass, time away
+   * from the tab included. A passed step stays passed, so this fires once
+   * per step until Start over.
+   */
+  tutorial_step_passed: {
+    tutorial: string;
+    step: number;
+    via: "chat" | "client" | "call_panel";
+    seconds: number;
+  };
 };
 
 /**

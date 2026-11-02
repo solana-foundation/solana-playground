@@ -25,7 +25,8 @@ vi.mock("@/entities/tutorial", async () => ({
 }));
 
 import hello from "../../../tutorials/hello-anchor/tutorial.json";
-import { memoryWorkspace, passingJudge, stubRunner } from "./ports";
+import { judgeGoal } from "./goals";
+import { memoryWorkspace, stubRunner } from "./ports";
 import type { Runner, Workspace } from "./ports";
 import { freshProgress } from "./progress";
 import type { RunResult } from "./progress";
@@ -86,7 +87,7 @@ const open = (
   sub = PgConversation.init({
     workspace: ports.workspace ?? memoryWorkspace(),
     runner: ports.runner ?? stubRunner([]),
-    judge: passingJudge,
+    judge: judgeGoal,
   });
 };
 

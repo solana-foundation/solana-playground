@@ -625,6 +625,7 @@ if (import.meta.vitest) {
       seconds: 1,
       signatures: ["x"],
       line: null,
+      called: [],
     };
 
     const LATE = { now: 1e9, loadedAt: 0 };

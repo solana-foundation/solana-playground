@@ -129,6 +129,17 @@ export interface BuildError {
 }
 
 /**
+ * One instruction a run invoked, with its argument values by name, each as
+ * the decoded value's string form. The client run and the call act (task
+ * 4.3) and the Call panel (task 4.4) fill it; none, or an empty list, fails
+ * every call goal.
+ */
+export interface Called {
+  instruction: string;
+  args: Record<string, string>;
+}
+
+/**
  * The facts a run leaves behind, by act. These are the fields the spec's
  * result cards read; the run tickets (4.1 to 4.3) add to them, never rename.
  */
@@ -165,6 +176,13 @@ export type RunResult =
       signatures: string[];
       /** The program log line the definition's pattern picked, if any */
       line: string | null;
+      /**
+       * Each instruction the run's transactions invoked on the tutorial's
+       * program, with its arguments as the deployed IDL decodes them. A call
+       * goal's arguments are checked here, not in the log: before the
+       * upgrade the deployed `hello` takes no `name`, so none is sent.
+       */
+      called: Called[];
     }
   | {
       act: "run" | "call";
@@ -294,17 +312,34 @@ const parseResolution = (v: unknown): Resolution | null => {
   }
 };
 
+const isCalled = (v: unknown): v is Called =>
+  isRecord(v) &&
+  typeof v.instruction === "string" &&
+  isRecord(v.args) &&
+  Object.values(v.args).every((a) => typeof a === "string");
+
 /**
  * A result is kept as it was saved once its act and `ok` are sound: the run
- * tickets own its other fields, and the cards read them by act.
+ * tickets own its other fields, and the cards read them by act. The one
+ * exception is a call's `called`, which `judgeGoal` reads: a save from before
+ * the field, or an entry that does not read as a call, comes back as no call,
+ * so the judge can trust the type.
  */
-const parseResult = (v: unknown): RunResult | null =>
-  isRecord(v) &&
-  ACTS.includes(v.act as Act) &&
-  typeof v.ok === "boolean" &&
-  isMs(v.seconds)
-    ? (v as unknown as RunResult)
-    : null;
+const parseResult = (v: unknown): RunResult | null => {
+  if (
+    !isRecord(v) ||
+    !ACTS.includes(v.act as Act) ||
+    typeof v.ok !== "boolean" ||
+    !isMs(v.seconds)
+  ) {
+    return null;
+  }
+  if ((v.act === "run" || v.act === "call") && v.ok) {
+    const called = Array.isArray(v.called) ? v.called.filter(isCalled) : [];
+    return { ...v, called } as unknown as RunResult;
+  }
+  return v as unknown as RunResult;
+};
 
 /** A run saved as `started` comes back `interrupted`: nothing resumes */
 const parseRun = (v: unknown): RunRecord | null => {
@@ -601,6 +636,45 @@ if (import.meta.vitest) {
       const bad = midway();
       (bad as { restartedAt: unknown }).restartedAt = "yesterday";
       expect(reload(bad)).toBeNull();
+    });
+
+    it("reads a call's `called` back, and an unreadable one as no calls", () => {
+      const ok = (called: unknown) => ({
+        status: "ok",
+        at: 1,
+        took: 1,
+        result: {
+          act: "call",
+          ok: true,
+          seconds: 1,
+          signatures: ["sig"],
+          line: null,
+          called,
+        },
+      });
+      const calledOf = (called: unknown) => {
+        const run = reload(midway({ runs: { "s4.call": [ok(called)] } }))?.runs[
+          "s4.call"
+        ][0];
+        return run?.status === "ok" &&
+          run.result.act === "call" &&
+          run.result.ok
+          ? run.result.called
+          : "not read";
+      };
+      const hello = { instruction: "hello", args: { name: "Alex" } };
+      expect(calledOf([hello])).toEqual([hello]);
+      // Saved before the field existed
+      expect(calledOf(undefined)).toEqual([]);
+      expect(calledOf({})).toEqual([]);
+      // Only the entries that read as calls are kept
+      expect(
+        calledOf([
+          hello,
+          { instruction: "hello" },
+          { instruction: "x", args: { n: 1 } },
+        ])
+      ).toEqual([hello]);
     });
 
     it("keeps a passed step once", () => {

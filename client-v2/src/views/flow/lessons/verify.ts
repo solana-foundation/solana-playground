@@ -1,9 +1,9 @@
 import type { Idl } from "@coral-xyz/anchor";
 
+import { sameIdlName } from "@/shared/lib/idl-name";
+
 import type { VerifyCondition } from "./types";
 import type { FlowState, Stage } from "../state/stage";
-
-const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 /**
  * How a condition is evaluated, which decides which ledger edges the
@@ -91,16 +91,18 @@ export const isSatisfied = (
       if (flow.build !== "done") return false;
       if (!idl) return false;
 
-      const ix = idl.instructions.find((i) => sameName(i.name, c.instruction));
+      const ix = idl.instructions.find((i) =>
+        sameIdlName(i.name, c.instruction)
+      );
       if (!ix) return false;
 
-      if (c.arg && !ix.args.some((a) => sameName(a.name, c.arg!))) {
+      if (c.arg && !ix.args.some((a) => sameIdlName(a.name, c.arg!))) {
         return false;
       }
 
       if (
         c.account &&
-        !(idl.accounts ?? []).some((a) => sameName(a.name, c.account!))
+        !(idl.accounts ?? []).some((a) => sameIdlName(a.name, c.account!))
       ) {
         return false;
       }
