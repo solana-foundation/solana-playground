@@ -88,14 +88,16 @@ const handleTutorial = (name: string, page: string) => {
       // other tutorial takes the branch below, unchanged.
       // The barrel, not `./registry` -- importing it is what registers
       // the paths, and this route can run before Flow has mounted.
-      // Whether a lesson path exists is all this one-shot callback
-      // decides -- it is fixed for the life of the tutorial. Whether the
+      // Whether a lesson path or a definition exists is all this one-shot
+      // callback decides -- both are fixed for the life of the tutorial. Whether the
       // tutorial is *started* changes within the same routed session
       // (Start runs inside upstream's own component, well after this
       // callback has already returned), so `LessonRoute` makes that half
       // of the decision itself, reactively. See its own comment.
+      // A tutorial with a definition opens the same way; once started, the
+      // frame (`widgets/tutorial-frame`) holds its chat beside the editor
       const { getLessonPath } = await import("../../views/flow/lessons");
-      if (getLessonPath(tutorial.name)) {
+      if (getLessonPath(tutorial.name) || tutorial.definition) {
         const { default: LessonRoute } = await import(
           "../../views/flow/lessons/LessonRoute"
         );

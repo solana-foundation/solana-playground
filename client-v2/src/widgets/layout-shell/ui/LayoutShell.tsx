@@ -23,7 +23,7 @@ import type { ToggleSource } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
 import BaseLayoutShell from "./BaseLayoutShell";
 import BaseStageBar from "./BaseStageBar";
-import type { AssistantWide } from "./BaseLayoutShell";
+import type { AssistantWide, TutorialFrameSlot } from "./BaseLayoutShell";
 
 export interface LayoutShellProps {
   /**
@@ -50,11 +50,13 @@ export interface LayoutShellProps {
   /**
    * The files column. `collapsed` is never true in the phone's Files Sheet;
    * `phone` says the column is in that Sheet, where `toggle` closes it.
+   * `pinned` says a tutorial's frame holds it open: it draws no fold control.
    */
   files: (panel: {
     collapsed: boolean;
     toggle: () => void;
     phone: boolean;
+    pinned: boolean;
   }) => ReactNode;
   /** The stage */
   stage: () => ReactNode;
@@ -93,6 +95,13 @@ export interface LayoutShellProps {
   cover?: { title: string; content: ReactNode; onClose: () => void };
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
+  /**
+   * A tutorial's frame (`BaseLayoutShellProps.tutorial`). On a wide window
+   * it has no assistant panel and holds the files column open, so Ctrl+R,
+   * ⌘E and the assistant's own requests to open do nothing while it holds
+   * the work; the frame's navigation state is its own and never saved.
+   */
+  tutorial?: TutorialFrameSlot;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -119,6 +128,7 @@ const LayoutShell = ({
   home,
   cover,
   keepWork,
+  tutorial,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -148,6 +158,11 @@ const LayoutShell = ({
   // Read by the keys and the subscriptions, which outlive renders
   const screenNow = useRef(screen);
   screenNow.current = screen;
+  // The frame holds the work: no assistant panel, and a files column it
+  // holds open
+  const tutorialNow = useRef(false);
+  tutorialNow.current =
+    tutorial !== undefined && viewport === "wide" && screen.kind === "work";
   // The assistant's Sheet while Home shows: the visit's, never saved
   const [homeSheetOpen, setHomeSheetOpen] = useState(false);
   const homeSheetNow = useRef(false);
@@ -313,6 +328,9 @@ const LayoutShell = ({
   const pagerOrFrame = phone ? view === "chat" : wideOrSheet;
   const assistantShown = homeShown ? homeSheetOpen : pagerOrFrame;
   const setAssistant = (open: boolean, via: ToggleSource) => {
+    // The frame has no assistant panel: its chat holds the assistant's
+    // thread, whose `useTurn` takes a requested prompt itself
+    if (tutorialNow.current) return;
     const now = screenNow.current;
     // A page over the work covers the assistant: it makes way first
     if (open && now.kind === "page" && now.over === "work") now.cover.onClose();
@@ -343,7 +361,7 @@ const LayoutShell = ({
   useKeybind(
     "Ctrl+R",
     () => {
-      if (isCovered(screenNow.current)) return;
+      if (isCovered(screenNow.current) || tutorialNow.current) return;
       if (phone) {
         // The view is shown on Work: bring it into view first
         showPage("work", "key");
@@ -375,7 +393,8 @@ const LayoutShell = ({
     {
       handle: (ev) => {
         // Before `preventDefault`: under Home or a page the key is not the shell's
-        if (isCovered(screenNow.current)) return;
+        // The frame holds the column open: no fold there
+        if (isCovered(screenNow.current) || tutorialNow.current) return;
         if (
           PgCommon.getOS() === "MacOS" &&
           ev.ctrlKey &&
@@ -494,6 +513,7 @@ const LayoutShell = ({
     <BaseLayoutShell
       viewport={viewport}
       keepWork={keepWork}
+      tutorial={tutorial}
       navOpen={navOpen}
       onNavOpenChange={onNavOpenChange}
       assistantState={{
@@ -536,13 +556,15 @@ const LayoutShell = ({
             collapsed: false,
             toggle: toggleNav(stock.toggle),
             phone: true,
+            pinned: false,
           });
         }
         return files({
-          collapsed: !state.open.files,
+          collapsed: stock.pinned ? false : !state.open.files,
           toggle: () =>
             setOpen("files", { open: !state.open.files, via: "button" }),
           phone: false,
+          pinned: stock.pinned,
         });
       }}
       // The product's text face, as the desktop's column has it: the code

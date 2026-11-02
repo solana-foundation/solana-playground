@@ -119,3 +119,29 @@ it("on a phone, heads the menu with the logo and a close, not a collapse", () =>
   fireEvent.click(screen.getByRole("button", { name: "Close the menu" }));
   expect(onToggle).toHaveBeenCalledOnce();
 });
+
+it("puts the pin in the open head only", () => {
+  const drawPinned = (collapsed: boolean) =>
+    render(
+      <TooltipProvider>
+        <SidebarProvider>
+          <BaseAppNav
+            collapsed={collapsed}
+            onToggle={vi.fn()}
+            onOpen={vi.fn()}
+            logo={<span>logo</span>}
+            projects={<span>projects</span>}
+            footer={<span>footer</span>}
+            railFooter={<span>rail footer</span>}
+            setup={<span>setup</span>}
+            pin={<button type="button">Keep open</button>}
+          />
+        </SidebarProvider>
+      </TooltipProvider>
+    );
+  const open = drawPinned(false);
+  expect(screen.getByRole("button", { name: "Keep open" })).toBeTruthy();
+  open.unmount();
+  drawPinned(true);
+  expect(screen.queryByRole("button", { name: "Keep open" })).toBeNull();
+});

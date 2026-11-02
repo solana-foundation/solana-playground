@@ -74,6 +74,34 @@ export interface AssistantProps {
   openConnect: ConnectOpener;
 }
 
+export interface AssistantConversationProps {
+  /** Opens Connect a model (`AssistantProps.openConnect`) */
+  openConnect: ConnectOpener;
+}
+
+/**
+ * The assistant's thread over its composer, with no head: the body a host
+ * with a head of its own puts it under, as the tutorial frame's chat column
+ * does until the tutorial's feed takes its place (`tutorial-flow-v2` 3.3).
+ */
+export function AssistantConversation({
+  openConnect,
+}: AssistantConversationProps) {
+  const turn = useTurn({ open: openConnect });
+  const tutorial = useTutorialBeforeStart();
+  const project = useProjectName() ?? tutorial;
+  // As `Assistant` does: the tools read what the gateway serves
+  useEffect(() => {
+    PgAssistant.initMcp();
+  }, []);
+  return (
+    <div className="flex h-full max-h-full min-h-0 flex-1 flex-col">
+      <Thread turn={turn} project={project} />
+      <AssistantComposer turn={turn} />
+    </div>
+  );
+}
+
 /**
  * The assistant, connected: its head, then the conversation over the composer,
  * or Sources and tools in their place.

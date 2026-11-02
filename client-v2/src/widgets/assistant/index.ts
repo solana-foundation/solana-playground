@@ -27,5 +27,9 @@ export { BaseAssistantHead } from "./ui/BaseAssistantHead";
 export type { BaseAssistantHeadProps } from "./ui/BaseAssistantHead";
 export { BaseThread } from "./ui/BaseThread";
 export { Thread } from "./ui/Thread";
-export { Assistant } from "./ui/Assistant";
-export type { AssistantProps, AssistantWiden } from "./ui/Assistant";
+export { Assistant, AssistantConversation } from "./ui/Assistant";
+export type {
+  AssistantConversationProps,
+  AssistantProps,
+  AssistantWiden,
+} from "./ui/Assistant";

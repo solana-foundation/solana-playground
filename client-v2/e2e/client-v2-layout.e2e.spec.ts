@@ -393,6 +393,9 @@ test("client-v2-layout: The files column keeps its tree", async ({
 test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
   // Opening a tutorial boots the dev server's tutorial chunk and imports it
   test.setTimeout(120_000);
+  // Under 1024 px a tutorial keeps today's layout, whose stage bar folds the
+  // column; the tutorial frame from 1024 holds it open (tutorial-workspace)
+  await page.setViewportSize({ width: 1000, height: 800 });
   await page.goto("/");
   await startTutorial(page);
 

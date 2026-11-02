@@ -15,26 +15,31 @@ On a desktop from 1152 px wide, a conversation tutorial SHALL lay out the
 navigation rail, the chat column and the workspace, left to right, with no
 horizontal scroll. Their heads SHALL share one 44 px line. The chat head holds
 a back button "Tutorials", the tutorial's name and a ⋯ menu with "Start
-over…" and "Keyboard shortcuts". The chat column SHALL default to
-`clamp(360px, 400px + (W − 1280px) × 0.134, 480px)` (420 at 1440). It SHALL
-be resizable from 340 to 560 px by a handle on its right edge, never leaving
-the workspace under 560 px; a double click resets it. The column order SHALL
-not be swappable.
+over…" and "Keyboard shortcuts". The chat column SHALL default, for a
+window W px wide, to `400 − (1280 − W) × 0.3125` under 1280 and
+`400 + (W − 1280) × 0.134` from 1280, rounded and held to 360–480 px (360 at
+1152, 400 at 1280, 421 at 1440). It SHALL be resizable from 340 to 560 px by a
+handle on its right edge, never leaving the workspace under 560 px; the
+focused handle takes the arrow keys (16 px, 64 with Shift), Home and End, and
+a double click resets it. A picked width SHALL be kept on the device until
+it is reset. The column order SHALL not be swappable.
 
 #### Scenario: Widths at 1440
 
 - **WHEN** a tutorial is open in a 1440 × 900 window
-- **THEN** the rail is 52 px, the chat column 420 px and the workspace fills
+- **THEN** the rail is 52 px, the chat column 421 px and the workspace fills
   the rest
 - **AND** the page has no horizontal scroll
 
 ### Requirement: The navigation folds to its rail in a tutorial
 
 Entering a tutorial (Start, Continue or a card) SHALL fold the navigation to
-its icon rail, whatever was saved. In a tutorial:
+its icon rail, whatever was saved. Until the intro card replaces the About
+page, entering is Start, or opening a tutorial already started. In a tutorial:
 
 - **Open:** the mark's button or ⌘B SHALL open the navigation as an overlay
-  over the chat with a scrim.
+  over the chat with a scrim. The chat SHALL stay where it was: the overlay
+  takes only the rail's width in the row.
 - **Close:** a pick, a scrim click, Esc or ⌘B SHALL close the overlay and
   return focus.
 - **Pin:** a pin in the overlay's head SHALL dock it open until the learner
@@ -43,8 +48,7 @@ its icon rail, whatever was saved. In a tutorial:
 - **Leaving:** the navigation SHALL return to its usual behaviour.
 
 On the first fold only, a one-line hint "The menu is folded to icons while you
-learn" with ⌘B SHALL show beside the mark for 6 s, or until a pointer down or
-a key.
+learn" SHALL show beside the mark for 6 s, or until a pointer down or a key.
 
 #### Scenario: Opening the menu in a tutorial
 
@@ -52,6 +56,23 @@ a key.
 - **THEN** the navigation covers the chat with a scrim and the live card keeps
   its state
 - **AND** Esc closes it and focus returns where it was
+
+### Requirement: The frame is measured
+
+The tutorial frame slice SHALL emit, under the prefix `tutorial_frame`:
+
+- `tutorial_frame_menu_opened` when the navigation opens as an overlay, with
+  `via`: `key` (⌘B) or `button`;
+- `tutorial_frame_menu_pinned` when the pin docks the navigation or folds it
+  back, with `pinned`;
+- `tutorial_frame_chat_resized` when the learner sets the chat's width, with
+  `width` in px and `via`: `drag`, `key` or `reset`.
+
+#### Scenario: Pinning the menu
+
+- **WHEN** the learner opens the navigation with its button and pins it
+- **THEN** `tutorial_frame_menu_opened` reaches the memory provider with
+  `via: "button"`, then `tutorial_frame_menu_pinned` with `pinned: true`
 
 ### Requirement: The workspace head holds tabs, Files and Terminal only
 

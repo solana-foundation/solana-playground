@@ -184,7 +184,8 @@ const theme = {
 const shellTree = (
   home?: LayoutShellProps["home"],
   work: { keepWork?: boolean; stage?: ReactNode } = {},
-  cover?: LayoutShellProps["cover"]
+  cover?: LayoutShellProps["cover"],
+  tutorial?: LayoutShellProps["tutorial"]
 ) => (
   <ThemeProvider theme={theme}>
     <TooltipProvider>
@@ -243,6 +244,7 @@ const shellTree = (
         home={home}
         keepWork={work.keepWork}
         cover={cover}
+        tutorial={tutorial}
       />
     </TooltipProvider>
   </ThemeProvider>
@@ -347,6 +349,19 @@ it("should go back to the saved navigation on a wide screen", () => {
     screen.getByRole("button", { name: "Collapse navigation" })
   ).toBeTruthy();
   expect(toggled()).toEqual([]);
+});
+
+it("should leave the saved layout alone on Ctrl+R and Cmd+E in a tutorial's frame, which holds the files column open", () => {
+  render(
+    shellTree(undefined, {}, undefined, {
+      chat: <section>chat</section>,
+      nav: { fold: "rail", onOpenChange: vi.fn(), onClose: vi.fn() },
+    })
+  );
+  press({ key: "r", ctrlKey: true });
+  press({ key: "e", metaKey: true });
+  expect(toggled()).toEqual([]);
+  expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
 });
 
 it("should toggle the assistant by Ctrl+R", () => {

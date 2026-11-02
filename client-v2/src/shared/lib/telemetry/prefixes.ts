@@ -16,6 +16,7 @@ export const EVENT_PREFIXES = {
   "settings-page": "settings",
   "setup-list": "setup",
   tutorial: "tutorial",
+  "tutorial-frame": "tutorial_frame",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];

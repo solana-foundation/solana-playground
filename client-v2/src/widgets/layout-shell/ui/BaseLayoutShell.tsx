@@ -112,7 +112,14 @@ export type NavStock =
  */
 export type FilesStock =
   | { isMobile: true; toggle: () => void }
-  | { isMobile: false };
+  | {
+      isMobile: false;
+      /**
+       * Held open by a tutorial's frame, which has no stage bar to reopen it
+       * from: the column draws no fold control of its own then
+       */
+      pinned: boolean;
+    };
 
 /**
  * What the assistant is handed to widen itself: the panel sized to
@@ -131,6 +138,37 @@ export interface AssistantWide {
   setWide: (wide: boolean) => boolean;
   /** Whether `setWide` can do anything now, so Widen is offered only then */
   canWiden: boolean;
+}
+
+/**
+ * The navigation in a tutorial: on its rail, open over the chat under a
+ * scrim, or pinned open beside it. The frame's fold rules
+ * (`widgets/tutorial-frame`) decide it, in place of the saved layout.
+ */
+export type TutorialNavFold = "rail" | "overlay" | "pinned";
+
+export interface TutorialNavState {
+  fold: TutorialNavFold;
+  /** The stock toggle or ⌘B asked it open or folded */
+  onOpenChange: (open: boolean) => void;
+  /** A pick in it, the scrim or Escape closed the overlay */
+  onClose: () => void;
+}
+
+/**
+ * A tutorial with a definition (`tutorial-flow-v2`, task 2.1): the work area
+ * becomes the chat column, then the files column beside the stage over the
+ * console. The stage bar, the stage tabs and the assistant are not drawn;
+ * the stage and the console are the same outlets, so nothing remounts on the
+ * way in or out. Only on the work screen of a wide window; narrower windows
+ * keep today's layout.
+ */
+export interface TutorialFrameSlot {
+  /** The chat column, which holds its own width */
+  chat: ReactNode;
+  nav: TutorialNavState;
+  /** Drawn over the frame, from its top left: the first fold's hint */
+  overNav?: ReactNode;
 }
 
 export interface BaseLayoutShellProps {
@@ -223,7 +261,22 @@ export interface BaseLayoutShellProps {
    * them as they were. On a phone it is the pager's work page.
    */
   cover?: { bar: ReactNode; content: ReactNode };
+  /** A tutorial's frame, given while a tutorial with a definition is open */
+  tutorial?: TutorialFrameSlot;
 }
+
+/** Where an Escape belongs to something open over the navigation */
+const OWNS_ESCAPE =
+  '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]';
+
+/** What a click in the navigation picks, and so closes its overlay with */
+const PICK = 'a[href], button, [role="menuitem"], [role="link"]';
+/**
+ * What opens something in place rather than going somewhere: a menu's
+ * trigger, a group that unfolds. Folding the overlay on it would take away
+ * the anchor of what it just opened.
+ */
+const OPENS_IN_PLACE = "[aria-haspopup], [aria-expanded]";
 
 const log = createLogger("layout-shell:panels");
 
@@ -259,6 +312,52 @@ const createFoldedOf = (): FoldedOf => {
       return undefined;
     }
   };
+};
+
+/**
+ * While the navigation is an overlay in a tutorial, Escape closes it, and
+ * folding it back to the rail gives focus back to where it was when the
+ * overlay opened, as a dialog would. Pinning it keeps focus where it is.
+ */
+const useOverlayFocus = (
+  fold: TutorialNavFold | undefined,
+  onClose?: () => void
+) => {
+  const overlay = fold === "overlay";
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  // Read by the cleanup, which runs once the next fold has rendered
+  const foldRef = useRef(fold);
+  foldRef.current = fold;
+  useEffect(() => {
+    if (!overlay) return;
+    const before =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // A menu or dialog opened from the navigation takes its own Escape
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest(OWNS_ESCAPE)) return;
+      e.preventDefault();
+      closeRef.current?.();
+    };
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("keydown", onKey, true);
+      // Pinned, the navigation stays, and so does focus on the pin
+      if (foldRef.current === "pinned") return;
+      // Only when focus is lost or left in the navigation: a pick that moved
+      // it somewhere on purpose keeps it there
+      const now = document.activeElement;
+      const lost =
+        now === null ||
+        now === document.body ||
+        now.closest('[data-slot="sidebar"]') !== null;
+      if (before?.isConnected && lost) before.focus();
+    };
+  }, [overlay]);
 };
 
 /** The assistant as a right Sheet, titled "Assistant" for its dialog */
@@ -333,6 +432,16 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
   const workInFrame = isWorkInFrame(screen);
   const workMounted = workInFrame || props.keepWork === true;
   const home = homeOf(screen);
+  // The tutorial's layout holds under a page over the work too, which keeps
+  // the work laid out as it was; its navigation holds on the work screen
+  // only. From `LAYOUT_BREAKPOINTS.compact` to wide no source draws it, so
+  // the frame keeps today's layout there, as the phone keeps its pager.
+  const tutorialLayout =
+    props.tutorial !== undefined && workInFrame && props.viewport === "wide";
+  const tutorialNav =
+    tutorialLayout && screen.kind === "work" ? props.tutorial?.nav : undefined;
+  const overlay = tutorialNav?.fold === "overlay";
+  useOverlayFocus(tutorialNav?.fold, tutorialNav?.onClose);
 
   // `open` props drive the panels; a drag that folds one reports back through
   // `settle` on release, so the two never disagree for long. A panel that
@@ -406,24 +515,40 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
   // layout, which snapped it open to its minimum when a drag of the
   // assistant's edge reflowed the work area. Opening mounts it at the width it
   // last had.
-  const filesShown = props.filesState.open;
+  // In a tutorial's frame the column is held open whatever was saved: the
+  // frame has no stage bar, so nothing there could open it again (until the
+  // workspace's tree, task 2.2, replaces it). A fold there is not saved.
+  // A fresh object each render; read only by `.open` in the effects below
+  const filesState: PanelState = tutorialLayout
+    ? { open: true, onOpenChange: () => undefined }
+    : props.filesState;
+  const filesShown = filesState.open;
   // A drag that folds the open column is the one fold left to the library
   useEffect(() => {
     if (!filesShown) return;
     const panel = filesRef.current;
     const folded = foldedOf(panel);
     if (!panel || folded === undefined) return;
-    if (folded === !props.filesState.open) return;
-    if (props.filesState.open) panel.resize(filesOpenSize.current);
+    if (folded === !filesState.open) return;
+    if (filesState.open) panel.resize(filesOpenSize.current);
     else panel.collapse();
     // The width is read, not a trigger, as the assistant's viewport above
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.filesState.open, filesRef, foldedOf]);
+  }, [filesState.open, filesRef, foldedOf]);
   useEffect(() => {
     // The column mounts again when shown, or on the way back from the Sheet,
     // and settles again
     if (!filesShown) filesSettled.current = false;
   }, [filesShown]);
+  // Entering or leaving a tutorial's frame mounts the files column and the
+  // stage over the console again, in the other branch, and they settle again
+  const tutorialSeen = useRef(tutorialLayout);
+  useEffect(() => {
+    if (tutorialSeen.current === tutorialLayout) return;
+    tutorialSeen.current = tutorialLayout;
+    filesSettled.current = false;
+    consoleSettled.current = false;
+  }, [tutorialLayout]);
 
   useEffect(() => {
     const panel = consoleRef.current;
@@ -528,6 +653,68 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
     </ResizablePanelGroup>
   );
 
+  // The files column beside the stage over the console: under the stage bar
+  // in the frame, beside the chat in a tutorial
+  const workGroup = (
+    <ResizablePanelGroup
+      orientation="horizontal"
+      id="layout-work"
+      className="h-auto min-h-0 flex-1"
+      defaultLayout={filesShown && !tutorialLayout ? props.work : undefined}
+      onLayoutChanged={
+        !filesShown
+          ? undefined
+          : (layout, meta) =>
+              settle(
+                {
+                  panel: filesRef.current,
+                  state: filesState,
+                  openSize: filesOpenSize.current,
+                  settledOnce: filesSettled,
+                  // Beside the chat the group is narrower, so its share is not the
+                  // frame's to save: a drag there would resize the column outside it
+                  save: tutorialLayout ? () => undefined : props.onWorkLayout,
+                },
+                layout,
+                meta
+              )
+      }
+    >
+      {filesShown && (
+        <ResizablePanel
+          id="files"
+          panelRef={filesRef}
+          // Held open in the frame: a drag past the fold point would fold it
+          // where nothing could open it again
+          collapsible={!tutorialLayout}
+          collapsedSize={PANEL_SIZES.files.folded}
+          defaultSize={filesOpenSize.current}
+          minSize={PANEL_SIZES.files.min}
+          groupResizeBehavior="preserve-pixel-size"
+          className="flex min-w-0 flex-col"
+          onResize={(size) => {
+            if (
+              foldedOf(filesRef.current) === false &&
+              size.inPixels > PANEL_SIZES.files.folded
+            ) {
+              filesOpenSize.current = size.inPixels;
+            }
+          }}
+        >
+          {props.files({ isMobile: false, pinned: tutorialLayout })}
+        </ResizablePanel>
+      )}
+      {filesShown && <ResizableHandle />}
+      <ResizablePanel
+        id="center"
+        minSize={PANEL_SIZES.stage.min}
+        className="flex min-w-0 flex-col"
+      >
+        {center}
+      </ResizablePanel>
+    </ResizablePanelGroup>
+  );
+
   return (
     <>
       {/* Under Home only with `keepWork`, and then off the page: Home places
@@ -583,11 +770,19 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
         </SidebarProvider>
       ) : (
         <SidebarProvider
-          open={props.navOpen}
-          onOpenChange={props.onNavOpenChange}
+          open={tutorialNav ? tutorialNav.fold !== "rail" : props.navOpen}
+          onOpenChange={tutorialNav?.onOpenChange ?? props.onNavOpenChange}
           style={SIDEBAR_STYLE}
-          className="relative min-h-0 flex-1"
+          data-nav-overlay={overlay || undefined}
+          // Over the chat, the column keeps only the rail's width in the row,
+          // so the chat stays where it was under the open navigation
+          className={cn(
+            "relative min-h-0 flex-1",
+            overlay &&
+              "[&_[data-slot=sidebar-gap]]:w-(--sidebar-width-icon)! [&_[data-slot=sidebar-container]]:z-30"
+          )}
         >
+          {tutorialNav && props.tutorial?.overNav}
           {/* The stock Sidebar's container is fixed at the window's full height.
           Flow draws the sync banner above the provider, so the Sidebar sits
           inside the provider instead, where the banner pushes it down rather
@@ -598,6 +793,23 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
           <Sidebar
             collapsible="icon"
             className="absolute inset-y-0 left-0 h-auto border-border [&>[data-slot=sidebar-inner]]:bg-background"
+            // A pick in the overlay closes it. Bubble phase, so the pick's
+            // own click (the pin's) runs before the close unmounts it. Only
+            // a pick in the column itself: React bubbles a click in a menu or
+            // dialog the navigation opened, portaled elsewhere, through here
+            onClick={
+              overlay
+                ? (e) => {
+                    const target = e.target;
+                    if (!(target instanceof Element)) return;
+                    if (!e.currentTarget.contains(target)) return;
+                    const pick = target.closest(PICK);
+                    if (pick && !pick.matches(OPENS_IN_PLACE)) {
+                      tutorialNav?.onClose();
+                    }
+                  }
+                : undefined
+            }
           >
             <div className="contents" style={props.sheetFont}>
               <NavSlot nav={props.nav} />
@@ -619,151 +831,124 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                 reach: `inert` keeps focus, clicks and the accessibility tree
                 off it */}
                 <div className="contents" inert={screen.kind === "page"}>
-                  {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is the
+                  {tutorialLayout ? (
+                    <div
+                      data-testid="tutorial-frame"
+                      className="flex min-h-0 min-w-0 flex-1"
+                    >
+                      {props.tutorial?.chat}
+                      {/* The files column stays until the workspace's own tree
+                      (task 2.2) takes its place: it holds the lesson's steps
+                      and the files a later step opens */}
+                      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+                        {workGroup}
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Between `LAYOUT_BREAKPOINTS.compact` and wide the tree is the
             same, so a rotate across it does not remount the stage, Monaco or
             the console's terminal; across `LAYOUT_BREAKPOINTS.phone` the
             frame swaps for the pager and they survive as outlets. Below
             `LAYOUT_BREAKPOINTS.compact` the group holds only the work
             area, so it neither takes nor saves the horizontal layout:
             crossing a breakpoint writes nothing. */}
-                  <ResizablePanelGroup
-                    orientation="horizontal"
-                    id="layout-horizontal"
-                    defaultLayout={wide ? props.horizontal : undefined}
-                    onLayoutChanged={
-                      wide
-                        ? (layout, meta) => {
-                            // A drag of the panel's edge takes over from Widen
-                            if (meta.isUserInteraction) setWideFrom(null);
-                            settle(
-                              {
-                                panel: assistantRef.current,
-                                state: props.assistantState,
-                                openSize: assistantOpenSize.current,
-                                settledOnce: assistantSettled,
-                                save: props.onHorizontalLayout,
-                              },
-                              layout,
-                              meta
-                            );
-                          }
-                        : undefined
-                    }
-                  >
-                    {wide && (
-                      <ResizablePanel
-                        id="assistant"
-                        panelRef={assistantRef}
-                        collapsible
-                        collapsedSize={PANEL_SIZES.assistant.folded}
-                        defaultSize={
-                          props.assistantState.open
-                            ? PANEL_SIZES.assistant.default
-                            : PANEL_SIZES.assistant.folded
-                        }
-                        minSize={PANEL_SIZES.assistant.min}
-                        maxSize={PANEL_SIZES.assistant.max}
-                        groupResizeBehavior="preserve-pixel-size"
-                        className="flex min-w-0 flex-col"
-                        onResize={(size) => {
-                          if (
-                            foldedOf(assistantRef.current) === false &&
-                            size.inPixels > PANEL_SIZES.assistant.folded
-                          ) {
-                            assistantOpenSize.current = size.inPixels;
-                          }
-                        }}
-                      >
-                        {assistant}
-                      </ResizablePanel>
-                    )}
-                    {/* Hidden, the assistant takes no width and its handle would double
-              the navigation's line; it stays a drag target, only unseen */}
-                    {wide && (
-                      <ResizableHandle
-                        className={
-                          props.assistantState.open
-                            ? undefined
-                            : "bg-transparent"
-                        }
-                      />
-                    )}
-                    <ResizablePanel
-                      id="work"
-                      minSize={PANEL_SIZES.work.min}
-                      className="flex min-w-0 flex-col"
-                    >
-                      {/* Over the files column and the stage both, as the prototype
-                draws them: the column bar, then the stage tabs */}
-                      {props.stageBar}
-                      {props.stageTabs}
-                      {/* Hidden, the group holds only the
-                stage and, like the horizontal group below `compact`, neither
-                takes nor saves its layout */}
                       <ResizablePanelGroup
                         orientation="horizontal"
-                        id="layout-work"
-                        className="h-auto min-h-0 flex-1"
-                        defaultLayout={filesShown ? props.work : undefined}
+                        id="layout-horizontal"
+                        defaultLayout={wide ? props.horizontal : undefined}
                         onLayoutChanged={
-                          !filesShown
-                            ? undefined
-                            : (layout, meta) =>
+                          wide
+                            ? (layout, meta) => {
+                                // A drag of the panel's edge takes over from Widen
+                                if (meta.isUserInteraction) setWideFrom(null);
                                 settle(
                                   {
-                                    panel: filesRef.current,
-                                    state: props.filesState,
-                                    openSize: filesOpenSize.current,
-                                    settledOnce: filesSettled,
-                                    save: props.onWorkLayout,
+                                    panel: assistantRef.current,
+                                    state: props.assistantState,
+                                    openSize: assistantOpenSize.current,
+                                    settledOnce: assistantSettled,
+                                    save: props.onHorizontalLayout,
                                   },
                                   layout,
                                   meta
-                                )
+                                );
+                              }
+                            : undefined
                         }
                       >
-                        {filesShown && (
+                        {wide && (
                           <ResizablePanel
-                            id="files"
-                            panelRef={filesRef}
+                            id="assistant"
+                            panelRef={assistantRef}
                             collapsible
-                            collapsedSize={PANEL_SIZES.files.folded}
-                            defaultSize={filesOpenSize.current}
-                            minSize={PANEL_SIZES.files.min}
+                            collapsedSize={PANEL_SIZES.assistant.folded}
+                            defaultSize={
+                              props.assistantState.open
+                                ? PANEL_SIZES.assistant.default
+                                : PANEL_SIZES.assistant.folded
+                            }
+                            minSize={PANEL_SIZES.assistant.min}
+                            maxSize={PANEL_SIZES.assistant.max}
                             groupResizeBehavior="preserve-pixel-size"
                             className="flex min-w-0 flex-col"
                             onResize={(size) => {
                               if (
-                                foldedOf(filesRef.current) === false &&
-                                size.inPixels > PANEL_SIZES.files.folded
+                                foldedOf(assistantRef.current) === false &&
+                                size.inPixels > PANEL_SIZES.assistant.folded
                               ) {
-                                filesOpenSize.current = size.inPixels;
+                                assistantOpenSize.current = size.inPixels;
                               }
                             }}
                           >
-                            {props.files({ isMobile: false })}
+                            {assistant}
                           </ResizablePanel>
                         )}
-                        {filesShown && <ResizableHandle />}
+                        {/* Hidden, the assistant takes no width and its handle would double
+              the navigation's line; it stays a drag target, only unseen */}
+                        {wide && (
+                          <ResizableHandle
+                            className={
+                              props.assistantState.open
+                                ? undefined
+                                : "bg-transparent"
+                            }
+                          />
+                        )}
                         <ResizablePanel
-                          id="center"
-                          minSize={PANEL_SIZES.stage.min}
+                          id="work"
+                          minSize={PANEL_SIZES.work.min}
                           className="flex min-w-0 flex-col"
                         >
-                          {center}
+                          {/* Over the files column and the stage both, as the prototype
+                draws them: the column bar, then the stage tabs */}
+                          {props.stageBar}
+                          {props.stageTabs}
+                          {/* Hidden, the group holds only the
+                stage and, like the horizontal group below `compact`, neither
+                takes nor saves its layout */}
+                          {workGroup}
                         </ResizablePanel>
                       </ResizablePanelGroup>
-                    </ResizablePanel>
-                  </ResizablePanelGroup>
-                  {props.viewport !== "wide" && (
-                    <AssistantSheet
-                      state={props.assistantState}
-                      sheetFont={props.sheetFont}
-                    >
-                      {assistant}
-                    </AssistantSheet>
+                      {props.viewport !== "wide" && (
+                        <AssistantSheet
+                          state={props.assistantState}
+                          sheetFont={props.sheetFont}
+                        >
+                          {assistant}
+                        </AssistantSheet>
+                      )}
+                    </>
                   )}
                 </div>
+                {overlay && (
+                  <div
+                    data-testid="tutorial-nav-scrim"
+                    aria-hidden
+                    className="absolute inset-0 z-20 bg-black/40"
+                    onClick={tutorialNav?.onClose}
+                  />
+                )}
                 {screen.kind === "page" && (
                   <div
                     data-testid="layout-cover"

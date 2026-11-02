@@ -134,13 +134,21 @@ const goalRunner = (d: TutorialDefinition): Runner => {
           lamports: 1,
           instructions,
         },
-        run: { act: "run", ok: true, seconds: 1, signatures: ["s"], line: "" },
+        run: {
+          act: "run",
+          ok: true,
+          seconds: 1,
+          signatures: ["s"],
+          line: "",
+          called: [],
+        },
         call: {
           act: "call",
           ok: true,
           seconds: 1,
           signatures: ["s"],
           line: "",
+          called: [],
         },
       };
       return results[act];

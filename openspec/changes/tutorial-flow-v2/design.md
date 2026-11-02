@@ -201,6 +201,18 @@ Learners with an old record start Hello Anchor from its intro. There is
 nothing to carry over: the old record holds marks, not code, and the files
 stay in the workspace.
 
+Until then (task 2.1 to 3.3) the frame opens once a definition tutorial is
+started; its About page with Start stays as it is, since the intro card (3.3)
+is what replaces it. In the frame the chat holds the assistant's own thread,
+"Start over…" stays disabled (the engine's `init` and its ports are 3.3's),
+and the band stays over the editor. The files column, with the lesson's step
+rail and "Skip this step", stays beside the stage, held open with no fold
+control since the frame has no stage bar to reopen it, until the workspace's
+own tree (2.2) takes its place. The frame shows on a wide window only: from 1024
+to 1151 px, under the spec's 1152 floor, it shows with the chat at its 360
+default, held to 340 if the window leaves the workspace under 560; from 768 to
+1023 px, which no source draws, a tutorial keeps today's layout.
+
 ### D8. The faucet's limit gets its own card, funding a stage
 
 Funding is an extra first stage on the deploy act card, shown only when the
