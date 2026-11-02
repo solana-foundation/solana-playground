@@ -195,6 +195,8 @@ export interface BaseLayoutShellProps {
    * outlets' nodes are the shell's own.
    */
   phone: PhonePagerState;
+  /** The phone's status chip, in the work page's bar */
+  phoneStatus?: ReactNode;
   /**
    * Home, in place of the assistant and the work; given means Home shows.
    * The frame keeps the navigation and shows `stageBar` over `content` where
@@ -580,6 +582,7 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             stageNode={stageNode}
             consoleNode={consoleNode}
             sheetFont={props.sheetFont}
+            status={props.phoneStatus}
           />
         </SidebarProvider>
       ) : (

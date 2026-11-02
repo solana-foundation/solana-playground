@@ -54,7 +54,6 @@ const MENU = (
 
 const draw = (props: {
   account: AccountView;
-  onOpenCluster?: () => void;
   onMenuOpenChange?: (open: boolean) => void;
 }) =>
   render(
@@ -62,8 +61,7 @@ const draw = (props: {
       <SidebarProvider defaultOpen={false}>
         <BaseRailFooter
           account={props.account}
-          settingsOpen={false}
-          onOpenCluster={props.onOpenCluster ?? vi.fn()}
+          status={<li>status dots</li>}
           onMenuOpenChange={props.onMenuOpenChange ?? vi.fn()}
           menu={MENU}
         />
@@ -71,19 +69,12 @@ const draw = (props: {
     </TooltipProvider>
   );
 
-it("opens the settings on the cluster from the dot", async () => {
-  const onOpenCluster = vi.fn();
-  draw({ account: view({}), onOpenCluster });
-  await userEvent.click(
-    screen.getByRole("button", { name: "Cluster: devnet" })
-  );
-  expect(onOpenCluster).toHaveBeenCalledOnce();
-});
-
-it("says a cluster that is down in the dot's name, not by colour alone", () => {
-  draw({ account: view({ cluster: { name: "devnet", down: true } }) });
+it("draws the status dots over the account", () => {
+  draw({ account: view({}) });
+  const status = screen.getByText("status dots");
+  const account = screen.getByRole("button", { name: "Account, signed out" });
   expect(
-    screen.getByRole("button", { name: "Cluster: devnet, not answering" })
+    status.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING
   ).toBeTruthy();
 });
 

@@ -170,11 +170,14 @@ Done:
   Flow is the only layout, a frame of four
   columns with no header. From the left: the navigation (Home, New project,
   Tutorials, Programs, the project list under them, and its session
-  footer: a cluster row, which opens the settings on the cluster, and an
+  footer: a status row of three indicators, each a dot and words (the
+  network, which opens the settings on the cluster; the AI, which opens
+  Connect a model; the Rust analyzer, which opens a short panel), and an
   account row whose menu holds sign-in, Settings (Cmd+,), Docs, the feedback
   entries and the wallet; Cmd+B folds it to a rail of icons, whose footer
-  keeps the cluster's status dot and an Account button that opens the same
-  menu), the
+  keeps the three status dots and an Account button that opens the same
+  menu; on a phone the three fold into one status chip in the top bar that
+  opens a sheet), the
   assistant, then the work area. Across the top of the work area runs the
   stage bar, with the stepper (Write → Build → Deploy →
   Interact, state derived from real build/deploy events); under it sit the

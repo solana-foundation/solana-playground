@@ -111,6 +111,8 @@ export interface LayoutShellProps {
    * offers it for the open project
    */
   onShare?: (project: string) => void;
+  /** The phone's status chip, in the work page's bar */
+  phoneStatus?: ReactNode;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -139,6 +141,7 @@ const LayoutShell = ({
   keepWork,
   stageBarActions,
   onShare,
+  phoneStatus,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -562,6 +565,7 @@ const LayoutShell = ({
     <BaseLayoutShell
       viewport={viewport}
       keepWork={keepWork}
+      phoneStatus={phoneStatus}
       navOpen={navOpen}
       onNavOpenChange={onNavOpenChange}
       assistantState={{

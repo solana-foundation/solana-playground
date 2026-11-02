@@ -235,7 +235,7 @@ const shellTree = (
             <button type="button" onClick={toggle}>
               {collapsed ? "Expand navigation" : "Collapse navigation"}
             </button>
-            {/* Stands for the cluster row, which opens settings */}
+            {/* Stands for the network indicator, which opens settings */}
             <button type="button" onClick={closeSheet}>
               Open settings
             </button>

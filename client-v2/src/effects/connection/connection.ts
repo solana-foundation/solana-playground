@@ -18,8 +18,8 @@ export const connection = () => {
     if (PgConnection.isConnected && !PgConnection.isClusterDown) return;
 
     // Connection failed or the cluster is down. Another cluster has no
-    // helper: the footer's cluster row says it is not answering (Spec 08's
-    // NET-02 chip, which replaced the "Switch to localnet?" toast)
+    // helper: the status row's network indicator says it is not answering
+    // (Spec 08's NET-02 chip, which replaced the "Switch to localnet?" toast)
     if (PgConnection.cluster !== "localnet") return;
     executeOnce("local", async () => {
       const { Local } = await import("./Local");
