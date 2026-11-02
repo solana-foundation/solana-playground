@@ -614,6 +614,21 @@ describe("creating a workspace from a temporary view", () => {
     expect(PgExplorer.currentWorkspaceName).toBe("beta");
   });
 
+  // Importing a link whose project is already saved switches to it; a view
+  // left temporary would skip every write and lose the user's edits
+  it("leaves the temporary view when it switches to a stored workspace", async () => {
+    await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
+    await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
+    await PgExplorer.getAllWorkspaceNames();
+
+    await PgExplorer.switchWorkspace("alpha");
+
+    expect(PgExplorer.isTemporary).toBe(false);
+    expect(PgExplorer.currentWorkspaceName).toBe("alpha");
+    await PgExplorer.createItem("/alpha/src/added.rs", "kept");
+    expect(stored().get("/alpha/src/added.rs")).toBe("kept");
+  });
+
   it("lists the stored workspaces while the view is temporary", async () => {
     await PgExplorer.createWorkspace("alpha", { files: files("alpha") });
     await PgExplorer.init({ files: [["/src/lib.rs", "temporary"]] });
