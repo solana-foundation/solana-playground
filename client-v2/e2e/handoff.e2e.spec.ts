@@ -1,0 +1,108 @@
+import type { Page } from "@playwright/test";
+
+import { LONG, expect, home, stubSession, test } from "./fixtures";
+import { lineOf, linesOn } from "./telemetry";
+
+const TITLE = "Continue on a computer";
+
+/** The phone's menu page, reached from the work page's Menu */
+const openMenu = async (page: Page) => {
+  await page.goto("/");
+  await expect(home(page)).toBeVisible(LONG);
+  await page
+    .getByRole("region", { name: "Work" })
+    .getByRole("button", { name: "Menu" })
+    .click();
+  return page.getByRole("region", { name: "Navigation" });
+};
+
+const sheet = (page: Page) => page.getByRole("dialog", { name: TITLE });
+
+test.describe("on a phone", () => {
+  test.use({ viewport: { width: 390, height: 844 } });
+
+  test("client-v2-handoff: The phone's menu page offers it", async ({
+    page,
+  }) => {
+    const menu = await openMenu(page);
+    await expect(menu.getByRole("button", { name: TITLE })).toBeVisible();
+  });
+
+  test("client-v2-handoff: The link names this app and page", async ({
+    page,
+    context,
+  }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    const lines = linesOn(page);
+    const menu = await openMenu(page);
+    await menu.getByRole("button", { name: TITLE }).click();
+    await expect(sheet(page)).toBeVisible();
+
+    const { origin, pathname } = new URL(page.url());
+    const link = `${origin}${pathname}`;
+    await expect(page.getByTestId("handoff-link")).toHaveText(link);
+    await sheet(page).getByRole("button", { name: "Copy link" }).click();
+    await expect(
+      sheet(page).getByRole("button", { name: "Copied" })
+    ).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+      link
+    );
+    await expect
+      .poll(() => lineOf(lines, "nav_handoff_link_copied"))
+      .toBeTruthy();
+
+    // The sheet fits the phone: nothing on the page scrolls sideways
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth)
+    ).toBeLessThanOrEqual(390);
+
+    await sheet(page)
+      .getByRole("button", { name: "Stay on the phone" })
+      .click();
+    await expect(sheet(page)).toBeHidden();
+  });
+
+  test("client-v2-handoff: Signed in", async ({ page }) => {
+    await stubSession(page, {
+      id: "u1",
+      name: "Ada",
+      image: null,
+      login: "ada",
+    });
+    const menu = await openMenu(page);
+    await menu.getByRole("button", { name: TITLE }).click();
+    await expect(sheet(page)).toContainText("saved to your account");
+    await expect(sheet(page)).toContainText("@ada");
+    await expect(
+      sheet(page).getByRole("button", { name: "Sign in with GitHub" })
+    ).toHaveCount(0);
+  });
+
+  test("client-v2-handoff: Signed out", async ({ page }) => {
+    await stubSession(page, null);
+    const menu = await openMenu(page);
+    await menu.getByRole("button", { name: TITLE }).click();
+    await expect(sheet(page)).toContainText("on this phone only");
+    await expect(
+      sheet(page).getByRole("button", { name: "Sign in with GitHub" })
+    ).toBeVisible();
+  });
+
+  test("client-v2-handoff: Opening is counted", async ({ page }) => {
+    await stubSession(page, null);
+    const lines = linesOn(page);
+    const menu = await openMenu(page);
+    await menu.getByRole("button", { name: TITLE }).click();
+    await expect
+      .poll(() => lineOf(lines, "nav_handoff_opened"))
+      .toContain("signedIn: false");
+  });
+});
+
+test("client-v2-handoff: The frame does not", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto("/");
+  await expect(home(page)).toBeVisible(LONG);
+  await expect(page.getByRole("button", { name: TITLE })).toHaveCount(0);
+});

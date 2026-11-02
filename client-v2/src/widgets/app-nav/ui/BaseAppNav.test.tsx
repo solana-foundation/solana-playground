@@ -119,3 +119,32 @@ it("on a phone, heads the menu with the logo and a close, not a collapse", () =>
   fireEvent.click(screen.getByRole("button", { name: "Close the menu" }));
   expect(onToggle).toHaveBeenCalledOnce();
 });
+
+it("draws the way to a computer only on a phone, under the project list", () => {
+  const nav = (phone: boolean) => (
+    <TooltipProvider>
+      <SidebarProvider>
+        <BaseAppNav
+          phone={phone}
+          collapsed={false}
+          onToggle={vi.fn()}
+          onOpen={vi.fn()}
+          logo={<span>logo</span>}
+          projects={<span>projects</span>}
+          handoff={<span>handoff</span>}
+          footer={<span>footer</span>}
+          railFooter={<span>rail footer</span>}
+          setup={<span>setup</span>}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  const { rerender } = render(nav(true));
+  const projects = screen.getByText("projects");
+  const handoff = screen.getByText("handoff");
+  expect(
+    projects.compareDocumentPosition(handoff) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+  rerender(nav(false));
+  expect(screen.queryByText("handoff")).toBeNull();
+});

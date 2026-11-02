@@ -3,6 +3,7 @@ import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
 import type { NavItem } from "../model/nav-item";
 import { navTelemetry } from "../model/telemetry";
 import BaseAppNav from "./BaseAppNav";
+import Handoff from "./Handoff";
 import type { BaseAppNavProps } from "./BaseAppNav";
 
 /** The items that open a page of their own */
@@ -60,7 +61,14 @@ const AppNav = ({
   };
 
   const marked = current ?? (homeShown ? "home" : undefined);
-  return <BaseAppNav {...props} current={marked} onOpen={open} />;
+  return (
+    <BaseAppNav
+      {...props}
+      handoff={props.phone ? <Handoff /> : undefined}
+      current={marked}
+      onOpen={open}
+    />
+  );
 };
 
 export default AppNav;
