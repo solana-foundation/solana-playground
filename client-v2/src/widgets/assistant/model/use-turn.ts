@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { isNetworkFailure } from "@/shared/lib/ai";
-import type { AiTurnError } from "@/shared/lib/ai";
+import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { pushThread } from "../../../effects/chat-thread/push-thread";
@@ -26,6 +26,7 @@ import { threadBackend } from "../../../views/sidebar/assistant/model/thread-bac
 import {
   isDefaultBackend,
   PROVIDERS,
+  TurnFailure,
 } from "../../../views/sidebar/assistant/model/types";
 import type {
   Provider,
@@ -105,6 +106,8 @@ interface BusyRetry {
   conversation: number;
   /** What went with the message the first time, sent with it again */
   context: TurnContext;
+  /** The backend the turn was sent to, which its outcome is reported under */
+  provider: ModelProvider;
 }
 
 /**
@@ -135,6 +138,31 @@ const isRejectedKey = (error: unknown) =>
  */
 const isDroppedConnection = (error: unknown) =>
   isNetworkFailure(error) || turnErrorOf(error)?.kind === "network";
+
+/**
+ * Sends the outcome of a turn that ended on `error`: capped for the cost
+ * gate's refusal, otherwise failed with the `TurnFailure`'s reason and status.
+ * A dropped connection is the backend not answering (`provider`); anything
+ * else raised on this side is `other`. Never the error's text, which can
+ * quote the prompt. `runTurn` calls it for every failure but a busy model's,
+ * which `waitOnBusyWith` reports once it gives up.
+ */
+const trackTurnFailure = (provider: ModelProvider, error: unknown) => {
+  if (!(error instanceof TurnFailure)) {
+    const reason = isDroppedConnection(error) ? "provider" : "other";
+    assistantTelemetry.track("assistant_turn_failed", { provider, reason });
+    return;
+  }
+  const { reason, status } = error;
+  if (reason === "capped") {
+    assistantTelemetry.track("assistant_turn_capped", { provider });
+    return;
+  }
+  assistantTelemetry.track(
+    "assistant_turn_failed",
+    status === undefined ? { provider, reason } : { provider, reason, status }
+  );
+};
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
@@ -523,26 +551,36 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * chose: the first send, or a busy message sent again.
    */
   const runTurn = async (outgoing: Outgoing) => {
-    const { text, context } = outgoing;
+    const { text, attempt, context } = outgoing;
     if (!provider.current) throw new Error("a turn ran with no provider");
     const { instance, connection: current } = provider.current;
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
-    // A busy message sent again is the same turn, so only the first attempt reports a send
+    // Once per message: a busy model's resend is the same turn
     if (attempt === 0) {
-      assistantTelemetry.track("assistant_turn_sent", { provider: backend });
+      assistantTelemetry.track("assistant_turn_sent", { provider: current.id });
     }
 
     try {
       await instance.send(text, { signal: controller.signal, context });
+      // A provider can still resolve after an abort; the turn's outcome is then the stop's, or none for a cut-off
+      if (!controller.signal.aborted) {
+        assistantTelemetry.track("assistant_turn_answered", {
+          provider: current.id,
+        });
+      }
     } catch (e) {
       const cutReply = isDroppedConnection(e)
         ? PgAssistant.turnReplyWithText()
         : undefined;
+      // A stopped turn's outcome is `stop`'s; a busy one waits for its resend
+      if (!controller.signal.aborted && !(e instanceof ModelBusyError)) {
+        trackTurnFailure(current.id, e);
+      }
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
-        waitOnBusy(outgoing, e);
+        waitOnBusyWith(current.id)(outgoing, e);
       } else if (
         !controller.signal.aborted &&
         isRejectedKey(e) &&
@@ -613,33 +651,33 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * A busy model: count down and send the message again, up to
    * `BUSY_RETRIES` times, then say so in the thread. The wait is the
    * server's when it names one, and Try now is off until it ends; a wait past
-   * `BUSY_WAIT_MAX_SECONDS` is not counted down at all.
+   * `BUSY_WAIT_MAX_SECONDS` is not counted down at all; giving up reports the
+   * turn as failed.
    *
-   * @returns whether the message waits to be sent again; `false` once the
-   *   thread said to come back later, which ends the turn
+   * @param backend the backend the turn was sent to, which giving up reports
    */
-  const waitOnBusy = (
-    { text, attempt, context }: Outgoing,
-    busy: ModelBusyError
-  ) => {
-    const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
-    if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
-      PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
-      return false;
-    }
-    const at = Date.now();
-    setNow(at);
-    setWaiting({
-      text,
-      at: at + seconds * 1000,
-      canTryNow: busyError.waitSeconds === undefined,
-      attempt: attempt + 1,
-      threadId: PgAssistant.threadId,
-      conversation: PgAssistant.conversation,
-      context,
-    });
-    return true;
-  };
+  const waitOnBusyWith =
+    (backend: ModelProvider) => (outgoing: Outgoing, busy: ModelBusyError) => {
+      const { text, attempt, context } = outgoing;
+      const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
+      if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
+        PgAssistant.addError(`${busy.message} ${COME_BACK_LATER}`);
+        trackTurnFailure(backend, busy);
+        return;
+      }
+      const at = Date.now();
+      setNow(at);
+      setWaiting({
+        text,
+        at: at + seconds * 1000,
+        canTryNow: busy.waitSeconds === undefined,
+        attempt: attempt + 1,
+        threadId: PgAssistant.threadId,
+        conversation: PgAssistant.conversation,
+        context,
+        provider: backend,
+      });
+    };
 
   // Another thread, or a sign-out, while a message waits: it belongs to the
   // conversation it was written in, so it is dropped, not sent here. That
@@ -677,12 +715,11 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     const current = usableConnection();
     if (!current || provider.current?.connection !== current) {
       PgAssistant.addError(NOT_RESENT);
-      // `provider.current` still holds the connection the turn was sent on
-      if (provider.current) {
-        trackTurnFailureFor(provider.current.connection.id)(
-          new Error(NOT_RESENT)
-        );
-      }
+      // The turn ends here, on this side: no backend saw the resend
+      assistantTelemetry.track("assistant_turn_failed", {
+        provider: held.provider,
+        reason: "other",
+      });
       return;
     }
     await runTurn({
@@ -733,7 +770,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       // The message stays in the thread; nothing more is sent for it
       setWaiting(null);
       PgAssistant.addNotice("Stopped.");
-      // The waiting message's turn reported its send and ends here
       assistantTelemetry.track("assistant_turn_stopped", {});
       return;
     }

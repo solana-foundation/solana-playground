@@ -21,7 +21,30 @@ handed to the backend, and exactly one of `assistant_turn_answered`,
 `assistant_turn_failed`, `assistant_turn_capped` or `assistant_turn_stopped`
 when that turn ends. `provider` is `default`, `anthropic`, `openai`,
 `openrouter` or `gemini`. A send that finds no backend, or is refused
-because another turn runs, sends nothing.
+because another turn runs, sends nothing. A message the assistant sends again
+after the model answered busy is the same turn: it is reported as sent once,
+and ends with one outcome once the waiting is over.
+
+#### Scenario: A busy model answers on the resend (manual)
+
+- **WHEN** the model answers a turn busy, and answers the message sent again
+  after the countdown
+- **THEN** `assistant_turn_sent` is sent once and `assistant_turn_answered`
+  once
+
+#### Scenario: A busy model the assistant gives up on (manual)
+
+- **WHEN** the model keeps answering busy with a 429 until the assistant
+  stops sending the message again
+- **THEN** `assistant_turn_sent` is sent once and `assistant_turn_failed`
+  once, with reason `provider` and status `429`
+
+#### Scenario: A stop during a busy countdown (manual)
+
+- **WHEN** a user presses Stop while the assistant counts down to sending a
+  busy message again
+- **THEN** `assistant_turn_sent` and `assistant_turn_stopped` are sent, and
+  no other outcome
 
 #### Scenario: An answered turn (manual)
 
@@ -61,6 +84,12 @@ absent when there was none.
 - **WHEN** the backend answers a turn with a 500
 - **THEN** `assistant_turn_failed` is sent with reason `provider` and status
   `500`
+
+#### Scenario: The connection drops (manual)
+
+- **WHEN** the connection to the backend drops during a turn
+- **THEN** `assistant_turn_failed` is sent with reason `provider` and no
+  status
 
 #### Scenario: The model refuses the prompt (manual)
 
