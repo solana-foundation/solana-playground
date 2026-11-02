@@ -618,6 +618,10 @@ export class PgExplorer {
     // Save metadata before changing the workspace to never lose data
     await this.saveMeta();
 
+    // A stored workspace is never a temporary view: a repository or gist link
+    // that opens an already saved project must not go on skipping its writes
+    this._isTemporary = false;
+
     // Set the workspace
     this.setWorkspaceName(name);
     await this._saveWorkspaces();
