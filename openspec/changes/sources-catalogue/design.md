@@ -14,13 +14,13 @@ for the skill tools (`model/skill-tools.ts`, `requireSkill`). Tools execute
 in the browser for every backend; `api/agent.mjs` forwards what the browser
 declares.
 
-The spike on branch `spike/mcp-config` (uncommitted at the time of writing,
-rebased on foundation master e41981fc0) holds a working MCP half:
-`features/mcp/model/{entry,catalogue,compose}.mjs`, `server.mjs`, the
-gateway composing through `composeServers`, `supportsTools` on the provider
-profiles, `setMcpServerEnabled` in the store, and the checkboxes in
-`Component/Grounding.tsx`, with unit tests. Its browser behaviour was checked
-by hand against the public Solana upstream.
+Branch `spike/mcp-config` (PR solana-foundation/solana-playground#82) began
+as a spike of the MCP half and carries the whole change: the shared
+catalogue and composer, `features/mcp` composing the gateway's upstreams from
+them, the `features/skills` slice with `api/skills.mjs`, the community
+skills, the per-source checkboxes with their events, and `supportsTools` on
+the provider profiles, with their tests. The MCP half's browser behaviour was
+checked by hand against the public Solana upstream.
 
 Constraints from `client-v2/CLAUDE.md`: a feature never imports another
 feature; `api/` reaches a slice only through its `server.mjs` and `shared` by
@@ -59,9 +59,10 @@ uniqueness, and returns entries grouped by kind, still untyped beyond those
 fields. Each feature validates its own kind: `features/mcp/model/entry.mjs`
 (`validateServers`, as spiked) and `features/skills/model/entry.mjs`
 (`validateSkills`). `features/mcp/server.mjs` exports
-`composeServers({ env, signedIn })` and `features/skills/server.mjs`
-`composeSkills({ env, signedIn })`, each calling the shared composer and its
-own validator.
+`composeServers({ env, override, signedIn })` and `features/skills/server.mjs`
+`composeSkills({ env, override, signedIn })`, each calling the shared composer
+and its own validator; the route passes `sourcesEnv().SOURCES` as `override`,
+so the composers stay pure over their arguments.
 
 Alternatives: keeping the catalogue in `features/mcp` as the spike does, with
 skills added to it, makes `features/skills` import `features/mcp`, which the
@@ -123,8 +124,8 @@ its credential looks broken rather than absent.
 One variable, one format, no merge. An operator who wants the shipped
 catalogue minus one entry copies the catalogue into `SOURCES` without it.
 `docs/deploy-client-vercel.md` shows the shipped catalogue as the starting
-point. `MCP_SERVERS` from the spike is renamed `SOURCES` before it ships, so
-no deployment ever sets the old name.
+point. The spike's `MCP_SERVERS` is `SOURCES` on this branch, and no
+deployment has set the old name.
 
 Alternative: a merge or an allow-list variable per kind. Two variables that
 interact need a precedence rule and a doc section for it; a replacement needs
@@ -171,9 +172,10 @@ profiles are where provider behaviour is data already.
 
 ### Community skills from solana.com/skills
 
-The catalogue carries the 37 community skills that
+The catalogue carries 35 of the community skills that
 [solana.com/skills](https://solana.com/skills) lists, as remote skills. The
-page's 17 Foundation entries are files under `solana-dev`'s `references/`,
+page lists 37: Clawpump is left out because its repository answers 404, and
+the 37th was not identified on the page. The page's 17 Foundation entries are files under `solana-dev`'s `references/`,
 which `read_skill_reference` already reaches, so they get no entries. The
 Solana Developer MCP already indexes `solana.com/docs`, the agent pages
 included, and `solana.com/developers`, so no skill is added for the docs.
@@ -189,12 +191,12 @@ included, and `solana.com/developers`, so no skill is added for the docs.
   the entry carries one sentence written for this catalogue.
 - **Every one starts unchecked, for every caller.** Each community entry
   carries `enabled: false` and no `signedIn`, so the skills route lists all
-  37 to a signed-out caller, and so to a user with their own key, as to a
+  35 to a signed-out caller, and so to a user with their own key, as to a
   signed-in one. A third party's text enters the prompt only after the user
   checks its skill, and the prompt stays the length of the two Foundation
   skills until then.
 - **A fold in the tab.** The two Foundation skills stay at the top; the
-  community skills sit under a fold with a count of those checked, so 37 rows
+  community skills sit under a fold with a count of those checked, so 35 rows
   do not push the MCP section out of view.
 
 Alternatives: generating the entries from the page, which has no API, means
@@ -225,8 +227,8 @@ is reported by kind only, as the slice's other events do.
 
 - [A `SOURCES` typo takes the whole gateway and skills route down] → Both
   routes fail with the error naming `SOURCES`, `scripts/check-agent-env.mjs`
-  gains a `SOURCES` parse check so `yarn dev` reports it at start, and the
-  docs show the shipped catalogue as the text to copy.
+  gains a `SOURCES` check so a Vercel build with a broken value fails, and
+  the docs show how to print the shipped catalogue as the text to copy.
 - [A withheld skill lowers answer quality for a user who did not choose that]
   → The tab says which skills the server lists; an operator who withholds
   `playground-env` does so knowingly, and the docs say what each shipped skill
@@ -234,10 +236,11 @@ is reported by kind only, as the slice's other events do.
 - [The skills route adds one request per panel open] → It is fetched with the
   gateway's list at the same points, and a failure degrades to no skills with
   a note rather than an error.
-- [The spike's file names move] → `features/mcp/model/catalogue.mjs` and
-  `compose.mjs` become `shared/config/sources.mjs` and
-  `shared/lib/catalogue/compose.mjs` in task 1; the spike's tests move with
-  them.
+- [An early review thread on #82 names a spike file that is gone] → The spike's
+  `features/mcp/model/catalogue.mjs` is `shared/config/sources.mjs` on this
+  branch, its placeholder rules are in `shared/lib/catalogue/compose.mjs`, and
+  its tests moved with them; `features/mcp/model/compose.mjs` keeps only the
+  MCP rules.
 
 ## Migration Plan
 

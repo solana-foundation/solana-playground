@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // The hooks and utils barrels reach generated globals and wasm packages that
 // exist only in the built app, so the panel gets the one hook it uses and no
 // server console
@@ -8,12 +8,13 @@ vi.mock("../../../../hooks", async () => ({
 }));
 vi.mock("./ServerConsole", () => ({ __esModule: true, default: () => null }));
 
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { ThemeProvider, type DefaultTheme } from "styled-components";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { MODEL_PROVIDER_PROFILES } from "../model/model-providers";
+import { createSkillTools } from "../model/skill-tools";
 import { PgAssistant } from "../store";
-import { isAlwaysOn, isCommunity, SKILLS } from "../grounding";
 import Grounding from "./Grounding";
 
 // A theme that answers every key: the panel's styled rules read deep tokens
@@ -38,9 +39,67 @@ function renderGrounding() {
   );
 }
 
+/** A skill as `GET /api/skills` lists it */
+const listed = (
+  id: string,
+  source: Record<string, string>,
+  { enabled = true, community = false } = {}
+) => ({
+  id,
+  name: `Skill ${id}`,
+  description: `About ${id}.`,
+  enabled,
+  source,
+  community: community ? { repo: `owner/${id}` } : undefined,
+});
+
+const remote = (id: string) => ({
+  type: "remote",
+  baseUrl: `https://skills.test/${id}/`,
+  entry: "SKILL.md",
+});
+
+const PLAYGROUND_ENV = listed("playground-env", { type: "bundled" });
+const SOLANA_DEV = listed("solana-dev", remote("solana-dev"));
+const ORCA = listed("orca", remote("orca"), {
+  enabled: false,
+  community: true,
+});
+const JUPITER = listed("jupiter", remote("jupiter"), {
+  enabled: false,
+  community: true,
+});
+const COMMUNITY = [ORCA, JUPITER];
+/** Every skill a test may switch, with the state the route lists it in */
+const SWITCHABLE = [SOLANA_DEV, ORCA, JUPITER];
+
+/** The skills route answers with `skills`, and every skill file with its URL */
+const serve = (skills: unknown[]) =>
+  vi
+    .spyOn(globalThis, "fetch")
+    .mockImplementation(async (input) =>
+      String(input) === "/api/skills"
+        ? new Response(JSON.stringify({ skills }), { status: 200 })
+        : new Response(`text of ${String(input)}`, { status: 200 })
+    );
+
+/** List these skills in the store, as the panel does on mount */
+const loadSkills = async (skills: unknown[]) => {
+  serve(skills);
+  await act(() => PgAssistant.loadSkills());
+};
+
+const checkbox = (name: string) => screen.getByRole("checkbox", { name });
+
 describe("Grounding", () => {
+  beforeEach(() => loadSkills([PLAYGROUND_ENV, SOLANA_DEV, ORCA, JUPITER]));
+
   afterEach(() => {
     vi.restoreAllMocks();
+    PgAssistant.setMcpServers([]);
+    for (const skill of SWITCHABLE) {
+      PgAssistant.setSkillEnabled(skill.id, skill.enabled);
+    }
   });
 
   it("switches a server off by clicking its name, which the editor then shows", () => {
@@ -53,68 +112,157 @@ describe("Grounding", () => {
     fireEvent.click(screen.getByText("Docs"));
 
     expect(setMcpServerEnabled).toHaveBeenCalledWith("docs", false);
-    expect(
-      screen
-        .getByRole("checkbox", { name: "Docs" })
-        .getAttribute("aria-checked")
-    ).toBe("false");
+    expect(checkbox("Docs").getAttribute("aria-checked")).toBe("false");
     expect(
       screen.getByLabelText<HTMLTextAreaElement>("MCP server configuration")
         .value
     ).toContain('"enabled": false');
-    PgAssistant.setMcpServers([]);
+  });
+
+  it("A user-added server switched on: its console appears and the editor shows it on", () => {
+    vi.spyOn(PgAssistant, "discoverMcpTools").mockResolvedValue();
+    PgAssistant.setMcpServers([
+      {
+        id: "extra",
+        name: "Extra",
+        url: "https://extra.test/mcp",
+        enabled: false,
+      },
+    ]);
+
+    renderGrounding();
+    expect(screen.queryByText("Call a tool")).toBeNull();
+    fireEvent.click(checkbox("Extra"));
+
+    expect(screen.getByText("Call a tool")).toBeTruthy();
+    expect(PgAssistant.discoverMcpTools).toHaveBeenCalled();
+    expect(
+      screen.getByLabelText<HTMLTextAreaElement>("MCP server configuration")
+        .value
+    ).toContain('"enabled": true');
+  });
+
+  it("A toggle while the editor is dirty: the server is off and the draft is kept", () => {
+    PgAssistant.setMcpServers([
+      { id: "docs", name: "Docs", url: "https://docs.test/mcp", enabled: true },
+    ]);
+    const draft = '[{ "id": "docs", "url": "https://docs.test/mcp" }, ';
+
+    renderGrounding();
+    const editor = screen.getByLabelText<HTMLTextAreaElement>(
+      "MCP server configuration"
+    );
+    fireEvent.change(editor, { target: { value: draft } });
+    fireEvent.click(checkbox("Docs"));
+
+    expect(PgAssistant.enabledMcpServers).toEqual([]);
+    expect(editor.value).toBe(draft);
   });
 
   it("switches a skill off by clicking its name", () => {
-    const skill = SKILLS.find(
-      (s) => !isAlwaysOn(s) && PgAssistant.enabledSkillIds.includes(s.id)
-    );
-    if (!skill) throw new Error("no switchable skill is enabled by default");
     const setSkillEnabled = vi.spyOn(PgAssistant, "setSkillEnabled");
 
     renderGrounding();
-    const box = screen.getByRole("checkbox", { name: skill.name });
-    expect(box.getAttribute("aria-checked")).toBe("true");
+    expect(checkbox(SOLANA_DEV.name).getAttribute("aria-checked")).toBe("true");
+    fireEvent.click(screen.getByText(SOLANA_DEV.name));
 
-    fireEvent.click(screen.getByText(skill.name));
-
-    expect(setSkillEnabled).toHaveBeenCalledWith(skill.id, false);
-    expect(
-      screen
-        .getByRole("checkbox", { name: skill.name })
-        .getAttribute("aria-checked")
-    ).toBe("false");
-    PgAssistant.setSkillEnabled(skill.id, true);
-  });
-
-  it("A community skill that starts off: unchecked under the fold, and counted once checked", () => {
-    const community = SKILLS.filter(isCommunity);
-    const skill = community[0];
-    if (!skill) throw new Error("no community skill");
-
-    renderGrounding();
-    const fold = screen.getByRole("button", { name: /Community skills/ });
-    expect(fold.textContent).toContain(`0 of ${community.length} on`);
-
-    fireEvent.click(fold);
-    const box = screen.getByRole("checkbox", { name: skill.name });
-    expect(box.getAttribute("aria-checked")).toBe("false");
-
-    fireEvent.click(box);
-    expect(fold.textContent).toContain(`1 of ${community.length} on`);
-    PgAssistant.setSkillEnabled(skill.id, false);
+    expect(setSkillEnabled).toHaveBeenCalledWith("solana-dev", false);
+    expect(checkbox(SOLANA_DEV.name).getAttribute("aria-checked")).toBe(
+      "false"
+    );
   });
 
   it("shows a bundled skill checked and locked, and keeps it on when its name is clicked", () => {
-    const skill = SKILLS.find(isAlwaysOn);
-    if (!skill) throw new Error("no bundled skill");
-
     renderGrounding();
-    fireEvent.click(screen.getByText(skill.name));
+    fireEvent.click(screen.getByText(PLAYGROUND_ENV.name));
 
-    const box = screen.getByRole("checkbox", { name: skill.name });
+    const box = checkbox(PLAYGROUND_ENV.name);
     expect(box.getAttribute("aria-checked")).toBe("true");
     expect(box.hasAttribute("disabled")).toBe(true);
-    expect(PgAssistant.enabledSkillIds).toContain(skill.id);
+    expect(PgAssistant.enabledSkillIds).toContain("playground-env");
+  });
+
+  it("A community skill that starts off: unchecked under the fold, and counted once checked", () => {
+    renderGrounding();
+    const fold = screen.getByRole("button", { name: /Community skills/ });
+    expect(fold.textContent).toContain(`0 of ${COMMUNITY.length} on`);
+
+    fireEvent.click(fold);
+    const box = checkbox(ORCA.name);
+    expect(box.getAttribute("aria-checked")).toBe("false");
+
+    fireEvent.click(box);
+    expect(fold.textContent).toContain(`1 of ${COMMUNITY.length} on`);
+  });
+
+  it("A skill withheld by the operator: only the listed skill has a row", async () => {
+    await loadSkills([PLAYGROUND_ENV]);
+
+    renderGrounding();
+
+    expect(checkbox(PLAYGROUND_ENV.name)).toBeTruthy();
+    expect(screen.queryByText(SOLANA_DEV.name)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: /Community skills/ })
+    ).toBeNull();
+  });
+
+  it("The skills route is unreachable: no skill, and a note that the server reported none", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch")
+    );
+    await act(() => PgAssistant.loadSkills());
+
+    renderGrounding();
+
+    expect(screen.getByText(/The server reported no skills/)).toBeTruthy();
+    expect(screen.queryByText(PLAYGROUND_ENV.name)).toBeNull();
+  });
+
+  describe("with a provider on the user's own key", () => {
+    beforeEach(() => {
+      vi.spyOn(PgAssistant, "connection", "get").mockReturnValue({
+        id: "openai",
+        apiKey: "sk-test",
+      } as typeof PgAssistant.connection);
+    });
+
+    afterEach(() => {
+      MODEL_PROVIDER_PROFILES.openai.supportsTools = true;
+    });
+
+    it("A user with their own key: every community skill unchecked, and one checked loads", async () => {
+      renderGrounding();
+      fireEvent.click(screen.getByRole("button", { name: /Community skills/ }));
+      expect(
+        COMMUNITY.map((skill) =>
+          checkbox(skill.name).getAttribute("aria-checked")
+        )
+      ).toEqual(["false", "false"]);
+
+      fireEvent.click(checkbox(ORCA.name));
+      const loadSkill = createSkillTools().find((t) => t.name === "load_skill");
+
+      expect(await loadSkill?.run({ id: "orca" }, {})).toBe(
+        "text of https://skills.test/orca/SKILL.md"
+      );
+    });
+
+    it("A profile that declares no tool support: one sentence and no checkbox", () => {
+      MODEL_PROVIDER_PROFILES.openai.supportsTools = false;
+      PgAssistant.setMcpServers([
+        {
+          id: "docs",
+          name: "Docs",
+          url: "https://docs.test/mcp",
+          enabled: true,
+        },
+      ]);
+
+      renderGrounding();
+
+      expect(screen.getByText(/takes no tools/)).toBeTruthy();
+      expect(screen.queryAllByRole("checkbox")).toEqual([]);
+    });
   });
 });

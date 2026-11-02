@@ -6,22 +6,26 @@ What the assistant can draw on beyond its model: the skills and MCP servers list
 
 A skill is a `SKILL.md` document and the reference files it names. The model reads the catalogue of checked
 skills, a name and a description each, in its prompt, and loads a skill's text with `load_skill` when it decides
-it needs it. The skills are entries of `SKILLS` in [`registry.ts`](../src/views/sidebar/assistant/grounding/registry.ts),
-so the list is the same for every backend: the default one or the user's own key, signed in or not.
+it needs it. The skills are the `skill` entries of `SOURCES_CATALOGUE` in
+[`sources.mjs`](../src/shared/config/sources.mjs), or of the `SOURCES` variable that replaces it
+([deploy-client-vercel.md](deploy-client-vercel.md), "Sources catalogue"). `GET /api/skills` lists them, and the
+Sources tab shows what it lists and nothing else, for every backend: the default one or the user's own key. A
+skill the deployment leaves out is absent from the tab, the prompt, and `load_skill`. When the route fails, the
+tab lists no skill.
 
-```ts
+```json
 {
-  id: "orca",
-  name: "Orca",
-  description: "Orca Whirlpools SDK for concentrated-liquidity swaps, positions, pool creation, and fee collection.",
-  source: {
-    type: "remote",
-    baseUrl:
-      "https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cdc288e9bb502/skills/orca/",
-    entry: "SKILL.md",
+  "kind": "skill",
+  "id": "orca",
+  "name": "Orca",
+  "description": "Orca Whirlpools SDK for concentrated-liquidity swaps, positions, pool creation, and fee collection.",
+  "source": {
+    "type": "remote",
+    "baseUrl": "https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cdc288e9bb502/skills/orca/",
+    "entry": "SKILL.md"
   },
-  enabled: false,
-  community: { repo: "sendaifun/skills" },
+  "enabled": false,
+  "community": { "repo": "sendaifun/skills" }
 }
 ```
 
@@ -29,14 +33,19 @@ so the list is the same for every backend: the default one or the user's own key
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | The name the model passes to `load_skill`. Unique across the list. |
+| `kind` | yes | `"skill"`. |
+| `id` | yes | Letters, digits, `-` and `_`: the name the model passes to `load_skill`. Unique across the catalogue, servers included. |
 | `name` | yes | What the Sources tab shows. |
 | `description` | yes | One sentence the model reads when deciding whether to load the skill. It sits in the prompt for every checked skill, so it is written for this list, not copied from the skill's frontmatter. |
-| `source` | yes | `{ type: "bundled", content }` for a document shipped in the app, or `{ type: "remote", baseUrl, entry }` for one fetched when loaded: `entry` is the document's file name inside `baseUrl`, usually `SKILL.md`. |
+| `source` | yes | `{ "type": "bundled" }` for a document shipped in the app, or `{ "type": "remote", "baseUrl", "entry" }` for one fetched when loaded: `baseUrl` is an `https://` folder ending in `/`, and `entry` is the document's file name inside it, usually `SKILL.md`. |
 | `enabled` | no | `false` lists the skill unchecked: the prompt does not name it and `load_skill` refuses it until the user checks it. Defaults to `true`. |
-| `community` | no | `{ repo: "owner/repo" }` on a skill a third party publishes. The Sources tab lists it under "Community skills" with the repository in its note. |
+| `community` | no | `{ "repo": "owner/repo" }` on a skill a third party publishes. The Sources tab lists it under "Community skills" with the repository in its note. |
+| `signedIn` | no | `true` offers the skill only to a caller signed in on this site. |
 
-A bundled skill is always on, and has no reference files.
+A bundled skill's text is in the app's bundle, keyed by its id (`BUNDLED_SKILLS` in
+[`registry.ts`](../src/features/skills/model/registry.ts)). The catalogue can offer or withhold it, never change
+it, and a bundled id the bundle does not know is left out. A bundled skill is always on, and has no reference
+files.
 
 ### Pinned to a commit
 
@@ -49,8 +58,9 @@ https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cd
 ```
 
 A skill's text enters the model's context. A branch would let the skill's owner change what every deployment's
-model reads; a commit means the text changes only with a change to `SKILLS`, reviewed like any other. A test in
-`registry.ts` fails on a community entry whose `baseUrl` names a branch.
+model reads; a commit means the text changes only with a change to `SOURCES_CATALOGUE`, reviewed like any other.
+[`sources.test.mjs`](../src/shared/config/sources.test.mjs) fails on a community entry whose `baseUrl` names a
+branch.
 
 `read_skill_reference` resolves a path against the skill's `baseUrl` and refuses one that leaves that folder, so
 a `SKILL.md` cannot send the model to another skill's files or another site.
@@ -58,20 +68,19 @@ a `SKILL.md` cannot send the model to another skill's files or another site.
 ### Community skills
 
 The community entries are the skills [solana.com/skills](https://solana.com/skills) lists, each at the commit the
-page links, and each with `enabled: false`: a third party's text reaches the model only after the user checks its
-skill. The page's Foundation entries are files under `solana-dev`'s `references/`, which `read_skill_reference`
-already reaches, so they have no entries of their own.
+page links, each with `enabled: false`, and none with `signedIn`: every caller gets them, and a third party's text
+reaches the model only after the user checks its skill. The page's Foundation entries are files under
+`solana-dev`'s `references/`, which `read_skill_reference` already reaches, so they have no entries of their own.
+Clawpump, which the page also lists, has no entry: its repository answered 404.
 
-Adding or updating a skill is a change to `SKILLS`. A catalogue the server sends, which a deployment could
-change without a release, is task 2.1 of the OpenSpec change
-[`sources-catalogue`](../../openspec/changes/sources-catalogue/tasks.md).
+Adding or updating a skill is a change to `SOURCES_CATALOGUE`, or, for one deployment, to its `SOURCES`.
 
 ## MCP server entries
 
 The assistant's "Additional servers" editor, in the Sources tab, takes a JSON array of server entries. The
-gateway's own list uses the same format: the catalogue in
-[`catalogue.mjs`](../src/features/mcp/model/catalogue.mjs), or the `MCP_SERVERS` variable that replaces it
-([deploy-client-vercel.md](deploy-client-vercel.md)). One validator,
+gateway's own list uses the same format, with `"kind": "mcp"` and an optional `signedIn` added: the `mcp` entries
+of `SOURCES_CATALOGUE` in [`sources.mjs`](../src/shared/config/sources.mjs), or of the `SOURCES` variable that
+replaces it ([deploy-client-vercel.md](deploy-client-vercel.md), "Sources catalogue"). One validator,
 [`validateServers`](../src/features/mcp/model/entry.mjs), checks both, so an entry that the editor accepts is an
 entry the gateway accepts.
 

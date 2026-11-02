@@ -21,7 +21,12 @@ export interface SkillEntry {
   description: string;
   source: SkillSource;
   /** `false` lists the skill unchecked, so its text reaches the model only after the user checks it */
-  enabled?: boolean;
+  enabled: boolean;
   /** Set on a skill from solana.com/skills, which a third party writes: its GitHub repository */
-  community?: { repo: `${string}/${string}` };
+  community?: { repo: string };
 }
+
+/** A skill as `GET /api/skills` lists it: a bundled one names no content, which only the bundle holds */
+export type ListedSkill = Omit<SkillEntry, "source"> & {
+  source: { type: "bundled" } | Extract<SkillSource, { type: "remote" }>;
+};

@@ -1,12 +1,23 @@
-import playgroundEnvSkill from "../content/playground-env.skill.md";
-import type { SkillEntry } from "./types";
+// @ts-check
+/* eslint-disable no-template-curly-in-string -- the placeholders are the point */
+// The sources the deployment offers the assistant: MCP servers and skills, one
+// list. `composeCatalogue` (`shared/lib/catalogue/compose.mjs`) fills each
+// `${NAME}` from the environment and leaves out an entry whose variable is
+// unset, which is how an operator turns one on; `SOURCES` replaces the list.
+// Each kind's fields are its slice's to check: `validateServers` in
+// `features/mcp`, `validateSkills` in `features/skills`.
+
+/** @typedef {{ kind: "mcp" | "skill", id: string, name: string, signedIn?: boolean } & Record<string, unknown>} CatalogueEntry */
 
 /** The commit solana.com/skills pins for most of sendaifun/skills */
 const SENDAI_COMMIT = "72ef2aa814cca4662341bfcdc01cdc288e9bb502";
 
 /**
- * A skill from solana.com/skills: read from `repo` at `commit`, never a branch, so its owner cannot change what
- * the model reads without a change here. `path` is the skill's folder, empty at the repository root.
+ * A skill from solana.com/skills, read from `repo` at `commit` so its owner cannot change what the model reads
+ * without a change here. `path` is the skill's folder, empty at the repository root.
+ *
+ * @param {{ id: string, name: string, description: string, repo: string, commit: string, path: string, entry?: string }} skill
+ * @returns {CatalogueEntry}
  */
 const communitySkill = ({
   id,
@@ -16,15 +27,8 @@ const communitySkill = ({
   commit,
   path,
   entry = "SKILL.md",
-}: {
-  id: string;
-  name: string;
-  description: string;
-  repo: `${string}/${string}`;
-  commit: string;
-  path: string;
-  entry?: string;
-}): SkillEntry => ({
+}) => ({
+  kind: "skill",
   id,
   name,
   description,
@@ -39,11 +43,18 @@ const communitySkill = ({
   community: { repo },
 });
 
-/** A skill in sendaifun/skills, whose folder is `skills/<id>` unless `folder` says otherwise */
+/**
+ * A skill in sendaifun/skills, whose folder is `skills/<id>` unless `folder` says otherwise.
+ *
+ * @param {string} id
+ * @param {string} name
+ * @param {string} description
+ * @param {{ folder?: string, commit?: string }} [options]
+ */
 const sendaiSkill = (
-  id: string,
-  name: string,
-  description: string,
+  id,
+  name,
+  description,
   { folder = id, commit = SENDAI_COMMIT } = {}
 ) =>
   communitySkill({
@@ -55,14 +66,29 @@ const sendaiSkill = (
     path: `skills/${folder}`,
   });
 
-/**
- * The skills the panel offers.
- *
- * Adding one is a single entry here — the tools, the prompt catalogue and the
- * picker all read this list.
- */
-export const SKILLS: SkillEntry[] = [
+/** @type {readonly CatalogueEntry[]} */
+export const SOURCES_CATALOGUE = [
   {
+    kind: "mcp",
+    id: "solana",
+    name: "Solana Developer MCP",
+    url: "https://mcp.solana.com/mcp",
+  },
+  {
+    kind: "mcp",
+    id: "explorer",
+    name: "Solana Explorer MCP",
+    url: "${MCP_EXPLORER_URL:-https://explorer.solana.com/mcp}",
+    headers: {
+      // Explorer gates on MCP_ACCESS_KEYS when its deployment sets them
+      authorization: "Bearer ${MCP_EXPLORER_TOKEN:-}",
+    },
+    // Sent only when set, for an Explorer deployment behind bot protection
+    protection: { provider: "vercel", secret: "${MCP_EXPLORER_BYPASS:-}" },
+  },
+
+  {
+    kind: "skill",
     id: "playground-env",
     name: "Playground build environment",
     description:
@@ -70,9 +96,11 @@ export const SKILLS: SkillEntry[] = [
       "solana-program 1.16, the crate whitelist, TypeScript-only tests. " +
       "Load this before proposing a fix, and prefer it over any other " +
       "source when they disagree about versions.",
-    source: { type: "bundled", content: playgroundEnvSkill },
+    // The text ships in the browser bundle; the catalogue only offers it
+    source: { type: "bundled" },
   },
   {
+    kind: "skill",
     id: "solana-dev",
     name: "Official Solana developer skill",
     description:
@@ -313,55 +341,3 @@ export const SKILLS: SkillEntry[] = [
     "Maps a codebase's architecture and trust boundaries before a security audit."
   ),
 ];
-
-/** Skills that are on unless the user turns them off */
-export const DEFAULT_SKILL_IDS = SKILLS.filter(
-  (skill) => skill.enabled !== false
-).map((skill) => skill.id);
-
-export const findSkill = (id: string) => SKILLS.find((s) => s.id === id);
-
-/** A bundled skill ships with the app and cannot be switched off: the prompt always lists it */
-export const isAlwaysOn = (skill: SkillEntry) =>
-  skill.source.type === "bundled";
-
-/** A skill a third party publishes, listed on solana.com/skills */
-export const isCommunity = (
-  skill: SkillEntry
-): skill is SkillEntry & Required<Pick<SkillEntry, "community">> =>
-  skill.community !== undefined;
-
-if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
-
-  describe("views/sidebar/assistant/grounding/registry", () => {
-    const community = () => SKILLS.filter(isCommunity);
-
-    it("reads every community skill from a commit, not a branch", () => {
-      const pinned =
-        /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[0-9a-f]{40}\//;
-      const unpinned = community()
-        .filter(
-          (skill) =>
-            skill.source.type !== "remote" || !pinned.test(skill.source.baseUrl)
-        )
-        .map((skill) => skill.id);
-
-      expect(community().length).toBeGreaterThan(0);
-      expect(unpinned).toEqual([]);
-    });
-
-    it("starts every community skill unchecked", () => {
-      expect(
-        community()
-          .filter((skill) => skill.enabled !== false)
-          .map((skill) => skill.id)
-      ).toEqual([]);
-    });
-
-    it("gives every skill its own id", () => {
-      const ids = SKILLS.map((skill) => skill.id);
-      expect(ids.length).toBe(new Set(ids).size);
-    });
-  });
-}

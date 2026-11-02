@@ -1,11 +1,14 @@
 // Fails a Vercel build that has no AGENT_API_KEY, so a deployment cannot ship
 // with the assistant's default backend off, and a production build that has
 // the key without sign-in or without AUTH_BASE_URL, where /api/agent would
-// refuse every turn or check origins against a per-deployment hostname. A
+// refuse every turn or check origins against a per-deployment hostname, and
+// any build whose SOURCES the gateway or the skills route would reject. A
 // preview may run without either: GET /api/agent then reports no backend.
 // Only vercel.json's buildCommand runs it: local, CI and e2e builds need no key.
 // The constants file, not `server.mjs`: that one loads Better Auth and the pool
 import { SIGN_IN_ENV } from "../src/features/auth/config.mjs";
+import { composeServers } from "../src/features/mcp/server.mjs";
+import { composeSkills } from "../src/features/skills/server.mjs";
 
 // Vercel's build machine sets CI; a local `vercel build` does not, and pulls a Secret as ""
 const onVercel = !!process.env.CI;
@@ -52,6 +55,21 @@ if (production) {
       `AUTH_BASE_URL is not a URL: "${baseUrl}". Set the production origin, ` +
         "scheme included."
     );
+  }
+}
+
+// A broken SOURCES fails /api/mcp and /api/skills on every request, so it fails the build instead
+if (process.env.SOURCES) {
+  const input = {
+    env: process.env,
+    override: process.env.SOURCES,
+    signedIn: true,
+  };
+  try {
+    composeServers(input);
+    composeSkills(input);
+  } catch (e) {
+    fail(e instanceof Error ? e.message : String(e));
   }
 }
 

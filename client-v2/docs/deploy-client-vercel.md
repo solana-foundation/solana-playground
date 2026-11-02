@@ -419,26 +419,43 @@ Failures after the answer are logged as `agent: settling a turn failed` and
 Adjust the caps and budgets together: the sum of per-user caps a pool serves
 can exceed its budget, but the budget is what binds.
 
-## MCP gateway
+## Sources catalogue
 
-`api/mcp.mjs` serves the MCP upstreams the assistant panel lists. Which ones
-exist is the catalogue in
-[`src/features/mcp/model/catalogue.mjs`](../src/features/mcp/model/catalogue.mjs),
-each entry in the JSON format of the panel's "Additional servers" editor plus
-`signedIn` (offered to signed-in callers only). A `${NAME}` in any string is
-filled from the environment, and an entry naming an unset variable is left
-out, so a variable is the switch for its entry; `${NAME:-}` marks a header or
-query value as optional. The browser never carries the list: it asks
-`GET /api/mcp` at startup.
+`api/mcp.mjs` serves the MCP upstreams the assistant panel lists, and
+`api/skills.mjs` the skills. Which ones exist is one catalogue,
+`SOURCES_CATALOGUE` in
+[`src/shared/config/sources.mjs`](../src/shared/config/sources.mjs). Each entry
+has a `kind` (`mcp` or `skill`), an `id` unique across the list, a `name`,
+the fields of its kind as
+[agent-sources-and-tools.md](agent-sources-and-tools.md) lists them, and
+optionally `signedIn: true`, which offers it to signed-in callers only. A
+`${NAME}` in any string is filled from the environment, `${NAME:-default}`
+takes the default when the variable is unset or empty, and an entry naming an
+unset variable without a default is left out, so a variable is the switch for
+its entry. `${NAME:-}` in a header, a query value, or a bypass secret marks it
+as optional: resolved empty, it is not sent. The browser never carries the
+list: it asks `GET /api/mcp` and `GET /api/skills` when the panel opens.
 
-An entry's credentials (`authToken`, `headers`, `queryParams`, and
+An MCP entry's credentials (`authToken`, `headers`, `queryParams`, and
 `protection`) go upstream only for a caller signed in on this site. Any other
 caller reaches the same upstream without them, so `/api/mcp` cannot be used
 from outside to spend the deployment's keys.
 
+`SOURCES` replaces the catalogue whole; there is no merge. To change one
+entry, start from the shipped catalogue as JSON, run from `client-v2/`:
+
+```sh
+node -e 'import("./src/shared/config/sources.mjs").then((m) => console.log(JSON.stringify(m.SOURCES_CATALOGUE)))'
+```
+
+Edit the output and set it as `SOURCES`. A value that is not a JSON array, an
+entry with an unknown `kind`, or two entries with one `id` make both routes
+answer 500 with a message naming `SOURCES` or the entry, and fail a Vercel
+build (`scripts/check-agent-env.mjs`).
+
 | Variable | Meaning |
 | --- | --- |
-| `MCP_SERVERS` | Optional. A JSON array in the catalogue's format that replaces the catalogue entirely; its placeholders are filled the same way |
+| `SOURCES` | Optional. A JSON array in the catalogue's format that replaces the catalogue entirely; its placeholders are filled the same way |
 | `MCP_EXPLORER_BYPASS` | Optional. Vercel's Protection Bypass for Automation secret, for an Explorer deployment behind bot protection. Explorer is listed whether it is set or not. Store it as a Secret |
 | `MCP_EXPLORER_URL` | Optional, defaults to `https://explorer.solana.com/mcp` |
 | `MCP_EXPLORER_TOKEN` | Optional. A bearer token, for an Explorer deployment that gates on `MCP_ACCESS_KEYS`. Store it as a Secret |

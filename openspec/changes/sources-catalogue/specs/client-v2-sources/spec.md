@@ -103,11 +103,26 @@ same upstream without them. No credential SHALL be sent to the browser.
 - **THEN** `GET /api/mcp` lists `explorer` for them, and the gateway's request to Explorer carries neither the
   bypass header nor an `authorization` header
 
+#### Scenario: A protected server added in the browser
+
+- **WHEN** a user adds an entry with `protection: { provider: "vercel", secret }` in "Additional servers" and
+  calls its `ping` tool from the server's console
+- **THEN** every request the browser sends to the server carries the secret as the `x-vercel-protection-bypass`
+  query parameter and not as a header, and the console shows the tool's answer
+
+#### Scenario: A protected server checked with a model (manual)
+
+- **WHEN** a user adds an entry for a real server behind Vercel's bot protection, with a model connected, and
+  walks through `.claude/skills/mcp-server-check/SKILL.md`
+- **THEN** `ping` answers `pong`, inspecting `11111111111111111111111111111111` returns the System Program, and
+  every request to the server carries the `x-vercel-protection-bypass` query parameter
+
 ### Requirement: The skills route lists the caller's skills
 
 `GET /api/skills` SHALL answer `{ skills: [...] }` with, for each skill the catalogue offers this caller, its
 `id`, `name`, `description`, `enabled`, and `source`: `{ type: "bundled" }` for a skill shipped in the bundle,
-or `{ type: "remote", baseUrl, entry }` for one fetched at runtime. The route SHALL answer a request from another
+or `{ type: "remote", baseUrl, entry }` for one fetched at runtime; and, for a skill a third party publishes, its
+`community`, `{ repo }`, which the Sources tab groups by. The route SHALL answer a request from another
 origin as the gateway does, and SHALL answer any method other than GET with 405.
 
 #### Scenario: The shipped catalogue signed out (manual)

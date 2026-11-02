@@ -1,14 +1,14 @@
 # Tasks
 
-Every task is HOO-2318. One task per PR. 1.1 and 3.1 may run at the same
-time; 1.2 and 2.1 may run at the same time once 1.1 has merged; every other
-task depends on the ones it names. The spike on branch `spike/mcp-config`
-is the starting point for 1.1, 1.2, 3.1, and 3.2; its files are moved and
-renamed as [design.md](design.md), "Decisions", says, never kept as they are.
+Every task is HOO-2318. Every task lands in PR
+solana-foundation/solana-playground#82, on branch `spike/mcp-config`, as the
+user decided on 2026-11-02, so the branch is a working prototype of the whole
+change. The tasks are worked in the order of their dependencies; each names
+the ones it depends on.
 
 ## 1. The catalogue and the gateway
 
-- [ ] 1.1 `src/shared/config/sources.mjs` (`SOURCES_CATALOGUE`: the `solana`
+- [x] 1.1 `src/shared/config/sources.mjs` (`SOURCES_CATALOGUE`: the `solana`
       and `explorer` servers and the `playground-env` and `solana-dev` skills,
       with the `MCP_EXPLORER_*` placeholders), `src/shared/lib/catalogue/compose.mjs`
       (`composeCatalogue({ env, override, signedIn })`), `sourcesEnv()` in
@@ -21,10 +21,10 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
       catalogue holds both kinds of source" in
       [specs/client-v2-sources/spec.md](specs/client-v2-sources/spec.md),
       each failing for a wrong implementation it names
-- [ ] 1.2 `features/mcp/model/entry.mjs` (`validateServers`, the shape rules
+- [x] 1.2 `features/mcp/model/entry.mjs` (`validateServers`, the shape rules
       moved out of `model/config.ts`, which keeps its messages and its
       browser-only URL check), `features/mcp/server.mjs` exporting
-      `composeServers({ env, signedIn })` and `protectionHeaders`,
+      `composeServers({ env, override, signedIn })` and `protectionHeaders`,
       `features/mcp/model/protection.mjs` (`PROTECTION_PROVIDERS` with the
       `vercel` row; `validateServers` checks `protection`; the browser's
       `serverUrl` sends it as a query parameter), `api/mcp.mjs` composing its
@@ -42,14 +42,14 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
 
 ## 2. The skills slice and route
 
-- [ ] 2.1 `features/skills`: `grounding/registry.ts`, `grounding/types.ts`,
+- [x] 2.1 `features/skills`: `grounding/registry.ts`, `grounding/types.ts`,
       and `grounding/skills.ts` moved from `views/sidebar/assistant/` with
       their tests, `index.ts` as the public API, `model/telemetry.ts`
       declaring `skills_toggled` as
       [specs/client-v2-skills/spec.md](specs/client-v2-skills/spec.md)
       describes it, the prefix `skills` in `shared/lib/telemetry/prefixes.ts`,
       `model/entry.mjs` (`validateSkills`), `server.mjs` exporting
-      `composeSkills({ env, signedIn })`, `listGatewaySkills` fetching
+      `composeSkills({ env, override, signedIn })`, `listGatewaySkills` fetching
       `GET /api/skills`, and `api/skills.mjs` with `api/skills.test.mjs`
       (depends on 1.1); verify `src/app/slice-structure.test.ts` passes with
       the new slice, `api/skills.test.mjs` holds "The shipped catalogue signed
@@ -57,7 +57,7 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
       POST, and the slice's tests hold "The server lists both shipped
       skills", "A bundled id the bundle does not know", and "A path that
       climbs out"
-- [ ] 2.2 The assistant reads the server's skills: `PgAssistant.loadSkills`
+- [x] 2.2 The assistant reads the server's skills: `PgAssistant.loadSkills`
       called where `loadMcpServers` is, `model/prompt.ts` and
       `model/skill-tools.ts` reading the loaded list through
       `enabledSkillIds`, `Component/Grounding.tsx` listing the loaded skills
@@ -67,9 +67,10 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
       and `Grounding.test.tsx` hold "A skill withheld by the operator" and
       "The skills route is unreachable", and `prompt.test.ts` shows the
       catalogue naming only the loaded skills
-- [ ] 2.3 Community skills: the 37 entries from solana.com/skills in
-      `SOURCES_CATALOGUE`, each remote at the commit the page pins, with a
-      one-sentence description, `enabled: false`, and no `signedIn`, as
+- [x] 2.3 Community skills: 35 entries from solana.com/skills in
+      `SOURCES_CATALOGUE` (the page lists 37: Clawpump's repository answers
+      404, and the 37th was not identified), each remote at the commit the
+      page pins, with a one-sentence description, `enabled: false`, and no `signedIn`, as
       [design.md](design.md), "Community skills from solana.com/skills", says;
       `enabled: false` honoured by `validateSkills` and the store's initial
       `enabledSkillIds`; the Sources tab's community fold with its count; a
@@ -84,7 +85,7 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
 
 ## 3. The selection
 
-- [ ] 3.1 `supportsTools` on `ModelProviderProfile`, `true` on every
+- [x] 3.1 `supportsTools` on `ModelProviderProfile`, `true` on every
       profile, `model/provider.ts` passing no tools when it is `false`, and
       `Component/Grounding.tsx` showing the one-sentence notice in place of
       the lists; verify `provider.test.ts` holds "A profile that declares no

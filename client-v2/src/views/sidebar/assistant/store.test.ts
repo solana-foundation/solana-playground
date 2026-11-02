@@ -1,4 +1,4 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 
 const mcp = vi.hoisted(() => ({
@@ -21,13 +21,20 @@ vi.mock("@/features/mcp", async (importOriginal) => {
       actual.closeConnection(id);
     },
     listGatewayServers: mcp.listGatewayServers,
+    mcpTelemetry: actual.mcpTelemetry,
   };
 });
 
 import { loadAi } from "@/shared/lib/ai";
 import { initializeResult } from "@/shared/lib/ai/__fixtures__/fake-mcp";
 import { rpcResult } from "@/shared/lib/json-rpc.mjs";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { createMcpTools } from "./model/mcp-tools";
+import { createSkillTools } from "./model/skill-tools";
 import { PgAssistant } from "./store";
 
 const entry = (id: string): McpServerEntry => ({
@@ -95,20 +102,140 @@ it("closes the connection of a local entry the user removes, and only that one",
   expect(mcp.closeConnection.mock.calls).toEqual([["removed"]]);
 });
 
-it("declares no tools for a gateway entry switched off, and the same tools once it is on again", async () => {
-  PgAssistant.setMcpServers([]);
-  mcp.listGatewayServers.mockResolvedValueOnce([gatewayEntry("solana")]);
-  await PgAssistant.loadMcpServers();
-  await discovered(gatewayEntry("solana"), [
-    { name: "search", inputSchema: {} },
-  ]);
+describe("switching a source", () => {
+  let tracked: ReturnType<typeof memoryProvider>;
 
-  PgAssistant.setMcpServerEnabled("solana", false);
-  expect(PgAssistant.enabledMcpServers).toEqual([]);
-  expect(createMcpTools()).toEqual([]);
+  beforeEach(() => {
+    tracked = memoryProvider();
+    initTelemetry({ providers: [tracked] });
+  });
 
-  PgAssistant.setMcpServerEnabled("solana", true);
-  expect(createMcpTools().map((tool) => tool.name)).toEqual(["solana__search"]);
+  afterEach(() => {
+    resetTelemetry();
+    vi.restoreAllMocks();
+  });
+
+  it("A gateway server switched off: declares no tools from it, and the same tools once it is on again", async () => {
+    PgAssistant.setMcpServers([]);
+    mcp.listGatewayServers.mockResolvedValueOnce([gatewayEntry("solana")]);
+    await PgAssistant.loadMcpServers();
+    await discovered(gatewayEntry("solana"), [
+      { name: "search", inputSchema: {} },
+    ]);
+
+    PgAssistant.setMcpServerEnabled("solana", false);
+    expect(PgAssistant.enabledMcpServers).toEqual([]);
+    expect(createMcpTools()).toEqual([]);
+
+    PgAssistant.setMcpServerEnabled("solana", true);
+    expect(createMcpTools().map((tool) => tool.name)).toEqual([
+      "solana__search",
+    ]);
+  });
+
+  it.each([
+    ["a gateway server", gatewayEntry("solana"), "gateway"],
+    ["a user-added server", entry("extra"), "user"],
+  ] as const)(
+    "reports %s switched off by kind, never by id",
+    async (_label, server, kind) => {
+      PgAssistant.setMcpServers(kind === "user" ? [server] : []);
+      mcp.listGatewayServers.mockResolvedValueOnce(
+        kind === "gateway" ? [server] : []
+      );
+      await PgAssistant.loadMcpServers();
+
+      PgAssistant.setMcpServerEnabled(server.id, false);
+
+      expect(tracked.events).toEqual([
+        {
+          name: "mcp_server_toggled",
+          params: { server: kind, enabled: false },
+        },
+      ]);
+      PgAssistant.setMcpServers([]);
+    }
+  );
+
+  /** `GET /api/skills` answers with these skills */
+  const skillsRoute = (skills: unknown[]) =>
+    vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(
+        async () => new Response(JSON.stringify({ skills }), { status: 200 })
+      );
+
+  const playgroundEnv = {
+    id: "playground-env",
+    name: "Playground build environment",
+    description: "What compiles here.",
+    enabled: true,
+    source: { type: "bundled" },
+  };
+
+  const listedOff = {
+    id: "orca",
+    name: "Orca",
+    description: "Orca Whirlpools.",
+    enabled: false,
+    source: {
+      type: "remote",
+      baseUrl: "https://skills.test/orca/",
+      entry: "SKILL.md",
+    },
+    community: { repo: "sendaifun/skills" },
+  };
+
+  it("A skill withheld by the operator: listed nowhere, and load_skill refuses its id", async () => {
+    skillsRoute([playgroundEnv]);
+    await PgAssistant.loadSkills();
+
+    const loadSkill = createSkillTools().find((t) => t.name === "load_skill");
+    const refusal = await loadSkill?.run({ id: "solana-dev" }, {});
+
+    expect(PgAssistant.skills.map((skill) => skill.id)).toEqual([
+      "playground-env",
+    ]);
+    expect(refusal).toMatch(/^Could not load solana-dev: .*"solana-dev"/);
+  });
+
+  it("The skills route is unreachable: no skill, and the list says why", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new TypeError("Failed to fetch")
+    );
+
+    await PgAssistant.loadSkills();
+
+    expect(PgAssistant.skills).toEqual([]);
+    expect(PgAssistant.enabledSkills).toEqual([]);
+    expect(PgAssistant.skillsUnavailable).toBe(true);
+  });
+
+  it("A community skill listed off: not enabled until checked, and each switch reported once", async () => {
+    skillsRoute([playgroundEnv, listedOff]);
+    await PgAssistant.loadSkills();
+    expect(PgAssistant.enabledSkillIds).toEqual(["playground-env"]);
+
+    PgAssistant.setSkillEnabled("orca", true);
+    expect(PgAssistant.enabledSkillIds).toEqual(["playground-env", "orca"]);
+    PgAssistant.setSkillEnabled("orca", false);
+
+    expect(tracked.events).toEqual([
+      { name: "skills_toggled", params: { id: "orca", enabled: true } },
+      { name: "skills_toggled", params: { id: "orca", enabled: false } },
+    ]);
+  });
+
+  it("keeps the user's choice when the skills are listed again", async () => {
+    skillsRoute([playgroundEnv, listedOff]);
+    await PgAssistant.loadSkills();
+    PgAssistant.setSkillEnabled("orca", true);
+
+    await PgAssistant.loadSkills();
+
+    expect(PgAssistant.enabledSkillIds).toContain("orca");
+    PgAssistant.setSkillEnabled("orca", false);
+  });
 });
 
 it("closes the connection of a gateway entry the gateway stops serving", async () => {

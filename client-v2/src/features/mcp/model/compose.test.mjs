@@ -1,110 +1,13 @@
-/* eslint-disable no-template-curly-in-string -- the placeholders are the point */
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { composeServers } from "./compose.mjs";
 
-/** One entry per rule, as `MCP_SERVERS` would carry it */
-const entry = ({ id, url, headers, signedIn }) =>
-  JSON.stringify([
-    {
-      id,
-      name: id,
-      url,
-      ...(headers ? { headers } : {}),
-      ...(signedIn ? { signedIn } : {}),
-    },
-  ]);
+/** `SOURCES` holding one `mcp` entry */
+const one = (id, url) => JSON.stringify([{ kind: "mcp", id, name: id, url }]);
 
 describe("composeServers", () => {
-  test("fills every placeholder of an entry whose variables are set", () => {
-    const servers = composeServers({
-      env: { HOST: "mcp.test", TOKEN: "t-1" },
-      servers: entry({
-        id: "a",
-        url: "https://${HOST}/mcp",
-        headers: { authorization: "Bearer ${TOKEN}" },
-      }),
-      signedIn: false,
-    });
-
-    assert.deepEqual(servers, [
-      {
-        id: "a",
-        name: "a",
-        url: "https://mcp.test/mcp",
-        enabled: true,
-        headers: { authorization: "Bearer t-1" },
-      },
-    ]);
-  });
-
-  test("leaves out an entry whose url has an unset variable", () => {
-    const servers = composeServers({
-      env: { HOST: "" },
-      servers: entry({ id: "a", url: "https://${HOST}/mcp" }),
-      signedIn: false,
-    });
-
-    assert.deepEqual(servers, []);
-  });
-
-  test("leaves out an entry whose header has an unset variable", () => {
-    const servers = composeServers({
-      env: {},
-      servers: entry({
-        id: "a",
-        url: "https://mcp.test/mcp",
-        headers: { "x-bypass": "${BYPASS}" },
-      }),
-      signedIn: false,
-    });
-
-    assert.deepEqual(servers, []);
-  });
-
-  test("drops only the header whose variable fell back to empty", () => {
-    const servers = composeServers({
-      env: { BYPASS: "b-1" },
-      servers: entry({
-        id: "a",
-        url: "https://mcp.test/mcp",
-        headers: {
-          "x-bypass": "${BYPASS}",
-          authorization: "Bearer ${TOKEN:-}",
-        },
-      }),
-      signedIn: false,
-    });
-
-    assert.deepEqual(servers[0].headers, { "x-bypass": "b-1" });
-  });
-
-  test("fills a placeholder's default when its variable is unset", () => {
-    const servers = composeServers({
-      env: {},
-      servers: entry({ id: "a", url: "${HOST:-https://mcp.test/mcp}" }),
-      signedIn: false,
-    });
-
-    assert.equal(servers[0].url, "https://mcp.test/mcp");
-  });
-
-  test("withholds a signedIn entry from a signed-out caller", () => {
-    const servers = entry({
-      id: "a",
-      url: "https://mcp.test/mcp",
-      signedIn: true,
-    });
-
-    assert.deepEqual(composeServers({ env: {}, servers, signedIn: false }), []);
-    assert.equal(
-      composeServers({ env: {}, servers, signedIn: true })[0].id,
-      "a"
-    );
-  });
-
-  test("serves both official servers to a signed-out caller with nothing set", () => {
+  test("Explorer with nothing set: listed, with no bypass and no authorization header", () => {
     const servers = composeServers({ env: {}, signedIn: false });
 
     assert.deepEqual(
@@ -127,31 +30,18 @@ describe("composeServers", () => {
     });
   });
 
-  test("replaces the catalogue with MCP_SERVERS", () => {
-    const servers = composeServers({
-      env: {},
-      servers: entry({ id: "mine", url: "https://mcp.test/mcp" }),
-      signedIn: true,
-    });
+  test("lists no skill as a server", () => {
+    const override = JSON.stringify([
+      {
+        kind: "skill",
+        id: "s",
+        name: "s",
+        description: "d",
+        source: { type: "bundled" },
+      },
+    ]);
 
-    assert.deepEqual(
-      servers.map((s) => s.id),
-      ["mine"]
-    );
-  });
-
-  test("rejects a duplicate id", () => {
-    const one = { id: "a", url: "https://mcp.test/mcp" };
-
-    assert.throws(
-      () =>
-        composeServers({
-          env: {},
-          servers: JSON.stringify([one, one]),
-          signedIn: true,
-        }),
-      /duplicate id "a"/
-    );
+    assert.deepEqual(composeServers({ env: {}, override, signedIn: true }), []);
   });
 
   test("rejects an id holding the tool-name separator", () => {
@@ -159,7 +49,7 @@ describe("composeServers", () => {
       () =>
         composeServers({
           env: {},
-          servers: entry({ id: "team__docs", url: "https://mcp.test/mcp" }),
+          override: one("team__docs", "https://mcp.test/mcp"),
           signedIn: true,
         }),
       /must not contain "__"/
@@ -171,10 +61,10 @@ describe("composeServers", () => {
       () =>
         composeServers({
           env: {},
-          servers: entry({ id: "docs", url: "/api/docs-mcp" }),
+          override: one("docs", "/api/docs-mcp"),
           signedIn: true,
         }),
-      /server "docs" needs an https:\/\/ url/
+      /SOURCES: server "docs" needs an https:\/\/ url/
     );
   });
 });

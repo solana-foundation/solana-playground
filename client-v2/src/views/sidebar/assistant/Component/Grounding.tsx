@@ -21,7 +21,7 @@ import { HelpTip } from "@/shared/ui/help-tip";
 import ServerConsole from "./ServerConsole";
 import { useRenderOnChange } from "../../../../hooks";
 import { PgAssistant } from "../store";
-import { isAlwaysOn, isCommunity, SKILLS } from "../grounding";
+import { isAlwaysOn, isCommunity } from "../grounding";
 import type { SkillEntry } from "../grounding";
 import {
   LOCAL_MCP_SERVERS,
@@ -40,9 +40,6 @@ const ENTRY_FORMAT_DOC = {
   mcpServer: `${ENTRY_FORMAT_DOC_URL}#mcp-server-entries`,
   skill: `${ENTRY_FORMAT_DOC_URL}#skill-entries`,
 };
-
-const FOUNDATION_SKILLS = SKILLS.filter((skill) => !isCommunity(skill));
-const COMMUNITY_SKILLS = SKILLS.filter(isCommunity);
 
 const EMPTY_LIST = "[]";
 
@@ -140,7 +137,11 @@ const Grounding = () => {
   useRenderOnChange(PgAssistant.onDidChange);
 
   const enabledSkills = PgAssistant.enabledSkillIds;
-  const communityOn = COMMUNITY_SKILLS.filter((skill) =>
+  const foundationSkills = PgAssistant.skills.filter(
+    (skill) => !isCommunity(skill)
+  );
+  const communitySkills = PgAssistant.skills.filter(isCommunity);
+  const communityOn = communitySkills.filter((skill) =>
     enabledSkills.includes(skill.id)
   ).length;
   const servers = PgAssistant.mcpServers;
@@ -196,77 +197,88 @@ const Grounding = () => {
 
   return (
     <Wrapper>
-      <FieldSet>
-        <FieldLegend className="flex items-center gap-2">
-          Skills
-          <HelpTip label="About the skill entry format">
-            {/* One block: the tooltip lays out its children as flex items */}
-            <p className="leading-relaxed">
-              A skill is a SKILL.md document and the reference files it names.
-              Each entry needs an id, a name, a one-line description, and where
-              its files come from. Entry format lists every field.
-            </p>
-          </HelpTip>
-        </FieldLegend>
-        <FieldDescription>
-          Reference documents the assistant loads when it decides it needs them.
-          Only the names and descriptions of checked skills sit in the prompt.{" "}
-          <a href={ENTRY_FORMAT_DOC.skill} target="_blank" rel="noreferrer">
-            Entry format ↗
-          </a>
-        </FieldDescription>
-
-        <FieldGroup data-slot="checkbox-group">
-          {FOUNDATION_SKILLS.map((skill) => (
-            <SkillRow
-              key={skill.id}
-              skill={skill}
-              checked={enabledSkills.includes(skill.id)}
-            />
-          ))}
-        </FieldGroup>
-
-        <Collapsible>
-          <CollapsibleHeading className="text-sm font-medium">
-            <CollapsibleChevron />
-            Community skills{" "}
-            <span className="font-normal text-muted-foreground">
-              · {communityOn} of {COMMUNITY_SKILLS.length} on
-            </span>
-          </CollapsibleHeading>
-          <CollapsibleContent className="pt-3">
-            <FieldDescription className="pb-3">
-              Written by third parties and listed on{" "}
-              <a
-                href="https://solana.com/skills"
-                target="_blank"
-                rel="noreferrer"
-              >
-                solana.com/skills ↗
-              </a>
-              . Each one is read from a fixed commit of its repository, and
-              reaches the assistant only once checked.
-            </FieldDescription>
-            <FieldGroup data-slot="checkbox-group">
-              {COMMUNITY_SKILLS.map((skill) => (
-                <SkillRow
-                  key={skill.id}
-                  skill={skill}
-                  checked={enabledSkills.includes(skill.id)}
-                />
-              ))}
-            </FieldGroup>
-          </CollapsibleContent>
-        </Collapsible>
-      </FieldSet>
-
       {!takesTools && (
         <FieldSet>
-          <FieldLegend>MCP servers</FieldLegend>
+          <FieldLegend>Skills and MCP servers</FieldLegend>
           <FieldDescription>
             The connected model, {providerName ?? providerId}, takes no tools,
-            so no MCP server is offered to it.
+            so no skill or MCP server is offered to it.
           </FieldDescription>
+        </FieldSet>
+      )}
+
+      {takesTools && (
+        <FieldSet>
+          <FieldLegend className="flex items-center gap-2">
+            Skills
+            <HelpTip label="About the skill entry format">
+              {/* One block: the tooltip lays out its children as flex items */}
+              <p className="leading-relaxed">
+                A skill is a SKILL.md document and the reference files it names.
+                Each entry needs an id, a name, a one-line description, and
+                where its files come from. Entry format lists every field.
+              </p>
+            </HelpTip>
+          </FieldLegend>
+          <FieldDescription>
+            Reference documents the assistant loads when it decides it needs
+            them. Only the names and descriptions of checked skills sit in the
+            prompt.{" "}
+            <a href={ENTRY_FORMAT_DOC.skill} target="_blank" rel="noreferrer">
+              Entry format ↗
+            </a>
+          </FieldDescription>
+
+          {PgAssistant.skills.length === 0 && (
+            <Active role="status">
+              The server reported no skills, so the assistant has none to load.
+            </Active>
+          )}
+
+          <FieldGroup data-slot="checkbox-group">
+            {foundationSkills.map((skill) => (
+              <SkillRow
+                key={skill.id}
+                skill={skill}
+                checked={enabledSkills.includes(skill.id)}
+              />
+            ))}
+          </FieldGroup>
+
+          {communitySkills.length > 0 && (
+            <Collapsible>
+              <CollapsibleHeading className="text-sm font-medium">
+                <CollapsibleChevron />
+                Community skills{" "}
+                <span className="font-normal text-muted-foreground">
+                  · {communityOn} of {communitySkills.length} on
+                </span>
+              </CollapsibleHeading>
+              <CollapsibleContent className="pt-3">
+                <FieldDescription className="pb-3">
+                  Written by third parties and listed on{" "}
+                  <a
+                    href="https://solana.com/skills"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    solana.com/skills ↗
+                  </a>
+                  . Each one is read from a fixed commit of its repository, and
+                  reaches the assistant only once checked.
+                </FieldDescription>
+                <FieldGroup data-slot="checkbox-group">
+                  {communitySkills.map((skill) => (
+                    <SkillRow
+                      key={skill.id}
+                      skill={skill}
+                      checked={enabledSkills.includes(skill.id)}
+                    />
+                  ))}
+                </FieldGroup>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </FieldSet>
       )}
 
@@ -356,8 +368,8 @@ const Grounding = () => {
             </div>
             <CollapsibleContent>
               <FieldDescription className="pb-2">
-                The gateway above owns its own list — these are extra entries,
-                and they are the only ones this editor changes.{" "}
+                Servers you add here, called from this browser. The
+                deployment&apos;s servers are not edited here.{" "}
                 <a
                   href={ENTRY_FORMAT_DOC.mcpServer}
                   target="_blank"

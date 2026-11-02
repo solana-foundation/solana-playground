@@ -1,9 +1,11 @@
-import { DEFAULT_SKILL_IDS, findSkill, isAlwaysOn } from "./grounding";
+import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
+import type { SkillEntry } from "./grounding";
 import {
   closeConnection,
   listGatewayServers,
   listTools,
   LOCAL_MCP_SERVERS,
+  mcpTelemetry,
   sameConnection,
 } from "@/features/mcp";
 import { redactKey } from "@/shared/lib/ai";
@@ -434,16 +436,57 @@ export class PgAssistant {
     PgAssistant._emitOnly();
   }
 
-  /** Which skills the model may load this session */
+  /** Every skill the server listed, on or off, in its order */
+  static get skills(): readonly SkillEntry[] {
+    return PgAssistant._skills;
+  }
+
+  /** Whether the last `loadSkills` failed, so the list is empty for that reason */
+  static get skillsUnavailable() {
+    return PgAssistant._skillsUnavailable;
+  }
+
+  /** The listed skills the model may load this session: the user's choice, else the entry's `enabled` */
+  static get enabledSkills(): readonly SkillEntry[] {
+    return PgAssistant._skills.filter(
+      (skill) =>
+        isAlwaysOn(skill) ||
+        (PgAssistant._skillChoices.get(skill.id) ?? skill.enabled)
+    );
+  }
+
+  /** The ids of {@link PgAssistant.enabledSkills} */
   static get enabledSkillIds(): readonly string[] {
-    return PgAssistant._enabledSkillIds;
+    return PgAssistant.enabledSkills.map((skill) => skill.id);
   }
 
   static setSkillEnabled(id: string, enabled: boolean) {
-    const skill = findSkill(id);
-    if (!enabled && skill && isAlwaysOn(skill)) return;
-    const ids = PgAssistant._enabledSkillIds.filter((i) => i !== id);
-    PgAssistant._enabledSkillIds = enabled ? [...ids, id] : ids;
+    const skill = PgAssistant._skills.find((entry) => entry.id === id);
+    if (!skill || isAlwaysOn(skill)) return;
+    PgAssistant._skillChoices = new Map(PgAssistant._skillChoices).set(
+      id,
+      enabled
+    );
+    skillsTelemetry.track("skills_toggled", { id, enabled });
+    PgAssistant._emit();
+  }
+
+  /**
+   * Ask the server which skills it offers. A failure leaves no skills and
+   * marks the list unavailable: there is no built-in list to fall back to.
+   */
+  static async loadSkills() {
+    try {
+      PgAssistant._skills = await listGatewaySkills();
+      PgAssistant._skillsUnavailable = false;
+    } catch (error) {
+      // The slice logged the cause; the tab tells the user the server reported none
+      log.debug("No skills: the skills route failed", {
+        context: { error: String(error) },
+      });
+      PgAssistant._skills = [];
+      PgAssistant._skillsUnavailable = true;
+    }
     PgAssistant._emit();
   }
 
@@ -505,7 +548,10 @@ export class PgAssistant {
    * choice, so the editor shows the same state.
    */
   static setMcpServerEnabled(id: string, enabled: boolean) {
-    if (PgAssistant._gatewayServers.some((server) => server.id === id)) {
+    const gateway = PgAssistant._gatewayServers.some(
+      (server) => server.id === id
+    );
+    if (gateway) {
       const off = new Set(PgAssistant._gatewayServersOff);
       if (enabled) off.delete(id);
       else off.add(id);
@@ -515,6 +561,10 @@ export class PgAssistant {
         server.id === id ? { ...server, enabled } : server
       );
     }
+    mcpTelemetry.track("mcp_server_toggled", {
+      server: gateway ? "gateway" : "user",
+      enabled,
+    });
     PgAssistant._emit();
   }
 
@@ -560,9 +610,9 @@ export class PgAssistant {
     }
   }
 
-  /** Learn what exists, then what it offers. Safe to call on every mount. */
+  /** Learn which skills and servers exist, then what the servers offer. Safe to call on every mount. */
   static async initMcp() {
-    await PgAssistant.loadMcpServers();
+    await Promise.all([PgAssistant.loadMcpServers(), PgAssistant.loadSkills()]);
     await PgAssistant.discoverMcpTools();
   }
 
@@ -1350,7 +1400,10 @@ export class PgAssistant {
   private static _status: AssistantStatus = "idle";
   private static _connection: Connection | null = null;
   private static _pickingBackend = false;
-  private static _enabledSkillIds: readonly string[] = DEFAULT_SKILL_IDS;
+  private static _skills: readonly SkillEntry[] = [];
+  private static _skillsUnavailable = false;
+  // Kept apart from the listed skills, which `loadSkills` replaces whole; in memory only
+  private static _skillChoices: ReadonlyMap<string, boolean> = new Map();
   private static _gatewayServers: readonly McpServerEntry[] = [];
   // Kept apart from the gateway's list, which `loadMcpServers` replaces whole; in memory only, like `_localServers`
   private static _gatewayServersOff: ReadonlySet<string> = new Set();
@@ -1558,24 +1611,6 @@ if (import.meta.vitest) {
       request: { type: "patch", path: "src/lib.rs", before: "a", after: "b" },
       status: "allowed",
     };
-
-    describe("PgAssistant skills", () => {
-      let SKILLS: typeof import("./grounding").SKILLS;
-      let isCommunity: typeof import("./grounding").isCommunity;
-      beforeAll(async () => {
-        ({ SKILLS, isCommunity } = await import("./grounding"));
-      });
-
-      it("leaves a community skill out until the user checks it", () => {
-        const skill = SKILLS.find(isCommunity);
-        if (!skill) throw new Error("no community skill");
-
-        expect(PgAssistant.enabledSkillIds).not.toContain(skill.id);
-        PgAssistant.setSkillEnabled(skill.id, true);
-        expect(PgAssistant.enabledSkillIds).toContain(skill.id);
-        PgAssistant.setSkillEnabled(skill.id, false);
-      });
-    });
 
     describe("turnProducedApproval", () => {
       it("is false for a turn that only replied", () => {

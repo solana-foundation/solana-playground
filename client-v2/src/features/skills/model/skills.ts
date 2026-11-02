@@ -1,4 +1,3 @@
-import { findSkill, SKILLS } from "./registry";
 import type { SkillEntry } from "./types";
 
 /** A skill file bigger than this is truncated rather than flooding the turn */
@@ -57,16 +56,13 @@ const fetchText = async (url: string) => {
   return capped;
 };
 
-/** Skills the user has enabled, in registry order */
-export const enabledSkills = (enabledIds: readonly string[]) =>
-  SKILLS.filter((skill) => enabledIds.includes(skill.id));
-
 /**
  * The catalogue that goes in the system prompt — names and descriptions only,
  * never bodies, so the cached prompt prefix stays byte-stable.
+ *
+ * @param skills the skills the user has on, in the order the server listed them
  */
-export const describeCatalog = (enabledIds: readonly string[]) => {
-  const skills = enabledSkills(enabledIds);
+export const describeCatalog = (skills: readonly SkillEntry[]) => {
   if (!skills.length) return "No skills are enabled.";
   return skills
     .map((skill) => `- ${skill.id} (${skill.name}): ${skill.description}`)
@@ -103,10 +99,16 @@ export const loadReference = async (skill: SkillEntry, path: string) => {
 /**
  * Look a skill up by the id the model supplied.
  *
- * @throws if no skill has that id, or the user has not checked it: an unchecked skill's text never reaches the model
+ * @param listed the skills the server listed
+ * @param enabledIds the ids the user has on
+ * @throws if the server did not list the id, or the user has not checked it: an unchecked skill's text never reaches the model
  */
-export const requireSkill = (id: string, enabledIds: readonly string[]) => {
-  const skill = findSkill(id);
+export const requireSkill = (
+  id: string,
+  listed: readonly SkillEntry[],
+  enabledIds: readonly string[]
+) => {
+  const skill = listed.find((entry) => entry.id === id);
   if (!skill) {
     throw new Error(
       `There is no skill with id "${id}". Call list_skills to see what exists.`
@@ -121,15 +123,41 @@ export const requireSkill = (id: string, enabledIds: readonly string[]) => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, vi, afterEach } = import.meta.vitest;
 
-  describe("views/sidebar/assistant/grounding/skills", () => {
-    it("refuses a skill the user has not checked", () => {
-      const off = SKILLS.find((skill) => skill.enabled === false);
-      if (!off) throw new Error("no skill starts unchecked");
+  describe("features/skills/model/skills", () => {
+    const remote: SkillEntry = {
+      id: "solana-dev",
+      name: "Solana dev",
+      description: "d",
+      source: {
+        type: "remote",
+        baseUrl: "https://skills.test/solana-dev/",
+        entry: "SKILL.md",
+      },
+      enabled: true,
+    };
 
-      expect(() => requireSkill(off.id, [])).toThrow(/switched off/);
-      expect(requireSkill(off.id, [off.id])).toBe(off);
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("A path that climbs out: rejected with no request sent", async () => {
+      const fetch = vi.spyOn(globalThis, "fetch");
+
+      await expect(loadReference(remote, "../other/SKILL.md")).rejects.toThrow(
+        /outside this skill's files/
+      );
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["a skill the server did not list", [], [], /no skill with id/],
+      ["a skill the user has not checked", [remote], [], /switched off/],
+    ])("refuses %s", (_label, listed, enabledIds, message) => {
+      expect(() => requireSkill("solana-dev", listed, enabledIds)).toThrow(
+        message
+      );
     });
   });
 }

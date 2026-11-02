@@ -35,7 +35,7 @@ export const createSkillTools = (): ToolDefinition[] => [
     schema: { type: "object", properties: {}, additionalProperties: false },
     run: () => {
       PgAssistant.addToolCall("listed the skills");
-      return describeCatalog(PgAssistant.enabledSkillIds);
+      return describeCatalog(PgAssistant.enabledSkills);
     },
   },
 
@@ -60,7 +60,11 @@ export const createSkillTools = (): ToolDefinition[] => [
     run: async (input) => {
       const id = str(input, "id");
       try {
-        const skill = requireSkill(id, PgAssistant.enabledSkillIds);
+        const skill = requireSkill(
+          id,
+          PgAssistant.skills,
+          PgAssistant.enabledSkillIds
+        );
         PgAssistant.addToolCall(`loaded the ${skill.name} skill`);
         return await loadSkill(skill);
       } catch (e) {
@@ -94,7 +98,11 @@ export const createSkillTools = (): ToolDefinition[] => [
       const id = str(input, "id");
       const path = str(input, "path");
       try {
-        const skill = requireSkill(id, PgAssistant.enabledSkillIds);
+        const skill = requireSkill(
+          id,
+          PgAssistant.skills,
+          PgAssistant.enabledSkillIds
+        );
         PgAssistant.addToolCall(`read ${skill.id}/${path}`);
         return await loadReference(skill, path);
       } catch (e) {

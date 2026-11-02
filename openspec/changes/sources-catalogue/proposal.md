@@ -15,8 +15,9 @@ HOO-2318 asks for one catalogue format for both kinds of source, composed on
 the server from the environment, so an operator decides what the deployment
 offers, including entries whose credentials stay on the server, and composed
 in the browser with checkboxes, so a user with their own key picks what a
-turn may use. A throwaway spike on branch `spike/mcp-config` proved the MCP
-half; this change states the shape for both halves.
+turn may use. Branch `spike/mcp-config` (PR
+solana-foundation/solana-playground#82) started as a spike of the MCP half
+and delivers both halves as this change states them.
 
 ## What Changes
 
@@ -53,10 +54,11 @@ half; this change states the shape for both halves.
   names, so a skill the operator withheld is absent for every backend.
   Bundled content stays in the bundle; the catalogue names a bundled skill and
   cannot change its content.
-- The shipped catalogue carries the 37 community skills that
+- The shipped catalogue carries 35 of the 37 community skills that
   [solana.com/skills](https://solana.com/skills) lists, each a remote skill
   whose `baseUrl` is on `raw.githubusercontent.com` at the commit the page
-  pins. A skill entry may carry `enabled: false` and then starts unchecked.
+  pins. Clawpump is left out because its repository answers 404, and the
+  37th was not identified on the page. A skill entry may carry `enabled: false` and then starts unchecked.
   Every community skill starts unchecked and none is marked `signedIn`, so a
   user with their own key gets the same list as a signed-in user. The
   Foundation skills the page lists are reference files of `solana-dev`,

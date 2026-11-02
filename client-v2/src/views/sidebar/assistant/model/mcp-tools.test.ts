@@ -10,6 +10,7 @@ vi.mock("@/features/mcp", async (importOriginal) => {
     listGatewayServers: actual.listGatewayServers,
     closeConnection: vi.fn(),
     callTool: mcp.callTool,
+    mcpTelemetry: actual.mcpTelemetry,
   };
 });
 

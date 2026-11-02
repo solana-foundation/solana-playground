@@ -13,7 +13,7 @@
  * routes on that prefix, so the caller sees one MCP server.
  *
  * Upstreams come from the server's own configuration (`composeServers`: the
- * catalogue in `features/mcp`, or `MCP_SERVERS`, filled from the environment)
+ * `mcp` entries of `SOURCES_CATALOGUE`, or of `SOURCES`, filled from the environment)
  * and never from the request. A gateway that dials a caller-supplied host is
  * an SSRF and an open relay; refusing the input removes the whole class.
  * Adding one is a deploy, or an operator setting the variables it names.
@@ -31,7 +31,7 @@ import {
   composeServers,
   protectionHeaders,
 } from "../src/features/mcp/server.mjs";
-import { mcpEnv } from "../src/shared/config/server-env.mjs";
+import { sourcesEnv } from "../src/shared/config/server-env.mjs";
 import {
   rpcError,
   rpcRequest,
@@ -78,12 +78,16 @@ const withoutCredentials = (server) => ({
 
 /** @param {boolean} signedIn */
 const compose = (signedIn) =>
-  composeServers({ env: process.env, servers: mcpEnv().SERVERS, signedIn });
+  composeServers({
+    env: process.env,
+    override: sourcesEnv().SOURCES,
+    signedIn,
+  });
 
 /**
  * The upstreams this request may use, by id.
  *
- * Which exist is the catalogue's business (`features/mcp/model/catalogue.mjs`):
+ * Which exist is the catalogue's business (`shared/config/sources.mjs`):
  * an entry whose variables are unset is absent, and a `signedIn` one is absent
  * for an anonymous caller. An entry's credentials (headers, query values,
  * token, bot-protection bypass) are the deployment's, so they are sent only
@@ -285,7 +289,14 @@ const callTool = async (id, ids, configured, params) => {
  */
 async function handler(req, res) {
   warnAboutMissingObservabilityIds();
-  const configured = await upstreams(req);
+  let configured;
+  try {
+    configured = await upstreams(req);
+  } catch (e) {
+    // A broken catalogue fails every request, with the entry at fault named, rather than serving part of it
+    console.error("mcp: the sources catalogue is invalid", e);
+    return sendJson(res, 500, { error: /** @type {Error} */ (e).message });
+  }
 
   // Discovery. The server decides which upstreams exist — the client asks
   // rather than carrying its own list, so adding one is a deploy and an

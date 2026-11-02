@@ -13,7 +13,7 @@ const exitCode = (env) =>
  * A build's environment. `ci` marks Vercel's own build machine; `signIn` fills
  * every sign-in variable, `""` as a local `vercel pull` delivers a Secret.
  */
-const build = ({ ci, target, key, signIn, authSecret, baseUrl }) => ({
+const build = ({ ci, target, key, signIn, authSecret, baseUrl, sources }) => ({
   CI: ci,
   VERCEL_ENV: target,
   AGENT_API_KEY: key,
@@ -22,6 +22,7 @@ const build = ({ ci, target, key, signIn, authSecret, baseUrl }) => ({
   GITHUB_CLIENT_SECRET: signIn,
   AUTH_SECRET: authSecret ?? signIn,
   AUTH_BASE_URL: baseUrl,
+  SOURCES: sources,
 });
 
 const ORIGIN = "https://beta.solpg.io";
@@ -34,6 +35,11 @@ for (const [label, env, expected] of [
     0,
   ],
   ["passes a key with sign-in", build({ key: "k", signIn: "" }), 0],
+  [
+    "fails a SOURCES that is not JSON",
+    build({ key: "k", signIn: "", sources: "[{" }),
+    1,
+  ],
   [
     "fails an empty key on Vercel's build machine",
     build({ ci: "1", target: "preview", key: "", signIn: "s" }),

@@ -132,13 +132,12 @@ export const agentEnv = () => ({
 });
 
 /**
- * `MCP_*`: the gateway's upstreams. `SERVERS` replaces the catalogue in
- * `features/mcp/model/catalogue.mjs`; the catalogue's own variables
- * (`MCP_EXPLORER_*`) are named there, as placeholders it fills from the
- * whole environment, so they have no getter here.
+ * `SOURCES` replaces `SOURCES_CATALOGUE` (`shared/config/sources.mjs`). The
+ * catalogue's own variables (`MCP_EXPLORER_*`) are named there, as
+ * placeholders filled from the whole environment, so they have no getter here.
  */
-export const mcpEnv = () => ({
-  SERVERS: read("MCP_SERVERS"),
+export const sourcesEnv = () => ({
+  SOURCES: read("SOURCES"),
 });
 
 /** Postgres for sync, and its opt-in kill switch */
