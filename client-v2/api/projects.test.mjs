@@ -46,7 +46,11 @@ describe("/api/projects", () => {
   };
 
   /** Enough of the platform's request object for a body-less call */
-  const makeReq = (over) => ({ method: "GET", url: "/", headers: {}, ...over });
+  const makeReq = ({ method = "GET", url = "/", headers = {} }) => ({
+    method,
+    url,
+    headers,
+  });
 
   it("503s while the sync kill switch is off", async () => {
     const mod = await load();
@@ -289,7 +293,7 @@ describe("/api/projects", () => {
   });
 
   describe("describeWrite", () => {
-    const token = { baseUpdatedAt: "2026-01-01T00:00:00.000Z" };
+    const baseUpdatedAt = "2026-01-01T00:00:00.000Z";
 
     it("takes a whole file set", async () => {
       const mod = await load();
@@ -306,7 +310,11 @@ describe("/api/projects", () => {
     it("takes a patch that carries a token", async () => {
       const mod = await load();
       assert.deepEqual(
-        mod.describeWrite({ changed: { a: "2" }, removed: ["b"], ...token }),
+        mod.describeWrite({
+          changed: { a: "2" },
+          removed: ["b"],
+          baseUpdatedAt,
+        }),
         { changed: { a: "2" }, removed: ["b"] }
       );
     });
@@ -319,8 +327,12 @@ describe("/api/projects", () => {
     it("refuses force outright", async () => {
       const mod = await load();
       assert.ok(
-        mod.describeWrite({ changed: {}, removed: [], force: true, ...token })
-          .error
+        mod.describeWrite({
+          changed: {},
+          removed: [],
+          force: true,
+          baseUpdatedAt,
+        }).error
       );
       assert.ok(mod.describeWrite({ files: { a: "1" }, force: true }).error);
     });
@@ -328,7 +340,8 @@ describe("/api/projects", () => {
     it("refuses both shapes at once, and neither", async () => {
       const mod = await load();
       assert.ok(
-        mod.describeWrite({ files: { a: "1" }, changed: {}, ...token }).error
+        mod.describeWrite({ files: { a: "1" }, changed: {}, baseUpdatedAt })
+          .error
       );
       assert.ok(mod.describeWrite({}).error);
     });
@@ -336,8 +349,11 @@ describe("/api/projects", () => {
     it("refuses a path that is both changed and removed", async () => {
       const mod = await load();
       assert.ok(
-        mod.describeWrite({ changed: { a: "1" }, removed: ["a"], ...token })
-          .error
+        mod.describeWrite({
+          changed: { a: "1" },
+          removed: ["a"],
+          baseUpdatedAt,
+        }).error
       );
     });
 
@@ -359,7 +375,7 @@ describe("/api/projects", () => {
         mod.describeWrite({
           changed: { "src/big.rs": big },
           removed: [],
-          ...token,
+          baseUpdatedAt,
         }).limit.reason,
         "file-too-large"
       );
@@ -390,11 +406,18 @@ describe("/api/projects", () => {
       const local = ".workspace/metadata.json";
       assert.ok(mod.describeWrite({ files: { [local]: "{}" } }).error);
       assert.ok(
-        mod.describeWrite({ changed: { [local]: "{}" }, removed: [], ...token })
-          .error
+        mod.describeWrite({
+          changed: { [local]: "{}" },
+          removed: [],
+          baseUpdatedAt,
+        }).error
       );
       assert.deepEqual(
-        mod.describeWrite({ changed: {}, removed: [local], ...token }),
+        mod.describeWrite({
+          changed: {},
+          removed: [local],
+          baseUpdatedAt,
+        }),
         { changed: {}, removed: [local] }
       );
       assert.deepEqual(
@@ -408,7 +431,7 @@ describe("/api/projects", () => {
       assert.ok(mod.describeWrite({ files: { a: 1 } }).error);
       assert.ok(mod.describeWrite({ files: { "": "x" } }).error);
       assert.ok(
-        mod.describeWrite({ changed: {}, removed: [7], ...token }).error
+        mod.describeWrite({ changed: {}, removed: [7], baseUpdatedAt }).error
       );
     });
   });
@@ -423,7 +446,12 @@ describe("/api/projects", () => {
       );
       assert.deepEqual(mod.answerWrite(mod.describeWrite({ files })), {
         status: 413,
-        body: { error: "The project is over a sync limit", ...limit },
+        body: {
+          error: "The project is over a sync limit",
+          reason: limit.reason,
+          limit: limit.limit,
+          count: limit.count,
+        },
       });
     });
 
@@ -431,7 +459,12 @@ describe("/api/projects", () => {
       const mod = await load();
       assert.deepEqual(mod.answerWrite({ limit }), {
         status: 413,
-        body: { error: "The project is over a sync limit", ...limit },
+        body: {
+          error: "The project is over a sync limit",
+          reason: limit.reason,
+          limit: limit.limit,
+          count: limit.count,
+        },
       });
     });
 

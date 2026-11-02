@@ -747,6 +747,28 @@ describe("writes past a project limit", () => {
       });
       expect(stored().get("/alpha/src/f0.rs")).toHaveLength(100_000);
     });
+
+    it("counts the generated files sync carries toward the project size", async () => {
+      // 524,000 bytes of user files: 288 bytes under the limit
+      await PgExplorer.createWorkspace("alpha", {
+        files: Array.from({ length: 4 }, (_, i) => [
+          `/alpha/src/f${i}.rs`,
+          "a".repeat(131_000),
+        ]),
+      });
+      // Written straight to the store, as `PgProgramInfo` does, so the
+      // explorer's file map never holds it
+      await PgExplorer.fs.writeFile(
+        "/alpha/.workspace/program-info.json",
+        "a".repeat(200),
+        { createParents: true }
+      );
+
+      await expect(
+        PgExplorer.createItem("notes.md", "a".repeat(100))
+      ).rejects.toThrow("A project can be at most 512 KB.");
+      expect(stored().has("/alpha/notes.md")).toBe(false);
+    });
   });
 
   describe("renaming", () => {

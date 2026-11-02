@@ -45,6 +45,17 @@ type StubResponse = {
   json: () => Promise<Record<string, unknown>>;
 };
 
+/**
+ * Answer `fetch` with `answer` through a spy, so `mockReset` (see
+ * `vitest.config.ts`) puts back the throwing `fetch` from `setupTests`
+ * before the next test. `answer` resolves `StubResponse`s, not `Response`s,
+ * hence the cast.
+ */
+const stubFetch = (answer: (url: string, init?: any) => Promise<unknown>) =>
+  vi
+    .spyOn(global, "fetch")
+    .mockImplementation(answer as unknown as typeof fetch);
+
 const okProbe: StubResponse = {
   ok: true,
   json: async () => ({ enabled: true, db: "ok" }),
@@ -110,7 +121,7 @@ describe("PgProjectSync", () => {
   beforeEach(reset);
 
   it("skips entirely when signed out", async () => {
-    global.fetch = vi.fn() as unknown as typeof fetch;
+    vi.spyOn(global, "fetch");
     expect(await PgProjectSync.push("p1", { files: {} })).toBe("skipped");
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -118,14 +129,14 @@ describe("PgProjectSync", () => {
   it("refuses an empty snapshot whoever pushes it", async () => {
     // Not only the editor's push: reconcile and an answer to the banner read
     // their snapshot off the same store, and can land in the same window
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t2" }),
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
     await agreedOn("p1", "one", { a: "1" });
 
@@ -136,14 +147,14 @@ describe("PgProjectSync", () => {
   });
 
   it("skips an unchanged snapshot rather than re-uploading it", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
 
     expect(await PgProjectSync.push("p1", { files: { a: "1" } })).toBe("ok");
@@ -153,14 +164,14 @@ describe("PgProjectSync", () => {
   });
 
   it("records what the server accepted, so the next push is a swap against it", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
 
     await PgProjectSync.push("p1", { files: { a: "1" } }, "one");
@@ -171,14 +182,14 @@ describe("PgProjectSync", () => {
   });
 
   it("survives a reload: the mark is read back, not rebuilt from memory", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
     await PgProjectSync.push("p1", { files: { a: "1" } });
 
@@ -202,14 +213,14 @@ describe("PgProjectSync", () => {
     // that forced an upload, every reload bumped the row -- and a bumped row
     // is exactly what the *other* browser reads as "changed elsewhere", so two
     // idle browsers generated conflicts against each other.
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
 
     await PgProjectSync.push("p1", { files: { a: "1" } }, "one");
@@ -222,14 +233,14 @@ describe("PgProjectSync", () => {
   });
 
   it("uploads a rename, which changes no bytes at all", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
 
     await PgProjectSync.push("p1", { files: { a: "1" } }, "one");
@@ -240,14 +251,14 @@ describe("PgProjectSync", () => {
   });
 
   it("keeps marks apart per account", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch;
+    );
 
     // A tutorial's id is derived from its name, so it is byte-identical in
     // every account. Sharing marks would have the second user's push checked
@@ -266,18 +277,16 @@ describe("PgProjectSync", () => {
   });
 
   it("lists nothing when signed out, rather than calling the server", async () => {
-    global.fetch = vi.fn() as unknown as typeof fetch;
+    vi.spyOn(global, "fetch");
     expect(await PgProjectSync.list()).toBeNull();
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   /** Sync is up; the list request itself answers with `list` */
   const listAnswers = (list: () => Promise<unknown>) => {
-    global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        url === "/api/sync" ? Promise.resolve(okProbe) : list()
-      ) as unknown as typeof fetch;
+    stubFetch((url: string) =>
+      url === "/api/sync" ? Promise.resolve(okProbe) : list()
+    );
   };
 
   const unreadable: [string, () => Promise<unknown>][] = [
@@ -314,13 +323,11 @@ describe("PgProjectSync", () => {
     const projects = [
       { id: "p1", name: "one", kind: "project", updatedAt: "t1" },
     ];
-    global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        url === "/api/sync"
-          ? Promise.resolve(okProbe)
-          : Promise.resolve({ ok: true, json: async () => ({ projects }) })
-      ) as unknown as typeof fetch;
+    stubFetch((url: string) =>
+      url === "/api/sync"
+        ? Promise.resolve(okProbe)
+        : Promise.resolve({ ok: true, json: async () => ({ projects }) })
+    );
     await signedIn();
 
     expect(await PgProjectSync.list()).toEqual(projects);
@@ -338,7 +345,7 @@ describe("PgProjectSync", () => {
         configurable: true,
         writable: true,
       });
-      global.fetch = vi.fn().mockImplementation((url: string) =>
+      stubFetch((url: string) =>
         Promise.resolve(
           url === "/api/sync"
             ? okProbe
@@ -351,7 +358,7 @@ describe("PgProjectSync", () => {
                 }),
               }
         )
-      ) as unknown as typeof fetch;
+      );
     });
 
     afterEach(() => {
@@ -389,14 +396,14 @@ describe("PgProjectSync", () => {
   });
 
   const okServer = () =>
-    (global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
             ok: true,
             json: async () => ({ updatedAt: "t1" }),
           })
-    ) as unknown as typeof fetch);
+    );
 
   it("sends the whole file set the first time", async () => {
     okServer();
@@ -452,11 +459,9 @@ describe("a conflict is asked once, not retried forever", () => {
     // record the hash, so the editor's debounce re-sent the same doomed swap
     // every few seconds for the life of the page, and the project never synced
     // again.
-    global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        Promise.resolve(url === "/api/sync" ? okProbe : refusal)
-      ) as unknown as typeof fetch;
+    stubFetch((url: string) =>
+      Promise.resolve(url === "/api/sync" ? okProbe : refusal)
+    );
     await signedIn();
 
     expect(await PgProjectSync.push("p1", { files: { a: "1" } })).toBe(
@@ -473,14 +478,14 @@ describe("a conflict is asked once, not retried forever", () => {
   });
 
   it("leaves other projects alone", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
+    stubFetch((url: string, init: any) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       return Promise.resolve(
         JSON.parse(init.body).id === "p1"
           ? refusal
           : { ok: true, json: async () => ({ updatedAt: "t2" }) }
       );
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
 
     expect(await PgProjectSync.push("p1", { files: { a: "1" } })).toBe(
@@ -493,7 +498,7 @@ describe("a conflict is asked once, not retried forever", () => {
     // The banner had no way to hear the second half, so once shown it stayed
     // up for the rest of the session -- over unrelated projects included.
     let status = 409;
-    global.fetch = vi.fn().mockImplementation((url: string) =>
+    stubFetch((url: string) =>
       url === "/api/sync"
         ? Promise.resolve(okProbe)
         : Promise.resolve({
@@ -504,7 +509,7 @@ describe("a conflict is asked once, not retried forever", () => {
                 ? { updatedAt: "t2" }
                 : { conflict: true, updatedAt: "t9" },
           })
-    ) as unknown as typeof fetch;
+    );
     await signedIn();
 
     let changes = 0;
@@ -533,11 +538,11 @@ describe("a conflict is asked once, not retried forever", () => {
     // Offline since the refusal. Returning without raising anything would
     // leave pushes running, and every debounce would send the same doomed
     // swap.
-    global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
+    stubFetch((url: string, init: any) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (init?.method === "PUT") return Promise.resolve(refusal);
       return Promise.reject(new TypeError("Failed to fetch"));
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue("one");
 
@@ -559,7 +564,7 @@ describe("a conflict is asked once, not retried forever", () => {
     // Asked as a divergence, both answers merge against a server that has
     // nothing to merge with and fail, so the banner could never be cleared --
     // and "Keep as a new project", the answer that works, was never offered.
-    global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
+    stubFetch((url: string, init: any) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (init?.method === "PUT") return Promise.resolve(refusal);
       return Promise.resolve({
@@ -567,7 +572,7 @@ describe("a conflict is asked once, not retried forever", () => {
         status: 404,
         json: async () => ({}),
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue("one");
 
@@ -601,7 +606,7 @@ describe("resolving a conflict", () => {
     // makes the server's copy the agreement first, so the upload is an
     // ordinary compare-and-swap that a third write can still refuse.
     let status = 409;
-    global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
+    stubFetch((url: string, init: any) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (init?.method !== "PUT") {
         return Promise.resolve({
@@ -625,7 +630,7 @@ describe("resolving a conflict", () => {
             ? { updatedAt: "t10" }
             : { conflict: true, updatedAt: "t9" },
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     asWorkspace("p1", "mine");
 
@@ -662,7 +667,7 @@ describe("resolving a conflict", () => {
   });
 
   it("takes the server's files when the user picks the other version", async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) => {
+    stubFetch((url: string) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (url.includes("id=p1")) {
         return Promise.resolve({
@@ -683,7 +688,7 @@ describe("resolving a conflict", () => {
         status: 409,
         json: async () => ({ conflict: true, updatedAt: "t9" }),
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     asWorkspace("p1", "mine");
     const replace = vi
@@ -709,7 +714,7 @@ describe("resolving a conflict", () => {
     //
     // `switchWorkspace` is not enough on its own: `_initCurrentWorkspace`
     // skips when the workspace is already the initialized one.
-    global.fetch = vi.fn().mockImplementation((url: string) => {
+    stubFetch((url: string) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       return Promise.resolve({
         ok: true,
@@ -723,7 +728,7 @@ describe("resolving a conflict", () => {
           },
         }),
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     asWorkspace("p1", "mine");
     // Adopting re-checks that the local copy is the last agreement
@@ -743,7 +748,7 @@ describe("resolving a conflict", () => {
   it("does not re-read a project the user is not looking at", async () => {
     // Only the current workspace is held in memory, so re-opening any other
     // would be a navigation the user did not ask for
-    global.fetch = vi.fn().mockImplementation((url: string) => {
+    stubFetch((url: string) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       return Promise.resolve({
         ok: true,
@@ -757,7 +762,7 @@ describe("resolving a conflict", () => {
           },
         }),
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     asWorkspace("p1", "mine");
     vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue("other");
@@ -777,7 +782,7 @@ describe("resolving a conflict", () => {
     // `replaceWorkspaceFiles` removes the directory before it discovers there
     // is nothing to write back, so an unusable snapshot is not a no-op -- it
     // is the project being deleted on every device that syncs it.
-    global.fetch = vi.fn().mockImplementation((url: string) => {
+    stubFetch((url: string) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       return Promise.resolve({
         ok: true,
@@ -791,7 +796,7 @@ describe("resolving a conflict", () => {
           },
         }),
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     asWorkspace("p1", "mine");
     const replace = vi
@@ -1226,11 +1231,9 @@ describe("PgProjectSync.pushCurrent", () => {
 
   beforeEach(() => {
     reset();
-    global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        url === "/api/sync" ? Promise.resolve(okProbe) : Promise.resolve(okPush)
-      ) as unknown as typeof fetch;
+    stubFetch((url: string) =>
+      url === "/api/sync" ? Promise.resolve(okProbe) : Promise.resolve(okPush)
+    );
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -1467,15 +1470,13 @@ describe("deleting a project", () => {
     // The tombstone machinery, its `deleted_at` column and its "does not
     // resurrect" tests were all server-side only: nothing ever issued the
     // DELETE, so deleting a project was undone by the next reconcile.
-    global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        Promise.resolve(
-          url === "/api/sync"
-            ? okProbe
-            : { ok: true, json: async () => ({ deleted: true }) }
-        )
-      ) as unknown as typeof fetch;
+    stubFetch((url: string) =>
+      Promise.resolve(
+        url === "/api/sync"
+          ? okProbe
+          : { ok: true, json: async () => ({ deleted: true }) }
+      )
+    );
     await signedIn();
 
     expect(await PgProjectSync.remove("p1")).toBe(true);
@@ -1489,15 +1490,13 @@ describe("deleting a project", () => {
 describe("holding pushes until the account is reconciled", () => {
   beforeEach(() => {
     reset();
-    global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        Promise.resolve(
-          url === "/api/sync"
-            ? okProbe
-            : { ok: true, json: async () => ({ updatedAt: "t1" }) }
-        )
-      ) as unknown as typeof fetch;
+    stubFetch((url: string) =>
+      Promise.resolve(
+        url === "/api/sync"
+          ? okProbe
+          : { ok: true, json: async () => ({ updatedAt: "t1" }) }
+      )
+    );
   });
 
   it("does not let a push out before the first reconcile", async () => {
@@ -1561,13 +1560,11 @@ describe("a refusal the user has to clear", () => {
 
   /** A `fetch` that answers the sync probe and hands every PUT `refusal` */
   const refusing = (refusal: StubResponse | (() => StubResponse)) =>
-    (global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        url === "/api/sync"
-          ? Promise.resolve(okProbe)
-          : Promise.resolve(typeof refusal === "function" ? refusal() : refusal)
-      ) as unknown as typeof fetch);
+    stubFetch((url: string) =>
+      url === "/api/sync"
+        ? Promise.resolve(okProbe)
+        : Promise.resolve(typeof refusal === "function" ? refusal() : refusal)
+    );
 
   beforeEach(reset);
   afterEach(() => vi.restoreAllMocks());
@@ -1669,7 +1666,7 @@ describe("a refusal the user has to clear", () => {
     // mean the name is free. `push` raises nothing for a request that threw,
     // so `resolve` is what puts the original question back.
     let offline = false;
-    global.fetch = vi.fn().mockImplementation((url: string) => {
+    stubFetch((url: string) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (offline) return Promise.reject(new Error("offline"));
       return Promise.resolve({
@@ -1677,7 +1674,7 @@ describe("a refusal the user has to clear", () => {
         status: 409,
         json: async () => ({ reason: "name-taken" }),
       });
-    }) as unknown as typeof fetch;
+    });
     await signedIn();
     asWorkspace("p1", "mine");
 
@@ -1876,13 +1873,9 @@ describe("a project over a sync limit", () => {
 
   /** A `fetch` that answers the probe and hands every PUT `answer()` */
   const answering = (answer: () => StubResponse) =>
-    (global.fetch = vi
-      .fn()
-      .mockImplementation((url: string) =>
-        url === "/api/sync"
-          ? Promise.resolve(okProbe)
-          : Promise.resolve(answer())
-      ) as unknown as typeof fetch);
+    stubFetch((url) =>
+      Promise.resolve(url === "/api/sync" ? okProbe : answer())
+    );
 
   const accepted = (): StubResponse => ({
     ok: true,

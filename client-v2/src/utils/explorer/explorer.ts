@@ -8,6 +8,7 @@ import {
   limitKind,
   limitRule,
   limitSummary,
+  SYNCED_WORKSPACE_FILES,
 } from "../../entities/project";
 import {
   isMissing,
@@ -329,7 +330,7 @@ export class PgExplorer {
       this._refuseOverLimit(
         "create",
         checkFileWrite(
-          this._projectFiles(),
+          await this._syncedProjectFiles(),
           this.getRelativePath(fullPath),
           content
         )
@@ -1024,15 +1025,40 @@ export class PgExplorer {
   /* ----------------------------- State methods ---------------------------- */
 
   /**
-   * The current project's files as sync measures them: workspace-relative
-   * paths to contents, folders left out. `checkProjectLimits` drops the
-   * paths sync does not carry.
+   * The current project's files in the explorer's file map: workspace-relative
+   * paths to contents, folders left out. Holds no dot-prefixed file, so not
+   * the generated ones sync carries; `_syncedProjectFiles` adds those.
+   * `checkProjectLimits` drops the paths sync does not carry.
    */
   private static _projectFiles(): Record<string, string> {
     const files: Record<string, string> = {};
     for (const [path, item] of Object.entries(this.files)) {
       if (item.content === undefined) continue;
       files[this.getRelativePath(path)] = item.content;
+    }
+    return files;
+  }
+
+  /**
+   * `_projectFiles` plus the `SYNCED_WORKSPACE_FILES` on disk. Their names
+   * start with a dot, which `isItemNameValid` rejects, so they never enter
+   * the explorer's file map, yet sync counts them toward the project's size.
+   * A temporary project has no store and none of them.
+   */
+  private static async _syncedProjectFiles(): Promise<Record<string, string>> {
+    const files = this._projectFiles();
+    const workspacePath = this.getCurrentWorkspacePath();
+    if (this.isTemporary || !workspacePath) return files;
+
+    for (const path of SYNCED_WORKSPACE_FILES) {
+      try {
+        files[path] = await this.fs.readToString(
+          PgCommon.joinPaths(workspacePath, path)
+        );
+      } catch (e) {
+        // Not written yet: nothing to count
+        if (!isMissing(e)) throw e;
+      }
     }
     return files;
   }

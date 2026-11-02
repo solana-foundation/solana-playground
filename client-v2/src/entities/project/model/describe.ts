@@ -1,4 +1,4 @@
-import { type LimitExceeded, PROJECT_LIMITS } from "../limits.mjs";
+import type { LimitExceeded } from "../limits.mjs";
 
 /** Which limit a refusal names, as the telemetry events report it */
 export type LimitKind = "path" | "size" | "count" | "project";
@@ -101,16 +101,19 @@ export const limitBannerText = (limit: LimitExceeded) =>
   `${limitSummary(limit)} ${limitAction(limit)}`;
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, beforeAll } = import.meta.vitest;
 
   describe("entities/project/model/describe", () => {
-    const fileLimit = PROJECT_LIMITS.fileBytes;
+    let limits: typeof import("../limits.mjs").PROJECT_LIMITS;
+    beforeAll(async () => {
+      ({ PROJECT_LIMITS: limits } = await import("../limits.mjs"));
+    });
 
     it("names one large file with its size", () => {
       expect(
         limitBannerText({
           reason: "file-too-large",
-          limit: fileLimit,
+          limit: limits.fileBytes,
           paths: ["src/lib.rs"],
           sizes: { "src/lib.rs": 143_360 },
         })
@@ -124,9 +127,11 @@ if (import.meta.vitest) {
       expect(
         limitBannerText({
           reason: "file-too-large",
-          limit: fileLimit,
+          limit: limits.fileBytes,
           paths,
-          sizes: Object.fromEntries(paths.map((p) => [p, fileLimit + 1])),
+          sizes: Object.fromEntries(
+            paths.map((p) => [p, limits.fileBytes + 1])
+          ),
         })
       ).toBe(
         "a.rs, b.rs, c.rs and 2 more are over 128 KB. A file can be at most 128 KB. Shrink or remove them, then try again."
@@ -163,7 +168,7 @@ if (import.meta.vitest) {
       expect(
         limitBannerText({
           reason: "project-too-large",
-          limit: PROJECT_LIMITS.projectBytes,
+          limit: limits.projectBytes,
           size: 614_400,
         })
       ).toBe(
@@ -172,7 +177,7 @@ if (import.meta.vitest) {
       expect(
         limitSummary({
           reason: "project-too-large",
-          limit: PROJECT_LIMITS.projectBytes,
+          limit: limits.projectBytes,
           size: 524_289,
         })
       ).toBe("This project is 513 KB. A project can be at most 512 KB.");
@@ -184,14 +189,14 @@ if (import.meta.vitest) {
           { reason: "path-too-long", limit: 256, paths: ["x"] },
           {
             reason: "file-too-large",
-            limit: fileLimit,
+            limit: limits.fileBytes,
             paths: ["x"],
             sizes: {},
           },
           { reason: "too-many-files", limit: 50, count: 51 },
           {
             reason: "project-too-large",
-            limit: PROJECT_LIMITS.projectBytes,
+            limit: limits.projectBytes,
             size: 1,
           },
         ].map((limit) => limitRule(limit as LimitExceeded))
