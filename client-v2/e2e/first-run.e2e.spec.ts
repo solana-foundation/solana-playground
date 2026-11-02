@@ -96,12 +96,12 @@ test.describe("on a desktop window", () => {
 
   test("client-v2-first-run: Past a minute", async ({ page }) => {
     await page.clock.install();
-    // A build that never answers, so the stage stays on "Building..."
+    // A build that never answers, so the stage stays on "Building…"
     await page.route("**/build", () => undefined);
     await page.goto("/");
     await homeRegion(page).getByRole("button", { name: "Run it" }).click();
     await expect(
-      page.getByRole("heading", { name: "Building..." })
+      page.getByRole("heading", { name: "Building…" })
     ).toBeVisible(LONG);
 
     await page.clock.runFor(61_000);
