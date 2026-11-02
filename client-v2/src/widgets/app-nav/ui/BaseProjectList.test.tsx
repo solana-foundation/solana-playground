@@ -34,13 +34,18 @@ const project = (
   isLesson: false,
   pinned,
   marker,
+  progress: null,
 });
-const lesson = (name: string): ProjectEntry => ({
+const lesson = (
+  name: string,
+  progress: ProjectEntry["progress"] = null
+): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: true,
   pinned: false,
   marker: null,
+  progress,
 });
 
 const alpha = project("alpha");
@@ -117,7 +122,7 @@ describe("BaseProjectList", () => {
     expect(within(group).queryByRole("button", { name: "alpha" })).toBeNull();
   });
 
-  it("lists lessons among the projects, with no count, the open one marked", () => {
+  it("lists lessons among the projects, the open one marked", () => {
     draw();
     const projects = screen.getByRole("group", { name: "Projects" });
     expect(screen.queryByRole("group", { name: "Lessons" })).toBeNull();
@@ -126,7 +131,6 @@ describe("BaseProjectList", () => {
         .getAllByRole("button", { name: /^(alpha|beta|Hello Anchor)$/ })
         .map((b) => b.textContent)
     ).toEqual(["beta", "alpha", "Hello Anchor"]);
-    expect(within(projects).queryByText(/of 4/)).toBeNull();
     expect(
       within(projects)
         .getByRole("button", { name: "alpha" })
@@ -160,6 +164,79 @@ describe("BaseProjectList", () => {
     expect(description("local")).toBe("This browser");
     expect(description("behind")).toBe("Not synced");
     expect(description("alpha")).toBeNull();
+  });
+
+  it("shows a started lesson's page, describing its row by it", () => {
+    draw({
+      projects: [
+        lesson("Hello Anchor", { state: "started", page: 3, pages: 5 }),
+      ],
+    });
+    const row = screen.getByRole("button", { name: "Hello Anchor" });
+    expect(screen.getByText("3/5")).toBeTruthy();
+    const id = row.getAttribute("aria-describedby") ?? "";
+    expect(
+      id
+        .split(" ")
+        .map((part) => document.getElementById(part)?.textContent)
+        .join(" ")
+    ).toContain("Page 3 of 5");
+  });
+
+  it("shows a finished lesson's check, describing its row as completed", () => {
+    draw({ projects: [lesson("Hello Anchor", { state: "completed" })] });
+    const row = screen.getByRole("button", { name: "Hello Anchor" });
+    expect(
+      document.querySelector('[data-lesson-progress="completed"]')
+    ).toBeTruthy();
+    const id = row.getAttribute("aria-describedby") ?? "";
+    expect(document.getElementById(id)?.textContent).toBe("Completed");
+  });
+
+  it("shows no progress on a project, nor on a lesson not read yet", () => {
+    draw({ projects: [alpha, hello] });
+    expect(document.querySelector("[data-lesson-progress]")).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Hello Anchor" })
+        .getAttribute("aria-describedby")
+    ).toBeNull();
+  });
+
+  it("describes a lesson by its progress and its marker together", () => {
+    const both: ProjectEntry = {
+      name: "Hello Anchor",
+      id: "id-Hello Anchor",
+      isLesson: true,
+      pinned: false,
+      marker: "this-browser",
+      progress: { state: "started", page: 2, pages: 4 },
+    };
+    draw({ projects: [both] });
+    const ids = screen
+      .getByRole("button", { name: "Hello Anchor" })
+      .getAttribute("aria-describedby")
+      ?.split(" ");
+    expect(ids?.map((id) => document.getElementById(id)?.textContent)).toEqual([
+      "This browser",
+      "Page 2 of 4",
+    ]);
+  });
+
+  it("keeps a long name clear of the marker, the page and the pin together", () => {
+    const crowded: ProjectEntry = {
+      name: "A lesson with a long name",
+      id: "id-crowded",
+      isLesson: true,
+      pinned: true,
+      marker: "not-synced",
+      progress: { state: "started", page: 12, pages: 12 },
+    };
+    draw({ projects: [crowded] });
+    expect(
+      screen.getByRole("button", { name: "A lesson with a long name" })
+        .className
+    ).toContain("pr-40");
   });
 
   it("draws Not synced with a warning dot, beside the pin", () => {

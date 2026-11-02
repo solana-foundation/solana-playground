@@ -267,6 +267,88 @@ const toasterTheme = () =>
     .querySelector("[data-sonner-toaster]")!
     .getAttribute("data-sonner-theme");
 
+describe("the progress bar", () => {
+  const barOf = (text: string) =>
+    screen
+      .getByText(text)
+      .closest("[data-sonner-toast]")
+      ?.querySelector<HTMLElement>('[data-slot="toast-progress"]') ?? null;
+
+  it("should drain over the default duration, hidden from assistive technology", () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "d" });
+
+    const bar = barOf("message d");
+    expect(bar).toBeTruthy();
+    expect(bar?.style.animationDuration).toBe(`${DEFAULT_TOAST_DURATION}ms`);
+    expect(bar?.closest('[aria-hidden="true"]')).toBeTruthy();
+  });
+
+  it("should drain over a toast's own duration", () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "t", duration: 3000 });
+
+    expect(barOf("message t")?.style.animationDuration).toBe("3000ms");
+  });
+
+  it("should name the keyframe the stylesheet defines", async () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "k" });
+
+    expect(barOf("message k")?.className).toContain("pg-toast-progress");
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(`${process.cwd()}/src/index.css`, "utf8");
+    expect(css).toContain("@keyframes pg-toast-progress");
+  });
+
+  it("should start again when a toast is shown again by its id", () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "again" });
+    const first = barOf("message again");
+
+    show({ name: "demo", id: "again" });
+
+    // A new element: its animation runs from full, as Sonner's timer does
+    const second = barOf("message again");
+    expect(second).toBeTruthy();
+    expect(second).not.toBe(first);
+  });
+
+  it("should drain over the default for a duration that is not a positive number", () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "bad", duration: -1 });
+
+    expect(barOf("message bad")?.style.animationDuration).toBe(
+      `${DEFAULT_TOAST_DURATION}ms`
+    );
+  });
+
+  it("should stop while the page is hidden, as Sonner's timer does", () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "h" });
+    const hidden = vi.spyOn(document, "hidden", "get").mockReturnValue(true);
+
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(barOf("message h")?.style.animationPlayState).toBe("paused");
+
+    hidden.mockReturnValue(false);
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    expect(barOf("message h")?.style.animationPlayState).toBe("");
+  });
+
+  it("should not show on a persistent toast", () => {
+    render(<ToastHost />);
+    show({ name: "demo", id: "p", duration: "persistent" });
+
+    expect(screen.getByText("message p")).toBeTruthy();
+    expect(barOf("message p")).toBeNull();
+  });
+});
+
 describe("the toaster's theme", () => {
   // The host is still mounted here and its observer reports in a microtask
   afterEach(async () => {

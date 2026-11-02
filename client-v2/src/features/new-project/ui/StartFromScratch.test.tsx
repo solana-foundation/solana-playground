@@ -110,6 +110,20 @@ it("refuses an invalid name and makes nothing until it is edited", async () => {
   expect(start()).toHaveProperty("disabled", false);
 });
 
+it("marks a typed name that passes the format check, and only that", () => {
+  render(<StartFromScratch />);
+  expect(nameField().getAttribute("data-state")).toBeNull();
+
+  fireEvent.change(nameField(), { target: { value: "my-project" } });
+  expect(nameField().getAttribute("data-state")).toBe("valid");
+
+  fireEvent.change(nameField(), { target: { value: "a (b)" } });
+  expect(nameField().getAttribute("data-state")).toBeNull();
+
+  fireEvent.change(nameField(), { target: { value: "   " } });
+  expect(nameField().getAttribute("data-state")).toBeNull();
+});
+
 it("makes one project for a double press", async () => {
   let release!: () => void;
   utils.getDefaultFiles.mockReturnValue(

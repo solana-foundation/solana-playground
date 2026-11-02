@@ -1,4 +1,8 @@
+import type { TutorialProgress } from "@/entities/tutorial";
 import type { SyncMarker } from "@/features/persistence";
+
+/** How far a started lesson is, as its row shows it */
+export type LessonProgress = Exclude<TutorialProgress, { state: "new" }>;
 
 export interface ProjectEntry {
   name: string;
@@ -8,15 +12,21 @@ export interface ProjectEntry {
   pinned: boolean;
   /** Where its work lives, when not in the account (`syncMarkerOf`) */
   marker: SyncMarker | null;
+  /**
+   * A lesson's page or its completion. `null` means show nothing: a project,
+   * or a lesson whose progress is not read yet
+   */
+  progress: LessonProgress | null;
 }
 
 /**
- * The navigation's one list, as the prototype draws it: a started lesson is
- * a row among the projects, drawn like one. `isLesson` changes only how it
- * opens and what its menu offers: opening a lesson has to go through
- * `PgTutorial.open`, which restores its route and page, and a lesson cannot
- * be renamed, since it is recognised by its workspace name. Pinned entries lead; otherwise the
- * explorer's order stands.
+ * The navigation's one list, as the prototype draws it: a started lesson is a
+ * row among the projects, drawn like one. `isLesson` changes only how it opens
+ * and what its menu offers: opening a lesson has to go through
+ * `PgTutorial.open`, which restores its route and page, and a lesson cannot be
+ * renamed, since it is recognised by its workspace name. A lesson also carries
+ * its progress, which its row shows at its end. Pinned entries lead; otherwise
+ * the explorer's order stands.
  */
 export const listProjects = (
   names: readonly string[],
@@ -25,17 +35,22 @@ export const listProjects = (
     isLesson: (name: string) => boolean;
     /** The last marker read for the workspace, by name */
     markerOf: (name: string) => SyncMarker | null;
+    /** A tutorial's progress, by its name, which is its workspace's */
+    progressOf: (name: string) => TutorialProgress;
   },
   pins: readonly string[]
 ) => {
   const projects = names.map((name): ProjectEntry => {
     const id = deps.idOf(name) ?? null;
+    const isLesson = deps.isLesson(name);
+    const progress = isLesson ? deps.progressOf(name) : null;
     return {
       name,
       id,
-      isLesson: deps.isLesson(name),
+      isLesson,
       pinned: id !== null && pins.includes(id),
       marker: deps.markerOf(name),
+      progress: progress && progress.state !== "new" ? progress : null,
     };
   });
   return pinnedFirst(projects);
@@ -60,6 +75,10 @@ if (import.meta.vitest) {
       isLesson: (name: string) => name.startsWith("Hello "),
       markerOf: (name: string): SyncMarker | null =>
         name === "beta" ? "this-browser" : null,
+      progressOf: (name: string): TutorialProgress =>
+        name === "Hello Anchor"
+          ? { state: "started", page: 3, pages: 5 }
+          : { state: "new" },
     };
 
     describe("listProjects", () => {
@@ -92,7 +111,29 @@ if (import.meta.vitest) {
           isLesson: false,
           pinned: false,
           marker: null,
+          progress: null,
         });
+      });
+
+      it("carries a lesson's progress, and none for a project", () => {
+        const projects = listProjects(
+          ["beta", "Hello Anchor", "Hello Native"],
+          {
+            idOf: deps.idOf,
+            isLesson: deps.isLesson,
+            markerOf: deps.markerOf,
+            // A project whose name a finished tutorial also has: not a lesson
+            progressOf: (name) =>
+              name === "beta" ? { state: "completed" } : deps.progressOf(name),
+          },
+          []
+        );
+        expect(projects.map((p) => [p.name, p.progress])).toEqual([
+          ["beta", null],
+          ["Hello Anchor", { state: "started", page: 3, pages: 5 }],
+          // Not read yet: nothing to show rather than a guess
+          ["Hello Native", null],
+        ]);
       });
 
       it("carries each project's sync marker", () => {

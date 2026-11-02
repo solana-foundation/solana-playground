@@ -1,4 +1,5 @@
 import {
+  Check,
   Copy,
   CornerDownLeft,
   Download,
@@ -36,7 +37,7 @@ import { StatusDot } from "@/shared/ui/status-dot";
 import { cn } from "@/shared/lib/utils";
 import type { SyncMarker } from "@/features/persistence";
 import type { ProjectAction } from "../model/project-action";
-import type { ProjectEntry } from "../model/project-entries";
+import type { LessonProgress, ProjectEntry } from "../model/project-entries";
 
 type Via = "click" | "key";
 
@@ -157,6 +158,13 @@ const Row = ({
   // focus back to its trigger on close would blur the field at once
   const keepFocus = useRef(false);
   const markerId = useId();
+  const progressId = useId();
+  // The marker and the progress describe the row and leave its name alone:
+  // the row is found by its name
+  const describedBy =
+    [entry.marker && markerId, entry.progress && progressId]
+      .filter(Boolean)
+      .join(" ") || undefined;
   const isCurrent = entry.name === list.current;
   const Glyph = entry.isLesson ? GraduationCap : Folder;
 
@@ -184,11 +192,10 @@ const Row = ({
       <SidebarMenuButton
         isActive={isCurrent}
         aria-current={isCurrent ? "page" : undefined}
-        // The marker describes the row and leaves its name alone: the row is
-        // found by its name
-        aria-describedby={entry.marker ? markerId : undefined}
-        // Room for the marker, so a long name truncates before it
-        className={entry.marker ? "pr-24" : undefined}
+        aria-describedby={describedBy}
+        // Room for the marker and the progress, so a long name truncates
+        // before them
+        className={roomFor(entry)}
         onClick={() => list.onAction(entry, "open", "click")}
       >
         <Glyph
@@ -198,15 +205,20 @@ const Row = ({
         />
         <span>{entry.name}</span>
       </SidebarMenuButton>
-      {(entry.pinned || entry.marker) && (
+      {(entry.pinned || entry.marker || entry.progress) && (
         <span
           className={cn(
             "pointer-events-none absolute top-1.5 right-7 flex items-center gap-1.5 text-xs text-muted-foreground group-focus-within/menu-item:hidden group-hover/menu-item:hidden",
-            // On a phone's taller rows the marker sits on the name's line
-            entry.marker && "max-md:top-1/2 max-md:-translate-y-1/2"
+            // On a phone's taller rows what sits at the row's end keeps to
+            // the name's line
+            (entry.marker || entry.progress) &&
+              "max-md:top-1/2 max-md:-translate-y-1/2"
           )}
         >
           {entry.marker && <Marker id={markerId} marker={entry.marker} />}
+          {entry.progress && (
+            <Progress id={progressId} progress={entry.progress} />
+          )}
           {entry.pinned && (
             <span title="Pinned">
               <Pin aria-hidden className="size-3" />
@@ -313,6 +325,47 @@ const Marker = ({ id, marker }: { id: string; marker: SyncMarker }) => (
     {MARKER_TEXT[marker]}
   </span>
 );
+
+/**
+ * A lesson's page as "3/5", or a check once it is finished. The digits and
+ * the check are for the eye and hidden from screen readers; the words beside
+ * them carry the id that describes the row, so the row keeps its name
+ */
+const Progress = ({
+  id,
+  progress,
+}: {
+  id: string;
+  progress: LessonProgress;
+}) => {
+  if (progress.state === "completed") {
+    return (
+      <span data-lesson-progress="completed" title="Completed">
+        <Check aria-hidden className="size-3" />
+        <span id={id} className="sr-only">
+          Completed
+        </span>
+      </span>
+    );
+  }
+  return (
+    <span data-lesson-progress="started" className="tabular-nums">
+      <span aria-hidden>{`${progress.page}/${progress.pages}`}</span>
+      <span id={id} className="sr-only">
+        {`Page ${progress.page} of ${progress.pages}`}
+      </span>
+    </span>
+  );
+};
+
+/** Right padding for what sits at the row's end, so the name stops short */
+const roomFor = (entry: ProjectEntry) => {
+  // The marker, "12/12" and a pin side by side
+  if (entry.marker && entry.progress) return entry.pinned ? "pr-40" : "pr-36";
+  if (entry.marker) return "pr-24";
+  if (entry.progress) return entry.pinned ? "pr-20" : "pr-16";
+  return undefined;
+};
 
 const Item = ({
   icon: Icon,

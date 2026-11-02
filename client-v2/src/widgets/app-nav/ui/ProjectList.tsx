@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
+import { useTutorialProgress } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
@@ -85,13 +86,15 @@ export type ProjectListProps = {
 
 /**
  * The navigation's project list, connected: the explorer's workspaces, the
- * device's pins, and what each menu item does. A failed action tells the
+ * device's pins, each project's sync marker, each lesson's progress, and what
+ * each menu item does. A failed action tells the
  * user, is logged for the team, and is counted.
  */
 const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const [pins, setPins] = useState(readPins);
   const markers = useSyncMarkers();
+  const progressOf = useTutorialProgress();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   // How the rename was asked for: it is counted on commit, with that `via`
@@ -165,6 +168,7 @@ const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
       idOf: (name) => PgExplorer.workspaceIdOf(name),
       isLesson: (name) => PgTutorial.isWorkspaceTutorial(name),
       markerOf: (name) => markers.get(name) ?? null,
+      progressOf,
     },
     livePins
   );
