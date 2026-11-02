@@ -112,6 +112,14 @@ vi.mock("./use-sync-markers", () => ({
   useSyncMarkers: () => syncMarkers.current,
 }));
 
+// Each tutorial's progress, by name; its reading is
+// `use-tutorial-progress.test.tsx`'s, here only where it lands
+const progress = vi.hoisted(() => new Map<string, unknown>());
+vi.mock("@/entities/tutorial", () => ({
+  useTutorialProgress: () => (name: string) =>
+    progress.get(name) ?? { state: "new" },
+}));
+
 import { PINS_KEY } from "../model/pins";
 import ProjectList from "./ProjectList";
 
@@ -152,6 +160,7 @@ beforeEach(() => {
   initLogger({ providers: [logged] });
 });
 afterEach(() => {
+  progress.clear();
   localStorage.clear();
   resetTelemetry();
   resetLogger();
@@ -340,6 +349,14 @@ describe("ProjectList", () => {
       "alpha",
       app.PgExplorer.fs
     );
+  });
+
+  it("shows a started lesson's page on its row, and none on a project's", () => {
+    progress.set("Hello Anchor", { state: "started", page: 3, pages: 5 });
+    progress.set("alpha", { state: "completed" });
+    draw();
+    expect(screen.getByText("3/5")).toBeTruthy();
+    expect(document.querySelectorAll("[data-lesson-progress]")).toHaveLength(1);
   });
 
   it("opens a project by switching, a lesson through the tutorial", async () => {

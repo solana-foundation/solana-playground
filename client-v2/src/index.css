@@ -250,6 +250,16 @@
   }
 }
 
+/* A timed toast's bar, drained over its duration (widgets/overlays) */
+@keyframes pg-toast-progress {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 /* The loading components' keyframes (Loading/*) */
 @keyframes pg-spin {
   0% {

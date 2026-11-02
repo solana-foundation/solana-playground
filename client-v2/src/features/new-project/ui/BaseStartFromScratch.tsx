@@ -36,16 +36,22 @@ export interface BaseStartFromScratchProps {
   /** The name a project gets when none is typed */
   placeholder: string;
   start: Start;
+  /**
+   * A typed name passes the format check: the field gets its success edge.
+   * Whether it is taken is known only on Start
+   */
+  valid?: boolean;
   /** Something else runs: Start waits for it */
   held?: boolean;
   onStart: () => void;
 }
 
 /**
- * A new project in three choices, as the prototype draws it: a framework
- * (the choice that matters, so it gets the gradient ring), a name, then
- * Start. One row from `md`, stacked below it, where every choice is a
- * fingertip tall in the phone's type, as the prototype's phone draws it.
+ * A new project in three choices, as the prototype draws it: a framework (the
+ * choice that matters, so it gets the gradient ring), a name, then Start, with
+ * what is wrong with the name before the field. One row from `md`, stacked
+ * below it, where every choice is a fingertip tall in the phone's type, as the
+ * prototype's phone draws it.
  */
 const BaseStartFromScratch = ({
   frameworks,
@@ -55,6 +61,7 @@ const BaseStartFromScratch = ({
   onName,
   placeholder,
   start,
+  valid = false,
   held = false,
   onStart,
 }: BaseStartFromScratchProps) => {
@@ -116,13 +123,21 @@ const BaseStartFromScratch = ({
         ))}
       </Segmented>
 
-      <div className="flex flex-col gap-1.5">
+      {/* The message comes before the field, as the prototype and the old
+          client draw it: on its left in the one row, so the field keeps the
+          chips' centre line, and above it when the row stacks */}
+      <div className="flex flex-col gap-1.5 md:flex-row md:items-center md:gap-2">
+        {/* A failed start's message can be long: it wraps in its own column */}
+        <FieldError id={errorId} className="md:max-w-56">
+          {error}
+        </FieldError>
         <div className="flex gap-2">
           <Input
             aria-label="Project name"
             aria-invalid={error ? true : undefined}
             aria-describedby={error ? errorId : undefined}
-            className="min-w-0 flex-1 md:w-48 md:flex-none max-md:h-12 max-md:px-3.5 max-md:text-body"
+            data-state={valid && !error ? "valid" : undefined}
+            className="min-w-0 data-[state=valid]:border-success flex-1 md:w-48 md:flex-none max-md:h-12 max-md:px-3.5 max-md:text-body"
             value={name}
             placeholder={placeholder}
             onChange={(e) => onName(e.target.value)}
@@ -142,7 +157,6 @@ const BaseStartFromScratch = ({
             Start &rarr;
           </BrandButton>
         </div>
-        <FieldError id={errorId}>{error}</FieldError>
       </div>
     </div>
   );
