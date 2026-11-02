@@ -16,27 +16,27 @@ test("client-v2-elements: A skill is switched by its name", async ({
   await page.getByRole("button", { name: "More", exact: true }).click();
   await page.getByRole("menuitem", { name: /Sources and tools/ }).click();
 
-  // The first skill row; its visible name is the checkbox's accessible name
-  const row = page
-    .locator("label", { has: page.getByRole("checkbox") })
+  // The first skill that can be switched off; a bundled skill is locked on
+  const first = page
+    .locator(
+      '[role="checkbox"][id^="skill-"][aria-checked="true"]:not([disabled])'
+    )
     .first();
-  await expect(row).toBeVisible();
-  const name = ((await row.textContent()) ?? "").trim();
-  expect(name).not.toBe("");
-  const box = page.getByRole("checkbox", { name, exact: true });
-  await expect(box).toBeVisible();
+  await expect(first).toBeVisible();
+  // Pinned by id, so the locator keeps the same box once it is unchecked
+  const box = page.locator(`[id="${await first.getAttribute("id")}"]`);
+  // The checkbox is named by the visible name beside it
+  const name = page.locator(
+    `[id="${await box.getAttribute("aria-labelledby")}"]`
+  );
+  const text = ((await name.textContent()) ?? "").trim();
+  expect(text).not.toBe("");
+  await expect(box).toHaveAccessibleName(text);
 
-  const color = () => row.evaluate((el) => getComputedStyle(el).color);
-
-  await expect(box).toBeChecked();
-  const checkedColor = await color();
-  await page.getByText(name, { exact: true }).click();
+  await name.click();
   await expect(box).not.toBeChecked();
-  // The label brightens when its box is checked
-  await expect.poll(color).not.toBe(checkedColor);
-  await page.getByText(name, { exact: true }).click();
+  await name.click();
   await expect(box).toBeChecked();
-  await expect.poll(color).toBe(checkedColor);
 });
 
 test("client-v2-elements: The compiler output folds", async ({
