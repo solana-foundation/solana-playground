@@ -1,4 +1,5 @@
-import { createFramework } from "../create";
+import { PgFramework } from "../../utils";
+import { createFramework, getIsCurrentCommon } from "../create";
 
 export const native = createFramework({
   name: "Native",
@@ -16,17 +17,18 @@ export const native = createFramework({
     // where it reads the user keypair and the program keypair but the goal
     // is to make everything that works in a local Node environment work in
     // Playground without any modifications.
+    //
     // TODO: Implement `fs` and `os` modules.
-    // url: "https://github.com/solana-developers/program-examples/tree/main/basics/hello-solana/native",
-    url: "https://github.com/solana-developers/program-examples/tree/main/basics/hello-solana/native/program",
+    // TODO: Also include tests after they are supported
+    url: "https://github.com/solana-foundation/program-examples/tree/6d134a7a978dfe1c96b2b0e9602e029d0226596c/basics/hello-solana/native/program",
   },
+  legacy: { version: "1.16.24" },
   getIsCurrent: (files) => {
-    for (const [path, content] of files) {
-      if (!path.endsWith(".rs")) continue;
-      const hasEntryPointMacro = content.includes("entrypoint!");
-      if (hasEntryPointMacro) return true;
-    }
-
-    return false;
+    // Native dependencies and `entrypoint!` can be used by other frameworks too
+    const matchesOther = PgFramework.all
+      .filter((f) => f.name !== "Native")
+      .some((f) => f.getIsCurrent(files));
+    if (matchesOther) return false;
+    return getIsCurrentCommon(files, ".rs", "entrypoint!");
   },
 });

@@ -63,9 +63,9 @@ fn build(args: &Args) -> Result<()> {
     let template = args.template;
 
     // Write files
-    let program_path = template.program_path();
+    let program_dir = template.program_dir();
     for (path, content) in &args.files {
-        let path = program_path.join(path);
+        let path = program_dir.join(path);
         let parent_path = path
             .parent()
             .ok_or_else(|| anyhow!("No parent: {path:?}"))?;
@@ -74,17 +74,24 @@ fn build(args: &Args) -> Result<()> {
     }
 
     // Build
-    let status = template.processor().build(&args.build_args)?;
+    let status = template.build()(&args.build_args)?;
     if !status.success() {
         // Compilation errors are expected; others are not
         return Ok(());
+    }
+
+    // Allow help output
+    if let Some(first) = args.build_args.first() {
+        if matches!(first.as_str(), "--help" | "-h") {
+            return Ok(());
+        }
     }
 
     // Move files to the expected output location
     //
     // 1. Move binary
     let binary_path = 'outer: {
-        for entry in fs::read_dir(template.binary_path())? {
+        for entry in fs::read_dir(template.binary_dir())? {
             let path = entry?.path();
             if path.extension().map(|ext| ext == "so").unwrap_or_default() {
                 break 'outer path;
@@ -97,13 +104,9 @@ fn build(args: &Args) -> Result<()> {
     fs::rename(&binary_path, &args.binary_path)?;
 
     // 2. Move IDL
-    if let Some(idl_path) = template.idl_path() {
-        let Ok(dir) = fs::read_dir(idl_path) else {
-            // Do not treat not having an IDL as an error case even when the template specifies
-            // `Some` for `idl_path` because the legacy template uses the same template for both
-            // Anchor and Native.
-            //
-            // TODO: Consider adding a field to toggle making IDL required or not.
+    if let Some(idl_dir) = template.idl_dir() {
+        let Ok(dir) = fs::read_dir(idl_dir) else {
+            // Not an error because IDL generation can be skipped
             return Ok(());
         };
 
@@ -119,7 +122,11 @@ fn build(args: &Args) -> Result<()> {
                 }
             }
 
-            return Err(anyhow!("Unable to find IDL"));
+            // Not an error because IDL generation can be skipped.
+            //
+            // NOTE: Frameworks can create the IDL directory by default even when the IDL generation
+            // step is getting skipped.
+            return Ok(());
         };
 
         fs::create_dir_all(args.idl_path.parent().expect("Always has parent"))?;

@@ -46,15 +46,23 @@ export as namespace ${name};`,
 };
 
 /**
+ * Declare a module if it hasn't been declared already.
+ *
  * Some declaration files need to be declared for them to be referenced by other
  * declaration files.
  *
  * @param packageName package name to be referenced in declaration files
- * @param module contents of the module
+ * @param mod contents of the module
  * @returns module declaration for the given package
  */
-export const declareModule = (packageName: string, module: string = "") => {
-  return `declare module "${packageName}" { ${module} }`;
+export const declareModule = (packageName: string, mod: string = "") => {
+  if (
+    mod.includes(`declare module "${packageName}"`) ||
+    mod.includes(`declare module '${packageName}'`)
+  ) {
+    return mod;
+  }
+  return `declare module "${packageName}" { ${mod} }`;
 };
 
 /**
@@ -73,43 +81,74 @@ export const declarePackage = async (
 ): Promise<Disposable | undefined> => {
   if (cache.has(packageName)) return;
 
+  // TODO: Remove (`PgSettings.experimental.unstable`)
   if (opts?.empty) {
     return monaco.languages.typescript.typescriptDefaults.addExtraLib(
       declareModule(packageName)
     );
   }
 
+  // Cache eagerly to limit concurrent requests to the same package
   cache.add(packageName);
 
-  const types = await getTypes(packageName).catch((e) => {
-    console.log("Failed to get types:", packageName, e);
-  });
+  // Catch errors but do not log them because this can produce hundreds of
+  // useless logs
+  const types = await getTypes(packageName).catch(() => {});
   if (!types) {
+    // This may result in unnecessary runs, but not clearing the cache sometimes
+    // skips declarations when they are needed, e.g. after a new installation
     cache.delete(packageName);
     return;
   }
 
-  const { files, dependencies } = types;
-  if (files.length > 1) {
-    // Type root is always the first index (sorted by the server)
-    const typeRootFile = files[0];
-    const parts = typeRootFile[0].split("/");
-    typeRootFile[0] = parts
-      .map((part, i) => (i === parts.length - 1 ? "old-index.d.ts" : part))
-      .join("/");
-    const [oldIndexPath] = typeRootFile;
+  const { manifest, files } = types;
 
-    // Renaming exports allows us to export everything
-    files.push([
-      oldIndexPath.replace("old-index", "index"),
-      declareModule(
-        packageName,
-        `export * from "${oldIndexPath
-          .replace("node_modules/", "")
-          .replace(".d.ts", "")}"`
-      ),
-    ]);
-  }
+  // Type root is always the first index (sorted by the server)
+  const typeRootFile = files[0];
+
+  // Make the package discoverable by declaring it as a module
+  const parts = typeRootFile[0].split("/");
+  typeRootFile[0] = parts
+    .map((part, i) => (i === parts.length - 1 ? "old-index.d.ts" : part))
+    .join("/");
+  const [oldIndexPath] = typeRootFile;
+
+  const oldIndexCodePath = oldIndexPath
+    // TODO: Remove
+    .replace(PgSettings.experimental.unstable ? "" : "node_modules/", "")
+    // Always use `<package>` for `@types/<package>` imports to avoid:
+    //
+    // ```
+    // Cannot import type declaration files. Consider importing 'mocha/old-index'
+    // instead of '@types/mocha/old-index'.
+    // ```
+    .replace("@types/", "")
+    .replace(".d.ts", "");
+
+  // Always declare `@types/<package>` as `<package>` to avoid:
+  //
+  // ```
+  // File 'file:///node_modules/@types/bn.js/index.d.ts' is not a module.
+  // ```
+  const declaredPackageName = packageName.replace("@types/", "");
+
+  // Fix being unable to export CommonJS modules:
+  //
+  // ```
+  // Module '"file:///node_modules/@types/bn.js/old-index"' uses 'export =' and
+  // cannot be used with 'export *'.
+  // ```
+  const commonJsExport = /export\s+=\s+(\w+)/.exec(typeRootFile[1])?.[1];
+  const mod = commonJsExport
+    ? `import ${commonJsExport} from "${oldIndexCodePath}";
+       export default ${commonJsExport};`
+    : `export * from "${oldIndexCodePath}";`;
+
+  // Renaming exports allows us to export everything
+  files.push([
+    oldIndexPath.replace("old-index", "index"),
+    declareModule(declaredPackageName, mod),
+  ]);
 
   // TODO: Monaco TS worker historically had a problem about directory imports
   // and exports not working without an explicit `/index` suffix. See
@@ -120,9 +159,8 @@ export const declarePackage = async (
 
   // Add all files
   const disposables = files.map(([path, content]) => {
-    // Declare module on `index.d.ts` if it's not declared
-    if (files.length === 1 && !content.includes("declare module")) {
-      content = declareModule(packageName, content);
+    if (PgSettings.experimental.unstable) {
+      path = PgCommon.joinPaths("node_modules", path);
     }
 
     return monaco.languages.typescript.typescriptDefaults.addExtraLib(
@@ -136,8 +174,9 @@ export const declarePackage = async (
   // transitive dependencies because that results in excessive amount of
   // requests without adding much benefit.
   if (!opts?.transitive) {
+    const deps = Object.keys(PgJsPackage.getAllDependencies(manifest));
     const transitiveDisposables = await Promise.all(
-      dependencies.map((dep) => declarePackage(dep, { transitive: true }))
+      deps.map((dep) => declarePackage(dep, { transitive: true }))
     );
     disposables.push(...transitiveDisposables.filter(PgCommon.isNonNullish));
   }
@@ -159,14 +198,23 @@ const getTypes = async (
     const files = await PgCommon.fetchJson(
       `/packages/${packageName}/types.json`
     );
-    const dependencies = await PgCommon.fetchJson(
+    const dependencies: string[] = await PgCommon.fetchJson(
       `/packages/${packageName}/deps.json`
     );
-    return { files, dependencies };
+    return {
+      files,
+      manifest: {
+        dependencies: dependencies.reduce((acc, cur) => {
+          acc[cur] = "0.0.0";
+          return acc;
+        }, {} as Record<string, string>),
+      },
+    };
   }
 
   return await PgJsPackage.getTypes(packageName);
 };
 
+// TODO: Cache should also include version
 /** Declared package names cache */
 const cache = new Set<string>();

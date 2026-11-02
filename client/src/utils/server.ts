@@ -1,8 +1,7 @@
-import type { Idl } from "@coral-xyz/anchor";
-
 import { PgCommon } from "./common";
 import { PgSettings } from "./settings";
 import type { TupleFiles } from "./explorer";
+import type { Idl } from "./program-interaction";
 
 /** Rust `Option` type */
 type Option<T> = T | null;
@@ -13,7 +12,10 @@ interface BuildRequest {
   files: TupleFiles;
   /** UUID of the program */
   uuid?: Option<string>;
-  /** Build flags */
+  /** Arguments to pass to the build command */
+  args?: Option<string[]>;
+  // TODO: Remove `PgSettings.experimental.unstable`
+  /** @deprecated build flags */
   flags?: Option<{
     /** Whether to enable Anchor `seeds` feature */
     seedsFeature?: Option<boolean>;
@@ -58,7 +60,11 @@ export class PgServer {
    */
   static async build(req: BuildRequest) {
     interface BuildResponse {
-      /** Build output */
+      /** Whether the build was successful */
+      success: boolean;
+      /** Build output to `stdout` regardless of the compilation status */
+      stdout: string;
+      /** Build output to `stderr` regardless of the compilation status (main output) */
       stderr: string;
       /** UUID of the program */
       uuid: Option<string>;

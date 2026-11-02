@@ -1,4 +1,4 @@
-import { createFramework } from "../create";
+import { createFramework, getIsCurrentCommon } from "../create";
 
 export const seahorse = createFramework({
   name: "Seahorse",
@@ -10,15 +10,8 @@ export const seahorse = createFramework({
   },
   githubExample: {
     name: "Transfer SOL",
-    url: "https://github.com/solana-developers/program-examples/tree/main/basics/transfer-sol/seahorse",
+    url: "https://github.com/solana-foundation/program-examples/tree/4b8594ec0416ac01c8cfbfa72ea8214c09cf0544/basics/transfer-sol/seahorse",
   },
-  getIsCurrent: (files) => {
-    for (const [path, content] of files) {
-      if (!path.endsWith(".py")) continue;
-      const isSeahorse = content.includes("seahorse.prelude");
-      if (isSeahorse) return true;
-    }
-
-    return false;
-  },
+  legacy: { version: "0.2.0" },
+  getIsCurrent: (files) => getIsCurrentCommon(files, ".py", "seahorse.prelude"),
 });

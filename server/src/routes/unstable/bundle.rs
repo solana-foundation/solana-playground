@@ -6,7 +6,7 @@ use blake3::{Hash, Hasher};
 use serde::{Deserialize, Serialize};
 use solpg_server::{
     package::{get_out_path, BUNDLE_FILE, LOCK_FILE, MANIFEST_FILE, PACKAGES_DIR, TYPES_FILE},
-    utils::{get_image_name, Files},
+    utils::Files,
     Result, Sandbox,
 };
 use tokio::{
@@ -132,16 +132,26 @@ pub async fn bundle(
         }
 
         let output = Sandbox::new()
-            .image(get_image_name("bundle"))
+            .image(Sandbox::get_image_name("bundle"))
             .user("solpg")
-            // TODO: Allow networking only during the installation step
-            .allow_networking()
             .limits(state.config.limits.sandbox)
+            .proxy([
+                "registry.npmjs.org",
+                "registry.yarnpkg.com",
+                "github.com",
+                "codeload.github.com",
+            ])
             .copy(
                 format!("{}/.", temp_host_path.display()),
                 format!("container:{PACKAGES_DIR}"),
             )
-            .command(Command::new("bundle").args(payload.command.unwrap_or_default()))
+            .command(
+                Command::new("bundle")
+                    .arg("install")
+                    .args(payload.command.unwrap_or_default()),
+            )
+            .disable_proxy()
+            .command(Command::new("bundle").arg("build"))
             .copy(
                 format!("container:{}/.", container_path.display()),
                 &temp_host_path,

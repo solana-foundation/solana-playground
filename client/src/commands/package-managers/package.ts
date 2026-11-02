@@ -1,5 +1,6 @@
-import { PgCommand } from "../../utils";
+import { PgCommand, PgJsPackage } from "../../utils";
 import { createArgs, createCmd, createOptions, createSubcmd } from "../create";
+import { checkExperimentalUnstable } from "./common";
 
 /**
  * Manage packages.
@@ -16,13 +17,18 @@ import { createArgs, createCmd, createOptions, createSubcmd } from "../create";
 export const packageManager = createCmd({
   name: "package",
   description: "Manage packages",
+  preChecks: checkExperimentalUnstable,
   subcommands: [
     createSubcmd({
       // TODO: Alias
       name: "install",
       description: "Install packages",
       // TODO: Add the relevant manifest and lock file if non-existent (ask?)
-      handle: proxy(),
+      handle: async (input) => {
+        const packageManager = PgJsPackage.getPackageManager();
+        const tokens = input.tokens.slice(1);
+        return await PgCommand[packageManager].execute(...tokens);
+      },
     }),
 
     createSubcmd({
@@ -53,12 +59,18 @@ export const packageManager = createCmd({
         },
       ]),
       handle: async (input) => {
-        const packageManager = getPackageManager();
+        const packageManager = PgJsPackage.getPackageManager();
         const tokens = [];
         switch (packageManager) {
+          case "npm": {
+            tokens.push("install", ...input.args.packages);
+            if (input.options.dev) tokens.push("--save-dev");
+            if (input.options.peer) tokens.push("--save-peer");
+            if (input.options.optional) tokens.push("--save-optional");
+            break;
+          }
           case "yarn": {
-            tokens.push("add");
-            tokens.push(...input.args.packages);
+            tokens.push("add", ...input.args.packages);
             if (input.options.dev) tokens.push("--dev");
             if (input.options.peer) tokens.push("--peer");
             if (input.options.optional) tokens.push("--optional");
@@ -79,7 +91,21 @@ export const packageManager = createCmd({
           multiple: true,
         },
       ]),
-      handle: proxy(),
+      handle: async (input) => {
+        const packageManager = PgJsPackage.getPackageManager();
+        const tokens = [];
+        switch (packageManager) {
+          case "npm": {
+            tokens.push("uninstall", ...input.tokens.slice(2));
+            break;
+          }
+          case "yarn": {
+            tokens.push(...input.tokens.slice(1));
+          }
+        }
+
+        return await PgCommand[packageManager].execute(...tokens);
+      },
     }),
 
     createSubcmd({
@@ -92,32 +118,21 @@ export const packageManager = createCmd({
           multiple: true,
         },
       ]),
-      handle: proxy("upgrade"),
+      handle: async (input) => {
+        const packageManager = PgJsPackage.getPackageManager();
+        const tokens = [];
+        switch (packageManager) {
+          case "npm": {
+            tokens.push(...input.tokens.slice(1));
+            break;
+          }
+          case "yarn": {
+            tokens.push("upgrade", ...input.tokens.slice(2));
+          }
+        }
+
+        return await PgCommand[packageManager].execute(...tokens);
+      },
     }),
   ],
 });
-
-/**
- * Create a proxy handler with the configured package manager.
- *
- * @param args command argument tokens to pass
- * @returns the proxy handler
- */
-function proxy(...args: string[]) {
-  return async (input: { tokens: string[] }) => {
-    const packageManager = getPackageManager();
-    return await PgCommand[packageManager].execute(
-      ...args,
-      ...input.tokens.slice(1 + args.length)
-    );
-  };
-}
-
-// TODO: `npm`
-// TODO: `pnpm`
-/**
- * Get the configured package manager.
- *
- * @returns the configured package manager
- */
-const getPackageManager = () => "yarn" as const;

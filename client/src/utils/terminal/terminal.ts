@@ -8,7 +8,7 @@ import { PgShell } from "./shell";
 import { PgTty } from "./tty";
 import { PgCommon } from "../common";
 import type { CommandManager, Prefixes, PrintOptions } from "./types";
-import type { Methods, ClassReturnType, SyncOrAsync } from "../types";
+import type { ClassReturnType, MethodParameters, SyncOrAsync } from "../types";
 
 export class PgTerminal {
   /** All terminal event names */
@@ -68,7 +68,12 @@ export class PgTerminal {
     await PgTerminal.run({ enable: [] });
   }
 
-  /** Log terminal messages from anywhere. */
+  /** Print to terminal from anywhere (WASM supported). */
+  static async print(msg: any, opts?: PrintOptions) {
+    await PgTerminal.run({ print: [msg, opts] });
+  }
+
+  /** Print to terminal with a newline character `\n` appended from anywhere. */
   static async println(msg: any, opts?: PrintOptions) {
     await PgTerminal.run({ println: [msg, opts] });
   }
@@ -118,7 +123,7 @@ export class PgTerminal {
    */
   static async run<
     R extends ClassReturnType<PgTerm, keyof M>,
-    M extends Methods<PgTerm>
+    M extends MethodParameters<PgTerm>
   >(data: M) {
     return await PgCommon.sendAndReceiveCustomEvent<R, M>(
       PgCommon.getStaticEventNames(PgTerminal.events.STATIC).run,
@@ -134,7 +139,7 @@ export class PgTerminal {
    * @returns the formatted list
    */
   static formatList(
-    list: Array<string[] | { name: string; description?: string }>,
+    list: Array<string[] | Record<string, any>>,
     opts?: { align?: "x" | "y" }
   ) {
     const { align } = PgCommon.setDefault(opts, { align: "x" });
@@ -316,31 +321,7 @@ export class PgTerm {
   /** Focus terminal and scroll to cursor. */
   focus() {
     this._xterm.focus();
-    this.scrollToCursor();
-  }
-
-  /** Scroll terminal to wherever the cursor currently is. */
-  scrollToCursor() {
-    const scrollableEl = document
-      .getElementsByClassName("xterm-viewport")
-      .item(0);
-    if (!scrollableEl) throw new Error("XTerm viewport not found");
-
-    // Find how much to scroll because of our cursor
-    const rect = scrollableEl.getBoundingClientRect();
-    const cursorOffsetY =
-      (this._tty.buffer.cursorY / this._tty.size.rows) * rect.height;
-
-    let scrollX = rect.left;
-    let scrollY = rect.top + cursorOffsetY + 10;
-    if (scrollX < 0) {
-      scrollX = 0;
-    }
-    if (scrollY > document.body.scrollHeight) {
-      scrollY = document.body.scrollHeight;
-    }
-
-    scrollableEl.scrollTo(scrollX, scrollY);
+    this.scrollToBottom();
   }
 
   /** Print a message. */
@@ -437,17 +418,17 @@ export class PgTerm {
         : O["choice"]["items"][number]
       : string
   > {
-    // Avoid `this.focus()` here because it calls `scrollToCursor`, which may
-    // desync the DOM scroll from `xterm`'s state and leave the next render at
-    // the wrong position.
-    this._xterm.focus();
-    this.scrollToBottom();
+    this.focus();
 
     let convertedMsg = msg;
     const disposables = [];
     if (opts?.choice) {
       // Show multi choice items
-      convertedMsg += " (options: ',' separated numbers e.g. 0,1)";
+      convertedMsg += ` (expected input: ${
+        opts.choice.multiple
+          ? "',' separated option numbers e.g. 0,1"
+          : "option number e.g. 0"
+      })`;
       const items = opts.choice.items;
       convertedMsg += items.reduce(
         (acc, cur, i) => acc + `\n[${i}] - ${cur}`,

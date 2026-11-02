@@ -42,18 +42,47 @@ export type FrameworkParam<N extends string> = {
   defaultOpenFile?: string;
 
   /**
+   * Legacy version information.
+   *
+   * This only applies to frameworks that can be built using the `legacy`
+   * template; newer frameworks can safely omit this field.
+   */
+  legacy?: {
+    /**
+     * Legacy version (used in the `legacy` template).
+     *
+     * This is the program crate version (or equivalent), not the tooling
+     * version (e.g. CLI).
+     */
+    version?: string;
+    /** Lazy load the legacy framework files, defaults to `./files` */
+    getFiles?: () => Promise<{
+      /** Default framework files to create on a new project */
+      files: TupleFiles;
+    }>;
+  };
+
+  /**
    * Get whether the given files have this framework's layout.
    *
    * @param files files with either playground's layout or framework's layout
    * @returns whether the given files belong to this framework
    */
-  getIsCurrent: (files: TupleFiles) => SyncOrAsync<boolean>;
+  getIsCurrent: (files: TupleFiles) => boolean;
 
-  /** Lazy load default framework files, defaults to `./files` */
-  getDefaultFiles?: () => Promise<{
-    /** Default framework files to create on a new project */
-    files: TupleFiles;
-  }>;
+  /** Available versions */
+  versions?: string[];
+
+  /**
+   * Get the template files of the project.
+   *
+   * The files are expected to be in the original non-playground layout. They
+   * will get converted using `convertToPlayground` implementation as needed.
+   *
+   * @param version version to get the templates for (must exist in `versions`)
+   * @returns the template files (in the original layout)
+   */
+  getTemplateFiles?: (version: string) => Promise<TupleFiles>;
 
   /** Lazy load the **to** playground conversion module, defaults to `./import` */
   import?: () => Promise<{
@@ -77,14 +106,20 @@ export type FrameworkParam<N extends string> = {
      */
     convertFromPlayground: (files: TupleFiles) => SyncOrAsync<TupleFiles>;
     /** Markdown text to show after conversion */
-    readme: string;
+    readme?: string;
   }>;
 };
 
 /** Created framework */
 export type Framework<N extends string = string> = RequiredKey<
   FrameworkParam<N>,
-  "icon" | "getIsCurrent" | "getDefaultFiles" | "import" | "export"
+  | "icon"
+  | "getIsCurrent"
+  | "legacy.getFiles"
+  | "versions"
+  | "getTemplateFiles"
+  | "import"
+  | "export"
 >;
 
 export class PgFramework {
@@ -107,9 +142,9 @@ export class PgFramework {
    * @param files files to check, defaults to current project files
    * @returns the framework
    */
-  static async getFromFiles(files: TupleFiles = PgExplorer.getAllFiles()) {
+  static getFromFiles(files: TupleFiles = PgExplorer.getAllFiles()) {
     for (const framework of this.all) {
-      const isCurrent = await framework.getIsCurrent(files);
+      const isCurrent = framework.getIsCurrent(files);
       if (isCurrent) return framework;
     }
   }
@@ -121,7 +156,7 @@ export class PgFramework {
    * @returns the playground layout converted files
    */
   static async toPlaygroundLayout(files: TupleFiles) {
-    const framework = await this.getFromFiles(files);
+    const framework = this.getFromFiles(files);
     if (!framework) throw new Error("Could not identify framework");
 
     const { convertToPlayground } = await framework.import();
@@ -165,9 +200,10 @@ export class PgFramework {
     await recursivelyGetItems(workspacePath);
 
     // Convert from playground layout to framework layout
-    let readme: string | undefined;
+    type Readme = Awaited<ReturnType<Framework["export"]>>["readme"];
+    let readme: Readme;
     if (opts?.convert) {
-      const framework = await this.getFromFiles(files);
+      const framework = this.getFromFiles(files);
       if (!framework) throw new Error("Could not identify framework");
 
       const frameworkFrom = await framework.export();
@@ -179,6 +215,6 @@ export class PgFramework {
     const blob = await PgCompression.createZip(files);
     PgCommon.export(PgExplorer.currentWorkspaceName + ".zip", blob);
 
-    return { readme } as { readme: C extends true ? string : undefined };
+    return { readme } as { readme: C extends true ? Readme : undefined };
   }
 }
