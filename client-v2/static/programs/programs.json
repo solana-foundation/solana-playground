@@ -1,0 +1,34 @@
+[
+  {
+    "name": "spl-memo",
+    "description": "A simple program that validates a string of UTF-8 encoded characters and logs it in the transaction log.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/memo/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL"]
+  },
+  {
+    "name": "spl-name-service",
+    "description": "A spl program for issuing and managing ownership of: domain names, Solana Pubkeys, URLs, twitter handles, ipfs cid's, metadata, etc...",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/name-service/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL"]
+  },
+  {
+    "name": "spl-noop",
+    "description": "Does nothing.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/account-compression/programs/noop",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL"]
+  },
+  {
+    "name": "spl-stake-pool",
+    "description": "A program for pooling together SOL to be staked by an off-chain agent running a Delegation Bot which redistributes the stakes across the network and tries to maximize censorship resistance and rewards.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/stake-pool/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL", "Staking"]
+  }
+]

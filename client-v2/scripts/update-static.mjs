@@ -10,6 +10,9 @@
  * `ASSETS_DIR` replaces that source with a clone of the assets repository, as
  * `client-v2/Dockerfile` does at the commit in `scripts/assets-commit.txt`.
  *
+ * Files under `client-v2/static` then replace their upstream copies
+ * (`static-overlay.mjs`).
+ *
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
  */
@@ -17,6 +20,7 @@ import { execFileSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
 
+import { overlayStatic } from "./static-overlay.mjs";
 import { CLIENT_PATH, exists } from "./utils.mjs";
 
 const TIMESTAMPS_FILE = "tutorial-timestamps.json";
@@ -66,6 +70,13 @@ for (const file of sourceFiles) {
   await fs.copyFile(path.join(SOURCE_PATH, file), to);
 }
 
+// The fork's own copies of upstream files (the curated program gallery). After
+// the mirror, so the fork's copy wins.
+const overlaid = await overlayStatic(
+  path.join(CLIENT_PATH, "static"),
+  DEST_PATH
+);
+
 // craco derives each tutorial's date from git history. The destination is not a
 // git repo of its own, so capture the real dates from the source while we can.
 const tutorialsPath = path.join(SOURCE_PATH, "tutorials");
@@ -93,5 +104,8 @@ await fs.writeFile(
 const commit = git(["rev-parse", "--short", "HEAD"], SOURCE_PATH).trim();
 console.log(
   `Synced ${sourceFiles.length} files from ${SOURCE_PATH}@${commit}` +
-    `, dated ${Object.keys(timestamps).length} tutorials`
+    `, dated ${Object.keys(timestamps).length} tutorials` +
+    `, overlaid ${overlaid.length} from client-v2/static (${overlaid.join(
+      ", "
+    )})`
 );
