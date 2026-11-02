@@ -51,7 +51,10 @@ jobs:
     name: sweep preview branches
     # Runs only where PREVIEW_REPOSITORY names this repository and a provider
     # is configured (see preview.yml's header).
+    # A manual run may pick any branch, whose copy of this job could drop
+    # anything; only master's runs
     if: >-
+      github.ref == 'refs/heads/master' &&
       (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
       github.repository == vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest

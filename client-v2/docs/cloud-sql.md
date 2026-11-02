@@ -250,8 +250,8 @@ npx vercel env rm DATABASE_URL preview --yes
 ```
 
 Run from a directory linked to the project (`make vercel-link-preview`). For Preview the CLI may ask for a Git
-branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. `SYNC_ENABLED=true` on Preview turns
-sync on once step 11 passes.
+branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. Leave `SYNC_ENABLED` off on
+Preview until step 11 has seen the database answer.
 
 ## 10. Migrate the shared preview database
 
@@ -261,8 +261,15 @@ memberships from step 7 at once; a failure names the step that broke.
 
 ## 11. Check the previews
 
-- An unlabelled PR's preview answers `{ "enabled": true, "db": "ok" }` on `GET /api/sync`.
-- A PR labelled `preview` gets the comment naming `solpg_preview_pr_<n>`, and its preview answers the same.
+1. An unlabelled PR's preview answers `{ "enabled": false, "db": "ok" }` on `GET /api/sync`: the database answers,
+   with sync still off.
+2. Set `SYNC_ENABLED=true` on Preview (`add SYNC_ENABLED preview true`) and redeploy that PR's preview from the
+   dashboard or with a new push. It answers `{ "enabled": true, "db": "ok" }`.
+
+Then, with sync on:
+
+- A PR labelled `preview` gets the comment naming `solpg_preview_pr_<n>`, and its preview answers
+  `{ "enabled": true, "db": "ok" }`.
 - Removing the label drops the database; the comment says so.
 - A dry run of Actions → preview-sweep lists nothing for an open labelled PR and never lists `solpg_preview`.
 
@@ -340,9 +347,17 @@ grant "user:$OPERATOR" solpg
 gcloud sql users create "$OPERATOR" --instance=solpg --type=cloud_iam_user
 ```
 
-Then, through the proxy as an existing operator: `GRANT "vercel-preview@<project id>.iam" TO "<their e-mail>";`
-on `solpg-preview`, and `GRANT "vercel-production@<project id>.iam" TO "<their e-mail>";` on `solpg`. Removing one
-reverses each line: `REVOKE`, `gcloud sql users delete`, and `gcloud projects remove-iam-policy-binding` with the
+Then, through the proxy as an existing operator, on `solpg-preview`:
+
+```sql
+GRANT "vercel-preview@<project id>.iam" TO "<their e-mail>";
+-- create-preview-db creates the database as the login user, for a laptop deploy with DB_PROVIDER=cloud-sql
+ALTER ROLE "<their e-mail>" CREATEDB;
+```
+
+and on `solpg`, for production migrations: `GRANT "vercel-production@<project id>.iam" TO "<their e-mail>";`. Both
+statements on `solpg-preview` need what step 7's do, so the note there on PostgreSQL 16 applies. Removing an
+operator reverses each line: `REVOKE`, `gcloud sql users delete`, and `gcloud projects remove-iam-policy-binding` with the
 same condition.
 
 ## Checks

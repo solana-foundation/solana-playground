@@ -28,7 +28,8 @@ own takes the label.
 
 It carries the migrations on `master` and no others.
 [`preview-shared-db.yml`](../../.github/workflows/preview-shared-db.yml) migrates it on every push to `master` that changes `client-v2/db/migrations`, and on a manual run (Actions → preview-shared-db →
-Run workflow). No workflow that runs on a PR migrates it: a `pull_request` run executes the PR's own workflow and
+Run workflow, with `master` selected: a run from any other branch is skipped, so no branch's migrations reach the
+shared database). No workflow that runs on a PR migrates it: a `pull_request` run executes the PR's own workflow and
 migrations, and a PR's schema on the shared database would break every other preview.
 
 So a PR that adds a migration gets a preview whose code expects a schema the shared database lacks. `preview.yml`
@@ -70,7 +71,7 @@ the copy is restored as that user, so the application owns every table it uses.
 [`preview-sweep.yml`](../../.github/workflows/preview-sweep.yml) is the safety net for a teardown that was cancelled
 or failed. Daily, it drops every `solpg_preview_pr_<n>` older than its `MIN_AGE_MINUTES` whose PR is no longer
 open and labelled. A database's age is read from that comment, finished or not; one without a stamp is kept. The sweep lists only names matching `^solpg_preview_pr_[0-9]+$`, so it never touches
-`solpg_preview` or a laptop's database. Run by hand it defaults to a dry run.
+`solpg_preview` or a laptop's database. Run by hand, from `master` only, it defaults to a dry run.
 
 ## Configuration
 

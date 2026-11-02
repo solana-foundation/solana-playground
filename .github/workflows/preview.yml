@@ -440,18 +440,27 @@ jobs:
           sparse-checkout: .github/scripts
 
       - name: Look for migrations
+        env:
+          # How the notice starts, so a later run can tell it from the
+          # deploy's and the teardown's comments
+          NOTICE: "**This PR changes migrations.**"
         run: |
           # The REST list pages to 3000 files; `gh pr view --json files` stops at 100.
           files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename')
           migrations=$(grep '^client-v2/db/migrations/' <<<"$files" || true)
           if [ -z "$migrations" ]; then
             echo "No file under client-v2/db/migrations changed."
+            # A notice from an earlier push no longer holds; any other
+            # comment is left as it is
+            [ "$READ_ONLY" = true ] ||
+              bash .github/scripts/preview-comment.sh --replace-if "$NOTICE" "$PR" \
+                "This PR no longer changes migrations, so its automatic preview on the shared database \`solpg_preview\` has the schema it expects."
             exit 0
           fi
           # Literal backticks, one Markdown list item per path
           # shellcheck disable=SC2001,SC2016
           list=$(sed 's/.*/- `&`/' <<<"$migrations")
-          body="**This PR changes migrations.** Its automatic preview reads the shared preview database \`solpg_preview\`, which has only the migrations on \`master\`, so it may fail where the PR's code expects these:
+          body="$NOTICE Its automatic preview reads the shared preview database \`solpg_preview\`, which has only the migrations on \`master\`, so it may fail where the PR's code expects these:
 
           $list
 

@@ -38,7 +38,10 @@ concurrency:
 jobs:
   migrate:
     name: migrate the shared preview database
-    if: vars.PREVIEW_DB_PROVIDER == 'cloud-sql' && github.repository == vars.PREVIEW_REPOSITORY
+    # A manual run may pick any branch; only master's migrations go here
+    if: >-
+      github.ref == 'refs/heads/master' &&
+      vars.PREVIEW_DB_PROVIDER == 'cloud-sql' && github.repository == vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
