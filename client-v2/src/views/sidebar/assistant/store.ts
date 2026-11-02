@@ -99,7 +99,8 @@ export type ChatItem =
       origin?: BackendParams;
       /**
        * `streaming` while a turn writes it, `cut-off` when its request failed
-       * mid-reply; absent once it finished. See `PgAssistant.isCutOff`.
+       * or a switch of backend cut its turn mid-reply; absent once it
+       * finished. See `PgAssistant.isCutOff`.
        */
       state?: "streaming" | "cut-off";
     })
@@ -663,11 +664,16 @@ export class PgAssistant {
    * Unregister the turn.
    *
    * Settles the replies the turn opened: `streaming` is dropped from each,
-   * so only one a reload or a closed tab left behind reads as cut off.
+   * so only one a reload or a closed tab left behind reads as cut off. When
+   * the turn was cut, its last reply with text is marked `cut-off` instead:
+   * a switch of backend (`connect`) cuts the turn and keeps the thread, and
+   * that partial reply would otherwise read as finished, with nothing to try
+   * again. The replies before it finished before a tool step, and one with
+   * no text shows nothing to mark, as in `useTurn`'s own `markCutOff`.
    *
    * @param controller the one passed to `beginTurn`
    * @returns `true` when the turn ran to its end uncut; `false` when a closed
-   * thread or `stopTurn` cut it off, or `controller` is not the turn
+   * thread, `stopTurn` or a switch of backend cut it off, or `controller` is not the turn
    * registered. On `false` the caller must not push the thread open now as
    * this turn's result: it holds nothing of the turn.
    */
@@ -677,12 +683,19 @@ export class PgAssistant {
     if (turn.overdue) clearTimeout(turn.overdue);
     PgAssistant._turn = null;
     // Not written here: the caller sets the status next, which writes it
-    for (const id of turn.replies) {
-      const item = PgAssistant._items.find((i) => i.id === id);
-      if (item?.kind === "assistant" && item.state === "streaming") {
-        delete item.state;
-        stamp(item);
-      }
+    const streaming = turn.replies
+      .map((id) => PgAssistant._items.find((i) => i.id === id))
+      .filter(
+        (i): i is Extract<ChatItem, { kind: "assistant" }> =>
+          i?.kind === "assistant" && i.state === "streaming"
+      );
+    const cutOff = turn.cut
+      ? streaming.filter((i) => i.text).at(-1)
+      : undefined;
+    for (const item of streaming) {
+      if (item === cutOff) item.state = "cut-off";
+      else delete item.state;
+      stamp(item);
     }
     return !turn.cut;
   }
@@ -891,7 +904,8 @@ export class PgAssistant {
   }
 
   /**
-   * Whether a reply was cut off: marked so when its request failed, or still
+   * Whether a reply was cut off: marked so when its request failed or a
+   * switch of backend cut its turn (`endTurn`), or still
    * marked streaming while no turn in this tab writes it, which is what a
    * reload or a closed tab mid-reply leaves stored.
    *
@@ -3011,6 +3025,40 @@ if (import.meta.vitest) {
           expect(reply(id).state).toBeUndefined();
           expect(versionOf(reply(id))).toBeGreaterThan(streamed);
           expect(PgAssistant.isCutOff(reply(id))).toBe(false);
+        });
+
+        /** Connects a backend other than the current one, which cuts the turn */
+        const switchBackend = () =>
+          PgAssistant.connect({
+            id: "anthropic",
+            apiKey: `${PgAssistant.connection?.apiKey ?? "sk"}-next`,
+          });
+
+        it("reads as cut off when a switch of backend cut its turn", () => {
+          const id = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(id, "Hel");
+          // A different backend cuts the turn and keeps the thread
+          switchBackend();
+          PgAssistant.endTurn(turn);
+
+          expect(reply(id).state).toBe("cut-off");
+          expect(PgAssistant.isCutOff(reply(id))).toBe(true);
+        });
+
+        it("marks only the last reply with text when a switch of backend cut its turn", () => {
+          // A tool step between them: the first reply finished before it
+          const finished = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(finished, "Let me read lib.rs");
+          const partial = PgAssistant.startAssistantMessage();
+          PgAssistant.appendToAssistantMessage(partial, "It decla");
+          // Opened, no text yet: nothing on screen to call cut off
+          const empty = PgAssistant.startAssistantMessage();
+          switchBackend();
+          PgAssistant.endTurn(turn);
+
+          expect(reply(finished).state).toBeUndefined();
+          expect(reply(partial).state).toBe("cut-off");
+          expect(reply(empty).state).toBeUndefined();
         });
 
         it("reads as cut off once marked, and stays so when the turn ends", () => {
