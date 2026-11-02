@@ -4,7 +4,7 @@
 // `api/mcp.mjs` passes `process.env` and a test passes a map.
 
 import { MCP_CATALOGUE } from "./catalogue.mjs";
-import { validateServers } from "./entry.mjs";
+import { isRemoteUrl, validateServers } from "./entry.mjs";
 
 /** @typedef {import("./types").McpServerEntry} McpServerEntry */
 /** @typedef {Readonly<Record<string, string | undefined>>} Env */
@@ -103,9 +103,7 @@ export const composeServers = ({ env, servers, signedIn }) => {
 
   const validated = validateServers(resolved);
   // A relative url is this site's gateway to the browser; the gateway has no base to resolve it against
-  const relative = validated.find(
-    (server) => !server.url.startsWith("https://")
-  );
+  const relative = validated.find((server) => !isRemoteUrl(server.url));
   if (relative) {
     throw new Error(
       `MCP_SERVERS: server "${relative.id}" needs an https:// url; a relative url works only in the browser's list.`

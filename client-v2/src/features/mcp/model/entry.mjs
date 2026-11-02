@@ -13,6 +13,13 @@ import { isProtectionProvider, PROTECTION_PROVIDERS } from "./protection.mjs";
 const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
 /**
+ * Whether `url` names a remote server, as opposed to a path on this site's gateway.
+ *
+ * @param {string} url
+ */
+export const isRemoteUrl = (url) => url.startsWith("https://");
+
+/**
  * @param {string} message
  * @returns {never}
  */
@@ -128,7 +135,7 @@ export const validateServers = (parsed, reservedIds = []) => {
     }
     // https for a remote server; a leading `/` is our own gateway
     const target = url.trim();
-    if (!target.startsWith("https://") && !target.startsWith("/")) {
+    if (!isRemoteUrl(target) && !target.startsWith("/")) {
       fail(`${where}: "url" must start with https:// or / for the gateway.`);
     }
     if (name !== undefined && typeof name !== "string") {
