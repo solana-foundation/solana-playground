@@ -1,10 +1,12 @@
 # assistant-tool-registry Specification
 
 ## Purpose
-Defines the one declared set of built-in tools, skills and default MCP
-upstreams the assistant offers, readable by both the browser panel and the
-server rail, so the default agent and a user on their own key get the same
-assistant.
+Defines the one declared set of built-in tools the assistant offers,
+readable by both the browser panel and the server rail, so the default agent
+and a user on their own key get the same assistant. The skills and MCP
+servers a deployment offers are the sources catalogue's
+(`shared/config/sources.mjs`, change `sources-catalogue`), not this
+registry's.
 
 Its scenarios are checked by unit tests, not in the browser, so they carry
 the `(manual)` mark: `src/entities/agent-tools/model/registry.test.mjs`
@@ -37,15 +39,15 @@ whether it needs the user's approval. Names SHALL be unique.
 
 The registry SHALL be importable by plain Node ESM from server code through
 the slice's server door, using no path alias, no TypeScript syntax and no
-browser-only module, and SHALL expose the same declarations, skill catalogue
-and default MCP upstreams as its browser door.
+browser-only module, and SHALL expose the same declarations as its browser
+door.
 
 #### Scenario: Node imports the server door (manual)
 
 - **WHEN** a test running in the Node environment imports the slice's
   `server.mjs`
-- **THEN** it gets the tool declarations, the skill catalogue and the default
-  MCP upstreams, equal to what the browser door exports
+- **THEN** it gets the tool declarations, equal to what the browser door
+  exports
 
 ### Requirement: The panel offers exactly the declared tools
 
@@ -86,36 +88,3 @@ the project, so the mark always says what the tool does.
 
 - **WHEN** a unit test runs each built-in tool not marked as needing approval
 - **THEN** none of them shows an approval card or writes, builds or deploys
-
-### Requirement: Skills come from the registry's catalogue
-
-The skill picker, the skill catalogue in the system prompt, and the skill
-tools SHALL list the skills the registry declares, in its order. A skill
-whose files ship in the bundle SHALL have its content bound by id in the
-browser, and a bundled catalogue entry with no bound content SHALL fail the
-unit tests.
-
-#### Scenario: The panel lists the declared skills (manual)
-
-- **WHEN** the panel builds its skill list
-- **THEN** it holds the registry's skills, in order, with their ids, names and
-  descriptions unchanged
-
-#### Scenario: Bundled skill without content (manual)
-
-- **WHEN** a bundled skill is declared with no content bound to its id
-- **THEN** a unit test fails naming the skill
-
-### Requirement: The registry names the default MCP upstreams
-
-The registry SHALL declare the MCP upstreams every deployment offers without
-configuration, each with an id usable as a tool-name prefix, a display name
-and an `https` URL. The public Solana Developer MCP SHALL be one of them, with
-id `solana` and URL `https://mcp.solana.com/mcp`. Upstreams that need
-deployment secrets are not defaults and are not declared.
-
-#### Scenario: The Solana upstream is a default (manual)
-
-- **WHEN** a unit test reads the default MCP upstreams
-- **THEN** it finds `solana`, named "Solana Developer MCP", at
-  `https://mcp.solana.com/mcp`, and every id matches `^[a-zA-Z0-9_-]+$`
