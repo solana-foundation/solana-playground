@@ -16,7 +16,10 @@ as soon as the Root Directory points at `client-v2`.
    [Conversation and project sync](#conversation-and-project-sync):
    - `DATABASE_URL` — the pooled URL of production's Neon database, the same one
      `migrate-production-db` migrates. It is in a Neon project of its own,
-     never the preview project ([Neon preview databases](neon.md)).
+     never the preview project ([Neon preview databases](neon.md)). After the
+     move to Cloud SQL, `DB_PROVIDER=cloud-sql` and the `CLOUD_SQL_*` and
+     `GCP_*` variables replace it ([Cloud SQL for client-v2](cloud-sql.md),
+     steps 13 and 14).
    - `AUTH_OAUTH_PROXY_SECRET` — the same value as on Preview, and never equal
      to either `AUTH_SECRET` ([Sign-in on previews](#sign-in-on-previews)).
    - `SYNC_ENABLED=true`.

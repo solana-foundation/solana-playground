@@ -16,8 +16,8 @@ runs on Cloud SQL. A laptop deploy picks its provider with `DB_PROVIDER` (`url`,
 The application reaches the instance through the `cloud-sql` provider (`src/features/persistence/model/providers/`)
 with the Preview deployment's Vercel OIDC token, exchanged for the `vercel-preview` service account; the workflows
 reach it through the Cloud SQL Auth Proxy as the `github-ci` service account. Neither identity holds a role on the
-production instance, and the provider refuses the production database name outside Production. The Google Cloud
-setup behind both is task 2.1 of the `cloud-sql` OpenSpec change (`openspec/changes/cloud-sql/tasks.md`).
+production instance, and the provider refuses the production database name outside Production. The Google Cloud,
+GitHub, and Vercel setup behind both is in [Cloud SQL for client-v2](cloud-sql.md).
 
 ## The shared database
 
@@ -122,4 +122,5 @@ scripts/db/cloud-sql/drop-preview-db --pr <number>                            # 
 ## Known gaps
 
 - **Not yet run against Google Cloud.** The scripts were exercised against a local Postgres through a stub proxy;
-  the federation, the proxy's IAM login, and the workflows wait for the setup in task 2.1.
+  the federation, the proxy's IAM login, and the workflows wait for the setup in [Cloud SQL for
+  client-v2](cloud-sql.md).
