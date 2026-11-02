@@ -16,6 +16,7 @@ export const EVENT_PREFIXES = {
   "session-footer": "session",
   "settings-page": "settings",
   "setup-list": "setup",
+  status: "status",
 } as const;
 
 export type EventPrefix = typeof EVENT_PREFIXES[keyof typeof EVENT_PREFIXES];

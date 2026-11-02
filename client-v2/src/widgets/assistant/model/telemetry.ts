@@ -8,8 +8,10 @@ export type AssistantEvents = {
   assistant_model_picked: { provider: ModelProvider; via: "menu" | "dialog" };
   /** The user changed the reasoning effort in the composer's menu. */
   assistant_effort_changed: { effort: Effort };
-  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected or the Get set up checklist. */
-  assistant_connect_opened: { via: "menu" | "model" | "send" | "setup" };
+  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, the Get set up checklist or the status indicators' Connect a model (`widgets/status`). */
+  assistant_connect_opened: {
+    via: "menu" | "model" | "send" | "setup" | "status";
+  };
   /** The user stopped a turn in progress with the stop button. */
   assistant_turn_stopped: NoParams;
   /** The default backend's probe failed and the default was treated as absent; `reason` says whether the request, the status (not a 404, which is a deployment without the agent) or the body. */

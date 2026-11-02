@@ -10,14 +10,10 @@ import {
   SidebarMenuItem,
 } from "@/shared/ui/sidebar";
 import { Spinner } from "@/shared/ui/spinner";
-import { StatusDot } from "@/shared/ui/status-dot";
-import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import {
   accountLabel,
   accountLines,
   accountUser,
-  clusterLabel,
-  NOT_ANSWERING,
   lineText,
 } from "../model/account";
 import type { AccountLine, AccountView } from "../model/account";
@@ -33,9 +29,8 @@ const LINE_STYLE: Record<AccountLine["kind"], string> = {
 
 export interface BaseSessionFooterProps {
   account: AccountView;
-  settingsOpen: boolean;
-  /** Opens the settings on the cluster; the page covers the row while open */
-  onOpenCluster: () => void;
+  /** The status row (`widgets/status`), over the account row */
+  status: ReactNode;
   onCancelSignIn: () => void;
   /** The account menu's content (`BaseAccountMenu`) */
   menu: ReactNode;
@@ -45,13 +40,13 @@ export interface BaseSessionFooterProps {
 }
 
 /**
- * The navigation's foot, as the prototype draws it: which cluster, and who
- * you are. Each row is one button; the account row opens the account menu.
+ * The navigation's foot, as the prototype draws it: the status row (which
+ * cluster, the AI, the Rust analyzer), and who you are. The account row opens
+ * the account menu.
  */
 const BaseSessionFooter = ({
   account,
-  settingsOpen,
-  onOpenCluster,
+  status,
   onCancelSignIn,
   menu,
   onMenuOpenChange,
@@ -59,92 +54,67 @@ const BaseSessionFooter = ({
 }: BaseSessionFooterProps) => {
   const { primary, line } = accountLines(account);
   return (
-    <SidebarMenu className="w-full">
-      <SidebarMenuItem>
-        <SidebarMenuButton
-          aria-label={clusterLabel(
-            account.cluster,
-            "Change cluster, currently "
-          )}
-          aria-expanded={settingsOpen}
-          // Tests find the controls that open the settings by it
-          {...{ [SETTINGS_TRIGGER_ATTR]: "" }}
-          onClick={onOpenCluster}
-        >
-          {/* In the 16 px glyph box every row's icon has, so its label
-              lines up with theirs */}
-          <span className="grid size-4 shrink-0 place-items-center">
-            <StatusDot
-              variant={account.cluster.down ? "error" : "success"}
-              size="lg"
-            />
-          </span>
-          {/* "Devnet", as the prototype writes it; the name stays lower case
-              in the label the screen reader reads. Down, the row is Spec 08's
-              NET-02 chip, "Devnet · not answering", in place of the old
-              "Switch to localnet?" toast */}
-          <span className="truncate">
-            <span className="capitalize">{account.cluster.name}</span>
-            {account.cluster.down && ` · ${NOT_ANSWERING}`}
-          </span>
-        </SidebarMenuButton>
-      </SidebarMenuItem>
-      <SidebarMenuItem>
-        <DropdownMenu onOpenChange={onMenuOpenChange}>
-          <DropdownMenuTrigger asChild>
-            <SidebarMenuButton
-              ref={accountRef}
-              size="lg"
-              // The prototype's 40 px account row, under the 28 px rows; on
-              // a phone a fingertip tall in the body type, its avatar at 32
-              className="h-10 text-[0.8125rem] max-md:h-12 max-md:gap-3 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8 max-md:[&_[data-slot=avatar-fallback]_svg]:size-4"
-              aria-label={accountLabel(account)}
-              aria-busy={account.sending || undefined}
-            >
-              <AccountAvatar
-                image={accountUser(account)?.image ?? null}
-                sending={account.sending}
-              />
-              <span className="flex min-w-0 flex-col leading-tight">
-                <span className="truncate font-medium text-foreground">
-                  {primary}
-                </span>
-                {line && (
-                  <span
-                    // A failure is announced; its reason is in full in the menu
-                    role={line.kind === "failed" ? "status" : undefined}
-                    title={line.kind === "failed" ? line.message : undefined}
-                    className={cn("truncate text-xs", LINE_STYLE[line.kind])}
-                  >
-                    {lineText(line)}
-                  </span>
-                )}
-              </span>
-              {account.sending ? (
-                <Spinner aria-label="Sending feedback" className="ml-auto" />
-              ) : (
-                <ChevronsUpDown
-                  aria-hidden
-                  className="ml-auto text-muted-foreground"
+    // The status row sits where the prototype draws "● Devnet"
+    <div className="flex w-full flex-col gap-1">
+      {status}
+      <SidebarMenu className="w-full">
+        <SidebarMenuItem>
+          <DropdownMenu onOpenChange={onMenuOpenChange}>
+            <DropdownMenuTrigger asChild>
+              <SidebarMenuButton
+                ref={accountRef}
+                size="lg"
+                // The prototype's 40 px account row, under the 28 px rows; on
+                // a phone a fingertip tall in the body type, its avatar at 32
+                className="h-10 text-[0.8125rem] max-md:h-12 max-md:gap-3 max-md:text-body max-md:[&_[data-slot=avatar]]:size-8 max-md:[&_[data-slot=avatar-fallback]_svg]:size-4"
+                aria-label={accountLabel(account)}
+                aria-busy={account.sending || undefined}
+              >
+                <AccountAvatar
+                  image={accountUser(account)?.image ?? null}
+                  sending={account.sending}
                 />
-              )}
-            </SidebarMenuButton>
-          </DropdownMenuTrigger>
-          {menu}
-        </DropdownMenu>
-        {account.session.status === "pending" && (
-          // The popup cannot be asked whether it is still open once GitHub has
-          // taken it over, so this is the way out short of the ten-minute
-          // timeout -- see `popup-channel.ts`
-          <SidebarMenuAction
-            onClick={onCancelSignIn}
-            className="aspect-auto w-auto px-1.5 text-xs"
-          >
-            Cancel
-          </SidebarMenuAction>
-        )}
-      </SidebarMenuItem>
-    </SidebarMenu>
+                <span className="flex min-w-0 flex-col leading-tight">
+                  <span className="truncate font-medium text-foreground">
+                    {primary}
+                  </span>
+                  {line && (
+                    <span
+                      // A failure is announced; its reason is in full in the menu
+                      role={line.kind === "failed" ? "status" : undefined}
+                      title={line.kind === "failed" ? line.message : undefined}
+                      className={cn("truncate text-xs", LINE_STYLE[line.kind])}
+                    >
+                      {lineText(line)}
+                    </span>
+                  )}
+                </span>
+                {account.sending ? (
+                  <Spinner aria-label="Sending feedback" className="ml-auto" />
+                ) : (
+                  <ChevronsUpDown
+                    aria-hidden
+                    className="ml-auto text-muted-foreground"
+                  />
+                )}
+              </SidebarMenuButton>
+            </DropdownMenuTrigger>
+            {menu}
+          </DropdownMenu>
+          {account.session.status === "pending" && (
+            // The popup cannot be asked whether it is still open once GitHub has
+            // taken it over, so this is the way out short of the ten-minute
+            // timeout -- see `popup-channel.ts`
+            <SidebarMenuAction
+              onClick={onCancelSignIn}
+              className="aspect-auto w-auto px-1.5 text-xs"
+            >
+              Cancel
+            </SidebarMenuAction>
+          )}
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </div>
   );
 };
 

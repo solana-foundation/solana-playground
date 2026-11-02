@@ -39,15 +39,17 @@ import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
+import { StatusChip, StatusRail, StatusRow } from "@/widgets/status";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { SetupList } from "@/widgets/setup-list";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
  * navigation (`AppNav`, holding the logo, the project list, and the
- * session footer, `SessionFooter`: the cluster row, and the account row that
- * opens the account menu; on the rail that footer gives way to `RailFooter`'s
- * cluster dot and account button), the assistant, the files
+ * session footer, `SessionFooter`: the status row (`StatusRow`), and the
+ * account row that opens the account menu; on the rail that footer gives way
+ * to `RailFooter`'s status dots (`StatusRail`) and account button), the
+ * assistant, the files
  * column, and the stage router over its collapsible console, with the shell's
  * stage bar (`BaseStageBar`) and then the `StageBar` stage tabs across the
  * last two. The sync banner sits above all four, full width. On `/` with no
@@ -102,7 +104,7 @@ const focusWhenShown = (el: HTMLElement, frames = 30): (() => void) => {
 
 /**
  * Where focus goes back when the control that opened the settings is gone or
- * out of reach: a footer the rail swapped out, a cluster row on the phone's menu page once Work shows. The
+ * out of reach: a footer the rail swapped out, the network indicator on the phone's menu page once Work shows. The
  * first control that opens the settings still in reach, else the control
  * that opens the navigation.
  */
@@ -258,6 +260,17 @@ const FlowFrame = () => {
           <SyncBanner />
         </div>
         <LayoutShell
+          phoneStatus={
+            <StatusChip
+              onOpenNetwork={() =>
+                toggleSettings(closeNavSheet.current)({
+                  from: "cluster",
+                  focus: "network",
+                })
+              }
+              onConnectAi={() => openConnectDialog("status")}
+            />
+          }
           home={homeSlot(
             page.view,
             viewport,
@@ -308,13 +321,35 @@ const FlowFrame = () => {
                   <SessionFooter
                     page={menuPage}
                     closeSheet={closeSheet}
-                    settingsOpen={settingsOpen}
+                    status={
+                      <StatusRow
+                        settingsOpen={settingsOpen}
+                        onOpenNetwork={() =>
+                          toggleSettings(closeSheet)({
+                            from: "cluster",
+                            focus: "network",
+                          })
+                        }
+                        onConnectAi={() => openConnectDialog("status")}
+                      />
+                    }
                     onToggleSettings={toggleSettings(closeSheet)}
                   />
                 }
                 railFooter={
                   <RailFooter
-                    settingsOpen={settingsOpen}
+                    status={
+                      <StatusRail
+                        settingsOpen={settingsOpen}
+                        onOpenNetwork={() =>
+                          toggleSettings(closeSheet)({
+                            from: "rail",
+                            focus: "network",
+                          })
+                        }
+                        onConnectAi={() => openConnectDialog("status")}
+                      />
+                    }
                     onToggleSettings={toggleSettings(closeSheet)}
                   />
                 }

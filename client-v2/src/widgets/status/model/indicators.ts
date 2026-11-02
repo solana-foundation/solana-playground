@@ -1,0 +1,461 @@
+import type { AnalyzerState } from "@/components/Editor/Monaco/languages/rust/rust-analyzer/status";
+
+/**
+ * One indicator's state. `idle` is neither ready nor not ready (the analyzer
+ * before a Rust file, or where the browser cannot run it): grey, and left out
+ * of the phone chip's count.
+ */
+export type StatusState = "ready" | "working" | "not-ready" | "idle";
+
+export type IndicatorId = "network" | "ai" | "rust";
+
+/** What fixes an indicator, from its panel or its sheet row */
+export type StatusAction =
+  | { kind: "network"; text: "Change network" }
+  | { kind: "ai"; text: "Connect a model" | "Change model" }
+  | { kind: "reload"; text: "Reload" };
+
+/** Everything a view needs to draw one indicator, in any of its places */
+export interface StatusIndicator {
+  id: IndicatorId;
+  /** The sheet row's title */
+  name: string;
+  state: StatusState;
+  /** What the indicator reads: "Devnet · Not answering" */
+  words: string;
+  /** The button's accessible name in the status row */
+  label: string;
+  /** The rail dot's name, where it differs from `label` */
+  railLabel: string;
+  /** What it means when not ready, for the panel and the sheet; null when
+   * there is nothing to add to the words */
+  detail: string | null;
+  action: StatusAction | null;
+}
+
+/** The phone chip: the worst state of the three, in words */
+export interface ChipView {
+  state: Exclude<StatusState, "idle">;
+  words: string;
+  label: string;
+}
+
+/** After this long, a start that has not answered reads "Taking longer" */
+export const SLOW_AFTER_MS = 60_000;
+
+export const OFFLINE_LINE =
+  "You're offline. You can keep editing. Building needs a connection.";
+
+export interface NetworkInput {
+  /** The cluster's name as the connection has it: "devnet" */
+  name: string;
+  /** `PgConnection.isConnected`: null or undefined until it first answers */
+  isConnected: boolean | null | undefined;
+  /** `PgConnection.isClusterDown`: answering with a slot that does not move */
+  slotStalled: boolean | null | undefined;
+}
+
+export type AiInput =
+  | { kind: "ready"; model: string }
+  /** `needsSignIn`: the default backend while nobody is signed in */
+  | { kind: "off"; needsSignIn: boolean };
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const NETWORK_ACTION: StatusAction = {
+  kind: "network",
+  text: "Change network",
+};
+
+export const networkIndicator = (
+  { name, isConnected, slotStalled }: NetworkInput,
+  online: boolean
+): StatusIndicator => {
+  const shown = capitalize(name);
+  const view = (
+    state: StatusState,
+    suffix: string | null,
+    detail: string | null
+  ): StatusIndicator => {
+    // Only a state that is not ready joins the name: "connecting" is every
+    // first load, and the settings' focus return and its tests look the
+    // trigger up by its plain name meanwhile
+    const spoken = suffix && state === "not-ready" ? `, ${suffix}` : "";
+    return {
+      id: "network",
+      name: "Network",
+      state,
+      words: suffix ? `${shown} · ${capitalize(suffix)}` : shown,
+      // The names the settings' focus return and its tests look up; the rail's
+      // dot keeps its own shorter one
+      label: `Change cluster, currently ${name}${spoken}`,
+      railLabel: `Cluster: ${name}${spoken}`,
+      detail,
+      action: NETWORK_ACTION,
+    };
+  };
+
+  if (!online) return view("not-ready", "offline", OFFLINE_LINE);
+  // The same reading as the account menu's warning (`clusterIsDown` in
+  // `widgets/session-footer`)
+  if (isConnected === false || slotStalled === true) {
+    return view(
+      "not-ready",
+      "not answering",
+      "The cluster does not answer. Write and Build work; Deploy and Interact wait for it."
+    );
+  }
+  // Playnet is not asked until it has started (`PgConnection.getIsConnected`),
+  // so its `null` can last: grey, not a pulse that never ends
+  if (isConnected == null && name === "playnet") {
+    return view("idle", null, "Playnet starts when a command needs it.");
+  }
+  if (isConnected == null) return view("working", "connecting", null);
+  return view("ready", null, null);
+};
+
+export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
+  const base = { id: "ai" as const, name: "AI" };
+  if (!online) {
+    return {
+      ...base,
+      state: "not-ready",
+      words: "AI · Offline",
+      label: "AI, offline",
+      railLabel: "AI, offline",
+      detail: OFFLINE_LINE,
+      action: null,
+    };
+  }
+  if (ai.kind === "ready") {
+    return {
+      ...base,
+      state: "ready",
+      words: ai.model,
+      // Not the model's name: the composer's model button is found by it,
+      // and a second button holding it would make that lookup ambiguous
+      label: "AI, ready",
+      railLabel: "AI, ready",
+      detail: null,
+      action: { kind: "ai", text: "Change model" },
+    };
+  }
+  return {
+    ...base,
+    state: "not-ready",
+    words: "AI · Off",
+    label: "AI, off",
+    railLabel: "AI, off",
+    detail: ai.needsSignIn
+      ? "Sign in to use the hosted model, or connect a model with your own key."
+      : "Connect a model to ask the assistant. Write and Build work without it.",
+    action: { kind: "ai", text: "Connect a model" },
+  };
+};
+
+const RELOAD: StatusAction = { kind: "reload", text: "Reload" };
+const ANALYZER_WAITING =
+  "Code builds as normal. Hints and errors in the editor return when it is ready.";
+
+export const analyzerIndicator = (
+  analyzer: AnalyzerState,
+  now: number,
+  online: boolean
+): StatusIndicator => {
+  const view = (
+    state: StatusState,
+    word: string | null,
+    spoken: string,
+    detail: string | null,
+    action: StatusAction | null
+  ): StatusIndicator => ({
+    id: "rust",
+    name: "Rust analyzer",
+    state,
+    words: word ? `Rust · ${word}` : "Rust",
+    label: `Rust analyzer, ${spoken}`,
+    railLabel: `Rust analyzer, ${spoken}`,
+    detail,
+    action,
+  });
+
+  // Offline reads the same on all three (Spec 06, "Offline"); a reload would
+  // not get far
+  if (!online) {
+    return view("not-ready", "Offline", "offline", OFFLINE_LINE, null);
+  }
+  switch (analyzer.kind) {
+    case "idle":
+      return view(
+        "idle",
+        null,
+        "not started",
+        "It starts when you open a Rust file.",
+        null
+      );
+    case "off":
+      return view(
+        "idle",
+        "Off",
+        "off",
+        "This browser cannot run it on this page. Code builds as normal.",
+        null
+      );
+    case "ready":
+      return view(
+        "ready",
+        "Ready",
+        "ready",
+        "Hints and errors show in the editor as you type.",
+        null
+      );
+    case "failed":
+      return view(
+        "not-ready",
+        "Failed",
+        "failed",
+        "Code builds as normal. Hints and errors in the editor are off until it restarts.",
+        RELOAD
+      );
+    case "starting": {
+      const elapsed = Math.max(0, now - analyzer.since);
+      if (elapsed >= SLOW_AFTER_MS) {
+        return view(
+          "not-ready",
+          "Taking longer",
+          "taking longer than usual",
+          ANALYZER_WAITING,
+          RELOAD
+        );
+      }
+      const seconds = Math.floor(elapsed / 1000);
+      // No Reload yet: a slow download is normal in its first minute, and a
+      // reload would throw away a build or a deploy under way
+      return view(
+        "working",
+        `Starting ${seconds} s`,
+        `starting, ${seconds} seconds`,
+        ANALYZER_WAITING,
+        null
+      );
+    }
+  }
+};
+
+/** The phone chip: "Ready", "Starting" or "<n> not ready" */
+export const chipOf = (indicators: readonly StatusIndicator[]): ChipView => {
+  const down = indicators.filter((i) => i.state === "not-ready").length;
+  if (down > 0) {
+    const words = `${down} not ready`;
+    return { state: "not-ready", words, label: `Status, ${words}` };
+  }
+  if (indicators.some((i) => i.state === "working")) {
+    return { state: "working", words: "Starting", label: "Status, starting" };
+  }
+  return { state: "ready", words: "Ready", label: "Status, ready" };
+};
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("widgets/status/model/indicators", () => {
+    const UP: NetworkInput = {
+      name: "devnet",
+      isConnected: true,
+      slotStalled: false,
+    };
+
+    describe("networkIndicator", () => {
+      it("names the cluster when it answers, under the settings trigger's name", () => {
+        const n = networkIndicator(UP, true);
+        expect([n.state, n.words, n.label, n.railLabel]).toEqual([
+          "ready",
+          "Devnet",
+          "Change cluster, currently devnet",
+          "Cluster: devnet",
+        ]);
+      });
+
+      it("is connecting until the connection first answers", () => {
+        const n = networkIndicator(
+          { name: "devnet", isConnected: null, slotStalled: null },
+          true
+        );
+        expect([n.state, n.words, n.label]).toEqual([
+          "working",
+          "Devnet · Connecting",
+          "Change cluster, currently devnet",
+        ]);
+      });
+
+      it("keeps a Playnet that has not started grey and plain", () => {
+        const n = networkIndicator(
+          { name: "playnet", isConnected: null, slotStalled: null },
+          true
+        );
+        expect([n.state, n.words, n.label]).toEqual([
+          "idle",
+          "Playnet",
+          "Change cluster, currently playnet",
+        ]);
+      });
+
+      it("says not answering when down, or when the slot stalls", () => {
+        const down = networkIndicator(
+          { name: "devnet", isConnected: false, slotStalled: null },
+          true
+        );
+        const stalled = networkIndicator(
+          { name: "devnet", isConnected: true, slotStalled: true },
+          true
+        );
+        expect([down.state, down.words, down.label]).toEqual([
+          "not-ready",
+          "Devnet · Not answering",
+          "Change cluster, currently devnet, not answering",
+        ]);
+        expect(stalled.words).toBe("Devnet · Not answering");
+        expect(down.action).toEqual({
+          kind: "network",
+          text: "Change network",
+        });
+      });
+
+      it("says offline over any other state", () => {
+        const n = networkIndicator(UP, false);
+        expect([n.state, n.words, n.detail]).toEqual([
+          "not-ready",
+          "Devnet · Offline",
+          OFFLINE_LINE,
+        ]);
+      });
+    });
+
+    describe("aiIndicator", () => {
+      it("names the model when one is connected", () => {
+        const a = aiIndicator({ kind: "ready", model: "Opus 5.5" }, true);
+        expect([a.state, a.words, a.label]).toEqual([
+          "ready",
+          "Opus 5.5",
+          "AI, ready",
+        ]);
+      });
+
+      it("reads Off with Connect a model when none is", () => {
+        const a = aiIndicator({ kind: "off", needsSignIn: false }, true);
+        expect([a.state, a.words, a.label, a.action]).toEqual([
+          "not-ready",
+          "AI · Off",
+          "AI, off",
+          { kind: "ai", text: "Connect a model" },
+        ]);
+      });
+
+      it("says sign-in is the way to the hosted model", () => {
+        const a = aiIndicator({ kind: "off", needsSignIn: true }, true);
+        expect(a.detail).toMatch(/^Sign in/);
+      });
+
+      it("reads Offline offline", () => {
+        const a = aiIndicator({ kind: "ready", model: "Opus 5.5" }, false);
+        expect([a.state, a.words]).toEqual(["not-ready", "AI · Offline"]);
+      });
+    });
+
+    describe("analyzerIndicator", () => {
+      it("counts the seconds of a start", () => {
+        const r = analyzerIndicator(
+          { kind: "starting", since: 1_000 },
+          13_500,
+          true
+        );
+        expect([r.state, r.words, r.label, r.action]).toEqual([
+          "working",
+          "Rust · Starting 12 s",
+          "Rust analyzer, starting, 12 seconds",
+          null,
+        ]);
+      });
+
+      it("takes longer than usual from 60 s", () => {
+        const r = analyzerIndicator(
+          { kind: "starting", since: 0 },
+          SLOW_AFTER_MS,
+          true
+        );
+        expect([r.state, r.words, r.label, r.action?.text]).toEqual([
+          "not-ready",
+          "Rust · Taking longer",
+          "Rust analyzer, taking longer than usual",
+          "Reload",
+        ]);
+      });
+
+      it("still starts a moment before 60 s", () => {
+        const r = analyzerIndicator(
+          { kind: "starting", since: 0 },
+          SLOW_AFTER_MS - 1,
+          true
+        );
+        expect(r.words).toBe("Rust · Starting 59 s");
+      });
+
+      it("reads ready, failed, off and not started in words", () => {
+        const words = (["ready", "failed", "off", "idle"] as const).map(
+          (kind) => {
+            const r = analyzerIndicator({ kind }, 0, true);
+            return [r.state, r.words];
+          }
+        );
+        expect(words).toEqual([
+          ["ready", "Rust · Ready"],
+          ["not-ready", "Rust · Failed"],
+          ["idle", "Rust · Off"],
+          ["idle", "Rust"],
+        ]);
+      });
+
+      it("reads Offline offline, with nothing to press", () => {
+        const r = analyzerIndicator({ kind: "ready" }, 0, false);
+        expect([r.state, r.words, r.action]).toEqual([
+          "not-ready",
+          "Rust · Offline",
+          null,
+        ]);
+      });
+    });
+
+    describe("chipOf", () => {
+      const ready = networkIndicator(UP, true);
+      const ai = aiIndicator({ kind: "ready", model: "Opus 5.5" }, true);
+      const idle = analyzerIndicator({ kind: "idle" }, 0, true);
+
+      it("is Ready when nothing is down or starting, idle aside", () => {
+        expect(chipOf([ready, ai, idle]).words).toBe("Ready");
+      });
+
+      it("is Starting when one works and none is down", () => {
+        const starting = analyzerIndicator(
+          { kind: "starting", since: 0 },
+          0,
+          true
+        );
+        expect(chipOf([ready, ai, starting])).toEqual({
+          state: "working",
+          words: "Starting",
+          label: "Status, starting",
+        });
+      });
+
+      it("counts what is not ready", () => {
+        const off = aiIndicator({ kind: "off", needsSignIn: false }, true);
+        const failed = analyzerIndicator({ kind: "failed" }, 0, true);
+        expect(chipOf([ready, off, failed])).toEqual({
+          state: "not-ready",
+          words: "2 not ready",
+          label: "Status, 2 not ready",
+        });
+      });
+    });
+  });
+}

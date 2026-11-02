@@ -117,7 +117,7 @@ const draw = (which: "footer" | "rail", onToggleSettings = vi.fn()) => {
   render(
     <TooltipProvider>
       <SidebarProvider defaultOpen={which === "footer"}>
-        <Footer settingsOpen={false} onToggleSettings={onToggleSettings} />
+        <Footer status={null} onToggleSettings={onToggleSettings} />
       </SidebarProvider>
     </TooltipProvider>
   );
@@ -134,28 +134,6 @@ const pick = async (name: string | RegExp) => {
 
 const eventsNamed = (name: string) =>
   sent.events.filter((event) => event.name === name).map((e) => e.params);
-
-it("opens the settings on the cluster from the footer's cluster row", async () => {
-  const fromRow = draw("footer");
-  await userEvent.click(
-    screen.getByRole("button", { name: "Change cluster, currently devnet" })
-  );
-  expect(fromRow).toHaveBeenCalledExactlyOnceWith({
-    from: "cluster",
-    focus: "network",
-  });
-});
-
-it("opens the settings on the cluster from the rail's dot", async () => {
-  const fromDot = draw("rail");
-  await userEvent.click(
-    screen.getByRole("button", { name: "Cluster: devnet" })
-  );
-  expect(fromDot).toHaveBeenCalledExactlyOnceWith({
-    from: "rail",
-    focus: "network",
-  });
-});
 
 it.each(["footer", "rail"] as const)(
   "reports that the %s opened the menu",

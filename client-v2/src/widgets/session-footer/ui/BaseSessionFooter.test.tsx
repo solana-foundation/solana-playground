@@ -45,7 +45,6 @@ const MENU = (
 
 const draw = (props: {
   account: AccountView;
-  onOpenCluster?: () => void;
   onCancelSignIn?: () => void;
   onMenuOpenChange?: (open: boolean) => void;
 }) =>
@@ -54,8 +53,7 @@ const draw = (props: {
       <SidebarProvider>
         <BaseSessionFooter
           account={props.account}
-          settingsOpen={false}
-          onOpenCluster={props.onOpenCluster ?? vi.fn()}
+          status={<p>status row</p>}
           onCancelSignIn={props.onCancelSignIn ?? vi.fn()}
           onMenuOpenChange={props.onMenuOpenChange ?? vi.fn()}
           menu={MENU}
@@ -64,27 +62,14 @@ const draw = (props: {
     </TooltipProvider>
   );
 
-it("opens the settings on the cluster from the cluster row", async () => {
-  const onOpenCluster = vi.fn();
-  draw({ account: view({}), onOpenCluster });
-  const row = screen.getByRole("button", {
-    name: "Change cluster, currently devnet",
-  });
-  expect(row.hasAttribute("data-settings-trigger")).toBe(true);
-  await userEvent.click(row);
-  expect(onOpenCluster).toHaveBeenCalledOnce();
-});
-
-// Spec 08's NET-02 chip, which replaced the "Switch to localnet?" toast
-it("says a cluster that is down is not answering, and colours its dot", () => {
-  draw({ account: view({ cluster: { name: "devnet", down: true } }) });
-  const row = screen.getByRole("button", {
-    name: "Change cluster, currently devnet, not answering",
-  });
-  expect(row.textContent).toBe("devnet · not answering");
+// The network indicator is tested in `widgets/status` (`BaseStatus.test.tsx`)
+it("draws the status row over the account row", () => {
+  draw({ account: view({}) });
+  const status = screen.getByText("status row");
+  const account = screen.getByRole("button", { name: "Account, signed out" });
   expect(
-    row.querySelector('[data-slot="status-dot"]')?.getAttribute("data-variant")
-  ).toBe("error");
+    status.compareDocumentPosition(account) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
 });
 
 it("opens the account menu from the account row and reports it", async () => {

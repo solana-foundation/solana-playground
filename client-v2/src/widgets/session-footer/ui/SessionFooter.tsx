@@ -1,9 +1,12 @@
+import type { ReactNode } from "react";
+
 import type { SettingsRequest } from "@/shared/lib/settings-request";
 import BaseSessionFooter from "./BaseSessionFooter";
 import { useAccount } from "./use-account";
 
 interface SessionFooterProps {
-  settingsOpen: boolean;
+  /** The status row (`widgets/status`) */
+  status: ReactNode;
   onToggleSettings: (request: SettingsRequest) => void;
   /** On the phone's menu page: the account menu is a page of its own */
   page?: boolean;
@@ -13,7 +16,7 @@ interface SessionFooterProps {
 
 /** `BaseSessionFooter` on the live cluster, session, wallet and feedback */
 const SessionFooter = ({
-  settingsOpen,
+  status,
   onToggleSettings,
   page,
   closeSheet,
@@ -27,10 +30,7 @@ const SessionFooter = ({
   return (
     <BaseSessionFooter
       account={account}
-      settingsOpen={settingsOpen}
-      onOpenCluster={() =>
-        onToggleSettings({ from: "cluster", focus: "network" })
-      }
+      status={status}
       onCancelSignIn={() => pick("cancel-sign-in")}
       menu={menu}
       onMenuOpenChange={onMenuOpenChange}

@@ -191,15 +191,6 @@ export const lineText = (line: AccountLine) => {
   }
 };
 
-/** What a cluster that is down is called, in Spec 08's words (NET-02) */
-export const NOT_ANSWERING = "not answering";
-
-/** Named, not only coloured, so a screen reader hears a cluster that is down */
-export const clusterLabel = (
-  cluster: ClusterStatus,
-  prefix: "Cluster: " | "Change cluster, currently "
-) => `${prefix}${cluster.name}${cluster.down ? `, ${NOT_ANSWERING}` : ""}`;
-
 /**
  * Down when the cluster does not answer (`PgConnection.isConnected`, polled),
  * or answers with a slot that does not move (`PgConnection.isClusterDown`,
@@ -423,18 +414,6 @@ if (import.meta.vitest) {
       it("waits with an ellipsis rather than claiming zero, unit kept", () => {
         expect(formatBalance(null)).toBe("… SOL");
         expect(formatBalance(0)).toBe("0.00 SOL");
-      });
-    });
-
-    describe("clusterLabel", () => {
-      it("says down in Spec 08's words, not by colour alone", () => {
-        expect(clusterLabel(UP, "Cluster: ")).toBe("Cluster: devnet");
-        expect(
-          clusterLabel(
-            { name: "devnet", down: true },
-            "Change cluster, currently "
-          )
-        ).toBe("Change cluster, currently devnet, not answering");
       });
     });
 

@@ -46,6 +46,8 @@ export interface PhonePagerSlots {
   stageNode: HTMLDivElement;
   consoleNode: HTMLDivElement;
   sheetFont?: CSSProperties;
+  /** The status chip (`widgets/status`), after the title in the work page's bar */
+  status?: ReactNode;
   /**
    * Home, in place of the work: the work page shows it under "Menu" and the
    * title, with no Chat | Code and no Preview, and there is no preview page
@@ -324,6 +326,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
           <span className="min-w-0 flex-1 truncate pl-0.5 text-title font-act text-foreground">
             {props.title}
           </span>
+          {props.status}
           {!covered && (
             <>
               {/* Two views of one session, one filled: the prototype's
