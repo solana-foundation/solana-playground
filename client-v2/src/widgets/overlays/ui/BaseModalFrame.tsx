@@ -61,6 +61,8 @@ export type BaseModalFrameProps = {
     status: SubmitStatus;
     variant: SubmitVariant;
     onSubmit: () => void;
+    /** Drawn before the label; the spinner takes its place while busy */
+    icon?: ReactNode;
     /** Shown as a Cancel button beside the submit */
     onCancel?: () => void;
   };
@@ -122,7 +124,7 @@ export const BaseModalFrame = ({
   /** What either kind of submit button shows */
   const submitLabel = submit && (
     <>
-      {submit.status === "busy" && <Spinner />}
+      {submit.status === "busy" ? <Spinner /> : submit.icon}
       {submit.text}
     </>
   );
