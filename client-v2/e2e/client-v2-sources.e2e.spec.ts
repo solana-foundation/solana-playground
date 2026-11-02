@@ -27,7 +27,10 @@ const rpc = (route: Route, id: unknown, result: unknown) =>
   route.fulfill({
     status: 200,
     headers: {
-      ...CORS,
+      "access-control-allow-origin": CORS["access-control-allow-origin"],
+      "access-control-allow-methods": CORS["access-control-allow-methods"],
+      "access-control-allow-headers": CORS["access-control-allow-headers"],
+      "access-control-expose-headers": CORS["access-control-expose-headers"],
       "content-type": "application/json",
       "mcp-session-id": "s1",
     },

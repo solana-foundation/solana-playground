@@ -155,6 +155,23 @@ describe("composeCatalogue", () => {
       );
     });
 
+    test("Two ids that differ only until their placeholders are filled: the error names the id", () => {
+      const override = sources(
+        server("${FIRST}", "https://a.test/mcp"),
+        server("${SECOND}", "https://b.test/mcp")
+      );
+
+      assert.throws(
+        () =>
+          composeCatalogue({
+            env: { FIRST: "team", SECOND: "team" },
+            override,
+            signedIn: false,
+          }),
+        /SOURCES entry 2: duplicate id "team"/
+      );
+    });
+
     test("rejects an unknown kind, naming the entry", () => {
       const override = sources({ kind: "tool", id: "x", name: "x" });
 

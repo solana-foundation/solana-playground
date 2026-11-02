@@ -236,6 +236,82 @@ describe("switching a source", () => {
     expect(PgAssistant.enabledSkillIds).toContain("orca");
     PgAssistant.setSkillEnabled("orca", false);
   });
+
+  it.each([
+    ["a listing", (answer: Answer) => answer.ok([playgroundEnv, listedOff])],
+    ["a failure", (answer: Answer) => answer.fail()],
+  ])(
+    "keeps the later skills listing when the earlier call answers %s after it",
+    async (_label, answerEarlier) => {
+      const earlier = heldAnswer();
+      vi.spyOn(globalThis, "fetch")
+        .mockReturnValueOnce(earlier.response)
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ skills: [playgroundEnv] }))
+        );
+      const first = PgAssistant.loadSkills();
+      await PgAssistant.loadSkills();
+
+      answerEarlier(earlier);
+      await first;
+
+      expect(PgAssistant.skills.map((skill) => skill.id)).toEqual([
+        "playground-env",
+      ]);
+      expect(PgAssistant.skillsUnavailable).toBe(false);
+    }
+  );
+
+  it("discovers MCP tools while the skills route has not answered", async () => {
+    PgAssistant.setMcpServers([]);
+    vi.spyOn(globalThis, "fetch").mockReturnValue(new Promise(() => {}));
+    mcp.listGatewayServers.mockResolvedValueOnce([gatewayEntry("docs")]);
+    mcp.listTools.mockResolvedValueOnce([{ name: "search", inputSchema: {} }]);
+
+    void PgAssistant.initMcp();
+
+    await vi.waitFor(() => expect(PgAssistant.mcpTools.docs).toBeDefined());
+  });
+});
+
+/** A `/api/skills` answer the test gives when it chooses */
+interface Answer {
+  response: Promise<Response>;
+  ok(skills: unknown[]): void;
+  fail(): void;
+}
+
+const heldAnswer = (): Answer => {
+  let resolve: (response: Response) => void = () => {};
+  let reject: (error: Error) => void = () => {};
+  const response = new Promise<Response>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return {
+    response,
+    ok: (skills) => resolve(new Response(JSON.stringify({ skills }))),
+    fail: () => reject(new TypeError("Failed to fetch")),
+  };
+};
+
+it("keeps the later gateway server list when the earlier call answers after it", async () => {
+  PgAssistant.setMcpServers([]);
+  let answerEarlier: (servers: McpServerEntry[]) => void = () => {};
+  mcp.listGatewayServers
+    .mockReturnValueOnce(
+      new Promise<McpServerEntry[]>((resolve) => {
+        answerEarlier = resolve;
+      })
+    )
+    .mockResolvedValueOnce([]);
+  const first = PgAssistant.loadMcpServers();
+  await PgAssistant.loadMcpServers();
+
+  answerEarlier([gatewayEntry("team")]);
+  await first;
+
+  expect(PgAssistant.gatewayMcpServers).toEqual([]);
 });
 
 it("closes the connection of a gateway entry the gateway stops serving", async () => {

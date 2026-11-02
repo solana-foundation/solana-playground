@@ -147,18 +147,27 @@ const checkEntries = (entries, label) => {
  * @param {string} [input.override] `SOURCES`: a JSON array in the catalogue's format that replaces it
  * @param {boolean} input.signedIn whether the caller may see `signedIn` entries
  * @returns {Record<"mcp" | "skill", ComposedEntry[]>}
- * @throws when the override is not a JSON array, or an entry has no id, an unknown kind, or a duplicate id
+ * @throws when the override is not a JSON array, or an entry has no id, an unknown kind, or a duplicate id before or after its placeholders are filled
  */
 export const composeCatalogue = ({ env, override, signedIn }) => {
   const { entries, label } = sourceList(override);
 
   /** @type {Record<"mcp" | "skill", ComposedEntry[]>} */
   const byKind = { mcp: [], skill: [] };
-  for (const entry of checkEntries(entries, label)) {
+  // Checked again once filled: `${A}` and `${B}` pass `checkEntries` and may name one id
+  const filledIds = new Set();
+  for (const [index, entry] of checkEntries(entries, label).entries()) {
     if (entry.signedIn === true && !signedIn) continue;
     const { kind, signedIn: _signedIn, ...fields } = entry;
     const filled = resolveEntry(fields, env);
-    if (filled) byKind[kind].push(filled);
+    if (!filled) continue;
+    if (filledIds.has(filled.id)) {
+      throw new Error(
+        `${label} entry ${index + 1}: duplicate id "${filled.id}".`
+      );
+    }
+    filledIds.add(filled.id);
+    byKind[kind].push(filled);
   }
   return byKind;
 };

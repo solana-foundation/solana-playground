@@ -474,12 +474,17 @@ export class PgAssistant {
   /**
    * Ask the server which skills it offers. A failure leaves no skills and
    * marks the list unavailable: there is no built-in list to fall back to.
+   * An answer overtaken by a later call is dropped.
    */
   static async loadSkills() {
+    const seq = ++PgAssistant._skillsSeq;
     try {
-      PgAssistant._skills = await listGatewaySkills();
+      const skills = await listGatewaySkills();
+      if (seq !== PgAssistant._skillsSeq) return;
+      PgAssistant._skills = skills;
       PgAssistant._skillsUnavailable = false;
     } catch (error) {
+      if (seq !== PgAssistant._skillsSeq) return;
       // The slice logged the cause; the tab tells the user the server reported none
       log.debug("No skills: the skills route failed", {
         context: { error: String(error) },
@@ -596,11 +601,14 @@ export class PgAssistant {
    *
    * Failure is not surfaced: running under a plain `craco start` there is no
    * `/api`, and that should leave the panel working with local additions and
-   * skills rather than showing an error nobody can act on.
+   * skills rather than showing an error nobody can act on. An answer overtaken
+   * by a later call is dropped.
    */
   static async loadMcpServers() {
+    const seq = ++PgAssistant._gatewayServersSeq;
     try {
       const gateway = await listGatewayServers();
+      if (seq !== PgAssistant._gatewayServersSeq) return;
       PgAssistant._replaceServers(() => {
         PgAssistant._gatewayServers = gateway;
       });
@@ -610,10 +618,16 @@ export class PgAssistant {
     }
   }
 
-  /** Learn which skills and servers exist, then what the servers offer. Safe to call on every mount. */
+  /**
+   * Learn which skills and servers exist, and what the servers offer. Tool
+   * discovery waits on the server list only, never on the skills route.
+   * Safe to call again, as on every mount and session change.
+   */
   static async initMcp() {
-    await Promise.all([PgAssistant.loadMcpServers(), PgAssistant.loadSkills()]);
-    await PgAssistant.discoverMcpTools();
+    await Promise.all([
+      PgAssistant.loadMcpServers().then(() => PgAssistant.discoverMcpTools()),
+      PgAssistant.loadSkills(),
+    ]);
   }
 
   /**
@@ -1402,6 +1416,9 @@ export class PgAssistant {
   private static _pickingBackend = false;
   private static _skills: readonly SkillEntry[] = [];
   private static _skillsUnavailable = false;
+  // A session change reloads the list, and the older session's answer must not land over it
+  private static _skillsSeq = 0;
+  private static _gatewayServersSeq = 0;
   // Kept apart from the listed skills, which `loadSkills` replaces whole; in memory only
   private static _skillChoices: ReadonlyMap<string, boolean> = new Map();
   private static _gatewayServers: readonly McpServerEntry[] = [];

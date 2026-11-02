@@ -13,7 +13,10 @@ const ROUTE = "/api/skills";
  */
 const toEntry = (skill: ListedSkill): SkillEntry | undefined => {
   if (skill.source.type === "remote") return skill as SkillEntry;
-  const content = BUNDLED_SKILLS[skill.id];
+  // Own keys only: an id such as `constructor` reads a function off the prototype
+  const content = Object.hasOwn(BUNDLED_SKILLS, skill.id)
+    ? BUNDLED_SKILLS[skill.id]
+    : undefined;
   if (content === undefined) {
     log.warn("The server listed a bundled skill this bundle does not have", {
       context: { id: skill.id },
@@ -123,13 +126,17 @@ if (import.meta.vitest) {
     });
 
     it("A bundled id the bundle does not know: left out and logged by id", async () => {
-      listed([bundled("other"), remote]);
+      // An inherited property name, so a lookup that reads the prototype loads a function as the text
+      listed([bundled("constructor"), remote]);
 
       const skills = await listGatewaySkills();
 
       expect(skills.map((skill) => skill.id)).toEqual(["solana-dev"]);
       expect(entries).toEqual([
-        expect.objectContaining({ level: "warn", context: { id: "other" } }),
+        expect.objectContaining({
+          level: "warn",
+          context: { id: "constructor" },
+        }),
       ]);
     });
 
