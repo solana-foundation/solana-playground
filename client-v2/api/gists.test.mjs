@@ -177,10 +177,10 @@ describe("/api/gists", () => {
     assert.equal(calls.createGist.length, 0);
   });
 
-  it("takes a gist at the limits: 300 files plus the manifest, 4 MB of multibyte text", async () => {
+  it("takes a gist at the limits: 300 files with the manifest, 4 MB of multibyte text", async () => {
     const { deps: d, calls } = deps();
     const many = { ".playground.json": { content: "{}" } };
-    for (let i = 0; i < 300; i++) many[`f${i}.rs`] = { content: "x" };
+    for (let i = 0; i < 299; i++) many[`f${i}.rs`] = { content: "x" };
     // 2 bytes each: 2 MB of characters is the whole 4 MB
     const wide = {
       "a.rs": { content: "é".repeat((4 * 1024 * 1024) / 2) },
@@ -196,11 +196,16 @@ describe("/api/gists", () => {
     const over = {
       "a.rs": { content: "é".repeat((4 * 1024 * 1024) / 2) + "x" },
     };
-    const { status } = await call(
-      makeReq({ body: { description: "p", files: over } }),
-      d
-    );
-    assert.equal(status, 413);
+    // GitHub would list only 300 of these, and the gist would not open again
+    const crowded = { ".playground.json": { content: "{}" } };
+    for (let i = 0; i < 300; i++) crowded[`f${i}.rs`] = { content: "x" };
+    for (const files of [over, crowded]) {
+      const { status } = await call(
+        makeReq({ body: { description: "p", files } }),
+        d
+      );
+      assert.equal(status, 413);
+    }
     assert.equal(calls.createGist.length, 2);
   });
 

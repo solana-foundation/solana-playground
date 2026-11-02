@@ -60,8 +60,8 @@ const parseGist = (body) => {
   );
   if (!wellFormed) return { error: "malformed" };
 
-  // The manifest is one of them, hence `+ 1`
-  if (entries.length > MAX_GIST_FILES + 1) return { error: "too-large" };
+  // The manifest counts toward GitHub's limit like any other file
+  if (entries.length > MAX_GIST_FILES) return { error: "too-large" };
   let bytes = 0;
   for (const [, file] of entries) bytes += Buffer.byteLength(file.content);
   if (bytes > MAX_GIST_BYTES) return { error: "too-large" };

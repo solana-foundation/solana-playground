@@ -2,6 +2,7 @@ import { createLogger } from "@/shared/lib/logger";
 import {
   GITHUB_UNAUTHORIZED,
   MAX_DESCRIPTION,
+  MAX_REQUEST_BYTES,
   NEEDS_GIST_SCOPE,
 } from "../config.mjs";
 import {
@@ -66,7 +67,15 @@ export const exportProject = async (project: {
   const gist = toGistFiles(project);
   const size = measureGist(gist);
   gistTelemetry.track("gist_export_started", { files: size.files });
-  if (size.bytes > MAX_GIST_BYTES || size.files > MAX_GIST_FILES) {
+  // The manifest is one more file against GitHub's limit
+  if (size.bytes > MAX_GIST_BYTES || size.files + 1 > MAX_GIST_FILES) {
+    return { status: "failed", reason: "too-large" };
+  }
+  const body = JSON.stringify({
+    description: project.name.slice(0, MAX_DESCRIPTION),
+    files: gist,
+  });
+  if (new TextEncoder().encode(body).length > MAX_REQUEST_BYTES) {
     return { status: "failed", reason: "too-large" };
   }
 
@@ -76,10 +85,7 @@ export const exportProject = async (project: {
       method: "POST",
       credentials: "include",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        description: project.name.slice(0, MAX_DESCRIPTION),
-        files: gist,
-      }),
+      body,
     });
   } catch (e) {
     // Offline or blocked: the user's to retry, not the team's to hear of
@@ -210,10 +216,24 @@ if (import.meta.vitest) {
       expect(fetch).not.toHaveBeenCalled();
     });
 
+    it("refuses a project whose JSON request would exceed Vercel's limit", async () => {
+      const fetch = vi.spyOn(globalThis, "fetch");
+
+      // 3 MB of content, but JSON writes each backslash as two
+      const result = await exportProject({
+        name: "escaped",
+        files: { "a.ts": `// ${"\\".repeat(3 * 1024 * 1024)}` },
+      });
+
+      expect(result).toEqual({ status: "failed", reason: "too-large" });
+      expect(fetch).not.toHaveBeenCalled();
+    });
+
     it("refuses a project of too many files without a request", async () => {
       const fetch = vi.spyOn(globalThis, "fetch");
       const files: Record<string, string> = {};
-      for (let i = 0; i <= MAX_GIST_FILES; i++) files[`f${i}.rs`] = "x";
+      // With the manifest, 300 project files make 301 gist files
+      for (let i = 0; i < MAX_GIST_FILES; i++) files[`f${i}.rs`] = "x";
 
       const result = await exportProject({ name: "many", files });
 

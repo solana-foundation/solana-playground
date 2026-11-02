@@ -9,7 +9,16 @@ export const MANIFEST_NAME = ".playground.json";
 /** Below Vercel's 4.5 MB request body limit, with room for the JSON around it */
 export const MAX_GIST_BYTES = 4 * 1024 * 1024;
 
-/** GitHub's API lists at most 300 files of a gist; more would not open again */
+/**
+ * Vercel's limit on a request body. JSON escapes quotes, backslashes and
+ * newlines, so content under {@link MAX_GIST_BYTES} can still encode past it
+ */
+export const MAX_REQUEST_BYTES = 4.5 * 1000 * 1000;
+
+/**
+ * GitHub's API lists at most 300 files of a gist, the manifest among them;
+ * more would not open again
+ */
 export const MAX_GIST_FILES = 300;
 
 /**
