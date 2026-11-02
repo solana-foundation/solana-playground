@@ -160,12 +160,13 @@ test("gist-sharing: Importing the same gist twice", async ({
   const url = `https://gist.github.com/alice/${ID}`;
   await importFromDialog(page, url);
   await expect(currentProject(page)).toHaveText(`gist-alice/${ID}`, LONG);
-  await page.getByText("Back to app").click();
+  // An import closes Settings once the project is open
+  await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 
   await importFromDialog(page, url);
 
   await expect(page.getByRole("dialog")).toBeHidden(LONG);
-  await page.getByText("Back to app").click();
+  await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
   await expect(projectRow(page, `gist-alice/${ID}`)).toHaveCount(1);
   expect(requests).toBe(1);
 });
