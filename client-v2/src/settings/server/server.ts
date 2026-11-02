@@ -13,8 +13,8 @@ export const server = [
     // Not "Endpoint", which `connection.endpoint` takes from its id
     name: "Build server",
     description: "Build server URL",
-    // The list lives beside the default so the two cannot disagree about
-    // which host is Solana's and which is upstream's (D30)
+    // The list lives beside the default so it cannot offer the upstream
+    // host the default avoids
     values: [...SERVER_ENDPOINT_OPTIONS],
     default: defaultServerEndpoint({
       REACT_APP_SERVER_URL: SERVER_URL,
