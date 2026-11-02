@@ -1,9 +1,9 @@
 name: preview-shared-db
 
-# Keeps the preview instance's shared databases at master's migrations:
-# `solpg_preview`, which every preview the Vercel Git integration builds
-# reads, and the template `solpg_preview_base`, which preview.yml clones for a
-# labelled PR (client-v2/docs/preview-databases.md).
+# Keeps the preview instance's shared database, `solpg_preview`, at master's
+# migrations. Every preview the Vercel Git integration builds reads it, and
+# preview.yml copies it into a labelled PR's own database
+# (client-v2/docs/preview-databases.md).
 #
 # Only from master. A `push` run reads this workflow and the migrations from
 # the commit pushed to master, which a reviewer has seen; a `pull_request` run
@@ -13,8 +13,8 @@ name: preview-shared-db
 #
 # Runs where PREVIEW_REPOSITORY names this repository and PREVIEW_DB_PROVIDER
 # is `cloud-sql`, with the same Cloud SQL variables as preview.yml. A failed
-# run leaves the databases behind master until a manual dispatch succeeds; a
-# labelled PR's clone still applies what the template lacks.
+# run leaves the database behind master until a manual dispatch succeeds; a
+# labelled PR's copy still applies what it lacks.
 on:
   push:
     branches: [master]
@@ -29,16 +29,15 @@ defaults:
     # Explicit, for pipefail: the implicit default runs `bash -e` without it.
     shell: bash
 
-# One at a time, and never cancelled: a migration stopped halfway leaves its
-# transaction rolled back but the template open to connections until
-# migrate-preview-base's exit trap runs.
+# One at a time, and never cancelled: dbmate runs each migration in a
+# transaction, but a cancelled run leaves the rest of master's unapplied.
 concurrency:
   group: preview-shared-db
   cancel-in-progress: false
 
 jobs:
   migrate:
-    name: migrate the shared preview databases
+    name: migrate the shared preview database
     if: vars.PREVIEW_DB_PROVIDER == 'cloud-sql' && github.repository == vars.PREVIEW_REPOSITORY
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -79,11 +78,6 @@ jobs:
             https://github.com/amacneil/dbmate/releases/download/v2.35.1/dbmate-linux-amd64
           chmod +x /usr/local/bin/dbmate
 
-      # The shared database first: it is what live previews read.
       - name: Migrate solpg_preview
         working-directory: client-v2
         run: bash scripts/db/cloud-sql/migration-url shared -- dbmate --wait --wait-timeout 60s --no-dump-schema up
-
-      - name: Migrate the template
-        working-directory: client-v2
-        run: bash scripts/db/cloud-sql/migrate-preview-base

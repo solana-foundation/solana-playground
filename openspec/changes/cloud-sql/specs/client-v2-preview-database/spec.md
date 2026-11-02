@@ -26,24 +26,22 @@ database `solpg_preview` with no workflow run before it.
 
 ### Requirement: The shared preview database is migrated from master only
 
-`preview-shared-db.yml` SHALL migrate `solpg_preview` and then
-`solpg_preview_base` on every push to `master` that changes a file under
+`preview-shared-db.yml` SHALL migrate `solpg_preview` on every push to `master` that changes a file under
 `client-v2/db/migrations`, and on manual dispatch, through the Cloud SQL Auth
 Proxy under the preview IAM database user's role. No workflow that runs on
-`pull_request` SHALL migrate either database.
+`pull_request` SHALL migrate it.
 
 #### Scenario: A migration lands on master (manual)
 
 - **WHEN** a PR that adds a migration is merged into `master`
 - **THEN** the `preview-shared-db.yml` run for that push applies it to
-  `solpg_preview` and to `solpg_preview_base`, the tables it creates are owned
-  by the preview IAM database user, and the base again refuses connections
+  `solpg_preview`, and the tables it creates are owned by the preview IAM
+  database user
 
 #### Scenario: A PR's run leaves the shared database alone (manual)
 
 - **WHEN** a reviewer reads every workflow triggered by `pull_request`
-- **THEN** none passes `shared` to `migration-url` or runs
-  `migrate-preview-base`
+- **THEN** none passes `shared` to `migration-url`
 
 ### Requirement: A PR that changes migrations is told to take its own database
 
@@ -145,26 +143,33 @@ Checked by the test "keeps branches that sanitise alike apart" in
 Checked by the test "keeps a branch apart from the PR it is named like" in
 `client-v2/scripts/db/preview-name.test.mjs`.
 
-### Requirement: A Cloud SQL preview database is cloned from the preview base
+### Requirement: A Cloud SQL preview database is a copy of the shared database
 
-A Cloud SQL preview database SHALL be created as a copy of the template
-database `solpg_preview_base` on `solpg-preview`, owned by the preview IAM
-database user, so it starts with the base's schema, rows, and applied
-migrations. The base SHALL hold preview data only, never a copy of
-production's, SHALL accept no connection outside `migrate-preview-base`, and
-SHALL have every table owned by the preview IAM database user.
+A labelled PR's database SHALL be created, on its first deploy, as a copy of
+`solpg_preview` taken while previews stay connected to it: its schema, its
+rows, and its applied migrations, with no rows of the `session` table. Every
+table of the copy SHALL be owned by the preview IAM database user. A copy
+that did not finish SHALL never be deployed: the next deploy SHALL copy again.
 
-#### Scenario: A new preview starts from the base (manual)
+#### Scenario: A new preview starts from the shared rows (manual)
 
-- **WHEN** a PR is first labelled `preview`
-- **THEN** its database holds the base's rows, and dbmate applies only the
-  migrations under `client-v2/db/migrations` that the base lacks
+- **WHEN** a PR that adds a migration is first labelled `preview`
+- **THEN** its database holds the rows of `solpg_preview`, and dbmate applies
+  only the PR's migrations, on top of those rows
 
-#### Scenario: The base is migrated forward (manual)
+#### Scenario: Sessions stay behind (manual)
 
-- **WHEN** `migrate-preview-base` runs while the base lacks a migration
-- **THEN** the base holds that migration, its tables are owned by the preview
-  IAM database user, and it again refuses connections
+- **WHEN** a user signed in on an unlabelled preview opens a labelled PR's
+  preview
+- **THEN** the labelled preview's database holds no row of `session`, and the
+  user is asked to sign in
+
+#### Scenario: A cancelled copy is redone (manual)
+
+- **WHEN** a labelled PR's deploy is cancelled while its database is being
+  copied, and the PR is pushed to again
+- **THEN** the next run drops the unfinished database, copies again, and
+  deploys on the complete copy
 
 ### Requirement: A Cloud SQL preview database is migrated on every deploy
 
@@ -213,7 +218,7 @@ other database on any instance.
 
 - **WHEN** the sweep runs
 - **THEN** it drops no database whose name is not `solpg_preview_pr_`
-  followed by digits, so `solpg_preview`, `solpg_preview_base`, and every
+  followed by digits, so `solpg_preview` and every
   `solpg_preview_br_*` remain; and it lists
   databases on `solpg-preview` only, never connecting to `solpg`
 

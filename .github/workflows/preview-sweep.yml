@@ -6,7 +6,7 @@ name: preview-sweep
 #
 # With PREVIEW_DB_PROVIDER `cloud-sql`, it drops `solpg_preview_pr_<n>` on the
 # preview instance, and nothing else there: not the shared `solpg_preview`,
-# not the template, not a laptop's `solpg_preview_br_*`
+# not a laptop's `solpg_preview_br_*`
 # (client-v2/scripts/db/cloud-sql/list-preview-dbs lists PR databases only).
 # The `scope` input does not apply.
 #

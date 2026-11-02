@@ -35,9 +35,9 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
   serves every preview. Each PR's preview from the Git integration reads one
   shared database there, `solpg_preview`, named by the Preview environment's
   variables. A PR labelled `preview` gets a database of its own,
-  `solpg_preview_pr_<number>`, cloned from the template database
-  `solpg_preview_base`, so it starts with the base's schema and rows as a Neon
-  branch starts with `main`'s; the label works only while the repository
+  `solpg_preview_pr_<number>`, a copy of `solpg_preview` without its
+  sessions, so the PR's migrations run on top of the rows previews have
+  written, as a migration runs on production's; the label works only while the repository
   variable `PREVIEW_DB_PROVIDER` is `cloud-sql`, and while it is unset the
   label still cuts a Neon branch, until a follow-up removes Neon. Every preview
   then runs the production connection path before production depends on it.
@@ -53,8 +53,7 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
   Production environment, and a preview database name the workflows derive
   from the PR number with no input to override.
 - **Migrations.** A labelled PR's database is migrated by `preview.yml` on
-  every deploy, as today. `solpg_preview` and `solpg_preview_base` are
-  migrated by a workflow on push to `master`, never from a PR's run, since a
+  every deploy, as today. `solpg_preview` is migrated by a workflow on push to `master`, never from a PR's run, since a
   PR's run executes the PR's code. `migrate-production-db` stays a person's step and migrates the one
   database production reads: the production Neon project until the cutover,
   `solpg` after it, through the Cloud SQL Auth Proxy as the operator's own
@@ -112,7 +111,7 @@ how the functions reach Postgres.
   `@vercel/oidc` in `client-v2/package.json`; `cloud-sql-proxy` on the runner
   and on a laptop that migrates production.
 - Google Cloud, by hand and documented: instance `solpg-preview`, its shared
-  database `solpg_preview`, and its template database `solpg_preview_base`; a Workload Identity Federation pool
+  database `solpg_preview`; a Workload Identity Federation pool
   and provider trusting Vercel's issuer, with one service account per Vercel
   environment; a pool and provider trusting GitHub Actions for the preview
   jobs, with a role on `solpg-preview` only, since `cicd.yml` is the only
@@ -141,8 +140,8 @@ how the functions reach Postgres.
   browser only. To carry one over, export it (Export workspace) and import it
   under a new name, which makes a new project with a new id. An unlabelled preview reads and writes the shared `solpg_preview`, so
   it sees rows written from every other PR's preview. A preview labelled
-  `preview` starts with the rows of `solpg_preview_base`, which are preview
-  data, as a Neon preview starts with the preview project's `main`. Otherwise nothing changes for a user.
+  `preview` starts with the rows of `solpg_preview` at its first deploy,
+  without anyone's sign-in: sessions are not copied. Otherwise nothing changes for a user.
 - Out of scope: a query or repository abstraction over SQL (both providers are
   Postgres); removing the Neon scripts, the Neon path of the preview
   workflows, `client-v2/docs/neon.md`, and the Neon projects, which is a

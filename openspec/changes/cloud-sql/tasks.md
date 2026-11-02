@@ -75,19 +75,22 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       nothing on `solpg`; the IAM database users for `vercel-preview`, `github-ci`,
       and the operators on `solpg-preview`; `github-ci` and the operators granted
       the `vercel-preview` role, and `github-ci` `CREATEDB`. Create
-      `solpg_preview_base` owned by `vercel-preview`, apply every migration to it
-      under that role, and set `IS_TEMPLATE true` and `ALLOW_CONNECTIONS false`.
-      Create the shared database `solpg_preview` owned by `vercel-preview` and
+      the shared database `solpg_preview` owned by `vercel-preview` and
       apply every migration to it under that role. Verify by running
       `cloud-sql-proxy` on a laptop as `github-ci` through its federation,
-      cloning the base with `psql` as its IAM user and dropping the clone; by
+      running `create-preview-db --branch <name>` as its IAM user and dropping
+      the copy; by
       `\dt` on `solpg_preview` showing every table owned by `vercel-preview`; by
       `gcloud projects get-iam-policy` showing no `github-ci` binding on `solpg`;
       and by the document listing every `gcloud` command run. Ticket to file.
 - [ ] 2.2 `preview.yml`: the `preview` label's path chosen by the repository
       variable `PREVIEW_DB_PROVIDER`. With `cloud-sql`, the deploy job
       authenticates with `google-github-actions/auth` through the GitHub
-      federation, runs `scripts/db/cloud-sql/create-preview-db` and dbmate
+      federation, installs the PostgreSQL client at the instance's major version,
+      runs `scripts/db/cloud-sql/create-preview-db` (a `pg_dump` copy of
+      `solpg_preview` without the rows of `session`, replacing task 1.3's clone
+      of the template `solpg_preview_base`, which goes with
+      `migrate-preview-base`) and dbmate
       through `migration-url`, deploys with
       `-e DB_PROVIDER=cloud-sql -e CLOUD_SQL_DATABASE=<name>` over the Preview
       environment's `CLOUD_SQL_*` and `GCP_*` variables, and names the database
@@ -97,25 +100,25 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       `cloud-sql`. `preview-sweep.yml`: with `cloud-sql`, list the databases on
       `solpg-preview` matching `^solpg_preview_pr_[0-9]+$` through the proxy and
       drop those whose PR is closed or unlabelled, honouring `MIN_AGE_MINUTES`
-      and `dry_run`, and never touching `solpg_preview`, `solpg_preview_base`,
-      or `solpg_preview_br_*`; a database's age is the creation stamp
-      `create-preview-db` writes as its comment, and one without a stamp is
-      kept. Document the label, the variable, and the shared database in
+      and `dry_run`, and never touching `solpg_preview` or `solpg_preview_br_*`; a
+      database's age is the stamp `create-preview-db` writes as its comment
+      (`copying:<epoch>`, then `created-at:<epoch>`), and one without a stamp
+      is kept. Document the label, the variable, and the shared database in
       `client-v2/docs/preview-databases.md`, with `neon.md` kept for the Neon
       path and pointing to it, so the follow-up that removes Neon deletes it
       whole. Verify with a labelled PR whose comment names the database and
       whose preview URL answers `{ "enabled": true, "db": "ok" }` on
-      `GET /api/sync`; removing the label drops the database; a dry-run sweep
+      `GET /api/sync`, whose database holds the shared rows and no
+      `session` rows; removing the label drops the database; a dry-run sweep
       lists nothing for an open labelled PR and never lists `solpg_preview`.
       Depends on 1.2, 1.3, 2.1. Ticket to file.
 - [ ] 2.3 `preview-shared-db.yml`, on push to `master` that changes
       `client-v2/db/migrations/**` and on `workflow_dispatch`, gated like
       `preview.yml` on `PREVIEW_REPOSITORY` and `PREVIEW_DB_PROVIDER=cloud-sql`:
       authenticate as `github-ci`, migrate `solpg_preview` through
-      `scripts/db/cloud-sql/migration-url shared`, then run
-      `migrate-preview-base`. One concurrency group, never cancelled mid-run.
-      Verify with a dispatch run that reports nothing to apply on both, and a
-      merge adding a migration whose run applies it to both. Depends on 1.3,
+      `scripts/db/cloud-sql/migration-url shared`. One concurrency group,
+      never cancelled mid-run. Verify with a dispatch run that reports nothing
+      to apply, and a merge adding a migration whose run applies it. Depends on 1.3,
       2.1. Ticket to file.
 - [ ] 2.4 Migration notice in `preview.yml`: a job on `opened`, `reopened`,
       and `synchronize` of a PR without the `preview` label that lists the PR's

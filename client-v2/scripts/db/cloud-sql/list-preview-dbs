@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # List the PR databases on the preview instance, for preview-sweep.yml: one
 # line per database, `<pr number> <age in minutes>`, the age `-` when the
-# database carries no creation stamp from create-preview-db.
+# database carries no stamp from create-preview-db. The age counts from the
+# start of the copy, finished or not.
 #
 # Only names matching PREVIEW_PR_DB_PATTERN are listed, so the shared
-# database, the template and laptop databases never reach the sweep.
+# database and laptop databases never reach the sweep.
 #
 #   list-preview-dbs
 set -euo pipefail
@@ -16,7 +17,7 @@ set -euo pipefail
 start_proxy
 trap stop_proxy EXIT
 
-rows=$(admin_sql "select datname, coalesce(substring(shobj_description(oid, 'pg_database') from '^created-at:([0-9]+)\$'), '') from pg_database where datname ~ '$PREVIEW_PR_DB_PATTERN' order by datname")
+rows=$(admin_sql "select datname, coalesce(substring(shobj_description(oid, 'pg_database') from '^(?:copying|created-at):([0-9]+)\$'), '') from pg_database where datname ~ '$PREVIEW_PR_DB_PATTERN' order by datname")
 
 now=$(date +%s)
 while IFS='|' read -r name created; do

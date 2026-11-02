@@ -198,8 +198,8 @@ repository, with each value specific to this deployment as a placeholder.
 #### Scenario: The guide covers every party (manual)
 
 - **WHEN** a reviewer reads the guide's setup section
-- **THEN** it covers Google Cloud (both instances, their flags, the template
-  base, both federation pools and providers, the three service accounts and
+- **THEN** it covers Google Cloud (both instances, their flags, the shared
+  preview database, both federation pools and providers, the three service accounts and
   their conditional bindings, the IAM database users and role memberships),
   Vercel (the OIDC issuer mode, the variables per environment, the function
   region), GitHub (the repository variables and secrets the preview workflows

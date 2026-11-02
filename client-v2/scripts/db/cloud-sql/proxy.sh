@@ -21,12 +21,13 @@
 : "${CLOUD_SQL_USER:?CLOUD_SQL_USER is unset: the IAM database user the application connects as}"
 PROXY_PORT=${CLOUD_SQL_PROXY_PORT:-5434}
 
-# The template every preview database is cloned from, and that
-# migrate-preview-base keeps migrated
-PREVIEW_BASE=solpg_preview_base
 # The database every unlabelled preview reads, named by the Preview
-# environment on Vercel and migrated from master by preview-shared-db.yml
+# environment on Vercel, migrated from master by preview-shared-db.yml, and
+# copied into each PR's own database by create-preview-db
 SHARED_PREVIEW_DB=solpg_preview
+# Better Auth's sessions, left out of that copy: a sign-in on one preview
+# must not be valid on another
+SESSION_TABLE=public.session
 # The databases preview.yml creates and preview-sweep.yml may drop
 PREVIEW_PR_DB_PATTERN='^solpg_preview_pr_[0-9]+$'
 

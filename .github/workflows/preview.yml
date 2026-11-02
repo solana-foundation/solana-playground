@@ -9,7 +9,8 @@ name: preview
 # The repository variable PREVIEW_DB_PROVIDER says where that database lives:
 #
 # - `cloud-sql`: `solpg_preview_pr_<number>` on the preview Cloud SQL
-#   instance, cloned from the template `solpg_preview_base`, reached as the
+#   instance, a copy of the shared `solpg_preview` without its sessions,
+#   reached as the
 #   `github-ci` service account through Workload Identity Federation;
 # - unset: the Neon branch `preview/pr-<number>` cut from `main`, until a
 #   follow-up removes Neon. The Neon project caps its branch count, so the
@@ -153,9 +154,9 @@ jobs:
           workload_identity_provider: ${{ vars.GCP_CI_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ vars.GCP_CI_SERVICE_ACCOUNT }}
 
-      - name: Install the Cloud SQL Auth Proxy
+      - name: Install the Cloud SQL Auth Proxy and pg_dump
         if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
-        run: bash .github/scripts/install-cloud-sql-proxy.sh
+        run: bash .github/scripts/install-cloud-sql-proxy.sh --with-pg-dump
 
       - name: Neon branch
         if: env.PREVIEW_DB_PROVIDER != 'cloud-sql'
@@ -170,7 +171,8 @@ jobs:
             https://github.com/amacneil/dbmate/releases/download/v2.35.1/dbmate-linux-amd64
           chmod +x /usr/local/bin/dbmate
 
-      # Cloned from the template on the first run, reused after. Prints
+      # Copied from the shared database on the first run, reused after, so a
+      # migration below meets the rows previews have written. Prints
       # DB_PROVIDER and CLOUD_SQL_DATABASE, which become this step's outputs.
       - name: Cloud SQL database
         id: cloud-sql

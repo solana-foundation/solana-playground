@@ -27,8 +27,7 @@ preview is visible from another's, under the same GitHub account. That is test d
 own takes the label.
 
 It carries the migrations on `master` and no others.
-[`preview-shared-db.yml`](../../.github/workflows/preview-shared-db.yml) migrates it, then the template below, on
-every push to `master` that changes `client-v2/db/migrations`, and on a manual run (Actions → preview-shared-db →
+[`preview-shared-db.yml`](../../.github/workflows/preview-shared-db.yml) migrates it on every push to `master` that changes `client-v2/db/migrations`, and on a manual run (Actions → preview-shared-db →
 Run workflow). No workflow that runs on a PR migrates it: a `pull_request` run executes the PR's own workflow and
 migrations, and a PR's schema on the shared database would break every other preview.
 
@@ -45,24 +44,33 @@ With `PREVIEW_DB_PROVIDER` set to `cloud-sql`:
 
 | PR event | What happens |
 | --- | --- |
-| `preview` label added, or a labelled PR opened, reopened or pushed to | Create or reuse `solpg_preview_pr_<n>`, cloned from `solpg_preview_base`; apply pending migrations to it; `vercel build` on the runner; deploy the prebuilt output with `DB_PROVIDER=cloud-sql` and `CLOUD_SQL_DATABASE=solpg_preview_pr_<n>`; post the URL in the PR's one preview comment |
+| `preview` label added, or a labelled PR opened, reopened or pushed to | Create or reuse `solpg_preview_pr_<n>`, a copy of `solpg_preview` without its sessions; apply pending migrations to it; `vercel build` on the runner; deploy the prebuilt output with `DB_PROVIDER=cloud-sql` and `CLOUD_SQL_DATABASE=solpg_preview_pr_<n>`; post the URL in the PR's one preview comment |
 | `preview` label removed, or PR closed or merged | Drop `solpg_preview_pr_<n>`, ending the sessions still on it |
 
 The name comes from the PR number alone (`scripts/db/preview-name.mjs`); no input, label, or variable can name
 another database. A push cancels the deploy it supersedes; a close cancels a deploy still running. Forks and
 Dependabot get no deploy, as on Neon.
 
-A clone starts with the template's schema, rows, and `schema_migrations`, so dbmate applies only what the template
-lacks, the PR's migrations among them. Every migration runs as the application's database user
-(`options=-c role=<user>` in the URL dbmate reads), so the application owns every table it uses. The template,
-`solpg_preview_base`, holds preview data only and refuses connections, because a clone fails while any session is on
-its template; `scripts/db/cloud-sql/migrate-preview-base` opens it for its own run and closes it again on any exit.
+The PR's database starts as a copy of `solpg_preview`: its schema, its rows, and its `schema_migrations`, which are
+`master`'s. dbmate then applies only the PR's own migrations, on top of the rows previews have written, so a
+migration that adds a `NOT NULL` column or a unique index meets existing data as it will in production. The copy
+leaves out the rows of `session`: a sign-in made on another preview is not valid on this one.
+
+The copy is made once, on the first deploy; later pushes reuse the database and apply only new migrations. To take a
+fresh copy, remove the label and add it again. The copy is `pg_dump` into `psql`
+(`scripts/db/cloud-sql/create-preview-db`), not `CREATE DATABASE ... TEMPLATE`: Postgres refuses to clone a
+database while any session is connected to it, and every preview is connected to `solpg_preview`, while `pg_dump`
+reads one consistent snapshot with them connected. The database's comment records whether the copy finished
+(`copying:<epoch>`, then `created-at:<epoch>`), so a deploy cancelled mid-copy is copied again on the next run
+rather than reused half full.
+
+Every migration runs as the application's database user (`options=-c role=<user>` in the URL dbmate reads), and
+the copy is restored as that user, so the application owns every table it uses.
 
 [`preview-sweep.yml`](../../.github/workflows/preview-sweep.yml) is the safety net for a teardown that was cancelled
 or failed. Daily, it drops every `solpg_preview_pr_<n>` older than its `MIN_AGE_MINUTES` whose PR is no longer
-open and labelled. A database's age is the creation stamp `create-preview-db` writes as the database's comment; one
-without a stamp is kept. The sweep lists only names matching `^solpg_preview_pr_[0-9]+$`, so it never touches
-`solpg_preview`, the template, or a laptop's database. Run by hand it defaults to a dry run.
+open and labelled. A database's age is read from that comment, finished or not; one without a stamp is kept. The sweep lists only names matching `^solpg_preview_pr_[0-9]+$`, so it never touches
+`solpg_preview` or a laptop's database. Run by hand it defaults to a dry run.
 
 ## Configuration
 
@@ -110,12 +118,11 @@ pairs one provider with the other's database.
 ## By hand
 
 From `client-v2/`, logged in with `gcloud auth login` as an operator who holds the preview roles, with
-`cloud-sql-proxy` and `psql` installed and the instance and user exported as `CLOUD_SQL_INSTANCE` and
+`cloud-sql-proxy`, `psql`, and `pg_dump` (at the instance's major version) installed and the instance and user exported as `CLOUD_SQL_INSTANCE` and
 `CLOUD_SQL_USER`:
 
 ```sh
 scripts/db/cloud-sql/migration-url shared -- dbmate --no-dump-schema status   # the shared database
-scripts/db/cloud-sql/migrate-preview-base                                     # bring the template forward
 scripts/db/cloud-sql/drop-preview-db --pr <number>                            # a leftover PR database
 ```
 

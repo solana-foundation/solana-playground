@@ -106,12 +106,10 @@ database `postgres`, one built-in user `postgres`.
 - **The shared database is migrated from `master`, never from a PR.**
   `preview-shared-db.yml` runs on push to `master` that touches
   `client-v2/db/migrations`, and on manual dispatch, as `github-ci`. It
-  migrates `solpg_preview`, then `solpg_preview_base`, so a labelled PR's
-  clone starts current. A `push` run reads the workflow and the migrations
+  migrates `solpg_preview`. A `push` run reads the workflow and the migrations
   from `master`, which a reviewer has seen; a `pull_request` run reads them
   from the PR's merge commit, so a PR that migrated the shared database would
-  impose an unreviewed schema on every other preview. `migrate-preview-base`
-  stays for a manual run.
+  impose an unreviewed schema on every other preview.
 - **A PR that changes migrations is told to take the label.** A job in
   `preview.yml`, on an unlabelled PR, lists the PR's files through the GitHub
   API and, when any is under `client-v2/db/migrations`, writes the PR's
@@ -125,26 +123,34 @@ database `postgres`, one built-in user `postgres`.
   Neon path, which a follow-up removes. A variable rather than a second label:
   once foundation's Vercel has no Neon behind it, a Neon label could only
   fail, and switching one variable reverses the move while Neon still exists.
-- **A labelled PR's database is cloned from a template.** Cloud SQL has no
-  copy-on-write branches, but Postgres copies a database at creation:
-  `CREATE DATABASE <name> TEMPLATE solpg_preview_base OWNER <preview user>`.
-  The clone carries the base's schema, rows, and `schema_migrations`, so dbmate
-  applies only the migrations the base lacks, as on a Neon branch. The base is
-  marked `IS_TEMPLATE true` and `ALLOW_CONNECTIONS false`, because a clone
-  fails while any session is connected to its template; the script that
-  migrates the base lifts `ALLOW_CONNECTIONS` for the run and restores it. It
-  holds preview data only, never a copy of production's, for the reason
-  `client-v2/docs/neon.md` gives for the separate preview Neon project. The
-  copy is a full one, not copy-on-write, which is cheap at preview sizes. The
-  alternative, an empty database migrated from zero, leaves every preview
-  without rows and replays every migration on every new preview.
+- **A labelled PR's database is a copy of the shared one, without sessions.**
+  On its first deploy, `create-preview-db` creates an empty database owned by
+  the preview user and restores `pg_dump` of `solpg_preview` into it, with
+  `--exclude-table-data` for `session`. The copy carries `master`'s schema,
+  `schema_migrations`, and the rows previews have written, so dbmate applies
+  only the PR's migrations, and each meets existing data as it will in
+  production: a `NOT NULL` column, a backfill, or a unique index fails here
+  first. Sessions stay behind so that a sign-in made on another preview is not
+  valid on this one. A dump rather than `CREATE DATABASE ... TEMPLATE`:
+  Postgres refuses to clone a database while any session is connected to it,
+  and every preview is connected to `solpg_preview`, while `pg_dump` reads one
+  consistent snapshot with them connected. The rejected alternatives: a
+  separate template, migrated from `master` with no rows, which tests a
+  migration only against empty tables; and a template refreshed from
+  `solpg_preview`, which is as stale as its last refresh and needs a swap that
+  races the clones. The database's comment records the copy's state
+  (`copying:<epoch>`, then `created-at:<epoch>`): a deploy cancelled
+  mid-copy leaves the first, and the next run copies again instead of
+  deploying on half the rows. Later pushes reuse the copy; a fresh one takes
+  removing and adding the label. `pg_dump` must be at least the server's
+  major version, so the runner installs that client.
 - **Tables are owned by the application's user.** In Postgres the role that
   creates a table owns it; membership in another role does not change that.
   So every migration connection sets its session role to the user the
   application connects as (`options=-c role=<user>` in the URL dbmate reads),
   on `solpg-preview` and on `solpg`. The application then owns every table and
-  needs no per-table grant, and the base's tables, copied as they are into each
-  clone, already belong to the preview user.
+  needs no per-table grant. A PR's copy is restored under the same role, so
+  its tables belong to the preview user too.
 - **Preview databases are named by PR number.** The shared database's name,
   `solpg_preview`, is fixed and is set in the Preview environment only. A
   labelled PR's database is
@@ -164,10 +170,9 @@ database `postgres`, one built-in user `postgres`.
   `migration-url production`, and `migration-url shared` for `solpg_preview`.
   The `url` set wraps `neon.sh` and
   `neon-preview-branch.sh`; the `cloud-sql` set runs the Cloud SQL Auth Proxy,
-  clones the template as the CI IAM user, and prints
+  copies the shared database as the CI IAM user, and prints
   `postgres://<user>@127.0.0.1:<port>/<database>?sslmode=disable&options=-c%20role%3D<app user>`
-  for dbmate (the proxy carries the TLS). The `cloud-sql` set also has
-  `migrate-preview-base`. `preview.yml`, `preview-sweep.yml`, and
+  for dbmate (the proxy carries the TLS). `preview.yml`, `preview-sweep.yml`, and
   `Makefile.vercel` call the generic names, chosen by `PREVIEW_DB_PROVIDER` in
   the workflows and `DB_PROVIDER` in the make targets.
 - **GitHub Actions reaches `solpg-preview` only.** A second Workload Identity
@@ -193,7 +198,7 @@ database `postgres`, one built-in user `postgres`.
   the production Neon project through its unpooled URL, as today; once it is
   `cloud-sql`, it migrates `solpg` through the proxy and no longer reaches
   Neon. No database is migrated that production does not read: the preview
-  Neon project's `main`, `solpg_preview`, and `solpg_preview_base` are preview
+  Neon project's `main` and `solpg_preview` are preview
   infrastructure, migrated from `master` by `preview-shared-db.yml` or, for
   Neon's `main`, by the preview that branches from it.
 - **The cutover copies no data.** Production has no users yet (confirmed with
@@ -235,12 +240,14 @@ database `postgres`, one built-in user `postgres`.
   memoised at module scope so a warm instance pays once. Task 2.7 records the
   cold and warm latency of `GET /api/sync` so the cost is a number before the
   cutover.
-- [`preview-shared-db.yml` fails, and `solpg_preview` or the base falls
-  behind `master`] → the run fails red on `master`; a clone still applies what
-  the base lacks, and a manual dispatch reruns it.
-- [A clone fails while a session is connected to the base] →
-  `ALLOW_CONNECTIONS false` on the base outside `migrate-preview-base`, and
-  `create-preview-db` reports the failure on the PR like any failed step.
+- [`preview-shared-db.yml` fails, and `solpg_preview` falls behind
+  `master`] → the run fails red on `master`; a PR's copy still applies what it
+  lacks, and a manual dispatch reruns it.
+- [A PR's copy carries rows written by other PRs' unmerged code, and the
+  account rows with their OAuth tokens] → accepted: the copy stays on the
+  preview instance, readable by the same identities as `solpg_preview`, and
+  the rows are what previews produce. The copy's time grows with the shared
+  database, which holds preview data only.
 - [`preview-sweep.yml` lists databases on an instance, which needs a
   connection where the Neon sweep needed only an API key] → the sweep runs
   the proxy under the CI federation; a sweep that cannot connect fails and
@@ -257,7 +264,7 @@ database `postgres`, one built-in user `postgres`.
 1. Provider layer merged; every deployment still on `DB_PROVIDER` unset, so
    `url`. No behaviour change.
 2. Google Cloud set up by hand and documented in `client-v2/docs/cloud-sql.md`:
-   `solpg-preview` and its `solpg_preview_base`, the two federation pools and
+   `solpg-preview` and its `solpg_preview`, the two federation pools and
    providers, the three service accounts, the IAM database users, the instance
    flags on both instances.
 3. `solpg_preview` created and migrated; the Preview environment switched to

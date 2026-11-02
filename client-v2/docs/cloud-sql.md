@@ -32,8 +32,7 @@ the Cloud SQL Node.js Connector; a workflow or an operator logs in through the C
 | --- | --- | --- | --- | --- |
 | `solpg` | `solpg` | `vercel-production` | Production | An operator, `migration-url production` |
 | `solpg-preview` | `solpg_preview` | `vercel-preview` | Every Git-integration preview | `preview-shared-db.yml`, on push to `master` |
-| `solpg-preview` | `solpg_preview_base` | `vercel-preview` | Nothing; the template for clones | `preview-shared-db.yml`, on push to `master` |
-| `solpg-preview` | `solpg_preview_pr_<n>` | `vercel-preview` | A PR labelled `preview` | `preview.yml`, on every push to the PR |
+| `solpg-preview` | `solpg_preview_pr_<n>` | `vercel-preview` | A PR labelled `preview` | `preview.yml`, on every push to the PR, after copying `solpg_preview` without its sessions |
 
 Every migration runs with its session role set to the owner (`options=-c role=<user>` in the URL dbmate reads), so
 the application's user owns every table it uses and needs no grant per table.
@@ -192,14 +191,11 @@ psql "postgres://$(printf %s "$OPERATOR" | sed 's/@/%40/')@127.0.0.1:5434/postgr
 ```sql
 -- The operator may then act as the application's role, and so create databases it owns
 GRANT "vercel-preview@<project id>.iam" TO "<operator e-mail>";
--- github-ci clones and drops PR databases owned by vercel-preview, and migrates as it
+-- github-ci reads solpg_preview, creates and drops PR databases owned by vercel-preview, and migrates as it
 GRANT "vercel-preview@<project id>.iam" TO "github-ci@<project id>.iam";
 ALTER ROLE "github-ci@<project id>.iam" CREATEDB;
 
 CREATE DATABASE solpg_preview OWNER "vercel-preview@<project id>.iam";
-CREATE DATABASE solpg_preview_base OWNER "vercel-preview@<project id>.iam";
--- A clone fails while any session is on its template; migrate-preview-base opens it for its own run
-ALTER DATABASE solpg_preview_base WITH IS_TEMPLATE true ALLOW_CONNECTIONS false;
 ```
 
 On PostgreSQL 16 and later, `GRANT` of a role and `ALTER ROLE` need the `ADMIN` option on the target role. Whether
@@ -208,7 +204,7 @@ On PostgreSQL 16 and later, `GRANT` of a role and `ALTER ROLE` need the `ADMIN` 
 `gcloud sql users set-password postgres --instance=solpg-preview --prompt-for-password`, use it for these
 statements only, then set it again to a random value nobody records.
 
-Stop the proxy (`kill %1`). Both databases are empty; step 10 migrates them.
+Stop the proxy (`kill %1`). The database is empty; step 10 migrates it.
 
 ## 8. GitHub: variables and the label
 
@@ -257,10 +253,10 @@ Run from a directory linked to the project (`make vercel-link-preview`). For Pre
 branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. `SYNC_ENABLED=true` on Preview turns
 sync on once step 11 passes.
 
-## 10. Migrate the preview databases
+## 10. Migrate the shared preview database
 
-With this change on `master`, run Actions → preview-shared-db → Run workflow. It migrates `solpg_preview`, then
-`solpg_preview_base`, as `github-ci`. The run proves the GitHub federation, the IAM login, and the role
+With this change on `master`, run Actions → preview-shared-db → Run workflow. It migrates `solpg_preview` as
+`github-ci`. The run proves the GitHub federation, the IAM login, and the role
 memberships from step 7 at once; a failure names the step that broke.
 
 ## 11. Check the previews
