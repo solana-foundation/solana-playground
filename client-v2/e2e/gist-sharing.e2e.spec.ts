@@ -301,7 +301,7 @@ test("gist-sharing: Too large is caught before sending", async ({ page }) => {
     .fill("https://github.com/alice/big");
   await importer.locator('button[type="submit"]').click();
   await expect(page.getByRole("dialog")).toHaveCount(0, LONG);
-  await page.getByRole("button", { name: "Back to app" }).click();
+  // An import closes Settings once the project is open
   await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 
   const big = "github-alice/big/";

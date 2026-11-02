@@ -63,13 +63,10 @@ const PROJECT = `/github-${OWNER}/${REPO}/`;
 const item = (page: Page, path: string) =>
   page.locator(`[data-path="${PROJECT}${path}"]`);
 
-/** Imports the repository from Settings, then goes back to the app */
+/** Imports the repository from Settings, which closes once the project opens */
 const importAndReturn = async (page: Page) => {
   await importRepository(page);
-  // The dialog closes once the project is open; leaving Settings earlier
-  // races the import, which can bring Settings back
   await expect(page.getByRole("dialog")).toHaveCount(0, LONG);
-  await page.getByRole("button", { name: "Back to app" }).click();
   await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 };
 
