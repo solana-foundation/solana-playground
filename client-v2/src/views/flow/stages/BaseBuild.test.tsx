@@ -73,6 +73,12 @@ describe("BaseBuild", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing built yet" })
     ).toBeTruthy();
+    // Spec 08 EMPTY-02
+    expect(
+      screen.getByText(
+        "Build compiles your program on the server. Only the source leaves your browser."
+      )
+    ).toBeTruthy();
     // Async: Build is an AsyncButton, which settles once `onBuild` resolves
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Build" }));
@@ -134,9 +140,7 @@ describe("BaseBuild", () => {
     expect(
       screen.getByText("First builds take longer. This one is running.")
     ).toBeTruthy();
-    expect(
-      screen.queryByText("This build is taking longer than usual.")
-    ).toBeNull();
+    expect(screen.queryByText(/taking longer than usual/)).toBeNull();
   });
 
   it("offers Deploy as the one brand button after a build", () => {
@@ -191,7 +195,7 @@ describe("BaseBuild", () => {
     render(<BaseBuild {...p} />);
 
     expect(
-      screen.getByRole("heading", { name: "Could not build" })
+      screen.getByRole("heading", { name: "Could not build." })
     ).toBeTruthy();
     expect(screen.getByText("The full log has the details.")).toBeTruthy();
     expect(screen.queryByText(/did not answer/)).toBeNull();
@@ -386,7 +390,9 @@ describe("BaseBuild", () => {
 
       rerender(<BaseBuild {...props(surface, true, true)} />);
       expect(
-        screen.getByText("This build is taking longer than usual.")
+        screen.getByText(
+          "This build is taking longer than usual. The server may be busy. It keeps running."
+        )
       ).toBeTruthy();
     }
   );

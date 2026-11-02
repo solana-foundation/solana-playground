@@ -40,7 +40,7 @@ export const DeleteWorkspace: FC<
         <p>Its files and its program keypair are deleted from this browser.</p>
         {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
             directory about to be removed */}
-        {isLesson && <p>Your progress in this lesson is lost.</p>}
+        {isLesson && <p>Your progress in this tutorial is lost.</p>}
         {signedIn && (
           <p>It's also deleted from your account and your other devices.</p>
         )}

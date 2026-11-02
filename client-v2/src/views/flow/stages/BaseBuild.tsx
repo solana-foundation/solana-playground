@@ -124,7 +124,9 @@ const Surface = ({
  */
 const SlowLine = ({ slow }: { slow: boolean }) => (
   <p role="status" className="text-sm text-muted-foreground">
-    {slow ? "This build is taking longer than usual." : ""}
+    {slow
+      ? "This build is taking longer than usual. The server may be busy. It keeps running."
+      : ""}
   </p>
 );
 
@@ -188,7 +190,7 @@ const Empty = (p: BaseBuildProps) => (
       // a second line below adds that this one is still running.
       p.building
         ? `Compiling on ${p.host}. A first build there can take several minutes.`
-        : "Build compiles your program on the server. Nothing leaves your browser except the source."
+        : "Build compiles your program on the server. Only the source leaves your browser."
     }
     actions={<FirstBuildButton p={p} />}
     // A first build says it is slow in its own words below (Spec 06), so
@@ -218,7 +220,8 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   return (
     <Surface
       icon={<CircleX className="text-error" />}
-      title={noAnswer ? "Build did not start" : "Could not build"}
+      // Spec 08 ANY-00 ends the title with a full stop
+      title={noAnswer ? "Build did not start" : "Could not build."}
       meta={msLabel(p.ms)}
       actions={<BuildButton p={p} label="Try again" />}
       progress={p}

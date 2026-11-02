@@ -36,20 +36,21 @@ const VERB: Record<ProjectAction, string> = {
   delete: "delete",
 };
 
-const INVALID_NAME = "Use letters, digits, spaces, - and _.";
+const INVALID_NAME = "Use letters, numbers, spaces, - or _.";
+const NAME_TAKEN = "A project already has that name.";
 
 /**
  * A rename the explorer refused for a reason the user can act on: the project
  * went (renamed or deleted elsewhere) or the name was taken meanwhile. Said
  * in the field, not reported: another tab or device is all it takes.
  */
-const refusalOf = (error: unknown, entry: ProjectEntry, newName: string) => {
+const refusalOf = (error: unknown, entry: ProjectEntry) => {
   const message = error instanceof Error ? error.message : null;
   if (message === PgWorkspace.errors.NOT_FOUND) {
     return `${entry.name} is no longer in your projects.`;
   }
   if (message === PgWorkspace.errors.ALREADY_EXISTS) {
-    return `A project named ${newName} already exists.`;
+    return NAME_TAKEN;
   }
   return null;
 };
@@ -258,7 +259,7 @@ const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
       return;
     }
     if (names.includes(newName)) {
-      setRenameError(`A project named ${newName} already exists.`);
+      setRenameError(NAME_TAKEN);
       return;
     }
 
@@ -277,7 +278,7 @@ const ProjectList = ({ onPickCurrent, onPicked }: ProjectListProps) => {
       setRenaming(null);
       setRenameError(null);
     } catch (e) {
-      const refusal = refusalOf(e, entry, newName);
+      const refusal = refusalOf(e, entry);
       if (refusal) {
         navTelemetry.track("nav_project_action_failed", { action: "rename" });
         setRenameError(refusal);

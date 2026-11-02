@@ -119,7 +119,7 @@ const unparsedView = (stderr: string): DiagnosticView => ({
   title: "The compiler stopped",
   // Spec 08 BUILD-02's message
   explanation:
-    "The compiler stopped with an error we can't read line by line. The compiler output is below.",
+    "The compiler stopped with an error that names no line. Its output is below.",
   label: null,
   file: null,
   lines: null,
@@ -320,8 +320,8 @@ if (import.meta.vitest) {
         // Spec 08 BUILD-02, in words a learner reads
         expect(view.diagnostics[0].title).toBe("The compiler stopped");
         expect(view.diagnostics[0].explanation).toBe(
-          "The compiler stopped with an error we can't read line by line. " +
-            "The compiler output is below."
+          "The compiler stopped with an error that names no line. " +
+            "Its output is below."
         );
         expect(view.diagnostics[0].prompts).toEqual({
           explain: "Explain this build failure in plain words:\nboom",

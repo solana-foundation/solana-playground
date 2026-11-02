@@ -69,7 +69,7 @@ test("client-v2-layout: Renaming in place", async ({ page }) => {
   // Monaco keeps alert regions of its own; the field's is in the navigation
   await expect(
     page.locator('[data-slot="sidebar"]').getByRole("alert")
-  ).toHaveText("A project named beta already exists.");
+  ).toHaveText("A project already has that name.");
 
   await field.fill("gamma");
   await field.press("Enter");
