@@ -103,6 +103,12 @@ describe("tutorials/AUTHORING.md", () => {
     "two beats share an id": (d) => {
       d.steps[1].beats[0].id = "s1.boil";
     },
+    "refused goal names nothing": (d) => {
+      d.steps[1].goal = { kind: "refused", instruction: "echo" };
+    },
+    "argument named twice": (d) => {
+      d.steps[1].beats[1].call.args = ["text", { name: "text", value: "hi" }];
+    },
     "log is not a regular expression": (d) => {
       d.steps[1].goal.log = "(";
     },

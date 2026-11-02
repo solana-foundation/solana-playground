@@ -467,8 +467,13 @@
           "type": "string",
           "minLength": 1
         },
+        "record": {
+          "description": "The line the act's card reads once its run landed, before the time it took: \"Created your map · 10 KB\". Without it the card reads its default record.",
+          "type": "string",
+          "minLength": 1
+        },
         "call": {
-          "description": "For a `call` act only: the instruction and the arguments the learner fills.",
+          "description": "For a `call` act only: the instruction and its arguments. A name is a field the learner fills; `{ name, value }` is sent as given, with no field; `{ name, value, add }` sends `value` on the first run and adds `add` for each run of this card that landed.",
           "type": "object",
           "additionalProperties": false,
           "required": ["instruction"],
@@ -480,8 +485,7 @@
             "args": {
               "type": "array",
               "items": {
-                "type": "string",
-                "minLength": 1
+                "$ref": "#/definitions/callArg"
               },
               "minItems": 1
             }
@@ -503,6 +507,48 @@
           "required": ["call"]
         }
       }
+    },
+    "callArg": {
+      "description": "One argument of a call act: a field the learner fills, a fixed value, or a whole number that grows by `add` with each run that landed.",
+      "anyOf": [
+        {
+          "type": "string",
+          "minLength": 1
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": ["string", "integer"]
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "value", "add"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "value": {
+              "type": "integer"
+            },
+            "add": {
+              "description": "Added for each run of this card that landed: a whole number, at least 1.",
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        }
+      ]
     },
     "beat": {
       "type": "object",
@@ -584,6 +630,55 @@
             },
             "log": {
               "description": "A pattern the call's program log must match.",
+              "$ref": "#/definitions/pattern"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "instruction"],
+          "anyOf": [
+            {
+              "required": ["error"]
+            },
+            {
+              "required": ["log"]
+            }
+          ],
+          "properties": {
+            "kind": {
+              "const": "refused"
+            },
+            "instruction": {
+              "type": "string",
+              "minLength": 1
+            },
+            "error": {
+              "description": "The program error the call was refused with: its name, its code (Anchor numbers custom errors from 6000), or both.",
+              "type": "object",
+              "additionalProperties": false,
+              "anyOf": [
+                {
+                  "required": ["name"]
+                },
+                {
+                  "required": ["code"]
+                }
+              ],
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "code": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "log": {
+              "description": "A pattern the refused transaction's log must match: alone for a refusal with no error code (a panic, running out of memory), or beside `error`, when both must match.",
               "$ref": "#/definitions/pattern"
             }
           }

@@ -4,6 +4,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 // Relative on purpose: `yarn tutorial:check` runs this module through tsx,
 // with no `@/` alias, and the schema sits beside the definitions it checks
 import schema from "../../../../tutorials/tutorial.schema.json";
+import { argName } from "./types";
 import type {
   Beat,
   DefinitionError,
@@ -32,7 +33,8 @@ const validator = () => {
  * range, a reason per wrong option and none for the right one, blocks found
  * in their target, instructions some step's target defines, a `next` in
  * `known`, ids used once, patterns that compile, read-only files the step
- * has, doc files that exist and link only to `https`) run only on a definition
+ * has, a call act's argument names used once, doc files that exist and link
+ * only to `https`) run only on a definition
  * the schema accepts, since they read its shape. The folder-name error leads,
  * then the rules' errors in step order.
  *
@@ -421,6 +423,25 @@ const ruleErrors = (
         }
         if (beat.writes) block(step.target, beat.writes, `${at}.writes`);
       }
+      if (beat.kind === "act" && beat.act === "call") {
+        // A name twice would send one value over the other
+        const named = new Map<string, string>();
+        beat.call.args?.forEach((arg, k) => {
+          const path = `${at}.call.args[${k}]`;
+          const name = argName(arg);
+          const first = named.get(name);
+          if (first === undefined) {
+            named.set(name, path);
+            return;
+          }
+          errors.push({
+            path,
+            message: `a name no other argument of this call has, found ${JSON.stringify(
+              name
+            )}, also at ${first}`,
+          });
+        });
+      }
     }
 
     const goal = step.goal;
@@ -438,7 +459,7 @@ const ruleErrors = (
       goal.instructions?.forEach((name, k) =>
         instruction(name, `steps[${i}].goal.instructions[${k}]`)
       );
-    } else if (goal.kind === "call") {
+    } else if (goal.kind === "call" || goal.kind === "refused") {
       instruction(goal.instruction, `steps[${i}].goal.instruction`);
       pattern(goal.log, `steps[${i}].goal.log`);
     }
@@ -749,6 +770,107 @@ if (import.meta.vitest) {
       expect(lines(d)).toEqual([
         "steps[0].beats[1].call: no call on an act other than `call`, found one",
       ]);
+    });
+
+    describe("a refused goal", () => {
+      it("accepts one by error name and code, or by a log pattern", () => {
+        const d = minimal();
+        d.steps[1].goal = {
+          kind: "refused",
+          instruction: "hello",
+          error: { name: "NotEnoughEnergy", code: 6000 },
+        };
+        expect(lines(d)).toEqual([]);
+        d.steps[1].goal = {
+          kind: "refused",
+          instruction: "hello",
+          log: "out of memory",
+        };
+        expect(lines(d)).toEqual([]);
+        d.steps[1].goal = {
+          kind: "refused",
+          instruction: "hello",
+          error: { code: 6000 },
+          log: "Not enough energy",
+        };
+        expect(lines(d)).toEqual([]);
+      });
+
+      it("rejects one that names neither an error nor a log", () => {
+        const d = minimal();
+        d.steps[1].goal = { kind: "refused", instruction: "hello" };
+        expect(lines(d)).toEqual([
+          "steps[1].goal: one of the shapes the schema allows, found an object",
+        ]);
+      });
+
+      it("rejects an error with neither a name nor a code", () => {
+        const d = minimal();
+        d.steps[1].goal = {
+          kind: "refused",
+          instruction: "hello",
+          error: {},
+        } as unknown as TutorialDefinition["steps"][number]["goal"];
+        expect(lines(d)).toEqual([
+          "steps[1].goal.error: one of the shapes the schema allows, found an object",
+        ]);
+      });
+
+      it("rejects an instruction no target defines, and a pattern that does not compile", () => {
+        const d = minimal();
+        d.steps[1].goal = {
+          kind: "refused",
+          instruction: "goodbye",
+          log: "(",
+        };
+        expect(lines(d)).toEqual([
+          'steps[1].goal.instruction: an instruction a step\'s target defines, found "goodbye"',
+          'steps[1].goal.log: a regular expression, found "("',
+        ]);
+      });
+    });
+
+    describe("a call act's arguments and an act's record line", () => {
+      const callAct = (args: unknown[]): Beat =>
+        ({
+          kind: "act",
+          id: "s2.call",
+          act: "call",
+          title: "Call",
+          context: "Sends hello",
+          button: "Grow",
+          record: "Created your map · 10 KB",
+          call: { instruction: "hello", args },
+        } as unknown as Beat);
+
+      it("accepts a field, a fixed value and a growing value, and a record line", () => {
+        const d = minimal();
+        d.steps[1].beats[0] = callAct([
+          "name",
+          { name: "text", value: "gm" },
+          { name: "at", value: 35000 },
+          { name: "len", value: 20480, add: 10240 },
+        ]);
+        expect(lines(d)).toEqual([]);
+      });
+
+      it("rejects an argument named twice on one act", () => {
+        const d = minimal();
+        d.steps[1].beats[0] = callAct(["len", { name: "len", value: 1 }]);
+        expect(lines(d)).toEqual([
+          'steps[1].beats[0].call.args[1]: a name no other argument of this call has, found "len", also at steps[1].beats[0].call.args[0]',
+        ]);
+      });
+
+      it("rejects an amount to add on a value that is not a whole number", () => {
+        const d = minimal();
+        d.steps[1].beats[0] = callAct([
+          { name: "len", value: "big", add: 10240 },
+        ]);
+        expect(lines(d)).toEqual([
+          "steps[1].beats[0].call.args[0]: one of the shapes the schema allows, found an object",
+        ]);
+      });
     });
 
     it("rejects a reason at the right option", () => {

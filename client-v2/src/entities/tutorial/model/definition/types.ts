@@ -80,13 +80,29 @@ interface ActBase {
   title: string;
   context: string;
   button: string;
+  /** The card's line once its run landed, before the time it took */
+  record?: string;
 }
+
+/**
+ * One argument of a call act: a name is a field the learner fills; a value
+ * is sent as given, with no field; with `add` (a whole number, at least 1),
+ * the value grows by it for each run of the card that landed
+ */
+export type CallArg =
+  | string
+  | { name: string; value: string | number; add?: never }
+  | { name: string; value: number; add: number };
+
+/** An argument's name, whatever its form */
+export const argName = (arg: CallArg): string =>
+  typeof arg === "string" ? arg : arg.name;
 
 /** An act card; only a `call` act names its instruction, and it must */
 export type ActBeat =
   | (ActBase & {
       act: "call";
-      call: { instruction: string; args?: string[] };
+      call: { instruction: string; args?: CallArg[] };
     })
   | (ActBase & { act: Exclude<Act, "call">; call?: never });
 
@@ -96,7 +112,23 @@ export type Beat = SayBeat | WriteBeat | Ask | ActBeat;
 export type Goal =
   | { kind: "build"; instructions?: string[] }
   | { kind: "deploy" }
-  | { kind: "call"; instruction: string; args?: string[]; log?: string };
+  | { kind: "call"; instruction: string; args?: string[]; log?: string }
+  /**
+   * A call of `instruction` the program refused, matched by its error (each
+   * of the name and code given) and by `log` over the transaction's log;
+   * at least one of the two
+   */
+  | {
+      kind: "refused";
+      instruction: string;
+      error?: RefusedError;
+      log?: string;
+    };
+
+/** A program error a refused goal names: its name, its code, or both */
+export type RefusedError =
+  | { name: string; code?: number }
+  | { name?: string; code: number };
 
 export interface Win {
   id: string;

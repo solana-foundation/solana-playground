@@ -347,6 +347,27 @@ The card fills the instruction's accounts itself (see rule 7 of "Steps and
 their files"). A step may hold more than one act: Hello Anchor's last step
 builds and deploys, then calls.
 
+An argument in `args` takes one of three forms:
+
+- `"name"`: a field on the card, which the learner fills.
+- `{ "name": "text", "value": "gm" }`: sent as given, with no field. The
+  value is a string or a whole number (`{ "name": "at", "value": 35000 }`).
+  The learner cannot change it on the card; the Call panel is where they
+  try other values.
+- `{ "name": "len", "value": 20480, "add": 10240 }`: the first press sends
+  `value`, and each press that landed adds `add` for the next one, so the
+  card sends 20480, then 30720. `add` is a whole number, at least 1. A press
+  the program refused, or one that failed, sends the same value again, and
+  calls made from the Call panel are not counted.
+
+A card pressed again and again (chop until the energy runs out, grow until
+the memory does) is one `call` act: it stays pressable until the step's goal
+passes. Name its button for what the learner does: `"button": "Chop"`.
+
+`record`, on any act, is the line its card reads once the run landed, before
+the time it took: `"record": "Created your map · 10 KB"`. Leave it out and
+the card reads its usual record.
+
 ```json beat
 {
   "kind": "act",
@@ -391,6 +412,20 @@ purpose..."). `onFail` holds the beats after the learner presses Explain: a
   optional too; each named argument needs a value that is not blank. A step
   with several calls passes on the first one that meets its goal, in
   whatever order they run.
+- `{ "kind": "refused", "instruction": "chop_tree", "error": { "name": "NotEnoughEnergy", "code": 6000 } }`:
+  the program refused a call of the instruction with this error. Give the
+  error's `name` (the variant of your `#[error_code]` enum), its `code`
+  (Anchor numbers them from 6000, in the order the enum declares them), or
+  both; with both, both must match. A refusal with no error code, a panic or
+  running out of memory, is named by `log` instead, a regular expression
+  over the whole transaction log:
+  `{ "kind": "refused", "instruction": "grow", "log": "out of memory" }`.
+  Pick a phrase only the refusal you mean prints: Zero Copy's grow is also
+  refused when it adds more than 10 KB at once, and "out of memory" is not
+  in that log. A `refused` goal needs `error`, `log` or both. A transaction
+  that never reached the program (no wallet, no funds) passes nothing, and a
+  refusal on a step whose goal is not `refused` is an ordinary failure the
+  assistant explains.
 
 `win` closes the step: `headline` says what is now true ("Your program
 compiles."), `line` says what that means. `callPanelLine` replaces `line`
@@ -605,21 +640,33 @@ copy. Given one, carry its copy over word for word, and map its fields:
 - `explainStep`, `testWin` → `explain`, `win.callPanelLine`
 - `goal: "build"`, `"deploy"` → `{ "kind": "build", "instructions": [...] }`, `{ "kind": "deploy" }`
 - `goal: "run"` or `"call"` → `{ "kind": "call", "instruction": ..., "log": ... }`
+- an act `chop`, `send` or `grow` → a `call` act: its `ix` (or the
+  instruction its program's move sends, `chop_tree` for a chop) →
+  `call.instruction`, its `button` and `record` kept; the values the move
+  sends → `args` with a `value` (and `add` when it grows each press)
+- a goal `chop`, `send` or `grow` → read the lesson's `chopPasses`,
+  `growPasses` or `panelPasses` for the step: a step that passes when the
+  program refuses (`!c.ok` or `!row.ok`: `chop_tree` refused with
+  `NotEnoughEnergy`, a grow out of memory) → `{ "kind": "refused", ... }`
+  with the error or log the lesson's refusal carries; a step that passes when
+  a call lands (`c.ok`, or `panelPasses` naming an instruction such as
+  `paint`) → `{ "kind": "call", "instruction": ... }`. When the function
+  checks anything else, stop and report.
 - beats, `planned`, `onFail` → the same, minus the fields below
 
 Drop, because Playground does it for real or the live assistant does it:
 `win.stats`, every `chips`, `errorChips` and `answers` with a `match`,
-`plannedShort`, an ask's `n`, a write's `ref`, an act's `ix` and `record`,
-and the lesson's `checks`, `game`, `memory`, `runTx`, `callTx`, `programId`,
+`plannedShort`, an ask's `n`, a write's `ref`, an act's `ix` (now in
+`call`), and the lesson's `checks`, `game`, `memory`, `runTx`, `callTx`, `programId`,
 `idlAccount` and `txSignature`.
 
 **Stop and report** when the script needs something the format cannot say:
-an act other than the five above (`chop`, `grow`, `send`), or a goal that
-passes on a refused transaction or an account's size. Do not invent a field:
-the check refuses any field the schema does not name. Tell the person which
-step needs what, and ask the Playground team: the format change that adds
-these is tracked as HOO-2502 (goals on a refused call and on an account's
-size, and acts named for what the learner does).
+a card that repeats until a condition other than its step's goal (Zero
+Copy's Grow to 40 KB before Paint), a goal on an account's size, or a value
+read from an account the lesson made earlier. Do not invent a field: the
+check refuses any field the schema does not name. Tell the person which step
+needs what, and ask the Playground team: the repeating card and the
+accounts are tracked as HOO-2505.
 
 ## Running the check
 
@@ -658,6 +705,11 @@ example above, broken one way each:
   `next` names no tutorial. Use an existing slug, or `null`.
 - `steps[1].beats[0].id: an id no other beat has, found "s1.boil", also at steps[0].beats[0].id`
   Two beats share an id.
+- `steps[1].goal: one of the shapes the schema allows, found an object`
+  A goal whose fields fit no kind: most often a `refused` goal with neither
+  `error` nor `log`. Name the error, a log phrase, or both.
+- `steps[1].beats[1].call.args[1]: a name no other argument of this call has, found "text", also at steps[1].beats[1].call.args[0]`
+  One argument appears twice in `args`. Keep one: a field or a value.
 - `steps[1].goal.log: a regular expression, found "("`
   `log` is a regular expression. Escape `( ) [ ] { } . * + ? | ^ $` when you
   mean the character itself, written `\\(` inside JSON.

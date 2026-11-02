@@ -21,8 +21,14 @@ const log = createLogger("tutorial-conversation:goals");
  *   fails). Arguments are read from what the
  *   deployed program decoded, which is what keeps a call before the upgrade
  *   from passing step 4: its log `Hello, World!` matches `Hello, .+!` too.
+ * - `refused`: a run or call the program refused in the goal's instruction,
+ *   matching the goal's error if it names one (each of its name and code
+ *   given) and the goal's log pattern over the whole transaction log if it
+ *   gives one; both when both are given. A failure that never reached the
+ *   program carries no refusal and passes nothing.
  */
 export const judgeGoal: Judge = (goal, result) => {
+  if (goal.kind === "refused") return refusalMeets(goal, result);
   if (!result.ok) return false;
   switch (goal.kind) {
     case "build":
@@ -54,6 +60,25 @@ export const judgeGoal: Judge = (goal, result) => {
 };
 
 type CallGoal = Extract<Goal, { kind: "call" }>;
+type RefusedGoal = Extract<Goal, { kind: "refused" }>;
+
+/** The program refused the goal's instruction the way the goal names */
+const refusalMeets = (goal: RefusedGoal, result: RunResult): boolean => {
+  if (result.ok || (result.act !== "run" && result.act !== "call")) {
+    return false;
+  }
+  const { refused } = result;
+  if (!refused || !sameIdlName(refused.instruction, goal.instruction)) {
+    return false;
+  }
+  if (goal.error) {
+    const { name, code } = goal.error;
+    if (!refused.error) return false;
+    if (code !== undefined && refused.error.code !== code) return false;
+    if (name !== undefined && refused.error.name !== name) return false;
+  }
+  return goal.log === undefined || logMatches(goal.log, result.log);
+};
 
 /** The call names the goal's instruction and carries each required argument, non-blank */
 const callMeets = (goal: CallGoal, called: Called): boolean =>
@@ -90,6 +115,7 @@ const logMatches = (pattern: string, line: string | null): boolean => {
 if (import.meta.vitest) {
   const { describe, it, expect, beforeAll, beforeEach, afterEach } = import.meta
     .vitest;
+  type Refusal = import("./progress").Refusal;
 
   // Hello Anchor's four goals, as its `tutorial.json` writes them
   const BUILD_HELLO: Goal = { kind: "build", instructions: ["hello"] };
@@ -348,6 +374,154 @@ if (import.meta.vitest) {
         expect(judgeGoal(goal, ran("call", [hello({})], "("))).toBe(false);
         expect(judgeGoal(goal, ran("call", [hello({})], "("))).toBe(false);
         expect(errors()).toHaveLength(1);
+      });
+    });
+
+    describe("refused", () => {
+      // Lumberjack's step 3 and Zero Copy's step 2, as their scripts end
+      const OUT_OF_ENERGY: Goal = {
+        kind: "refused",
+        instruction: "chop_tree",
+        error: { name: "NotEnoughEnergy", code: 6000 },
+      };
+      const OUT_OF_MEMORY: Goal = {
+        kind: "refused",
+        instruction: "grow",
+        log: "out of memory",
+      };
+
+      const refusedBy = (
+        act: "run" | "call",
+        refused: Refusal | undefined,
+        log = ""
+      ): RunResult =>
+        refused
+          ? { act, ok: false, seconds: 1, message: "refused", log, refused }
+          : { act, ok: false, seconds: 1, message: "No wallet", log };
+      const chop = (code: number, name: string | null): Refusal => ({
+        instruction: "chop_tree",
+        error: { code, name },
+      });
+
+      it("passes a refusal with the goal's error, from a call act or a client run", () => {
+        expect(
+          judgeGoal(
+            OUT_OF_ENERGY,
+            refusedBy("call", chop(6000, "NotEnoughEnergy"))
+          )
+        ).toBe(true);
+        expect(
+          judgeGoal(
+            OUT_OF_ENERGY,
+            refusedBy("run", chop(6000, "NotEnoughEnergy"))
+          )
+        ).toBe(true);
+      });
+
+      it("checks each of the name and the code the goal gives", () => {
+        const byCode: Goal = {
+          kind: "refused",
+          instruction: "chop_tree",
+          error: { code: 6000 },
+        };
+        const byName: Goal = {
+          kind: "refused",
+          instruction: "chop_tree",
+          error: { name: "NotEnoughEnergy" },
+        };
+        expect(judgeGoal(byCode, refusedBy("call", chop(6000, null)))).toBe(
+          true
+        );
+        expect(
+          judgeGoal(byName, refusedBy("call", chop(6001, "NotEnoughEnergy")))
+        ).toBe(true);
+        expect(
+          judgeGoal(
+            OUT_OF_ENERGY,
+            refusedBy("call", chop(6001, "NotEnoughEnergy"))
+          )
+        ).toBe(false);
+        expect(
+          judgeGoal(OUT_OF_ENERGY, refusedBy("call", chop(6000, "NoWood")))
+        ).toBe(false);
+        expect(
+          judgeGoal(
+            OUT_OF_ENERGY,
+            refusedBy("call", { instruction: "chop_tree", error: null })
+          )
+        ).toBe(false);
+      });
+
+      it("fails another instruction, a confirmed call, and a failure that never reached the program", () => {
+        expect(
+          judgeGoal(
+            OUT_OF_ENERGY,
+            refusedBy("call", {
+              instruction: "init_player",
+              error: { code: 6000, name: "NotEnoughEnergy" },
+            })
+          )
+        ).toBe(false);
+        expect(
+          judgeGoal(
+            OUT_OF_ENERGY,
+            ran("call", [{ instruction: "chop_tree", args: {} }], null)
+          )
+        ).toBe(false);
+        expect(judgeGoal(OUT_OF_ENERGY, refusedBy("call", undefined))).toBe(
+          false
+        );
+        expect(judgeGoal(OUT_OF_ENERGY, built(["chop_tree"]))).toBe(false);
+      });
+
+      it("matches the log pattern over the whole transaction log: out of memory, not too big", () => {
+        const grow: Refusal = { instruction: "grow", error: null };
+        const tooBig = [
+          "Program Zero111 invoke [1]",
+          "Program log: Error: an account can grow by at most 10,240 bytes in one instruction",
+          "Program Zero111 failed: Failed to reallocate account data",
+        ].join("\n");
+        const outOfMemory = [
+          "Program Zero111 invoke [1]",
+          "Program log: Error: memory allocation failed, OUT OF MEMORY",
+          "Program Zero111 failed: SBF program panicked",
+        ].join("\n");
+        expect(judgeGoal(OUT_OF_MEMORY, refusedBy("call", grow, tooBig))).toBe(
+          false
+        );
+        expect(
+          judgeGoal(OUT_OF_MEMORY, refusedBy("call", grow, outOfMemory))
+        ).toBe(true);
+      });
+
+      it("needs both the error and the log when the goal gives both", () => {
+        const both: Goal = {
+          kind: "refused",
+          instruction: "chop_tree",
+          error: { code: 6000 },
+          log: "Not enough energy",
+        };
+        const refusal = chop(6000, "NotEnoughEnergy");
+        expect(judgeGoal(both, refusedBy("call", refusal, ""))).toBe(false);
+        expect(
+          judgeGoal(
+            both,
+            refusedBy(
+              "call",
+              refusal,
+              "Program log: AnchorError ... Error Message: Not enough energy."
+            )
+          )
+        ).toBe(true);
+      });
+
+      it("a refusal passes no call goal", () => {
+        expect(
+          judgeGoal(
+            { kind: "call", instruction: "chop_tree" },
+            refusedBy("call", chop(6000, "NotEnoughEnergy"))
+          )
+        ).toBe(false);
       });
     });
 

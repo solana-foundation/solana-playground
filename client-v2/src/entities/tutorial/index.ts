@@ -16,6 +16,7 @@ export type {
   Ask,
   Beat,
   Block,
+  CallArg,
   Chip,
   DefinitionError,
   Doc,
@@ -23,6 +24,7 @@ export type {
   Follow,
   Goal,
   Quote,
+  RefusedError,
   SayBeat,
   Step,
   Text,
@@ -30,3 +32,4 @@ export type {
   Win,
   WriteBeat,
 } from "./model/definition/types";
+export { argName } from "./model/definition/types";

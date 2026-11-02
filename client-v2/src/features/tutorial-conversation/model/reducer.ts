@@ -3,6 +3,7 @@ import type {
   ActBeat,
   Ask,
   Beat,
+  CallArg,
   Step,
   TutorialDefinition,
 } from "@/entities/tutorial";
@@ -372,6 +373,38 @@ const isPlannedFailure = (
   cursor.stepId === step.id &&
   !cursor.fail;
 
+/**
+ * The values a call act sends: what the learner gave, with the definition's
+ * value for every argument it gives one, which no learner value overrides. A
+ * value with `add` grows by it for each run of this act that landed, so a
+ * refused, failed or interrupted run sends the same value again.
+ */
+const callArgs = (
+  args: CallArg[],
+  given: Record<string, string>,
+  p: ConversationProgress,
+  beatId: string
+): Record<string, string> => {
+  const landed = (p.runs[beatId] ?? []).filter((r) => r.status === "ok").length;
+  const out: Record<string, string> = {};
+  // The card's fields are named by `args`, so names compare exactly, as
+  // `checkDefinition`'s duplicate rule does
+  const fixed = new Set(
+    args.flatMap((arg) => (typeof arg === "string" ? [] : [arg.name]))
+  );
+  for (const [name, value] of Object.entries(given)) {
+    if (!fixed.has(name)) out[name] = value;
+  }
+  for (const arg of args) {
+    if (typeof arg === "string") continue;
+    out[arg.name] =
+      arg.add === undefined
+        ? String(arg.value)
+        : String(arg.value + arg.add * landed);
+  }
+  return out;
+};
+
 /** The index of the fix question in `onFail`, past its leading explanation */
 const fixQuestionIndex = (step: Step): number => {
   const i = (step.onFail ?? []).findIndex((b) => b.kind !== "say");
@@ -622,7 +655,7 @@ export const reduce = (
       if (beat.act === "call") {
         input.call = {
           instruction: beat.call.instruction,
-          args: action.args ?? {},
+          args: callArgs(beat.call.args ?? [], action.args ?? {}, p, beat.id),
         };
       }
       return {
@@ -685,9 +718,18 @@ export const reduce = (
       const { step, beat } = found;
       const took = action.at - run.at;
       const result = action.result;
+      // A refusal the step's goal names is its own outcome: it passes the
+      // step below, and is no failure to explain
+      const refused =
+        !result.ok &&
+        step.goal.kind === "refused" &&
+        !passed(p, step) &&
+        ctx.judge(step.goal, result);
       let record: RunRecord;
       if (result.ok) {
         record = { status: "ok", at: run.at, took, result };
+      } else if (refused) {
+        record = { status: "refused", at: run.at, took, result };
       } else if (isPlannedFailure(step, p.cursor, result)) {
         record = { status: "failed", at: run.at, took, result, planned: true };
       } else {
@@ -701,8 +743,11 @@ export const reduce = (
         },
       };
       const cleared: EngineState = { progress: recorded, stage: null };
-      if (!result.ok) return same(cleared);
-      if (!passed(recorded, step) && ctx.judge(step.goal, result)) {
+      if (!result.ok && !refused) return same(cleared);
+      if (
+        refused ||
+        (!passed(recorded, step) && ctx.judge(step.goal, result))
+      ) {
         const via: PassedVia = beat.act === "run" ? "client" : "chat";
         return passStep(ctx, cleared, recorded, step, action.at, via);
       }
@@ -851,6 +896,9 @@ export const reduce = (
 
 if (import.meta.vitest) {
   const { describe, it, expect, beforeAll } = import.meta.vitest;
+  type CallArg = import("@/entities/tutorial").CallArg;
+  type Goal = import("@/entities/tutorial").Goal;
+  type Refusal = import("./progress").Refusal;
 
   describe("features/tutorial-conversation/model/reducer", () => {
     let hello: TutorialDefinition;
@@ -2094,6 +2142,404 @@ if (import.meta.vitest) {
         expect(r.state.stage).toBeNull();
         expect(r.effects).toEqual([
           { kind: "restore", files: hello.intro.files, remove: [] },
+        ]);
+      });
+    });
+
+    describe("a refused call and argument values", () => {
+      const act = (
+        id: string,
+        instruction: string,
+        args: CallArg[] | undefined,
+        button: string
+      ): Beat =>
+        args
+          ? {
+              kind: "act",
+              id,
+              act: "call",
+              title: button,
+              context: `Sends ${instruction}`,
+              button,
+              call: { instruction, args },
+            }
+          : {
+              kind: "act",
+              id,
+              act: "call",
+              title: button,
+              context: `Sends ${instruction}`,
+              button,
+              call: { instruction },
+            };
+      const step = (id: string, beats: Beat[], goal: Goal): Step => ({
+        id,
+        title: id,
+        short: id,
+        objective: id,
+        learned: id,
+        file: "src/lib.rs",
+        start: { "src/lib.rs": "" },
+        target: { "src/lib.rs": "" },
+        beats,
+        goal,
+        win: { id: `${id}.win`, headline: "Won", line: "Won." },
+        explain: id,
+      });
+
+      /** Lumberjack's chop and refill steps, and Zero Copy's grow and paint */
+      const lesson = (): TutorialDefinition => ({
+        version: 1,
+        name: "Refusals",
+        description: "Refused calls.",
+        authors: [{ name: "Fleet" }],
+        level: "Intermediate",
+        framework: "Anchor",
+        languages: ["Rust"],
+        thumbnail: "thumbnail.jpg",
+        minutes: 5,
+        intro: { promise: "p", log: "l", files: { "src/lib.rs": "" } },
+        steps: [
+          step("chop", [act("s3.chop", "chop_tree", undefined, "Chop")], {
+            kind: "refused",
+            instruction: "chop_tree",
+            error: { name: "NotEnoughEnergy", code: 6000 },
+          }),
+          step("refill", [act("s4.chop", "chop_tree", undefined, "Chop")], {
+            kind: "call",
+            instruction: "chop_tree",
+          }),
+          step(
+            "grow",
+            [
+              act(
+                "s2.grow",
+                "grow",
+                [{ name: "len", value: 20480, add: 10240 }],
+                "Grow +10 KB"
+              ),
+            ],
+            { kind: "refused", instruction: "grow", log: "out of memory" }
+          ),
+          step(
+            "paint",
+            [
+              act(
+                "s3.paint",
+                "paint",
+                [
+                  "note",
+                  { name: "text", value: "gm" },
+                  { name: "at", value: 35000 },
+                ],
+                "Paint"
+              ),
+            ],
+            { kind: "call", instruction: "paint" }
+          ),
+        ],
+        finish: {
+          headline: "Done",
+          line: "Done.",
+          learned: ["Refusals"],
+          chips: [],
+          next: null,
+        },
+      });
+
+      let realCtx: EngineContext;
+      beforeAll(() => {
+        realCtx = { definition: lesson(), slug: "refusals", judge: judgeGoal };
+      });
+
+      const run = (actions: Action[], from = INITIAL_ENGINE_STATE) => {
+        let state = from;
+        const effects: Effect[] = [];
+        for (const a of actions) {
+          const r = reduce(realCtx, state, a);
+          state = r.state;
+          effects.push(...r.effects);
+        }
+        return { state, progress: state.progress, effects };
+      };
+
+      /** The cursor on the step at `index`, its act posted at 1000 */
+      const at = (index: number): EngineState => {
+        const { steps } = realCtx.definition;
+        const here = steps[index];
+        return {
+          progress: {
+            version: 1,
+            passed: steps.slice(0, index).map((s) => s.id),
+            finishedAt: null,
+            startedAt: 1000,
+            restartedAt: null,
+            cursor: { kind: "step", stepId: here.id, beat: 1, fail: false },
+            beats: { [here.beats[0].id]: { kind: "said", at: 1000 } },
+            runs: {},
+            times: { [here.id]: { from: 1000, to: null } },
+          },
+          stage: null,
+        };
+      };
+
+      const refusal = (
+        instruction: string,
+        error: Refusal["error"],
+        log = ""
+      ): RunResult => ({
+        act: "call",
+        ok: false,
+        seconds: 1,
+        message: "Transaction failed",
+        log,
+        refused: { instruction, error },
+      });
+      const landed = (instruction: string): RunResult => ({
+        act: "call",
+        ok: true,
+        seconds: 1,
+        signatures: ["sig"],
+        line: null,
+        called: [{ instruction, args: {} }],
+      });
+      const press = (
+        beatId: string,
+        t: number,
+        args?: Record<string, string>
+      ): Action =>
+        args
+          ? { type: "act", beatId, args, at: t }
+          : { type: "act", beatId, at: t };
+      const ended = (beatId: string, t: number, result: RunResult): Action => ({
+        type: "ended",
+        beatId,
+        startedAt: t,
+        result,
+        at: t + 900,
+      });
+
+      it("a refusal the goal expects is recorded refused and passes the step", () => {
+        const out = refusal("chop_tree", {
+          code: 6000,
+          name: "NotEnoughEnergy",
+        });
+        const { progress, effects } = run(
+          [press("s3.chop", 2000), ended("s3.chop", 2000, out)],
+          at(0)
+        );
+        expect(progress.runs["s3.chop"]).toEqual([
+          { status: "refused", at: 2000, took: 900, result: out },
+        ]);
+        expect(progress.passed).toEqual(["chop"]);
+        expect(effects).toContainEqual({
+          kind: "event",
+          name: "tutorial_step_passed",
+          params: { tutorial: "refusals", step: 1, via: "chat", seconds: 2 },
+        });
+      });
+
+      it("chops that land before the refusal record and keep the card", () => {
+        const { progress } = run(
+          [
+            press("s3.chop", 2000),
+            ended("s3.chop", 2000, landed("chop_tree")),
+            press("s3.chop", 3000),
+            ended(
+              "s3.chop",
+              3000,
+              refusal("chop_tree", { code: 6000, name: "NotEnoughEnergy" })
+            ),
+          ],
+          at(0)
+        );
+        expect(progress.runs["s3.chop"].map((r) => r.status)).toEqual([
+          "ok",
+          "refused",
+        ]);
+        expect(progress.passed).toEqual(["chop"]);
+      });
+
+      it("a refusal the refused goal does not name stays failed and is explained", () => {
+        const other = refusal("chop_tree", { code: 6001, name: "NoTrees" });
+        const failed = run(
+          [press("s3.chop", 2000), ended("s3.chop", 2000, other)],
+          at(0)
+        );
+        expect(failed.progress.runs["s3.chop"]).toEqual([
+          { status: "failed", at: 2000, took: 900, result: other },
+        ]);
+        expect(failed.progress.passed).toEqual([]);
+        expect(
+          run([{ type: "explain", beatId: "s3.chop", at: 4000 }], failed.state)
+            .effects
+        ).toEqual([{ kind: "explain", beatId: "s3.chop", result: other }]);
+      });
+
+      it("a learner's value never moves a growing one, and an interrupted run does not count as landed", () => {
+        const interrupted: EngineState = {
+          progress: {
+            version: 1,
+            passed: at(2).progress.passed,
+            finishedAt: null,
+            startedAt: 1000,
+            restartedAt: null,
+            cursor: at(2).progress.cursor,
+            beats: at(2).progress.beats,
+            runs: {
+              "s2.grow": [
+                { status: "interrupted", at: 1500 },
+                {
+                  status: "ok",
+                  at: 1600,
+                  took: 100,
+                  result: landed("grow"),
+                },
+              ],
+            },
+            times: at(2).progress.times,
+          },
+          stage: null,
+        };
+        const { effects } = run(
+          [press("s2.grow", 2000, { len: "1" })],
+          interrupted
+        );
+        expect(effects).toEqual([
+          {
+            kind: "run",
+            beatId: "s2.grow",
+            act: "call",
+            input: {
+              beatId: "s2.grow",
+              call: { instruction: "grow", args: { len: "30720" } },
+            },
+            startedAt: 2000,
+          },
+        ]);
+      });
+
+      it("a refusal from the Call panel passes the same goal", () => {
+        const { progress } = run(
+          [
+            {
+              type: "passed",
+              via: "call_panel",
+              result: refusal("chop_tree", {
+                code: 6000,
+                name: "NotEnoughEnergy",
+              }),
+              at: 2000,
+            },
+          ],
+          at(0)
+        );
+        expect(progress.passed).toEqual(["chop"]);
+        expect(progress.times.chop).toEqual({
+          from: 1000,
+          to: 2000,
+          via: "call_panel",
+        });
+      });
+
+      it("a refusal the goal does not expect stays failed and is explained", () => {
+        const out = refusal("chop_tree", {
+          code: 6000,
+          name: "NotEnoughEnergy",
+        });
+        const failed = run(
+          [press("s4.chop", 2000), ended("s4.chop", 2000, out)],
+          at(1)
+        );
+        expect(failed.progress.runs["s4.chop"]).toEqual([
+          { status: "failed", at: 2000, took: 900, result: out },
+        ]);
+        expect(failed.progress.passed).toEqual(["chop"]);
+        expect(
+          run([{ type: "explain", beatId: "s4.chop", at: 4000 }], failed.state)
+            .effects
+        ).toEqual([{ kind: "explain", beatId: "s4.chop", result: out }]);
+      });
+
+      it("a refused run offers no Explain and no fix", () => {
+        const passed = run(
+          [
+            press("s3.chop", 2000),
+            ended(
+              "s3.chop",
+              2000,
+              refusal("chop_tree", { code: 6000, name: "NotEnoughEnergy" })
+            ),
+          ],
+          at(0)
+        ).state;
+        expect(
+          run(
+            [
+              { type: "explain", beatId: "s3.chop", at: 4000 },
+              { type: "fixMyself", beatId: "s3.chop", at: 4100 },
+            ],
+            passed
+          ).effects
+        ).toEqual([]);
+      });
+
+      it("grows a value by each run that landed, and sends it again after a refusal", () => {
+        const tooBig = refusal(
+          "grow",
+          null,
+          "Program log: Error: an account can grow by at most 10,240 bytes in one instruction"
+        );
+        const { progress, effects } = run(
+          [
+            press("s2.grow", 2000),
+            ended("s2.grow", 2000, landed("grow")),
+            press("s2.grow", 3000),
+            ended("s2.grow", 3000, tooBig),
+            press("s2.grow", 4000),
+            ended(
+              "s2.grow",
+              4000,
+              refusal(
+                "grow",
+                null,
+                "Program log: Error: memory allocation failed, out of memory"
+              )
+            ),
+          ],
+          at(2)
+        );
+        const sent = effects.flatMap((e) =>
+          e.kind === "run" && e.input.call ? [e.input.call.args.len] : []
+        );
+        expect(sent).toEqual(["20480", "30720", "30720"]);
+        expect(progress.runs["s2.grow"].map((r) => r.status)).toEqual([
+          "ok",
+          "failed",
+          "refused",
+        ]);
+        expect(progress.passed).toContain("grow");
+      });
+
+      it("sends fixed values over a learner's, and a learner's for a field", () => {
+        const { effects } = run(
+          [press("s3.paint", 2000, { note: "hi", text: "nope", at: "1" })],
+          at(3)
+        );
+        expect(effects).toEqual([
+          {
+            kind: "run",
+            beatId: "s3.paint",
+            act: "call",
+            input: {
+              beatId: "s3.paint",
+              call: {
+                instruction: "paint",
+                args: { note: "hi", text: "gm", at: "35000" },
+              },
+            },
+            startedAt: 2000,
+          },
         ]);
       });
     });

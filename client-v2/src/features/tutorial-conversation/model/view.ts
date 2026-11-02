@@ -57,7 +57,17 @@ export type AskOutcome =
   | "skipped"
   | "call_panel";
 
-export type ActState = "live" | "running" | "done" | "failed" | "interrupted";
+/**
+ * An act card's state. `refused` is a call the program refused as the step's
+ * `refused` goal expected: it passed the step, and is no failure to explain.
+ */
+export type ActState =
+  | "live"
+  | "running"
+  | "done"
+  | "refused"
+  | "failed"
+  | "interrupted";
 
 export type Turn = TurnBase &
   (
@@ -187,6 +197,12 @@ const attemptsOf = (r: Resolution): number => {
   return 0;
 };
 
+/** A run that ended, and so has its time and its result card */
+const ended = (
+  run: RunRecord
+): run is Extract<RunRecord, { status: "ok" | "refused" | "failed" }> =>
+  run.status === "ok" || run.status === "refused" || run.status === "failed";
+
 const actStateOf = (run: RunRecord | undefined): ActState => {
   if (!run) return "live";
   if (run.status === "started") return "running";
@@ -199,7 +215,7 @@ const actStateOf = (run: RunRecord | undefined): ActState => {
  * and the last act the cursor went past ended well: the step's goal refused
  * the result, so the card is the way to try again. Null otherwise.
  */
-const refusedAct = (
+const retryAct = (
   definition: TutorialDefinition,
   p: ConversationProgress
 ): string | null => {
@@ -444,12 +460,9 @@ export const view = (
               note: run.status === "interrupted" ? INTERRUPTED : null,
               stage:
                 isLast && state.stage?.beatId === b.id ? state.stage : null,
-              took:
-                run.status === "ok" || run.status === "failed"
-                  ? run.took
-                  : null,
+              took: ended(run) ? run.took : null,
             });
-            if (run.status === "ok" || run.status === "failed") {
+            if (ended(run)) {
               const planned = run.status === "failed" && run.planned === true;
               turn({
                 id: `result:${b.id}:${n}`,
@@ -519,7 +532,7 @@ export const view = (
   // The last act the cursor passed whose latest run ended well without
   // passing the step (its result failed the goal): its card stays the one
   // to press, so the learner can run it again
-  const refusedActId = refusedAct(definition, p);
+  const retryActId = retryAct(definition, p);
   let live: Turn | null = null;
   if (p.cursor.kind !== "finished") {
     live =
@@ -527,7 +540,7 @@ export const view = (
         if (t.kind === "win") return !t.done;
         if (t.kind === "act") {
           if (t.step !== null && p.passed.includes(t.step)) return false;
-          if (t.state === "done") return t.id === refusedActId;
+          if (t.state === "done") return t.id === retryActId;
           return (
             t.state === "live" ||
             t.state === "running" ||
@@ -980,6 +993,53 @@ if (import.meta.vitest) {
         last: false,
       });
       expect(v.steps[0]).toMatchObject({ state: "done", took: 9600 });
+    });
+
+    it("a refused run is a record with its time and a closed result card, and the win follows", () => {
+      // The view reads a run's record, not the goal behind it, so Hello
+      // Anchor's build card stands in for a refused call card here
+      const state = play(toFailed().slice(0, 3));
+      const result: RunResult = {
+        act: "call",
+        ok: false,
+        seconds: 0.9,
+        message: "Not enough energy",
+        log: "Program log: AnchorError ... Error Number: 6000.",
+        refused: {
+          instruction: "chop_tree",
+          error: { code: 6000, name: "NotEnoughEnergy" },
+        },
+      };
+      const refused: EngineState = {
+        progress: {
+          version: 1,
+          passed: ["write-program"],
+          finishedAt: null,
+          startedAt: state.progress.startedAt,
+          restartedAt: null,
+          cursor: state.progress.cursor,
+          beats: state.progress.beats,
+          runs: {
+            "s1.build": [{ status: "refused", at: 7000, took: 900, result }],
+          },
+          times: {
+            "write-program": { from: 1000, to: 7900, via: "chat" },
+          },
+        },
+        stage: null,
+      };
+      const v = view(hello, refused, LATE);
+      expect(v.turns.find((t) => t.id === "s1.build")).toMatchObject({
+        state: "refused",
+        took: 900,
+      });
+      expect(v.turns.find((t) => t.id === "result:s1.build:0")).toMatchObject({
+        result,
+        took: 900,
+        planned: null,
+        open: false,
+      });
+      expect(v.live).toMatchObject({ id: "win:write-program", done: false });
     });
 
     it("an interrupted run is the live act again", () => {

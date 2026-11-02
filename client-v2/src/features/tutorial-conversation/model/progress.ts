@@ -110,6 +110,8 @@ export type RunRecord =
   | { status: "started"; at: number }
   | { status: "interrupted"; at: number }
   | { status: "ok"; at: number; took: number; result: RunResult }
+  /** A run or call the program refused, as the step's `refused` goal expected */
+  | { status: "refused"; at: number; took: number; result: RunResult }
   | {
       status: "failed";
       at: number;
@@ -137,6 +139,16 @@ export interface BuildError {
 export interface Called {
   instruction: string;
   args: Record<string, string>;
+}
+
+/**
+ * What the program refused in a failed run or call: the instruction, and the
+ * error it returned, or null for a refusal with no code (a panic, running out
+ * of memory), which the transaction's log names instead
+ */
+export interface Refusal {
+  instruction: string;
+  error: { code: number; name: string | null } | null;
 }
 
 /**
@@ -190,6 +202,14 @@ export type RunResult =
       seconds: number;
       message: string;
       log: string;
+      /**
+       * What the program refused, when the transaction reached it; absent
+       * when it never did (no wallet, a send that failed). A `refused` goal
+       * is judged on it and on `log`. The runner fills it from the
+       * transaction's error (`tutorial-flow-v2` task 4.3); until then no real
+       * run carries it.
+       */
+      refused?: Refusal;
     };
 
 export const freshProgress = (
@@ -318,12 +338,21 @@ const isCalled = (v: unknown): v is Called =>
   isRecord(v.args) &&
   Object.values(v.args).every((a) => typeof a === "string");
 
+const isRefusal = (v: unknown): v is Refusal =>
+  isRecord(v) &&
+  typeof v.instruction === "string" &&
+  (v.error === null ||
+    (isRecord(v.error) &&
+      Number.isInteger(v.error.code) &&
+      (v.error.name === null || typeof v.error.name === "string")));
+
 /**
  * A result is kept as it was saved once its act and `ok` are sound: the run
- * tickets own its other fields, and the cards read them by act. The one
- * exception is a call's `called`, which `judgeGoal` reads: a save from before
- * the field, or an entry that does not read as a call, comes back as no call,
- * so the judge can trust the type.
+ * tickets own its other fields, and the cards read them by act. The
+ * exceptions are what `judgeGoal` reads: a call's `called`, which comes back
+ * as no call when it is missing or does not read as one, and a failed call's
+ * `refused`, dropped when it does not read as a refusal, so the judge can
+ * trust the type.
  */
 const parseResult = (v: unknown): RunResult | null => {
   if (
@@ -337,6 +366,12 @@ const parseResult = (v: unknown): RunResult | null => {
   if ((v.act === "run" || v.act === "call") && v.ok) {
     const called = Array.isArray(v.called) ? v.called.filter(isCalled) : [];
     return { ...v, called } as unknown as RunResult;
+  }
+  if ((v.act === "run" || v.act === "call") && "refused" in v) {
+    const { refused, ...rest } = v;
+    return (isRefusal(refused)
+      ? { ...rest, refused }
+      : rest) as unknown as RunResult;
   }
   return v as unknown as RunResult;
 };
@@ -353,6 +388,17 @@ const parseRun = (v: unknown): RunRecord | null => {
       const result = parseResult(v.result);
       return result && isMs(v.took)
         ? { status: "ok", at, took: v.took, result }
+        : null;
+    }
+    case "refused": {
+      // Only a failed call that carries its refusal was ever recorded refused
+      const result = parseResult(v.result);
+      return result &&
+        isMs(v.took) &&
+        !result.ok &&
+        (result.act === "run" || result.act === "call") &&
+        result.refused
+        ? { status: "refused", at, took: v.took, result }
         : null;
     }
     case "failed": {
@@ -567,6 +613,95 @@ if (import.meta.vitest) {
       });
       expect(reload(saved)?.runs["s2.deploy"]).toEqual([
         { status: "interrupted", at: 2100 },
+      ]);
+    });
+
+    it("reloads a refused run as refused, and drops a refusal it cannot read", () => {
+      const refused: RunRecord = {
+        status: "refused",
+        at: 3000,
+        took: 900,
+        result: {
+          act: "call",
+          ok: false,
+          seconds: 0.9,
+          message: "Not enough energy",
+          log: "Program log: AnchorError ... Error Number: 6000.",
+          refused: {
+            instruction: "chop_tree",
+            error: { code: 6000, name: "NotEnoughEnergy" },
+          },
+        },
+      };
+      const panicked: RunRecord = {
+        status: "failed",
+        at: 4000,
+        took: 900,
+        result: {
+          act: "call",
+          ok: false,
+          seconds: 0.9,
+          message: "SBF program panicked",
+          log: "Program log: Error: memory allocation failed, out of memory",
+          refused: { instruction: "grow", error: null },
+        },
+      };
+      const saved = midway({ runs: { "s3.chop": [refused, panicked] } });
+      expect(reload(saved)?.runs["s3.chop"]).toEqual([refused, panicked]);
+
+      // A refused record holds a failed call with its refusal, or nothing
+      const notRefused = midway({
+        runs: {
+          "s3.chop": [
+            {
+              status: "refused",
+              at: 3000,
+              took: 900,
+              result: {
+                act: "call",
+                ok: false,
+                seconds: 1,
+                message: "x",
+                log: "",
+              },
+            },
+          ],
+        },
+      });
+      expect(reload(notRefused)?.runs["s3.chop"]).toBeUndefined();
+
+      const garbled = midway({
+        runs: {
+          "s3.chop": [
+            {
+              status: "failed",
+              at: 4000,
+              took: 900,
+              result: {
+                act: "call",
+                ok: false,
+                seconds: 0.9,
+                message: "x",
+                log: "",
+                refused: { instruction: "chop_tree", error: { code: "6000" } },
+              },
+            },
+          ],
+        },
+      });
+      expect(reload(garbled)?.runs["s3.chop"]).toEqual([
+        {
+          status: "failed",
+          at: 4000,
+          took: 900,
+          result: {
+            act: "call",
+            ok: false,
+            seconds: 0.9,
+            message: "x",
+            log: "",
+          },
+        },
       ]);
     });
 
