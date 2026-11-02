@@ -202,9 +202,16 @@ describe("Grounding", () => {
 
     expect(checkbox(PLAYGROUND_ENV.name)).toBeTruthy();
     expect(screen.queryByText(SOLANA_DEV.name)).toBeNull();
-    expect(
-      screen.queryByRole("button", { name: /Community skills/ })
-    ).toBeNull();
+  });
+
+  it("No community skills listed: no fold, heading, or count", async () => {
+    await loadSkills([PLAYGROUND_ENV, SOLANA_DEV]);
+
+    renderGrounding();
+
+    expect(checkbox(SOLANA_DEV.name)).toBeTruthy();
+    expect(screen.queryByText(/Community skills/)).toBeNull();
+    expect(screen.queryByText(/ of \d+ on/)).toBeNull();
   });
 
   it("The skills route is unreachable: no skill, and a note that the server reported none", async () => {

@@ -7,6 +7,10 @@
 /** The model passes the id to `load_skill`, and the tab builds element ids from it */
 const ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
+/** `https://raw.githubusercontent.com/<owner>/<repo>/<commit>/`, never a branch */
+const COMMUNITY_PINNED =
+  /^https:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[0-9a-f]{40}\//;
+
 /**
  * @param {string} message
  * @returns {never}
@@ -80,12 +84,22 @@ export const validateSkills = (entries) =>
     ) {
       fail(`${where}: "community" must be { "repo": "owner/repo" }.`);
     }
+    const source = readSource(entry.source, where);
+    // Pinned so the repository's owner cannot change what the model reads without a catalogue change
+    if (
+      community &&
+      (source.type !== "remote" || !COMMUNITY_PINNED.test(source.baseUrl))
+    ) {
+      fail(
+        `${where}: a community skill's "source.baseUrl" must be a raw.githubusercontent.com folder at a 40-character commit hash.`
+      );
+    }
 
     return {
       id,
       name,
       description,
-      source: readSource(entry.source, where),
+      source,
       enabled: enabled !== false,
       ...(community ? { community: { repo: String(community.repo) } } : {}),
     };

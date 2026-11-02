@@ -247,9 +247,9 @@ Honesty rule for the demo — never present a mocked step as working.
   server's decision: the Sources tab lists what the deployment's `/api/skills`
   route offers, the same list for every backend, and a skill the deployment
   leaves out is absent. When that route cannot be reached, the panel has no
-  skills. The community skills from solana.com/skills are listed switched off,
-  each read from a fixed commit of its repository, and reach the model only
-  once the user checks them.
+  skills. One community skill is listed, Surfpool, for a local network on
+  localhost:8899. It starts switched off, is read from a fixed commit of its
+  repository, and reaches the model only once the user checks it.
 - **Real, behind a capability probe:** conversation and project sync. The
   client asks `/api/sync` whether the deployment has a database and stays
   purely local when it does not, so signing out or deploying without one

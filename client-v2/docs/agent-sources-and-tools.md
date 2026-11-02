@@ -13,15 +13,17 @@ Sources tab shows what it lists and nothing else, for every backend: the default
 skill the deployment leaves out is absent from the tab, the prompt, and `load_skill`. When the route fails, the
 tab lists no skill.
 
+The shipped community skill, `surfpool`, as `SOURCES_CATALOGUE` lists it:
+
 ```json
 {
   "kind": "skill",
-  "id": "orca",
-  "name": "Orca",
-  "description": "Orca Whirlpools SDK for concentrated-liquidity swaps, positions, pool creation, and fee collection.",
+  "id": "surfpool",
+  "name": "Surfpool local network",
+  "description": "Load when the user runs Surfpool on their machine with the Playground's endpoint set to localhost:8899: mainnet forking and the surfnet_* RPC cheatcodes. Its CLI, runbooks, and anchor test parts do not run in the Playground, so playground-env wins where they disagree.",
   "source": {
     "type": "remote",
-    "baseUrl": "https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cdc288e9bb502/skills/orca/",
+    "baseUrl": "https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cdc288e9bb502/skills/surfpool/",
     "entry": "SKILL.md"
   },
   "enabled": false,
@@ -39,7 +41,7 @@ tab lists no skill.
 | `description` | yes | One sentence the model reads when deciding whether to load the skill. It sits in the prompt for every checked skill, so it is written for this list, not copied from the skill's frontmatter. |
 | `source` | yes | `{ "type": "bundled" }` for a document shipped in the app, or `{ "type": "remote", "baseUrl", "entry" }` for one fetched when loaded: `baseUrl` is an `https://` folder ending in `/`, and `entry` is the document's file name inside it, usually `SKILL.md`. |
 | `enabled` | no | `false` lists the skill unchecked: the prompt does not name it and `load_skill` refuses it until the user checks it. Defaults to `true`. |
-| `community` | no | `{ "repo": "owner/repo" }` on a skill a third party publishes. The Sources tab lists it under "Community skills" with the repository in its note. |
+| `community` | no | `{ "repo": "owner/repo" }` on a skill a third party publishes. The Sources tab lists it under "Community skills" with the repository in its note; the fold is absent while no community skill is listed. Its `baseUrl` must be pinned to a commit ("Pinned to a commit"). |
 | `signedIn` | no | `true` offers the skill only to a caller signed in on this site. |
 
 A bundled skill's text is in the app's bundle, keyed by its id (`BUNDLED_SKILLS` in
@@ -49,29 +51,39 @@ files.
 
 ### Pinned to a commit
 
-Every remote skill other than `solana-dev` has a `baseUrl` on `raw.githubusercontent.com` whose path holds a full
-40-character commit hash, never a branch:
+A community skill has a `baseUrl` on `raw.githubusercontent.com` whose path holds a full 40-character commit hash,
+never a branch:
 
 ```text
 https://raw.githubusercontent.com/<owner>/<repo>/<commit>/<folder>/
-https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cdc288e9bb502/skills/orca/
+https://raw.githubusercontent.com/sendaifun/skills/72ef2aa814cca4662341bfcdc01cdc288e9bb502/skills/surfpool/
 ```
 
 A skill's text enters the model's context. A branch would let the skill's owner change what every deployment's
-model reads; a commit means the text changes only with a change to `SOURCES_CATALOGUE`, reviewed like any other.
-[`sources.test.mjs`](../src/shared/config/sources.test.mjs) fails on a community entry whose `baseUrl` names a
-branch.
+model reads; a commit means the text changes only with a change to `SOURCES_CATALOGUE` or `SOURCES`, reviewed like
+any other. `validateSkills` in [`entry.mjs`](../src/features/skills/model/entry.mjs) rejects a community entry
+whose `baseUrl` is not pinned this way, and `GET /api/skills` then answers 500 naming the skill.
 
 `read_skill_reference` resolves a path against the skill's `baseUrl` and refuses one that leaves that folder, so
 a `SKILL.md` cannot send the model to another skill's files or another site.
 
 ### Community skills
 
-The community entries are the skills [solana.com/skills](https://solana.com/skills) lists, each at the commit the
-page links, each with `enabled: false`, and none with `signedIn`: every caller gets them, and a third party's text
-reaches the model only after the user checks its skill. The page's Foundation entries are files under
-`solana-dev`'s `references/`, which `read_skill_reference` already reaches, so they have no entries of their own.
-Clawpump, which the page also lists, has no entry: its repository answered 404.
+`SOURCES_CATALOGUE` lists a community skill only when all of these hold:
+
+- It helps write, test, or debug a program in the Playground.
+- Its document has been read at the pinned commit.
+- It is pinned to a commit ("Pinned to a commit").
+- It starts switched off: `enabled: false`, so a third party's text reaches the model only after the user checks
+  its skill.
+
+The rule is needed because no per-skill rating exists to choose from: [solana.com/skills](https://solana.com/skills)
+shows none, and GitHub stars count a repository, which several skills share. `surfpool` is the one community skill
+that meets the rule and is listed; the example entry in "Skill entries" is that entry.
+
+A community skill added to `SOURCES` for one deployment takes the same shape: `community: { repo }`, a pinned
+`baseUrl`, and `enabled: false`. The page's Foundation entries are files under `solana-dev`'s `references/`, which
+`read_skill_reference` already reaches, so they need no entries of their own.
 
 Adding or updating a skill is a change to `SOURCES_CATALOGUE`, or, for one deployment, to its `SOURCES`.
 

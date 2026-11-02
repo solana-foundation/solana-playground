@@ -34,23 +34,19 @@ describe("/api/skills", () => {
     delete process.env.SKILL_BASE_URL;
   });
 
-  it("The shipped catalogue signed out: both Foundation skills and every community skill, switched off", async () => {
+  it("The shipped catalogue signed out: both Foundation skills, and surfpool switched off", async () => {
     const res = await call("GET");
     const { skills } = JSON.parse(res.body);
     const byId = new Map(skills.map((skill) => [skill.id, skill]));
-    const community = skills.filter((skill) => skill.community);
 
     assert.equal(res.statusCode, 200);
     assert.deepEqual(byId.get("playground-env").source, { type: "bundled" });
     assert.equal(byId.get("solana-dev").source.type, "remote");
     assert.equal(byId.get("solana-dev").source.entry, "SKILL.md");
-    assert.equal(community.length, 35);
-    assert.deepEqual(
-      community.filter(
-        (skill) => skill.enabled !== false || skill.source.type !== "remote"
-      ),
-      []
-    );
+    assert.equal(byId.get("surfpool")?.enabled, false);
+    assert.deepEqual(byId.get("surfpool").community, {
+      repo: "sendaifun/skills",
+    });
   });
 
   it("A remote skill's base URL from the environment", async () => {

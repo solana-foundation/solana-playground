@@ -80,7 +80,7 @@ const SourceLabel = ({
 );
 
 const skillNote = (skill: SkillEntry) => {
-  // The description sits in the row's tip, so 35 rows stay one short line each
+  // The description sits in the row's tip, so each row stays one short line
   if (isCommunity(skill)) return skill.community.repo;
   return isAlwaysOn(skill)
     ? "bundled — always available"

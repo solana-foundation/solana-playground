@@ -22,14 +22,14 @@ through the slice's logger, and SHALL NOT fall back to a built-in list.
 
 #### Scenario: A community skill listed off (manual)
 
-- **WHEN** `GET /api/skills` lists a community skill as remote with `enabled: false`
+- **WHEN** `SOURCES` holds a community skill and `GET /api/skills` lists it as remote with `enabled: false`
 - **THEN** the slice returns it with `enabled: false`, and `enabledSkillIds` does not hold its id until the user
   checks it
 
 #### Scenario: A bundled id the bundle does not know (manual)
 
-- **WHEN** `GET /api/skills` lists a bundled skill `other`
-- **THEN** the slice returns the other entries without `other` and logs a warning naming `other`
+- **WHEN** `GET /api/skills` lists a bundled skill `constructor`, a name every object inherits
+- **THEN** the slice returns the other entries without `constructor` and logs a warning naming `constructor`
 
 ### Requirement: A reference path stays inside its skill
 

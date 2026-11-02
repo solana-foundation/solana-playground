@@ -54,24 +54,28 @@ and delivers both halves as this change states them.
   names, so a skill the operator withheld is absent for every backend.
   Bundled content stays in the bundle; the catalogue names a bundled skill and
   cannot change its content.
-- The shipped catalogue carries 35 of the 37 community skills that
-  [solana.com/skills](https://solana.com/skills) lists, each a remote skill
-  whose `baseUrl` is on `raw.githubusercontent.com` at the commit the page
-  pins. Clawpump is left out because its repository answers 404, and the
-  37th was not identified on the page. A skill entry may carry `enabled: false` and then starts unchecked.
-  Every community skill starts unchecked and none is marked `signedIn`, so a
-  user with their own key gets the same list as a signed-in user. The
-  Foundation skills the page lists are reference files of `solana-dev`,
-  which the assistant already
-  loads, so they get no entries of their own.
+- A skill entry may carry `community: { repo }`, a skill a third party
+  publishes, whose `baseUrl` must be on `raw.githubusercontent.com` at a
+  40-character commit. A skill entry may carry `enabled: false` and then
+  starts unchecked. The shipped catalogue lists a community skill only when
+  it meets one inclusion rule, written in
+  `client-v2/docs/agent-sources-and-tools.md`, "Community skills": no
+  per-skill rating exists to choose from, since
+  [solana.com/skills](https://solana.com/skills) shows none and GitHub stars
+  count a repository, which 21 of the 35 skills a draft of this change carried
+  shared. It lists one, sendaifun/skills `surfpool`, with `enabled: false` and
+  no `signedIn`, so a user with their own key gets the same list as a
+  signed-in user.
+  The Foundation skills the page lists are reference files of `solana-dev`,
+  which the assistant already loads, so they get no entries of their own.
 - The Sources tab shows a checkbox for every source, skill or server, gateway
   or user-added. An unchecked server contributes no tools to the next turn and
   shows no console; an unchecked skill is absent from the prompt's catalogue
   and `load_skill` refuses it. The choice lives in memory, as the skill choice
   does today. A model provider profile declares `supportsTools`; when it is
   `false`, a turn declares no tools and the tab says so in place of the lists.
-  The community skills sit in a fold of their own with a count of those
-  checked. The skills list and the additional-servers editor each have a help
+  Community skills sit in a fold of their own with a count of those
+  checked, and the fold is absent while none is listed. The skills list and the additional-servers editor each have a help
   tip and an "Entry format" link to `client-v2/docs/agent-sources-and-tools.md`,
   which describes a skill entry as it already describes an MCP server entry.
 - Telemetry: `features/mcp` adds `mcp_server_toggled` (`server`: `gateway` or
@@ -122,13 +126,14 @@ and delivers both halves as this change states them.
   Explorer on: Explorer is listed whether it is set or not, and when set its
   secret rides only on signed-in callers' requests. `MCP_EXPLORER_URL` and
   `MCP_EXPLORER_TOKEN` keep their effect. A deployment that sets none of
-  them serves the Solana upstream, Explorer, both Foundation skills, and the
-  community skills.
+  them serves the Solana upstream, Explorer, both Foundation skills, and
+  `surfpool`, switched off.
 - Dependencies: none added or removed.
 - Users: the Sources tab gains a checkbox per server, and a server switched
-  off is absent from the next turn. The community skills appear unchecked,
-  for every backend; each one the user checks adds its name and description
-  to the prompt. A
+  off is absent from the next turn. `surfpool`, and any community skill a
+  deployment lists with `enabled: false`, appears unchecked, for every
+  backend; each one the user
+  checks adds its name and description to the prompt. A
   deployment can now withhold a skill or a server, in which case it is absent
   from the tab for every backend. A signed-out user keeps the Solana
   upstream, gains Explorer, and keeps every source the catalogue does not

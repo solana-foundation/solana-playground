@@ -170,34 +170,45 @@ A boolean on `ModelProviderProfile`, `true` for every profile that exists;
 reads the same flag. The flag is per profile, not per model, because the
 profiles are where provider behaviour is data already.
 
-### Community skills from solana.com/skills
+### Community skills: one rule, surfpool first
 
-The catalogue carries 35 of the community skills that
-[solana.com/skills](https://solana.com/skills) lists, as remote skills. The
-page lists 37: Clawpump is left out because its repository answers 404, and
-the 37th was not identified on the page. The page's 17 Foundation entries are files under `solana-dev`'s `references/`,
-which `read_skill_reference` already reaches, so they get no entries. The
-Solana Developer MCP already indexes `solana.com/docs`, the agent pages
-included, and `solana.com/developers`, so no skill is added for the docs.
+The shipped catalogue lists a community skill only when it meets the
+inclusion rule in `client-v2/docs/agent-sources-and-tools.md`, "Community
+skills", and lists one: sendaifun/skills `surfpool`, switched off. A draft of
+this change carried 35 of the skills
+[solana.com/skills](https://solana.com/skills) lists, chosen by nothing more
+than the page listing them. They were removed on 2026-11-02, because no
+per-skill rating exists to choose from: the page shows none, and GitHub stars
+count a repository, while 21 of those 35 skills shared one repository. The
+rule replaces a rating, and surfpool was the first skill checked against it,
+on the same day. The page's Foundation entries
+are files under `solana-dev`'s `references/`, which `read_skill_reference`
+already reaches, so they need no entries. The Solana Developer MCP already
+indexes `solana.com/docs`, the agent pages included, and
+`solana.com/developers`, so no skill is added for the docs.
 
-- **Pinned to the page's commits.** Each `baseUrl` is
-  `https://raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>/`, with
-  the commit the page links. A skill's text enters the model's context, and a
+What every community skill gets, shipped or added through `SOURCES`:
+
+- **Pinned to a commit.** `validateSkills` rejects a community entry whose
+  `baseUrl` is not
+  `https://raw.githubusercontent.com/<owner>/<repo>/<commit>/<path>/` with a
+  40-character commit hash. A skill's text enters the model's context, and a
   branch would let its owner change what every deployment's model reads.
-  Updating a skill is a catalogue change, reviewed like any other.
+  The rule sits in the validator rather than in a test over the shipped list,
+  so it holds for `SOURCES` too and has a case that fails on an unpinned
+  entry whatever the shipped list holds.
 - **Our own short descriptions.** Every checked skill's name and description
   sit in the prompt. A `SKILL.md` frontmatter description can run to a
   paragraph, and reading it means a request per skill on every panel open, so
-  the entry carries one sentence written for this catalogue.
-- **Every one starts unchecked, for every caller.** Each community entry
-  carries `enabled: false` and no `signedIn`, so the skills route lists all
-  35 to a signed-out caller, and so to a user with their own key, as to a
-  signed-in one. A third party's text enters the prompt only after the user
-  checks its skill, and the prompt stays the length of the two Foundation
-  skills until then.
-- **A fold in the tab.** The two Foundation skills stay at the top; the
-  community skills sit under a fold with a count of those checked, so 35 rows
-  do not push the MCP section out of view.
+  the entry carries one sentence written for the catalogue.
+- **Starts unchecked.** The shipped entry carries `enabled: false` and no
+  `signedIn`, as the rule requires, so the skills route lists it to every
+  caller, a user with their own key included, and a third party's text enters
+  the prompt only after the user checks its skill.
+- **A fold in the tab.** The Foundation skills stay at the top; community
+  skills sit under a fold with a count of those checked, so a long list does
+  not push the MCP section out of view. With none listed, the fold, its
+  heading, and its count are absent.
 
 Alternatives: generating the entries from the page, which has no API, means
 scraping HTML in a script that breaks silently on a redesign. Reading each
@@ -218,12 +229,16 @@ is reported by kind only, as the slice's other events do.
   reviewed commit, a checked skill is only listed until the model loads it,
   and `playground-env` stays the source the prompt tells the model to prefer
   on versions.
-- [Each checked skill lengthens the prompt] → None starts checked, and each
-  carries a one-sentence description.
+- [Each checked skill lengthens the prompt] → A community skill starts
+  unchecked when its entry carries `enabled: false`, and each carries a
+  one-sentence description.
 - [A useful community skill goes unnoticed because it starts off] → The
   community fold shows the count checked and each skill's description; a
   deployment that wants one on by default sets `SOURCES` with that entry's
   `enabled` left out.
+- [A useful community skill is missing from the shipped list] → A
+  deployment adds one through `SOURCES`; the shipped list grows by one entry
+  at a time, each checked against the inclusion rule.
 
 - [A `SOURCES` typo takes the whole gateway and skills route down] → Both
   routes fail with the error naming `SOURCES`, `scripts/check-agent-env.mjs`

@@ -112,10 +112,13 @@ same upstream without them. No credential SHALL be sent to the browser.
 
 #### Scenario: A protected server checked with a model (manual)
 
-- **WHEN** a user adds an entry for a real server behind Vercel's bot protection, with a model connected, and
-  walks through `.claude/skills/mcp-server-check/SKILL.md`
-- **THEN** `ping` answers `pong`, inspecting `11111111111111111111111111111111` returns the System Program, and
-  every request to the server carries the `x-vercel-protection-bypass` query parameter
+- **WHEN** a user adds an entry
+  `{ id, name, url: "https://<host>/mcp", protection: { provider: "vercel", secret } }` through "Additional
+  servers" in the Sources tab, presses Apply, and, with a model connected, asks the assistant to call
+  `<id>__ping` and then to inspect `11111111111111111111111111111111`
+- **THEN** `ping` answers `pong`, inspect returns the System Program (`native-program`, executable), and the
+  browser's network log shows every request to the host carrying the `x-vercel-protection-bypass` query
+  parameter and no header of that name
 
 ### Requirement: The skills route lists the caller's skills
 
@@ -129,7 +132,7 @@ origin as the gateway does, and SHALL answer any method other than GET with 405.
 
 - **WHEN** no `SOURCES` is set and a signed-out user calls `GET /api/skills`
 - **THEN** the answer lists `playground-env` as bundled, `solana-dev` as remote with its `baseUrl` and `entry`,
-  and every community skill as remote with its `enabled` value
+  and `surfpool` as remote with `enabled: false` and `community.repo` `sendaifun/skills`
 
 #### Scenario: A remote skill's base URL from the environment (manual)
 
@@ -216,28 +219,55 @@ Sources tab with its checkbox unchecked, and SHALL be absent from the prompt's s
 
 #### Scenario: A community skill that starts off (manual)
 
-- **WHEN** the shipped catalogue lists a community skill with `enabled: false` and the user opens the Sources tab
+- **WHEN** `SOURCES` lists a community skill with `enabled: false` and the user opens the Sources tab
 - **THEN** the skill's checkbox is unchecked, the prompt's catalogue does not name it, and after the user checks
   it the next turn's catalogue names it
 
-### Requirement: Every caller gets the community skills, switched off
+### Requirement: The shipped catalogue lists community skills by one rule
 
-Every community skill in the shipped catalogue SHALL carry `enabled: false` and SHALL NOT be marked `signedIn`.
-The skills route SHALL list them to every caller, signed in or not, so a user with their own key sees the same
-community skills, unchecked, as a signed-in user on the default backend.
+The shipped catalogue SHALL list a community skill only when it meets the inclusion rule in
+`client-v2/docs/agent-sources-and-tools.md`, "Community skills", which stands in for a per-skill rating that does
+not exist: solana.com/skills shows none, and GitHub stars count a repository. It SHALL list sendaifun/skills
+`surfpool`, with `enabled: false` and no `signedIn`. The skills route SHALL list an entry with
+`community: { repo }` to every caller, signed in or not, unless it is marked `signedIn`, with the `enabled` value
+its entry carries. The Sources tab SHALL show the listed community skills in a fold of their own with a count of
+those checked, and SHALL render no fold, heading, or count while the list holds no community skill. The node test
+"The shipped catalogue signed out" in `api/skills.test.mjs` covers the route's side of the surfpool scenario, and
+the unit test "No community skills listed: no fold, heading, or count" in `Grounding.test.tsx` covers the scenario
+of that name.
+
+#### Scenario: The shipped catalogue offers surfpool unchecked (manual)
+
+- **WHEN** no `SOURCES` is set, and a signed-in user on the default backend, a signed-out user, and a user with
+  their own key each open the Sources tab
+- **THEN** each sees `surfpool` under the "Community skills" fold, unchecked, and the prompt's catalogue names it
+  for none of them until that user checks it
+
+#### Scenario: No community skills listed (manual)
+
+- **WHEN** `SOURCES` lists `playground-env` and `solana-dev` and no community skill, and the user opens the
+  Sources tab
+- **THEN** the tab lists `playground-env` and `solana-dev`, and shows no "Community skills" heading and no count
 
 #### Scenario: A user with their own key (manual)
 
-- **WHEN** no `SOURCES` is set, a signed-out user connects a provider with their own key, and opens the Sources
-  tab
-- **THEN** every community skill is listed unchecked, the prompt's catalogue names none, and after the user
-  checks one the next turn's catalogue names it and `load_skill` loads it
+- **WHEN** `SOURCES` lists community skills with `enabled: false`, and a signed-out user connects a provider with
+  their own key and opens the Sources tab
+- **THEN** every community skill is listed unchecked under the fold, the prompt's catalogue names none, and after
+  the user checks one the next turn's catalogue names it and `load_skill` loads it
 
 ### Requirement: A community skill is pinned to a commit
 
-Every remote skill in the shipped catalogue other than `solana-dev` SHALL have a `baseUrl` on
-`raw.githubusercontent.com` whose path holds a full 40-character commit hash, so the text the model reads cannot
-change without a change to the catalogue.
+A community skill SHALL have a `baseUrl` on `raw.githubusercontent.com` whose path holds a full 40-character
+commit hash, so the text the model reads cannot change without a change to the catalogue. The skills route SHALL
+reject a catalogue holding a community skill whose `baseUrl` is not pinned this way, answering 500 with a message
+naming the skill. The node test of `validateSkills` (`entry.test.mjs`) covers the scenario "An unpinned community
+skill".
+
+#### Scenario: An unpinned community skill (manual)
+
+- **WHEN** `SOURCES` lists a community skill whose `baseUrl` names the branch `main`
+- **THEN** `GET /api/skills` answers 500 with a message naming the skill
 
 #### Scenario: A community skill loads from its pinned commit (manual)
 

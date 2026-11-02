@@ -67,21 +67,23 @@ the ones it depends on.
       and `Grounding.test.tsx` hold "A skill withheld by the operator" and
       "The skills route is unreachable", and `prompt.test.ts` shows the
       catalogue naming only the loaded skills
-- [x] 2.3 Community skills: 35 entries from solana.com/skills in
-      `SOURCES_CATALOGUE` (the page lists 37: Clawpump's repository answers
-      404, and the 37th was not identified), each remote at the commit the
-      page pins, with a one-sentence description, `enabled: false`, and no `signedIn`, as
-      [design.md](design.md), "Community skills from solana.com/skills", says;
-      `enabled: false` honoured by `validateSkills` and the store's initial
-      `enabledSkillIds`; the Sources tab's community fold with its count; a
-      help tip and "Entry format" link for skills, as the additional-servers
-      section has; a "Skill entries" section in
-      `client-v2/docs/agent-sources-and-tools.md` (depends on 2.2); verify a
-      node test fails on a community `baseUrl` that names a branch and on a
-      community entry that is not `enabled: false` or is `signedIn`, the PR
-      lists every entry's `SKILL.md` answering 200 at its pinned URL, and the
-      tab's tests hold "A community skill that starts off" and "A user with
-      their own key"
+- [x] 2.3 Community skills by one rule, as [design.md](design.md),
+      "Community skills: one rule, surfpool first", says: the inclusion rule
+      in `client-v2/docs/agent-sources-and-tools.md`, "Community skills";
+      `SOURCES_CATALOGUE` lists `surfpool` with `enabled: false`; `validateSkills`
+      accepts `community: { repo }`, honours `enabled: false`, and rejects a
+      community `baseUrl` that is not on `raw.githubusercontent.com` at a
+      40-character commit; the store's initial `enabledSkillIds` honours
+      `enabled: false`; the Sources tab's community fold with its count,
+      absent while none is listed; a help tip and "Entry format" link for
+      skills, as the additional-servers section has; a "Skill entries"
+      section in `client-v2/docs/agent-sources-and-tools.md` with the
+      `surfpool` entry as its example (depends on 2.2); verify
+      `entry.test.mjs` fails on a community `baseUrl` that names a branch or
+      another host, `api/skills.test.mjs` "The shipped catalogue signed out"
+      fails when `surfpool` is missing or switched on, and the tab's
+      tests hold "A community skill that starts off", "A user with their own
+      key", and "No community skills listed"
 
 ## 3. The selection
 
