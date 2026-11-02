@@ -5,6 +5,28 @@ Defines what `@/shared/lib/ai` guarantees to any caller that talks to a model
 through it: how a turn runs and stops, how failures surface, how MCP servers
 are reached, and where a connection's key may appear.
 
+```mermaid
+flowchart TD
+  turn["A turn starts (runTurn)"] --> conn{"Connection?"}
+  conn -- "default backend" --> agent["/api/agent, same origin, no key"]
+  conn -- "own key" --> endpoint["The provider's endpoint,<br/>the key in its auth header only"]
+  agent --> request["One request per step,<br/>never retried"]
+  endpoint --> request
+  tools["Tools declared with JSON Schema or zod,<br/>sent as JSON Schema"] -.-> request
+  mcp["MCP server: reconnect once on a stale session,<br/>McpUnreachableError when the host is unreachable"] -.-> tools
+  request --> answer{"Response?"}
+  answer -- "tool call" --> hold["Run the tool; an approval<br/>holds the next request"] --> steps{"Step limit reached?"}
+  steps -- no --> request
+  steps -- yes --> done["Turn ends"]
+  answer -- "pause_turn" --> resumes{"Resume limit reached?"}
+  resumes -- no --> request
+  resumes -- yes --> fail
+  answer -- "error frame, refusal" --> fail["AiTurnError"]
+  answer -- "done" --> done
+  abort["Caller aborts"] -.-> stop["Rejects with the reason,<br/>no further request"]
+  fail --> redact["Key replaced by REDACTED_KEY<br/>in every error and callback message"]
+```
+
 ## Requirements
 
 ### Requirement: A turn stops at its step limit

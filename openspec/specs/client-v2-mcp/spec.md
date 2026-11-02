@@ -4,6 +4,22 @@
 The browser MCP client of client-v2: the connections it keeps to MCP servers, directly or through the
 `/api/mcp` gateway, and the events it reports about them.
 
+```mermaid
+flowchart TD
+  entries["Server entries: the gateway's and the user's"] --> id{"Same id twice?"}
+  id -- yes --> gateway["The gateway's entry wins;<br/>the local one is shown as replaced"]
+  id -- no --> conn
+  gateway --> conn["One connection per entry id;<br/>a changed or removed entry closes it"]
+  conn -- "list tools" --> listed["mcp_tools_listed"]
+  conn -- "listing fails" --> failed["mcp_tools_list_failed<br/>(unreachable, timeout, session-expired, other)"]
+  conn -- "call a tool" --> called["mcp_tool_called<br/>(ok, tool-error, aborted, timeout, failed)"]
+  conn -- "session expired" --> reopened["mcp_session_reopened,<br/>once per reopened session"] --> called
+  listed --> nodata["No event carries a URL, a header,<br/>a token, a tool name, or arguments"]
+  failed --> nodata
+  called --> nodata
+  reopened --> nodata
+```
+
 ## Requirements
 
 ### Requirement: A connection follows its server entry
