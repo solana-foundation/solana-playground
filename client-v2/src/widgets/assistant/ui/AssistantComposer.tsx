@@ -14,7 +14,7 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgProgramInfo } from "../../../utils/program-info";
 import { modelOptions, modelShown } from "../model/choice";
 import type { ModelOption } from "../model/choice";
-import { DEFAULT_CONNECTION } from "../model/connection";
+import { connectLabel, DEFAULT_CONNECTION } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import { withEffort, withModel } from "../model/tune";
@@ -28,8 +28,18 @@ import { BaseModelMenu } from "./BaseModelMenu";
 
 const log = createLogger("assistant:composer");
 
-/** What the assistant reads each turn, as chips over the input */
-const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
+/** How a chip names what it sends, for a screen reader */
+const sent = (what: string) => `Sent with this message: ${what}`;
+
+/**
+ * What the assistant reads each turn, as chips over the input. The open
+ * file's chip can be removed for the next message (`leaveOut`); gone while it
+ * is left out.
+ */
+const contextChips = (
+  lessonState: LessonState,
+  openFile: { leftOut: string | null; leaveOut(path: string): void }
+): ComposerContextChip[] => {
   // Mirror what `describeProject()` actually sends, so the row cannot claim
   // less than the model gets. Paths only — never file content, since this runs
   // on every render, including every streamed token.
@@ -37,6 +47,11 @@ const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
   const filePaths = realBridge.listFiles();
   const openPaths = realBridge.listOpenFiles();
   const lesson = describeLesson(lessonState);
+  const files = `${filePaths.length} ${
+    filePaths.length === 1 ? "file" : "files"
+  }`;
+  const openName =
+    currentFilePath && PgExplorer.getItemNameFromPath(currentFilePath);
   // The prototype's order: where you are, what you are looking at, then
   // what else is sent
   return [
@@ -44,19 +59,32 @@ const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
       ? {
           label: `Step ${lesson.stepIndex} of ${lesson.stepCount}`,
           title: lesson.objective,
+          spoken: sent(
+            `step ${lesson.stepIndex} of ${lesson.stepCount} and its goal`
+          ),
         }
       : null,
-    currentFilePath
+    currentFilePath && openName && openFile.leftOut !== currentFilePath
       ? {
-          label: PgExplorer.getItemNameFromPath(currentFilePath),
+          label: openName,
           title: "The tab you are looking at, sent in full every turn",
+          spoken: sent(`${openName}, the open file, in full`),
+          remove: {
+            label: `Leave ${openName} out of the next message`,
+            run: () => openFile.leaveOut(currentFilePath),
+          },
         }
       : null,
     {
-      label: `${filePaths.length} ${filePaths.length === 1 ? "file" : "files"}`,
+      label: files,
       title: `Every path is sent each turn, and the assistant can read any of them:\n\n${filePaths.join(
         "\n"
       )}`,
+      spoken: sent(
+        filePaths.length === 1
+          ? `the path of ${files}`
+          : `the paths of all ${files}`
+      ),
     },
     openPaths.length > 1
       ? {
@@ -64,13 +92,22 @@ const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
           title: `Your open tabs are named each turn; only the active one is sent in full:\n\n${openPaths.join(
             "\n"
           )}`,
+          spoken: sent(`the names of your ${openPaths.length} open tabs`),
         }
       : null,
     PgBuildOutput.latest?.failed
-      ? { label: "build error", title: "The last build's compiler output" }
+      ? {
+          label: "build error",
+          title: "The last build's compiler output",
+          spoken: sent("the last build's compiler output"),
+        }
       : null,
     PgProgramInfo.idl
-      ? { label: "idl", title: "The built program's interface" }
+      ? {
+          label: "idl",
+          title: "The built program's interface",
+          spoken: sent("the built program's interface"),
+        }
       : null,
   ].filter((chip): chip is ComposerContextChip => !!chip);
 };
@@ -86,9 +123,19 @@ const PLACEHOLDERS: Record<TurnPhase, string> = {
 
 /**
  * The assistant's composer, connected: the context it reads, the model and
- * effort menus, and the turn shared with the thread.
+ * effort menus, the + menu, and the turn shared with the thread.
  */
-export function AssistantComposer({ turn }: { turn: Turn }) {
+export function AssistantComposer({
+  turn,
+  onSources,
+  focusPicked,
+}: {
+  turn: Turn;
+  /** Opens Sources and tools in place of the conversation */
+  onSources(): void;
+  /** Gives focus to what a pick from + opened, as the head's More does */
+  focusPicked(): boolean;
+}) {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
 
@@ -135,8 +182,8 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         turn.openConnect("model", { provider: "default" });
         return;
       }
-      // From a keyed backend this is a change of backend, and starts a new
-      // conversation as connecting always has
+      // From a keyed backend this is a change of backend; the conversation
+      // carries over, as it does on every connect
       PgAssistant.connect(DEFAULT_CONNECTION);
       assistantTelemetry.track("assistant_model_picked", {
         provider: "default",
@@ -190,7 +237,13 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         </Callout>
       )}
       <BaseAssistantComposer
-        chips={contextChips(lessonState)}
+        chips={contextChips(lessonState, {
+          leftOut: turn.openFileLeftOut,
+          leaveOut: (path) => {
+            turn.leaveOutOpenFile(path);
+            assistantTelemetry.track("assistant_file_chip_removed", {});
+          },
+        })}
         value={turn.input}
         onValueChange={turn.setInput}
         onSend={(text) => {
@@ -212,6 +265,10 @@ export function AssistantComposer({ turn }: { turn: Turn }) {
         }
         effort={effort}
         focusRequest={turn.focusRequest}
+        onSources={onSources}
+        onConnect={() => turn.openConnect("add")}
+        connectLabel={connectLabel(connection)}
+        focusPicked={focusPicked}
         // The deployment serves no default and nothing is connected: the model
         // button reads "Connect a model" and is the way in, so Send waits for
         // it. A default the probe could not reach keeps Send, whose send asks

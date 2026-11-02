@@ -6,9 +6,12 @@ import { LONG, expect, test } from "./fixtures";
 const startButton = (page: Page) =>
   page.getByRole("button", { name: "Start", exact: true });
 
-/** The assistant's head is an h2; the About page's own title is the h1 */
-const assistantHead = (page: Page, name: string) =>
-  page.getByRole("heading", { level: 2, name, exact: true });
+/**
+ * The empty conversation's title names whose conversation it is; the head
+ * names the model (assistant-model-name)
+ */
+const askAbout = (page: Page, name: string) =>
+  page.getByRole("heading", { name: `Ask about ${name}`, exact: true });
 
 test("client-v2-tutorials: The assistant beside Hello Anchor", async ({
   page,
@@ -16,12 +19,9 @@ test("client-v2-tutorials: The assistant beside Hello Anchor", async ({
   await page.goto("/tutorials/hello-anchor");
   await expect(startButton(page)).toBeVisible(LONG);
 
-  // Before Start there is no project: the assistant names the tutorial and
-  // the files column offers nothing to create
-  await expect(assistantHead(page, "Hello Anchor")).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Ask about Hello Anchor" })
-  ).toBeVisible();
+  // Before Start there is no project: the conversation names the tutorial
+  // and the files column offers nothing to create
+  await expect(askAbout(page, "Hello Anchor")).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Create a new project" })
   ).toHaveCount(0);
@@ -34,7 +34,7 @@ test("client-v2-tutorials: Starting from the About page", async ({ page }) => {
   await expect(page).toHaveURL(/\/tutorials\/hello-seahorse\/1$/, LONG);
   // The tutorial's project now exists, and the files column shows it
   await expect(page.locator("#root-dir")).toBeVisible(LONG);
-  await expect(assistantHead(page, "Hello Seahorse")).toBeVisible();
+  await expect(askAbout(page, "Hello Seahorse")).toBeVisible();
 });
 
 test("client-v2-tutorials: The details read as text", async ({ page }) => {
@@ -57,9 +57,9 @@ test("client-v2-tutorials: Beside another project", async ({
   await page.goto("/tutorials/hello-anchor");
   await expect(startButton(page)).toBeVisible(LONG);
 
-  // The open project keeps the assistant, whose thread and tools are its;
+  // The open project keeps the conversation, whose thread and tools are its;
   // the files column stays empty until the tutorial has a project of its own
-  await expect(assistantHead(page, "e2e-project")).toBeVisible();
+  await expect(askAbout(page, "e2e-project")).toBeVisible();
   await expect(page.locator("#root-dir")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Create a new project" })

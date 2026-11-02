@@ -2,6 +2,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { BaseApprovalCard } from "./BaseApprovalCard";
 import type { ApprovalItem } from "./BaseApprovalCard";
 
@@ -128,5 +129,142 @@ describe("BaseApprovalCard", () => {
       expect(button.classList.contains("h-11")).toBe(true);
       expect(button.classList.contains("md:h-8")).toBe(true);
     }
+  });
+
+  describe("Undo patch", () => {
+    const request = {
+      type: "patch",
+      path: "src/lib.rs",
+      before: "a",
+      after: "b",
+    } as const;
+    const appliedCard = (): ApprovalItem => ({
+      id: "card-3",
+      createdAt: CREATED,
+      kind: "approval",
+      status: "allowed",
+      outcome: "wrote src/lib.rs",
+      request,
+    });
+    const undoneCard = (): ApprovalItem => ({
+      id: "card-3",
+      createdAt: CREATED,
+      kind: "approval",
+      status: "allowed",
+      outcome: "undone, src/lib.rs is back as it was",
+      undo: "done",
+      request,
+    });
+
+    it("offers Undo patch on an applied card it can take back", () => {
+      const onUndo = vi.fn();
+      render(
+        <BaseApprovalCard
+          item={appliedCard()}
+          onAnswer={vi.fn()}
+          onUndo={onUndo}
+        />
+      );
+      expect(screen.getByText("Applied")).toBeTruthy();
+      const undo = screen.getByRole("button", { name: "Undo patch" });
+      // A thumb's target on a phone, both ways
+      expect(undo.className).toContain("h-11");
+      expect(undo.className).toContain("min-w-11");
+      fireEvent.click(undo);
+      expect(onUndo).toHaveBeenCalledTimes(1);
+    });
+
+    it("offers the original to copy when Undo could not finish", () => {
+      render(
+        <TooltipProvider>
+          <BaseApprovalCard
+            item={appliedCard()}
+            onAnswer={vi.fn()}
+            original="old"
+          />
+        </TooltipProvider>
+      );
+      const copy = screen.getByRole("button", { name: "Copy the original" });
+      expect(copy.className).toContain("size-11");
+      expect(screen.queryByRole("button", { name: "Undo patch" })).toBeNull();
+      const writeText = vi.fn(async () => {});
+      vi.stubGlobal("navigator", { clipboard: { writeText } });
+      try {
+        fireEvent.click(copy);
+        expect(writeText).toHaveBeenCalledWith("old");
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("offers the original even when it was an empty file", () => {
+      render(
+        <TooltipProvider>
+          <BaseApprovalCard
+            item={appliedCard()}
+            onAnswer={vi.fn()}
+            original=""
+          />
+        </TooltipProvider>
+      );
+      expect(
+        screen.getByRole("button", { name: "Copy the original" })
+      ).toBeTruthy();
+    });
+
+    it("offers nothing to copy without an original", () => {
+      render(<BaseApprovalCard item={appliedCard()} onAnswer={vi.fn()} />);
+      expect(
+        screen.queryByRole("button", { name: "Copy the original" })
+      ).toBeNull();
+    });
+
+    it("reads an undo that did not finish as a warning", () => {
+      const card: ApprovalItem = {
+        id: "card-4",
+        createdAt: CREATED,
+        kind: "approval",
+        status: "allowed",
+        undo: "stranded",
+        outcome: "Undo did not finish: src/lib.rs changed while Undo wrote it.",
+        request,
+      };
+      render(<BaseApprovalCard item={card} onAnswer={vi.fn()} />);
+      expect(
+        screen.getByText(
+          "Undo did not finish: src/lib.rs changed while Undo wrote it."
+        ).className
+      ).toContain("text-warning");
+    });
+
+    it("reads the undo state, never the outcome's wording", () => {
+      const card: ApprovalItem = {
+        id: "card-5",
+        createdAt: CREATED,
+        kind: "approval",
+        status: "allowed",
+        outcome: "Undo did not finish: but no Undo ran on this card.",
+        request,
+      };
+      render(<BaseApprovalCard item={card} onAnswer={vi.fn()} />);
+      expect(
+        screen.getByText("Undo did not finish: but no Undo ran on this card.")
+          .className
+      ).not.toContain("text-warning");
+    });
+
+    it("offers no Undo patch without onUndo", () => {
+      render(<BaseApprovalCard item={appliedCard()} onAnswer={vi.fn()} />);
+      expect(screen.queryByRole("button", { name: "Undo patch" })).toBeNull();
+    });
+
+    it("reads Undone once taken back", () => {
+      render(<BaseApprovalCard item={undoneCard()} onAnswer={vi.fn()} />);
+      expect(screen.getByText("Undone")).toBeTruthy();
+      expect(screen.queryByText("Applied")).toBeNull();
+      expect(
+        screen.getByText("undone, src/lib.rs is back as it was")
+      ).toBeTruthy();
+    });
   });
 });

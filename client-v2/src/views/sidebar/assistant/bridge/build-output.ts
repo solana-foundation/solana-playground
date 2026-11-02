@@ -26,7 +26,7 @@ export interface BuildOutput {
  * span markers — is discarded, and `PgTerminal` has no way to read it back.
  *
  * Explaining a real error needs the real text, so the build command hands the
- * raw output here. See `docs/decisions.md` -> D4.
+ * raw output here, at the source, before `improveOutput` strips it.
  */
 export class PgBuildOutput {
   /** The most recent build, or `null` if nothing has been built this session */

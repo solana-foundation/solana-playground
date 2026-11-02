@@ -37,6 +37,11 @@ export type ReplyActions = {
   };
   /** The lesson's escape valve, recorded as a skip */
   skipStep?: { onClick: () => void; title: string };
+  /**
+   * On an error whose provider refused the key: reopens Connect a model on
+   * that backend for the key to be entered again
+   */
+  enterKey?: () => void;
 };
 
 const MAKE_CHANGE: Record<
@@ -58,15 +63,42 @@ const MAKE_CHANGE: Record<
 
 const VERIFY_LABEL = { build: "Build", deploy: "Deploy" } as const;
 
+/** Under a reply left unfinished: its request failed mid-stream, or a reload cut it short (`PgAssistant.isCutOff`) */
+const CUT_OFF = "This reply was cut off.";
+
+/** Sends the last message again, under a stopped or cut-off reply */
+const TryAgain = ({ onClick }: { onClick: () => void }) => (
+  <Button
+    variant="outline"
+    size="sm"
+    className="h-11 shrink-0 md:h-8"
+    onClick={onClick}
+  >
+    Try again
+  </Button>
+);
+
 /** One item of the conversation, drawn from props only */
 export const BaseThreadItem = ({
   item,
   actions,
   onAnswer,
+  onUndo,
+  original,
+  cutOff = false,
+  onRetry,
 }: {
   item: ChatItem;
   actions?: ReplyActions;
   onAnswer: (id: string, answer: ApprovalAnswer) => void;
+  /** Takes back this item's applied patch; only while it still can be */
+  onUndo?: () => void;
+  /** The file before this item's patch, when its Undo could not finish */
+  original?: string;
+  /** The reply's request failed mid-stream, or a reload cut it short */
+  cutOff?: boolean;
+  /** Sends the last message again; given to the last item only, when it was stopped or cut off */
+  onRetry?: () => void;
 }) => {
   switch (item.kind) {
     case "user":
@@ -97,6 +129,12 @@ export const BaseThreadItem = ({
                 <Markdown codeFontOnly>{item.text}</Markdown>
               </BubbleContent>
             </Bubble>
+            {cutOff && (
+              <MessageFooter className="flex-wrap items-center gap-2 px-0">
+                <span className="text-sm text-muted-foreground">{CUT_OFF}</span>
+                {onRetry && <TryAgain onClick={onRetry} />}
+              </MessageFooter>
+            )}
             {actions && <ReplyFooter actions={actions} />}
           </MessageContent>
         </Message>
@@ -118,13 +156,32 @@ export const BaseThreadItem = ({
           <CalloutDescription className="break-words">
             {item.text}
           </CalloutDescription>
+          {actions?.enterKey && (
+            // Spec 08 (state AI-05) offers Open settings and Use hosted model;
+            // the key lives in Connect a model here, so Enter key opens that.
+            // TODO(HOO-1719): its look awaits Design alignment's sync item
+            // 4.15; the design system's outline button until then
+            <Button
+              id="assistant-enter-key"
+              variant="outline"
+              size="sm"
+              className="mt-2 self-start"
+              onClick={actions.enterKey}
+            >
+              Enter key
+            </Button>
+          )}
+          {onRetry && <TryAgain onClick={onRetry} />}
         </Callout>
       );
 
     case "notice":
       return (
         <Callout role="status">
-          <CalloutDescription>{item.text}</CalloutDescription>
+          <CalloutDescription className="flex flex-wrap items-center justify-between gap-2">
+            {item.text}
+            {onRetry && <TryAgain onClick={onRetry} />}
+          </CalloutDescription>
         </Callout>
       );
 
@@ -133,6 +190,8 @@ export const BaseThreadItem = ({
         <BaseApprovalCard
           item={item}
           onAnswer={(answer) => onAnswer(item.id, answer)}
+          onUndo={onUndo}
+          original={original}
         />
       );
   }

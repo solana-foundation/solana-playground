@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { BaseAssistantHead } from "./BaseAssistantHead";
 import type { ForgetKey } from "./BaseAssistantHead";
+import type { HeadLabel } from "../model/head-label";
 
 interface HeadChoice {
   wide?: boolean;
@@ -12,7 +13,32 @@ interface HeadChoice {
   /** What the caller's `focusPicked` does; takes focus by default */
   focusPicked?: () => boolean;
   forgetKey?: ForgetKey;
+  label?: HeadLabel;
 }
+
+const HOSTED: HeadLabel = {
+  kind: "model",
+  lead: "Assistant · ",
+  model: "GLM 5.3 Flash",
+  tail: " · hosted",
+};
+
+const LONG = "deepseek/deepseek-chat-v3.1-terminus-instruct:free";
+
+const KEYED_LONG: HeadLabel = {
+  kind: "model",
+  lead: "",
+  model: LONG,
+  tail: " · your OpenRouter key",
+};
+
+/** jsdom lays nothing out, so whether the head's model name is cut is stated */
+const cutName = (cut: boolean) => {
+  const text = screen.getByText(LONG);
+  Object.defineProperty(text, "scrollWidth", { value: cut ? 300 : 100 });
+  Object.defineProperty(text, "clientWidth", { value: 100 });
+  return text;
+};
 
 const setup = (choice: HeadChoice = {}) => {
   const onSources = vi.fn();
@@ -24,9 +50,10 @@ const setup = (choice: HeadChoice = {}) => {
   render(
     <TooltipProvider>
       <BaseAssistantHead
-        title="hello-anchor"
+        label={choice.label ?? HOSTED}
         onSources={onSources}
         onConnect={onConnect}
+        connectLabel="Connect a model…"
         focusPicked={focusPicked}
         wide={choice.wide ?? false}
         onWiden={onWiden}
@@ -60,9 +87,43 @@ describe("BaseAssistantHead", () => {
   beforeEach(() => vi.stubGlobal("ResizeObserver", NoopResizeObserver));
   afterEach(() => vi.unstubAllGlobals());
 
-  it("names the project", () => {
+  it("reads the model in use", () => {
     setup();
-    expect(screen.getByText("hello-anchor")).toBeTruthy();
+    expect(
+      screen.getByRole("heading", {
+        name: "Assistant · GLM 5.3 Flash · hosted",
+      })
+    ).toBeTruthy();
+  });
+
+  it("reads Assistant alone with no model", () => {
+    setup({ label: { kind: "plain", text: "Assistant" } });
+    expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
+  });
+
+  it("cuts only the model's name, keeping the words around it whole", () => {
+    setup({
+      label: KEYED_LONG,
+    });
+    expect(screen.getByText(LONG).className).toContain("truncate");
+    expect(screen.getByText(LONG).hasAttribute("data-overflow")).toBe(true);
+    expect(screen.getByText("· your OpenRouter key").className).toContain(
+      "shrink-0"
+    );
+  });
+
+  it("shows a cut model name whole in a tooltip on hover", async () => {
+    const { user } = setup({
+      label: KEYED_LONG,
+    });
+    await user.hover(cutName(true));
+    expect((await screen.findByRole("tooltip")).textContent).toBe(LONG);
+  });
+
+  it("shows no tooltip for a model name that fits", async () => {
+    const { user } = setup({ label: KEYED_LONG });
+    await user.hover(cutName(false));
+    expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
   it("lists the three items under More, Clear conversation disabled", async () => {
@@ -239,8 +300,9 @@ describe("BaseAssistantHead", () => {
 
 it("is the frame's 44 px column bar", () => {
   setup();
-  const head = screen.getByRole("heading", { name: "hello-anchor" })
-    .parentElement!;
+  const head = screen.getByRole("heading", {
+    name: "Assistant · GLM 5.3 Flash · hosted",
+  }).parentElement!;
   expect(head.className).toMatch(/\bh-11\b/);
   expect(head.className).toMatch(/\bborder-b\b/);
 });

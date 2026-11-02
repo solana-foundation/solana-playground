@@ -134,7 +134,7 @@ const handleTutorial = (name: string, page: string) => {
           // "Tutorials" -- the *earlier* change's callback can still fire
           // after the later one, delivering a stale `p` here that no longer
           // matches the live sidebar page. Ignore it; the live value's own
-          // (correct) dispatch follows right behind. See D16.
+          // (correct) dispatch follows right behind.
           if (p.name !== PgView.sidebar.name) return;
 
           // `setMainPrimary`'s callback is async, so `PgTutorial.refresh()`
@@ -142,7 +142,7 @@ const handleTutorial = (name: string, page: string) => {
           // assignment below fires this listener. Both branches read
           // tutorial state that does not exist yet at that moment:
           // `openAboutPage()` throws, and the `isStarted` branch navigates
-          // away mid-open. Wait for the next change instead. See D16.
+          // away mid-open. Wait for the next change instead.
           if (!PgTutorial.current) return;
 
           if (p.name === "Tutorials") PgTutorial.openAboutPage();

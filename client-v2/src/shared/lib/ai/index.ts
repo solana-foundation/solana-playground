@@ -1,3 +1,4 @@
+export { isNetworkFailure } from "./network-failure";
 export { MIN_REDACTED_KEY_LENGTH, REDACTED_KEY, redactKey } from "./redact";
 export type {
   McpCallOptions,

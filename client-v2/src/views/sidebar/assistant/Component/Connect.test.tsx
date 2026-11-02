@@ -312,6 +312,54 @@ describe("Connect", () => {
     ).toBe("vendor/model-x");
   });
 
+  it("opens on the connected backend without its key when a preset names it", () => {
+    PgAssistant.connect(OWN);
+
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: OWN.id, model: "gpt-x" },
+    });
+
+    expect(checked()?.getAttribute("value")).toBe(OWN.id);
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")?.value
+    ).toBe("");
+  });
+
+  it("puts a preset base URL into an endpoint's base URL field", () => {
+    renderConnect({
+      defaultBackend: "present",
+      preset: {
+        provider: "openai",
+        model: "local-model",
+        baseUrl: "http://localhost:1234/v1",
+      },
+    });
+
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-base-url")?.value
+    ).toBe("http://localhost:1234/v1");
+    expect(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")?.value
+    ).toBe("");
+  });
+
+  it("starts a preset backend on the preset effort", async () => {
+    const user = userEvent.setup();
+    renderConnect({
+      defaultBackend: "present",
+      preset: { provider: "anthropic", effort: "low" },
+    });
+    await user.type(
+      document.querySelector<HTMLInputElement>("#assistant-api-key")!,
+      "sk-ant-fake"
+    );
+
+    act(() => action!.connect());
+
+    expect(PgAssistant.connection?.settings?.effort).toBe("low");
+  });
+
   it("hands its host the action, ready once the key is in, and connects", async () => {
     const user = userEvent.setup();
     renderConnect({ defaultBackend: "absent" });

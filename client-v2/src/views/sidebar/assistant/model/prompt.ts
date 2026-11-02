@@ -1,6 +1,7 @@
 import { describeCatalog } from "../grounding";
 import { PgAssistant } from "../store";
 import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
+import type { TurnContext } from "./types";
 import assistantContext from "../content/assistant-context.md";
 
 /**
@@ -67,9 +68,14 @@ export const systemPrompt = () =>
  * apart leaves the stable half cacheable.
  *
  * @param bridge the playground to read
+ * @param context what the user chose to send; the open file in full unless
+ * they left it out
  * @returns a plain-text snapshot
  */
-export const describeProject = (bridge: PlaygroundBridge = realBridge) => {
+export const describeProject = (
+  bridge: PlaygroundBridge = realBridge,
+  context: TurnContext = { openFile: true }
+) => {
   const ctx = bridge.getProjectContext();
   const lines = [
     `Workspace: ${ctx.workspaceName ?? "none"}`,
@@ -99,7 +105,11 @@ export const describeProject = (bridge: PlaygroundBridge = realBridge) => {
     );
   }
 
-  if (ctx.currentFilePath) {
+  if (ctx.currentFilePath && !context.openFile) {
+    lines.push(
+      `\nThe user is looking at ${ctx.currentFilePath}, and left its content out of this message.`
+    );
+  } else if (ctx.currentFilePath) {
     lines.push(
       `\nThe user is looking at ${ctx.currentFilePath}:\n\n${
         ctx.currentFileContent ?? ""

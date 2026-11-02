@@ -142,7 +142,9 @@ test.describe("client-v2-controls", () => {
 
     // Connect a model opens from the head's More, not on its own
     await page.getByRole("button", { name: "More", exact: true }).click();
-    await page.getByRole("menuitem", { name: /Connect a model/ }).click();
+    await page
+      .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
+      .click();
 
     const toggle = page.getByRole("button", { name: "Bring your own key" });
     await toggle.click();

@@ -1,10 +1,11 @@
 import { CirclePlayIcon } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { Marker, MarkerIcon } from "@/shared/ui/marker";
+import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -12,6 +13,7 @@ import {
   MessageScrollerItem,
   MessageScrollerProvider,
   MessageScrollerViewport,
+  useMessageScroller,
 } from "@/shared/ui/message-scroller";
 import { Spinner } from "@/shared/ui/spinner";
 import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
@@ -34,8 +36,9 @@ export interface BusyRetryView {
  *
  * The scroller follows new content while the reader is at the end and stays
  * put once they scroll up by wheel, touch or keys, offering "Scroll to end"
- * instead. The log "Conversation" is the scroller's content; there is no
- * scroll anchor, so a send made while scrolled up does not move the thread.
+ * instead. The log "Conversation" is the scroller's content. Sending takes
+ * the thread back to the end (`FollowOnSend`), so the reply is followed even
+ * when the user sent it while scrolled up.
  */
 export const BaseThread = ({
   items,
@@ -47,6 +50,10 @@ export const BaseThread = ({
   actionsFor,
   onAnswer,
   retry,
+  undoFor = () => undefined,
+  originalFor = () => undefined,
+  isCutOff = () => false,
+  retryFor = () => undefined,
 }: {
   items: readonly ChatItem[];
   /** The turn is running and the last item is not a reply with text: before the first token and while tools run */
@@ -62,8 +69,17 @@ export const BaseThread = ({
   onAnswer: (id: string, answer: ApprovalAnswer) => void;
   /** Spec 08's AI-03, under the message that waits; never a stored item */
   retry?: BusyRetryView;
+  /** Takes back the patch of the card `id`, or `undefined` when it no longer can */
+  undoFor?: (id: string) => (() => void) | undefined;
+  /** The file before the patch of the card `id`, when its Undo could not finish */
+  originalFor?: (id: string) => string | undefined;
+  /** Whether a reply was cut off mid-stream */
+  isCutOff?: (item: ChatItem) => boolean;
+  /** Sends the last message again from the item `id`, or `undefined` where Try again is not offered */
+  retryFor?: (id: string) => (() => void) | undefined;
 }) => (
   <MessageScrollerProvider autoScroll>
+    <FollowOnSend items={items} working={working} />
     <MessageScroller className="flex-1">
       <MessageScrollerViewport>
         <MessageScrollerContent
@@ -88,18 +104,16 @@ export const BaseThread = ({
                   item={item}
                   actions={actionsFor(item.id)}
                   onAnswer={onAnswer}
+                  onUndo={undoFor(item.id)}
+                  original={originalFor(item.id)}
+                  cutOff={isCutOff(item)}
+                  onRetry={retryFor(item.id)}
                 />
               </MessageScrollerItem>
             ))
           )}
           {retry && <BusyRetry retry={retry} />}
-          {working && (
-            <Marker role="status" aria-label="Assistant is working">
-              <MarkerIcon>
-                <Spinner />
-              </MarkerIcon>
-            </Marker>
-          )}
+          {working && <Thinking />}
         </MessageScrollerContent>
       </MessageScrollerViewport>
       <MessageScrollerButton />
@@ -128,6 +142,71 @@ const BusyRetry = ({ retry }: { retry: BusyRetryView }) => (
     </div>
   </Callout>
 );
+
+/**
+ * While `working` (a turn runs and its last item is not a reply with text:
+ * before the first text, and while a tool runs after one): "Thinking", then
+ * the seconds since the marker appeared. Announced once, by its name: the
+ * count is hidden from screen readers, which would otherwise read it every
+ * second, and the spinner stands still under reduced motion.
+ */
+const Thinking = () => {
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const timer = setInterval(
+      () => setSeconds(Math.floor((Date.now() - start) / 1000)),
+      1000
+    );
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <Marker role="status" aria-label="Assistant is working">
+      <MarkerIcon>
+        <Spinner
+          role="presentation"
+          aria-hidden="true"
+          className="motion-reduce:animate-none"
+        />
+      </MarkerIcon>
+      <MarkerContent>
+        Thinking
+        {seconds > 0 && (
+          <span aria-hidden="true" className="ml-1.5 tabular-nums">
+            {seconds}s
+          </span>
+        )}
+      </MarkerContent>
+    </Marker>
+  );
+};
+
+/**
+ * Scrolls to the end when the user sends: a new last user message that comes
+ * with a turn starting (`working`, set in the same tick by `useTurn`'s send).
+ * Without it a reader who had scrolled up stayed in free scrolling and the
+ * reply streamed off-screen; `scrollToEnd` under `autoScroll` turns following
+ * back on. A user message that arrives with no turn here, folded in from
+ * another device or in another thread, leaves the reader where they are.
+ */
+const FollowOnSend = ({
+  items,
+  working,
+}: {
+  items: readonly ChatItem[];
+  working: boolean;
+}) => {
+  const { scrollToEnd } = useMessageScroller();
+  const lastSent = items.findLast((item) => item.kind === "user")?.id;
+  const seen = useRef(lastSent);
+  useEffect(() => {
+    if (lastSent === seen.current) return;
+    seen.current = lastSent;
+    if (lastSent && working) scrollToEnd({ behavior: "auto" });
+  }, [lastSent, working, scrollToEnd]);
+  return null;
+};
 
 const EmptyThread = ({
   project,
