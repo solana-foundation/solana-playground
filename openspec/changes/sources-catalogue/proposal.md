@@ -34,17 +34,17 @@ half; this change states the shape for both halves.
   its upstream's bot protection. A registry in `features/mcp` says how each
   provider takes its secret, a header for the gateway and a query parameter
   for the browser, so a deployment that leaves Vercel adds a provider rather
-  than changing the gateway. The gateway sends the secret only for a caller
-  signed in on this site.
+  than changing the gateway. The gateway sends an entry's credentials, the
+  bypass among them, only for a caller signed in on this site.
 - A composer, `src/shared/lib/catalogue/compose.mjs`, pure over its
   arguments: it reads the catalogue or the override, withholds `signedIn`
   entries from a signed-out caller, fills placeholders, and checks `kind` and
   `id` only. Each slice validates the fields of its own kind.
 - `features/mcp` validates an MCP entry once for both readers, the browser's
   `parseServers` and the gateway, and exposes `composeServers` through its
-  `server.mjs`. `api/mcp.mjs` composes its upstreams through it and applies an
-  entry's `authToken` and `queryParams` to upstream requests, as the browser
-  does for a user entry.
+  `server.mjs`. `api/mcp.mjs` composes its upstreams through it. For a signed-in
+  caller, it applies an entry's `authToken` and `queryParams` to upstream
+  requests, as the browser does for a user entry.
 - A slice `features/skills` takes the skill registry, its types, and its
   loaders from `views/sidebar/assistant/grounding/`, exposes
   `listGatewaySkills`, and validates a skill entry. A route `api/skills.mjs`

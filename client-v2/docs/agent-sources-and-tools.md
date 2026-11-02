@@ -90,8 +90,8 @@ entry the gateway accepts.
 
 | Field | Required | Meaning |
 | --- | --- | --- |
-| `id` | yes | Letters, digits, `-` and `_`. It prefixes the server's tool names (`docs__search`), so it is unique across the list, and it may not repeat an id the gateway serves. |
-| `url` | yes | The server's Streamable HTTP endpoint. `https://` for a remote server, or a path starting with `/` for this site's gateway. |
+| `id` | yes | Letters, digits, `-` and `_`, without `__`. It prefixes the server's tool names (`docs__search`), so it is unique across the list, and it may not repeat an id the gateway serves. |
+| `url` | yes | The server's Streamable HTTP endpoint. `https://` for a remote server. In the editor only, a path starting with `/` for this site's gateway. |
 | `name` | no | What the Sources tab and the chat show. Defaults to the `id`. |
 | `enabled` | no | `false` keeps the entry without offering its tools. Defaults to `true`. The checkbox beside the server sets it. |
 | `authToken` | no | Sent as `Authorization: Bearer <authToken>`. |
@@ -113,6 +113,12 @@ than in `headers`, because a query parameter needs no preflight permission. A se
 at all cannot be called from the browser. It has to be added to the gateway's list by whoever runs the
 deployment.
 
+### Credentials in the gateway's list
+
+In the gateway's list, an entry's `authToken`, `headers`, `queryParams`, and `protection` belong to the
+deployment. The gateway sends them only for a caller signed in on this site. Any other caller reaches the same
+server without them. A user with their own key for that server adds it to the editor with the key.
+
 ### Protection
 
 `protection` names a bot-protection provider and the secret that gets past it:
@@ -125,10 +131,10 @@ deployment.
 }
 ```
 
-The provider decides how the secret travels: the browser sends it as a query parameter, so no preflight
-permission is needed, and the gateway sends it as a header, only for a caller signed in on this site. The supported providers and their parameter names
-are in `PROTECTION_PROVIDERS` ([`protection.mjs`](../src/features/mcp/model/protection.mjs)). Supporting
-another provider is a new entry there.
+The provider decides how the secret travels. The browser sends it as a query parameter, which needs no
+preflight permission. The gateway sends it as a header. The supported providers and their parameter names are
+in `PROTECTION_PROVIDERS` ([`protection.mjs`](../src/features/mcp/model/protection.mjs)). Supporting another
+provider is a new entry there.
 
 An entry with no `protection` sends no bypass. In the gateway's list, a secret written as `"${NAME:-}"` turns
 the bypass on only when the variable `NAME` is set.

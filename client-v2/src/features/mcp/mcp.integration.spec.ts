@@ -23,13 +23,14 @@ vi.mock("@/features/auth/server.mjs", async (importOriginal) => {
 });
 
 /**
- * Explorer is listed for every caller. The bot-protection bypass is ours, so
- * it rides only on a signed-in caller's requests from this site; anyone else
- * reaches Explorer without it.
+ * Explorer is listed for every caller. Its token and bot-protection bypass are
+ * the deployment's, so they ride only on a signed-in caller's requests from
+ * this site; anyone else reaches Explorer without them.
  */
-describe("/api/mcp with the Explorer bypass configured", () => {
+describe("/api/mcp with the Explorer credentials configured", () => {
   beforeEach(() => {
     vi.stubEnv("MCP_EXPLORER_BYPASS", "bypass-secret");
+    vi.stubEnv("MCP_EXPLORER_TOKEN", "token-secret");
     vi.stubEnv("AUTH_BASE_URL", "https://app.test");
   });
 
@@ -62,8 +63,8 @@ describe("/api/mcp with the Explorer bypass configured", () => {
     ).toEqual(["solana", "explorer"]);
   });
 
-  /** The bypass header on every request the gateway made to Explorer, one entry per request */
-  const bypassSent = async (origin?: string) => {
+  /** The bypass and authorization headers of every request the gateway made to Explorer, one entry per request */
+  const credentialsSent = async (origin?: string) => {
     const upstream = vi.spyOn(globalThis, "fetch").mockImplementation(
       async () =>
         new Response('{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}', {
@@ -77,22 +78,26 @@ describe("/api/mcp with the Explorer bypass configured", () => {
     });
 
     expect(upstream).toHaveBeenCalled();
-    return upstream.mock.calls.map(
-      ([, init]) =>
-        (init?.headers as Record<string, string>)["x-vercel-protection-bypass"]
-    );
+    return upstream.mock.calls.map(([, init]) => {
+      const headers = init?.headers as Record<string, string>;
+      return `${headers["x-vercel-protection-bypass"]} ${headers.authorization}`;
+    });
   };
 
-  it("sends the bypass for a signed-in caller on this site", async () => {
+  it("sends the bypass and the token for a signed-in caller on this site", async () => {
     session.state = "signed-in";
-    expect(new Set(await bypassSent())).toEqual(new Set(["bypass-secret"]));
+    expect(new Set(await credentialsSent())).toEqual(
+      new Set(["bypass-secret Bearer token-secret"])
+    );
   });
 
   it.each(CALLERS.slice(1))(
-    "sends no bypass for %s",
+    "sends neither the bypass nor the token for %s",
     async (_label, state, origin) => {
       session.state = state;
-      expect(new Set(await bypassSent(origin))).toEqual(new Set([undefined]));
+      expect(new Set(await credentialsSent(origin))).toEqual(
+        new Set(["undefined undefined"])
+      );
     }
   );
 });

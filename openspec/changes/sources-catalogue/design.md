@@ -80,28 +80,39 @@ out of the entry, so an optional token never travels as an empty header. The
 rule is the same for `url`, `name`, `baseUrl`, and any other string: one
 rule, stated once in the composer.
 
-### A bypass is a provider's, and rides only for a signed-in caller
+### A bypass is a provider's, and credentials ride only for a signed-in caller
 
 Explorer's public endpoint answers without a bypass; only a deployment behind
 Vercel's bot protection needs one. So the shipped Explorer entry is served to
 every caller, and its `MCP_EXPLORER_BYPASS` is optional. A bypass is an entry
-field, `protection: { provider, secret }`, rather than a literal header: the
+field, `protection: { provider, secret }`, rather than a literal header. The
 registry `PROTECTION_PROVIDERS` in `features/mcp/model/protection.mjs` says
-which header the gateway sends and which query parameter the browser sends,
-because a custom header from the browser must pass the upstream's CORS
-preflight and a query parameter need not. A deployment off Vercel adds a row.
+which header the gateway sends and which query parameter the browser sends.
+The browser needs the query parameter because a custom header from the browser
+must pass the upstream's CORS preflight. A deployment off Vercel adds a row.
 
-The secret is ours. Sent for every caller, it would make the gateway a way
-past the upstream's bot protection for anyone, from any site. So the gateway
-lists a protected entry for everyone and sends the secret only for a caller
-signed in from this site's origin; anyone else reaches the upstream without
-it, which works against a public endpoint and fails against a protected one.
+The gateway's credentials belong to the deployment: an entry's `headers`,
+`queryParams`, `authToken`, and `protection`. `/api/mcp` answers any caller
+from any site, so a credential sent for every caller would let anyone use the
+deployment's keys through it. The bypass would get them past the upstream's
+bot protection, and `MCP_EXPLORER_TOKEN` past an Explorer that gates on
+`MCP_ACCESS_KEYS`. So the gateway lists every entry for everyone and sends its
+credentials only for a caller signed in from this site's origin. Anyone else
+reaches the upstream without them, which works against a public endpoint and
+fails against a gated one. A user with their own key for a server adds it as
+a browser entry with that key.
+
 The session is a database read, so `api/mcp.mjs` looks it up only when
-signing in would change the answer: a `signedIn` entry or a protected one.
+signing in would change the answer: a `signedIn` entry, or an entry with
+credentials.
 
 Alternative: withholding a protected entry from a signed-out caller, as the
 spike first did. It hid Explorer from every bring-your-own-key user although
 the public endpoint needs no secret.
+
+Alternative: marking each credential as signed-in only or public. It adds a
+field to the entry format, and no shipped entry has a credential meant for
+every caller.
 
 Alternative: dropping only the field whose placeholder is unset. It makes an
 entry's presence depend on which field was blank, and a server served without

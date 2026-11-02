@@ -79,25 +79,29 @@ it SHALL fail as for an unknown server. The shipped catalogue marks no entry `si
 - **WHEN** `SOURCES` holds an `mcp` entry `team` marked `signedIn` and a signed-out user calls `GET /api/mcp`
 - **THEN** the answer lists no `team`, and `tools/list` with `server[]=team` fails with an error naming `team`
 
-### Requirement: A bot-protection bypass rides only on a signed-in caller's requests
+### Requirement: An entry's credentials ride only on a signed-in caller's requests
 
 An `mcp` entry MAY carry `protection: { provider, secret }`, a bypass for the upstream's bot protection. The
-provider SHALL be one the client knows; it decides how the secret travels, as a header when the gateway calls
-and as a query parameter when the browser calls. The gateway SHALL list a protected entry for every caller, and
-SHALL send its secret only on requests from a caller signed in from this site's origin. Any other caller SHALL
-reach the same upstream without the secret. The secret SHALL NOT be sent to the browser.
+provider SHALL be one the client knows. The provider decides how the secret travels: as a header when the
+gateway calls, and as a query parameter when the browser calls.
+
+In the gateway's list, an entry's credentials are its `headers`, `queryParams`, `authToken`, and `protection`.
+They belong to the deployment. The gateway SHALL list the entry for every caller, and SHALL send its
+credentials only on requests from a caller signed in from this site's origin. Any other caller SHALL reach the
+same upstream without them. No credential SHALL be sent to the browser.
 
 #### Scenario: A signed-in caller on this site (manual)
 
-- **WHEN** `MCP_EXPLORER_BYPASS` is set and a user signed in on this site lists Explorer's tools
-- **THEN** the gateway's request to Explorer carries the bypass header
+- **WHEN** `MCP_EXPLORER_BYPASS` and `MCP_EXPLORER_TOKEN` are set, and a user signed in on this site lists
+  Explorer's tools
+- **THEN** the gateway's request to Explorer carries the bypass header and `authorization: Bearer <token>`
 
 #### Scenario: A caller who is not signed in on this site (manual)
 
-- **WHEN** `MCP_EXPLORER_BYPASS` is set and a signed-out user, a user whose session lookup failed, or a
-  signed-in user calling from another origin lists Explorer's tools
-- **THEN** `GET /api/mcp` lists `explorer` for them, and the gateway's request to Explorer carries no bypass
-  header
+- **WHEN** `MCP_EXPLORER_BYPASS` and `MCP_EXPLORER_TOKEN` are set, and Explorer's tools are listed by a
+  signed-out user, a user whose session lookup failed, or a signed-in user calling from another origin
+- **THEN** `GET /api/mcp` lists `explorer` for them, and the gateway's request to Explorer carries neither the
+  bypass header nor an `authorization` header
 
 ### Requirement: The skills route lists the caller's skills
 

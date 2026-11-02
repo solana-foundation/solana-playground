@@ -431,12 +431,17 @@ out, so a variable is the switch for its entry; `${NAME:-}` marks a header or
 query value as optional. The browser never carries the list: it asks
 `GET /api/mcp` at startup.
 
+An entry's credentials (`authToken`, `headers`, `queryParams`, and
+`protection`) go upstream only for a caller signed in on this site. Any other
+caller reaches the same upstream without them, so `/api/mcp` cannot be used
+from outside to spend the deployment's keys.
+
 | Variable | Meaning |
 | --- | --- |
 | `MCP_SERVERS` | Optional. A JSON array in the catalogue's format that replaces the catalogue entirely; its placeholders are filled the same way |
-| `MCP_EXPLORER_BYPASS` | Optional. Vercel's Protection Bypass for Automation secret of the Explorer deployment, needed only when that deployment sits behind bot protection. Explorer is listed whether or not it is set; the gateway sends it only for a caller signed in on this site. Store it as a Secret |
+| `MCP_EXPLORER_BYPASS` | Optional. Vercel's Protection Bypass for Automation secret, for an Explorer deployment behind bot protection. Explorer is listed whether it is set or not. Store it as a Secret |
 | `MCP_EXPLORER_URL` | Optional, defaults to `https://explorer.solana.com/mcp` |
-| `MCP_EXPLORER_TOKEN` | Optional. Sent as a bearer token when the Explorer deployment gates on `MCP_ACCESS_KEYS` |
+| `MCP_EXPLORER_TOKEN` | Optional. A bearer token, for an Explorer deployment that gates on `MCP_ACCESS_KEYS`. Store it as a Secret |
 
 ## Conversation and project sync
 

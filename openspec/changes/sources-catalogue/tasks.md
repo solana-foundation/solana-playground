@@ -28,9 +28,9 @@ renamed as [design.md](design.md), "Decisions", says, never kept as they are.
       `features/mcp/model/protection.mjs` (`PROTECTION_PROVIDERS` with the
       `vercel` row; `validateServers` checks `protection`; the browser's
       `serverUrl` sends it as a query parameter), `api/mcp.mjs` composing its
-      upstreams through it, sending an entry's `headers`, `queryParams`, and
-      `authToken` upstream, and its `protection` only for a caller signed in
-      on this site, the Explorer withheld-reason hints removed,
+      upstreams through it, sending an entry's `headers`, `queryParams`,
+      `authToken`, and `protection` upstream only for a caller signed in on
+      this site, the Explorer withheld-reason hints removed,
       `mcpExplorerEnv()` removed, `.env.example` and
       `docs/deploy-client-vercel.md` describing `SOURCES`, the placeholders,
       and the shipped catalogue as the text to copy (depends on 1.1); verify

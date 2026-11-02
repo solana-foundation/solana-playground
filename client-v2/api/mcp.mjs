@@ -58,6 +58,24 @@ const SEPARATOR = "__";
  * @property {Record<string, unknown>} [params]
  */
 
+/** @param {Upstream} server */
+const hasCredentials = (server) =>
+  Boolean(
+    server.protection ||
+      server.authToken ||
+      Object.keys(server.headers ?? {}).length ||
+      Object.keys(server.queryParams ?? {}).length
+  );
+
+/** @param {Upstream} server */
+const withoutCredentials = (server) => ({
+  ...server,
+  headers: undefined,
+  queryParams: undefined,
+  authToken: undefined,
+  protection: undefined,
+});
+
 /** @param {boolean} signedIn */
 const compose = (signedIn) =>
   composeServers({ env: process.env, servers: mcpEnv().SERVERS, signedIn });
@@ -67,9 +85,10 @@ const compose = (signedIn) =>
  *
  * Which exist is the catalogue's business (`features/mcp/model/catalogue.mjs`):
  * an entry whose variables are unset is absent, and a `signedIn` one is absent
- * for an anonymous caller. An entry's bot-protection bypass is ours, so it is
- * sent only for a signed-in caller on this site; anyone else reaches the same
- * upstream without it.
+ * for an anonymous caller. An entry's credentials (headers, query values,
+ * token, bot-protection bypass) are the deployment's, so they are sent only
+ * for a signed-in caller on this site; anyone else reaches the same upstream
+ * without them, and brings their own keys through a browser entry.
  *
  * @param {import("node:http").IncomingMessage} req
  * @returns {Promise<Upstreams>}
@@ -79,16 +98,14 @@ const upstreams = async (req) => {
   const open = compose(false);
   // The session is a database read, so it is looked up only when signing in changes the answer
   const signingInMatters =
-    full.length !== open.length || full.some((s) => s.protection);
+    full.length !== open.length || full.some(hasCredentials);
   // The origin first, so another site cannot borrow a visitor's session
   const signedIn =
     signingInMatters &&
     isAllowedOrigin(req) &&
     (await readSession(req)).status === "signed-in";
 
-  const servers = signedIn
-    ? full
-    : open.map((s) => ({ ...s, protection: undefined }));
+  const servers = signedIn ? full : open.map(withoutCredentials);
   return Object.fromEntries(servers.map((s) => [s.id, s]));
 };
 
