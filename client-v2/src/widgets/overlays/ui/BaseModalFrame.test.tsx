@@ -365,3 +365,37 @@ it("on a phone, has no Cancel beside the bar's Close and draws a brand submit as
   fireEvent.click(submit);
   expect(onSubmit).toHaveBeenCalledTimes(1);
 });
+
+it("should draw the submit's icon before its label", () => {
+  renderFrame({
+    submit: {
+      text: "Sign in",
+      status: "ready",
+      variant: "default",
+      onSubmit: vi.fn(),
+      icon: <svg data-testid="mark" />,
+    },
+  });
+
+  const submit = screen.getByRole("button", { name: "Sign in" });
+  expect(submit.firstElementChild).toBe(screen.getByTestId("mark"));
+});
+
+it("should show the spinner in place of the submit's icon while busy", () => {
+  renderFrame({
+    submit: {
+      text: "Sign in",
+      status: "busy",
+      variant: "default",
+      onSubmit: vi.fn(),
+      icon: <svg data-testid="mark" />,
+    },
+  });
+
+  expect(screen.queryByTestId("mark")).toBeNull();
+  expect(
+    screen
+      .getByRole("button", { name: /Sign in/ })
+      .querySelector("[data-slot=spinner]")
+  ).toBeTruthy();
+});

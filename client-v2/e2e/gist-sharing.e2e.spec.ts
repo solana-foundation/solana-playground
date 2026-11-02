@@ -122,21 +122,121 @@ test("gist-sharing: Successful share", async ({ page }) => {
   expect(requests).toHaveLength(1);
 });
 
+const prompt = (page: Page) =>
+  page.getByRole("dialog", { name: "Sign in to share" });
+
+/** Picks Share as gist on the project while signed out: the prompt opens */
+const openSignedOut = async (page: Page) => {
+  const menu = await projectMenu(page, PROJECT);
+  await menu
+    .getByRole("menuitem", { name: `Share ${PROJECT} as a gist` })
+    .click();
+  await expect(prompt(page)).toBeVisible();
+};
+
+test("gist-sharing: Signed out, the prompt comes first", async ({ page }) => {
+  await stubAuth(page, { signedIn: false });
+  const requests = await stubGists(page);
+  await seedWorkspace(page);
+
+  await openSignedOut(page);
+
+  await expect(
+    prompt(page).getByText(
+      "Your project goes to a gist on your GitHub account."
+    )
+  ).toBeVisible();
+  const signIn = prompt(page).getByRole("button", {
+    name: "Sign in with GitHub",
+  });
+  await expect(signIn.locator("svg")).toBeVisible();
+  await expect(
+    prompt(page).getByRole("button", { name: "Cancel" })
+  ).toBeVisible();
+  expect(requests).toHaveLength(0);
+});
+
 test("gist-sharing: Signed out, then signed in", async ({ page }) => {
   const signIns = await stubAuth(page, { signedIn: false });
-  await stubGists(page, [201, { url: GIST_URL, id: "abc123" }]);
+  const requests = await stubGists(page, [
+    201,
+    { url: GIST_URL, id: "abc123" },
+  ]);
   await seedWorkspace(page);
-  await openShare(page);
+  await openSignedOut(page);
 
-  await dialog(page)
-    .getByRole("button", { name: "Sign in with GitHub to share" })
+  await prompt(page)
+    .getByRole("button", { name: "Sign in with GitHub" })
     .click();
 
   await expect(
-    dialog(page).getByRole("textbox", { name: "Gist URL" })
-  ).toHaveValue(GIST_URL, LONG);
+    dialog(page).getByRole("button", { name: "Create public gist" })
+  ).toBeVisible(LONG);
+  await expect(prompt(page)).toHaveCount(0);
+  expect(requests).toHaveLength(0);
   expect(signIns).toHaveLength(1);
   expect(signIns[0].scopes).toBeUndefined();
+});
+
+test("gist-sharing: Signed in, no prompt", async ({ page }) => {
+  await stubAuth(page, { signedIn: true });
+  await seedWorkspace(page);
+
+  await openShare(page);
+
+  await expect(prompt(page)).toHaveCount(0);
+});
+
+test("gist-sharing: Sign-in cancelled", async ({ page }) => {
+  await stubAuth(page, { signedIn: false });
+  // A popup GitHub never sends back: the sign-in waits until it is cancelled
+  await page.route("**/api/auth/sign-in/social", (r) =>
+    json(r, { url: "about:blank", redirect: false })
+  );
+  const requests = await stubGists(page);
+  await seedWorkspace(page);
+  await openSignedOut(page);
+
+  await prompt(page)
+    .getByRole("button", { name: "Sign in with GitHub" })
+    .click();
+  await expect(
+    prompt(page).getByRole("button", { name: "Waiting for GitHub…" })
+  ).toBeDisabled();
+  await prompt(page).getByRole("button", { name: "Cancel" }).click();
+
+  await expect(prompt(page)).toHaveCount(0);
+  expect(requests).toHaveLength(0);
+});
+
+test("gist-sharing: A sign-in that cannot start", async ({ page }) => {
+  await stubAuth(page, { signedIn: false });
+  await page.route("**/api/auth/sign-in/social", (r) =>
+    r.fulfill({ status: 500, contentType: "application/json", body: "{}" })
+  );
+  const requests = await stubGists(page);
+  await seedWorkspace(page);
+  await openSignedOut(page);
+
+  await prompt(page)
+    .getByRole("button", { name: "Sign in with GitHub" })
+    .click();
+
+  await expect(prompt(page).getByText("Could not start sign-in")).toBeVisible();
+  expect(requests).toHaveLength(0);
+});
+
+test("gist-sharing: Cancel leaves without signing in", async ({ page }) => {
+  const signIns = await stubAuth(page, { signedIn: false });
+  const requests = await stubGists(page);
+  await seedWorkspace(page);
+  await openSignedOut(page);
+
+  await prompt(page).getByRole("button", { name: "Cancel" }).click();
+
+  await expect(prompt(page)).toHaveCount(0);
+  expect(signIns).toHaveLength(0);
+  expect(requests).toHaveLength(0);
 });
 
 test("gist-sharing: A session without gist access", async ({ page }) => {
