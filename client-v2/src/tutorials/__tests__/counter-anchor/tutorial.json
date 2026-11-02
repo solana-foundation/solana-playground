@@ -1,0 +1,223 @@
+{
+  "version": 1,
+  "name": "Counter Anchor",
+  "description": "An Anchor program that keeps a count in an account.",
+  "authors": [
+    {
+      "name": "Playground"
+    }
+  ],
+  "level": "Beginner",
+  "framework": "Anchor",
+  "languages": ["Rust"],
+  "thumbnail": "thumbnail.jpg",
+  "minutes": 6,
+  "intro": {
+    "promise": "You'll write a program that keeps a count in an account, and count with it on devnet.",
+    "log": "Program log: Count: 1",
+    "files": {
+      "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod counter_anchor {\n    use super::*;\n\n    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn increment(ctx: Context<Increment>) -> Result<()> {\n        ctx.accounts.counter.count += 1;\n        msg!(\"Count: {}\", ctx.accounts.counter.count);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Initialize<'info> {\n    #[account(\n        init,\n        payer = user,\n        space = 8 + 8,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    #[account(mut)]\n    pub user: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Increment<'info> {\n    #[account(\n        mut,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    pub user: Signer<'info>,\n}\n\n#[account]\npub struct Counter {\n    pub count: u64,\n}\n"
+    }
+  },
+  "steps": [
+    {
+      "id": "write-program",
+      "title": "Counter account",
+      "short": "Account",
+      "objective": "Write initialize and increment around a Counter account",
+      "learned": "Keeping a count in an account",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": ""
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod counter_anchor {\n    use super::*;\n\n    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn increment(ctx: Context<Increment>) -> Result<()> {\n        ctx.accounts.counter.count += 1;\n        msg!(\"Count: {}\", ctx.accounts.counter.count);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Initialize<'info> {\n    #[account(\n        init,\n        payer = user,\n        space = 8 + 8,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    #[account(mut)]\n    pub user: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Increment<'info> {\n    #[account(\n        mut,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    pub user: Signer<'info>,\n}\n\n#[account]\npub struct Counter {\n    pub count: u64,\n}\n"
+      },
+      "beats": [
+        {
+          "kind": "write",
+          "id": "s1.boil",
+          "text": "Every Anchor program opens with the same two lines: the import and the program's id. They're routine, so I've written them.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.counter",
+          "text": "A program keeps nothing between calls, so your count needs an account to live in. I've written `Counter` at the bottom: an account that holds one `u64` named `count`.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[account]\npub struct Counter {\n    pub count: u64,\n}"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.init",
+          "text": "`initialize` creates the counter, so it needs three accounts: the `counter`, your wallet as `user` to sign and pay, and the System Program, which creates accounts. The counter sits at a program derived address (PDA), worked out from the word `counter` and your wallet, so a call can find it again. `space` is 8 bytes Anchor keeps for itself plus 8 for the `u64`. It's routine, so I've written it.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct Initialize<'info> {\n    #[account(\n        init,\n        payer = user,\n        space = 8 + 8,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    #[account(mut)]\n    pub user: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}"
+          }
+        },
+        {
+          "kind": "write",
+          "id": "s1.inc",
+          "text": "`increment` works on the same address, so it finds the counter you made. It marks `counter` as `mut`, because it will change it, and asks for your wallet as `user` to sign. I've written that too.",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[derive(Accounts)]\npub struct Increment<'info> {\n    #[account(\n        mut,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    pub user: Signer<'info>,\n}"
+          }
+        },
+        {
+          "kind": "say",
+          "id": "s1.what",
+          "text": "A program does its work in instructions: functions inside a module marked `#[program]`. Yours has two, `initialize`, which sets the counter up, and `increment`, which adds one and logs the new count. A program on Solana has no terminal: the only place it can write is the program log, which comes back with every transaction. You pick the line that adds one."
+        },
+        {
+          "kind": "ask",
+          "id": "s1.q1",
+          "kicker": "Question",
+          "question": "Which line adds one to the count?",
+          "options": [
+            "ctx.accounts.counter.count++;",
+            "ctx.accounts.counter.count += 1;",
+            "ctx.accounts.counter.count + 1;"
+          ],
+          "code": true,
+          "answer": 1,
+          "right": "Yes. `+= 1` adds one and stores it back in the account. I've put both instructions in the `#[program]` module, with a `msg!` that logs the new count.",
+          "why": [
+            "Rust has no `++` operator, so this doesn't compile. Adding one in place is written `+= 1`.",
+            null,
+            "That works out a new number and throws it away. The account's `count` stays as it was."
+          ],
+          "hint": "You want to change the stored `count`, not work out a new number. Which line changes it, in Rust?",
+          "writes": {
+            "file": "src/lib.rs",
+            "block": "#[program]\nmod counter_anchor {\n    use super::*;\n\n    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn increment(ctx: Context<Increment>) -> Result<()> {\n        ctx.accounts.counter.count += 1;\n        msg!(\"Count: {}\", ctx.accounts.counter.count);\n        Ok(())\n    }\n}"
+          },
+          "typed": "That's the line. `+= 1` adds one to the stored count. I've put `initialize` and `increment` in the `#[program]` module around it."
+        },
+        {
+          "kind": "act",
+          "id": "s1.build",
+          "act": "build",
+          "say": "That's the whole program. Let's compile it.",
+          "title": "Build lib.rs",
+          "context": "Compiles lib.rs on Playground's build server",
+          "button": "Build"
+        }
+      ],
+      "goal": {
+        "kind": "build",
+        "instructions": ["initialize", "increment"]
+      },
+      "win": {
+        "id": "s1.win",
+        "headline": "Your program compiles.",
+        "line": "Its IDL, the description Anchor builds from your program, lists `initialize` and `increment`."
+      },
+      "explain": "This step writes a program with a `Counter` account that holds one `u64`, an `initialize` instruction that creates it, and an `increment` instruction that adds one and logs the count. Then the build checks that both instructions are in the IDL."
+    },
+    {
+      "id": "deploy-and-count",
+      "title": "Deploy and count",
+      "short": "Count",
+      "objective": "Deploy the program, create the counter and add one",
+      "learned": "Deploying, then creating and changing an account",
+      "file": "src/lib.rs",
+      "start": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod counter_anchor {\n    use super::*;\n\n    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn increment(ctx: Context<Increment>) -> Result<()> {\n        ctx.accounts.counter.count += 1;\n        msg!(\"Count: {}\", ctx.accounts.counter.count);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Initialize<'info> {\n    #[account(\n        init,\n        payer = user,\n        space = 8 + 8,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    #[account(mut)]\n    pub user: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Increment<'info> {\n    #[account(\n        mut,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    pub user: Signer<'info>,\n}\n\n#[account]\npub struct Counter {\n    pub count: u64,\n}\n"
+      },
+      "target": {
+        "src/lib.rs": "use anchor_lang::prelude::*;\n\ndeclare_id!(\"11111111111111111111111111111111\");\n\n#[program]\nmod counter_anchor {\n    use super::*;\n\n    pub fn initialize(_ctx: Context<Initialize>) -> Result<()> {\n        Ok(())\n    }\n\n    pub fn increment(ctx: Context<Increment>) -> Result<()> {\n        ctx.accounts.counter.count += 1;\n        msg!(\"Count: {}\", ctx.accounts.counter.count);\n        Ok(())\n    }\n}\n\n#[derive(Accounts)]\npub struct Initialize<'info> {\n    #[account(\n        init,\n        payer = user,\n        space = 8 + 8,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    #[account(mut)]\n    pub user: Signer<'info>,\n    pub system_program: Program<'info, System>,\n}\n\n#[derive(Accounts)]\npub struct Increment<'info> {\n    #[account(\n        mut,\n        seeds = [b\"counter\", user.key().as_ref()],\n        bump\n    )]\n    pub counter: Account<'info, Counter>,\n    pub user: Signer<'info>,\n}\n\n#[account]\npub struct Counter {\n    pub count: u64,\n}\n"
+      },
+      "readOnly": ["src/lib.rs"],
+      "beats": [
+        {
+          "kind": "act",
+          "id": "s2.deploy",
+          "act": "deploy",
+          "say": "Deploy it to devnet, Solana's test network. Your Playground wallet pays in devnet SOL, which is free.",
+          "title": "Deploy to devnet",
+          "context": "From your Playground wallet on devnet",
+          "button": "Deploy"
+        },
+        {
+          "kind": "say",
+          "id": "s2.where",
+          "text": "A deployed program is just code, and a transaction can't change it. Anything that has to last, like a count, needs a home of its own."
+        },
+        {
+          "kind": "ask",
+          "id": "s2.q1",
+          "kicker": "Question",
+          "question": "Where does the count live?",
+          "options": [
+            "In the program log, which the program reads back next time",
+            "In a variable the program keeps between calls",
+            "In the `Counter` account, at an address worked out from your wallet"
+          ],
+          "code": false,
+          "answer": 2,
+          "right": "Yes. The program holds only code; the count is in the `Counter` account at that address. `initialize` creates it next.",
+          "why": [
+            "The log is a printout that comes back with a transaction. A program can't read it later, so it can't hold the count.",
+            "A program keeps no variables between calls. What has to last goes in an account.",
+            null
+          ],
+          "hint": "What did you deploy: code, or data?",
+          "skipped": "No problem. The count lives in the `Counter` account, not in the program. `initialize` creates it next."
+        },
+        {
+          "kind": "act",
+          "id": "s2.init",
+          "act": "call",
+          "say": "Create your counter first. `initialize` takes no arguments, and the card fills in the accounts for you.",
+          "title": "Call initialize",
+          "context": "Sends initialize from your wallet, which pays for the counter",
+          "button": "Call initialize",
+          "call": {
+            "instruction": "initialize"
+          }
+        },
+        {
+          "kind": "act",
+          "id": "s2.inc",
+          "act": "call",
+          "say": "Now add one, and watch the log.",
+          "title": "Call increment",
+          "context": "Sends increment from your wallet",
+          "button": "Call increment",
+          "call": {
+            "instruction": "increment"
+          }
+        }
+      ],
+      "goal": {
+        "kind": "call",
+        "instruction": "increment",
+        "log": "Count: 1$"
+      },
+      "win": {
+        "id": "s2.win",
+        "headline": "Your counter counted on devnet.",
+        "line": "The count lives in an account your wallet paid for, and the program log showed it.",
+        "callPanelLine": "You called `increment` from the Call panel, which Playground built from the IDL."
+      },
+      "explain": "This step puts the program on devnet, creates your `Counter` account with `initialize`, then calls `increment`. The new count comes back in the program log."
+    }
+  ],
+  "finish": {
+    "headline": "You built a counter on Solana.",
+    "line": "Your count lives in an account on devnet, and the program log showed it.",
+    "learned": [
+      "Keeping a count in an account",
+      "Deploying, then creating and changing an account"
+    ],
+    "chips": [],
+    "next": null
+  }
+}
