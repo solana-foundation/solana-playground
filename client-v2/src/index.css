@@ -60,6 +60,24 @@
 }
 
 /*
+ * Monaco's own button that raises the keyboard on iOS, where a tap on the
+ * code does not always do it, in every editor of the product (the code and
+ * the merge panes): kept, and drawn as one of the product's buttons rather
+ * than the editor's grey box, as the prototype draws it. Monaco mounts it on
+ * any iOS touch screen, so an iPad gets the same button. Monaco's dark rule
+ * (`.monaco-editor.vs-dark .iPadShowKeyboard`) outranks this selector, and
+ * its `background` shorthand resets the longhands, hence `!important`.
+ */
+.monaco-editor .iPadShowKeyboard {
+  width: 48px !important;
+  height: 48px !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 14px !important;
+  background-color: var(--secondary) !important;
+  background-size: 22px !important;
+}
+
+/*
  * The legacy theme provider sets the code font on the app's root, so a
  * design-system element names the text font itself. Goes with the provider.
  */

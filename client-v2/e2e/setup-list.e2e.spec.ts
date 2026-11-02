@@ -44,53 +44,40 @@ const connectWallet = async (page: Page) => {
   );
 };
 
-/** Opens the settings from the step and picks the network already checked */
-const chooseCurrentNetwork = async (page: Page) => {
-  await step(page, "Choose a network").click();
-  const network = page.getByRole("radiogroup", { name: "Network" });
-  await expect(network).toBeVisible();
-  await network.locator('[role="radio"][aria-checked="true"]').click();
-};
-
 test.beforeEach(async ({ context }) => {
   await stubNoDefaultBackend(context);
 });
 
 test("client-v2-layout: Counting the steps", async ({ page }) => {
   await seedWorkspace(page);
-  await expect(title(page)).toHaveText("Get set up· 0 of 4", LONG);
+  await expect(title(page)).toHaveText("Get set up· 1 of 4", LONG);
   await connectWallet(page);
 
   // A user who comes back with the wallet still connected
   await page.reload();
-  await expect(title(page)).toHaveText("Get set up· 1 of 4", LONG);
+  await expect(title(page)).toHaveText("Get set up· 2 of 4", LONG);
+  await expect(doneStep(page, "Choose a network")).toContainText("devnet");
   await expect(doneStep(page, "Connect a wallet")).toContainText(/\w{4}…\w{4}/);
   await expect(step(page, "Sign in with GitHub")).toBeVisible();
   await expect(step(page, "Connect the assistant")).toBeVisible();
 });
 
-// From `seededPage`, whose editor already holds focus: an editor that mounts
-// late takes focus as it opens its first file, and would take it from the
-// settings trigger this test expects focus to return to
-test("client-v2-layout: Choosing a network", async ({ seededPage: page }) => {
-  const lines = linesOn(page);
-  await expect(title(page)).toHaveText("Get set up· 0 of 4", LONG);
-
-  await chooseCurrentNetwork(page);
-  // The settings page covers the navigation, the checklist with it
-  await page.getByRole("button", { name: "Back to app" }).click();
-
+test("client-v2-layout: The default network counts", async ({ page }) => {
+  await seedWorkspace(page);
+  await expect(title(page)).toHaveText("Get set up· 1 of 4", LONG);
   await expect(doneStep(page, "Choose a network")).toContainText("devnet");
-  await expect(title(page)).toHaveText("Get set up· 1 of 4");
-  // The step that opened the settings is ticked now, no longer a button:
-  // focus comes back to a control that still opens them
-  await expect(page.locator(":focus")).toHaveAttribute(
-    "data-settings-trigger",
-    ""
-  );
-  await expect
-    .poll(() => lineOf(lines, "setup_item_picked"))
-    .toContain("{item: network}");
+  await expect(step(page, "Choose a network")).toHaveCount(0);
+});
+
+test("client-v2-layout: The fold survives a reload", async ({ page }) => {
+  await seedWorkspace(page);
+  await expect(title(page)).toHaveAttribute("aria-expanded", "true", LONG);
+  await title(page).click();
+  await expect(step(page, "Connect a wallet")).toHaveCount(0);
+
+  await page.reload();
+  await expect(title(page)).toHaveAttribute("aria-expanded", "false", LONG);
+  await expect(step(page, "Connect a wallet")).toHaveCount(0);
 });
 
 test("client-v2-layout: A step opens its action", async ({ page }) => {
@@ -105,26 +92,23 @@ test("client-v2-layout: A step opens its action", async ({ page }) => {
     .toContain("{via: setup}");
 });
 
-test("the checklist is on a phone's menu page, and its network step works there", async ({
+test("client-v2-layout: The checklist on a phone's menu page", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await seedWorkspace(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await expect(title(page)).toHaveText("Get set up· 0 of 4");
+  await expect(title(page)).toHaveText("Get set up· 1 of 4");
   // Folded to its one line on a phone, as the prototype keeps it
   await expect(title(page)).toHaveAttribute("aria-expanded", "false");
   await title(page).click();
+  await expect(step(page, "Connect a wallet")).toBeInViewport();
 
-  await step(page, "Choose a network").click();
-
-  const network = page.getByRole("radiogroup", { name: "Network" });
-  await expect(network).toBeInViewport();
-  await network.locator('[role="radio"][aria-checked="true"]').click();
-  await page.keyboard.press("Escape");
+  // Unfolded by the user, it stays so
+  await page.reload();
   await page.getByRole("button", { name: "Menu", exact: true }).click();
-  await expect(title(page)).toHaveText("Get set up· 1 of 4");
+  await expect(title(page)).toHaveAttribute("aria-expanded", "true", LONG);
 });
 
 test("client-v2-layout: Dismissing the checklist", async ({ page }) => {
@@ -144,11 +128,9 @@ test("client-v2-layout: Dismissing the checklist", async ({ page }) => {
 test("client-v2-layout: Finishing the checklist", async ({ page, context }) => {
   await stubSignedIn(context);
   await seedWorkspace(page);
-  await expect(title(page)).toHaveText("Get set up· 1 of 4", LONG);
+  await expect(title(page)).toHaveText("Get set up· 2 of 4", LONG);
 
   await connectWallet(page);
-  await chooseCurrentNetwork(page);
-  await page.keyboard.press("Escape");
   await expect(title(page)).toHaveText("Get set up· 3 of 4");
 
   // The last step: a key-based model, which connects without a request

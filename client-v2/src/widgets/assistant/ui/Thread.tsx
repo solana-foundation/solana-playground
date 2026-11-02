@@ -179,6 +179,16 @@ export const Thread = ({
       }}
       actionsFor={actionsFor}
       onAnswer={onAnswer}
+      retry={
+        turn.retry
+          ? {
+              secondsLeft: turn.retry.secondsLeft,
+              canTryNow: turn.retry.canTryNow,
+              onTryNow: turn.tryNow,
+              onStop: turn.stop,
+            }
+          : undefined
+      }
     />
   );
 };

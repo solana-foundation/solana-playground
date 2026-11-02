@@ -6,6 +6,7 @@ import { MAX_RESUMES, MAX_STEPS } from "../config";
 import { PgSession } from "../../../../features/auth";
 import { agentTelemetry } from "@/features/agent";
 import { MODEL_PROVIDER_PROFILES } from "./model-providers";
+import { ModelBusyError } from "./model-busy";
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ModelProvider } from "@/shared/lib/ai";
 import type { ReplayMessage } from "../../../../features/persistence/model/replay";
@@ -116,15 +117,9 @@ export const createProvider = (
             { reason: "refusal", cause: e }
           );
         }
+        // Read before busy and before `ownRefusal`: a daily cap is a 429 and a spent pool a 503, and neither clears by waiting
         const refusal = profile.backendRefusal?.(e);
-        if (!refusal) {
-          throw new TurnFailure(e.message, {
-            reason: e.kind,
-            status: e.status,
-            cause: e,
-          });
-        }
-        if (refusal.kind === "signed-out") {
+        if (refusal?.kind === "signed-out") {
           // The session ended server-side; ending it here makes the next send open Connect a model, which offers sign-in
           void PgSession.refresh();
           throw new TurnFailure(refusal.message, {
@@ -133,14 +128,43 @@ export const createProvider = (
             cause: e,
           });
         }
-        // The conversation and the session stay: switching to a key-based
-        // backend is how the user keeps going today
-        agentTelemetry.track("agent_refused", {
-          reason: refusal.reason,
-          tier: refusal.tier,
-        });
-        throw new TurnFailure(refusal.message, {
-          reason: "capped",
+        if (refusal) {
+          // The conversation and the session stay: switching to a key-based
+          // backend is how the user keeps going today
+          agentTelemetry.track("agent_refused", {
+            reason: refusal.reason,
+            tier: refusal.tier,
+          });
+          throw new TurnFailure(refusal.message, {
+            reason: "capped",
+            status: e.status,
+            cause: e,
+          });
+        }
+        // Busy is sent again only before any tool ran: `history` keeps none of this turn, so a retry would run its tools twice
+        if (e.kind === "busy" && calledTool) {
+          throw new TurnFailure(
+            `${e.message} What it already ran stays done; send your next message once it is free.`,
+            { reason: "provider", status: e.status, cause: e }
+          );
+        }
+        if (e.kind === "busy") {
+          throw new ModelBusyError(e.retryAfter, e.message, {
+            status: e.status,
+            cause: e,
+          });
+        }
+        const own = profile.ownRefusal?.(e);
+        if (own) {
+          throw new TurnFailure(own, {
+            reason: "provider",
+            status: e.status,
+            cause: e,
+          });
+        }
+        // Spec 08's words, never the status or the server's text
+        throw new TurnFailure(e.message, {
+          reason: e.kind === "paused" ? "paused" : "provider",
           status: e.status,
           cause: e,
         });

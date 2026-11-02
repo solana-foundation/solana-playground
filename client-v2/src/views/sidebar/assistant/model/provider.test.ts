@@ -14,6 +14,7 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { createProvider } from "./provider";
+import { ModelBusyError } from "./model-busy";
 import { TurnFailure } from "./types";
 import {
   DAILY_CAP_REASON,
@@ -334,8 +335,80 @@ describe("the assistant's provider", () => {
 
     const failure = await provider.send("hi").catch((e: Error) => e.message);
 
-    expect(failure).toContain("Incorrect API key provided");
+    // Spec 08's AI-05: the provider's words stay in the log
+    expect(failure).toBe(
+      "The model's provider did not accept this key. Check it in Settings, or use the hosted model."
+    );
     expect(failure).not.toContain(KEY);
+  });
+
+  describe("a model limiting requests", () => {
+    it("is busy, with no HTTP status, from a provider's own error", async () => {
+      respond(openAiError(429, "Rate limit reached for gpt-4o"));
+      const provider = createProvider({
+        id: "openai",
+        apiKey: KEY,
+        endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
+      });
+
+      const failure = await provider.send("hi").catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(ModelBusyError);
+      expect((failure as ModelBusyError).message).toBe("The model is busy.");
+    });
+
+    it("carries the default backend's wait in seconds", async () => {
+      respond(
+        new Response(JSON.stringify({ error: "Upstream 429: slow down" }), {
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: { "content-type": "application/json", "retry-after": "12" },
+        })
+      );
+
+      const failure = await defaultBackend()
+        .send("hi")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(ModelBusyError);
+      expect((failure as ModelBusyError).waitSeconds).toBe(12);
+    });
+
+    it("is not busy once a tool has run, so the turn is not sent again", async () => {
+      respond(
+        openAiToolCall("c1", "write_file", {}),
+        new Response(JSON.stringify({ error: "Upstream 429: slow down" }), {
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: { "content-type": "application/json" },
+        })
+      );
+
+      const failure = await defaultBackend()
+        .send("make the change")
+        .catch((e: unknown) => e);
+
+      expect(failure).toBeInstanceOf(Error);
+      expect(failure).not.toBeInstanceOf(ModelBusyError);
+      expect((failure as Error).message).toMatch(/already ran/);
+    });
+  });
+
+  it("never shows the default backend's relay of an upstream failure", async () => {
+    respond(
+      new Response(
+        JSON.stringify({ error: 'Upstream 503: {"error":"overloaded"}' }),
+        {
+          status: 503,
+          statusText: "Service Unavailable",
+          headers: { "content-type": "application/json" },
+        }
+      )
+    );
+
+    await expect(defaultBackend().send("hi")).rejects.toThrow(
+      /^Could not get an answer from the model\. Send your message again\.$/
+    );
   });
 
   it("shows the default backend's sentence for a failure it refuses", async () => {
@@ -349,7 +422,11 @@ describe("the assistant's provider", () => {
       })
     );
 
-    await expect(defaultBackend().send("hi")).rejects.toThrow(sentence);
+    // Its own refusal, written for people: shown whole, with no status
+    await expect(defaultBackend().send("hi")).rejects.toMatchObject({
+      message: sentence,
+      reason: "provider",
+    });
   });
 
   it("echoes Gemini's thought signature on its tool call in the next turn", async () => {
@@ -582,7 +659,7 @@ describe("the assistant's provider", () => {
       expect(refused()).toEqual([]);
     });
 
-    it("keeps the SDK's message for another backend's 429 in the same shape", async () => {
+    it("reads another backend's 429 in the same shape as busy, not as a cap", async () => {
       refuses(429, { error: "server text", reason: "daily-cap" });
       const ownKey = createProvider({
         id: "openai",
@@ -590,9 +667,9 @@ describe("the assistant's provider", () => {
         endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
       });
 
-      const failure = await ownKey.send("hi").catch((e: Error) => e.message);
+      const failure = await ownKey.send("hi").catch((e: unknown) => e);
 
-      expect(failure).toMatch(/^429 /);
+      expect(failure).toBeInstanceOf(ModelBusyError);
       expect(refused()).toEqual([]);
     });
 
@@ -603,7 +680,9 @@ describe("the assistant's provider", () => {
         .send("hi")
         .catch((e: Error) => e.message);
 
-      expect(failure).toMatch(/^503 /);
+      expect(failure).toMatch(
+        /^Could not get an answer from the model\. Send your message again\.$/
+      );
       expect(refused()).toEqual([]);
     });
   });
@@ -631,7 +710,9 @@ describe("a turn's failure", () => {
       answers: () => [openAiError(500, "boom")],
       reason: "provider",
       status: 500,
-      message: /boom/,
+      // Spec 08's words, never the backend's text
+      message:
+        /^Could not get an answer from the model\. Send your message again\.$/,
     },
     {
       name: "a refusal, with no status",
@@ -661,7 +742,8 @@ describe("a turn's failure", () => {
       ],
       reason: "provider",
       status: undefined,
-      message: /Failed to fetch/,
+      message:
+        /^Could not get an answer from the model\. Send your message again\.$/,
     },
     {
       // The panel's own sentence for the limit, not the SDK's wrapper around the status
@@ -678,7 +760,12 @@ describe("a turn's failure", () => {
       name: "an exhausted pool, as capped with the 503",
       provider: defaultBackend,
       answers: () => [
-        refuses(503, { reason: POOL_EXHAUSTED_REASON, tier: "established" }),
+        // `error` as the route sends it, so the cap is read before the 503's own sentence
+        refuses(503, {
+          error: "server text",
+          reason: POOL_EXHAUSTED_REASON,
+          tier: "established",
+        }),
       ],
       reason: "capped",
       status: 503,
@@ -691,7 +778,7 @@ describe("a turn's failure", () => {
       answers: () => [openAiError(429, "Rate limited")],
       reason: "provider",
       status: 429,
-      message: /Rate limited/,
+      message: /^The model is busy\./,
     },
   ])(
     "rejects with $name",

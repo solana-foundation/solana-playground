@@ -803,6 +803,11 @@ test("a phone's hunk bar sits under a conflict at the end of a file, not over it
   const { pane } = await openResolver(page);
 
   await expect.poll(() => linesIn(pane.result)).toContain("fn c() {}");
+  // The code a step up, as in the code editor on a phone
+  await expect(pane.result.locator(".view-line").first()).toHaveCSS(
+    "font-size",
+    "15px"
+  );
   await expect.poll(() => barGap(pane.result)).toBeGreaterThanOrEqual(-0.5);
   await expect.poll(() => barGap(pane.result)).toBeLessThan(2);
 });

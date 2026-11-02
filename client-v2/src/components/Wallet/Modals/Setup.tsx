@@ -8,6 +8,7 @@ import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgWallet, PgWeb3 } from "../../../utils";
 import { KeypairFileError } from "../../../utils/wallet/keypair-file";
+import { importedText } from "../imported-text";
 import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("wallet:setup");
@@ -40,7 +41,8 @@ export const Setup = () => {
       // that is already there.
       const imported = await PgWallet.import();
       if (imported) {
-        setText("Imported address: " + imported.keypair.publicKey.toBase58());
+        const { name } = PgWallet.accounts[PgWallet.currentIndex];
+        setText(importedText(imported, name));
       }
     } catch (err) {
       if (err instanceof KeypairFileError) {

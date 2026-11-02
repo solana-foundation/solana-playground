@@ -17,7 +17,7 @@ import {
 import { SETUP_LIST_KEY, setupMarks } from "../model/storage";
 import SetupList from "./SetupList";
 
-const cluster = vi.hoisted(() => ({ name: "devnet" }));
+const cluster = vi.hoisted(() => ({ name: "devnet" as string | null }));
 const wallet = vi.hoisted(() => ({
   current: null as null | undefined | { publicKey: { toBase58: () => string } },
 }));
@@ -73,17 +73,25 @@ afterEach(() => {
   PgSession.reset();
 });
 
-const draw = () => {
+const draw = (defaultFolded?: boolean) => {
   const onConnectAssistant = vi.fn();
-  const onChooseNetwork = vi.fn();
   const view = render(
     <SetupList
       onConnectAssistant={onConnectAssistant}
-      onChooseNetwork={onChooseNetwork}
+      defaultFolded={defaultFolded}
     />
   );
-  return { onConnectAssistant, onChooseNetwork, view };
+  return { onConnectAssistant, view };
 };
+
+/** A reload: the page's memory goes, and storage is read again */
+const reload = (view: ReturnType<typeof render>) => {
+  view.unmount();
+  window.dispatchEvent(new StorageEvent("storage", { key: null }));
+};
+
+const listShown = () =>
+  screen.queryByRole("button", { name: "Connect a wallet" }) !== null;
 
 const title = () => screen.queryByRole("button", { name: /^Get set up/ });
 
@@ -99,20 +107,68 @@ const signInAsTester = () =>
 
 const doAllFour = async () => {
   assistant.connected = true;
-  setupMarks.mark("networkChosen");
   wallet.current = { publicKey: { toBase58: () => ADDRESS } };
   await signInAsTester();
 };
 
-it("counts nothing done on a fresh device", () => {
+it("counts the default network as done on a fresh device", () => {
   draw();
-  expect(title()?.textContent).toBe("Get set up· 0 of 4");
+  expect(title()?.textContent).toBe("Get set up· 1 of 4");
+  expect(screen.getByText("devnet")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Choose a network" })).toBeNull();
+});
+
+it("ticks the network step before the cluster is known, with no value", () => {
+  cluster.name = null;
+  try {
+    draw();
+    expect(title()?.textContent).toBe("Get set up· 1 of 4");
+  } finally {
+    cluster.name = "devnet";
+  }
+});
+
+it("stays folded after a reload", async () => {
+  const { view } = draw();
+  await userEvent.click(title()!);
+  expect(listShown()).toBe(false);
+  reload(view);
+  draw();
+  expect(listShown()).toBe(false);
+});
+
+it("stays unfolded after a reload once unfolded again", async () => {
+  const { view } = draw();
+  await userEvent.click(title()!);
+  await userEvent.click(title()!);
+  reload(view);
+  draw();
+  expect(listShown()).toBe(true);
+});
+
+it("keeps a fold from elsewhere on the device over the phone's default", () => {
+  localStorage.setItem(
+    SETUP_LIST_KEY,
+    '{"dismissed":false,"completed":false,"folded":false}'
+  );
+  window.dispatchEvent(new StorageEvent("storage", { key: null }));
+  draw(true);
+  expect(listShown()).toBe(true);
+});
+
+it("starts folded on a phone's menu until the user unfolds it there", async () => {
+  const { view } = draw(true);
+  expect(listShown()).toBe(false);
+  await userEvent.click(title()!);
+  reload(view);
+  draw(true);
+  expect(listShown()).toBe(true);
 });
 
 it("ticks the GitHub step with the login once signed in", async () => {
   await signInAsTester();
   draw();
-  expect(title()?.textContent).toBe("Get set up· 1 of 4");
+  expect(title()?.textContent).toBe("Get set up· 2 of 4");
   expect(screen.getByText("t")).toBeTruthy();
   expect(
     screen.queryByRole("button", { name: "Sign in with GitHub" })
@@ -130,12 +186,6 @@ it("ticks the wallet step with the short address", () => {
   wallet.current = { publicKey: { toBase58: () => ADDRESS } };
   draw();
   expect(screen.getByText("7Hq5…Xk2P")).toBeTruthy();
-});
-
-it("ticks the network step with the cluster once a network was chosen", () => {
-  setupMarks.mark("networkChosen");
-  draw();
-  expect(screen.getByText("devnet")).toBeTruthy();
 });
 
 it("starts a sign-in from its step", async () => {
@@ -201,29 +251,13 @@ it("reports a wallet connection that fails, and tells the user", async () => {
   ]);
 });
 
-it("marks the network step as a settings trigger, as tests find it", () => {
-  draw();
-  expect(
-    screen
-      .getByRole("button", { name: "Choose a network" })
-      .hasAttribute("data-settings-trigger")
-  ).toBe(true);
-});
-
-it("hands the assistant and the network steps to their props, counted", async () => {
-  const { onConnectAssistant, onChooseNetwork } = draw();
+it("hands the assistant step to its prop, counted", async () => {
+  const { onConnectAssistant } = draw();
   await userEvent.click(
     screen.getByRole("button", { name: "Connect the assistant" })
   );
-  await userEvent.click(
-    screen.getByRole("button", { name: "Choose a network" })
-  );
   expect(onConnectAssistant).toHaveBeenCalledOnce();
-  expect(onChooseNetwork).toHaveBeenCalledOnce();
-  expect(eventsNamed("setup_item_picked")).toEqual([
-    { item: "assistant" },
-    { item: "network" },
-  ]);
+  expect(eventsNamed("setup_item_picked")).toEqual([{ item: "assistant" }]);
 });
 
 it("goes for good once dismissed", async () => {
@@ -233,11 +267,10 @@ it("goes for good once dismissed", async () => {
     screen.getByRole("button", { name: "Dismiss the checklist" })
   );
   expect(title()).toBeNull();
-  expect(eventsNamed("setup_dismissed")).toEqual([{ done: 1 }]);
+  expect(eventsNamed("setup_dismissed")).toEqual([{ done: 2 }]);
   expect(JSON.parse(localStorage.getItem(SETUP_LIST_KEY) ?? "{}")).toEqual({
     dismissed: true,
     completed: false,
-    networkChosen: false,
   });
 });
 
@@ -245,14 +278,11 @@ it("never shows with all four done, and counts the completion once", async () =>
   await doAllFour();
   const { view } = draw();
   expect(title()).toBeNull();
-  view.rerender(
-    <SetupList onConnectAssistant={vi.fn()} onChooseNetwork={vi.fn()} />
-  );
+  view.rerender(<SetupList onConnectAssistant={vi.fn()} />);
   expect(eventsNamed("setup_completed")).toEqual([{}]);
   expect(JSON.parse(localStorage.getItem(SETUP_LIST_KEY) ?? "{}")).toEqual({
     dismissed: false,
     completed: true,
-    networkChosen: true,
   });
 });
 

@@ -52,7 +52,9 @@ describe("BaseInteract", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing to call yet" })
     ).toBeTruthy();
-    expect(screen.getByText(/Once it is on devnet,/)).toBeTruthy();
+    expect(
+      screen.getByText("Deploy the program, and its instructions show up here.")
+    ).toBeTruthy();
     fireEvent.click(
       within(actions(container)).getByRole("button", { name: "Go to Deploy" })
     );
@@ -60,16 +62,20 @@ describe("BaseInteract", () => {
     expect(screen.queryByText("FORM")).toBeNull();
   });
 
-  it("an unknown cluster reads as the network", () => {
-    render(<BaseInteract {...props("not-deployed", { cluster: null })} />);
-    expect(screen.getByText(/Once it is on the network,/)).toBeTruthy();
+  it("an unknown cluster reads as the network while checking", () => {
+    render(<BaseInteract {...props("checking", { cluster: null })} />);
+    expect(
+      screen.getByText(/^Reading the program from the network/)
+    ).toBeTruthy();
   });
 
   /** The prototype says what is missing for Interact: a deployment */
   it("before a build it asks for a deploy and offers Go to Deploy", () => {
     const onGoTo = vi.fn();
     render(<BaseInteract {...props("not-built", { onGoTo })} />);
-    expect(screen.getByText(/^Deploy the program first\./)).toBeTruthy();
+    expect(
+      screen.getByText("Deploy the program, and its instructions show up here.")
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go to Deploy" }));
     expect(onGoTo).toHaveBeenCalledWith("deploy");
   });

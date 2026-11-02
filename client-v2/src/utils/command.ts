@@ -2,6 +2,21 @@ import { PgCommon } from "./common";
 import { PgTerminal } from "./terminal";
 import type { Arrayable, Disposable, Getable, SyncOrAsync } from "./types";
 
+/**
+ * Whether a run can be stopped now: `stoppable` honours its signal, `step`
+ * is a stoppable command in a step that cannot stop (deploy's last
+ * transaction), `never` is a command that does not honour a stop
+ */
+type Stoppability = "stoppable" | "step" | "never";
+
+/** A command run in flight, for `PgCommandManager.stop` */
+interface Run {
+  /** Name of the top-level command */
+  readonly name: string;
+  stoppability: Stoppability;
+  readonly controller: AbortController;
+}
+
 /** Terminal command creation parameter */
 export type CommandParam<
   N extends string,
@@ -16,6 +31,12 @@ export type CommandParam<
   description: string;
   /* Only process the command if the condition passes */
   preChecks?: Arrayable<() => SyncOrAsync<void>>;
+  /**
+   * Whether the handler honours its input's `signal`: a stop (Ctrl+C, the
+   * console strip's Stop) aborts it, and the handler ends with a
+   * `StoppedError`. Any other command answers a stop with "can't be stopped".
+   */
+  stoppable?: true;
 } & (WithSubcommands<S> | WithHandle<A, O, R>);
 
 type WithSubcommands<S> = {
@@ -47,6 +68,13 @@ type ParsedInput<A, O> = {
   args: ParsedArgs<A>;
   /** Parsed options */
   options: ParsedOptions<O>;
+  /** Aborted when the person stops the run (see `stoppable`) */
+  signal: AbortSignal;
+  /**
+   * The rest of this run is one step that cannot stop: a stop from here on
+   * says "This step can't be stopped" and the run goes on
+   */
+  lockStop: () => void;
 };
 
 /** Recursively map argument types */
@@ -308,37 +336,50 @@ export class PgCommandManager {
 
       const input = tokens.join(" ");
 
+      const run: Run = {
+        name: topCmd.name,
+        stoppability: topCmd.stoppable ? "stoppable" : "never",
+        controller: new AbortController(),
+      };
+
       // Dispatch start event
       const eventNames = PgCommandManager._getEventNames(topCmd.name);
       PgCommon.createAndDispatchCustomEvent(eventNames.start, input);
 
-      let cmd: Command<string, Arg[], Option[], any[], any> = topCmd;
-      const args = [];
-      const opts = [];
+      // A run that started finishes however it ends: a pre-check or a parse
+      // that throws would otherwise leave every `onDidFinish` listener, the
+      // flow's stages among them, on "running". Help and a bare parent
+      // command print and end without a result, and finish nothing.
+      let result: { ok: unknown } | { err: unknown } | undefined;
+      try {
+        PgCommandManager._runs.add(run);
+        let cmd: Command<string, Arg[], Option[], any[], any> = topCmd;
+        const args = [];
+        const opts = [];
 
-      for (const i in tokens) {
-        const token = tokens[i];
-        const nextIndex = +i + 1;
-        const nextToken = tokens.at(nextIndex);
-        const subcmd = cmd.subcommands?.find((cmd) => cmd.name === token);
-        if (subcmd) cmd = subcmd;
+        for (const i in tokens) {
+          const token = tokens[i];
+          const nextIndex = +i + 1;
+          const nextToken = tokens.at(nextIndex);
+          const subcmd = cmd.subcommands?.find((cmd) => cmd.name === token);
+          if (subcmd) cmd = subcmd;
 
-        // Handle checks
-        if (cmd.preChecks) {
-          const preChecks = PgCommon.toArray(cmd.preChecks);
-          for (const preCheck of preChecks) await preCheck();
-        }
+          // Handle checks
+          if (cmd.preChecks) {
+            const preChecks = PgCommon.toArray(cmd.preChecks);
+            for (const preCheck of preChecks) await preCheck();
+          }
 
-        // Early continue if it's not the end of the command
-        const isLast = +i === tokens.length - 1;
-        const isNextTokenSubcmd = cmd.subcommands?.some(
-          (cmd) => cmd.name === nextToken
-        );
-        if (!isLast && isNextTokenSubcmd) continue;
+          // Early continue if it's not the end of the command
+          const isLast = +i === tokens.length - 1;
+          const isNextTokenSubcmd = cmd.subcommands?.some(
+            (cmd) => cmd.name === nextToken
+          );
+          if (!isLast && isNextTokenSubcmd) continue;
 
-        // Check missing command processor
-        if (!cmd.handle) {
-          PgTerminal.println(`
+          // Check missing command processor
+          if (!cmd.handle) {
+            PgTerminal.println(`
 ${cmd.description}
 
 Usage: ${[...tokens.slice(0, +i), cmd.name].join(" ")} <COMMAND>
@@ -346,214 +387,258 @@ Usage: ${[...tokens.slice(0, +i), cmd.name].join(" ")} <COMMAND>
 Commands:
 
 ${PgTerminal.formatList(cmd.subcommands!)}`);
-          break;
-        }
-
-        const hasArgsOrOpts = cmd.args?.length || cmd.options!.length > 1;
-        if (hasArgsOrOpts) {
-          // Handle `help` option
-          if (nextToken === "--help" || nextToken === "-h") {
-            const usagePrefix = `Usage: ${[
-              ...tokens.slice(0, +i),
-              cmd.name,
-            ].join(" ")} [OPTIONS]`;
-            const lines = [cmd.description];
-            if (cmd.subcommands) {
-              lines.push(
-                `${usagePrefix} <COMMAND>`,
-                "Commands:",
-                PgTerminal.formatList(cmd.subcommands)
-              );
-            }
-            if (cmd.args) {
-              const toArgStr = (arg: Arg) => {
-                const name = arg.name.toUpperCase();
-                return arg.multiple ? `[${name}]` : `<${name}>`;
-              };
-
-              const usageArgs = cmd.args.reduce(
-                (acc, arg) => acc + toArgStr(arg) + " ",
-                ""
-              );
-              const argList = cmd.args.map((arg) => [
-                toArgStr(arg),
-                (arg.description ?? "") +
-                  (Array.isArray(arg.values)
-                    ? ` (possible values: ${arg.values.join(", ")})`
-                    : ""),
-              ]);
-              lines.push(
-                `${usagePrefix} ${usageArgs}`,
-                "Arguments:",
-                PgTerminal.formatList(argList)
-              );
-            }
-            if (cmd.options) {
-              const optList = cmd.options.map((opt) => [
-                `${opt.short ? `-${opt.short}, ` : ""}--${opt.name} ${
-                  opt.takeValue ? `<${opt.name.toUpperCase()}>` : ""
-                }`,
-                opt.description ?? "",
-              ]);
-              lines.push("Options:", PgTerminal.formatList(optList));
-            }
-
-            PgTerminal.println(lines.join("\n\n"));
-            return;
+            break;
           }
 
-          // Get subcommands, args and options
-          if (nextToken && !isNextTokenSubcmd) {
-            let takeValue = false;
-            for (const argOrOpt of tokens.slice(nextIndex)) {
-              if (takeValue) {
-                opts.push(argOrOpt);
-                takeValue = false;
+          const hasArgsOrOpts = cmd.args?.length || cmd.options!.length > 1;
+          if (hasArgsOrOpts) {
+            // Handle `help` option
+            if (nextToken === "--help" || nextToken === "-h") {
+              const usagePrefix = `Usage: ${[
+                ...tokens.slice(0, +i),
+                cmd.name,
+              ].join(" ")} [OPTIONS]`;
+              const lines = [cmd.description];
+              if (cmd.subcommands) {
+                lines.push(
+                  `${usagePrefix} <COMMAND>`,
+                  "Commands:",
+                  PgTerminal.formatList(cmd.subcommands)
+                );
+              }
+              if (cmd.args) {
+                const toArgStr = (arg: Arg) => {
+                  const name = arg.name.toUpperCase();
+                  return arg.multiple ? `[${name}]` : `<${name}>`;
+                };
+
+                const usageArgs = cmd.args.reduce(
+                  (acc, arg) => acc + toArgStr(arg) + " ",
+                  ""
+                );
+                const argList = cmd.args.map((arg) => [
+                  toArgStr(arg),
+                  (arg.description ?? "") +
+                    (Array.isArray(arg.values)
+                      ? ` (possible values: ${arg.values.join(", ")})`
+                      : ""),
+                ]);
+                lines.push(
+                  `${usagePrefix} ${usageArgs}`,
+                  "Arguments:",
+                  PgTerminal.formatList(argList)
+                );
+              }
+              if (cmd.options) {
+                const optList = cmd.options.map((opt) => [
+                  `${opt.short ? `-${opt.short}, ` : ""}--${opt.name} ${
+                    opt.takeValue ? `<${opt.name.toUpperCase()}>` : ""
+                  }`,
+                  opt.description ?? "",
+                ]);
+                lines.push("Options:", PgTerminal.formatList(optList));
+              }
+
+              PgTerminal.println(lines.join("\n\n"));
+              return;
+            }
+
+            // Get subcommands, args and options
+            if (nextToken && !isNextTokenSubcmd) {
+              let takeValue = false;
+              for (const argOrOpt of tokens.slice(nextIndex)) {
+                if (takeValue) {
+                  opts.push(argOrOpt);
+                  takeValue = false;
+                  continue;
+                }
+
+                const isOpt = argOrOpt.startsWith("-");
+                if (isOpt && cmd.options) {
+                  const opt = cmd.options.find(
+                    (o) =>
+                      "--" + o.name === argOrOpt || "-" + o.short === argOrOpt
+                  );
+                  if (!opt)
+                    throw new Error(`Unexpected option: \`${argOrOpt}\``);
+
+                  opts.push(argOrOpt);
+                  if (opt.takeValue) takeValue = true;
+                } else if (cmd.args) {
+                  args.push(argOrOpt);
+                }
+              }
+
+              if (!cmd.args && cmd.subcommands) {
+                if (nextToken.startsWith("-")) {
+                  throw new Error(`Unexpected option: \`${nextToken}\``);
+                }
+
+                throw new Error(
+                  `Subcommand doesn't exist: \`${nextToken}\`
+
+Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
+                );
+              }
+              if (
+                args.length > (cmd.args?.length ?? 0) &&
+                !cmd.args?.at(-1)?.multiple
+              ) {
+                throw new Error(
+                  `Provided argument count is higher than expected: ${args.length}`
+                );
+              }
+            }
+          }
+
+          // Parse args
+          const parsedArgs: Record<string, Arrayable<unknown>> = {};
+          if (cmd.args) {
+            for (const i in cmd.args) {
+              const arg = cmd.args[i];
+              const inputArgs = arg.multiple
+                ? args.slice(+i)
+                : args[i]
+                ? [args[i]]
+                : [];
+              if (!inputArgs.length) {
+                if (!arg.optional) {
+                  throw new Error(`Argument not specified: \`${arg.name}\``);
+                }
+
+                // Optional argument value not specified, skip
                 continue;
               }
 
-              const isOpt = argOrOpt.startsWith("-");
-              if (isOpt && cmd.options) {
-                const opt = cmd.options.find(
-                  (o) =>
-                    "--" + o.name === argOrOpt || "-" + o.short === argOrOpt
-                );
-                if (!opt) throw new Error(`Unexpected option: \`${argOrOpt}\``);
-
-                opts.push(argOrOpt);
-                if (opt.takeValue) takeValue = true;
-              } else if (cmd.args) {
-                args.push(argOrOpt);
-              }
-            }
-
-            if (!cmd.args && cmd.subcommands) {
-              if (nextToken.startsWith("-")) {
-                throw new Error(`Unexpected option: \`${nextToken}\``);
-              }
-
-              throw new Error(
-                `Subcommand doesn't exist: \`${nextToken}\`
-
-Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
-              );
-            }
-            if (
-              args.length > (cmd.args?.length ?? 0) &&
-              !cmd.args?.at(-1)?.multiple
-            ) {
-              throw new Error(
-                `Provided argument count is higher than expected: ${args.length}`
-              );
-            }
-          }
-        }
-
-        // Parse args
-        const parsedArgs: Record<string, Arrayable<unknown>> = {};
-        if (cmd.args) {
-          for (const i in cmd.args) {
-            const arg = cmd.args[i];
-            const inputArgs = arg.multiple
-              ? args.slice(+i)
-              : args[i]
-              ? [args[i]]
-              : [];
-            if (!inputArgs.length) {
-              if (!arg.optional) {
-                throw new Error(`Argument not specified: \`${arg.name}\``);
-              }
-
-              // Optional argument value not specified, skip
-              continue;
-            }
-
-            // Validate values if specified
-            if (inputArgs.length && arg.values) {
-              const values =
-                typeof arg.values === "function"
-                  ? arg.values(args[i], tokens)
-                  : arg.values;
-              const invalidValue = inputArgs.find(
-                (inputArg) => !values.includes(inputArg)
-              );
-              if (invalidValue) {
-                throw new Error(
-                  [
-                    `Incorrect argument value given: \`${invalidValue}\``,
-                    `(possible values: ${values.join(", ")})`,
-                  ].join(" ")
-                );
-              }
-            }
-
-            if (arg.parse) {
-              const parse = PgCommandManager._createParse("argument", arg);
-              parsedArgs[arg.name] = arg.multiple
-                ? inputArgs.map((token) => parse(token, tokens))
-                : parse(inputArgs[0], tokens);
-            } else {
-              parsedArgs[arg.name] = arg.multiple ? inputArgs : inputArgs[0];
-            }
-          }
-        }
-
-        // Parse options
-        const parsedOpts: Record<string, unknown> = {};
-        if (cmd.options) {
-          for (const opt of cmd.options) {
-            const i = opts.findIndex(
-              (o) => o === "--" + opt.name || o === "-" + opt.short
-            );
-            if (i === -1) continue;
-
-            if (opt.takeValue) {
-              const val = opts.at(i + 1);
-              if (!val) {
-                throw new Error(`Option value not given: \`${opt.name}\``);
-              }
-
               // Validate values if specified
-              if (opt.values) {
-                const values = PgCommon.callIfNeeded(opt.values);
-                if (!values.includes(val)) {
+              if (inputArgs.length && arg.values) {
+                const values =
+                  typeof arg.values === "function"
+                    ? arg.values(args[i], tokens)
+                    : arg.values;
+                const invalidValue = inputArgs.find(
+                  (inputArg) => !values.includes(inputArg)
+                );
+                if (invalidValue) {
                   throw new Error(
                     [
-                      `Incorrect option value given: \`${val}\``,
+                      `Incorrect argument value given: \`${invalidValue}\``,
                       `(possible values: ${values.join(", ")})`,
                     ].join(" ")
                   );
                 }
               }
 
-              parsedOpts[opt.name] = opt.parse
-                ? PgCommandManager._createParse("option", opt)(val, tokens)
-                : val;
-            } else {
-              parsedOpts[opt.name] = true;
+              if (arg.parse) {
+                const parse = PgCommandManager._createParse("argument", arg);
+                parsedArgs[arg.name] = arg.multiple
+                  ? inputArgs.map((token) => parse(token, tokens))
+                  : parse(inputArgs[0], tokens);
+              } else {
+                parsedArgs[arg.name] = arg.multiple ? inputArgs : inputArgs[0];
+              }
             }
           }
-        }
 
-        // Run the command processor
-        let result;
-        try {
+          // Parse options
+          const parsedOpts: Record<string, unknown> = {};
+          if (cmd.options) {
+            for (const opt of cmd.options) {
+              const i = opts.findIndex(
+                (o) => o === "--" + opt.name || o === "-" + opt.short
+              );
+              if (i === -1) continue;
+
+              if (opt.takeValue) {
+                const val = opts.at(i + 1);
+                if (!val) {
+                  throw new Error(`Option value not given: \`${opt.name}\``);
+                }
+
+                // Validate values if specified
+                if (opt.values) {
+                  const values = PgCommon.callIfNeeded(opt.values);
+                  if (!values.includes(val)) {
+                    throw new Error(
+                      [
+                        `Incorrect option value given: \`${val}\``,
+                        `(possible values: ${values.join(", ")})`,
+                      ].join(" ")
+                    );
+                  }
+                }
+
+                parsedOpts[opt.name] = opt.parse
+                  ? PgCommandManager._createParse("option", opt)(val, tokens)
+                  : val;
+              } else {
+                parsedOpts[opt.name] = true;
+              }
+            }
+          }
+
+          // Run the command processor
+          run.stoppability = cmd.stoppable ? "stoppable" : "never";
           const ret = await cmd.handle({
             raw: input,
             args: parsedArgs,
             options: parsedOpts,
+            signal: run.controller.signal,
+            lockStop: () => {
+              if (run.stoppability === "stoppable") run.stoppability = "step";
+            },
           });
           result = { ok: ret };
           return ret;
-        } catch (e) {
-          result = { err: e };
-          throw e;
-        } finally {
+        }
+      } catch (e) {
+        result = { err: e };
+        throw e;
+      } finally {
+        PgCommandManager._runs.delete(run);
+        if (result) {
           PgCommon.createAndDispatchCustomEvent(eventNames.finish, result);
         }
       }
     });
   }
+
+  /**
+   * Stop the runs in flight: Ctrl+C (or ⌘. on a Mac) in the terminal and the
+   * console strip's Stop. A run of a `stoppable` command has its signal
+   * aborted and ends with a `StoppedError` at its next safe point; a run in a
+   * step that cannot stop, or of a command that does not honour a stop, goes
+   * on, and the terminal says so. A stop pressed again while a run is
+   * already stopping says nothing. When one run starts another (deploy
+   * builds first when the program is not built), every stoppable one stops.
+   *
+   * @returns whether a run is stopping
+   */
+  static stop() {
+    const runs = [...PgCommandManager._runs];
+    const last = runs.at(-1);
+    if (!last) return false;
+
+    const stoppable = runs.filter(
+      (run) =>
+        run.stoppability === "stoppable" && !run.controller.signal.aborted
+    );
+    if (stoppable.length) {
+      PgTerminal.println("^C");
+      for (const run of stoppable) run.controller.abort();
+      return true;
+    }
+    if (runs.some((run) => run.controller.signal.aborted)) return true;
+
+    const why = runs.some((run) => run.stoppability === "step")
+      ? "This step can't be stopped."
+      : `\`${last.name}\` can't be stopped.`;
+    PgTerminal.println(`^C\n${why} Wait for it to finish.`);
+    return false;
+  }
+
+  /** Runs in flight, oldest first */
+  private static readonly _runs = new Set<Run>();
 
   /**
    * Runs after the command starts execution.

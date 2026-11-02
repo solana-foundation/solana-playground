@@ -38,9 +38,10 @@ export class PgServer {
    * Build the program files.
    *
    * @param req build request
+   * @param opts.signal aborts the request
    * @returns the build response
    */
-  static async build(req: BuildRequest) {
+  static async build(req: BuildRequest, opts?: { signal?: AbortSignal }) {
     interface BuildResponse {
       /** Build output */
       stderr: string;
@@ -53,6 +54,7 @@ export class PgServer {
     const response = await this._send("/build", {
       post: { body: JSON.stringify(req) },
       unstable: PgSettings.experimental.unstable,
+      signal: opts?.signal,
     });
     return (await response.json()) as BuildResponse;
   }
@@ -111,7 +113,8 @@ export class PgServer {
   /**
    * Send an HTTP request to the Playground server.
    *
-   * @param opts server send request options
+   * @param opts server send request options; an aborted `signal` fails the
+   * request like any other network failure ("Server request failed")
    * @throws when the response is not OK (with the decoded response)
    * @returns the HTTP response
    */
@@ -122,9 +125,10 @@ export class PgServer {
       post?: { body: string };
       useDbServer?: boolean;
       unstable?: boolean;
+      signal?: AbortSignal;
     }
   ) {
-    const requestInit: RequestInit = {};
+    const requestInit: RequestInit = { signal: opts?.signal };
     if (!opts?.cache) requestInit.cache = "no-store";
 
     if (opts?.post) {
@@ -138,8 +142,10 @@ export class PgServer {
       : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
     const requestUrl = PgCommon.joinPaths(serverUrl, path);
+    let answered = false;
     try {
       const response = await fetch(requestUrl, requestInit);
+      answered = true;
       if (!response.ok) {
         const message = await response.text();
         throw new Error(message);
@@ -147,7 +153,22 @@ export class PgServer {
 
       return response;
     } catch (e: any) {
-      throw new Error(`Server request failed (${requestUrl}): ${e?.message}`);
+      throw new PgServerRequestError(
+        `Server request failed (${requestUrl}): ${e?.message}`,
+        answered
+      );
     }
+  }
+}
+
+/**
+ * A request to the Playground server that failed. `answered` tells a server
+ * that never replied (Spec 08's BUILD-04, "did not answer") from one that
+ * replied with an error.
+ */
+export class PgServerRequestError extends Error {
+  constructor(message: string, readonly answered: boolean) {
+    super(message);
+    this.name = "PgServerRequestError";
   }
 }

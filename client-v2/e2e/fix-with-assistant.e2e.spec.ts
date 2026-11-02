@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { json, startProject } from "./fixtures";
 
 /**
- * "Fix with assistant" pressed before any backend is connected.
+ * A build error's Explain pressed before any backend is connected.
  *
  * The prompt waits in the composer and the panel says so -- but only until a
  * backend is connected. The hint lives beside the picker, not in the
@@ -11,7 +11,7 @@ import { json, startProject } from "./fixtures";
  */
 
 const LONG = { timeout: 60_000 };
-const PROMPT = "Explain this build error and propose a fix: E0308";
+const PROMPT = "Explain this build error in plain words: E0308";
 // The test serves no default backend, so the model is the one way in
 const HINT = /Connect a model to send this to the assistant/;
 
