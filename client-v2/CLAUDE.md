@@ -495,12 +495,14 @@ it.
   in CI's order, minus the production build. Opt in to running it on every
   push with `git config core.hooksPath .githooks` once per clone. The same
   setting adds a pre-commit hook, and both hooks print the lint warnings of
-  the files they cover (staged, or changed by the commits being pushed)
-  through `scripts/lint-changed.sh` without blocking; the `--max-warnings`
-  ceiling in `check` stays the gate. Each line names its severity, and an
-  `error` line still fails `yarn lint`. Claude Code does the same after each
-  `Edit` or `Write` (`.claude/settings.json`), and hands the edited file's
-  messages to the agent. To run a
+  the content they cover (the staged content, or the content of the commits
+  being pushed, as git holds it) through `scripts/lint-changed.mjs` without
+  blocking; the `--max-warnings` ceiling in `check` stays the gate. Each line
+  names its severity, and an `error` line still fails `yarn lint`. Claude
+  Code does the same after each `Edit` or `Write` (`.claude/settings.json`),
+  and hands the edited file's messages to the agent. By hand,
+  `node scripts/lint-changed.mjs --dirty` lints every uncommitted file as it
+  is on disk. To run a
   CI job itself, in its runner image, see
   [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
 - **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**
