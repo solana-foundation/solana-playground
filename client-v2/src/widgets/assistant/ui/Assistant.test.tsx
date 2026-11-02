@@ -7,6 +7,7 @@ import { PgSession } from "@/features/auth";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import type { DefaultBackend } from "../model/default-backend";
 
 // The thread, Sources and the composer stand in by name: what is under test
 // is which of them the panel shows, not what they draw.
@@ -29,8 +30,15 @@ vi.mock("./AssistantComposer", () => ({
 const dialog = vi.hoisted(() => ({ shows: true }));
 const turn = vi.hoisted(() => ({ busy: false, openConnect: vi.fn() }));
 vi.mock("../model/use-turn", () => ({ useTurn: () => turn }));
+// What the deployment serves, as the head names it
+const deployment = vi.hoisted(() => ({
+  backend: { state: "absent" } as DefaultBackend,
+}));
+vi.mock("../model/default-backend", () => ({
+  useDefaultBackend: () => deployment.backend,
+}));
 
-// The explorer's workspace, with the two events the heading follows
+// The explorer's workspace, with the events the thread follows
 const explorer = vi.hoisted(() => ({
   name: "hello-anchor" as string | undefined,
   listeners: new Set<() => void>(),
@@ -93,6 +101,7 @@ beforeEach(() => {
   explorer.name = "hello-anchor";
   tutorial.beforeStart = null;
   explorer.listeners.clear();
+  deployment.backend = { state: "absent" };
   turn.openConnect.mockReset();
   turn.openConnect.mockImplementation(() => {
     if (dialog.shows) showConnect(true);
@@ -134,9 +143,9 @@ const openSources = async (user: ReturnType<typeof userEvent.setup>) => {
 };
 
 describe("Assistant", () => {
-  it("shows the thread over the composer, under the project's name", () => {
+  it("shows the thread over the composer, under Assistant with no model", () => {
     setup();
-    expect(screen.getByRole("heading", { name: "hello-anchor" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
     expect(screen.getByText("thread")).toBeTruthy();
     expect(screen.getByText("composer")).toBeTruthy();
   });
@@ -144,7 +153,6 @@ describe("Assistant", () => {
   it("tells the thread there is no project before one opens", () => {
     explorer.name = undefined;
     setup();
-    expect(screen.getByRole("heading", { name: "Assistant" })).toBeTruthy();
     expect(screen.getByText("thread").dataset.project).toBe("none");
   });
 
@@ -153,19 +161,17 @@ describe("Assistant", () => {
     expect(screen.getByText("thread").dataset.project).toBe("hello-anchor");
   });
 
-  it("names a tutorial not yet started while no project is open", () => {
+  it("hands the thread a tutorial not yet started while no project is open", () => {
     explorer.name = undefined;
     tutorial.beforeStart = "Hello Anchor";
     setup();
-    expect(screen.getByRole("heading", { name: "Hello Anchor" })).toBeTruthy();
     expect(screen.getByText("thread").dataset.project).toBe("Hello Anchor");
   });
 
-  it("keeps the open project's name beside a tutorial not yet started", () => {
+  it("keeps the thread on the open project beside a tutorial not yet started", () => {
     explorer.name = "Counter";
     tutorial.beforeStart = "Hello Anchor";
     setup();
-    expect(screen.getByRole("heading", { name: "Counter" })).toBeTruthy();
     expect(screen.getByText("thread").dataset.project).toBe("Counter");
   });
 
@@ -182,11 +188,53 @@ describe("Assistant", () => {
     expect(PgAssistant.initMcp).toHaveBeenCalledTimes(2);
   });
 
-  it("follows a switch or a rename of the project", () => {
+  it("names the hosted model in the head, not the project", () => {
+    deployment.backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+    setup();
+    expect(
+      screen.getByRole("heading", {
+        name: "Assistant · GLM 5.3 Flash · hosted",
+      })
+    ).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /hello-anchor/ })).toBeNull();
+  });
+
+  it("names a keyed model with whose key it runs on", () => {
+    PgAssistant.connect({
+      id: "openrouter",
+      apiKey: "sk-or-fake",
+      endpoint: {
+        baseUrl: "https://openrouter.ai/api/v1",
+        model: "deepseek/deepseek-chat-v3.1:free",
+      },
+    });
+    setup();
+    expect(
+      screen.getByRole("heading", {
+        name: "deepseek/deepseek-chat-v3.1:free · your OpenRouter key",
+      })
+    ).toBeTruthy();
+  });
+
+  it("follows the model connected after it opens", () => {
+    setup();
+    act(() =>
+      PgAssistant.connect({
+        id: "anthropic",
+        apiKey: "sk-ant-fake",
+        settings: { model: "claude-sonnet-5-5", effort: "medium" },
+      })
+    );
+    expect(
+      screen.getByRole("heading", { name: "Sonnet 5.5 · your Anthropic key" })
+    ).toBeTruthy();
+  });
+
+  it("hands the thread a switch or a rename of the project", () => {
     setup();
     explorer.name = "renamed";
     act(() => explorer.listeners.forEach((cb) => cb()));
-    expect(screen.getByRole("heading", { name: "renamed" })).toBeTruthy();
+    expect(screen.getByText("thread").dataset.project).toBe("renamed");
   });
 
   it("puts Sources and tools in place of the thread and composer, and comes back", async () => {

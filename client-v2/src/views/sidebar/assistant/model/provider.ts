@@ -1,3 +1,13 @@
+import { loadAi } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
+import { createTools } from "./tools";
+import { describeProject, systemPrompt } from "./prompt";
+import { PgAssistant } from "../store";
+import { MAX_RESUMES, MAX_STEPS } from "../config";
+import { PgSession } from "../../../../features/auth";
+import { agentTelemetry } from "@/features/agent";
+import { MODEL_PROVIDER_PROFILES } from "./model-providers";
+import { ModelBusyError } from "./model-busy";
 import type { LanguageModel, ModelMessage } from "ai";
 
 import { agentTelemetry } from "@/features/agent";
@@ -14,6 +24,8 @@ import { MODEL_PROVIDER_PROFILES } from "./model-providers";
 import { describeProject, systemPrompt } from "./prompt";
 import { createTools } from "./tools";
 import { type Provider, TurnFailure } from "./types";
+
+const log = createLogger("assistant:provider");
 
 /** What a provider needs to be built: structurally the store's `Connection` */
 export interface ProviderConnection extends ModelProviderInput {
@@ -71,7 +83,7 @@ export const createProvider = (
     id: connection.id,
     label: profile.label,
 
-    async send(input, signal) {
+    async send(input, signal, context) {
       const ai = await loadAi();
       signal?.throwIfAborted();
       model ??= ai.createModel(profile.connection);
@@ -92,7 +104,10 @@ export const createProvider = (
             },
             {
               role: "system",
-              content: `Current project state:\n\n${describeProject()}`,
+              content: `Current project state:\n\n${describeProject(
+                undefined,
+                context
+              )}`,
             },
           ],
           // Built per turn, so MCP tools discovered since the last one are offered
@@ -157,12 +172,19 @@ export const createProvider = (
             cause: e,
           });
         }
+        // After the cap, whose 503 is a refusal of ours with its own words
         const own = profile.ownRefusal?.(e);
         if (own) {
           throw new TurnFailure(own, {
             reason: "provider",
             status: e.status,
             cause: e,
+          });
+        }
+        if (ai.isOutage(e.status) && profile.reportsOutage?.(e)) {
+          log.warn("the backend we run is down", {
+            report: true,
+            context: { status: e.status, detail: e.detail },
           });
         }
         // Spec 08's words, never the status or the server's text
