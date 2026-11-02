@@ -40,6 +40,11 @@ export interface BaseAppNavProps {
   logo: ReactNode;
   /** The project list, under the items; the rail has no room for it */
   projects: ReactNode;
+  /**
+   * The way to a computer, under the project list: drawn on the phone's menu
+   * page only, since from `LAYOUT_BREAKPOINTS.phone` up this is the computer
+   */
+  handoff?: ReactNode;
   footer: ReactNode;
   /** The footer's few icons the 52 px rail has room for, in its place */
   railFooter: ReactNode;
@@ -56,6 +61,7 @@ const BaseAppNav = ({
   onToggle,
   logo,
   projects,
+  handoff,
   footer,
   railFooter,
   setup,
@@ -122,6 +128,7 @@ const BaseAppNav = ({
           })}
         </SidebarMenu>
         {!collapsed && projects}
+        {phone && handoff && <div className="mt-2">{handoff}</div>}
       </SidebarGroup>
       {!collapsed && <div className="mt-auto">{setup}</div>}
     </SidebarContent>

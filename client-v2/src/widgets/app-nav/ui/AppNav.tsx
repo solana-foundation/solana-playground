@@ -5,6 +5,7 @@ import type { NavItem } from "../model/nav-item";
 import { navTelemetry } from "../model/telemetry";
 import type { BaseAppNavProps } from "./BaseAppNav";
 import BaseAppNav from "./BaseAppNav";
+import Handoff from "./Handoff";
 
 /** The items that open a page of their own */
 export type NavPage = Extract<NavItem, "tutorials" | "programs">;
@@ -61,7 +62,14 @@ const AppNav = ({
   };
 
   const marked = current ?? (homeShown ? "home" : undefined);
-  return <BaseAppNav {...props} current={marked} onOpen={open} />;
+  return (
+    <BaseAppNav
+      {...props}
+      handoff={props.phone ? <Handoff /> : undefined}
+      current={marked}
+      onOpen={open}
+    />
+  );
 };
 
 export default AppNav;
