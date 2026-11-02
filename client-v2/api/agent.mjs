@@ -63,9 +63,7 @@ import {
 } from "../src/features/auth/server.mjs";
 import { query } from "../src/features/persistence/server.mjs";
 import { agentEnv } from "../src/shared/config/server-env.mjs";
-import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
-
-const log = createServerLogger("api:agent");
+import { UPSTREAM_DROPPED } from "../src/shared/lib/ai/config.mjs";
 
 /**
  * Request fields forwarded upstream; everything else is the server's to
@@ -181,11 +179,10 @@ const pipeStream = async (res, body, observe) => {
       // The error frame `@ai-sdk/openai-compatible` reads; `runTurn` (shared/lib/ai) raises it as `AiTurnError`
       const message = `Upstream stream failed: ${e.message}`;
       // The code tells the panel the connection dropped, so it keeps what
-      // streamed and offers Try again (`UPSTREAM_DROPPED` in
-      // `shared/lib/ai/network-failure.ts`, written twice). A failure of
-      // ours carries none, so the panel reports it as a bug
+      // streamed and offers Try again. A failure of ours carries none, so
+      // the panel reports it as a bug
       const error = readFailed
-        ? { message, code: "upstream_connection_lost" }
+        ? { message, code: UPSTREAM_DROPPED }
         : { message };
       // The leading blank line closes whatever frame the upstream left
       // unfinished; glued onto it, the error would be one malformed line

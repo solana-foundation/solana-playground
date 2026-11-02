@@ -10,6 +10,7 @@ import {
 import { initLogger, memoryProvider, resetLogger } from "../logger";
 import type { LogEntry } from "../logger";
 import { createModel } from "./models";
+import { UPSTREAM_DROPPED } from "./config.mjs";
 import { AiTurnError, runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";
 
@@ -399,7 +400,7 @@ describe("runTurn", () => {
         `\n\ndata: ${JSON.stringify({
           error: {
             message: "Upstream stream failed: terminated",
-            code: "upstream_connection_lost",
+            code: UPSTREAM_DROPPED,
           },
         })}\n\n`,
       ])

@@ -11,6 +11,7 @@ import {
 import handler from "../../../api/agent.mjs";
 import { jsonBody, makeReq, makeRes, postJson } from "../../test/api-handler";
 import { toMicro, worstCaseCost } from "./server.mjs";
+import { UPSTREAM_DROPPED } from "@/shared/lib/ai/config.mjs";
 
 /** The server logger's entries for one test, in place of the console */
 const serverLog = () => {
@@ -595,7 +596,7 @@ describe("POST /api/agent streaming", () => {
     const last = JSON.parse(events[events.length - 1].slice(6));
     expect(last.error.message).toMatch(/connection reset/);
     // The panel reads the code as a dropped connection: cut off, Try again
-    expect(last.error.code).toBe("upstream_connection_lost");
+    expect(last.error.code).toBe(UPSTREAM_DROPPED);
   });
 
   it("leaves the dropped-connection code off a failure of its own", async () => {

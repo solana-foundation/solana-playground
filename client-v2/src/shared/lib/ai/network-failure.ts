@@ -1,3 +1,5 @@
+import { UPSTREAM_DROPPED } from "./config.mjs";
+
 /**
  * What `fetch`, and a stream it was reading, reject with when the connection
  * drops: a `TypeError` whose whole message is one Chrome ("Failed to fetch",
@@ -15,13 +17,10 @@ const isDroppedFetch = (error: unknown) =>
   error instanceof TypeError && NETWORK_FAILURE.test(error.message);
 
 /**
- * The `code` of the error frame `api/agent.mjs` sends when its own read of
- * the model fails mid-reply. The SDK hands that frame's `error` over as a
- * plain object, so the dropped connection behind it reaches the panel only
- * through this mark. Written twice, here and in `pipeStream`.
+ * The error frame `api/agent.mjs` sends when its own read of the model fails
+ * mid-reply. The SDK hands that frame's `error` over as a plain object, so
+ * the dropped connection behind it reaches the panel only through its code.
  */
-const UPSTREAM_DROPPED = "upstream_connection_lost";
-
 const isUpstreamDrop = (error: unknown) =>
   typeof error === "object" &&
   error !== null &&
@@ -66,7 +65,7 @@ if (import.meta.vitest) {
     it("matches the error frame of a default backend whose model dropped", () => {
       const frame = {
         message: "Upstream stream failed: terminated",
-        code: "upstream_connection_lost",
+        code: UPSTREAM_DROPPED,
       };
 
       expect(isNetworkFailure(frame)).toBe(true);
