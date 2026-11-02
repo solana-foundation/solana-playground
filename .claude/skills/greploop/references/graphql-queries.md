@@ -28,6 +28,16 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
 }
 ```
 
+## Reply to a thread
+
+```graphql
+mutation($thread: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $thread, body: $body}) {
+    comment { url }
+  }
+}
+```
+
 ## Batch-resolve threads
 
 ```graphql
