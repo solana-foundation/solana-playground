@@ -142,10 +142,15 @@ const sendJson = (res, status, body) => {
 const pipeStream = async (res, body, observe) => {
   const reader = body.getReader();
   let finished = false;
+  // Only the read is the model's connection; a throw past it is ours
+  let readFailed = false;
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const { done, value } = await reader.read().catch((e) => {
+        readFailed = true;
+        throw e;
+      });
       if (done) {
         finished = !res.destroyed;
         break;
@@ -177,8 +182,11 @@ const pipeStream = async (res, body, observe) => {
       const message = `Upstream stream failed: ${e.message}`;
       // The code tells the panel the connection dropped, so it keeps what
       // streamed and offers Try again (`UPSTREAM_DROPPED` in
-      // `shared/lib/ai/network-failure.ts`, written twice)
-      const error = { message, code: "upstream_connection_lost" };
+      // `shared/lib/ai/network-failure.ts`, written twice). A failure of
+      // ours carries none, so the panel reports it as a bug
+      const error = readFailed
+        ? { message, code: "upstream_connection_lost" }
+        : { message };
       // The leading blank line closes whatever frame the upstream left
       // unfinished; glued onto it, the error would be one malformed line
       // the panel skips

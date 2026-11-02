@@ -598,6 +598,31 @@ describe("POST /api/agent streaming", () => {
     expect(last.error.code).toBe("upstream_connection_lost");
   });
 
+  it("leaves the dropped-connection code off a failure of its own", async () => {
+    // A throw past the read is ours, not the model's connection: the panel
+    // must report it, not offer Try again over it
+    let thrown = false;
+    const res = makeRes({
+      write: (c) => {
+        if (!thrown) {
+          thrown = true;
+          throw new Error("write failed");
+        }
+        res.chunks.push(Buffer.from(c as Uint8Array));
+        return true;
+      },
+    });
+    await call(res, upstream(["data: a\n\n"]));
+
+    const events = res
+      .body()
+      .split("\n\n")
+      .filter((e) => e.startsWith("data: "));
+    const last = JSON.parse(events[events.length - 1].slice(6));
+    expect(last.error.message).toMatch(/write failed/);
+    expect(last.error.code).toBeUndefined();
+  });
+
   it("says so inside the stream when the upstream drops mid-answer", async () => {
     const res = makeRes();
     await call(res, upstream(["data: a\n\n"], "fail"));
