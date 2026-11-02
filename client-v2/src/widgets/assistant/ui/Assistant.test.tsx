@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 
@@ -103,6 +104,7 @@ beforeEach(() => {
 afterEach(() => {
   showConnect = () => {};
   PgAssistant.disconnect();
+  PgSession.reset();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -168,6 +170,14 @@ describe("Assistant", () => {
   it("asks the gateway for its tools once, on mount", () => {
     setup();
     expect(PgAssistant.initMcp).toHaveBeenCalledTimes(1);
+  });
+
+  it("asks the gateway again when the account changes", async () => {
+    setup();
+    await act(() =>
+      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+    );
+    expect(PgAssistant.initMcp).toHaveBeenCalledTimes(2);
   });
 
   it("follows a switch or a rename of the project", () => {

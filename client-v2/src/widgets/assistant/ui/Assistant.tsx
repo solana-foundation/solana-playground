@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
 
 import { useTutorialBeforeStart } from "@/entities/tutorial";
+import { PgSession } from "@/features/auth";
 import { Button } from "@/shared/ui/button";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
 import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
@@ -109,9 +110,18 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
   // Ask the gateway what it serves and what those servers offer. Has to happen
   // here rather than only in Sources: `createTools` reads the result, so a
   // model connected before this ran would be offered no MCP tool at all, with
-  // nothing on screen to say why.
+  // nothing on screen to say why. Asked again for each account: the gateway
+  // lists `signedIn` sources only to a signed-in caller.
   useEffect(() => {
     PgAssistant.initMcp();
+    let user = PgSession.get()?.id;
+    return PgSession.onDidChange(() => {
+      const next = PgSession.get()?.id;
+      // `onDidChange` also fires for a sign-in's progress, which changes no account
+      if (next === user) return;
+      user = next;
+      PgAssistant.initMcp();
+    }).dispose;
   }, []);
 
   // A prompt raised while Sources is open (a tool call there, say) lands in

@@ -29,6 +29,8 @@ type McpEvents = {
   };
   /** An expired session was replaced, once however many calls failed on it */
   mcp_session_reopened: { server: McpServerKind };
+  /** The user checked or unchecked a server in the Sources tab; `enabled` is the state it moved to */
+  mcp_server_toggled: { server: McpServerKind; enabled: boolean };
 };
 
 export type McpEventParams<E extends keyof McpEvents> = McpEvents[E];

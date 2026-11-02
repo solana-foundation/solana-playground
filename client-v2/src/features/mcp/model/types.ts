@@ -10,6 +10,8 @@
  * - `headers` is sent on every request. A header the server's
  *   `Access-Control-Allow-Headers` omits fails preflight rather than being
  *   ignored.
+ * - `protection` is a bot-protection bypass; its provider decides how the
+ *   secret is sent (`PROTECTION_PROVIDERS` in `protection.mjs`).
  */
 export interface McpServerEntry {
   /** Prefixes the server's tool names, so it must be unique */
@@ -20,4 +22,11 @@ export interface McpServerEntry {
   authToken?: string;
   queryParams?: Record<string, string>;
   headers?: Record<string, string>;
+  protection?: McpProtection;
+}
+
+/** A bot-protection bypass: a provider named in `PROTECTION_PROVIDERS` (`protection.mjs`), and its secret */
+export interface McpProtection {
+  provider: string;
+  secret: string;
 }

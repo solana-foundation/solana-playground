@@ -1,9 +1,11 @@
-import { DEFAULT_SKILL_IDS } from "./grounding";
+import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
+import type { SkillEntry } from "./grounding";
 import {
   closeConnection,
   listGatewayServers,
   listTools,
   LOCAL_MCP_SERVERS,
+  mcpTelemetry,
   sameConnection,
 } from "@/features/mcp";
 import { redactKey } from "@/shared/lib/ai";
@@ -434,14 +436,62 @@ export class PgAssistant {
     PgAssistant._emitOnly();
   }
 
-  /** Which skills the model may load this session */
+  /** Every skill the server listed, on or off, in its order */
+  static get skills(): readonly SkillEntry[] {
+    return PgAssistant._skills;
+  }
+
+  /** Whether the last `loadSkills` failed, so the list is empty for that reason */
+  static get skillsUnavailable() {
+    return PgAssistant._skillsUnavailable;
+  }
+
+  /** The listed skills the model may load this session: the user's choice, else the entry's `enabled` */
+  static get enabledSkills(): readonly SkillEntry[] {
+    return PgAssistant._skills.filter(
+      (skill) =>
+        isAlwaysOn(skill) ||
+        (PgAssistant._skillChoices.get(skill.id) ?? skill.enabled)
+    );
+  }
+
+  /** The ids of {@link PgAssistant.enabledSkills} */
   static get enabledSkillIds(): readonly string[] {
-    return PgAssistant._enabledSkillIds;
+    return PgAssistant.enabledSkills.map((skill) => skill.id);
   }
 
   static setSkillEnabled(id: string, enabled: boolean) {
-    const ids = PgAssistant._enabledSkillIds.filter((i) => i !== id);
-    PgAssistant._enabledSkillIds = enabled ? [...ids, id] : ids;
+    const skill = PgAssistant._skills.find((entry) => entry.id === id);
+    if (!skill || isAlwaysOn(skill)) return;
+    PgAssistant._skillChoices = new Map(PgAssistant._skillChoices).set(
+      id,
+      enabled
+    );
+    skillsTelemetry.track("skills_toggled", { id, enabled });
+    PgAssistant._emit();
+  }
+
+  /**
+   * Ask the server which skills it offers. A failure leaves no skills and
+   * marks the list unavailable: there is no built-in list to fall back to.
+   * An answer overtaken by a later call is dropped.
+   */
+  static async loadSkills() {
+    const seq = ++PgAssistant._skillsSeq;
+    try {
+      const skills = await listGatewaySkills();
+      if (seq !== PgAssistant._skillsSeq) return;
+      PgAssistant._skills = skills;
+      PgAssistant._skillsUnavailable = false;
+    } catch (error) {
+      if (seq !== PgAssistant._skillsSeq) return;
+      // The slice logged the cause; the tab tells the user the server reported none
+      log.debug("No skills: the skills route failed", {
+        context: { error: String(error) },
+      });
+      PgAssistant._skills = [];
+      PgAssistant._skillsUnavailable = true;
+    }
     PgAssistant._emit();
   }
 
@@ -459,7 +509,7 @@ export class PgAssistant {
   static get mcpServers(): readonly McpServerEntry[] {
     const gatewayIds = new Set(PgAssistant._gatewayServers.map((s) => s.id));
     return [
-      ...PgAssistant._gatewayServers,
+      ...PgAssistant.gatewayMcpServers,
       ...PgAssistant._localServers.filter((s) => !gatewayIds.has(s.id)),
     ];
   }
@@ -470,9 +520,13 @@ export class PgAssistant {
     return PgAssistant._localServers.filter((s) => gatewayIds.has(s.id));
   }
 
-  /** The gateway's own upstreams, as it reported them */
+  /** The gateway's own upstreams, as it reported them, with the user's on/off state applied */
   static get gatewayMcpServers(): readonly McpServerEntry[] {
-    return PgAssistant._gatewayServers;
+    return PgAssistant._gatewayServers.map((server) =>
+      PgAssistant._gatewayServersOff.has(server.id)
+        ? { ...server, enabled: false }
+        : server
+    );
   }
 
   /** Only the entries the user added, which is what the editor edits */
@@ -489,6 +543,32 @@ export class PgAssistant {
   static setMcpServers(servers: readonly McpServerEntry[]) {
     PgAssistant._replaceServers(() => {
       PgAssistant._localServers = servers;
+    });
+    PgAssistant._emit();
+  }
+
+  /**
+   * Turn one server on or off. A gateway entry keeps the gateway's own copy
+   * and records the choice beside it; a local entry's `enabled` field is the
+   * choice, so the editor shows the same state.
+   */
+  static setMcpServerEnabled(id: string, enabled: boolean) {
+    const gateway = PgAssistant._gatewayServers.some(
+      (server) => server.id === id
+    );
+    if (gateway) {
+      const off = new Set(PgAssistant._gatewayServersOff);
+      if (enabled) off.delete(id);
+      else off.add(id);
+      PgAssistant._gatewayServersOff = off;
+    } else {
+      PgAssistant._localServers = PgAssistant._localServers.map((server) =>
+        server.id === id ? { ...server, enabled } : server
+      );
+    }
+    mcpTelemetry.track("mcp_server_toggled", {
+      server: gateway ? "gateway" : "user",
+      enabled,
     });
     PgAssistant._emit();
   }
@@ -521,11 +601,14 @@ export class PgAssistant {
    *
    * Failure is not surfaced: running under a plain `craco start` there is no
    * `/api`, and that should leave the panel working with local additions and
-   * skills rather than showing an error nobody can act on.
+   * skills rather than showing an error nobody can act on. An answer overtaken
+   * by a later call is dropped.
    */
   static async loadMcpServers() {
+    const seq = ++PgAssistant._gatewayServersSeq;
     try {
       const gateway = await listGatewayServers();
+      if (seq !== PgAssistant._gatewayServersSeq) return;
       PgAssistant._replaceServers(() => {
         PgAssistant._gatewayServers = gateway;
       });
@@ -535,10 +618,16 @@ export class PgAssistant {
     }
   }
 
-  /** Learn what exists, then what it offers. Safe to call on every mount. */
+  /**
+   * Learn which skills and servers exist, and what the servers offer. Tool
+   * discovery waits on the server list only, never on the skills route.
+   * Safe to call again, as on every mount and session change.
+   */
   static async initMcp() {
-    await PgAssistant.loadMcpServers();
-    await PgAssistant.discoverMcpTools();
+    await Promise.all([
+      PgAssistant.loadMcpServers().then(() => PgAssistant.discoverMcpTools()),
+      PgAssistant.loadSkills(),
+    ]);
   }
 
   /**
@@ -1325,8 +1414,16 @@ export class PgAssistant {
   private static _status: AssistantStatus = "idle";
   private static _connection: Connection | null = null;
   private static _pickingBackend = false;
-  private static _enabledSkillIds: readonly string[] = DEFAULT_SKILL_IDS;
+  private static _skills: readonly SkillEntry[] = [];
+  private static _skillsUnavailable = false;
+  // A session change reloads the list, and the older session's answer must not land over it
+  private static _skillsSeq = 0;
+  private static _gatewayServersSeq = 0;
+  // Kept apart from the listed skills, which `loadSkills` replaces whole; in memory only
+  private static _skillChoices: ReadonlyMap<string, boolean> = new Map();
   private static _gatewayServers: readonly McpServerEntry[] = [];
+  // Kept apart from the gateway's list, which `loadMcpServers` replaces whole; in memory only, like `_localServers`
+  private static _gatewayServersOff: ReadonlySet<string> = new Set();
   // Copied, so editing a server in the UI never mutates the registry default
   private static _localServers: readonly McpServerEntry[] =
     LOCAL_MCP_SERVERS.map((server) => ({ ...server }));

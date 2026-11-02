@@ -158,7 +158,7 @@ Also fetch all inline comments:
 gh api --paginate "repos/{owner}/{repo}/pulls/<PR_NUMBER>/comments?per_page=100"
 ```
 
-The REST endpoint does not say which comments are resolved. Count unresolved comments from the review threads query in step E, which walks every page.
+The REST endpoint does not say which comments are resolved. Count unresolved comments from the review threads query in step F, which walks every page.
 
 Also carry forward actionable items from the latest Greptile general PR comment, especially the "Prompt to fix all with AI" section, even if the inline comment endpoint returns zero unresolved comments.
 
@@ -178,7 +178,17 @@ For each unresolved Greptile comment:
 3. If actionable, make the fix.
 4. If informational or a false positive, note it but still resolve the thread.
 
-#### E. Resolve threads
+#### E. Commit and push
+
+```bash
+git add -A
+git commit -m "address greptile review feedback (greploop iteration N)"
+git push
+```
+
+The reply in step F links this commit, so it is pushed first.
+
+#### F. Reply to and resolve threads
 
 Fetch unresolved review threads and resolve all that have been addressed (see [GraphQL reference](references/graphql-queries.md)):
 
@@ -204,6 +214,18 @@ query($owner: String!, $repo: String!, $number: Int!, $endCursor: String) {
 }'
 ```
 
+Before resolving a thread, reply on it with one sentence and a link to the commit that addressed it, so a reader
+of the PR sees what changed without opening the diff. Link through the PR, which shows the commit in its
+context: `https://github.com/OWNER/REPO/pull/PR_NUMBER/commits/FULL_SHA`. For a thread that needed no change,
+the sentence says why, and links the commit that already holds the answer when there is one.
+
+```bash
+gh api graphql -f query='
+mutation($thread: ID!, $body: String!) {
+  addPullRequestReviewThreadReply(input: {pullRequestReviewThreadId: $thread, body: $body}) { comment { url } }
+}' -f thread=THREAD_ID -f body='Fixed in [abc1234](https://github.com/OWNER/REPO/pull/PR_NUMBER/commits/FULL_SHA): the id check now rejects `__`.'
+```
+
 Resolve addressed threads:
 
 ```bash
@@ -212,20 +234,6 @@ mutation {
   t1: resolveReviewThread(input: {threadId: "ID1"}) { thread { isResolved } }
   t2: resolveReviewThread(input: {threadId: "ID2"}) { thread { isResolved } }
 }'
-```
-
-#### F. Commit and push
-
-```bash
-git add -A
-git commit -m "address greptile review feedback (greploop iteration N)"
-git push
-```
-
-Wait for checks to start after push:
-
-```bash
-sleep 5
 ```
 
 Then go back to step **A**.

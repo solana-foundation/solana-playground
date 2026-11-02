@@ -23,84 +23,81 @@ vi.mock("@/features/auth/server.mjs", async (importOriginal) => {
 });
 
 /**
- * The Explorer upstream forwards our protection bypass, so only a signed-in
- * caller on our own origin is offered it. The public Solana upstream stays
- * open to everyone.
+ * Explorer is listed for every caller. Its token and bot-protection bypass are
+ * the deployment's, so they ride only on a signed-in caller's requests from
+ * this site; anyone else reaches Explorer without them.
  */
-describe("/api/mcp with the Explorer bypass configured", () => {
+describe("/api/mcp with the Explorer credentials configured", () => {
   beforeEach(() => {
     vi.stubEnv("MCP_EXPLORER_BYPASS", "bypass-secret");
+    vi.stubEnv("MCP_EXPLORER_TOKEN", "token-secret");
+    vi.stubEnv("AUTH_BASE_URL", "https://app.test");
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.restoreAllMocks();
   });
 
-  const serverIds = async (headers: Record<string, string> = {}) => {
-    const res = await postJson(handler, "", { method: "GET", headers });
-    return jsonBody<{ servers: Array<{ id: string }> }>(res).servers.map(
-      (s) => s.id
-    );
-  };
-
-  it("hides Explorer from a signed-in caller on another site", async () => {
-    session.state = "signed-in";
-    vi.stubEnv("AUTH_BASE_URL", "https://app.test");
-    expect(await serverIds({ origin: "https://elsewhere.test" })).toEqual([
-      "solana",
-    ]);
-  });
-
-  it.each(["signed-out", "unavailable"] as const)(
-    "hides Explorer when the session is %s",
-    async (state) => {
-      session.state = state;
-      expect(await serverIds()).toEqual(["solana"]);
-    }
-  );
-
-  it("offers Explorer to a signed-in caller", async () => {
-    session.state = "signed-in";
-    expect(await serverIds()).toEqual(["solana", "explorer"]);
-  });
-
-  // Telling a signed-in caller to sign in sends them round a loop that cannot end
-  it.each([
+  const CALLERS = [
+    ["a signed-in caller on this site", "signed-in", undefined],
+    ["a signed-out caller", "signed-out", undefined],
+    ["a caller whose session lookup failed", "unavailable", undefined],
     [
       "a signed-in caller on another site",
       "signed-in",
       "https://elsewhere.test",
-      /only to requests from this site/,
     ],
-    [
-      "a caller whose session lookup failed",
-      "unavailable",
-      undefined,
-      /Sign-in is unavailable right now/,
-    ],
-    [
-      "a signed-out caller",
-      "signed-out",
-      undefined,
-      /Sign in with GitHub to use explorer/,
-    ],
-  ] as const)(
-    "tells %s why Explorer is withheld",
-    async (_label, state, origin, hint) => {
+  ] as const;
+
+  it.each(CALLERS)("lists Explorer to %s", async (_label, state, origin) => {
+    session.state = state;
+
+    const res = await postJson(handler, "", {
+      method: "GET",
+      headers: origin ? { origin } : {},
+    });
+
+    expect(
+      jsonBody<{ servers: Array<{ id: string }> }>(res).servers.map((s) => s.id)
+    ).toEqual(["solana", "explorer"]);
+  });
+
+  /** The bypass and authorization headers of every request the gateway made to Explorer, one entry per request */
+  const credentialsSent = async (origin?: string) => {
+    const upstream = vi.spyOn(globalThis, "fetch").mockImplementation(
+      async () =>
+        new Response('{"jsonrpc":"2.0","id":1,"result":{"tools":[]}}', {
+          headers: { "content-type": "application/json" },
+        })
+    );
+
+    await postJson(handler, '{"jsonrpc":"2.0","id":1,"method":"tools/list"}', {
+      url: "/api/mcp?server=explorer",
+      headers: origin ? { origin } : {},
+    });
+
+    expect(upstream).toHaveBeenCalled();
+    return upstream.mock.calls.map(([, init]) => {
+      const headers = init?.headers as Record<string, string>;
+      return `${headers["x-vercel-protection-bypass"]} ${headers.authorization}`;
+    });
+  };
+
+  it("sends the bypass and the token for a signed-in caller on this site", async () => {
+    session.state = "signed-in";
+    expect(new Set(await credentialsSent())).toEqual(
+      new Set(["bypass-secret Bearer token-secret"])
+    );
+  });
+
+  it.each(CALLERS.slice(1))(
+    "sends neither the bypass nor the token for %s",
+    async (_label, state, origin) => {
       session.state = state;
-      vi.stubEnv("AUTH_BASE_URL", "https://app.test");
-
-      const res = await postJson(
-        handler,
-        '{"jsonrpc":"2.0","id":1,"method":"initialize"}',
-        {
-          url: "/api/mcp?server=explorer",
-          headers: origin ? { origin } : {},
-        }
+      expect(new Set(await credentialsSent(origin))).toEqual(
+        new Set(["undefined undefined"])
       );
-
-      expect(res.statusCode).toBe(400);
-      expect(jsonBody(res).error).toMatch(hint);
     }
   );
 });

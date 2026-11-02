@@ -97,6 +97,7 @@ const CALLED_PATHS = [
   "/api/health",
   "/api/mcp",
   "/api/projects",
+  "/api/skills",
   "/api/sync",
 ];
 

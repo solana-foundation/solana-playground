@@ -14,6 +14,7 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { createProvider } from "./provider";
+import { MODEL_PROVIDER_PROFILES } from "./model-providers";
 import { ModelBusyError } from "./model-busy";
 import { TurnFailure } from "./types";
 import {
@@ -290,6 +291,34 @@ describe("the assistant's provider", () => {
       reason: "paused",
     });
     expect(sent).toHaveLength(MAX_RESUMES + 1);
+  });
+
+  describe("A profile that declares no tool support", () => {
+    afterEach(() => {
+      MODEL_PROVIDER_PROFILES.openai.supportsTools = true;
+    });
+
+    it.each([
+      [true, ["write_file"]],
+      [false, undefined],
+    ])(
+      "with supportsTools %s, the request declares tools %j",
+      async (supportsTools, declared) => {
+        MODEL_PROVIDER_PROFILES.openai.supportsTools = supportsTools;
+        const sent = respond(openAiText("Hi."));
+
+        await createProvider({
+          id: "openai",
+          apiKey: KEY,
+          endpoint: { baseUrl: "https://llm.test/v1", model: "m" },
+        }).send("hi");
+
+        const tools = sent[0].body.tools as
+          | Array<{ function: { name: string } }>
+          | undefined;
+        expect(tools?.map((tool) => tool.function.name)).toEqual(declared);
+      }
+    );
   });
 
   it("sends the default backend's requests to the assistant's route", async () => {

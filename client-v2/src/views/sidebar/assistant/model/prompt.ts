@@ -55,7 +55,7 @@ export const systemPrompt = () =>
   [
     BEHAVIOUR,
     `Skills you can load with load_skill:\n\n${describeCatalog(
-      PgAssistant.enabledSkillIds
+      PgAssistant.enabledSkills
     )}`,
     assistantContext,
   ].join("\n\n---\n\n");

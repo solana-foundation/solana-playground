@@ -243,7 +243,13 @@ Honesty rule for the demo — never present a mocked step as working.
   Explorer link after a deploy.
 - **Real:** the skills — fetched from the Foundation's own repository at
   `raw.githubusercontent.com`, not copies bundled and left to rot. Only the
-  playground-environment skill is bundled, so something always loads offline.
+  playground-environment skill's text is bundled. Which skills exist is the
+  server's decision: the Sources tab lists what the deployment's `/api/skills`
+  route offers, the same list for every backend, and a skill the deployment
+  leaves out is absent. When that route cannot be reached, the panel has no
+  skills. One community skill is listed, Surfpool, for a local network on
+  localhost:8899. It starts switched off, is read from a fixed commit of its
+  repository, and reaches the model only once the user checks it.
 - **Real, behind a capability probe:** conversation and project sync. The
   client asks `/api/sync` whether the deployment has a database and stays
   purely local when it does not, so signing out or deploying without one
@@ -278,10 +284,10 @@ Honesty rule for the demo — never present a mocked step as working.
   `program_autofixer`. That server sends no CORS headers, so a page cannot call
   it; our gateway does, which means the tools work with no Anthropic key at all
   — including in a console with no model connected. The Explorer MCP goes
-  through the same gateway and stays off unless the deployment configures its
-  bypass secret; you cannot switch it on from the panel alone. Which applies is
-  a property of each server, shown in the Sources tab, not of the backend you
-  picked.
+  through the same gateway and is listed for everyone, signed in or not. Each
+  server and each skill has a checkbox in the Sources tab; one switched off
+  offers nothing to the next turn, and the choice lasts until the page
+  reloads.
 - **Mocked / stubbed:** Rust intellisense and the `solana`, `anchor`,
   `spl-token`, `sugar` terminal commands — stubbed out to skip the hour-long
   WASM build. They throw a clear message pointing at `wasm/build.sh`.

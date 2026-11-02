@@ -11,4 +11,5 @@ export {
   sameConnection,
 } from "./model/mcp-client";
 export type { McpTool } from "./model/mcp-client";
+export { mcpTelemetry } from "./model/telemetry";
 export type { McpServerEntry } from "./model/types";
