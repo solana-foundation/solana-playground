@@ -122,10 +122,7 @@ Production SHALL move to Cloud SQL without copying data: the production
 Neon project holds no user data to keep, so `solpg` starts empty. Every
 migration SHALL be applied to `solpg`, under the production IAM user's role,
 before Production's variables name it. Sync SHALL stay on throughout; nothing
-is frozen, because nothing moves. Until the production Neon project is
-deleted, restoring `DATABASE_URL` and `DB_PROVIDER=url` on Production and
-redeploying SHALL be a complete rollback, and anything written to `solpg`
-in between is test data and may be lost.
+is frozen, because nothing moves.
 
 #### Scenario: solpg is ready before the switch (manual)
 
@@ -143,6 +140,12 @@ in between is test data and may be lost.
   `migrate-production-db` names `solpg` and reports nothing to apply, and a
   sign-in followed by a project edit on the production domain writes a row to
   `solpg`
+
+### Requirement: The production Neon project is the rollback
+
+Until the production Neon project is deleted, restoring `DATABASE_URL` and
+`DB_PROVIDER=url` on Production and redeploying SHALL be a complete rollback.
+Anything written to `solpg` in between is test data and may be lost.
 
 #### Scenario: Rollback after the switch (manual)
 
@@ -187,7 +190,7 @@ repository, with each value specific to this deployment as a placeholder.
 
 #### Scenario: The setup steps are complete (manual)
 
-- **WHEN** a reviewer compares the guide with tasks 2.1, 2.3, and 3.1
+- **WHEN** a reviewer compares the guide with tasks 2.1, 2.5, 2.6, and 3.1
 - **THEN** every `gcloud`, `vercel`, `gh`, and SQL command those tasks ran is
   in the guide, in the order it must run, and no project id, team, instance
   address, or e-mail address appears except as a placeholder
@@ -200,7 +203,9 @@ repository, with each value specific to this deployment as a placeholder.
   their conditional bindings, the IAM database users and role memberships),
   Vercel (the OIDC issuer mode, the variables per environment, the function
   region), GitHub (the repository variables and secrets the preview workflows
-  read, the `preview` and `preview:cloud-sql` labels), and adding an operator
+  read, `PREVIEW_DB_PROVIDER`, the `preview` label), the shared preview
+  database `solpg_preview` and `preview-shared-db.yml`, which migrates it, and
+  adding an operator
 
 #### Scenario: The guide is the runbook for the cutover and its rollback (manual)
 

@@ -2,40 +2,99 @@
 
 ## Purpose
 
-A preview deployment's own database: where it lives, what it is called, what
-it starts with, how it is migrated and dropped, and the guarantee that no
+The databases preview deployments read: the shared one every preview starts
+on, and a labelled PR's own; where they live, what they are called, what they
+start with, how they are migrated and dropped, and the guarantee that no
 preview, whatever its label or variables, can reach the production database.
 
 ## ADDED Requirements
 
-### Requirement: The preview label chooses the database host
+### Requirement: Every preview reads the shared preview database
 
-A PR labelled `preview` SHALL get a Neon branch `preview/pr-<number>` cut from
-`main` of the preview Neon project, as before. A PR labelled
-`preview:cloud-sql` SHALL instead get a database of its own on the Cloud SQL
-instance `solpg-preview`, and its deployment SHALL run with
-`DB_PROVIDER=cloud-sql`. A PR carrying both labels SHALL get the Cloud SQL
-database. A laptop deploy through `Makefile.vercel` SHALL choose the host the
-same way through `DB_PROVIDER`.
+The Preview environment on Vercel SHALL set `DB_PROVIDER=cloud-sql` and
+`CLOUD_SQL_DATABASE=solpg_preview` on instance `solpg-preview`, so every
+preview the Git integration builds, for any PR, reads and writes the shared
+database `solpg_preview` with no workflow run before it.
 
-#### Scenario: A Neon preview (manual)
+#### Scenario: An unlabelled PR's preview (manual)
 
-- **WHEN** the `preview` label is added to a PR
-- **THEN** the PR comment names the Neon branch `preview/pr-<number>`, and
-  `GET /api/sync` on the preview URL answers `{ "enabled": true, "db": "ok" }`
+- **WHEN** a PR without the `preview` label is pushed to and the Git
+  integration deploys it
+- **THEN** `GET /api/sync` on that deployment answers
+  `{ "enabled": true, "db": "ok" }`, and the instance's log shows the Preview
+  IAM database user connecting to `solpg_preview`
 
-#### Scenario: A Cloud SQL preview (manual)
+### Requirement: The shared preview database is migrated from master only
 
-- **WHEN** the `preview:cloud-sql` label is added to a PR
+`preview-shared-db.yml` SHALL migrate `solpg_preview` and then
+`solpg_preview_base` on every push to `master` that changes a file under
+`client-v2/db/migrations`, and on manual dispatch, through the Cloud SQL Auth
+Proxy under the preview IAM database user's role. No workflow that runs on
+`pull_request` SHALL migrate either database.
+
+#### Scenario: A migration lands on master (manual)
+
+- **WHEN** a PR that adds a migration is merged into `master`
+- **THEN** the `preview-shared-db.yml` run for that push applies it to
+  `solpg_preview` and to `solpg_preview_base`, the tables it creates are owned
+  by the preview IAM database user, and the base again refuses connections
+
+#### Scenario: A PR's run leaves the shared database alone (manual)
+
+- **WHEN** a reviewer reads every workflow triggered by `pull_request`
+- **THEN** none passes `shared` to `migration-url` or runs
+  `migrate-preview-base`
+
+### Requirement: A PR that changes migrations is told to take its own database
+
+On a PR without the `preview` label that adds, changes, or removes a file
+under `client-v2/db/migrations`, `preview.yml` SHALL write the PR's preview
+comment saying the automatic preview reads `solpg_preview`, which lacks the
+PR's migrations, and that the `preview` label gives the PR a database that has
+them. A PR from a fork, whose token cannot comment, SHALL get the same text as
+a warning in the job summary.
+
+#### Scenario: An unlabelled PR adds a migration (manual)
+
+- **WHEN** a PR without the label is pushed to with a new file under
+  `client-v2/db/migrations`
+- **THEN** the PR's preview comment names the shared database and suggests
+  the `preview` label
+
+#### Scenario: The label is added (manual)
+
+- **WHEN** that PR is then labelled `preview`
+- **THEN** no new notice is written, and the deploy's comment replaces it
+
+#### Scenario: A PR without migrations (manual)
+
+- **WHEN** an unlabelled PR changes no file under `client-v2/db/migrations`
+- **THEN** no notice is written
+
+### Requirement: The preview label gives a PR its own database
+
+While the repository variable `PREVIEW_DB_PROVIDER` is `cloud-sql`, a PR
+labelled `preview` SHALL get a database of its own on `solpg-preview`, and its
+deployment from `preview.yml` SHALL run with `DB_PROVIDER=cloud-sql` and that
+database as `CLOUD_SQL_DATABASE`. While the variable is unset, the label SHALL
+get a Neon branch `preview/pr-<number>` cut from `main` of the preview Neon
+project, as before. A laptop deploy through `Makefile.vercel` SHALL choose
+the host through `DB_PROVIDER`.
+
+#### Scenario: A labelled Cloud SQL preview (manual)
+
+- **WHEN** `PREVIEW_DB_PROVIDER` is `cloud-sql` and the `preview` label is added
+  to a PR
 - **THEN** the PR comment names the database `solpg_preview_pr_<number>` on
   `solpg-preview`, and `GET /api/sync` on the preview URL answers
   `{ "enabled": true, "db": "ok" }`
 
-#### Scenario: Both labels (manual)
+#### Scenario: A labelled Neon preview (manual)
 
-- **WHEN** a PR carries `preview` and `preview:cloud-sql`
-- **THEN** one deployment is made, against the Cloud SQL database, and no Neon
-  branch is created for the PR
+- **WHEN** `PREVIEW_DB_PROVIDER` is unset and the `preview` label is added to a
+  PR
+- **THEN** the PR comment names the Neon branch `preview/pr-<number>`, and no
+  Cloud SQL database is created for the PR
 
 ### Requirement: A Cloud SQL preview database is named after its PR
 
@@ -46,7 +105,7 @@ the provisioning scripts.
 
 #### Scenario: A PR's database (manual)
 
-- **WHEN** PR 42 is labelled `preview:cloud-sql`
+- **WHEN** PR 42 is labelled `preview`
 - **THEN** its database is `solpg_preview_pr_42`
 
 Checked by the test "names a PR's database by its number" in
@@ -97,7 +156,7 @@ SHALL have every table owned by the preview IAM database user.
 
 #### Scenario: A new preview starts from the base (manual)
 
-- **WHEN** a PR is first labelled `preview:cloud-sql`
+- **WHEN** a PR is first labelled `preview`
 - **THEN** its database holds the base's rows, and dbmate applies only the
   migrations under `client-v2/db/migrations` that the base lacks
 
@@ -109,7 +168,7 @@ SHALL have every table owned by the preview IAM database user.
 
 ### Requirement: A Cloud SQL preview database is migrated on every deploy
 
-Each deploy of a `preview:cloud-sql` PR SHALL create the database when it does
+Each deploy of a `preview` PR SHALL create the database when it does
 not exist and SHALL apply pending migrations to it through the Cloud SQL Auth
 Proxy, under the preview IAM database user's role, before the deployment is
 built. A failed creation or migration SHALL fail the deploy and SHALL be
@@ -131,7 +190,7 @@ reported on the PR, and the earlier preview, if any, SHALL keep serving.
 
 ### Requirement: A Cloud SQL preview database is dropped with its preview
 
-When the `preview:cloud-sql` label is removed or the PR is closed, the
+When the `preview` label is removed or the PR is closed, the
 workflow SHALL drop the PR's database and edit the PR comment to say so. The
 daily sweep SHALL drop every `solpg_preview_pr_<number>` database older than
 its minimum age whose PR is no longer open and labelled, and SHALL touch no
@@ -139,7 +198,7 @@ other database on any instance.
 
 #### Scenario: Label removed (manual)
 
-- **WHEN** `preview:cloud-sql` is removed from an open PR
+- **WHEN** `preview` is removed from an open PR
 - **THEN** the database no longer exists on `solpg-preview`, and the PR comment
   says it was dropped
 
@@ -153,8 +212,9 @@ other database on any instance.
 #### Scenario: The sweep leaves the base and laptop databases (manual)
 
 - **WHEN** the sweep runs
-- **THEN** it drops no database outside `solpg_preview_pr_*`, so
-  `solpg_preview_base` and every `solpg_preview_br_*` remain; and it lists
+- **THEN** it drops no database whose name is not `solpg_preview_pr_`
+  followed by digits, so `solpg_preview`, `solpg_preview_base`, and every
+  `solpg_preview_br_*` remain; and it lists
   databases on `solpg-preview` only, never connecting to `solpg`
 
 ### Requirement: No preview or CI identity holds a role on the production instance
@@ -189,12 +249,14 @@ its role.
 
 The workflows and `Makefile.vercel` SHALL derive a Cloud SQL preview
 database's name from the PR number or, for a laptop deploy, the git branch,
-with no input, label, or variable that can name another database.
+with no input, label, or variable that can name another database. The one
+fixed name, `solpg_preview`, SHALL be set in the Preview environment on Vercel
+and passed by no workflow to a deployment.
 
 #### Scenario: No way to name another database (manual)
 
 - **WHEN** a reviewer reads `preview.yml`, `preview-sweep.yml`, and
   `Makefile.vercel`
-- **THEN** every `CLOUD_SQL_DATABASE` value is the output of the naming
-  module applied to the PR number or the git branch, and no workflow input or
-  make variable sets it
+- **THEN** every `CLOUD_SQL_DATABASE` value they pass is the output of the
+  naming module applied to the PR number or the git branch, and no workflow
+  input or make variable sets it

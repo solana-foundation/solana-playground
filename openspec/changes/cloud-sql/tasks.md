@@ -77,40 +77,77 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       the `vercel-preview` role, and `github-ci` `CREATEDB`. Create
       `solpg_preview_base` owned by `vercel-preview`, apply every migration to it
       under that role, and set `IS_TEMPLATE true` and `ALLOW_CONNECTIONS false`.
-      Verify by running `cloud-sql-proxy` on a laptop as `github-ci` through its
-      federation, cloning the base with `psql` as its IAM user and dropping the
-      clone; by `gcloud projects get-iam-policy` showing no `github-ci` binding on
-      `solpg`; and by the document listing every `gcloud` command run. Ticket to
-      file.
-- [ ] 2.2 `preview.yml`: a `preview:cloud-sql` path beside `preview`
-      (Cloud SQL wins when both labels are present) that authenticates with
-      `google-github-actions/auth` through the GitHub federation, runs
-      `create-preview-db` and dbmate through `migration-url`, deploys with
-      `-e DB_PROVIDER=cloud-sql -e CLOUD_SQL_DATABASE=<name>` plus the Preview
-      environment's `CLOUD_SQL_*` and `GCP_*` variables, and names the database in
-      the PR comment; teardown runs `drop-preview-db`. `preview-sweep.yml`: list
-      `solpg_preview_pr_*` on `solpg-preview` through the proxy and drop those
-      whose PR is closed or unlabelled, honouring `MIN_AGE_MINUTES` and `dry_run`,
-      and never touching `solpg_preview_base` or `solpg_preview_br_*`.
-      Document the label in `client-v2/docs/neon.md` (renamed to
+      Create the shared database `solpg_preview` owned by `vercel-preview` and
+      apply every migration to it under that role. Verify by running
+      `cloud-sql-proxy` on a laptop as `github-ci` through its federation,
+      cloning the base with `psql` as its IAM user and dropping the clone; by
+      `\dt` on `solpg_preview` showing every table owned by `vercel-preview`; by
+      `gcloud projects get-iam-policy` showing no `github-ci` binding on `solpg`;
+      and by the document listing every `gcloud` command run. Ticket to file.
+- [ ] 2.2 `preview.yml`: the `preview` label's path chosen by the repository
+      variable `PREVIEW_DB_PROVIDER`. With `cloud-sql`, the deploy job
+      authenticates with `google-github-actions/auth` through the GitHub
+      federation, runs `scripts/db/cloud-sql/create-preview-db` and dbmate
+      through `migration-url`, deploys with
+      `-e DB_PROVIDER=cloud-sql -e CLOUD_SQL_DATABASE=<name>` over the Preview
+      environment's `CLOUD_SQL_*` and `GCP_*` variables, and names the database
+      in the PR comment; teardown runs `drop-preview-db`. Unset, the Neon path
+      runs unchanged. The jobs run where `PREVIEW_REPOSITORY` names the
+      repository and either `NEON_PROJECT_ID` is set or `PREVIEW_DB_PROVIDER` is
+      `cloud-sql`. `preview-sweep.yml`: with `cloud-sql`, list the databases on
+      `solpg-preview` matching `^solpg_preview_pr_[0-9]+$` through the proxy and
+      drop those whose PR is closed or unlabelled, honouring `MIN_AGE_MINUTES`
+      and `dry_run`, and never touching `solpg_preview`, `solpg_preview_base`,
+      or `solpg_preview_br_*`. Document the label, the variable, and the shared
+      database in `client-v2/docs/neon.md` (renamed to
       `client-v2/docs/preview-databases.md`, with `neon.md` left as a one-line
-      pointer), including the base and when to run `migrate-preview-base`, and the
-      Preview variables in `deploy-client-vercel.md`. Verify with
-      a labelled PR whose comment names the database and whose preview URL
-      answers `{ "enabled": true, "db": "ok" }` on `GET /api/sync`; removing the
-      label drops the database; a dry-run sweep lists nothing for an open labelled
-      PR. Depends on 1.2, 1.3, 2.1. Ticket to file.
-- [ ] 2.3 Add the gates that are not code to `client-v2/docs/cloud-sql.md`
+      pointer). Verify with a labelled PR whose comment names the database and
+      whose preview URL answers `{ "enabled": true, "db": "ok" }` on
+      `GET /api/sync`; removing the label drops the database; a dry-run sweep
+      lists nothing for an open labelled PR and never lists `solpg_preview`.
+      Depends on 1.2, 1.3, 2.1. Ticket to file.
+- [ ] 2.3 `preview-shared-db.yml`, on push to `master` that changes
+      `client-v2/db/migrations/**` and on `workflow_dispatch`, gated like
+      `preview.yml` on `PREVIEW_REPOSITORY` and `PREVIEW_DB_PROVIDER=cloud-sql`:
+      authenticate as `github-ci`, migrate `solpg_preview` through
+      `scripts/db/cloud-sql/migration-url shared`, then run
+      `migrate-preview-base`. One concurrency group, never cancelled mid-run.
+      Verify with a dispatch run that reports nothing to apply on both, and a
+      merge adding a migration whose run applies it to both. Depends on 1.3,
+      2.1. Ticket to file.
+- [ ] 2.4 Migration notice in `preview.yml`: a job on `opened`, `reopened`,
+      and `synchronize` of a PR without the `preview` label that lists the PR's
+      files (`gh pr view --json files`) and, when any is under
+      `client-v2/db/migrations`, writes the preview comment through
+      `.github/scripts/preview-comment.sh` naming `solpg_preview` and
+      suggesting the label; on a PR from a fork, a `::warning::` and a step
+      summary instead. Runs wherever the deploy job could. Verify with a PR
+      adding a migration (comment written), the same PR labelled (comment
+      replaced by the deploy's), and a PR without one (no comment).
+      Depends on 2.2. Ticket to file.
+- [ ] 2.5 Vercel, by hand, written up in `client-v2/docs/cloud-sql.md` and
+      `deploy-client-vercel.md`: on the Preview environment set
+      `DB_PROVIDER=cloud-sql`, `CLOUD_SQL_INSTANCE`, `CLOUD_SQL_USER`, the
+      `GCP_*` variables, and `CLOUD_SQL_DATABASE=solpg_preview`, and remove
+      `DATABASE_URL`; on GitHub set `PREVIEW_DB_PROVIDER=cloud-sql` and the
+      federation variables. Verify with an unlabelled PR's Git-integration
+      preview answering `{ "enabled": true, "db": "ok" }` on `GET /api/sync`.
+      Depends on 2.1, 2.3. Ticket to file.
+- [ ] 2.6 Add the gates that are not code to `client-v2/docs/cloud-sql.md`
       with their check commands: the `vercel-preview` and `github-ci` bindings
-      conditioned on `solpg-preview`, and the reviewer check that no workflow input or make
-      variable sets `CLOUD_SQL_DATABASE`. Verify by running each check command
-      and pasting its output into the PR. Depends on 2.2. Ticket to file.
-- [ ] 2.4 Walk through every `(manual)` scenario of `client-v2-preview-database`
-      and the preview scenarios of `client-v2-database-provider` on a PR labelled
-      `preview:cloud-sql`: sign-in, a project edited in one browser appearing in
-      a second, a pushed migration applied, the label removed. Record the results
-      in that PR, with the cold and warm latency of `GET /api/sync` and the
-      functions' region. Depends on 2.2. Ticket to file.
+      conditioned on `solpg-preview`, and the reviewer checks that no workflow
+      input or make variable sets `CLOUD_SQL_DATABASE` and that no
+      `pull_request` workflow migrates `solpg_preview`. Verify by running each
+      check command and pasting its output into the PR. Depends on 2.2, 2.3.
+      Ticket to file.
+- [ ] 2.7 Walk through every `(manual)` scenario of `client-v2-preview-database`
+      and the preview scenarios of `client-v2-database-provider` on an
+      unlabelled PR and on a PR labelled `preview`: sign-in, a project edited
+      in one browser appearing in a second, a pushed migration applied to the
+      labelled PR's database and noticed on the unlabelled one, the label
+      removed. Record the results in that PR, with the cold and warm latency of
+      `GET /api/sync` and the functions' region. Depends on 2.4, 2.5. Ticket to
+      file.
 
 ## 3. Production on Cloud SQL
 
@@ -141,7 +178,7 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       Neon host and "nothing to apply" while Production is on `url`, and
       `dbmate status` through `migration-url production` as an operator listing
       every migration pending on `solpg`. Depends on 1.3, 2.1. Ticket to file.
-- [ ] 3.2 Cutover, after 2.4's results are recorded, with sync on throughout:
+- [ ] 3.2 Cutover, after 2.7's results are recorded, with sync on throughout:
       confirm with the team that production still has no users, and stop if it
       has (a copy behind a freeze is then needed, outside this change); apply
       every migration to `solpg` with
@@ -157,7 +194,7 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       gotcha on the production database. Verify by `\dt` showing every table
       owned by the production user before the switch, the `GET /api/sync`
       body after it, and a sign-in and project edit on the production domain
-      writing a row to `solpg`, all recorded in the PR. Depends on 2.4, 3.1.
+      writing a row to `solpg`, all recorded in the PR. Depends on 2.7, 3.1.
       Ticket to file.
 - [ ] 3.3 Add a `smoke` job to `client-v2.yml` on push to `master` that waits
       for the Vercel deployment of the pushed commit and fails unless its
@@ -175,5 +212,5 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       `deploy-client-vercel.md` and `preview-databases.md`. Verify by the
       four `(manual)` scenarios of "A maintainer guide sets the pipeline up
       from nothing" in `client-v2-production-database`, checked on the PR by
-      someone who did not run tasks 2.1 and 3.1. Depends on 2.3, 3.2. Ticket
+      someone who did not run tasks 2.1, 2.5, and 3.1. Depends on 2.6, 3.2. Ticket
       to file.
