@@ -114,7 +114,7 @@ const doAllFour = async () => {
 it("counts the default network as done on a fresh device", () => {
   draw();
   expect(title()?.textContent).toBe("Get set up· 1 of 4");
-  expect(screen.getByText("devnet")).toBeTruthy();
+  expect(screen.getByText("Devnet")).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Choose a network" })).toBeNull();
 });
 

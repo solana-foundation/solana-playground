@@ -67,7 +67,7 @@ const SetupList = ({
   const steps: StepView[] = SETUP_STEPS.map((step): StepView => {
     // A network is always chosen: Devnet until the user picks another
     if (step === "network") {
-      return { step, done: true, value: cluster ?? undefined };
+      return { step, done: true, value: clusterName(cluster) ?? undefined };
     }
     const { done, value } = states[step];
     return done ? { step, done, value } : { step, done };
