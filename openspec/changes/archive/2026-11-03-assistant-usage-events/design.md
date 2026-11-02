@@ -89,6 +89,36 @@ store cuts off without a Stop (its thread closed, the backend changed) is
 aborted the same way and ends with no outcome event; it is rare and not the
 user's action, so it is accepted rather than given a fifth event.
 
+### A busy model's resend is the same turn
+
+The busy-model retry (`ModelBusyError`, Spec 08 AI-03) landed after this
+design: a 429 that is not the daily cap makes `runTurn` count down and send
+the same message again through `waitOnBusy` and `resend`, up to
+`BUSY_RETRIES` times. One message is one turn however many requests it
+takes, so:
+
+- `assistant_turn_sent` goes out on the first attempt only.
+- A busy answer that schedules a resend sends no outcome; the resend's
+  outcome is the turn's.
+- A wait that gives up (the retries are spent, or the server asks for longer
+  than `BUSY_WAIT_MAX_SECONDS`) sends `assistant_turn_failed` with reason
+  `provider` and the busy status.
+- Stop during the countdown sends `assistant_turn_stopped`, whose TSDoc
+  widens to say so; today that path sends nothing.
+- A resend refused because the model changed meanwhile (`NOT_RESENT`) sends
+  `assistant_turn_failed` with reason `other`.
+- A wait dropped because the conversation changed sends nothing, like a turn
+  the store cuts off.
+
+### A dropped connection is reason `provider`
+
+A failure that is not a `TurnFailure` is reason `other`, except a dropped
+connection (`isDroppedConnection`: the fetch failing before `runTurn`, or an
+`AiTurnError` of kind `network`), which is reason `provider` with no status:
+the requirement's own words, "the backend did not answer". A key the backend
+rejects reaches the hook as a `TurnFailure` with status 401 and is reported
+as failed `provider` `401`, next to the existing `assistant_key_rejected`.
+
 ### `capped` is HOO-1751's limit refusal, both kinds
 
 The provider maps a `backendRefusal` of kind `signed-out` to the session

@@ -1,7 +1,6 @@
-# Spec Delta
+# client-v2-assistant-usage Specification
 
 ## Purpose
-
 What the assistant reports about each turn it sends to a model: which
 backend took it and how it ended, so AI usage and refusals can be measured
 without reading a prompt, a reply or a key.
@@ -12,7 +11,7 @@ through the memory provider, in `provider.test.ts` for the failure reasons
 and `use-turn.test.tsx` for the events, and can be checked by hand in GA4's
 DebugView on a deployment with a measurement id.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: Every turn is reported once as sent and once as ended
 
@@ -21,7 +20,53 @@ handed to the backend, and exactly one of `assistant_turn_answered`,
 `assistant_turn_failed`, `assistant_turn_capped` or `assistant_turn_stopped`
 when that turn ends. `provider` is `default`, `anthropic`, `openai`,
 `openrouter` or `gemini`. A send that finds no backend, or is refused
-because another turn runs, sends nothing.
+because another turn runs, sends nothing. A message the assistant sends again
+after the model answered busy is the same turn: it is reported as sent once,
+and ends with one outcome once the waiting is over. Two endings send no
+outcome and are accepted: a turn the panel cuts off without a Stop (its
+thread closed, the backend changed, the user signed out), and a busy message
+dropped because the conversation changed while it waited. A turn whose
+backend answered with nothing at all is answered, though the thread shows it
+as an error.
+
+#### Scenario: A stop that lands as the answer completes (manual)
+
+- **WHEN** a user presses Stop and the backend's answer completes anyway
+- **THEN** `assistant_turn_stopped` is the turn's only outcome
+
+#### Scenario: A turn cut off by a backend change (manual)
+
+- **WHEN** the user connects another backend before the turn ends
+- **THEN** `assistant_turn_sent` is sent and no outcome follows
+
+#### Scenario: A busy model answers on the resend (manual)
+
+- **WHEN** the model answers a turn busy, and answers the message sent again
+  after the countdown
+- **THEN** `assistant_turn_sent` is sent once and `assistant_turn_answered`
+  once
+
+#### Scenario: A busy model the assistant gives up on (manual)
+
+- **WHEN** the model keeps answering busy with a 429 until the assistant
+  stops sending the message again, or asks to wait longer than the assistant
+  counts down
+- **THEN** `assistant_turn_sent` is sent once and `assistant_turn_failed`
+  once, with reason `provider` and the busy answer's status, `429`
+
+#### Scenario: The model changes during a busy countdown (manual)
+
+- **WHEN** the user picks another model while a busy message waits to be
+  sent again
+- **THEN** `assistant_turn_failed` is sent with reason `other` and the
+  provider the turn was sent to
+
+#### Scenario: A stop during a busy countdown (manual)
+
+- **WHEN** a user presses Stop while the assistant counts down to sending a
+  busy message again
+- **THEN** `assistant_turn_sent` and `assistant_turn_stopped` are sent, and
+  no other outcome
 
 #### Scenario: An answered turn (manual)
 
@@ -61,6 +106,12 @@ absent when there was none.
 - **WHEN** the backend answers a turn with a 500
 - **THEN** `assistant_turn_failed` is sent with reason `provider` and status
   `500`
+
+#### Scenario: The connection drops (manual)
+
+- **WHEN** the connection to the backend drops during a turn
+- **THEN** `assistant_turn_failed` is sent with reason `provider` and no
+  status
 
 #### Scenario: The model refuses the prompt (manual)
 
