@@ -1,3 +1,4 @@
+import { clusterName } from "@/constants";
 import { useEffect } from "react";
 
 import { isSetupRejected } from "@/commands/connect/setup-rejected";

@@ -3,12 +3,26 @@ import { useEffect, useState } from "react";
 import { PgSession } from "../../../features/auth";
 import { PgCommand, PgConnection } from "../../../utils";
 
+/**
+ * Whether the current cluster has a faucet. `unknown` until the cluster is
+ * read, so the menu neither offers Airdrop nor says there is no faucet before
+ * it can tell.
+ */
+export type Faucet = "unknown" | "available" | "none";
+
+const faucetOf = (cluster: unknown): Faucet => {
+  if (!cluster) return "unknown";
+  return typeof PgConnection.getAirdropAmount() === "number"
+    ? "available"
+    : "none";
+};
+
 export const useAirdrop = () => {
-  const [airdropCondition, setAirdropCondition] = useState(false);
+  const [faucet, setFaucet] = useState(() => faucetOf(PgConnection.cluster));
 
   useEffect(() => {
-    const { dispose } = PgConnection.onDidChangeCluster(() => {
-      setAirdropCondition(!!PgConnection.getAirdropAmount());
+    const { dispose } = PgConnection.onDidChangeCluster((cluster) => {
+      setFaucet(faucetOf(cluster));
     });
     return dispose;
   }, []);
@@ -20,5 +34,5 @@ export const useAirdrop = () => {
     await PgCommand.airdrop.execute();
   };
 
-  return { airdrop, airdropCondition };
+  return { airdrop, faucet };
 };

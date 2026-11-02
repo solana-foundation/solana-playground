@@ -30,6 +30,7 @@ import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import { importedText } from "./imported-text";
 import { useAirdrop, useDarken } from "./hooks";
 import { isSignInFailure } from "../../features/auth";
+import { NO_FAUCET } from "../../commands/airdrop/no-faucet";
 import { useCopy } from "../../hooks";
 
 const log = createLogger("wallet:settings");
@@ -81,7 +82,7 @@ interface SettingsProps {
 const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
   showRename,
 }) => {
-  const { airdrop, airdropCondition } = useAirdrop();
+  const { airdrop, faucet } = useAirdrop();
   const { darken, lighten } = useDarken();
 
   const wallet = PgWallet.current!;
@@ -131,7 +132,7 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
             <Copy />
             <MenuItemText>Copy address</MenuItemText>
           </DropdownMenuItem>
-          {airdropCondition && (
+          {faucet === "available" && (
             <DropdownMenuItem
               onSelect={() => {
                 airdrop().catch((error: unknown) => {
@@ -144,6 +145,12 @@ const Settings: FC<React.PropsWithChildren<SettingsProps>> = ({
             >
               <Airdrop />
               <MenuItemText>Airdrop</MenuItemText>
+            </DropdownMenuItem>
+          )}
+          {faucet === "none" && (
+            <DropdownMenuItem disabled>
+              <Airdrop />
+              <MenuItemText>{NO_FAUCET}</MenuItemText>
             </DropdownMenuItem>
           )}
           <DropdownMenuItem

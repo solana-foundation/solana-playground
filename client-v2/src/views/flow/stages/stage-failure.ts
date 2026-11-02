@@ -17,6 +17,20 @@ import { PgFlow } from "../state/stage";
 export const toldByStage =
   (stage: "build" | "deploy") =>
   (error: unknown): never => {
-    if (PgFlow.state[stage] === "failed") markFailureShown(error);
+    markIfToldByStage(stage, error);
     throw error;
   };
+
+/**
+ * Mark a failure as shown when its stage already says it failed in place;
+ * `toldByStage` without the rethrow, for a run that reports on its own
+ *
+ * @param stage the stage whose run this is
+ * @param error the run's failure
+ */
+export const markIfToldByStage = (
+  stage: "build" | "deploy",
+  error: unknown
+) => {
+  if (PgFlow.state[stage] === "failed") markFailureShown(error);
+};

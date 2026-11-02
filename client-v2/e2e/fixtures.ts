@@ -105,9 +105,10 @@ export const leaveEditor = async (page: Page) => {
 };
 
 /**
- * Starts every page of a fresh profile on the public devnet, the cluster the
- * specs stub and name, whatever default `REACT_APP_DEVNET_RPC_URL` gives the
- * build. A profile that already holds settings keeps them.
+ * Starts every page of a fresh profile on Devnet, the cluster the specs stub
+ * and name. The dev server runs with the platform RPC URLs blanked
+ * (`playwright.config.mts`), so Devnet is the public endpoint. A profile that
+ * already holds settings keeps them.
  */
 const startOnPublicDevnet = (context: BrowserContext) =>
   context.addInitScript(() => {

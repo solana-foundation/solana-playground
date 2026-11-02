@@ -101,11 +101,15 @@ export const getIdlType: <T extends IdlType>(
   >;
 
   if (defined) {
-    if (!idl?.types) {
+    if (!idl?.types && !idl?.accounts) {
       throw new Error(`Defined type \`${defined}\` requires idl.types`);
     }
 
-    const definedType = idl.types.find((type) => type.name === defined);
+    // An argument may name an account's struct, which 0.29 lists under
+    // `accounts` only
+    const definedType = [...(idl.types ?? []), ...(idl.accounts ?? [])].find(
+      (type) => type.name === defined
+    );
     if (!definedType) throw new Error(`Type \`${defined}\` not found`);
 
     switch (definedType.type.kind) {

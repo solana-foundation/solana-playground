@@ -42,8 +42,8 @@ SHALL fail when the built bundle lacks one of those names.
 #### Scenario: Dependent change events in the production build (manual)
 
 - **WHEN** the production build is served and the connection's endpoint is
-  changed in settings from Devnet to Testnet
-- **THEN** the cluster label in the bottom bar changes to Testnet, and the tab
+  changed in settings from Devnet to Mainnet
+- **THEN** the cluster label in the bottom bar changes to Mainnet, and the tab
   does not freeze in a loop of change events
 
 ### Requirement: Minified output stays within the production browser floor

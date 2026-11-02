@@ -77,12 +77,12 @@ const BaseSessionFooter = ({
               size="lg"
             />
           </span>
-          {/* "Devnet", as the prototype writes it; the name stays lower case
-              in the label the screen reader reads. Down, the row is Spec 08's
-              NET-02 chip, "Devnet · not answering", in place of the old
-              "Switch to localnet?" toast */}
+          {/* Already "Devnet", as the prototype writes it (`clusterName`);
+              the screen reader's label reads the same name. Down, the row is
+              Spec 08's NET-02 chip, "Devnet · not answering", in place of the
+              old "Switch to localnet?" toast */}
           <span className="truncate">
-            <span className="capitalize">{account.cluster.name}</span>
+            {account.cluster.name}
             {account.cluster.down && ` · ${NOT_ANSWERING}`}
           </span>
         </SidebarMenuButton>

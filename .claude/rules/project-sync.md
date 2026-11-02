@@ -44,14 +44,18 @@ when a session reads a file matching the `paths` in the frontmatter.
   questions; when both copies hold work, `reconcile` merges them and asks the
   user only about lines both changed. The mark is per account because a
   tutorial's id is derived from its name and so is identical across accounts.
-- **There is one in-browser migration: from the pre-sync layout to the
-  current one.** `PgWorkspace.migrate` (workspace ids) and
-  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). No
-  intermediate format between #29 and now reached real users, so none gets
-  compatibility code: a sync mark `read` cannot parse is `null` ("never
-  agreed", merged against an empty base), yet still keeps its project out of
-  `pushNeverSynced` (`PgSyncMark.exists`). A future format change that ships
-  to users adds its own step; that step does not chain through dropped
+- **In-browser migration covers the pre-sync layout, plus one read of the
+  first sync client's mark.** `PgWorkspace.migrate` (workspace ids) and
+  `PgThreadIndex._migrate` (thread files to `<threadId>.json` + index). A
+  sync mark `read` cannot parse is `null` ("never agreed", merged against an
+  empty base), yet still keeps its project out of `pushNeverSynced`
+  (`PgSyncMark.exists`). One older shape is still read on purpose: the
+  whole-snapshot mark the first sync client wrote, which production browsers
+  hold. Where the row still stands at its `updatedAt`, reconcile rebuilds it
+  per file from the server's copy (`rebaseWholeSnapshotMark` in
+  `project-restore.ts`), so unpushed edits push and unpushed deletes stay
+  deleted instead of merging against nothing. A future format change that
+  ships to users adds its own step; that step does not chain through dropped
   formats.
 - **The sync mark holds a hash per file, and those hashes are the merge
   base.** `mark.files` is `path -> sha256` of what the server last accepted
@@ -99,7 +103,12 @@ when a session reads a file matching the `paths` in the frontmatter.
   The refresh goes through the explorer's editor-buffer seam
   (`registerEditorBuffers`), because Monaco reuses an existing model on
   re-open and Monaco's autosave would otherwise write the pre-merge text back.
-  Keystrokes typed during the merge are folded in with `merge3`.
+  Keystrokes typed during the merge are folded in with `merge3`. `_catchUp`
+  does it twice, before the re-open and after it: the editor registers its
+  buffers only once its lazy chunk and `initLanguages` are done, so under load
+  it can mount mid-sync, build its model from memory not yet re-read, and have
+  the re-open reuse it -- the pane kept the replaced file (HOO-2119). The
+  second pass also sets memory, which the re-open has already read.
 - **`dirty` is a hint, never a decision.** The `dirty` hint only lets
   reconcile skip re-hashing a project; `mark.files` + `name` decide whether
   anything is owed. Code decided on `dirty` twice, and was wrong both times: a
@@ -129,9 +138,12 @@ when a session reads a file matching the `paths` in the frontmatter.
   `refreshing` flag stays as well: the flag drops a switch caused by the
   effect's own pass's re-open, so adopt -> re-open -> reconcile cannot repeat
   in a loop.
-- **`pushCurrent` refuses an empty snapshot.** The explorer clears its file
-  map before re-reading a workspace, so a push landing in that window would
-  upload nothing over whatever the server holds.
+- **`push` refuses an empty snapshot, whoever calls it.**
+  `replaceWorkspaceFiles` removes the directory before writing the taken copy
+  back, another tab can rename or delete it away, and an interrupted import
+  or replace can leave a registered workspace with no files in the
+  store; a push from that state (the editor's, reconcile's, or a banner's
+  `retry`) would upload nothing over whatever the server holds.
 - **`replaceWorkspaceFiles` preserves `.workspace/metadata.json`.** Which tabs
   are open is local state the snapshot deliberately excludes, so sync must not
   be what deletes `.workspace/metadata.json`. With no tabs there is no current
@@ -140,9 +152,10 @@ when a session reads a file matching the `paths` in the frontmatter.
   open file when the metadata names none, so re-reading a workspace always
   opens a file.
 - **Typing folded in by sync has its base kept at fold time.** A merge or an
-  adoption folds typing into the files it rewrote (`_catchUp`), then re-opens
-  the workspace. The sync effect then re-takes the shadow from that folded
-  copy, which no longer hashes to the mark. So `_adopt` and `_mergeWithServer`
+  adoption folds typing into the files it rewrote (`_catchUp`), before the
+  re-open or, for an editor that mounted meanwhile, after it. The sync effect
+  then re-takes the shadow from memory, which holds the folded copy and no
+  longer hashes to the mark. So `_adopt` and `_mergeWithServer`
   call `PgSyncBase.capture(..., from)` with what they wrote; without that
   capture the folded file had no base and the next exchange asked about the
   whole file. Tests that stub `switchWorkspace` (`captureWrites`) never fire
@@ -159,10 +172,22 @@ when a session reads a file matching the `paths` in the frontmatter.
   the user answers. A row that reads as 404 is raised as `deleted-elsewhere`
   (`PgProjectSync.read` returns `"gone"`), since both version answers would
   merge against nothing.
+- **No write may leave a project with no files.** A row with none reads back
+  as `snapshot: null`, which no device can merge with or take, so the server
+  refuses an empty `files` up front and a patch that empties the row inside
+  the transaction (`saveProject`, rolled back). The patch refusal is a 400
+  with `reason: "no-files"` (`NO_FILES_REASON`), never a 409; the browser
+  only meets it against a row emptied before the server checked, and answers
+  with its whole file set once (`_push`, `whole`).
+- **`/api/projects` still takes the pre-#40 client's body.** A tab open
+  across that deploy sends `{snapshot: {files}, baseUpdatedAt, force: false}`
+  and drops every status but 409 and 413 silently, so `describeWrite` reads
+  `snapshot` as `files`, `force: false` as absent, and answers `force: true`
+  with a 409. Both doors can go once no such tab can still be open.
 - **Only a visible tab pushes.** Tabs share IndexedDB but hold the _current_
   workspace in memory separately, so a backgrounded tab's snapshot goes stale.
   A tab flushes on `visibilitychange` -> `hidden` (not `beforeunload`, which is
-  too late, and not `keepalive`, which caps at ~64 KB against an 8 MB limit)
+  too late, and not `keepalive`, which caps at ~64 KB against a 4 MB limit)
   and reconciles before it may push again.
 - **Tabs agree through the store and one Web Lock.** Uploads are built from
   disk (`snapshotOf`), never from a tab's memory, which can be behind another

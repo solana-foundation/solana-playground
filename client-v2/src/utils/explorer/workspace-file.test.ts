@@ -5,7 +5,7 @@ import {
   resetLogger,
 } from "../../shared/lib/logger";
 import { PgExplorer } from "./explorer";
-import { writeWorkspaceFile } from "./workspace-file";
+import { forgetFlushed, writeWorkspaceFile } from "./workspace-file";
 
 /** An error shaped like lightning-fs's, with its code */
 const fsError = (code: string) => Object.assign(new Error(code), { code });
@@ -93,6 +93,17 @@ describe("writeWorkspaceFile", () => {
     expect(calls).not.toContain("flush");
   });
 
+  it("fails without making a folder for a file at a gone workspace's root", async () => {
+    const { calls, write, createDir } = recordFs();
+    write.mockRejectedValueOnce(enoent());
+
+    await expect(
+      writeWorkspaceFile("/rootless/.tutorial.json", "1")
+    ).rejects.toMatchObject({ code: "ENOENT" });
+    expect(createDir).not.toHaveBeenCalled();
+    expect(calls).not.toContain("flush");
+  });
+
   it("rethrows a failure other than a missing folder", async () => {
     const { write, createDir } = recordFs();
     write.mockRejectedValueOnce(new Error("quota exceeded"));
@@ -124,6 +135,23 @@ describe("writeWorkspaceFile", () => {
     } finally {
       resetLogger();
     }
+  });
+
+  it("flushes again once its folder is forgotten, and only under it", async () => {
+    const { calls } = recordFs();
+    await writeWorkspaceFile("/forgot/.workspace/a.json", "1");
+    await writeWorkspaceFile("/kept/.workspace/a.json", "1");
+
+    forgetFlushed("/forgot/");
+    await writeWorkspaceFile("/forgot/.workspace/a.json", "2");
+    await writeWorkspaceFile("/kept/.workspace/a.json", "2");
+
+    expect(calls.filter((call) => call === "flush")).toHaveLength(3);
+    expect(calls.slice(-3)).toEqual([
+      "write /forgot/.workspace/a.json",
+      "flush",
+      "write /kept/.workspace/a.json",
+    ]);
   });
 
   // The listeners are installed by the first write, which each case below

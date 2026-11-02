@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { before, beforeEach, describe, it } from "node:test";
 
+import pg from "pg";
+
 import {
   appendMessages,
   getThread,
@@ -8,6 +10,7 @@ import {
   ThreadDeleted,
 } from "./conversations.mjs";
 import { query, transaction } from "./db.mjs";
+import { NO_FILES_REASON } from "./project-write.mjs";
 import {
   deleteProject,
   getProject,
@@ -115,6 +118,83 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
         "new.rs": "added",
       },
     });
+  });
+
+  it("refuses a patch that removes every file, and changes nothing", async () => {
+    // Once a row holds no files, every other device reads it as no snapshot
+    // and can neither adopt it nor merge with it
+    const first = await put({ files });
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    const after = await getProject(userId, "p1");
+    assert.deepEqual(after.snapshot, { files });
+    assert.equal(after.updatedAt, first.updatedAt);
+  });
+
+  it("takes a patch that only removes a file, keeping the rest", async () => {
+    // The common delete-one-file push, which reaches the emptiness check
+    const first = await put({
+      files: {
+        "src/lib.rs": "fn main() {}",
+        "Cargo.toml": "[package]",
+        "old.rs": "gone soon",
+      },
+    });
+    const result = await put({
+      changed: {},
+      removed: ["old.rs", "never-there.rs"],
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, { files });
+  });
+
+  it("answers a stale emptying patch with the conflict, not the refusal", async () => {
+    // The conflict carries the token the client retries with; the refusal
+    // carries none
+    await put({ files });
+    const result = await put({
+      changed: {},
+      removed: Object.keys(files),
+      baseUpdatedAt: "2000-01-01T00:00:00.000Z",
+    });
+    assert.equal(result.conflict, true);
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, { files });
+  });
+
+  it("takes a patch that removes every file and adds another", async () => {
+    const first = await put({ files });
+    const result = await put({
+      changed: { "src/main.rs": "fn main() {}" },
+      removed: Object.keys(files),
+      baseUpdatedAt: first.updatedAt,
+    });
+    assert.ok(result.updatedAt);
+    assert.deepEqual((await getProject(userId, "p1")).snapshot, {
+      files: { "src/main.rs": "fn main() {}" },
+    });
+  });
+
+  it("refuses an empty patch against a row that has no files", async () => {
+    // The parent row a chat turn creates holds no files; a patch adding
+    // nothing to it would bump its token over an empty project
+    await query(
+      `insert into projects (id, user_id, name, kind) values ('p1', $1, 'one', 'project')`,
+      [userId]
+    );
+    const { updatedAt } = await getProject(userId, "p1");
+    const result = await put({
+      changed: {},
+      removed: [],
+      baseUpdatedAt: updatedAt,
+    });
+    assert.deepEqual(result, { refused: NO_FILES_REASON });
+    assert.equal((await getProject(userId, "p1")).updatedAt, updatedAt);
   });
 
   it("leaves the rows a patch does not name unwritten", async () => {
@@ -383,6 +463,177 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.equal(await getThread(userId, mine), null);
     assert.ok(await getThread(userId, neighbour));
     assert.ok(await getThread(otherUser, theirs));
+  });
+
+  describe("erasing a deleted project's history", () => {
+    // The tombstone hides a thread from every read; the content under it
+    // must go too, or a deleted project's chat outlives the delete in the
+    // account. Read straight from the tables: no API returns a tombstoned
+    // thread, so only the rows can show what is left.
+    const otherUser = "test-user-projects-2";
+
+    /** What the database still holds of one thread */
+    const left = async (threadId) => {
+      const { rows } = await query(
+        `select c.title, c.deleted_at is not null as deleted,
+                (select count(*)::int from messages m
+                  where m.conversation_id = c.id) as messages
+           from conversations c where c.id = $1`,
+        [threadId]
+      );
+      return rows[0];
+    };
+
+    const say = (userOf, threadId, projectId, n) =>
+      appendMessages(userOf, { threadId, projectId, title: `chat ${n}` }, [
+        {
+          id: `22222222-0000-4000-8000-0000000002${n}`,
+          kind: "user",
+          createdAt: new Date(1000).toISOString(),
+          text: "hi",
+        },
+      ]);
+
+    before(async () => {
+      await query(
+        `insert into "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+         values ($1, 'Test', 'projects-2@example.com', false, now(), now())
+         on conflict (id) do nothing`,
+        [otherUser]
+      );
+    });
+
+    beforeEach(async () => {
+      await query("delete from conversations where user_id = $1", [otherUser]);
+      await query("delete from projects where user_id = $1", [otherUser]);
+    });
+
+    it("deletes its messages and title, keeping the tombstone", async () => {
+      const mine = "22222222-0000-4000-8000-000000000021";
+      await say(userId, mine, "p1", 21);
+
+      await deleteProject(userId, "p1");
+
+      assert.deepEqual(await left(mine), {
+        title: null,
+        deleted: true,
+        messages: 0,
+      });
+    });
+
+    it("leaves another project's history whole", async () => {
+      const neighbour = "22222222-0000-4000-8000-000000000022";
+      await say(userId, "22222222-0000-4000-8000-000000000023", "p1", 23);
+      await say(userId, neighbour, "p2", 22);
+
+      await deleteProject(userId, "p1");
+
+      assert.deepEqual(await left(neighbour), {
+        title: "chat 22",
+        deleted: false,
+        messages: 1,
+      });
+    });
+
+    it("leaves another account's history under the same id whole", async () => {
+      // A tutorial's id is the same string in every account that started it
+      const theirs = "22222222-0000-4000-8000-000000000024";
+      await say(userId, "22222222-0000-4000-8000-000000000025", "tut:x", 25);
+      await say(otherUser, theirs, "tut:x", 24);
+
+      await deleteProject(userId, "tut:x");
+
+      assert.deepEqual(await left(theirs), {
+        title: "chat 24",
+        deleted: false,
+        messages: 1,
+      });
+    });
+
+    it("also erases a thread tombstoned before this delete", async () => {
+      // A tutorial restarted after a delete leaves the old run's thread
+      // tombstoned under a live project id; the next delete takes it too
+      const earlier = "22222222-0000-4000-8000-000000000026";
+      await say(userId, earlier, "p1", 26);
+      await query("update conversations set deleted_at = now() where id = $1", [
+        earlier,
+      ]);
+
+      await deleteProject(userId, "p1");
+
+      assert.deepEqual(await left(earlier), {
+        title: null,
+        deleted: true,
+        messages: 0,
+      });
+    });
+
+    it("erases a push that was in flight when the delete came", async () => {
+      // A push that has found its thread live and is still writing when the
+      // delete runs must either finish before the erase or be refused; its
+      // messages must never land under the tombstone afterwards. The push is
+      // held mid-write by an open transaction that inserted the same message
+      // id first, so the delete runs while the push is past its checks.
+      const threadId = "22222222-0000-4000-8000-000000000027";
+      const held = {
+        id: "22222222-0000-4000-8000-000000000327",
+        kind: "user",
+        createdAt: new Date(2000).toISOString(),
+        text: "in flight",
+      };
+      await say(userId, threadId, "p1", 27);
+      let push;
+      let deletion;
+
+      // Its own connection, outside the pool: the pool holds three, and the
+      // push and the delete take two of them while this one must keep
+      // polling and keep its transaction open
+      const side = new pg.Client({ connectionString: DB });
+      await side.connect();
+      try {
+        /** Sessions of this database waiting on a lock */
+        const waiting = async () => {
+          const { rows } = await side.query(
+            `select count(*)::int as n from pg_stat_activity
+              where datname = current_database() and wait_event_type = 'Lock'`
+          );
+          return rows[0].n;
+        };
+        const until = async (done) => {
+          for (let i = 0; i < 100 && !(await done()); i++) {
+            await new Promise((resolve) => setTimeout(resolve, 20));
+          }
+        };
+
+        // Holds the push mid-write: it inserts the push's message id first,
+        // so the push waits on this row until the rollback below
+        await side.query("begin");
+        await side.query(
+          `insert into messages (id, conversation_id, kind, payload, created_at)
+           values ($1, $2, 'user', '{}', now())`,
+          [held.id, threadId]
+        );
+
+        push = appendMessages(userId, { threadId, projectId: "p1" }, [
+          held,
+        ]).catch((e) => e);
+        await until(async () => (await waiting()) >= 1);
+
+        let deleted = false;
+        deletion = deleteProject(userId, "p1").then(() => (deleted = true));
+        await until(async () => deleted || (await waiting()) >= 2);
+      } finally {
+        await side.query("rollback");
+        await side.end();
+      }
+      const pushed = await push;
+      await deletion;
+
+      if (pushed instanceof Error) {
+        assert.ok(pushed instanceof ThreadDeleted, pushed.message);
+      }
+      assert.equal((await left(threadId)).messages, 0);
+    });
   });
 
   it("tombstones rather than deleting, and drops the files", async () => {

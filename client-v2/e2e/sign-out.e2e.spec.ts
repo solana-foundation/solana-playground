@@ -42,7 +42,7 @@ const signedInWith = async (
   await seedWorkspace(page);
   await expect(account(page)).toHaveAccessibleName("Account: t", LONG);
 
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
+  const dialog = page.getByRole("dialog", { name: "Sign out of Playground?" });
   const confirm = dialog.getByRole("button", { name: "Sign out" });
 
   /** Opens the dialog from the account menu and confirms */

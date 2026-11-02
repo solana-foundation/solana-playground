@@ -69,7 +69,7 @@ const contextChips = (lessonState: LessonState): ComposerContextChip[] => {
     PgBuildOutput.latest?.failed
       ? { label: "build error", title: "The last build's compiler output" }
       : null,
-    PgProgramInfo.idl
+    PgProgramInfo.callableIdl()
       ? { label: "idl", title: "The built program's interface" }
       : null,
   ].filter((chip): chip is ComposerContextChip => !!chip);

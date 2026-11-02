@@ -25,16 +25,16 @@ export const Local = () => {
   }, [id]);
 
   return (
-    <ModalFrame name="localnet-unreachable" title="Connect to localnet">
+    <ModalFrame name="localnet-unreachable" title="Connect to Localnet">
       <Callout variant="error">
         <FrownIcon />
-        <CalloutDescription>Unable to connect to localnet</CalloutDescription>
+        <CalloutDescription>Unable to connect to Localnet</CalloutDescription>
       </Callout>
 
       <Content>
         <ContentTitle>How to connect</ContentTitle>
         <ContentDescription>
-          Here are the steps for connecting to localnet from playground.
+          Here are the steps for connecting to Localnet from playground.
         </ContentDescription>
 
         <MarkdownSteps codeFontOnly>

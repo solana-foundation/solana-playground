@@ -9,59 +9,63 @@ export enum Endpoint {
   MAINNET_BETA = "https://api.mainnet-beta.solana.com",
 }
 
-/** Cluster moniker a platform endpoint talks to */
-type PlatformCluster = "devnet" | "testnet" | "mainnet-beta";
+const CLUSTER_NAMES: Record<string, string> = {
+  devnet: "Devnet",
+  "mainnet-beta": "Mainnet",
+  testnet: "Testnet",
+  localnet: "Localnet",
+  playnet: "Playnet",
+};
 
-/** RPC endpoint the deployment provides in addition to {@link Endpoint} */
-export interface PlatformEndpoint {
-  name: string;
-  value: string;
-  cluster: PlatformCluster;
+/**
+ * A cluster's name as a person reads it: a proper noun, so capitalised, and
+ * "Mainnet" for the `mainnet-beta` moniker, which URLs, CLI flags and
+ * telemetry keep. An unknown moniker comes back as it is.
+ */
+export function clusterName(cluster: string): string;
+export function clusterName(cluster: string | null): string | null;
+export function clusterName(cluster: string | null): string | null {
+  if (cluster === null) return null;
+  return Object.hasOwn(CLUSTER_NAMES, cluster)
+    ? CLUSTER_NAMES[cluster]
+    : cluster;
 }
 
-/** Configured platform RPC URLs, keyed by cluster */
+/** Cluster moniker an offered network talks to */
+type NetworkCluster = "devnet" | "mainnet-beta";
+
+/** A network Settings offers: one of ours, named as the cluster */
+export interface Network {
+  name: string;
+  value: string;
+  cluster: NetworkCluster;
+}
+
+/** Configured platform RPC URLs, keyed by network */
 interface PlatformRpcUrls {
   devnet?: string;
-  testnet?: string;
   mainnet?: string;
 }
 
-/** Build the platform endpoint list, dropping clusters that have no URL. */
-export const buildPlatformEndpoints = (
-  urls: PlatformRpcUrls
-): PlatformEndpoint[] => {
-  const candidates: ReadonlyArray<
-    [string | undefined, string, PlatformCluster]
-  > = [
-    [urls.devnet, "Devnet (Platform)", "devnet"],
-    [urls.testnet, "Testnet (Platform)", "testnet"],
-    [urls.mainnet, "Mainnet Beta (Platform)", "mainnet-beta"],
-  ];
+/**
+ * The networks Settings offers: Devnet and Mainnet, each on the platform RPC
+ * the env configures, else on the public one. The public RPCs rate-limit a
+ * shared app, so they are only the fallback, never listed beside ours.
+ */
+export const buildNetworks = (urls: PlatformRpcUrls): Network[] =>
+  (
+    [
+      // `||` not `??`: sourcing an env file leaves unfilled keys as "", which
+      // is not nullish and would win.
+      [urls.devnet || Endpoint.DEVNET, "devnet"],
+      [urls.mainnet || Endpoint.MAINNET_BETA, "mainnet-beta"],
+    ] as const
+  ).map(([value, cluster]) => ({ name: clusterName(cluster), value, cluster }));
 
-  // Skipping URLs already listed keeps the endpoint the unique identity of an
-  // option: a duplicate would collide on the React key and leave `aria-checked`
-  // true on two entries at once.
-  const seen = new Set<string>(Object.values(Endpoint));
+/** The networks Settings offers, Devnet first */
+export const NETWORKS = buildNetworks(PLATFORM_RPC_URLS);
 
-  // `!value` rather than a nullish check: sourcing an env file leaves unfilled
-  // keys as "".
-  return candidates.flatMap(([value, name, cluster]) => {
-    if (!value || seen.has(value)) return [];
-    seen.add(value);
-    return [{ name, value, cluster }];
-  });
-};
-
-/** Resolve the endpoint a fresh profile starts on. */
-export const resolveDefaultEndpoint = (platformDevnet?: string): string =>
-  // `||` not `??`: sourcing an env file leaves unfilled keys as "", which is
-  // not nullish and would win.
-  platformDevnet || Endpoint.DEVNET;
-
-/** Platform-provided RPC endpoints; empty when the deployment configures none. */
-export const PLATFORM_ENDPOINTS = buildPlatformEndpoints(PLATFORM_RPC_URLS);
-
-/** Default RPC endpoint, preferring the platform's devnet over the public one. */
-export const DEFAULT_ENDPOINT = resolveDefaultEndpoint(
-  PLATFORM_RPC_URLS.devnet
-);
+/** Default RPC endpoint: the offered Devnet */
+export const DEFAULT_ENDPOINT = NETWORKS.find(
+  (n) => n.cluster === "devnet"
+)!.value;

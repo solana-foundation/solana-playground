@@ -108,8 +108,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     <ConsoleDrawerContent className="flex h-auto min-h-0 flex-1 flex-col overflow-hidden max-md:data-[state=open]:h-auto">
       {/* The terminal's own root has no height. One grid cell the well's
           size stretches it, whatever element it is, so xterm's fit sees a
-          real size and counts the right rows. */}
-      <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)]">
+          real size and counts the right rows. The column is `minmax(0,1fr)`
+          too: an `auto` one is never narrower than the terminal's own width,
+          so the terminal outgrows a narrowing stage and fit, which takes the
+          scrollbar off that width, gets there one scrollbar per pass. */}
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] grid-rows-[minmax(0,1fr)]">
         {children}
       </div>
     </ConsoleDrawerContent>

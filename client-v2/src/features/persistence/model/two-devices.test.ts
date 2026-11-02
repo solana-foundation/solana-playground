@@ -2,6 +2,7 @@ import type { Mock } from "vitest";
 import { PgChatStorage } from "./chat-storage";
 import { clearFailures, getFailures } from "./diagnostics";
 import { PgProjectSync } from "./project-sync";
+import { NO_FILES_REASON } from "./project-write.mjs";
 import { sha256, snapshotOf, SYNCED_WORKSPACE_FILES } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
@@ -127,6 +128,18 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
       ? { ...body.files }
       : { ...held, ...(body.changed ?? {}) };
     for (const path of body.removed ?? []) delete files[path];
+
+    // Refused and rolled back, as `saveProject` does
+    if (!Object.keys(files).length) {
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({
+          error: "A write must leave the project at least one file",
+          reason: NO_FILES_REASON,
+        }),
+      };
+    }
 
     const stored: StoredProject = {
       id: body.id,
@@ -401,7 +414,11 @@ describe("a tutorial started on one browser, opened on another", () => {
 
 describe("work that never reached the server", () => {
   beforeEach(setUp);
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    editor?.dispose();
+    editor = null;
+    vi.restoreAllMocks();
+  });
 
   /**
    * The sequence the old code lost an afternoon to: this device pushes, then
@@ -468,6 +485,31 @@ describe("work that never reached the server", () => {
       "src/lib.rs": "the other device",
     });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+  });
+
+  it("brings an editor that mounted while the other device's copy was taken up to that copy", async () => {
+    await diverge();
+    await reconcile();
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    // The editor finishes loading during the re-open, before memory is
+    // re-read, so it builds its model from the text just replaced. The
+    // re-open then reuses that model, and the pane goes on showing it.
+    let buffers: Map<string, string> | null = null;
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers = editorHolds({
+        [`/${HELLO.name}/src/lib.rs`]: "an afternoon of work",
+      });
+    });
+
+    expect(await PgProjectSync.resolve(HELLO.id, "take-server")).toBe(true);
+
+    expect(buffers!.get(`/${HELLO.name}/src/lib.rs`)).toBe("the other device");
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "the other device"
+    );
   });
 });
 
@@ -876,6 +918,129 @@ describe("both devices changed it", () => {
     expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\ne\n");
   });
 
+  it("folds in what was typed into an editor that mounted while the other device's copy was taken", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    // Mounted during the re-open, from memory not yet re-read, and typed into
+    // before the re-open was done
+    let buffers: Map<string, string> | null = null;
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers = editorHolds({
+        [`/${HELLO.name}/src/lib.rs`]: "a\nb\nc\nd\nE\n",
+      });
+    });
+    const toMemory = vi
+      .spyOn(PgExplorer, "saveFileToState")
+      .mockImplementation(() => {});
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    expect(buffers!.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\nE\n");
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "A\nb\nc\nd\nE\n"
+    );
+    // ...and memory, which the re-open has read already: a build reads it
+    expect(toMemory).toHaveBeenCalledWith(
+      `/${HELLO.name}/src/lib.rs`,
+      "A\nb\nc\nd\nE\n"
+    );
+    // On this device alone, so the project still owes it to the account
+    expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
+  });
+
+  it("leaves alone what was typed during the re-open into a buffer it had already caught up", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    const buffers = editorHolds({ [`/${HELLO.name}/src/lib.rs`]: base });
+    // Typed beside the line sync changed, once the buffer had the account's
+    // copy: ordinary typing for autosave, not something to merge again
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers.set(`/${HELLO.name}/src/lib.rs`, "A\nB\nc\nd\ne\n");
+    });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nB\nc\nd\ne\n");
+    expect(getFailures()).toEqual([]);
+  });
+
+  it("brings up a model the re-open built from the replaced text in an editor already mounted", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    // Mounted, with no model for the file until the re-open opened it
+    const buffers = editorHolds({});
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers.set(`/${HELLO.name}/src/lib.rs`, base);
+    });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    expect(buffers.get(`/${HELLO.name}/src/lib.rs`)).toBe("A\nb\nc\nd\ne\n");
+  });
+
+  it("writes nothing for a model the re-open built from the copy it took", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    const buffers = editorHolds({});
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers.set(`/${HELLO.name}/src/lib.rs`, "A\nb\nc\nd\ne\n");
+    });
+    const write = vi.spyOn(PgFs, "writeFile");
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    // A write announces a change to the other tabs, which reload for it
+    expect(
+      write.mock.calls.filter(([path]) => path === `/${HELLO.name}/src/lib.rs`)
+    ).toEqual([]);
+  });
+
+  it("drops the model of a file the other device removed from an editor that mounted while its copy was taken", async () => {
+    await startFrom(
+      { "src/lib.rs": base, "tests/t.rs": "test" },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
+      async (name: string, files: Record<string, string>) =>
+        writeStored(name, files)
+    );
+    let buffers: Map<string, string> | null = null;
+    vi.spyOn(PgExplorer, "switchWorkspace").mockImplementation(async () => {
+      buffers = editorHolds({ [`/${HELLO.name}/tests/t.rs`]: "test" });
+    });
+
+    expect((await reconcile()).replaced).toEqual([HELLO.name]);
+
+    // Left in place, autosave would write the file back and the next push
+    // would undo the other device's delete
+    expect(buffers!.has(`/${HELLO.name}/tests/t.rs`)).toBe(false);
+    expect(storedFiles().has(`/${HELLO.name}/tests/t.rs`)).toBe(false);
+  });
+
   it("does not take the other device's copy over what was typed and saved while it was being fetched", async () => {
     // Reconcile found the copy clean and adopted. The user typed during the
     // adoption's round trip and autosave stored it, so a copy of the local
@@ -933,6 +1098,58 @@ describe("both devices changed it", () => {
       "A\nb\nC\nd\nE\n"
     );
     expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
+  });
+
+  it("writes folded typing to the store again after the re-open when the first write failed", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    editorHolds({ [`/${HELLO.name}/src/lib.rs`]: "a\nb\nC\nd\nE\n" });
+    const writeFile = PgFs.writeFile.bind(PgFs);
+    let failed = false;
+    vi.spyOn(PgFs, "writeFile").mockImplementation(async (path, data, opts) => {
+      if (!failed && data === "A\nb\nC\nd\nE\n") {
+        failed = true;
+        throw new Error("quota");
+      }
+      return writeFile(path, data, opts);
+    });
+
+    await PgProjectSync.pushCurrent();
+
+    expect(failed).toBe(true);
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "A\nb\nC\nd\nE\n"
+    );
+  });
+
+  it("still keeps the base of folded typing, and says so, when the re-open fails", async () => {
+    await startFrom(
+      { "src/lib.rs": base },
+      { "src/lib.rs": "A\nb\nc\nd\ne\n" }
+    );
+    localFilesAre(HELLO.name, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    captureWrites();
+    vi.spyOn(PgExplorer, "switchWorkspace").mockRejectedValue(
+      new Error("re-open failed")
+    );
+    editorHolds({ [`/${HELLO.name}/src/lib.rs`]: "a\nb\nC\nd\nE\n" });
+
+    await PgProjectSync.pushCurrent();
+
+    expect(storedFiles().get(`/${HELLO.name}/src/lib.rs`)).toBe(
+      "A\nb\nC\nd\nE\n"
+    );
+    // Without the base, the next exchange asks about the whole file; without
+    // the mark, reconcile's cheap path skips the typing until the next edit
+    expect(await PgSyncBase.read(HELLO.id)).toHaveProperty("src/lib.rs");
+    expect((await PgSyncMark.read(HELLO.id))?.dirty).toBe(true);
+    expect(getFailures().map((f) => f.what)).toEqual([
+      expect.stringContaining("re-open"),
+    ]);
   });
 
   it("merges an edit no push has sent yet, when a reconcile gets there first", async () => {
@@ -1113,6 +1330,269 @@ describe("two rewrites of one project at once", () => {
     expect(await merging).toBe("merged");
     expect(await adopting).toBeNull();
     expect(replace).toHaveBeenLastCalledWith(HELLO.name, both);
+  });
+});
+
+describe("a workspace whose files are gone from the store", () => {
+  beforeEach(setUp);
+  afterEach(() => vi.restoreAllMocks());
+
+  const puts = () =>
+    (global.fetch as Mock).mock.calls.filter(
+      ([, init]) => (init as RequestInit | undefined)?.method === "PUT"
+    );
+
+  /**
+   * In sync with the account, and then the store holds nothing under the
+   * workspace -- an import or a replace interrupted half way -- while the
+   * workspace is still registered and its mark flagged.
+   */
+  const emptiedAfterSync = async () => {
+    asDevice([HELLO]);
+    await signedIn();
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    writeStored(HELLO.name, {});
+    await PgSyncMark.markDirty(HELLO.id);
+    return server.get(HELLO.id)!.snapshot;
+  };
+
+  it("is not uploaded by reconcile while the account is where it was", async () => {
+    const held = await emptiedAfterSync();
+    (global.fetch as Mock).mockClear();
+
+    await reconcile();
+
+    expect(puts()).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual(held);
+  });
+
+  it("is not uploaded over a row that holds no code", async () => {
+    // The row moved and holds no files, so reconcile has nothing to merge
+    // with and would push this device's copy -- an empty one
+    await emptiedAfterSync();
+    server.set(HELLO.id, {
+      id: HELLO.id,
+      name: HELLO.name,
+      kind: "tutorial",
+      snapshot: null,
+      updatedAt: tick(),
+    });
+    (global.fetch as Mock).mockClear();
+
+    await reconcile();
+
+    expect(puts()).toEqual([]);
+  });
+
+  it("is not merged into a row the other device moved on", async () => {
+    // Merged against the account's files, an empty copy reads as this
+    // device deleting every one of them
+    await emptiedAfterSync();
+    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "the other device" });
+    const replace = captureWrites();
+    (global.fetch as Mock).mockClear();
+
+    const result = await reconcile();
+
+    expect(puts()).toEqual([]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "the other device" },
+    });
+    expect(result.pushed).toEqual([]);
+  });
+
+  it("is not uploaded when the user answers a question with retry", async () => {
+    const held = await emptiedAfterSync();
+    PgProjectSync.raise({ projectId: HELLO.id, kind: "divergent" });
+    (global.fetch as Mock).mockClear();
+
+    expect(await PgProjectSync.resolve(HELLO.id, "retry")).toBe(false);
+
+    expect(puts()).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual(held);
+    // and the question is still up, rather than silently dropped
+    expect(PgProjectSync.conflictFor(HELLO.id)).not.toBeNull();
+  });
+});
+
+describe("a row emptied before the server refused it", () => {
+  beforeEach(setUp);
+  afterEach(() => vi.restoreAllMocks());
+
+  it("is put back by this device's next upload", async () => {
+    // The account's row lost every file to a patch the server once accepted.
+    // This device still agrees with its token, so its next patch adds
+    // nothing to an empty row and is refused; the whole set restores it.
+    asDevice([HELLO]);
+    writeStored(HELLO.name, { "src/lib.rs": "kept", "src/extra.rs": "gone" });
+    await signedIn();
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+    const row = server.get(HELLO.id)!;
+    server.set(HELLO.id, {
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      snapshot: null,
+      updatedAt: row.updatedAt,
+    });
+
+    writeStored(HELLO.name, { "src/lib.rs": "kept" });
+    expect(await PgProjectSync.pushCurrent()).toBe("ok");
+
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "kept" },
+    });
+    // and the mark now agrees with it, so nothing more goes up
+    (global.fetch as Mock).mockClear();
+    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+  });
+});
+
+describe("a project whose mark is one hash of the whole snapshot", () => {
+  beforeEach(() => {
+    setUp();
+    clearFailures();
+  });
+  afterEach(() => {
+    clearFailures();
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * The account holds `files` at one timestamp, and this browser's mark is
+   * the whole-snapshot mark the first sync client wrote when it uploaded them:
+   * one hash of the whole snapshot, none per file.
+   */
+  const syncedUnderAWholeSnapshotMark = async (
+    files: Record<string, string>
+  ) => {
+    asDevice([HELLO]);
+    await signedIn();
+    const updatedAt = tick();
+    server.set(HELLO.id, {
+      id: HELLO.id,
+      name: HELLO.name,
+      kind: "tutorial",
+      snapshot: { files },
+      updatedAt,
+    });
+    storedFiles().set(
+      `/.config/sync/u1/${encodeURIComponent(HELLO.id)}.json`,
+      JSON.stringify({
+        hash: "whole-snapshot-hash",
+        contentHash: "user-files-hash",
+        name: HELLO.name,
+        updatedAt,
+        dirty: true,
+      })
+    );
+    return updatedAt;
+  };
+
+  it("uploads an edit and a delete made under a whole-snapshot mark, asking nothing", async () => {
+    await syncedUnderAWholeSnapshotMark({
+      "src/lib.rs": "as uploaded",
+      "src/old.rs": "deleted here since",
+    });
+    // Never uploaded: an edit to one file, and the other file deleted
+    localFilesAre(HELLO.name, { "src/lib.rs": "edited here since" });
+    const replace = captureWrites();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
+    expect(replace).not.toHaveBeenCalled();
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "edited here since" },
+    });
+    expect(result.pushed).toEqual([HELLO.name]);
+  });
+
+  it("merges by line when the other device writes before the upload lands", async () => {
+    await syncedUnderAWholeSnapshotMark({ "src/lib.rs": "a\nb\nc\nd\ne\n" });
+    localFilesAre(HELLO.name, { "src/lib.rs": "A\nb\nc\nd\ne\n" });
+    captureWrites();
+    // Offline for the upload: the agreement is rebuilt, the push fails
+    (global.fetch as Mock).mockImplementation(
+      (url: string, init?: RequestInit) =>
+        init?.method === "PUT"
+          ? Promise.resolve({ ok: false, status: 503, json: async () => ({}) })
+          : fakeFetch(url, init)
+    );
+    expect((await reconcile()).pushed).toEqual([]);
+
+    (global.fetch as Mock).mockImplementation(fakeFetch);
+    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "a\nb\nc\nd\nE\n" });
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "A\nb\nc\nd\nE\n" },
+    });
+  });
+
+  it("waits for the next pass when the account's copy cannot be read", async () => {
+    await syncedUnderAWholeSnapshotMark({
+      "src/lib.rs": "as uploaded",
+      "src/old.rs": "deleted here since",
+    });
+    localFilesAre(HELLO.name, { "src/lib.rs": "edited here since" });
+    const replace = captureWrites();
+    // The list answers, the project itself does not
+    (global.fetch as Mock).mockImplementation(
+      (url: string, init?: RequestInit) =>
+        url.startsWith("/api/projects?id=")
+          ? Promise.resolve({ ok: false, status: 503, json: async () => ({}) })
+          : fakeFetch(url, init)
+    );
+
+    const first = await reconcile();
+
+    // Not merged against nothing, which would raise the edit and bring the
+    // deleted file back
+    expect(first.conflicts).toEqual([]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(getFailures().map((f) => f.what)).toContain(
+      `rebase whole-snapshot mark ${HELLO.id}: row unreadable`
+    );
+
+    (global.fetch as Mock).mockImplementation(fakeFetch);
+    const second = await reconcile();
+
+    expect(second.conflicts).toEqual([]);
+    expect(server.get(HELLO.id)!.snapshot).toEqual({
+      files: { "src/lib.rs": "edited here since" },
+    });
+  });
+
+  it("still asks, rather than guess, when the account moved past the mark", async () => {
+    await syncedUnderAWholeSnapshotMark({ "src/lib.rs": "as uploaded" });
+    otherDeviceWroteFiles(HELLO.id, { "src/lib.rs": "the other device" });
+    localFilesAre(HELLO.name, { "src/lib.rs": "edited here since" });
+    const replace = captureWrites();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([divergentOn(HELLO.id, ["src/lib.rs"])]);
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("leaves the account alone when nothing changed here", async () => {
+    const before = await syncedUnderAWholeSnapshotMark({
+      "src/lib.rs": "as uploaded",
+    });
+    localFilesAre(HELLO.name, { "src/lib.rs": "as uploaded" });
+    const replace = captureWrites();
+
+    const result = await reconcile();
+
+    expect(result.conflicts).toEqual([]);
+    expect(replace).not.toHaveBeenCalled();
+    expect(server.get(HELLO.id)!.updatedAt).toBe(before);
+    // and the next exchange is an ordinary one, against a per-file mark
+    expect((await PgSyncMark.read(HELLO.id))?.updatedAt).toBe(before);
   });
 });
 

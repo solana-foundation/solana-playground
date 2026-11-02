@@ -4,8 +4,19 @@ import { isTypingElsewhere } from "@/shared/lib/focus";
 export type OpenKind = "mount" | "later";
 
 /**
- * Whether opening a file leaves focus in the field the user is typing in,
- * rather than the editor taking it.
+ * Whether `el`'s box lies mostly beside the window, its middle past either
+ * edge. A box with no width (a view that is hidden) is not out of it.
+ */
+const isOutOfWindow = (el: Element) => {
+  const { left, width } = el.getBoundingClientRect();
+  if (width === 0) return false;
+  const middle = left + width / 2;
+  return middle < 0 || middle > window.innerWidth;
+};
+
+/**
+ * Whether opening a file leaves focus where it is, rather than the editor
+ * taking it.
  *
  * An open the user started from a field in the explorer's tree (naming a new
  * file) ends in the editor, so a later open takes focus from that field. Any
@@ -18,6 +29,10 @@ export type OpenKind = "mount" | "later";
  * naming has not been created yet). It takes focus from the bare document,
  * so a fresh load lands in the editor, and from an item of the tree, whose
  * click opened the file with no tab open and so mounted the editor.
+ *
+ * Neither open takes focus while the editor is out of the window: on a phone
+ * the user swiped to another page while it loaded, and focusing it would
+ * scroll the pager back to it and undo the swipe (HOO-2290).
  *
  * @param opts -
  * - `open`: the mount's open or a later one
@@ -36,6 +51,7 @@ export const leavesFocusElsewhere = ({
   tree: Element | null;
   active?: Element | null;
 }): boolean => {
+  if (isOutOfWindow(editor)) return true;
   if (open === "mount") {
     // A click in the tree opened the file: the editor mounts to show it
     if (
@@ -60,7 +76,7 @@ const isFocusedElsewhere = (editor: Element, active: Element | null) =>
   !editor.contains(active);
 
 if (import.meta.vitest) {
-  const { describe, it, expect, afterEach } = import.meta.vitest;
+  const { describe, it, expect, afterEach, vi } = import.meta.vitest;
 
   describe("components/Editor/Monaco/open-focus", () => {
     /**
@@ -180,6 +196,74 @@ if (import.meta.vitest) {
             editor,
             tree,
             active: inputarea,
+          })
+        ).toBe(false);
+      });
+
+      /** Puts the editor's box at `left`, a window's width wide */
+      const placeAt = (editor: Element, left: number) =>
+        vi
+          .spyOn(editor, "getBoundingClientRect")
+          .mockReturnValue(
+            new DOMRect(left, 0, window.innerWidth, window.innerHeight)
+          );
+
+      it.each(["mount", "later"] as const)(
+        "leaves focus where it is on a %s open when the editor is swiped out of the window",
+        (open) => {
+          const { editor, tree } = page();
+          placeAt(editor, -window.innerWidth);
+          expect(
+            leavesFocusElsewhere({ open, editor, tree, active: document.body })
+          ).toBe(true);
+        }
+      );
+
+      it("leaves focus where it is when the editor is swiped out past the right edge", () => {
+        const { editor, tree } = page();
+        placeAt(editor, window.innerWidth);
+        expect(
+          leavesFocusElsewhere({
+            open: "mount",
+            editor,
+            tree,
+            active: document.body,
+          })
+        ).toBe(true);
+      });
+
+      it("leaves focus where it is on the tree's own open when the editor is out of the window", () => {
+        const { editor, tree, name } = page();
+        placeAt(editor, -window.innerWidth);
+        expect(
+          leavesFocusElsewhere({ open: "later", editor, tree, active: name })
+        ).toBe(true);
+      });
+
+      it("takes focus when the editor has no box, as a hidden view's", () => {
+        const { editor, tree } = page();
+        vi.spyOn(editor, "getBoundingClientRect").mockReturnValue(
+          new DOMRect(-window.innerWidth, 0, 0, 0)
+        );
+        expect(
+          leavesFocusElsewhere({
+            open: "mount",
+            editor,
+            tree,
+            active: document.body,
+          })
+        ).toBe(false);
+      });
+
+      it("takes focus when the editor is in the window", () => {
+        const { editor, tree } = page();
+        placeAt(editor, 0);
+        expect(
+          leavesFocusElsewhere({
+            open: "mount",
+            editor,
+            tree,
+            active: document.body,
           })
         ).toBe(false);
       });

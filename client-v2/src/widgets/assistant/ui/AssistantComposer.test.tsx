@@ -49,7 +49,7 @@ vi.mock("../../../utils/explorer/explorer", () => ({
   },
 }));
 vi.mock("../../../utils/program-info", () => ({
-  PgProgramInfo: { idl: null },
+  PgProgramInfo: { idl: null, callableIdl: () => null },
 }));
 vi.mock("../../../views/sidebar/assistant/bridge/playground-bridge", () => ({
   realBridge: {

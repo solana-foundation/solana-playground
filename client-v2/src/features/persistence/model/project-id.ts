@@ -1,3 +1,4 @@
+import { TUTORIAL_ID_PREFIX } from "./project-write.mjs";
 import { PgCommon } from "../../../utils/common";
 
 /**
@@ -12,7 +13,7 @@ import { PgCommon } from "../../../utils/common";
  * one `projects.id` column without any chance of collision.
  */
 export const tutorialProjectId = (name: string) =>
-  `tut:${PgCommon.toKebabFromTitle(name)}`;
+  `${TUTORIAL_ID_PREFIX}${PgCommon.toKebabFromTitle(name)}`;
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;

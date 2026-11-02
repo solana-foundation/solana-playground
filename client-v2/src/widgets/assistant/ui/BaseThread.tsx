@@ -19,6 +19,7 @@ import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { BaseThreadItem } from "./BaseThreadItem";
 import type { ReplyActions } from "./BaseThreadItem";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
+import type { SignInOffer } from "../model/sign-in-offer";
 
 /** A message the model turned away for load, counting down to its next send */
 export interface BusyRetryView {
@@ -41,6 +42,7 @@ export const BaseThread = ({
   items,
   working,
   unsaved,
+  signIn,
   project,
   suggestions,
   onSuggestion,
@@ -53,6 +55,8 @@ export const BaseThread = ({
   working: boolean;
   /** The open thread could not be read, so nothing typed into it is saved */
   unsaved: boolean;
+  /** The line a signed-out thread ends in, or `null` when it is not shown */
+  signIn: SignInOffer | null;
   /** The open project's name, or `null` when there is none */
   project: string | null;
   suggestions: readonly string[];
@@ -93,6 +97,22 @@ export const BaseThread = ({
             ))
           )}
           {retry && <BusyRetry retry={retry} />}
+          {signIn && (
+            <Callout role="status">
+              <CalloutDescription>
+                Sign in to keep this conversation on your other devices.
+              </CalloutDescription>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 justify-self-start"
+                disabled={signIn.pending}
+                onClick={signIn.onSignIn}
+              >
+                Sign in with GitHub
+              </Button>
+            </Callout>
+          )}
           {working && (
             <Marker role="status" aria-label="Assistant is working">
               <MarkerIcon>

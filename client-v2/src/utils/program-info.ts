@@ -17,6 +17,7 @@ import { writeWorkspaceFile } from "./explorer/workspace-file";
 import { PgWeb3 } from "./web3";
 import type { Nullable } from "./types";
 import { createLogger } from "../shared/lib/logger";
+import { readIdl, type IdlReading, type IdlV1 } from "../entities/idl";
 
 const log = createLogger("program-info:storage");
 
@@ -28,8 +29,8 @@ type ProgramInfo = Nullable<{
   kp: PgWeb3.Keypair;
   /** Program's custom public key */
   customPk: PgWeb3.PublicKey;
-  /** Program's Anchor IDL */
-  idl: Idl;
+  /** Program's Anchor IDL, 0.29 or 1.x, as it arrived; read it through `readIdl` */
+  idl: Idl | IdlV1;
   /** Imported program binary file */
   importedProgram: {
     bytes: Uint8Array;
@@ -44,7 +45,7 @@ type SerializedProgramInfo = Nullable<{
   uuid: string;
   kp: Array<number>;
   customPk: string;
-  idl: Idl;
+  idl: Idl | IdlV1;
   lastBuildFailed: boolean;
 }>;
 
@@ -163,6 +164,29 @@ class _PgProgramInfo {
     return PgProgramInfo.pk?.toBase58() ?? null;
   }
 
+  /** How the stored IDL reads, or `null` when there is none */
+  static readIdl(): IdlReading | null {
+    return PgProgramInfo.idl ? readIdl(PgProgramInfo.idl) : null;
+  }
+
+  /**
+   * The IDL in the 0.29 shape the client calls a program with, or `null`
+   * when there is none or it was refused (`readIdl` says why).
+   */
+  static callableIdl(): Idl | null {
+    const reading = _PgProgramInfo.readIdl();
+    return reading && reading.kind !== "refused" ? reading.idl : null;
+  }
+
+  /** Why `callableIdl()` is null, worded for the person who hit it */
+  static noCallableIdlMessage() {
+    const reading = _PgProgramInfo.readIdl();
+    if (reading?.kind === "refused") {
+      return `The program's IDL can't be called: ${reading.reason}.`;
+    }
+    return "IDL not found, build the program to create the IDL.";
+  }
+
   /** Get the JSON.stringified IDL from state. */
   static getIdlStr() {
     if (PgProgramInfo.idl) return JSON.stringify(PgProgramInfo.idl);
@@ -234,7 +258,8 @@ class _PgProgramInfo {
     const idlAccount = decodeIdlAccount(accountInfo.data.slice(8));
     const { inflate } = await import("pako");
     const inflatedIdl = inflate(idlAccount.data);
-    const idl: Idl = JSON.parse(PgCodec.decodeText(inflatedIdl));
+    // Either version; readers go through `readIdl`
+    const idl: Idl | IdlV1 = JSON.parse(PgCodec.decodeText(inflatedIdl));
     return { idl, authority: idlAccount.authority };
   }
 }

@@ -1,46 +1,44 @@
-import { FC, useEffect, useMemo } from "react";
-import {
-  StandardWalletAdapter,
-  WalletReadyState,
-} from "@solana/wallet-adapter-base";
-import {
-  useWallet as useSolanaWallet,
-  WalletProvider,
-} from "@solana/wallet-adapter-react";
+import { FC, useEffect } from "react";
 
-import { PgWallet } from "../../utils";
+import {
+  watchExternalWallets,
+  type SigningCluster,
+} from "@/entities/external-wallet";
+import { PgConnection, PgWallet } from "../../utils";
 import { useWallet } from "../../hooks";
+
+/** ConnectorKit's cluster ids by the Playground's; the rest sign without a hint */
+const SIGNING_CLUSTER_IDS: Partial<Record<string, SigningCluster["id"]>> = {
+  "mainnet-beta": "solana:mainnet",
+  devnet: "solana:devnet",
+  testnet: "solana:testnet",
+};
+
+/** The chain an external wallet is told it signs for: the Playground's cluster */
+const signingCluster = (): SigningCluster | undefined => {
+  const name = PgConnection.cluster;
+  if (!name) return undefined;
+  const id = SIGNING_CLUSTER_IDS[name];
+  if (!id) return undefined;
+  return { id, label: name, url: PgConnection.current.rpcEndpoint };
+};
 
 export const SolanaProvider: FC<React.PropsWithChildren<unknown>> = ({
   children,
 }) => {
-  const wallets = useMemo(() => [], []);
-
-  return (
-    <WalletProvider wallets={wallets}>
-      <PgWalletProvider>{children}</PgWalletProvider>
-    </WalletProvider>
-  );
-};
-
-const PgWalletProvider: FC<React.PropsWithChildren<unknown>> = ({
-  children,
-}) => {
   const wallet = useWallet();
-  const { wallets } = useSolanaWallet();
 
-  // Set the standard wallets
-  useEffect(() => {
-    // Only check for the `standard` field because signer methods such as
-    // `signTransaction` and `signMessage` are optional, and they are only
-    // getting set after a successful connection.
-    PgWallet.standardWallets = wallets
-      .filter((w) => w.readyState === WalletReadyState.Installed)
-      .map((w) => w.adapter)
-      .filter(
-        (w) => (w as StandardWalletAdapter).standard
-      ) as StandardWalletAdapter[];
-  }, [wallets]);
+  // Set the standard wallets, found through ConnectorKit's registry
+  useEffect(
+    () =>
+      watchExternalWallets(
+        (wallets) => {
+          PgWallet.standardWallets = wallets;
+        },
+        { signingCluster }
+      ),
+    []
+  );
 
   // Sync values when the user changes standard wallet accounts in the extension
   useEffect(() => {
@@ -54,12 +52,15 @@ const PgWalletProvider: FC<React.PropsWithChildren<unknown>> = ({
       PgWallet.standardWallets = [...PgWallet.standardWallets];
     };
 
-    // There is no specific event for account changes, but the `connect` event
-    // triggers after account switch even if the wallet is already connected
+    // There is no specific event for account changes; the bridge fires
+    // `connect` after an account switch, as wallet-adapter did, and
+    // `disconnect` when the user revokes the site inside the extension
     wallet.on("connect", handleStandardAccountChange);
+    wallet.on("disconnect", handleStandardAccountChange);
 
     return () => {
       wallet.off("connect", handleStandardAccountChange);
+      wallet.off("disconnect", handleStandardAccountChange);
     };
   }, [wallet]);
 

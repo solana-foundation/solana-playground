@@ -157,4 +157,15 @@ describe("SyncBanner wording", () => {
       "src/lib.rs changed on another device while you were resolving. Review before applying."
     );
   });
+
+  it("names the limit a project too large to sync is over", async () => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    await act(async () => root.render(<SyncBanner />));
+    expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
+      "This project is over the 4 MB sync limit. Remove or shrink its largest files, then try again."
+    );
+  });
 });

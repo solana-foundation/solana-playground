@@ -17,7 +17,7 @@ export { SIGNED_OUT_REASON } from "./config.mjs";
  */
 export const checkSignedIn = () => {
   if (!PgSession.get()) {
-    throw new Error("Sign in with GitHub to request devnet SOL.");
+    throw new Error("Sign in with GitHub to request Devnet SOL.");
   }
 };
 

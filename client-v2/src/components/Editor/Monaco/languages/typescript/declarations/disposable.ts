@@ -99,7 +99,9 @@ export const declareDisposableTypes = (): Disposable => {
 
   // Anchor program
   let programDisposables: monaco.IDisposable[] = [];
-  const idlChange = PgProgramInfo.onDidChangeIdl((idl) => {
+  const idlChange = PgProgramInfo.onDidChangeIdl(() => {
+    // Typed from the 0.29 shape the runtime's `Program` is built with
+    const idl = PgProgramInfo.callableIdl();
     if (!idl) {
       // Dispose the program types if there is no IDL otherwise the types will
       // leak between workspaces if the previous workspace has an IDL but the

@@ -279,6 +279,55 @@ test("client-v2-layout: Folding the console", async ({ seededPage: page }) => {
   await expect(page.locator(".xterm-rows")).toContainText("echo-marker");
 });
 
+// The terminal was a grid item as wide as its own content, so when the stage
+// narrowed after it mounted (as it does while the layout settles on load) it
+// overhung the console and shrank one scrollbar per throttled fit, 15 fits on
+// a load here. On the runner a `help` sent in that window once printed with
+// the view left at the top of the buffer (HOO-2370); that xterm step is not
+// reproduced, so this guards the overhang, the condition it ran in
+test("the terminal never overhangs the console while it opens and runs a command", async ({
+  page,
+}) => {
+  // How far the terminal reaches past the console, every frame from the load
+  await page.addInitScript(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    w.overhang = 0;
+    w.samples = 0;
+    const sample = () => {
+      const terminal = document.querySelector(".xterm");
+      const well = document.querySelector(
+        '[data-slot="console-drawer-content"]'
+      );
+      if (terminal && well) {
+        w.samples++;
+        w.overhang = Math.max(
+          w.overhang,
+          terminal.getBoundingClientRect().width -
+            well.getBoundingClientRect().width
+        );
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await seedWorkspace(page);
+
+  // Typed and sent while the drawer is still opening: no wait for it
+  await consoleHandle(page).click();
+  await page.getByLabel("Terminal input").first().focus();
+  await page.keyboard.type("help");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".xterm-rows")).toContainText(HELP_TAIL);
+
+  const { overhang, samples } = await page.evaluate(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    return { overhang: w.overhang, samples: w.samples };
+  });
+  // A renamed selector would measure nothing and pass
+  expect(samples).toBeGreaterThan(0);
+  expect(overhang).toBeLessThanOrEqual(0);
+});
+
 // React's StrictMode runs an effect twice in dev; opening the terminal on
 // both runs printed the welcome twice and left `$ $` as the prompt
 test("client-v2-layout: The terminal greets once", async ({
@@ -641,9 +690,13 @@ test.describe("on a phone", () => {
     const settings = page.getByRole("region", { name: "Settings" });
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
-    await network.getByRole("radio", { name: "Localnet" }).click();
+    // Mainnet's requests are refused, so CI never reaches it
+    await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
+      route.abort("connectionrefused")
+    );
+    await network.getByRole("radio", { name: "Mainnet" }).click();
     await expect(
-      network.getByRole("radio", { name: "Localnet" })
+      network.getByRole("radio", { name: "Mainnet" })
     ).toHaveAttribute("aria-checked", "true");
     await network.getByRole("radio", { name: "Devnet", exact: true }).click();
     await expect(
@@ -673,6 +726,46 @@ test.describe("on a phone", () => {
     await expect(
       page.getByRole("button", { name: "Menu", exact: true })
     ).toBeFocused();
+  });
+
+  // A swipe made while the editor loads stays. Opening its file must not
+  // focus the editor while it is swiped out of the window, and its tab row
+  // must scroll only itself: either would scroll the pager back to the work
+  // page. The touch stays down until the editor is in, so the pager has not
+  // settled when the editor mounts.
+  test("a swipe made while the editor loads stays on the preview", async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // The editor's chunk (webpack's name for it), held so it mounts under the
+    // swipe; a name that stopped matching would hold nothing and pass for the
+    // wrong reason
+    let heldChunk = false;
+    await page.route(/src_components_Editor_Monaco_index_ts/, async (route) => {
+      heldChunk = true;
+      await held;
+      await route.continue();
+    });
+    await seedThenNarrow(page);
+    const pager = page.getByTestId("phone-pager");
+    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    await pager.evaluate((el) => {
+      el.dispatchEvent(new TouchEvent("touchstart"));
+      el.scrollTo({ left: el.clientWidth * 2, behavior: "instant" });
+    });
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect(preview).toBeInViewport({ ratio: 1 });
+
+    await expect.poll(() => heldChunk).toBe(true);
+    release();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "use anchor_lang"
+    );
+    await pager.evaluate((el) => el.dispatchEvent(new TouchEvent("touchend")));
+
+    await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
+    await expect(preview).toBeInViewport({ ratio: 1 });
   });
 
   // The gallery is a dialog over the menu page; the project it starts opens
@@ -1524,7 +1617,7 @@ test("client-v2-layout: Signing out asks first", async ({ page }) => {
 
   await account(page).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
+  const dialog = page.getByRole("dialog", { name: "Sign out of Playground?" });
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   expect(signedOut).toBe(false);
@@ -1588,7 +1681,7 @@ test("client-v2-layout: A cluster that is down", async ({
   await page.reload();
 
   const row = nav(page).getByRole("button", {
-    name: "Change cluster, currently devnet, not answering",
+    name: "Change cluster, currently Devnet, not answering",
   });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await account(page).click();
@@ -1596,7 +1689,7 @@ test("client-v2-layout: A cluster that is down", async ({
     .getByRole("menu", { name: "Account" })
     .getByRole("menuitem")
     .first();
-  await expect(first).toContainText("devnet is not answering");
+  await expect(first).toContainText("Devnet is not answering");
   await first.click();
   const network = page
     .getByRole("region", { name: "Settings" })
@@ -1642,7 +1735,7 @@ test("a cluster that does not answer is down", async ({ seededPage: page }) => {
 
   await expect(
     nav(page).getByRole("button", {
-      name: "Change cluster, currently devnet, not answering",
+      name: "Change cluster, currently Devnet, not answering",
     })
   ).toBeVisible({ timeout: 15_000 });
 });
@@ -1665,13 +1758,13 @@ test("a stalled cluster that moves again is not down", async ({
   });
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, not answering",
+    "Change cluster, currently Devnet, not answering",
     { timeout: 15_000 }
   );
 
   moving = true;
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet",
+    "Change cluster, currently Devnet",
     { timeout: 20_000 }
   );
 });
@@ -1682,13 +1775,13 @@ test("a cluster that answers again is not down", async ({
   await refuseCluster(page);
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, not answering",
+    "Change cluster, currently Devnet, not answering",
     { timeout: 15_000 }
   );
 
   await page.unrouteAll();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet",
+    "Change cluster, currently Devnet",
     { timeout: 20_000 }
   );
 });
@@ -1717,7 +1810,7 @@ test("the wallet asks about the validator when localnet does not answer", async 
   // and the open dialog hides the page from role queries: the account's
   // label is read once it is closed, never in a race with it
   await createWallet(page);
-  const howTo = page.getByRole("dialog", { name: "Connect to localnet" });
+  const howTo = page.getByRole("dialog", { name: "Connect to Localnet" });
   await expect(howTo).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(howTo).toBeHidden();
@@ -1741,7 +1834,7 @@ test("playnet is not down while it starts", async ({ seededPage: page }) => {
   // recovers must fail here, not be waited out
   for (let i = 0; i < 12; i++) {
     expect(await clusterRow(page).getAttribute("aria-label")).toBe(
-      "Change cluster, currently playnet"
+      "Change cluster, currently Playnet"
     );
     await page.waitForTimeout(500);
   }
