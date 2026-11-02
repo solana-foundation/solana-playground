@@ -16,6 +16,10 @@ derive the new instance with lenses (`ramda`'s `lensProp`/`set`/`over`, or a sim
 hides which fields the fixture actually carries; the explicit form names the change. Build long
 event series with small named helpers rather than inline spreads.
 
+ESLint warns on such a spread (`layers/no-test-spread` in `eslint-plugin-layers/`): in a `*.test.*` or
+`*.spec.*` file, anywhere under `e2e/`, and inside an `if (import.meta.vitest)` block. A spread in a call
+(`fn(...args)`) builds no shape and passes.
+
 Production code is not covered by this rule yet — match the surrounding idiom there.
 
 Note: no lens library is a dependency yet — until one is added, write the explicit copy.

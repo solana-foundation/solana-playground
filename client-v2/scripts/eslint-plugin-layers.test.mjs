@@ -165,6 +165,67 @@ tester.run("layers/alias-across-modules", rules["alias-across-modules"], {
   invalid,
 });
 
+tester.run("layers/no-test-spread", rules["no-test-spread"], {
+  valid: [
+    [
+      "src/shared/lib/probe.ts",
+      "const x = { ...a };\nif (import.meta.vitest) {}",
+    ],
+    ["src/shared/lib/probe.test.ts", "fn(...args);"],
+    ["src/shared/lib/probe.ts", "if (import.meta.env) { const x = { ...a }; }"],
+    [
+      "src/shared/lib/probe.ts",
+      "if (import.meta.vitest) {} else { const x = { ...a }; }",
+    ],
+  ].map(([file, code]) => ({ filename: path.join(cwd, file), code })),
+  invalid: [
+    ["src/shared/lib/probe.test.ts", "const x = { ...a, b: 1 };"],
+    ["src/shared/lib/probe.spec.ts", "const x = [...a, b];"],
+    ["src/shared/lib/probe.test.tsx", "const x = { ...a };"],
+    ["src/shared/lib/probe.test.mjs", "const x = { ...a };"],
+    ["e2e/probe.ts", "const x = { ...a };"],
+    [
+      "src/shared/lib/probe.ts",
+      "if (import.meta.vitest) { const x = { ...a }; }",
+    ],
+  ].map(([file, code]) => ({
+    filename: path.join(cwd, file),
+    code,
+    errors: [{ messageId: "spread" }],
+  })),
+});
+
+tester.run("layers/curry-order", rules["curry-order"], {
+  valid: [
+    // A callback first is the order the rule asks for
+    "function f(cb: () => void, a) {}",
+    "function f(cb: () => void) {}",
+    "function f(opts) {}",
+    "function Panel(a = 1) {}",
+    "const Panel = (a = 1) => null;",
+    "exports.Panel = (a = 1) => null;",
+    "const parts = { Panel: (a = 1) => null };",
+    "class C { Panel(a = 1) {} }",
+    "class C { Panel = (a = 1) => null; }",
+    "list.map((x, i = 0) => x);",
+    "new Promise((resolve, reject = 1) => {});",
+  ]
+    .map((code) => ({ code }))
+    .concat({
+      filename: path.join(cwd, "api/probe.mjs"),
+      code: "function f(a = 1) {}",
+    }),
+  invalid: [
+    ["function f(a = 1) {}", "optional"],
+    ["function f(a?: number) {}", "optional"],
+    ["class C { constructor(private a?: number) {} }", "optional"],
+    // All capitals is a constant's name, not a component's
+    ["const VERSION_OF = (row = 1) => row;", "optional"],
+    ["function f(a, cb: () => void) {}", "callbackLast"],
+    ["function f(a, opts) {}", "optionsLast"],
+  ].map(([code, messageId]) => ({ code, errors: [{ messageId }] })),
+});
+
 describe("layers/alias-across-modules options", () => {
   // A wrong `src` would place no file in a layer and pass everything
   for (const wrong of ["src", path.join(src, "missing")]) {
