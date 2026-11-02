@@ -41,7 +41,10 @@ stamp() {
   admin_sql "comment on database \"$name\" is '$1:$(date +%s)'"
 }
 
-case "$(state)" in
+# Checked on its own line: a failure inside `case "$(...)"` is not caught by
+# `set -e`, and an empty state would drop a database that exists
+current=$(state)
+case "$current" in
   created-at:*)
     echo "reusing database $name on $CLOUD_SQL_INSTANCE" >&2
     ;;
