@@ -27,6 +27,10 @@
       "destination": "/api/auth"
     },
     {
+      "source": "/api/ai/status",
+      "destination": "/api/ai"
+    },
+    {
       "source": "/((?!api/|static/|.*\\..*).*)",
       "destination": "/index.html"
     }
