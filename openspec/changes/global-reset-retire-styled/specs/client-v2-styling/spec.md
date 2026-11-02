@@ -57,7 +57,10 @@ provider in `src/providers/theme/` and the theme's type declaration in
 `src/types/declarations.d.ts`. The lint step SHALL fail on such an import
 anywhere else.
 
-#### Scenario: A new styled import
+#### Scenario: A new styled import (manual)
 
-- **WHEN** a module outside the two folders imports `styled-components`
+- **WHEN** a module outside the two folders imports `styled-components`, for
+  instance a probe file `src/views/probe.tsx` holding
+  `import styled from "styled-components";`
 - **THEN** `yarn lint` fails and names the import
+- **AND** the same probe under `src/widgets/layout-shell/` passes
