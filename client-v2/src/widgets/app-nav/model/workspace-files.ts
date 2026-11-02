@@ -38,11 +38,14 @@ export const readWorkspaceFiles = async (name: string, fs: Fs) => {
  */
 export const readProjectFiles = async (name: string, fs: Fs) => {
   const root = `/${name}/`;
-  const files: Record<string, string> = {};
-  for (const [path, content] of await readWorkspaceFiles(name, fs)) {
-    files[path.slice(root.length)] = content;
-  }
-  return files;
+  // `Object.fromEntries` makes own keys, where an assignment to `__proto__`
+  // would set the prototype and lose a file of that name
+  return Object.fromEntries(
+    (await readWorkspaceFiles(name, fs)).map(([path, content]) => [
+      path.slice(root.length),
+      content,
+    ])
+  );
 };
 
 /** The same files under another workspace's folder */
@@ -115,6 +118,17 @@ if (import.meta.vitest) {
         expect(await readProjectFiles("alpha", PgExplorer.fs)).toEqual({
           "src/lib.rs": "fn main() {}",
         });
+      });
+
+      it("keeps a file named __proto__ as a file", async () => {
+        await PgExplorer.createWorkspace("alpha", {
+          files: [["/alpha/__proto__", "kept"]],
+        });
+
+        const files = await readProjectFiles("alpha", PgExplorer.fs);
+
+        expect(Object.hasOwn(files, "__proto__")).toBe(true);
+        expect(Object.getPrototypeOf(files)).toBe(Object.prototype);
       });
     });
 

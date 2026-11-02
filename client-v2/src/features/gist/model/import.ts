@@ -195,7 +195,9 @@ const readGist = async (ref: GistRef) => {
     );
   }
 
-  const files: Record<string, { content: string }> = {};
+  // A Map, turned into an object at the end: an assignment to `__proto__`
+  // would set the prototype and lose a file of that name
+  const files = new Map<string, { content: string }>();
   for (const [name, file] of Object.entries(gist.files)) {
     // The API answers `null` for a file it cannot show; there is nothing to
     // import from it
@@ -204,10 +206,13 @@ const readGist = async (ref: GistRef) => {
       file.truncated || file.content === undefined
         ? await downloadWhole(file.raw_url, name, subject)
         : file.content;
-    files[name] = { content };
+    files.set(name, { content });
   }
 
-  return { owner: gist.owner?.login ?? ANONYMOUS_OWNER, files };
+  return {
+    owner: gist.owner?.login ?? ANONYMOUS_OWNER,
+    files: Object.fromEntries(files),
+  };
 };
 
 /**

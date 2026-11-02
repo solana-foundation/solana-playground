@@ -311,6 +311,22 @@ describe("getGistFiles", () => {
     ]);
   });
 
+  it("keeps a file named __proto__ as a file", async () => {
+    // `JSON.stringify` drops a `__proto__` set by a literal; write it raw
+    answers({
+      [API]: ok(
+        '{"files":{"__proto__":{"content":"a","raw_url":"x"}},' +
+          '"truncated":false,"owner":{"login":"alice"}}'
+      ),
+    });
+
+    await getGistFiles({ id: ID }, "link");
+
+    const [files] = format.fromGistFiles.mock.calls[0];
+    expect(Object.hasOwn(files, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(files)).toBe(Object.prototype);
+  });
+
   it("downloads a file the API gave no content for", async () => {
     answers({
       [API]: ok(gist({ "lib.rs": {} })),
