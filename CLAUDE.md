@@ -150,7 +150,10 @@ Asked to build something in the client, look in `openspec/changes/` first.
 - **`client-v2/public/` is gitignored and generated**, not authored.
   `scripts/update-static.mjs` copies it out of the `client/public` git submodule
   and dates tutorials from that submodule's history — so the submodule needs
-  full history (`fetch-depth: 0`), not a shallow checkout.
+  full history (`fetch-depth: 0`), not a shallow checkout. Files under
+  `client-v2/static/` (the curated program gallery,
+  `static/programs/programs.json`) are copied over that mirror afterwards and
+  win; edit those, never `public/`.
 - **`docs/assistant-context.md` is the in-product assistant's context**, not
   Claude Code's. It is the source of truth; `yarn sync-assistant-context` copies
   it into `client-v2/src/views/sidebar/assistant/content/`. Edit the `docs/` copy.

@@ -8,6 +8,9 @@
  * the *primary* checkout's `client/public`, even when run from a worktree —
  * a worktree copies files in and never touches a submodule of its own.
  *
+ * Files under `client-v2/static` then replace their upstream copies
+ * (`static-overlay.mjs`).
+ *
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
  */
@@ -15,6 +18,7 @@ import fs from "fs/promises";
 import path from "path";
 import { execFileSync } from "child_process";
 
+import { overlayStatic } from "./static-overlay.mjs";
 import { CLIENT_PATH, exists } from "./utils.mjs";
 
 const TIMESTAMPS_FILE = "tutorial-timestamps.json";
@@ -52,6 +56,10 @@ for (const file of sourceFiles) {
   await fs.copyFile(path.join(SOURCE_PATH, file), to);
 }
 
+// The fork's own copies of upstream files (the curated program gallery). After
+// the mirror, so the fork's copy wins.
+const overlaid = await overlayStatic(path.join(CLIENT_PATH, "static"), DEST_PATH);
+
 // craco derives each tutorial's date from git history. The destination is not a
 // git repo of its own, so capture the real dates from the source while we can.
 const tutorialsPath = path.join(SOURCE_PATH, "tutorials");
@@ -79,5 +87,6 @@ await fs.writeFile(
 const commit = git(["rev-parse", "--short", "HEAD"], SOURCE_PATH).trim();
 console.log(
   `Synced ${sourceFiles.length} files from ${path.relative(primaryRoot, SOURCE_PATH)}@${commit}` +
-    `, dated ${Object.keys(timestamps).length} tutorials`
+    `, dated ${Object.keys(timestamps).length} tutorials` +
+    `, overlaid ${overlaid.length} from client-v2/static (${overlaid.join(", ")})`
 );
