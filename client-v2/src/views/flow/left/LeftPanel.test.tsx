@@ -13,6 +13,8 @@ const given = vi.hoisted(() => ({
   listener: null as ((state: unknown) => void) | null,
   /** How many times the tree mounted */
   treeMounts: 0,
+  /** The editor's "Show files" listeners, to fire an ask */
+  filesAsks: [] as (() => void)[],
 }));
 
 // The utils barrel needs build-time globals the unit runner does not define.
@@ -20,6 +22,16 @@ vi.mock("../../../utils", () => ({
   PgExplorer: {
     get currentWorkspaceId() {
       return given.workspace;
+    },
+  },
+  PgView: {
+    onDidRequestFiles: (cb: () => void) => {
+      given.filesAsks.push(cb);
+      return {
+        dispose: () => {
+          given.filesAsks = given.filesAsks.filter((f) => f !== cb);
+        },
+      };
     },
   },
 }));
@@ -238,6 +250,21 @@ describe("LeftPanel across an unmount", () => {
 
     draw(false);
     expect(body().scrollTop).toBe(120);
+  });
+
+  it("turns to Files when the editor asks for files", () => {
+    inLesson();
+    draw(false);
+    act(() => given.filesAsks.forEach((ask) => ask()));
+    expect(tab("files").getAttribute("data-state")).toBe("on");
+  });
+
+  it("opens on Files when the editor asked while it was hidden", () => {
+    inLesson();
+    draw(false).unmount();
+    act(() => given.filesAsks.forEach((ask) => ask()));
+    draw(false);
+    expect(tab("files").getAttribute("data-state")).toBe("on");
   });
 
   it("keeps the Files tab across an unmount", () => {

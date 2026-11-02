@@ -582,12 +582,12 @@
   height: 1em;
 }
 
-.pg-markdown :before {
+.pg-markdown::before {
   content: "";
   display: table;
 }
 
-.pg-markdown :after {
+.pg-markdown::after {
   clear: both;
   content: "";
   display: table;

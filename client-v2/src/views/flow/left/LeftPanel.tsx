@@ -10,8 +10,18 @@ import Explorer from "../../sidebar/explorer/Component";
 import { useCreateItem } from "../../sidebar/explorer/Component/useCreateItem";
 import { BOTTOM_BAR_HEIGHT } from "../tokens";
 import { keepColumn, keptColumn, type Tab } from "./kept-column";
-import { PgExplorer } from "../../../utils";
+import { PgExplorer, PgView } from "../../../utils";
 import { cn } from "@/shared/lib/utils";
+
+// The editor's "Show files" asks for the tree, not just the column: in a
+// lesson the column would otherwise open on Steps. A hidden column is
+// unmounted, so the ask is written to its memory, which it opens from
+PgView.onDidRequestFiles(() => {
+  const workspace = PgExplorer.currentWorkspaceId;
+  if (!workspace) return;
+  const scrollTop = keptColumn(workspace)?.scrollTop ?? 0;
+  keepColumn({ workspace, tab: "files", scrollTop });
+});
 
 /** Narrows the Segmented's plain string to a tab */
 export const isLessonTab = (value: string): value is Tab =>
@@ -84,6 +94,8 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   useLayoutEffect(() => {
     kept.current.tab = tab;
   }, [tab]);
+  // An open column takes the same ask in place
+  useEffect(() => PgView.onDidRequestFiles(() => setTab("files")).dispose, []);
   const bodyRef = useRef<HTMLDivElement>(null);
   // A layout effect: the tree, a child, has reopened its folders by now
   // (`useHandleItemState`), so the scroll lands where it was rather than on
