@@ -105,6 +105,7 @@
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-boundaries": "7.3.0",
     "eslint-plugin-layers": "link:./eslint-plugin-layers",
+    "eslint-plugin-unicorn": "47.0.0",
     "jsdom": "^29.1.1",
     "markdownlint-cli2": "0.24.0",
     "monaco-editor-webpack-plugin": "^7.0.1",
@@ -147,7 +148,7 @@
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --ext .ts,.tsx,.mjs,.mts src api e2e",
+    "lint": "eslint --max-warnings 2816 --ext .ts,.tsx,.mjs,.mts src api e2e",
     "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
@@ -370,6 +371,58 @@
             {
               "args": "none",
               "ignoreRestSiblings": true
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**",
+          "api/**",
+          "e2e/**"
+        ],
+        "plugins": [
+          "@typescript-eslint",
+          "unicorn"
+        ],
+        "rules": {
+          "@typescript-eslint/no-non-null-assertion": "warn",
+          "layers/curry-order": "warn",
+          "layers/no-test-spread": "warn",
+          "unicorn/no-null": [
+            "warn",
+            {
+              "checkStrictEquality": false
+            }
+          ],
+          "max-params": [
+            "warn",
+            2
+          ]
+        }
+      },
+      {
+        "files": [
+          "api/**"
+        ],
+        "rules": {
+          "max-params": "off"
+        }
+      },
+      {
+        "files": [
+          "src/**/*.{test,spec}.*"
+        ],
+        "plugins": [
+          "jest"
+        ],
+        "rules": {
+          "jest/valid-title": [
+            "warn",
+            {
+              "mustNotMatch": {
+                "describe": "\\b([Uu][Nn][Ii][Tt]|[Ii][Nn][Tt][Ee][Gg][Rr][Aa][Tt][Ii][Oo][Nn]|[Ee]2[Ee])\\b"
+              }
             }
           ]
         }

@@ -4,6 +4,14 @@
 # build, so a push that CI would reject fails here first.
 set -e
 root=$(git rev-parse --show-toplevel)
+# Lint warnings of the files changed by pushed commits no remote has; stdin is "<lref> <lsha> <rref> <rsha>" per ref
+while read -r _ local_sha _ _; do
+  # An all-zero sha is a deleted ref: nothing to lint
+  case $local_sha in *[!0]*) ;; *) continue ;; esac
+  git log --name-only --format= "$local_sha" --not --remotes
+done | sort -u | tr '\n' '\0' |
+  xargs -0 "$root/client-v2/scripts/lint-changed.sh" ||
+  echo "pre-push: lint-changed could not run" >&2
 cd "$root/client-v2"
 if [ ! -d node_modules ]; then
   echo "pre-push: client-v2/node_modules missing; skipping check" >&2

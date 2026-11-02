@@ -274,15 +274,29 @@ when it is empty.
 
 ## What review keeps finding
 
-Each rule here came back in review more than once. The first three are
+Each rule here came back in review more than once. The first holds by
+review. The next three are
 ESLint errors (`package.json` `eslintConfig`, run by `yarn lint`, and by the
 build's `lint:layers` in the layers and `api/`) in the
 layers, `src/{app,widgets,features,entities,shared}/`; the legacy roots are
 exempt until code moves out of them, except that `crypto.randomUUID` is an
 error across all of `src/` and `e2e/`, and the id rule holds in `e2e/`. The
-lint catches the common spellings, not every one. The fourth is the boundary
-check's job (Layers, "The boundary check"); the rest hold by review.
+lint catches the common spellings, not every one. The fifth is the boundary
+check's job (Layers, "The boundary check"); the rest hold by review, apart
+from the ESLint warnings an item names. The `lint` script's `--max-warnings`
+caps the total of every ESLint warning in `src/`, `api/` and `e2e/`, not only
+those, and a PR that pushes the total over the cap fails. A sanctioned
+exception, such as `null` on the wire or a signature a library defines,
+passes with `// eslint-disable-next-line <rule> -- <why>` on the line before
+it.
 
+- **The lint warnings are debt, not the normal state.** `yarn lint` reports
+  thousands of warnings, and `--max-warnings` in `package.json` records their
+  total. Fix the warnings on the lines a change touches, and in the function
+  that holds them when the fix stays inside that function. A PR never adds
+  a warning, and a PR that removes warnings lowers `--max-warnings` to the
+  new total. Warnings in files the change does not otherwise touch are
+  fixed in a PR of their own, so the diff stays reviewable.
 - **Ids come from `src/shared/lib/ids`.** `uuid()` mints one, `isUuid()`
   checks one. Never `crypto.randomUUID()`, never a
   copied UUID regex, never `import ... from "uuid"` anywhere else.
@@ -297,6 +311,88 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   `Record` lookup.
 - **Imports go through a slice's public API**, never a deep path (see
   Layers).
+- **Curried parameters.** Order a function's parameters by how often their
+  values change between calls: what stays fixed (configuration, a
+  dependency, a callback) comes first, and the data comes last. The
+  reviewer's test: fix the first argument, and the result must be a function
+  worth reusing. No parameter is optional or has a default: a default is a
+  function with the setting already applied. Each setting is a curried
+  argument of its own, not a field of an options object, and a positional
+  boolean becomes a function with its own name (`renderCollapsed(node)`, not
+  `render(node, true)`). A function that returns a function is named
+  `<verb>For` or `<verb>With`, so the full call reads as one phrase:
+  `formatFor(locale)(amount)`. No `make` or `create` prefix.
+
+  ```ts
+  truncate(text, 80); // before
+  const truncateWith = (max: number) => (text: string) => text.slice(0, max);
+  const truncate = truncateWith(80); // after: truncate(text)
+  ```
+
+  ESLint warns through `layers/curry-order` on an optional or defaulted
+  parameter, on a callback or a parameter named `options`, `opts`, `config`
+  or `settings` in the last of two or more places. `layers/curry-order`
+  exempts by structure: a React component (a PascalCase name, taking a
+  props object), a function written directly as an argument of a call,
+  whose caller defines its signature (`reduce`, an event listener), and
+  `api/*.mjs` handlers. `max-params` warns on more than two parameters
+  everywhere outside `api/`, without those exemptions, so a library-defined
+  callback with three or more parameters takes
+  `// eslint-disable-next-line max-params -- <why>`. Which argument is the
+  data, and the `<verb>For` or `<verb>With` name, hold by review.
+
+- **One concept, one name.** A function, type or variable reuses the name
+  the codebase already has for its concept; a second name for an existing
+  concept is a finding, even when the new name reads better. The reviewer's
+  test: search the codebase for the concept the new name stands for, and if
+  an existing name turns up, the new one goes. `uuid()` from
+  `src/shared/lib/ids` mints ids, so a `newId()` that does the same is a
+  finding.
+
+  ```ts
+  const id = newId(); // before
+  const id = uuid(); // after
+  ```
+
+- **Internal code uses `undefined`, never `null`.** ESLint warns
+  (`unicorn/no-null`). At a boundary, a `===` or `!==` comparison with
+  `null` is allowed; `== null` and `!= null` warn, because a loose
+  comparison is not exact. Replace one with an exact `=== undefined` check,
+  not with the rule's autofix to `== undefined`. `null` stays
+  where a library or platform type requires it: React's `useRef<T>(null)`,
+  DOM and `JSON.parse` returns, and wire payloads and Postgres rows where
+  `null` means "cleared" and an absent key means "unchanged". Convert at
+  that boundary.
+- **The verb says where the data comes from.** `get` is synchronous and in
+  memory, with no side effects; `fetch` goes over the network; `read` and
+  `write` go to storage (IndexedDB, localStorage, the file system).
+- **A predicate starts with `is`, `has`, `can` or `should`**, functions and
+  booleans alike. Review only: the check needs type-aware ESLint, which this
+  config does not run.
+- **Handler props are `onX`; the functions that implement them are
+  `handleX`.** Review only. With its default options,
+  `react/jsx-handler-names` checks only `x.y` member expressions, so it
+  misses local handlers and flags the methods of hook results; with
+  `checkLocalVariables` it gave 469 warnings, mostly on props passed straight
+  through (`onClick={onBack}`).
+- **No non-null assertion (`value!`).** Narrow the type with a check, or
+  throw with a message that says what was missing. ESLint warns
+  (`@typescript-eslint/no-non-null-assertion`); whether the check or the
+  throw fits the case holds by review.
+- **A test title says what the code does**, in one form per file: starting
+  with "should" or with a verb (`removes the directory`), or in the scenario
+  format "Scenarios are the test plan" requires for a spec scenario. The form
+  holds by review. A `describe` title names what is tested, never the kind of
+  test, because the file name carries the kind. ESLint warns through
+  `jest/valid-title` on `describe`, `it` and `test` calls in
+  `src/**/*.{test,spec}.*`: a title that is not a string
+  (`titleMustBeString`), an empty title (`emptyTitle`), leading or trailing
+  spaces (`accidentalSpace`), a title that repeats the call's name
+  (`duplicatePrefix`), and "unit", "integration" or "e2e" in a `describe`
+  title. A title built from a loop variable (`it(label, …)`) is a
+  legitimate table test and takes
+  `// eslint-disable-next-line jest/valid-title -- <why>`. In-source blocks
+  and Playwright's `test.describe` are outside the rule and hold by review.
 - **A string that two places must agree on is declared once** and exported,
   preferably as a predicate (`isTruncationNotice`), not as a prefix that each
   caller compares by hand.
@@ -311,8 +407,9 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   mid-frame.
 - **Shape state as a type, not as flags.** Four `let`s whose valid
   combinations live in your head are a discriminated union. A result that
-  says `skipped` for eight reasons names the reason. A boolean parameter is
-  a sign the function wants an options object.
+  says `skipped` for eight reasons names the reason. A boolean parameter
+  becomes two functions with their own names (`renderCollapsed(node)`, not
+  `render(node, true)`).
 - **A comment names a symbol, never a line number**, and says why, not what.
   When the function changes, its JSDoc is part of the change.
 - **One migration per PR**, even while the schema is unshipped. Appending
@@ -396,7 +493,14 @@ check's job (Layers, "The boundary check"); the rest hold by review.
   rebase" is a review verdict here, not a nit.
 - **The `check` script is green before the push.** It runs what CI runs,
   in CI's order, minus the production build. Opt in to running it on every
-  push with `git config core.hooksPath .githooks` once per clone. To run a
+  push with `git config core.hooksPath .githooks` once per clone. The same
+  setting adds a pre-commit hook, and both hooks print the lint warnings of
+  the files they cover (staged, or changed by the commits being pushed)
+  through `scripts/lint-changed.sh` without blocking; the `--max-warnings`
+  ceiling in `check` stays the gate. Each line names its severity, and an
+  `error` line still fails `yarn lint`. Claude Code does the same after each
+  `Edit` or `Write` (`.claude/settings.json`), and hands the edited file's
+  messages to the agent. To run a
   CI job itself, in its runner image, see
   [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
 - **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**

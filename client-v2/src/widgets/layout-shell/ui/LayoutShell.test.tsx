@@ -109,7 +109,9 @@ const screenMedia = (query: string) => {
     },
     media: query,
     onchange: null,
+    // eslint-disable-next-line layers/curry-order -- DOM signature
     addEventListener: (_: string, fn: () => void) => listeners.add(fn),
+    // eslint-disable-next-line layers/curry-order -- DOM signature
     removeEventListener: (_: string, fn: () => void) => listeners.delete(fn),
     addListener: () => {},
     removeListener: () => {},
