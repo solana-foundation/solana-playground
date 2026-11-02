@@ -1,7 +1,6 @@
 import type { Mock } from "vitest";
 import { PgProjectSync } from "./project-sync";
 import { clearFailures, getFailures } from "./diagnostics";
-import { PgEditorModels } from "./editor-models";
 import { hashFiles } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClaim } from "./sync-claim";
@@ -18,6 +17,9 @@ import { PgWorkspace } from "../../../utils/explorer/workspace";
 // `reloadCurrentFromDisk`, which drops Monaco's cached models -- and
 // `monaco-editor` cannot load under jsdom, so every test in this file goes
 // through this stand-in instead.
+// `mockReset` (`vitest.config.ts`) puts every mock back to these answers
+// before each test. `valueOf` answers `null`, not `undefined`, which reads as
+// "someone is typing in it".
 vi.mock("./editor-models", () => ({
   PgEditorModels: {
     valueOf: vi.fn(async () => null),
@@ -58,13 +60,6 @@ const reset = () => {
   PgProjectSync.reset();
   PgSyncBase.reset();
   storedFiles().clear();
-  // The answers the factory gives: `mockReset` (see `vitest.config.ts`)
-  // restores them before each test anyway, and they are restated here so
-  // the test reads on its own. `valueOf` must answer `null`, not
-  // `undefined`, which reads as "someone is typing in it".
-  (PgEditorModels.valueOf as Mock).mockResolvedValue(null);
-  (PgEditorModels.drop as Mock).mockResolvedValue(undefined);
-  (PgEditorModels.dropUnder as Mock).mockResolvedValue(undefined);
 };
 
 /** The body of the most recent request */

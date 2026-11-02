@@ -8,6 +8,9 @@ import { PgFs } from "../../../utils/explorer/fs";
 import { PgRouter } from "../../../utils/router";
 import { PgWorkspace } from "../../../utils/explorer/workspace";
 
+// `mockReset` (`vitest.config.ts`) puts every mock back to these answers
+// before each test. `valueOf` answers `null`, not `undefined`, which reads as
+// "someone is typing in it".
 vi.mock("./editor-models", () => ({
   PgEditorModels: {
     valueOf: vi.fn(async () => null),
@@ -44,12 +47,6 @@ beforeEach(() => {
   vi.spyOn(PgExplorer, "switchWorkspace").mockResolvedValue(undefined);
   vi.spyOn(PgExplorer, "refreshWorkspaces").mockResolvedValue(true);
   vi.spyOn(PgCommon, "createAndDispatchCustomEvent");
-  // The answers the factory gives: `mockReset` (see `vitest.config.ts`)
-  // restores them before each test anyway, and they are restated here so
-  // the test reads on its own. `valueOf` must answer `null`, not
-  // `undefined`, or every path reads as "someone is typing in it".
-  (PgEditorModels.valueOf as Mock).mockResolvedValue(null);
-  (PgEditorModels.anyEditedUnder as Mock).mockResolvedValue(false);
   // The real one runs `then` once the models are gone; so does this
   (PgEditorModels.dropUnder as Mock).mockImplementation(
     async (_prefix: string, then?: () => void) => then?.()

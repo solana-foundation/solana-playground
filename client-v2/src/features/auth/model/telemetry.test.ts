@@ -1,4 +1,3 @@
-// `@types/mocha` also declares a global `it`, without `each`
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {

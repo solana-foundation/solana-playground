@@ -34,7 +34,6 @@ vi.mock("./merge-editor/controller", () => ({
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-// `@types/mocha` also declares a global `it`, without `each`
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { ConflictResolver } from "./ConflictResolver";

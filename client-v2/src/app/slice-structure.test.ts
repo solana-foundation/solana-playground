@@ -1,7 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "fs";
 import { join, relative } from "path";
 import ts from "typescript";
-// `@types/mocha` also declares a global `it`, without `each`
 import { expect, it } from "vitest";
 
 const SRC = join(__dirname, "..");

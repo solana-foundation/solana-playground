@@ -75,7 +75,7 @@ yarn dev                   # generate-fast + craco start
 yarn build                 # the whole production build: wasm/build.sh, install, build:bundle (~1h first run)
 yarn build:bundle          # lint:layers + generate + craco build + source-map upload, over whatever wasm/*/pkg holds; Vercel runs this
 yarn test                  # test-types + test-unit + build:bundle
-yarn test-types            # tsc --noEmit
+yarn test-types            # tsc over the tests program, then over the app (tsconfig.app.json)
 yarn test-e2e              # playwright
 yarn test-api              # node --test, for api/ and **/server/*.mjs
 yarn bundle:info           # rewrite bench/BUNDLE.md from build/; commit it when bundle sizes move

@@ -8,7 +8,6 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-// `@types/mocha` also declares a global `it`, without `each`
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";

@@ -17,6 +17,9 @@ import { PgWorkspace } from "../../../utils/explorer/workspace";
  * was meant to act on.
  */
 
+// `mockReset` (`vitest.config.ts`) puts every mock back to these answers
+// before each test. `valueOf` answers `null`, not `undefined`, which reads as
+// "someone is typing in it".
 vi.mock("./editor-models", () => ({
   PgEditorModels: {
     valueOf: vi.fn(async () => null),
@@ -96,8 +99,6 @@ beforeEach(async () => {
     value: FakeChannel,
     configurable: true,
   });
-  (PgEditorModels.valueOf as Mock).mockResolvedValue(null);
-  (PgEditorModels.anyEditedUnder as Mock).mockResolvedValue(false);
   (PgEditorModels.dropUnder as Mock).mockImplementation(
     async (_prefix: string, then?: () => void) => then?.()
   );

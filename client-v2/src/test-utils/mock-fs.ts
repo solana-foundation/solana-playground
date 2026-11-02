@@ -1,4 +1,5 @@
 import { PgCommon } from "../utils/common";
+import type { PgFs as RealPgFs } from "../utils/explorer/fs";
 
 /**
  * An in-memory stand-in for `PgFs`, for tests that run under jsdom.
@@ -8,7 +9,11 @@ import { PgCommon } from "../utils/common";
  * installed, so the module is replaced outright. `setupTests.ts` already does
  * that for every test file; no test needs its own `vi.mock` for it.
  *
- * The real filesystem round trip is covered by the browser tests in `e2e/`.
+ * The members it provides are checked against the real ones' signatures
+ * (`checkedAs` below), and every path goes through
+ * `PgExplorer.convertToFullPath` as the real one's does, so a relative path
+ * lands under the open workspace. The real filesystem round trip is covered
+ * by the browser tests in `e2e/`.
  */
 export const mockFsModule = () => {
   const files = new Map<string, string>();
@@ -23,7 +28,52 @@ export const mockFsModule = () => {
    */
   const dir = (path: string) => path.replace(/\/+$/, "");
 
-  const PgFs = {
+  /**
+   * `PgFs`'s own path resolution. Imported on call: the explorer imports this
+   * module's stand-in while it loads, so a static import would be a cycle.
+   */
+  const full = async (path: string) =>
+    (await import("../utils/explorer/explorer")).PgExplorer.convertToFullPath(
+      path
+    );
+
+  /** A filesystem error carrying lightning-fs's `code`, which callers branch on */
+  const fsError = (code: "ENOENT" | "ENOTDIR" | "ENOTEMPTY", path: string) =>
+    Object.assign(new Error(`${code}: ${path}`), { code });
+
+  /** Whether `key` is `path` itself or lies beneath it */
+  const isUnder = (key: string, path: string) =>
+    key === path || key.startsWith(path + "/");
+
+  /**
+   * The `satisfies` operator, which prettier 2.7 cannot parse: checks the mock
+   * against `T` and keeps the mock's own type, `__files` included. Replace it
+   * with the operator once prettier is upgraded.
+   */
+  const checkedAs =
+    <T>() =>
+    <U extends T>(value: U) =>
+      value;
+
+  const PgFs = checkedAs<
+    Pick<
+      typeof RealPgFs,
+      | "events"
+      | "onDidWriteFile"
+      | "writeFile"
+      | "readToString"
+      | "readToJSON"
+      | "readToJSONOrDefault"
+      | "removeFile"
+      | "rename"
+      | "createDir"
+      | "exists"
+      | "getMetadata"
+      | "removeDir"
+      | "readDir"
+      | "flush"
+    > & { __files: Map<string, string> }
+  >()({
     /** Test-only handle, for asserting on or corrupting what is stored */
     __files: files,
 
@@ -36,7 +86,12 @@ export const mockFsModule = () => {
       );
     },
 
-    async writeFile(path: string, data: string) {
+    async writeFile(
+      path: string,
+      data: string,
+      _opts?: { createParents?: boolean }
+    ) {
+      path = await full(path);
       files.set(path, data);
       // Dispatched here as well, because what listens for it is the only
       // thing that uploads the three workspace files written this way
@@ -47,8 +102,9 @@ export const mockFsModule = () => {
     },
 
     async readToString(path: string) {
+      path = await full(path);
       const content = files.get(path);
-      if (content === undefined) throw new Error(`ENOENT: ${path}`);
+      if (content === undefined) throw fsError("ENOENT", path);
       return content;
     },
 
@@ -56,7 +112,7 @@ export const mockFsModule = () => {
       return JSON.parse(await this.readToString(path));
     },
 
-    async readToJSONOrDefault(path: string, defaultValue: unknown) {
+    async readToJSONOrDefault<T>(path: string, defaultValue: T): Promise<T> {
       try {
         return await this.readToJSON(path);
       } catch {
@@ -65,14 +121,14 @@ export const mockFsModule = () => {
     },
 
     async removeFile(path: string) {
-      files.delete(path);
+      files.delete(await full(path));
     },
 
     async rename(oldPath: string, newPath: string) {
       // A directory may come with its trailing slash, as the explorer's
       // canonical paths have it
-      oldPath = oldPath.replace(/\/+$/, "");
-      newPath = newPath.replace(/\/+$/, "");
+      oldPath = dir(await full(oldPath));
+      newPath = dir(await full(newPath));
       for (const [path, content] of [...files.entries()]) {
         if (path !== oldPath && !path.startsWith(oldPath + "/")) continue;
         files.delete(path);
@@ -80,9 +136,11 @@ export const mockFsModule = () => {
       }
     },
 
-    async createDir() {},
+    /** A no-op: a directory exists here while anything is stored beneath it */
+    async createDir(_path: string, _opts?: { createParents?: boolean }) {},
 
     async exists(path: string) {
+      path = await full(path);
       return (
         files.has(path) ||
         [...files.keys()].some((key) => key.startsWith(dir(path) + "/"))
@@ -90,27 +148,51 @@ export const mockFsModule = () => {
     },
 
     /**
-     * Enough of `stat` for a directory walk: a path is a directory when
-     * anything is stored beneath it. Matches the real thing in throwing for a
-     * path that is neither.
+     * `stat`, as far as a path tells: a path is a directory when anything is
+     * stored beneath it. Matches the real thing in throwing for a path that is
+     * neither. Times and ids are fixed; nothing under test reads them.
      */
     async getMetadata(path: string) {
+      path = await full(path);
       const isDirectory = [...files.keys()].some((key) =>
         key.startsWith(dir(path) + "/")
       );
-      if (!isDirectory && !files.has(path)) {
-        throw new Error(`ENOENT: ${path}`);
+      const content = files.get(path);
+      if (!isDirectory && content === undefined) {
+        throw fsError("ENOENT", path);
       }
-      return { isDirectory: () => isDirectory, isFile: () => !isDirectory };
+      return {
+        type: isDirectory ? "dir" : "file",
+        mode: isDirectory ? 0o777 : 0o666,
+        size: isDirectory ? 0 : content?.length ?? 0,
+        ino: 0,
+        mtimeMs: 0,
+        ctimeMs: 0,
+        uid: 1,
+        gid: 1,
+        dev: 1,
+        isDirectory: () => isDirectory,
+        isFile: () => !isDirectory,
+        isSymbolicLink: () => false,
+      } as const;
     },
 
-    async removeDir(path: string) {
-      for (const key of [...files.keys()]) {
-        if (key.startsWith(dir(path))) files.delete(key);
+    /**
+     * Like the real thing, refuses a directory with anything in it unless
+     * `recursive` is set
+     */
+    async removeDir(path: string, opts?: { recursive?: boolean }) {
+      path = dir(await full(path));
+      if (files.has(path)) throw fsError("ENOTDIR", path);
+      const under = [...files.keys()].filter((key) => isUnder(key, path));
+      if (under.length && !opts?.recursive) {
+        throw fsError("ENOTEMPTY", path);
       }
+      for (const key of under) files.delete(key);
     },
 
     async readDir(path: string) {
+      path = await full(path);
       // Immediate children only, like the real thing -- a recursive walk that
       // was handed whole subpaths here would look like it worked while never
       // actually recursing
@@ -122,12 +204,12 @@ export const mockFsModule = () => {
       );
       // Matches the real thing: a directory that does not exist throws rather
       // than reading as empty, which is what `threadIds` relies on
-      if (!names.size) throw new Error(`ENOENT: ${path}`);
+      if (!names.size) throw fsError("ENOENT", path);
       return [...names];
     },
 
     async flush() {},
-  };
+  });
 
   return { PgFs };
 };
