@@ -90,7 +90,21 @@ describe("Stepper", () => {
   });
 
   it("shows only Write for a project with no program", () => {
-    const noProgram: FlowState = { ...INITIAL_FLOW_STATE, hasProgram: false };
+    const noProgram: FlowState = {
+      stage: "write",
+      build: "upcoming",
+      buildSettled: "upcoming",
+      deploy: "upcoming",
+      interact: "upcoming",
+      buildErrorCount: 0,
+      buildMs: null,
+      buildStartedAt: null,
+      buildStartedBefore: null,
+      buildFailure: null,
+      deployBeforeRun: null,
+      stopped: null,
+      hasProgram: false,
+    };
     render(<Stepper state={noProgram} onSelect={vi.fn()} />);
     expect(screen.getAllByRole("tab").map((tab) => tab.id)).toEqual([
       "flow-stage-tab-write",
