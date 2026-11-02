@@ -112,6 +112,24 @@ describe("BaseApprovalCard", () => {
     expect(screen.queryByRole("button", { name: ANSWERS })).toBeNull();
   });
 
+  it("a card whose tool failed says Failed and why, not Applied", () => {
+    const item: ApprovalItem = {
+      id: "card-4",
+      createdAt: CREATED,
+      kind: "approval",
+      status: "failed",
+      outcome: "not written: A project can have at most 50 files.",
+      request: { type: "patch", path: "src/f60.rs", before: null, after: "x" },
+    };
+    render(<BaseApprovalCard item={item} onAnswer={vi.fn()} />);
+    expect(screen.getByText("Failed")).toBeTruthy();
+    expect(
+      screen.getByText("not written: A project can have at most 50 files.")
+    ).toBeTruthy();
+    expect(screen.queryByText("Applied")).toBeNull();
+    expect(screen.queryByRole("button", { name: ANSWERS })).toBeNull();
+  });
+
   it("a declined card says so", () => {
     render(
       <BaseApprovalCard item={commandCard("denied")} onAnswer={vi.fn()} />

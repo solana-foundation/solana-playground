@@ -1,6 +1,11 @@
 import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
-import { PgExplorer, PgFramework, PgTutorial } from "@/utils";
+import {
+  ExplorerLimitError,
+  PgExplorer,
+  PgFramework,
+  PgTutorial,
+} from "@/utils";
 import { homeTelemetry } from "../model/telemetry";
 import type { PageTile } from "../model/telemetry";
 import { useProgramCount } from "../model/use-program-count";
@@ -118,11 +123,21 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
           await openQuickstart(quickstart, onContinue);
         } catch (e) {
           // Logged once here and told by a toast, so the button's own
-          // `onError` never sees it
-          log.error(e, {
-            report: true,
-            context: { quickstart: quickstart.id },
-          });
+          // `onError` never sees it. A limit refusal is the explorer's on
+          // purpose, and the toast names it; it is not reported.
+          if (e instanceof ExplorerLimitError) {
+            log.warn("refused by a project limit", {
+              context: {
+                quickstart: quickstart.id,
+                limit: e.message,
+              },
+            });
+          } else {
+            log.error(e, {
+              report: true,
+              context: { quickstart: quickstart.id },
+            });
+          }
           toastActionFailed(e);
           return;
         }

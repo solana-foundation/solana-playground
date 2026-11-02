@@ -131,7 +131,7 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
     assert.notEqual(after["src/lib.rs"], before["src/lib.rs"]);
   });
 
-  it("creates a template-sized project in two statements, not one per file", async () => {
+  it("creates a template-sized project in three statements, not one per file", async () => {
     // Counted through the real database: a regression to per-file inserts
     // would still pass every other case here, just slowly
     const statements = [];
@@ -140,7 +140,7 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       return query(text, params);
     };
     const many = Object.fromEntries(
-      Array.from({ length: 200 }, (_, i) => [`src/file${i}.rs`, `// ${i}`])
+      Array.from({ length: 50 }, (_, i) => [`src/file${i}.rs`, `// ${i}`])
     );
 
     const created = await writeProject(counting, userId, {
@@ -149,10 +149,11 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       kind: "project",
       files: many,
     });
-    assert.equal(statements.length, 2);
+    // The insert, the upsert and the measure
+    assert.equal(statements.length, 3);
     assert.equal(
       Object.keys((await getProject(userId, "p1")).snapshot.files).length,
-      200
+      50
     );
 
     statements.length = 0;
@@ -164,7 +165,113 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
       removed: ["src/file8.rs"],
       baseUpdatedAt: created.updatedAt,
     });
-    assert.ok(statements.length <= 3);
+    assert.ok(statements.length <= 4);
+  });
+
+  describe("limits", () => {
+    /** `count` small user files, `src/f0.rs` onward */
+    const many = (count, content = "x") =>
+      Object.fromEntries(
+        Array.from({ length: count }, (_, i) => [`src/f${i}.rs`, content])
+      );
+
+    /** Rows and `updated_at`, to show a refused write changed nothing */
+    const stored = async () => {
+      const { rows } = await query(
+        `select p.updated_at,
+                (select jsonb_object_agg(path, content) from project_files f
+                  where f.user_id = p.user_id and f.project_id = p.id) as files
+           from projects p where p.user_id = $1 and p.id = 'p1'`,
+        [userId]
+      );
+      return rows[0];
+    };
+
+    it("refuses a patch that adds the 51st file, and changes nothing", async () => {
+      const first = await put({ files: many(50) });
+      const before = await stored();
+
+      const result = await put({
+        changed: { "src/extra.rs": "x" },
+        removed: [],
+        baseUpdatedAt: first.updatedAt,
+      });
+
+      assert.deepEqual(result, {
+        limit: { reason: "too-many-files", limit: 50, count: 51 },
+      });
+      assert.deepEqual(await stored(), before);
+    });
+
+    it("leaves the generated workspace files out of the count", async () => {
+      const files = many(50);
+      files[".tutorial.json"] = "{}";
+      files[".workspace/tutorial-storage.json"] = "{}";
+      files[".workspace/program-info.json"] = "{}";
+      assert.ok((await put({ files })).updatedAt);
+    });
+
+    it("refuses a small patch whose project it makes too large", async () => {
+      // 500,000 bytes stored; the patch grows one file from 1,000 to 30,000
+      const files = many(5, "a".repeat(99_800));
+      files["src/small.rs"] = "a".repeat(1_000);
+      const first = await put({ files });
+      const before = await stored();
+
+      const result = await put({
+        changed: { "src/small.rs": "a".repeat(30_000) },
+        removed: [],
+        baseUpdatedAt: first.updatedAt,
+      });
+
+      assert.deepEqual(result, {
+        limit: { reason: "project-too-large", limit: 524_288, size: 529_000 },
+      });
+      assert.deepEqual(await stored(), before);
+    });
+
+    it("refuses a create over the size limit and leaves no row", async () => {
+      const result = await put({ files: many(6, "a".repeat(100_000)) });
+      assert.equal(result.limit.reason, "project-too-large");
+      assert.equal(await getProject(userId, "p1"), null);
+    });
+
+    it("takes a project at the size limit", async () => {
+      const files = many(4, "a".repeat(131_072));
+      assert.ok((await put({ files })).updatedAt);
+    });
+
+    it("leaves a stored .workspace/ row sync does not carry out of the measure", async () => {
+      const { updatedAt } = await put({ files: many(50) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         values ($1, 'p1', '.workspace/metadata.json', $2)`,
+        [userId, "a".repeat(600_000)]
+      );
+      const result = await put({
+        changed: { "src/f0.rs": "y" },
+        removed: [],
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(result.updatedAt);
+    });
+
+    it("lets a patch bring a project over a limit back under it", async () => {
+      // Stored before the limits: 60 files
+      const { updatedAt } = await put({ files: many(10) });
+      await query(
+        `insert into project_files (user_id, project_id, path, content)
+         select $1, 'p1', 'old/' || g, '' from generate_series(1, 50) g`,
+        [userId]
+      );
+      const removed = Array.from({ length: 10 }, (_, i) => `old/${i + 1}`);
+      const result = await put({
+        changed: {},
+        removed,
+        baseUpdatedAt: updatedAt,
+      });
+      assert.ok(result.updatedAt);
+    });
   });
 
   it("replaces the file set on a full swap, deleting what it omits", async () => {

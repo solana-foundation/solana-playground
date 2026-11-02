@@ -8,6 +8,11 @@ import { PgSyncClaim } from "./sync-claim";
 import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
+import {
+  initTelemetry,
+  memoryProvider,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 // TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
 import { PgSession } from "@/features/auth";
 import { PgExplorer } from "../../../utils/explorer/explorer";
@@ -84,6 +89,18 @@ const agreedOn = async (
     dirty: false,
   });
 
+/** The divergent question up for a project, or `undefined` */
+const divergentFor = (projectId: string) => {
+  const conflict = PgProjectSync.conflictFor(projectId);
+  return conflict?.kind === "divergent" ? conflict : undefined;
+};
+
+/** The limit a too-large question up for a project names, or `undefined` */
+const limitFor = (projectId: string) => {
+  const conflict = PgProjectSync.conflictFor(projectId);
+  return conflict?.kind === "too-large" ? conflict.limit : undefined;
+};
+
 const putCalls = () =>
   (global.fetch as Mock).mock.calls.filter(
     ([url, init]) => url === "/api/projects" && init?.method === "PUT"
@@ -131,7 +148,7 @@ describe("PgProjectSync", () => {
 
     expect(await PgProjectSync.push("p1", { files: { a: "1" } })).toBe("ok");
     expect(await PgProjectSync.push("p1", { files: { a: "1" } })).toBe(
-      "skipped"
+      "unchanged"
     );
   });
 
@@ -200,7 +217,7 @@ describe("PgProjectSync", () => {
     expect((await PgSyncMark.read("p1"))?.dirty).toBe(true);
 
     expect(await PgProjectSync.push("p1", { files: { a: "1" } }, "one")).toBe(
-      "skipped"
+      "unchanged"
     );
   });
 
@@ -892,7 +909,7 @@ describe("resolving a conflict with content of the user's own", () => {
 
   it("writes the resolved content, records it as agreed and uploads it", async () => {
     const replace = await askedAboutLib();
-    expect(PgProjectSync.conflictFor("p1")?.files).toEqual([
+    expect(divergentFor("p1")?.files).toEqual([
       {
         kind: "whole",
         path: LIB,
@@ -953,7 +970,7 @@ describe("resolving a conflict with content of the user's own", () => {
 
     expect(await PgProjectSync.resolve("p1", answer)).toBe(false);
 
-    expect(PgProjectSync.conflictFor("p1")?.files).toEqual([
+    expect(divergentFor("p1")?.files).toEqual([
       {
         kind: "whole",
         path: LIB,
@@ -1004,7 +1021,7 @@ describe("resolving a conflict with content of the user's own", () => {
 
       expect(await PgProjectSync.resolve("p1", answer)).toBe(false);
 
-      expect(PgProjectSync.conflictFor("p1")?.files).toEqual([
+      expect(divergentFor("p1")?.files).toEqual([
         {
           kind: "whole",
           path: A,
@@ -1170,7 +1187,7 @@ describe("resolving a conflict with content of the user's own", () => {
     expect(replace).toHaveBeenCalledTimes(1);
     expect(replace).toHaveBeenCalledWith("mine", { [LIB]: "mine\ntheirs" });
     expect(putCalls()).toHaveLength(2);
-    const asked = PgProjectSync.conflictFor("p1");
+    const asked = divergentFor("p1");
     expect(asked?.paths).toEqual([LIB]);
     expect(asked?.files?.[0]).toMatchObject({
       kind: "lines",
@@ -1192,7 +1209,7 @@ describe("resolving a conflict with content of the user's own", () => {
       await PgProjectSync.resolve("p1", { kind: "resolved", files: {} })
     ).toBe(false);
 
-    expect(PgProjectSync.conflictFor("p1")?.paths).toEqual([LIB]);
+    expect(divergentFor("p1")?.paths).toEqual([LIB]);
     expect(replace).not.toHaveBeenCalled();
     expect(putCalls()).toHaveLength(1);
   });
@@ -1851,5 +1868,290 @@ describe("a refusal the user has to clear", () => {
     expect(await PgProjectSync.resolve("p1", "keep-as-new")).toBe(false);
     expect(importWorkspace).not.toHaveBeenCalled();
     expect(deleteWorkspace).not.toHaveBeenCalled();
+  });
+});
+
+describe("a project over a sync limit", () => {
+  let sent: ReturnType<typeof memoryProvider>;
+
+  /** A `fetch` that answers the probe and hands every PUT `answer()` */
+  const answering = (answer: () => StubResponse) =>
+    (global.fetch = vi
+      .fn()
+      .mockImplementation((url: string) =>
+        url === "/api/sync"
+          ? Promise.resolve(okProbe)
+          : Promise.resolve(answer())
+      ) as unknown as typeof fetch);
+
+  const accepted = (): StubResponse => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ updatedAt: "t2" }),
+  });
+
+  /** `count` small files, `src/f0.rs` onward */
+  const many = (count: number) =>
+    Object.fromEntries(
+      Array.from({ length: count }, (_, i) => [`src/f${i}.rs`, "x"])
+    );
+
+  /** The workspace `mine`, id `p1`, on the store with `files` */
+  const onDisk = (files: Record<string, string>) => {
+    vi.spyOn(PgExplorer, "currentWorkspaceId", "get").mockReturnValue("p1");
+    vi.spyOn(PgExplorer, "currentWorkspaceName", "get").mockReturnValue("mine");
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue("mine");
+    for (const key of [...storedFiles().keys()]) {
+      if (key.startsWith("/mine/")) storedFiles().delete(key);
+    }
+    for (const [path, content] of Object.entries(files)) {
+      storedFiles().set(`/mine/${path}`, content);
+    }
+  };
+
+  const markOf = () => storedFiles().get("/.config/sync/u1/p1.json");
+
+  /** This slice's events; signing in and out sends the auth slice's own */
+  const syncEvents = () =>
+    sent.events.filter(({ name }) => name.startsWith("sync_"));
+
+  beforeEach(async () => {
+    reset();
+    sent = memoryProvider();
+    initTelemetry({ providers: [sent] });
+    await signedIn();
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    resetTelemetry();
+  });
+
+  it("sends nothing for a one-line edit to a project over the size limit, and keeps the mark", async () => {
+    answering(accepted);
+    const big = "a".repeat(100_000);
+    const files = { "a.rs": big, "b.rs": big, "c.rs": big, "d.rs": big };
+    await agreedOn("p1", "mine", files);
+    const before = markOf();
+
+    // One new file brings the project to 524,288 bytes plus one
+    const edited = {
+      "a.rs": big,
+      "b.rs": big,
+      "c.rs": big,
+      "d.rs": big,
+      "e.rs": "a".repeat(124_289),
+    };
+
+    expect(await PgProjectSync.push("p1", { files: edited }, "mine")).toBe(
+      "conflict"
+    );
+    expect(putCalls()).toHaveLength(0);
+    expect(markOf()).toBe(before);
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+      limit: { reason: "project-too-large", limit: 524_288, size: 524_289 },
+    });
+    expect(syncEvents()).toEqual([
+      {
+        name: "sync_project_limit_exceeded",
+        params: { by: "client", kib: 513 },
+      },
+    ]);
+  });
+
+  it("keeps other projects syncing", async () => {
+    answering(accepted);
+    await PgProjectSync.push("p1", { files: many(51) }, "a");
+    expect(await PgProjectSync.push("p2", { files: many(3) }, "b")).toBe("ok");
+    expect(putCalls()).toHaveLength(1);
+  });
+
+  it("raises the same banner from a server 413", async () => {
+    answering(() => ({
+      ok: false,
+      status: 413,
+      json: async () => ({
+        error: "over",
+        reason: "too-many-files",
+        limit: 50,
+        count: 52,
+      }),
+    }));
+
+    expect(await PgProjectSync.push("p1", { files: many(3) }, "mine")).toBe(
+      "conflict"
+    );
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+      limit: { reason: "too-many-files", limit: 50, count: 52 },
+    });
+    expect(syncEvents()).toEqual([
+      {
+        name: "sync_files_count_limit_exceeded",
+        params: { by: "server", files: 52 },
+      },
+    ]);
+  });
+
+  it("asks without a measure when a 413's limit body cannot be read", async () => {
+    answering(() => ({
+      ok: false,
+      status: 413,
+      json: async () => ({ reason: "too-many-files", limit: 50 }),
+    }));
+    await PgProjectSync.push("p1", { files: many(3) }, "mine");
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    expect(syncEvents()).toEqual([]);
+    expect(getFailures().map(({ what }) => what)).toContainEqual(
+      expect.stringContaining("unreadable 413 body")
+    );
+  });
+
+  it("counts a server banner once when a retry never reaches the server", async () => {
+    answering(() => ({
+      ok: false,
+      status: 413,
+      json: async () => ({ reason: "too-many-files", limit: 50, count: 52 }),
+    }));
+    onDisk(many(3));
+    await PgProjectSync.pushCurrent();
+
+    answering(() => {
+      throw new TypeError("Failed to fetch");
+    });
+    expect(await PgProjectSync.resolve("p1", "retry")).toBe(false);
+    expect(limitFor("p1")).toEqual({
+      reason: "too-many-files",
+      limit: 50,
+      count: 52,
+    });
+    expect(syncEvents()).toEqual([
+      {
+        name: "sync_files_count_limit_exceeded",
+        params: { by: "server", files: 52 },
+      },
+    ]);
+  });
+
+  it("sends no limit event for the body cap", async () => {
+    answering(() => ({
+      ok: false,
+      status: 413,
+      json: async () => ({ reason: "too-large" }),
+    }));
+    await PgProjectSync.push("p1", { files: many(3) }, "mine");
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    expect(syncEvents()).toEqual([]);
+  });
+
+  it("names a file over the size limit and how many are over", async () => {
+    answering(accepted);
+    const big = "a".repeat(131_073);
+    await PgProjectSync.push(
+      "p1",
+      { files: { "src/a.rs": big, "src/b.rs": big } },
+      "mine"
+    );
+    expect(syncEvents()).toEqual([
+      {
+        name: "sync_file_limit_exceeded",
+        params: { by: "client", limit: "size", files: 2 },
+      },
+    ]);
+  });
+
+  it("names a path over the path limit", async () => {
+    answering(accepted);
+    await PgProjectSync.push("p1", { files: { ["p".repeat(257)]: "" } }, "m");
+    expect(syncEvents()).toEqual([
+      {
+        name: "sync_file_limit_exceeded",
+        params: { by: "client", limit: "path", files: 1 },
+      },
+    ]);
+  });
+
+  it("sends nothing more while the banner is up", async () => {
+    answering(accepted);
+    await PgProjectSync.push("p1", { files: many(51) }, "mine");
+    await PgProjectSync.push("p1", { files: many(52) }, "mine");
+    expect(syncEvents()).toHaveLength(1);
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("uploads on retry once the large file is gone", async () => {
+    answering(accepted);
+    onDisk({ "src/lib.rs": "x", "src/big.rs": "a".repeat(140_000) });
+    await PgProjectSync.pushCurrent();
+    expect(limitFor("p1")?.reason).toBe("file-too-large");
+
+    onDisk({ "src/lib.rs": "x" });
+    expect(await PgProjectSync.resolve("p1", "retry")).toBe(true);
+    expect(PgProjectSync.conflictFor("p1")).toBeNull();
+    expect(putCalls()).toHaveLength(1);
+  });
+
+  it("settles on retry once the edit that went over is undone", async () => {
+    answering(accepted);
+    const agreed = { "src/lib.rs": "x" };
+    await agreedOn("p1", "mine", agreed);
+    onDisk({ "src/lib.rs": "a".repeat(150_000) });
+    await PgProjectSync.pushCurrent();
+    expect(limitFor("p1")?.reason).toBe("file-too-large");
+
+    onDisk(agreed);
+    expect(await PgProjectSync.resolve("p1", "retry")).toBe(true);
+    expect(PgProjectSync.conflictFor("p1")).toBeNull();
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  it("re-checks on retry and names the limit that applies now", async () => {
+    answering(accepted);
+    const files = many(60);
+    files["src/big.rs"] = "a".repeat(140_000);
+    onDisk(files);
+    await PgProjectSync.pushCurrent();
+    expect(limitFor("p1")?.reason).toBe("file-too-large");
+
+    onDisk(many(60));
+    expect(await PgProjectSync.resolve("p1", "retry")).toBe(false);
+    expect(limitFor("p1")).toEqual({
+      reason: "too-many-files",
+      limit: 50,
+      count: 60,
+    });
+    expect(putCalls()).toHaveLength(0);
+    expect(syncEvents().map((e) => e.name)).toEqual([
+      "sync_file_limit_exceeded",
+      "sync_files_count_limit_exceeded",
+    ]);
+  });
+
+  it("syncs a tutorial-sized project as before, with no limit event", async () => {
+    answering(accepted);
+    const files = {
+      "src/lib.rs": "a".repeat(8_000),
+      "client/client.ts": "a".repeat(3_000),
+      "tests/index.test.ts": "a".repeat(1_500),
+    };
+    await agreedOn("p1", "mine", files);
+    const edited = {
+      "src/lib.rs": "b".repeat(8_000),
+      "client/client.ts": "a".repeat(3_000),
+      "tests/index.test.ts": "a".repeat(1_500),
+    };
+    expect(await PgProjectSync.push("p1", { files: edited }, "mine")).toBe(
+      "ok"
+    );
+    expect(putCalls()).toHaveLength(1);
+    expect(syncEvents()).toEqual([]);
   });
 });

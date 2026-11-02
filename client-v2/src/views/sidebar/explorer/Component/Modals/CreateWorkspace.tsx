@@ -10,11 +10,14 @@ import {
   PgExplorer,
   PgFramework,
 } from "../../../../../utils";
+import { FieldError } from "@/shared/ui/field";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 export const CreateWorkspace = () => {
   const [name, setName] = useState("");
   const [error, setError] = useState("");
   const [selected, setSelected] = useState<FrameworkName | null>(null);
+  const { limitError, guard } = useLimitRefusal();
 
   const createWorkspace = async () => {
     const { getDefaultFiles, defaultOpenFile } = PgFramework.get(selected!);
@@ -27,11 +30,14 @@ export const CreateWorkspace = () => {
       name="create-workspace"
       buttonProps={{
         text: "Create",
-        onSubmit: createWorkspace,
+        onSubmit: guard(createWorkspace),
         disabled: !!error || !selected,
       }}
     >
       <Content>
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <WorkspaceNameWrapper>
           <MainText>Project name</MainText>
           <Input

@@ -27,7 +27,13 @@ import {
   Triangle,
   Wrench,
 } from "../../../../components/Icons";
-import { PgCommon, PgExplorer, PgView, PgTheme } from "../../../../utils";
+import {
+  ExplorerLimitError,
+  PgCommon,
+  PgExplorer,
+  PgView,
+  PgTheme,
+} from "../../../../utils";
 import { useCreateItem } from "./useCreateItem";
 import { useExplorerContextMenu } from "./useExplorerContextMenu";
 import { useResetCtxSelected } from "./useResetCtxSelected";
@@ -35,6 +41,9 @@ import { useHandleItemState } from "./useHandleItemState";
 import { useKeybind } from "../../../../hooks";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { createLogger } from "@/shared/lib/logger";
+
+const log = createLogger("explorer:folders");
 
 const Folders = () => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -225,12 +234,26 @@ const ExplorerDndContext: FC<React.PropsWithChildren<unknown>> = ({
       await PgExplorer.renameItem(fromPath, newPath, {
         skipNameValidation: true,
       });
-    } catch (e: any) {
-      if (e.message === PgExplorer.errors.ALREADY_EXISTS) {
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "";
+      if (message === PgExplorer.errors.ALREADY_EXISTS) {
         await PgView.setModal(
           <ReplaceItem fromPath={fromPath} toPath={newPath} />
         );
+        return;
       }
+      // A limit or another refusal of the explorer's own: a drop has no
+      // dialog to show it in. Anything else was not expected.
+      if (
+        e instanceof ExplorerLimitError ||
+        Object.values(PgExplorer.errors).includes(message)
+      ) {
+        PgView.setToast(() => <span>{message}</span>, {
+          options: { name: "explorer-move-refused" },
+        });
+        return;
+      }
+      log.error(e, { report: true, context: { action: "move" } });
     }
   }, []);
 

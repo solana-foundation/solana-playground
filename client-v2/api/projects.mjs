@@ -14,6 +14,10 @@ import {
   withObservability,
 } from "../src/features/api/server.mjs";
 import {
+  checkProjectLimits,
+  isSyncedPath,
+} from "../src/entities/project/server.mjs";
+import {
   deleteProject,
   getProject,
   isEnabled,
@@ -22,20 +26,24 @@ import {
 } from "../src/features/persistence/server.mjs";
 
 /**
- * A workspace larger than this is not something we sync silently.
+ * The largest request body this route reads, in bytes.
  *
- * Ours, not the platform's. Vercel Functions accept a request body of up to
- * 100 MB, so this sits well under the cap and is a product decision about what
- * a reasonable workspace is -- written down because the figure has already
- * been re-derived once from the old 4.5 MB limit and judged, wrongly, to be
- * over it. Nothing here needs to change if that platform number moves.
+ * Twice `PROJECT_LIMITS.projectBytes`, so a full upload of a project at the
+ * size limit fits with room for JSON escaping. The project limits, not this,
+ * are what a user meets: the client checks them before every upload and the
+ * route checks them again below. This only stops a body no project under
+ * those limits produces before it is buffered. Vercel's own cap on a Function's
+ * request body is 4.5 MB (its limits page), so this is the lower of the two.
  *
  * The rejection carries `reason: "too-large"` for the same reason the name
  * collision below carries one: the client files every failure it cannot name
  * under a silent "skipped", so a workspace that is genuinely too big has to
  * arrive as something it can tell apart and say out loud.
  */
-const MAX_BODY_BYTES = 8_000_000;
+const MAX_BODY_BYTES = 1024 * 1024;
+
+/** `describeWrite`'s refusal of a file sync does not carry */
+const UNSYNCED = { error: "A path under .workspace/ is not synced" };
 
 /** Matches `projects_kind_check`, so a bad kind is a 400 and not a 500 */
 const KINDS = ["project", "tutorial"];
@@ -67,10 +75,22 @@ const isFileMap = (value) =>
  * two devices' copies are merged on the client, so every write is either a
  * create or a swap against the row the caller read.
  *
+ * A body whose own files are over a limit is refused as `limit`, before the
+ * database is touched: whatever is stored, the project those files land in is
+ * over it too. The count and the total size of a patch's result depend on
+ * rows already stored, so `writeProject` measures those after its writes.
+ *
+ * A file sync does not carry (`.workspace/metadata.json` and the rest of
+ * `.workspace/` but `SYNCED_WORKSPACE_FILES`) is refused as a bad request:
+ * the client never sends one, the limits do not measure one, and stored it
+ * would sit in the project unchecked. Removing one is allowed, so a row stored
+ * before this check can still go.
+ *
  * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
  *
  * @returns {{files: Record<string, string>}
  *   | {changed: Record<string, string>, removed: string[]}
+ *   | {limit: import("../src/entities/project/limits.mjs").LimitExceeded}
  *   | {error: string}}
  */
 export const describeWrite = (body) => {
@@ -82,9 +102,12 @@ export const describeWrite = (body) => {
   }
 
   if (full) {
-    return isFileMap(body.files) && Object.keys(body.files).length
-      ? { files: body.files }
-      : { error: "files must be a non-empty map of paths to strings" };
+    if (!isFileMap(body.files) || !Object.keys(body.files).length) {
+      return { error: "files must be a non-empty map of paths to strings" };
+    }
+    if (!Object.keys(body.files).every(isSyncedPath)) return UNSYNCED;
+    const limit = checkProjectLimits(body.files);
+    return limit ? { limit } : { files: body.files };
   }
 
   if (!body.baseUpdatedAt) {
@@ -104,7 +127,11 @@ export const describeWrite = (body) => {
   if (removed.some((path) => path in changed)) {
     return { error: "A path cannot be both changed and removed" };
   }
-  return { changed, removed };
+  if (!Object.keys(changed).every(isSyncedPath)) return UNSYNCED;
+  // Every changed file is in the project the patch produces, so their count
+  // and size are a floor under its own
+  const limit = checkProjectLimits(changed);
+  return limit ? { limit } : { changed, removed };
 };
 
 const sendJson = (res, status, body) => {
@@ -112,6 +139,31 @@ const sendJson = (res, status, body) => {
   res.setHeader("content-type", "application/json");
   res.setHeader("cache-control", "no-store");
   res.end(JSON.stringify(body));
+};
+
+/**
+ * The status and body a write is answered with, from `describeWrite`'s limit
+ * or `saveProject`'s outcome. A limit is 413 with its `reason` and measure at
+ * the top level, so the client raises the same banner from this body as from
+ * its own check; a missed swap or a tombstone is 409; anything else was
+ * written. Both sources come through here so neither can reach a 200 with a
+ * limit.
+ *
+ * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
+ *
+ * @param {{limit: import("../src/entities/project/limits.mjs").LimitExceeded}
+ *   | {conflict: true} | {updatedAt: string}} outcome
+ * @returns {{status: number, body: object}}
+ */
+export const answerWrite = (outcome) => {
+  if ("limit" in outcome) {
+    return {
+      status: 413,
+      body: { error: "The project is over a sync limit", ...outcome.limit },
+    };
+  }
+  if ("conflict" in outcome) return { status: 409, body: outcome };
+  return { status: 200, body: outcome };
 };
 
 /**
@@ -240,6 +292,10 @@ async function handler(req, res) {
 
       const write = describeWrite(body);
       if (write.error) return sendJson(res, 400, { error: write.error });
+      if (write.limit) {
+        const answer = answerWrite(write);
+        return sendJson(res, answer.status, answer.body);
+      }
 
       // Reaches SQL as a timestamptz. Unchecked, a malformed one is a cast
       // error from the driver, which is a 500 for what is really a bad request.
@@ -262,9 +318,8 @@ async function handler(req, res) {
         baseUpdatedAt: body.baseUpdatedAt,
         ...write,
       });
-      return result.conflict
-        ? sendJson(res, 409, result)
-        : sendJson(res, 200, result);
+      const answer = answerWrite(result);
+      return sendJson(res, answer.status, answer.body);
     }
 
     if (req.method === "DELETE") {

@@ -20,11 +20,14 @@ import {
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { FieldError } from "@/shared/ui/field";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 export const ImportGithub = () => {
   // Handle user input
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const { limitError, guard } = useLimitRefusal();
 
   return (
     <ModalFrame
@@ -32,7 +35,7 @@ export const ImportGithub = () => {
       title
       buttonProps={{
         text: "Import",
-        onSubmit: async () => {
+        onSubmit: guard(async () => {
           try {
             await PgCommon.transition(PgGithub.import(url));
           } catch (e) {
@@ -41,11 +44,14 @@ export const ImportGithub = () => {
             if (e instanceof ImportCancelledError) throw new SubmitCancelled();
             throw e;
           }
-        },
+        }),
         disabled: !!error,
       }}
     >
       <Wrapper>
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <GithubUrlWrapper>
           <GithubUrlInputLabel>GitHub URL</GithubUrlInputLabel>
           <Input

@@ -1,3 +1,8 @@
+import {
+  checkProjectLimits,
+  type LimitExceeded,
+  readLimitExceeded,
+} from "@/entities/project";
 import { uuid } from "@/shared/lib/ids";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
 import { DELETED_REASON } from "./deleted.mjs";
@@ -15,6 +20,7 @@ import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
 import { LOCKED_REQUEST_MS, withSyncLock } from "./sync-lock";
 import { PgSyncMark } from "./sync-mark";
+import { persistenceTelemetry, type LimitByParam } from "./telemetry";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
@@ -30,7 +36,13 @@ import type { FileHashes, Snapshot } from "./snapshot";
 import type { SyncMark } from "./sync-mark";
 import type { Disposable } from "../../../utils/types";
 
-type PushResult = "ok" | "conflict" | "skipped";
+/**
+ * How a push ended. `unchanged`: the server already holds these files under
+ * this name, so there was nothing to send. Apart from `skipped` (not sent for
+ * any other reason, offline among them) because "Try again" settles the
+ * question on the first and puts it back on the second.
+ */
+type PushResult = "ok" | "conflict" | "unchanged" | "skipped";
 
 /**
  * Why sync left a project alone as another account's.
@@ -88,7 +100,8 @@ const trimmedName = <T extends ServerProject>(project: T): T =>
  *
  * - `name-taken`: another live project in this account already holds this
  *   name, which the unique index on `(user_id, name)` will not have twice.
- * - `too-large`: the snapshot is over the size this endpoint accepts.
+ * - `too-large`: the project is over a limit (`limit` says which), or the
+ *   body is over the size this endpoint reads (no `limit`).
  *
  * They share the conflict machinery because they need exactly what it gives:
  * pushes for the project stop (there is no point re-uploading every three
@@ -96,30 +109,41 @@ const trimmedName = <T extends ServerProject>(project: T): T =>
  * the only thing anywhere that says the project has stopped syncing. Before
  * this they were `!response.ok` -- a diagnostics line and silence.
  */
-export type ConflictKind =
-  | "divergent"
-  | "deleted-elsewhere"
-  | "name-taken"
-  | "too-large";
+export type ConflictKind = Refusal["kind"];
 
-export interface Conflict {
-  projectId: string;
-  kind: ConflictKind;
-  /**
-   * For `divergent`: the files both devices changed in the same place. Every
-   * other file has already been merged, so these are all the user is asked
-   * about. Absent when the merge could not get that far. Always `files`'
-   * paths, in order, when `files` is there.
-   */
-  paths?: string[];
-  /**
-   * For `divergent`: each of `paths` with the lines in question, or the
-   * whole file, and the hashes of the two copies it was read from. In memory
-   * only, as the conflict itself is: a reload re-raises it with fresh ones.
-   * Absent where `paths` is.
-   */
-  files?: FileConflict[];
-}
+/** A question as the server's refusal, or the client's own check, raises it */
+type Refusal =
+  | {
+      kind: "divergent";
+      /**
+       * The files both devices changed in the same place. Every other file
+       * has already been merged, so these are all the user is asked about.
+       * Absent when the merge could not get that far. Always `files`' paths,
+       * in order, when `files` is there.
+       */
+      paths?: string[];
+      /**
+       * Each of `paths` with the lines in question, or the whole file, and
+       * the hashes of the two copies it was read from. In memory only, as the
+       * conflict itself is: a reload re-raises it with fresh ones. Absent
+       * where `paths` is.
+       */
+      files?: FileConflict[];
+    }
+  | { kind: "deleted-elsewhere" }
+  | { kind: "name-taken" }
+  | {
+      kind: "too-large";
+      /**
+       * The project limit it is over and what is over it, from the client's
+       * own check or a 413's body. Absent for the body cap, which names no
+       * limit. A field rather than four more kinds: every one of them stops
+       * pushes and offers "Try again", as `too-large` does.
+       */
+      limit?: LimitExceeded;
+    };
+
+export type Conflict = { projectId: string } & Refusal;
 
 /**
  * What the user picked.
@@ -256,23 +280,35 @@ const answers = (
  * un-deletes the project for every device.
  *
  * A 413 comes here too, and is `too-large` whether or not its body says so.
+ * A limit's reason (`too-many-files` and the rest) is `too-large` with the
+ * body read into its `limit`, so the banner names the limit as the client's
+ * own check would. A limit body this client cannot read is reported and asked
+ * as the plain `too-large`: the banner still goes up, without the measure.
  *
  * An unreadable body falls back to the older meaning, whose prompt is at least
  * about the right project.
  */
-const refusalKind = async (response: Response): Promise<ConflictKind> => {
-  let reason: unknown = null;
+const refusalOf = async (response: Response): Promise<Refusal> => {
+  let body: unknown = null;
   try {
-    reason = (await response.json())?.reason;
+    body = await response.json();
   } catch (e) {
     // A refusal with no readable body is still a refusal
     report("read refusal body", e);
   }
+  const reason = (body as { reason?: unknown } | null)?.reason;
 
-  if (reason === "name-taken") return "name-taken";
-  if (reason === DELETED_REASON) return "deleted-elsewhere";
-  if (reason === "too-large" || response.status === 413) return "too-large";
-  return "divergent";
+  if (reason === "name-taken") return { kind: "name-taken" };
+  if (reason === DELETED_REASON) return { kind: "deleted-elsewhere" };
+  const limit = readLimitExceeded(body);
+  if (limit) return { kind: "too-large", limit };
+  if (reason === "too-large" || response.status === 413) {
+    if (reason !== "too-large") {
+      report(`unreadable 413 body: ${JSON.stringify(body)}`, null);
+    }
+    return { kind: "too-large" };
+  }
+  return { kind: "divergent" };
 };
 
 /**
@@ -598,7 +634,18 @@ export class PgProjectSync {
       !patch.removed.length &&
       mark!.name === storedName
     ) {
-      return "skipped";
+      return "unchanged";
+    }
+
+    // The whole project, not the patch: a patch is small even when the
+    // project it lands in is not, and the server would refuse it for the
+    // count or the size. Not sent, the mark stays as it was, and the banner
+    // holds pushes for the project until "Try again" finds it under every
+    // limit.
+    const limit = checkProjectLimits(snapshot.files);
+    if (limit) {
+      PgProjectSync._raise({ projectId, kind: "too-large", limit }, "client");
+      return "conflict";
     }
 
     try {
@@ -628,12 +675,12 @@ export class PgProjectSync {
       // workspace too big to upload is a project that has stopped syncing, and
       // reporting it only to the console meant nothing on screen ever said so.
       if (response.status === 409 || response.status === 413) {
-        const kind = await refusalKind(response);
+        const refusal = await refusalOf(response);
         // A swap that missed: another device wrote since this one last
         // agreed. Fold its changes in rather than asking -- the merge asks
         // only about lines both sides changed. Not from inside a merge,
         // which starts over on its own.
-        if (kind === "divergent" && !opts.merging) {
+        if (refusal.kind === "divergent" && !opts.merging) {
           const local = PgExplorer.workspaceNameOf(projectId);
           if (local) {
             const outcome = await PgProjectSync.mergeWithServer(
@@ -652,7 +699,7 @@ export class PgProjectSync {
         // Deliberately without recording anything: the upload has not been
         // accepted, and remembering it would make every later attempt look
         // unchanged and strand the project out of sync for good.
-        PgProjectSync._raise({ projectId, kind });
+        PgProjectSync._raise({ projectId, ...refusal }, "server");
         return "conflict";
       }
       if (!response.ok) {
@@ -1237,8 +1284,8 @@ export class PgProjectSync {
           localName,
           { immediate: true, merging: true }
         );
-        // "skipped" is either nothing left to send or no network; both leave
-        // a state the next reconcile continues from
+        // "unchanged" is nothing left to send, "skipped" most likely no
+        // network; both leave a state the next reconcile continues from
         if (result !== "conflict") return "merged";
 
         // A refusal that is not about versions is the user's to clear
@@ -1466,7 +1513,7 @@ export class PgProjectSync {
           projectId,
           name,
           resolution.files,
-          PgProjectSync._conflicts.get(projectId)?.paths
+          PgProjectSync._askedPaths(projectId)
         );
         return outcome === "merged";
       }
@@ -1484,7 +1531,7 @@ export class PgProjectSync {
             projectId,
             name,
             resolution === "keep-local" ? "local" : "server",
-            PgProjectSync._conflicts.get(projectId)?.paths
+            PgProjectSync._askedPaths(projectId)
           );
           return outcome === "merged";
         }
@@ -1555,10 +1602,13 @@ export class PgProjectSync {
           // comes back by itself and says which refusal it hit this time --
           // renaming into a *second* taken name keeps the same prompt, and a
           // project that shrank below the size cap only to hit a real
-          // divergence gets the version question it now deserves. The one
-          // outcome that raises nothing is a push that never reached the
-          // server, which is why the original question is put back for it:
-          // being offline does not mean the name is free.
+          // divergence gets the version question it now deserves. A push with
+          // nothing to send is settled too: the user undid whatever went
+          // over a limit, and the server already holds the project as it is
+          // now. The one outcome that raises nothing is a push that never
+          // reached the server, which is why the original question is put
+          // back for it: being offline does not mean the name is free. Put
+          // back without `by`, so no limit event fires twice for one banner.
           const previous = PgProjectSync._conflicts.get(projectId) ?? null;
           PgProjectSync._clear(projectId);
 
@@ -1567,7 +1617,7 @@ export class PgProjectSync {
             await snapshotOf(name),
             name
           );
-          if (result === "ok") return true;
+          if (result === "ok" || result === "unchanged") return true;
 
           if (previous && !PgProjectSync._conflicts.has(projectId)) {
             PgProjectSync._raise(previous);
@@ -1782,26 +1832,31 @@ export class PgProjectSync {
    * The same question again is not announced: reconcile re-raises on every
    * pass. "The same" includes the copies a divergent conflict's files were
    * read from, so the same paths with a side that has moved since replace
-   * the files -- an answer pinned to the old ones can only be refused.
+   * the files -- an answer pinned to the old ones can only be refused. A
+   * limit question is identified by its limit and measure, so two different
+   * limits are never taken for the same question.
+   *
+   * A limit's event fires here, the one place both the client's check and a
+   * 413 reach, and only for a question that is new: a banner already up sends
+   * nothing more while the user keeps editing. `by` says which found it, and
+   * is left out for a question put back after a retry that never reached the
+   * server: that banner was counted when it first went up. After the banner
+   * is up, so an event that fails cannot keep it down.
    */
-  private static _raise(conflict: Conflict) {
+  private static _raise(conflict: Conflict, by?: LimitByParam) {
     const existing = PgProjectSync._conflicts.get(conflict.projectId);
-    /** What identifies a question, without the file contents */
-    const key = (c: Conflict) =>
-      JSON.stringify([
-        c.paths,
-        c.files?.map(({ kind, path, localHash, serverHash }) => [
-          kind,
-          path,
-          localHash,
-          serverHash,
-        ]),
-      ]);
-    if (existing?.kind === conflict.kind && key(existing) === key(conflict)) {
-      return;
-    }
+    if (existing && sameQuestion(existing, conflict)) return;
     PgProjectSync._conflicts.set(conflict.projectId, conflict);
     PgProjectSync._emit();
+    if (conflict.kind === "too-large" && conflict.limit && by) {
+      trackLimit(conflict.limit, by);
+    }
+  }
+
+  /** The files a divergent question up for the project named, if any */
+  private static _askedPaths(projectId: string) {
+    const conflict = PgProjectSync._conflicts.get(projectId);
+    return conflict?.kind === "divergent" ? conflict.paths : undefined;
   }
 
   private static _clear(projectId: string) {
@@ -1821,6 +1876,53 @@ export class PgProjectSync {
     );
   }
 }
+
+/** Whether two conflicts ask the same question, file contents aside */
+const sameQuestion = (a: Conflict, b: Conflict) => {
+  if (a.kind === "divergent" && b.kind === "divergent") {
+    const key = (c: typeof a) =>
+      JSON.stringify([
+        c.paths,
+        c.files?.map(({ kind, path, localHash, serverHash }) => [
+          kind,
+          path,
+          localHash,
+          serverHash,
+        ]),
+      ]);
+    return key(a) === key(b);
+  }
+  if (a.kind === "too-large" && b.kind === "too-large") {
+    return JSON.stringify(a.limit) === JSON.stringify(b.limit);
+  }
+  return a.kind === b.kind;
+};
+
+/** Send the event named for the limit a banner was raised for */
+const trackLimit = (limit: LimitExceeded, by: LimitByParam) => {
+  switch (limit.reason) {
+    case "path-too-long":
+    case "file-too-large":
+      persistenceTelemetry.track("sync_file_limit_exceeded", {
+        by,
+        limit: limit.reason === "path-too-long" ? "path" : "size",
+        files: limit.paths.length,
+      });
+      return;
+    case "too-many-files":
+      persistenceTelemetry.track("sync_files_count_limit_exceeded", {
+        by,
+        files: limit.count,
+      });
+      return;
+    case "project-too-large":
+      persistenceTelemetry.track("sync_project_limit_exceeded", {
+        by,
+        kib: Math.ceil(limit.size / 1024),
+      });
+      return;
+  }
+};
 
 /**
  * Whether a local copy's user files are exactly what a mark says this device

@@ -145,7 +145,7 @@ export const createTools = (
         return `Wrote ${path}.`;
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        PgAssistant.setApprovalOutcome(approvalId, "write failed");
+        PgAssistant.setApprovalFailure(approvalId, `not written: ${message}`);
         return `Could not write ${path}: ${message}`;
       }
     },
@@ -169,16 +169,18 @@ export const createTools = (
       try {
         await bridge.build();
         const { buildError } = bridge.getProjectContext();
-        PgAssistant.setApprovalOutcome(
-          approvalId,
-          buildError ? "build failed" : "build succeeded"
-        );
-        return buildError
-          ? `The build failed:\n\n${buildError}`
-          : "The build succeeded.";
+        if (buildError) {
+          PgAssistant.setApprovalFailure(approvalId, "build failed");
+          return `The build failed:\n\n${buildError}`;
+        }
+        PgAssistant.setApprovalOutcome(approvalId, "build succeeded");
+        return "The build succeeded.";
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        PgAssistant.setApprovalOutcome(approvalId, "build errored");
+        PgAssistant.setApprovalFailure(
+          approvalId,
+          `build could not run: ${message}`
+        );
         return `The build could not run: ${message}`;
       }
     },
@@ -212,7 +214,7 @@ export const createTools = (
         );
       } catch (e) {
         const message = e instanceof Error ? e.message : String(e);
-        PgAssistant.setApprovalOutcome(approvalId, "deploy failed");
+        PgAssistant.setApprovalFailure(approvalId, `deploy failed: ${message}`);
         return `The deployment failed: ${message}`;
       }
     },

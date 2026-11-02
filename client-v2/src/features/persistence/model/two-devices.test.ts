@@ -150,6 +150,12 @@ const fakeFetch = async (url: string, init?: RequestInit) => {
   return { ok: true, json: async () => ({ projects: live }) };
 };
 
+/** The divergent question up for a project, or `undefined` */
+const divergentFor = (projectId: string) => {
+  const conflict = PgProjectSync.conflictFor(projectId);
+  return conflict?.kind === "divergent" ? conflict : undefined;
+};
+
 const storedFiles = () =>
   (PgFs as unknown as { __files: Map<string, string> }).__files;
 
@@ -376,7 +382,7 @@ describe("a tutorial started on one browser, opened on another", () => {
     expect(result.conflicts).toEqual([]);
     expect(importWorkspace).not.toHaveBeenCalled();
     // and having recorded the agreement, it does not push it back up
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 
   it("asks when the second browser's copy has different work in it", async () => {
@@ -451,7 +457,7 @@ describe("work that never reached the server", () => {
     });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
     // and the project syncs normally again afterwards
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 
   it("takes the other device's copy when the user picks that", async () => {
@@ -614,7 +620,7 @@ describe("both devices changed it", () => {
       divergentOn(HELLO.id, ["src/lib.rs"])
     );
     // Only the line both changed is in question
-    expect(PgProjectSync.conflictFor(HELLO.id)?.files).toEqual([
+    expect(divergentFor(HELLO.id)?.files).toEqual([
       expect.objectContaining({
         kind: "lines",
         chunks: [
@@ -672,7 +678,7 @@ describe("both devices changed it", () => {
     });
     const replace = captureWrites();
     expect(await PgProjectSync.pushCurrent()).toBe("conflict");
-    expect(PgProjectSync.conflictFor(HELLO.id)?.paths).toEqual(["src/lib.rs"]);
+    expect(divergentFor(HELLO.id)?.paths).toEqual(["src/lib.rs"]);
 
     // While the banner is up, the other device edits the same line of the
     // file this one had merged cleanly
@@ -704,7 +710,7 @@ describe("both devices changed it", () => {
 
     // Hunk by hunk, as the view does it: every settled line, and both sides
     // of each conflict, this device's first
-    const [file] = PgProjectSync.conflictFor(HELLO.id)!.files!;
+    const [file] = divergentFor(HELLO.id)!.files!;
     if (file.kind !== "lines") throw new Error("expected a line conflict");
     const content = file.chunks
       .flatMap((chunk) =>
@@ -752,7 +758,7 @@ describe("both devices changed it", () => {
     expect(replace).toHaveBeenCalledWith(HELLO.name, { "src/lib.rs": content });
     expect(PgProjectSync.conflictFor(HELLO.id)).toBeNull();
     expect(uploads()).toBe(before);
-    expect(await PgProjectSync.pushCurrent()).toBe("skipped");
+    expect(await PgProjectSync.pushCurrent()).toBe("unchanged");
   });
 
   // Separate files, so the merge needs no base content: these call the merge

@@ -74,9 +74,11 @@ const app = vi.hoisted(() => {
       open: vi.fn(),
     },
     PgView: { setModal: vi.fn(), setToast: vi.fn() },
+    ExplorerLimitError: class ExplorerLimitError extends Error {},
   };
 });
 vi.mock("@/utils", () => ({
+  ExplorerLimitError: app.ExplorerLimitError,
   PgExplorer: app.PgExplorer,
   PgTutorial: app.PgTutorial,
   PgView: app.PgView,
@@ -249,6 +251,30 @@ describe("ProjectList", () => {
         error: failure,
         report: true,
       }),
+    ]);
+  });
+
+  it("names the limit a refused duplicate is over, and does not report it", async () => {
+    files.readWorkspaceFiles.mockResolvedValue([["/alpha/src/lib.rs", ""]]);
+    app.PgExplorer.createWorkspace.mockRejectedValue(
+      new app.ExplorerLimitError(
+        "This project has 64 files. A project can have at most 50."
+      )
+    );
+    draw();
+
+    fireEvent.keyDown(menuOf("alpha"), { key: "d" });
+
+    await waitFor(() => expect(toasts()).toEqual(["project-duplicate-failed"]));
+    const [Toast] = app.PgView.setToast.mock.calls[0];
+    render(<Toast />);
+    expect(
+      screen.getByText(
+        "Could not duplicate alpha. This project has 64 files. A project can have at most 50."
+      )
+    ).toBeTruthy();
+    expect(logged.entries).toEqual([
+      expect.objectContaining({ level: "warn", report: false }),
     ]);
   });
 

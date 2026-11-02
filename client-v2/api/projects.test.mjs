@@ -181,6 +181,27 @@ describe("/api/projects", () => {
         error: "too-large",
       });
     });
+
+    it("refuses a body of 1,048,577 bytes", async () => {
+      const mod = await load();
+      assert.deepEqual(
+        await mod.readBody(streamOf(Buffer.alloc(1_048_576), Buffer.alloc(1))),
+        { error: "too-large" }
+      );
+    });
+
+    it("reads a full upload of a project at the size limit", async () => {
+      // 524,288 bytes of ordinary source escape to about the same in JSON
+      const files = Object.fromEntries(
+        [0, 1, 2, 3].map((i) => [`src/f${i}.rs`, "fn x() {}\n".repeat(13_107)])
+      );
+      const body = Buffer.from(
+        JSON.stringify({ id: "p", name: "p", kind: "project", files })
+      );
+      assert.ok(body.length < 1_048_576);
+      const mod = await load();
+      assert.deepEqual((await mod.readBody(streamOf(body))).body.files, files);
+    });
   });
 
   describe("describeDriverError", () => {
@@ -320,6 +341,68 @@ describe("/api/projects", () => {
       );
     });
 
+    it("names a file over the size limit before touching the database", async () => {
+      const mod = await load();
+      const big = "a".repeat(200_000);
+      assert.deepEqual(
+        mod.describeWrite({ files: { "src/big.rs": big, "src/lib.rs": "" } }),
+        {
+          limit: {
+            reason: "file-too-large",
+            limit: 131_072,
+            paths: ["src/big.rs"],
+            sizes: { "src/big.rs": 200_000 },
+          },
+        }
+      );
+      assert.equal(
+        mod.describeWrite({
+          changed: { "src/big.rs": big },
+          removed: [],
+          ...token,
+        }).limit.reason,
+        "file-too-large"
+      );
+    });
+
+    it("refuses a path over 256 characters", async () => {
+      const mod = await load();
+      const path = "p".repeat(257);
+      assert.deepEqual(mod.describeWrite({ files: { [path]: "" } }), {
+        limit: { reason: "path-too-long", limit: 256, paths: [path] },
+      });
+    });
+
+    it("refuses a full write of 51 files on its own", async () => {
+      const mod = await load();
+      const files = Object.fromEntries(
+        Array.from({ length: 51 }, (_, i) => [`f${i}`, ""])
+      );
+      assert.deepEqual(mod.describeWrite({ files }).limit, {
+        reason: "too-many-files",
+        limit: 50,
+        count: 51,
+      });
+    });
+
+    it("refuses a .workspace/ file sync does not carry, but lets one be removed", async () => {
+      const mod = await load();
+      const local = ".workspace/metadata.json";
+      assert.ok(mod.describeWrite({ files: { [local]: "{}" } }).error);
+      assert.ok(
+        mod.describeWrite({ changed: { [local]: "{}" }, removed: [], ...token })
+          .error
+      );
+      assert.deepEqual(
+        mod.describeWrite({ changed: {}, removed: [local], ...token }),
+        { changed: {}, removed: [local] }
+      );
+      assert.deepEqual(
+        mod.describeWrite({ files: { ".workspace/program-info.json": "{}" } }),
+        { files: { ".workspace/program-info.json": "{}" } }
+      );
+    });
+
     it("refuses content that is not a string, and an empty path", async () => {
       const mod = await load();
       assert.ok(mod.describeWrite({ files: { a: 1 } }).error);
@@ -327,6 +410,39 @@ describe("/api/projects", () => {
       assert.ok(
         mod.describeWrite({ changed: {}, removed: [7], ...token }).error
       );
+    });
+  });
+
+  describe("answerWrite", () => {
+    const limit = { reason: "too-many-files", limit: 50, count: 51 };
+
+    it("answers a limit from describeWrite 413, its measure at the top level", async () => {
+      const mod = await load();
+      const files = Object.fromEntries(
+        Array.from({ length: 51 }, (_, i) => [`f${i}`, ""])
+      );
+      assert.deepEqual(mod.answerWrite(mod.describeWrite({ files })), {
+        status: 413,
+        body: { error: "The project is over a sync limit", ...limit },
+      });
+    });
+
+    it("answers a limit from saveProject 413, not 200", async () => {
+      const mod = await load();
+      assert.deepEqual(mod.answerWrite({ limit }), {
+        status: 413,
+        body: { error: "The project is over a sync limit", ...limit },
+      });
+    });
+
+    it("answers a missed swap 409 and a write 200", async () => {
+      const mod = await load();
+      const missed = { conflict: true, updatedAt: null };
+      assert.deepEqual(mod.answerWrite(missed), { status: 409, body: missed });
+      assert.deepEqual(mod.answerWrite({ updatedAt: "t" }), {
+        status: 200,
+        body: { updatedAt: "t" },
+      });
     });
   });
 });

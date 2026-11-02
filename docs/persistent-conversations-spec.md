@@ -217,7 +217,7 @@ Two rules: a tab only pushes while it is visible, and a tab that has just become
 visible reconciles before it is allowed to push again. The pending upload is
 flushed on the way out (`visibilitychange` → `hidden`), where the document is
 still alive and an ordinary fetch completes — `beforeunload` is too late and
-`keepalive`/`sendBeacon` cap the body at ~64 KB against an 8 MB snapshot limit.
+`keepalive`/`sendBeacon` cap the body at ~64 KB against a 512 KiB project limit (`PROJECT_LIMITS` in `client-v2/src/entities/project`).
 
 ### Identity and lifecycle of projects
 

@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { PgExplorer, PgFramework } from "@/utils";
+import { ExplorerLimitError, PgExplorer, PgFramework } from "@/utils";
 import { newProjectTelemetry } from "../model/telemetry";
 import BaseStartFromScratch, { canStart } from "./BaseStartFromScratch";
 import type { Start } from "./BaseStartFromScratch";
@@ -56,7 +56,15 @@ const StartFromScratch = ({
       await PgExplorer.createWorkspace(projectName, { files, defaultOpenFile });
     } catch (e) {
       onRunning?.(false);
-      log.error(e, { report: true, context: { framework } });
+      // A template over a limit is the explorer refusing on purpose, and its
+      // message is shown below; anything else is a failure to hear about
+      if (e instanceof ExplorerLimitError) {
+        log.warn("refused by a project limit", {
+          context: { framework, limit: e.message },
+        });
+      } else {
+        log.error(e, { report: true, context: { framework } });
+      }
       newProjectTelemetry.track("new_project_start_failed", { framework });
       setStart({
         state: "failed",

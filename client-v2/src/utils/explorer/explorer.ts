@@ -1,5 +1,14 @@
 import { PgFs } from "./fs";
+import { explorerTelemetry, type LimitActionParam } from "./telemetry";
 import { PgWorkspace } from "./workspace";
+import {
+  checkFileWrite,
+  checkProjectLimits,
+  type LimitExceeded,
+  limitKind,
+  limitRule,
+  limitSummary,
+} from "../../entities/project";
 import {
   isMissing,
   report,
@@ -19,6 +28,18 @@ import type {
   ExplorerFiles,
   Position,
 } from "./types";
+
+/**
+ * A create, rename or import the explorer refused because the project would
+ * be over a limit. Its own class so a dialog can show it beside its input
+ * rather than as a failure the team hears about.
+ */
+export class ExplorerLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ExplorerLimitError";
+  }
+}
 
 export class PgExplorer {
   /** Internal state */
@@ -302,6 +323,19 @@ export class PgExplorer {
 
     const itemType = PgExplorer.getItemTypeFromPath(fullPath);
 
+    // Before anything is written, and only for what this write makes worse
+    // (`checkFileWrite`). A folder holds no bytes and is not counted.
+    if (itemType.file) {
+      this._refuseOverLimit(
+        "create",
+        checkFileWrite(
+          this._projectFiles(),
+          this.getRelativePath(fullPath),
+          content
+        )
+      );
+    }
+
     // Ordering of `indexedDB` calls and state calls matter. If `indexedDB` call fails,
     // state will not change. Can't say the same if the ordering was in reverse.
     if (itemType.file) {
@@ -384,6 +418,27 @@ export class PgExplorer {
         newPathExists = files.length > 0 || folders.length > 0;
       }
       if (newPathExists) throw new Error(PgExplorer.errors.ALREADY_EXISTS);
+    }
+
+    // A rename moves no bytes and adds no file, so only the path limit
+    // applies: a project already over another limit can still be tidied.
+    // Checked on every file path the rename produces.
+    const moved: Record<string, string> = {};
+    if (itemType.file) {
+      moved[this.getRelativePath(newPath)] = "";
+    } else {
+      const newPrefix = oldPath.endsWith("/")
+        ? PgCommon.appendSlash(newPath)
+        : newPath;
+      for (const path in this.files) {
+        if (!path.startsWith(oldPath)) continue;
+        if (!PgExplorer.getItemTypeFromPath(path).file) continue;
+        moved[this.getRelativePath(path.replace(oldPath, newPrefix))] = "";
+      }
+    }
+    const overPath = checkProjectLimits(moved);
+    if (overPath?.reason === "path-too-long") {
+      this._refuseOverLimit("rename", overPath);
     }
 
     // Rename in `indexedDB`
@@ -527,6 +582,20 @@ export class PgExplorer {
     if (!opts?.skipNameValidation && !this.isWorkspaceNameValid(name)) {
       throw new Error(PgWorkspace.errors.INVALID_NAME);
     }
+
+    // Before the workspace exists: a refused import leaves nothing behind
+    let imported: Record<string, string> | null = null;
+    if (opts?.fromTemporary && this.isTemporary) {
+      imported = this._projectFiles();
+    } else if (opts?.files) {
+      imported = Object.fromEntries(
+        opts.files.map(([path, content]) => [
+          PgExplorer._workspaceRelative(name, path),
+          content,
+        ])
+      );
+    }
+    if (imported) this._refuseOverLimit("import", checkProjectLimits(imported));
 
     if (opts?.fromTemporary && this.isTemporary) {
       // The reason we are not just getting the necessary files and re-calling this
@@ -953,6 +1022,59 @@ export class PgExplorer {
   }
 
   /* ----------------------------- State methods ---------------------------- */
+
+  /**
+   * The current project's files as sync measures them: workspace-relative
+   * paths to contents, folders left out. `checkProjectLimits` drops the
+   * paths sync does not carry.
+   */
+  private static _projectFiles(): Record<string, string> {
+    const files: Record<string, string> = {};
+    for (const [path, item] of Object.entries(this.files)) {
+      if (item.content === undefined) continue;
+      files[this.getRelativePath(path)] = item.content;
+    }
+    return files;
+  }
+
+  /**
+   * A path `createWorkspace` was given, relative to the workspace `name`.
+   * Callers pass both `/name/src/lib.rs` and `src/lib.rs`.
+   */
+  private static _workspaceRelative(name: string, path: string) {
+    const root = PgCommon.joinPaths(
+      this.PATHS.ROOT_DIR_PATH,
+      PgCommon.appendSlash(name)
+    );
+    if (path.startsWith(root)) return path.slice(root.length);
+    return path.replace(/^\//, "");
+  }
+
+  /**
+   * Refuse a write whose project would be over `limit`, before anything is
+   * written. Every create, rename and import comes through the three methods
+   * that call this, so the New File dialog, the assistant's file writes, the
+   * terminal commands and the import flows all get the same refusal. The
+   * editor's saves and sync's restores do not: a refused autosave would lose
+   * typing, and a refused restore would strand a project stored before the
+   * limits; the sync banner reports both.
+   *
+   * The message is the limit's rule, or for an import, what is over it and
+   * the rule, since the files were not the user's last keystroke.
+   */
+  private static _refuseOverLimit(
+    action: LimitActionParam,
+    limit: LimitExceeded | null
+  ) {
+    if (!limit) return;
+    explorerTelemetry.track("explorer_limit_refused", {
+      action,
+      limit: limitKind(limit),
+    });
+    throw new ExplorerLimitError(
+      action === "import" ? limitSummary(limit) : limitRule(limit)
+    );
+  }
 
   /**
    * Get all files as `TupleFiles`

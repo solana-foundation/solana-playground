@@ -10,6 +10,9 @@ export type HunkHowParam = "take" | "dismiss" | "edit";
 /** Why an Apply in the resolve view settled nothing */
 export type ApplyFailureParam = "refused" | "error";
 
+/** Who found a project over a limit: the client's check, or a 413 */
+export type LimitByParam = "client" | "server";
+
 type PersistenceEvents = {
   /**
    * The resolve view opened on a divergent conflict. `files` is how many
@@ -46,6 +49,27 @@ type PersistenceEvents = {
    * or `error` (it threw).
    */
   sync_resolve_apply_failed: { reason: ApplyFailureParam };
+  /**
+   * A project's sync banner was raised for the file size limit (`size`) or
+   * the path limit (`path`). `files` is how many files are over it. Once per
+   * banner: editing on under it sends nothing more until "Try again" raises
+   * it again.
+   */
+  sync_file_limit_exceeded: {
+    by: LimitByParam;
+    limit: "size" | "path";
+    files: number;
+  };
+  /**
+   * A project's sync banner was raised for the project size limit. `kib` is
+   * the project's size in KiB, rounded up. Once per banner, as above.
+   */
+  sync_project_limit_exceeded: { by: LimitByParam; kib: number };
+  /**
+   * A project's sync banner was raised for the file count limit. `files` is
+   * the counted files. Once per banner, as above.
+   */
+  sync_files_count_limit_exceeded: { by: LimitByParam; files: number };
 };
 
 export const persistenceTelemetry = createTracker<PersistenceEvents>();

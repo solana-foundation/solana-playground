@@ -13,6 +13,8 @@ import {
   TupleFiles,
 } from "../../../../../utils";
 import { useMounted } from "../../../../../hooks";
+import { FieldError } from "@/shared/ui/field";
+import { useLimitRefusal } from "./useLimitRefusal";
 
 interface ImportFsProps {
   name?: string;
@@ -26,6 +28,7 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
   const [files, setFiles] = useState(props.files);
   const [nameError, setNameError] = useState("");
   const [importError, setImportError] = useState(props.importError ?? "");
+  const { limitError, guard } = useLimitRefusal();
 
   const mounted = useMounted();
 
@@ -64,11 +67,14 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       title="Import project"
       buttonProps={{
         text: "Import",
-        onSubmit: () => PgExplorer.createWorkspace(name, { files }),
+        onSubmit: guard(() => PgExplorer.createWorkspace(name, { files })),
         disabled: !files || !!nameError || !!importError,
       }}
     >
       <Content>
+        <FieldError data-testid="explorer-limit-error" className="mb-2">
+          {limitError}
+        </FieldError>
         <ProjectNameWrapper>
           <MainText>Project name</MainText>
           <Input

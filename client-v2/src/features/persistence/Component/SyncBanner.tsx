@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { TriangleAlertIcon } from "lucide-react";
 
+import { limitBannerText } from "@/entities/project";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
@@ -23,9 +24,12 @@ const describePaths = (paths: string[]) =>
  * A divergent conflict's files, by whether they still conflict (`open`) or
  * were raised again only because a refused answer was about them, and now
  * merge on their own (`settled`; see `refusedOf` in `project-sync.ts`). A
- * conflict that names no files counts every path as open.
+ * conflict that names no files counts every path as open; any other kind has
+ * none.
  */
-const splitPaths = ({ paths = [], files }: Conflict) => {
+const splitPaths = (conflict: Conflict) => {
+  if (conflict.kind !== "divergent") return { open: [], settled: [] };
+  const { paths = [], files } = conflict;
   if (!files) return { open: paths, settled: [] };
   const settled = files.filter((f) => f.kind === "settled").map((f) => f.path);
   const open = files.filter((f) => f.kind !== "settled").map((f) => f.path);
@@ -105,9 +109,12 @@ const PROMPTS: Record<
       "Another project in your account already uses this name, so this one cannot be uploaded. Rename it, then try again.",
     actions: [{ label: "Try again", resolution: "retry", primary: true }],
   },
+  // A limit names itself and what is over it; the body cap names no limit
   "too-large": {
-    message: () =>
-      "This project is too large to sync. Remove or shrink its largest files, then try again.",
+    message: (conflict) =>
+      conflict.kind === "too-large" && conflict.limit
+        ? limitBannerText(conflict.limit)
+        : "This project is too large to sync. Remove or shrink its largest files, then try again.",
     actions: [{ label: "Try again", resolution: "retry", primary: true }],
   },
 };
@@ -194,7 +201,7 @@ const SyncBanner = () => {
     const at = named ? message.indexOf(named) : -1;
 
     return (
-      <Callout variant="warning">
+      <Callout variant="warning" data-testid="sync-banner">
         <TriangleAlertIcon />
         {/* Message left, buttons right; the buttons drop below when it gets
             narrow. Full opacity: the message is the point of the banner */}
