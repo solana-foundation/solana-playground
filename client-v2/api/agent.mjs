@@ -175,10 +175,14 @@ const pipeStream = async (res, body, observe) => {
     if (!res.writableEnded && !res.destroyed) {
       // The error frame `@ai-sdk/openai-compatible` reads; `runTurn` (shared/lib/ai) raises it as `AiTurnError`
       const message = `Upstream stream failed: ${e.message}`;
+      // The code tells the panel the connection dropped, so it keeps what
+      // streamed and offers Try again (`UPSTREAM_DROPPED` in
+      // `shared/lib/ai/network-failure.ts`, written twice)
+      const error = { message, code: "upstream_connection_lost" };
       // The leading blank line closes whatever frame the upstream left
       // unfinished; glued onto it, the error would be one malformed line
       // the panel skips
-      res.write(`\n\ndata: ${JSON.stringify({ error: { message } })}\n\n`);
+      res.write(`\n\ndata: ${JSON.stringify({ error })}\n\n`);
     }
   } finally {
     await reader.cancel().catch(() => {});

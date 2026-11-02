@@ -15,13 +15,28 @@ const isDroppedFetch = (error: unknown) =>
   error instanceof TypeError && NETWORK_FAILURE.test(error.message);
 
 /**
+ * The `code` of the error frame `api/agent.mjs` sends when its own read of
+ * the model fails mid-reply. The SDK hands that frame's `error` over as a
+ * plain object, so the dropped connection behind it reaches the panel only
+ * through this mark. Written twice, here and in `pipeStream`.
+ */
+const UPSTREAM_DROPPED = "upstream_connection_lost";
+
+const isUpstreamDrop = (error: unknown) =>
+  typeof error === "object" &&
+  error !== null &&
+  (error as { code?: unknown }).code === UPSTREAM_DROPPED;
+
+/**
  * Whether `error` is the connection dropping, or the SDK's wrapper around
  * one: it reports a body that fails early as "Failed to process successful
  * response" and a request that never connects as "Cannot connect to API",
- * each an `APICallError` with the `TypeError` as its `cause`.
+ * each an `APICallError` with the `TypeError` as its `cause`. The default
+ * backend's connection to its model dropping counts too (`UPSTREAM_DROPPED`).
  */
 export const isNetworkFailure = (error: unknown) =>
   isDroppedFetch(error) ||
+  isUpstreamDrop(error) ||
   (error instanceof Error && isDroppedFetch(error.cause));
 
 if (import.meta.vitest) {
@@ -46,6 +61,18 @@ if (import.meta.vitest) {
       });
 
       expect(isNetworkFailure(wrapped)).toBe(true);
+    });
+
+    it("matches the error frame of a default backend whose model dropped", () => {
+      const frame = {
+        message: "Upstream stream failed: terminated",
+        code: "upstream_connection_lost",
+      };
+
+      expect(isNetworkFailure(frame)).toBe(true);
+      expect(isNetworkFailure({ message: "overloaded", code: 529 })).toBe(
+        false
+      );
     });
 
     it("keeps a programming TypeError, bare or wrapped, apart", () => {

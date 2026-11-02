@@ -7,6 +7,10 @@ import {
   clearFailures,
   getFailures,
 } from "@/features/persistence/model/diagnostics";
+import {
+  decodeItem,
+  encodeItem,
+} from "@/features/persistence/model/chat-codec";
 import type { ChatItem } from "./store";
 
 // The real bridge reaches the explorer and the settings, which need the
@@ -63,6 +67,23 @@ describe("PgPatchUndo", () => {
     expect(PgPatchUndo.can(card, bridge)).toBe(false);
     expect(await PgPatchUndo.undo(card, bridge)).toBe("not-undoable");
     expect(bridge.applyPatch).not.toHaveBeenCalled();
+  });
+
+  it("keeps Undo for a card the thread reopened from storage", async () => {
+    // A project switch and back reopens the thread from its stored copy,
+    // whose patch keeps only the region the card shows (`trimPatch`)
+    const lines = Array.from({ length: 40 }, (_, i) => `line ${i}`);
+    const before = lines.join("\n");
+    const after = lines.map((l, i) => (i === 20 ? "changed" : l)).join("\n");
+    const card = await applied(before, after);
+    PgPatchUndo.wrote(card.id);
+    const reopened = decodeItem(encodeItem(card)) as ApprovalItem;
+    expect(reopened.request).not.toEqual(card.request);
+    const { bridge, file } = fakeBridge(after);
+
+    expect(PgPatchUndo.can(reopened, bridge)).toBe(true);
+    expect(await PgPatchUndo.undo(reopened, bridge)).toBe("undone");
+    expect(file.content).toBe(before);
   });
 
   it("puts an edited file back and marks the card undone", async () => {

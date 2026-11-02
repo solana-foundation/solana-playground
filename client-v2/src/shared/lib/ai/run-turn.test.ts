@@ -386,6 +386,37 @@ describe("runTurn", () => {
     expect((failure as AiTurnError).kind).toBe("network");
   });
 
+  it("rejects the error frame /api/agent sends when its model drops as a network failure", async () => {
+    // What `pipeStream` in `api/agent.mjs` writes once its read of the model fails
+    const { fetch } = fakeFetch(
+      sse([
+        `data: ${JSON.stringify({
+          id: "1",
+          created: 0,
+          model: "m",
+          choices: [{ index: 0, delta: { content: "The program" } }],
+        })}\n\n`,
+        `\n\ndata: ${JSON.stringify({
+          error: {
+            message: "Upstream stream failed: terminated",
+            code: "upstream_connection_lost",
+          },
+        })}\n\n`,
+      ])
+    );
+    const text: string[] = [];
+
+    const failure = await runTurn({
+      model: openAi(fetch),
+      messages: USER,
+      onText: (delta) => text.push(delta),
+    }).catch((e: unknown) => e);
+
+    expect(text.join("")).toBe("The program");
+    expect(failure).toBeInstanceOf(AiTurnError);
+    expect((failure as AiTurnError).kind).toBe("network");
+  });
+
   it("keeps a programming TypeError a provider failure", async () => {
     const { fetch } = fakeFetch(() => {
       throw new TypeError("x.fetch is not a function");

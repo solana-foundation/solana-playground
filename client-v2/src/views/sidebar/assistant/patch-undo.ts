@@ -17,11 +17,12 @@ const log = createLogger("assistant:patch-undo");
 export type UndoResult = "undone" | "moved-on" | "not-undoable";
 
 /**
- * Patches this tab wrote. Only their cards still hold the whole file before
- * and after: a stored card keeps just the region it shows (`trimPatch`), so
- * one restored from history has nothing to put back.
+ * Patches this tab wrote, by card, with the whole file before and after.
+ * Kept here, not read from the card: a stored card keeps just the region it
+ * shows (`trimPatch`), and the thread reopens from that copy after a project
+ * switch, so the card alone has nothing to put back. A reload loses them.
  */
-const written = new Set<string>();
+const written = new Map<string, PatchApproval>();
 
 /**
  * Cards whose Undo threw and left the file holding neither the patch nor
@@ -30,7 +31,7 @@ const written = new Set<string>();
  * original to copy (`PgPatchUndo.original`). In memory, like `written`: only
  * this tab holds the whole original, and a reload loses it.
  */
-const stranded = new Set<string>();
+const stranded = new Map<string, PatchApproval>();
 
 /** Cards whose file `can` cannot read now: reported once per outage, not per render */
 const unreadable = new Set<string>();
@@ -80,7 +81,7 @@ const strand = (item: ApprovalItem, request: PatchApproval, why: string) => {
     });
     return;
   }
-  stranded.add(item.id);
+  stranded.set(item.id, request);
   PgAssistant.markUndoStranded(
     item.id,
     undoStrandedOutcome(request.path, why, request.before === null)
@@ -109,12 +110,12 @@ const settleFailedUndo = (
       readError
     );
     // Unknown, not lost: `can` reads the file again on the next render
-    written.add(item.id);
+    written.set(item.id, request);
     strand(item, request, "could not be read back");
     return;
   }
   if (holdsPatch(now, request.after)) {
-    written.add(item.id);
+    written.set(item.id, request);
     if (stranded.delete(item.id)) {
       // An earlier attempt said it did not finish; the patch is whole again
       PgAssistant.clearUndoStranded(item.id, wroteOutcome(request.path));
@@ -152,6 +153,17 @@ export const editedAfterApply = (path: string) =>
   `You edited ${path} after applying. Use undo in the editor.`;
 
 /**
+ * The whole patch this tab wrote for an applied card not yet undone, or
+ * `undefined` when Undo has nothing to put back
+ */
+const heldPatch = (item: ApprovalItem) =>
+  item.request.type === "patch" &&
+  item.status === "allowed" &&
+  item.undo !== "done"
+    ? written.get(item.id)
+    : undefined;
+
+/**
  * Undo an applied patch in one step, from its card.
  *
  * Undo puts the file back as it was before Apply, and only while the file
@@ -161,9 +173,15 @@ export const editedAfterApply = (path: string) =>
  * original, is closed by the next press.
  */
 export class PgPatchUndo {
-  /** Call once a patch from an approval card is written */
+  /**
+   * Call once a patch from an approval card is written, while the card in
+   * the thread still holds the whole file
+   */
   static wrote(approvalId: string) {
-    written.add(approvalId);
+    const item = PgAssistant.items.find((i) => i.id === approvalId);
+    if (item?.kind === "approval" && item.request.type === "patch") {
+      written.set(approvalId, item.request);
+    }
   }
 
   /**
@@ -171,28 +189,15 @@ export class PgPatchUndo {
    * finish; `null` for any other card, or a patch that created its file
    */
   static original(item: ApprovalItem) {
-    const { request } = item;
-    if (
-      !stranded.has(item.id) ||
-      item.undo === "done" ||
-      request.type !== "patch"
-    ) {
-      return null;
-    }
+    const request = stranded.get(item.id);
+    if (!request || item.undo === "done") return null;
     return request.before;
   }
 
   /** Whether the card's patch can still be taken back with one press */
   static can(item: ApprovalItem, bridge: PlaygroundBridge = realBridge) {
-    const { request } = item;
-    if (
-      request.type !== "patch" ||
-      item.status !== "allowed" ||
-      item.undo === "done" ||
-      !written.has(item.id)
-    ) {
-      return false;
-    }
+    const request = heldPatch(item);
+    if (!request) return false;
     let now: string | null;
     try {
       now = bridge.readFile(request.path);
@@ -219,15 +224,8 @@ export class PgPatchUndo {
     item: ApprovalItem,
     bridge: PlaygroundBridge = realBridge
   ): Promise<UndoResult> {
-    const { request } = item;
-    if (
-      request.type !== "patch" ||
-      item.status !== "allowed" ||
-      item.undo === "done" ||
-      !written.has(item.id)
-    ) {
-      return "not-undoable";
-    }
+    const request = heldPatch(item);
+    if (!request) return "not-undoable";
     const now = bridge.readFile(request.path);
     if (now === null || !holdsPatch(now, request.after)) {
       // A stranded attempt whose write did land: the file is already back

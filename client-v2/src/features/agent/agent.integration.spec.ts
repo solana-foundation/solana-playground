@@ -594,6 +594,8 @@ describe("POST /api/agent streaming", () => {
       .filter((e) => e.startsWith("data: "));
     const last = JSON.parse(events[events.length - 1].slice(6));
     expect(last.error.message).toMatch(/connection reset/);
+    // The panel reads the code as a dropped connection: cut off, Try again
+    expect(last.error.code).toBe("upstream_connection_lost");
   });
 
   it("says so inside the stream when the upstream drops mid-answer", async () => {
