@@ -1,3 +1,5 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import { Emoji } from "../../../../constants";
 import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 import {
@@ -6,6 +8,8 @@ import {
   loadCache,
   loadConfigData,
 } from "../../utils";
+
+const log = createLogger("sugar:reveal");
 
 export const processReveal = async (rpcUrl: string | undefined) => {
   const term = await PgTerminal.get();
@@ -91,7 +95,7 @@ export const processReveal = async (rpcUrl: string | undefined) => {
             uri: cacheMetadataLink,
           });
         } catch (e: any) {
-          console.log(e.message);
+          log.warn(e.message);
           errorCount++;
         } finally {
           progressCount++;

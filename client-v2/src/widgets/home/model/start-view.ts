@@ -232,13 +232,15 @@ export const useStartView = (): PageView => {
   // A shared project (temporary) has no row in the list to go back by, so
   // there the navigation's Home, picked again, is the way back
   const showHome = useCallback(
-    (via: HomeVia) => {
-      if (view === "home" && via === "nav" && PgExplorer.isTemporary) {
+    (nextVia: HomeVia) => {
+      if (view === "home" && nextVia === "nav" && PgExplorer.isTemporary) {
         homeTelemetry.track("home_left", { via: "nav" });
         setShown({ view: "work" });
         return;
       }
-      setShown((now) => (now.view === "work" ? { view: "home", via } : now));
+      setShown((now) =>
+        now.view === "work" ? { view: "home", via: nextVia } : now
+      );
     },
     [view]
   );

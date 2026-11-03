@@ -29,7 +29,7 @@ const CONFIG_MARKER = "workspaces.json";
 /** The file store keys by inode, so the config is found by its content */
 const rewriteConfig = (page: Page, next: unknown) =>
   page.evaluate(
-    async ({ next, marker }) => {
+    async ({ next: nextInPage, marker }) => {
       const dbs = await (indexedDB as any).databases();
       const name = dbs
         .map((d: any) => d.name)
@@ -71,7 +71,7 @@ const rewriteConfig = (page: Page, next: unknown) =>
       await new Promise<void>((res, rej) => {
         const tx = db.transaction(store, "readwrite");
         tx.objectStore(store).put(
-          new TextEncoder().encode(JSON.stringify(next)),
+          new TextEncoder().encode(JSON.stringify(nextInPage)),
           target!
         );
         tx.oncomplete = () => res();

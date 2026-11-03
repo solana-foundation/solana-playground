@@ -64,11 +64,11 @@ const Sortable = <P, I extends UniqueIdentifier>({
     const { active, over } = ev;
     if (!over || active.id === over.id) return;
 
-    setItems((items) => {
-      const oldIndex = items.indexOf(active.id as I);
-      const newIndex = items.indexOf(over.id as I);
+    setItems((currentItems) => {
+      const oldIndex = currentItems.indexOf(active.id as I);
+      const newIndex = currentItems.indexOf(over.id as I);
 
-      return arrayMove(items, oldIndex, newIndex);
+      return arrayMove(currentItems, oldIndex, newIndex);
     });
 
     setActiveItemProps(null);

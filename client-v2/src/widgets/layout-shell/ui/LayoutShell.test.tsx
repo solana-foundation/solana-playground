@@ -840,18 +840,21 @@ describe.each([
 it.each([
   [LAYOUT_BREAKPOINTS.phone - 1, "the pager"],
   [LAYOUT_BREAKPOINTS.phone, "the frame, with the navigation as its rail"],
-])("should show at %i px %s, and never the stock Sidebar's Sheet", (width) => {
-  resizeTo(width);
-  shell();
-  const phone = width < LAYOUT_BREAKPOINTS.phone;
-  expect(screen.queryByRole("button", { name: "Menu" }) !== null).toBe(phone);
-  expect(
-    screen.queryByRole("button", { name: "Expand navigation" }) !== null
-  ).toBe(!phone);
-  expect(
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
-  ).toBeNull();
-});
+])(
+  "should show at %i px %s, and never the stock Sidebar's Sheet",
+  (viewportWidth) => {
+    resizeTo(viewportWidth);
+    shell();
+    const phone = viewportWidth < LAYOUT_BREAKPOINTS.phone;
+    expect(screen.queryByRole("button", { name: "Menu" }) !== null).toBe(phone);
+    expect(
+      screen.queryByRole("button", { name: "Expand navigation" }) !== null
+    ).toBe(!phone);
+    expect(
+      document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
+    ).toBeNull();
+  }
+);
 
 it("should fold the files column by Cmd+E and unfold the rail by Cmd+B at the phone's line", () => {
   resizeTo(LAYOUT_BREAKPOINTS.phone);

@@ -1,5 +1,6 @@
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
+import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { CopyButton } from "@/shared/ui/copy-button";
 
@@ -19,6 +20,8 @@ import { useIdl } from "../IdlProvider";
 import Label from "../InputLabel";
 import FromSeed from "./FromSeed";
 import { useInstruction } from "./InstructionProvider";
+
+const log = createLogger("test:instruction-input");
 
 type InstructionValues = GeneratableInstruction["values"];
 type InstructionInputAccount = InstructionValues["accounts"][number];
@@ -89,16 +92,16 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
     if (PgCommon.isEqual(newValue, lastValue.current)) return;
     lastValue.current = newValue;
 
-    setInstruction((instruction) => {
+    setInstruction((current) => {
       updateInstruction({
         updateGenerator: (data) => {
-          const generator = PgProgramInteraction.createGenerator(
+          const nextGenerator = PgProgramInteraction.createGenerator(
             selectedItems,
             value
           );
           // Only update the generator if there is a generator otherwise the
           // existing generator can be overridden
-          if (generator) data.generator = generator;
+          if (nextGenerator) data.generator = nextGenerator;
           data.error = error;
         },
         updateRefs: (data, refGeneratorType) => {
@@ -106,13 +109,13 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
 
           for (const key of ["accounts", "args"] as const) {
             // Default ref
-            for (const instructionValue of instruction.values[key]) {
+            for (const instructionValue of current.values[key]) {
               if (
                 instructionValue.generator.type === refGeneratorType &&
                 instructionValue.generator.name === data.name
               ) {
                 const inputEl = document.getElementById(
-                  instruction.name + key + instructionValue.name
+                  current.name + key + instructionValue.name
                 ) as HTMLInputElement;
                 PgCommon.changeInputValue(inputEl, value);
               }
@@ -127,21 +130,21 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
                 )
               ) {
                 const inputEl = document.getElementById(
-                  instruction.name + key + instructionValue.name
+                  current.name + key + instructionValue.name
                 ) as HTMLInputElement;
-                const newValue = generateValueOrDefault(
+                const seedValue = generateValueOrDefault(
                   instructionValue.generator,
-                  instruction.values
+                  current.values
                 );
-                PgCommon.changeInputValue(inputEl, newValue);
+                PgCommon.changeInputValue(inputEl, seedValue);
               }
             }
           }
         },
         checkErrors: () => {
-          return Object.values(instruction.values).reduce((acc, value) => {
-            if (Array.isArray(value)) {
-              acc ||= value.some(
+          return Object.values(current.values).reduce((acc, entry) => {
+            if (Array.isArray(entry)) {
+              acc ||= entry.some(
                 (v) =>
                   v.error ||
                   (v.generator.type === "Custom" && v.generator.value === "")
@@ -153,7 +156,7 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
         },
       });
 
-      return instruction;
+      return current;
     });
   }, [value, error, selectedItems, updateInstruction, setInstruction]);
 
@@ -215,7 +218,7 @@ const getSearchBarProps = (
 
   // Generate values via `generateValueOrDefault` method and push to items.
   const pushGeneratorItem = (
-    generator:
+    option:
       | (Pick<Exclude<InstructionValueGenerator, { name: string }>, "type"> & {
           names?: never;
         })
@@ -225,21 +228,21 @@ const getSearchBarProps = (
   ) => {
     if (!searchBarProps.items) return;
 
-    if (!generator.names) {
+    if (!option.names) {
       searchBarProps.items.push({
-        label: generator.type,
+        label: option.type,
         value: generateValueOrDefault(
-          generator as InstructionValueGenerator,
+          option as InstructionValueGenerator,
           instruction.values
         ),
       });
-    } else if (generator.names.length) {
+    } else if (option.names.length) {
       searchBarProps.items.push({
-        label: generator.type,
-        items: generator.names.map((name) => ({
-          label: name,
+        label: option.type,
+        items: option.names.map((optionName) => ({
+          label: optionName,
           value: generateValueOrDefault(
-            { ...generator, name },
+            { ...option, name: optionName },
             instruction.values
           ),
         })),
@@ -437,7 +440,7 @@ const generateValueOrDefault = (
   try {
     return PgProgramInteraction.generateValue(generator, values);
   } catch (e: any) {
-    console.log("Failed to generate:", e.message);
+    log.warn(`Failed to generate: ${e.message}`);
     return "";
   }
 };

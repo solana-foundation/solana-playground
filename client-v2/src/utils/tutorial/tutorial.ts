@@ -112,8 +112,8 @@ const derive = () => ({
 });
 
 const getTutorialsRoute = () => {
-  const route = PgRouter.all.find((route) =>
-    route.path.startsWith("/tutorials")
+  const route = PgRouter.all.find((candidate) =>
+    candidate.path.startsWith("/tutorials")
   );
   if (!route) throw new Error("/tutorials route not found");
 

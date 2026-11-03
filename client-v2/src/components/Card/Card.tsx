@@ -31,10 +31,10 @@ const Card: FC<React.PropsWithChildren<CardProps>> = (props) => {
     setIsClickable(hasHref);
   }, [props.onClick]);
 
-  const Card = <Wrapper ref={ref} {...props} />;
+  const card = <Wrapper ref={ref} {...props} />;
 
-  if (isClickable) return <Gradient>{Card}</Gradient>;
-  return Card;
+  if (isClickable) return <Gradient>{card}</Gradient>;
+  return card;
 };
 
 const Wrapper = styled.div`

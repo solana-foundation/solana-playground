@@ -173,10 +173,12 @@ const linesIn = (pane: Locator) =>
  * `hunkLineClass` names on the decoration at that line's height.
  */
 const looksOf = (pane: Locator, text: string) =>
-  pane.locator(".monaco-editor").evaluate((editor, text) => {
+  pane.locator(".monaco-editor").evaluate((editor, textInPage) => {
     const line = Array.from(
       editor.querySelectorAll<HTMLElement>(".view-lines .view-line")
-    ).find((l) => (l.textContent ?? "").replace(/\u00a0/g, " ").includes(text));
+    ).find((l) =>
+      (l.textContent ?? "").replace(/\u00a0/g, " ").includes(textInPage)
+    );
     if (!line) return null;
     const overlay = Array.from(
       editor.querySelectorAll<HTMLElement>(".view-overlays > div")
@@ -194,7 +196,7 @@ const banner = (page: Page) => page.getByText("changed on another device");
  * store keys files by inode, so a file is found by what it holds.
  */
 const storedWith = (page: Page, marker: string) =>
-  page.evaluate(async (marker) => {
+  page.evaluate(async (markerInPage) => {
     const dbs: Array<{ name?: string }> = await (
       indexedDB as unknown as {
         databases: () => Promise<Array<{ name?: string }>>;
@@ -230,7 +232,7 @@ const storedWith = (page: Page, marker: string) =>
           return "";
         }
       })
-      .filter((text) => text.includes(marker));
+      .filter((text) => text.includes(markerInPage));
   }, marker);
 
 /**

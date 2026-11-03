@@ -700,7 +700,7 @@ if (import.meta.vitest) {
 
       it("only accepts a reply carrying this flow's nonce", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(
-          vi.fn().mockImplementation((url: string, init: RequestInit) =>
+          vi.fn().mockImplementation((url: string) =>
             url === "/api/auth/sign-in/social"
               ? Promise.resolve({
                   ok: true,

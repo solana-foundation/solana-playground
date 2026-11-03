@@ -1,5 +1,9 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "./common";
 import type { Disposable, SyncOrAsync } from "./types";
+
+const log = createLogger("utils:router");
 
 /** Opening delimiter for path variables */
 const OPEN = "{";
@@ -63,10 +67,10 @@ export class PgRouter {
       disposable?.dispose();
 
       let params: PathParameter;
-      const route = this.all.find((route) => {
+      const route = this.all.find((candidate) => {
         try {
-          params = this.getParamsFromPath(route.path, path);
-          if (route.validate) return route.validate(params);
+          params = this.getParamsFromPath(candidate.path, path);
+          if (candidate.validate) return candidate.validate(params);
           return true;
         } catch {
           return false;
@@ -76,7 +80,7 @@ export class PgRouter {
       try {
         disposable = (await route?.handle(params!))!;
       } catch (e: any) {
-        console.log("ROUTE ERROR:", e.message);
+        log.warn(`ROUTE ERROR: ${e.message}`);
         this.navigate();
       }
     });

@@ -7,6 +7,7 @@ export class PgJsRuntimeImporter {
   /** Whether `console.log` is overridden */
   private static _isOverridden: boolean;
   /** The default `console.log` */
+  // eslint-disable-next-line no-console -- keeps the original to call from the wrapper that mirrors mocha output to the terminal
   private static _consoleLog = console.log;
 
   /**
@@ -16,6 +17,7 @@ export class PgJsRuntimeImporter {
   static async import() {
     if (!this._isOverridden) {
       // Overriding needs to happen before the client is imported
+      // eslint-disable-next-line no-console -- mocha prints through console.log; the wrapper mirrors that output to the terminal
       console.log = (msg, ...rest) => {
         this._consoleLog(msg, ...rest);
 

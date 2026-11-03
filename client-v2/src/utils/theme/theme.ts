@@ -179,16 +179,16 @@ export class PgTheme {
       // https://bugzilla.mozilla.org/show_bug.cgi?id=1729089
       const fonts = document.fonts.keys();
       while (1) {
-        const { done, value: font } = fonts.next();
+        const { done, value: face } = fonts.next();
         if (done) break;
-        if (font.family === this._font.family) {
-          isLoaded = font.status === "loaded";
+        if (face.family === this._font.family) {
+          isLoaded = face.status === "loaded";
         }
       }
     } else {
-      for (const font of document.fonts.keys()) {
-        if (font.family === this._font.family) {
-          isLoaded = font.status === "loaded";
+      for (const face of document.fonts.keys()) {
+        if (face.family === this._font.family) {
+          isLoaded = face.status === "loaded";
         }
       }
     }
@@ -201,7 +201,7 @@ export class PgTheme {
         await fontFace.load();
         document.fonts.add(fontFace);
       } catch (e) {
-        console.log(`Failed to load font: ${this._font.family}\nError: ${e}`);
+        log.warn(`Failed to load font: ${this._font.family}\nError: ${e}`);
       }
     }
 

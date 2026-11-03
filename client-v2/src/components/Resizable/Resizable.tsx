@@ -16,17 +16,17 @@ const Resizable = forwardRef<ReResizable, ResizableProps>((props, ref) => (
     {...{
       ...props,
       enable: transformEnable(props.enable),
-      onResizeStart: (ev, dir, ref) => {
+      onResizeStart: (ev, dir, element) => {
         // Having a transition makes resizing experience laggy. To solve, we
         // disable the transition when resizing starts, and re-enable it
         // after resizing stops.
-        ref.style.transitionDuration = "0s";
-        props.onResizeStart?.(ev, dir, ref);
+        element.style.transitionDuration = "0s";
+        props.onResizeStart?.(ev, dir, element);
       },
-      onResizeStop: (ev, dir, ref, delta) => {
+      onResizeStop: (ev, dir, element, delta) => {
         // Setting to empty string restores the default value
-        ref.style.transitionDuration = "";
-        props.onResizeStop?.(ev, dir, ref, delta);
+        element.style.transitionDuration = "";
+        props.onResizeStop?.(ev, dir, element, delta);
       },
     }}
   />

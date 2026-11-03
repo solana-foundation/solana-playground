@@ -2,6 +2,8 @@ import { FC, useCallback, useMemo, useRef, useState } from "react";
 import ReactDOM from "react-dom";
 import styled from "styled-components";
 
+import { createLogger } from "@/shared/lib/logger";
+
 import Input from "../../../../../components/Input";
 import LangIcon from "../../../../../components/LangIcon";
 import {
@@ -10,6 +12,8 @@ import {
   useSetStatic,
 } from "../../../../../hooks";
 import { Fn, PgCommon, PgExplorer, PgView } from "../../../../../utils";
+
+const log = createLogger("explorer:create-item");
 
 export const CreateItem = () => {
   const [El, setEl] = useState<Element | null>(null);
@@ -73,7 +77,7 @@ const CreateItemInput: FC<React.PropsWithChildren<CreateItemInputProps>> = ({
             const newEl = PgExplorer.getElFromPath(itemPath);
             if (newEl) PgExplorer.setSelectedEl(newEl);
           } catch (e: any) {
-            console.log(e.message);
+            log.warn(e.message);
             setError(true);
           }
         },

@@ -10,7 +10,7 @@ import { ExplorerLink } from "./ExplorerLink";
 
 // Show a notification toast with explorer links after a transaction is sent.
 export const tx = () => {
-  return PgTx.onDidSend((tx) => {
+  return PgTx.onDidSend((sentTx) => {
     // Check setting
     if (!PgSettings.notification.showTx) return;
 
@@ -19,7 +19,7 @@ export const tx = () => {
 
     // If a tx includes an BPF Upgradeable Loader program ix, only allow the
     // final deploy/upgrade ixs to not spam
-    const hasNonFinalBpfLoaderIx = tx.instructions.some(
+    const hasNonFinalBpfLoaderIx = sentTx.instructions.some(
       (ix) =>
         ix.programId.equals(PgWeb3.BpfLoaderUpgradeableProgram.programId) &&
         !(
@@ -31,9 +31,9 @@ export const tx = () => {
     if (hasNonFinalBpfLoaderIx) return;
 
     // Sanity check for signature
-    if (!tx.signature) return;
+    if (!sentTx.signature) return;
 
-    const txHash = PgCodec.encodeBinary(tx.signature, "base58");
+    const txHash = PgCodec.encodeBinary(sentTx.signature, "base58");
     PgView.setToast(ExplorerLink, {
       componentProps: { txHash },
       options: { name: "tx-explorer-link", id: txHash },

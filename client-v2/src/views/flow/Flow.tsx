@@ -325,11 +325,11 @@ const FlowFrame = () => {
             );
           }}
           stageTabs={<StageBar />}
-          files={({ collapsed, toggle, phone }) => (
+          files={({ collapsed, toggle, phone: isPhone }) => (
             <LeftPanel
               collapsed={collapsed}
-              onHide={phone ? undefined : toggle}
-              startOn={phone ? "files" : undefined}
+              onHide={isPhone ? undefined : toggle}
+              startOn={isPhone ? "files" : undefined}
             />
           )}
           stage={() => (

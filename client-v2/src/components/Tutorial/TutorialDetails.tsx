@@ -23,8 +23,12 @@ const TutorialDetails: FC<React.PropsWithChildren<TutorialDetailsProps>> = ({
 
             <div className="flex flex-wrap gap-4">
               {Array.isArray(data) ? (
-                data.map((data) => (
-                  <ClickableTutorialDetail key={data} kind={kind} data={data} />
+                data.map((value) => (
+                  <ClickableTutorialDetail
+                    key={value}
+                    kind={kind}
+                    data={value}
+                  />
                 ))
               ) : (
                 <ClickableTutorialDetail kind={kind} data={data} />

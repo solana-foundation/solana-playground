@@ -117,8 +117,10 @@ export const initLanguages = async (theme: RequiredKey<IRawTheme, "name">) => {
     if (!file) return;
 
     const extension = file.path.split(".").at(-1)!;
-    const lang = monaco.languages.getLanguages().find((lang) => {
-      return lang.extensions?.map((ext) => ext.slice(1)).includes(extension);
+    const lang = monaco.languages.getLanguages().find((candidate) => {
+      return candidate.extensions
+        ?.map((ext) => ext.slice(1))
+        .includes(extension);
     });
     if (lang) await loadGrammarAndConfiguration(lang.id);
   });

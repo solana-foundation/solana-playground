@@ -1,3 +1,5 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import {
   PgCommon,
   PgConnection,
@@ -6,6 +8,8 @@ import {
   PgWeb3,
   WalletOption,
 } from "../../utils";
+
+const log = createLogger("commands:deploy");
 
 /** Wrapper around `BpfLoaderUpgradeableProgram` for easier interactions */
 export class BpfLoaderUpgradeable {
@@ -128,7 +132,7 @@ export class BpfLoaderUpgradeable {
             } catch (e: any) {
               if (isRateLimited) break;
 
-              console.log("Buffer write error:", e);
+              log.warn("Buffer write error", { context: { error: e } });
               if (!(e instanceof Error)) continue;
 
               // Naively parse the error message. Example error message:

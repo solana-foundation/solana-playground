@@ -144,8 +144,8 @@ export function updatable<T extends Record<string, any>>(params: {
     });
 
     // Add `update` method
-    (sClass as Updatable<T>)[PROPS.UPDATE] = (params) => {
-      for (const [prop, value] of Object.entries(params)) {
+    (sClass as Updatable<T>)[PROPS.UPDATE] = (updates) => {
+      for (const [prop, value] of Object.entries(updates)) {
         if (value !== undefined) sClass[prop] = value;
       }
     };
@@ -188,34 +188,34 @@ export function updatable<T extends Record<string, any>>(params: {
       }
 
       // Set the default if any prop is missing (recursively)
-      const setMissingDefaults = (state: any, defaultState: any) => {
-        if (Array.isArray(state)) return;
+      const setMissingDefaults = (node: any, defaultState: any) => {
+        if (Array.isArray(node)) return;
 
         for (const prop in defaultState) {
-          if (state[prop] === undefined) {
-            state[prop] = defaultState[prop];
+          if (node[prop] === undefined) {
+            node[prop] = defaultState[prop];
           } else if (
-            typeof state[prop] === "object" &&
+            typeof node[prop] === "object" &&
             defaultState[prop] !== null
           ) {
-            setMissingDefaults(state[prop], defaultState[prop]);
+            setMissingDefaults(node[prop], defaultState[prop]);
           }
         }
       };
       setMissingDefaults(state, params.defaultState);
 
       // Remove extra properties if a prop was removed (recursively)
-      const removeExtraProperties = (state: any, defaultState: any) => {
-        if (Array.isArray(state)) return;
+      const removeExtraProperties = (node: any, defaultState: any) => {
+        if (Array.isArray(node)) return;
 
-        for (const prop in state) {
+        for (const prop in node) {
           if (defaultState[prop] === undefined) {
-            delete state[prop];
+            delete node[prop];
           } else if (
-            typeof state[prop] === "object" &&
+            typeof node[prop] === "object" &&
             defaultState[prop] !== null
           ) {
-            removeExtraProperties(state[prop], defaultState[prop]);
+            removeExtraProperties(node[prop], defaultState[prop]);
           }
         }
       };
@@ -232,10 +232,10 @@ export function updatable<T extends Record<string, any>>(params: {
       // need to update this part too.
       const handleFields = (
         classState: any,
-        state: any,
+        node: any,
         accessor: string[] = []
       ) => {
-        for (const [prop, value] of Object.entries(state)) {
+        for (const [prop, value] of Object.entries(node)) {
           if (params.recursive && typeof value === "object" && value !== null) {
             PgCommon.getValue(classState, accessor)[prop] ??= {};
             handleFields(classState, value, [...accessor, prop]);
@@ -263,8 +263,8 @@ const recursivelyDefineSetters = (sClass: any, accessor: string[]) => {
   }
 
   const proxy = new Proxy(value, {
-    set(target: any, prop: string, value: any) {
-      target[prop] = value;
+    set(target: any, prop: string, newValue: any) {
+      target[prop] = newValue;
 
       // Setting a new value should dispatch a change event for all of the
       // parent objects. For example:

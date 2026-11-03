@@ -65,7 +65,7 @@ const closeIfNoHost = (id: string) => {
   setTimeout(() => {
     // A host that came meanwhile starts a wait of its own when it goes
     if (modalHosts > 0 || hostAttaches !== attaches) return;
-    const modal = openModals.find((modal) => modal.id === id);
+    const modal = openModals.find((open) => open.id === id);
     if (!modal) return;
     modalLog.error(
       new Error("No ModalHost showed a modal; it closed unanswered"),

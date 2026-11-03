@@ -1,9 +1,13 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import { Emoji } from "../../../../constants";
 import { PgCommon, PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 import { getMetaplex, loadCache, loadConfigData } from "../../utils";
 import { hashAndUpdate } from "../hash";
 import { processUpdate } from "../update";
 import { checkName, checkSellerFeeBasisPoints, checkSymbol } from "../validate";
+
+const log = createLogger("sugar:deploy");
 
 export const processDeploy = async (rpcUrl: string | undefined) => {
   const term = await PgTerminal.get();
@@ -241,7 +245,7 @@ export const processDeploy = async (rpcUrl: string | undefined) => {
                 });
               }
             } catch (e: any) {
-              console.log(e.message);
+              log.warn(e.message);
               errorCount++;
             } finally {
               progressCount++;

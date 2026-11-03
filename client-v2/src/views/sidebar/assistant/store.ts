@@ -615,7 +615,9 @@ export class PgAssistant {
       });
       PgAssistant._emit();
     } catch (err) {
-      console.warn("MCP gateway unavailable; using local servers only", err);
+      log.warn("MCP gateway unavailable; using local servers only", {
+        context: { error: err },
+      });
     }
   }
 
@@ -687,7 +689,9 @@ export class PgAssistant {
         try {
           await PgAssistant.discoverToolsOf(server);
         } catch (err) {
-          console.warn(`MCP server ${server.id}: tool discovery failed`, err);
+          log.warn(`MCP server ${server.id}: tool discovery failed`, {
+            context: { error: err },
+          });
         }
       })
     );
@@ -1742,8 +1746,8 @@ if (import.meta.vitest) {
     describe("PgAssistant item versions", () => {
       beforeEach(() => PgAssistant.clear());
 
-      /** An item's version: when it last changed, or when it was made */
-      const versionOf = (item: ChatItem) =>
+      /** An item's version in milliseconds: when it last changed, or when it was made */
+      const versionTimeOf = (item: ChatItem) =>
         Date.parse(item.updatedAt ?? item.createdAt);
 
       const find = (id: string) => PgAssistant.items.find((i) => i.id === id)!;
@@ -1758,14 +1762,14 @@ if (import.meta.vitest) {
 
       it("stamps a reply each time text streams into it", () => {
         const id = PgAssistant.startAssistantMessage();
-        const created = versionOf(find(id));
+        const createdTime = versionTimeOf(find(id));
 
         PgAssistant.appendToAssistantMessage(id, "Hel");
-        const first = versionOf(find(id));
+        const first = versionTimeOf(find(id));
         PgAssistant.appendToAssistantMessage(id, "lo");
-        const second = versionOf(find(id));
+        const second = versionTimeOf(find(id));
 
-        expect(first).toBeGreaterThan(created);
+        expect(first).toBeGreaterThan(createdTime);
         // Strictly, even when two deltas land in the same millisecond: a tie
         // would let the server keep the shorter copy
         expect(second).toBeGreaterThan(first);
@@ -1778,11 +1782,11 @@ if (import.meta.vitest) {
           effect: "builds",
         });
         const id = latestCard();
-        const created = versionOf(find(id));
+        const createdTime = versionTimeOf(find(id));
 
         PgAssistant.resolveApproval(id, true);
 
-        expect(versionOf(find(id))).toBeGreaterThan(created);
+        expect(versionTimeOf(find(id))).toBeGreaterThan(createdTime);
       });
 
       it("stamps an approval when its outcome is recorded", () => {
@@ -1793,11 +1797,11 @@ if (import.meta.vitest) {
         });
         const id = latestCard();
         PgAssistant.resolveApproval(id, true);
-        const answered = versionOf(find(id));
+        const answered = versionTimeOf(find(id));
 
         PgAssistant.setApprovalOutcome(id, "built");
 
-        expect(versionOf(find(id))).toBeGreaterThan(answered);
+        expect(versionTimeOf(find(id))).toBeGreaterThan(answered);
       });
 
       it("stamps an approval denied because the turn was stopped", () => {
@@ -1807,11 +1811,11 @@ if (import.meta.vitest) {
           effect: "deploys",
         });
         const id = latestCard();
-        const created = versionOf(find(id));
+        const createdTime = versionTimeOf(find(id));
 
         PgAssistant.cancelPending();
 
-        expect(versionOf(find(id))).toBeGreaterThan(created);
+        expect(versionTimeOf(find(id))).toBeGreaterThan(createdTime);
       });
 
       it("writes the stamp to storage with the item", async () => {
@@ -1898,7 +1902,7 @@ if (import.meta.vitest) {
       it("leaves a running turn running, and its approval waiting", async () => {
         PgAssistant.setStatus("running");
         const id = PgAssistant.startAssistantMessage();
-        const approval = PgAssistant.requestApproval({
+        const decision = PgAssistant.requestApproval({
           type: "command",
           name: "build",
           effect: "builds",
@@ -1928,7 +1932,7 @@ if (import.meta.vitest) {
         expect(texts()).toContain("Hi");
 
         PgAssistant.resolveApproval(card, true);
-        await expect(approval).resolves.toEqual({ id: card, allowed: true });
+        await expect(decision).resolves.toEqual({ id: card, allowed: true });
       });
 
       it("writes nothing when the server had nothing new", async () => {
@@ -2777,7 +2781,7 @@ if (import.meta.vitest) {
           await PgChatStorage.remove("t1");
         };
 
-        const storedTexts = async (threadId: string) =>
+        const storedTextsOf = async (threadId: string) =>
           (await PgChatStorage.read(threadId))?.map((i) =>
             "text" in i ? i.text : i.kind
           );
@@ -2807,7 +2811,7 @@ if (import.meta.vitest) {
             "Hello, world",
           ]);
           await PgAssistant.whenPersisted();
-          expect(await storedTexts("t2")).toEqual([
+          expect(await storedTextsOf("t2")).toEqual([
             "from the account",
             "build it",
             "Hello, world",
@@ -2817,7 +2821,7 @@ if (import.meta.vitest) {
         });
 
         it("leaves the approval the turn waits on to the user", async () => {
-          const approval = PgAssistant.requestApproval({
+          const decision = PgAssistant.requestApproval({
             type: "command",
             name: "build",
             effect: "builds",
@@ -2827,7 +2831,7 @@ if (import.meta.vitest) {
           const [card] = PgAssistant.items;
           PgAssistant.resolveApproval(card.id, true);
 
-          expect(await approval).toEqual({ id: card.id, allowed: true });
+          expect(await decision).toEqual({ id: card.id, allowed: true });
         });
 
         it("drops the thread it moved from once its writes land", async () => {
@@ -2860,7 +2864,7 @@ if (import.meta.vitest) {
             write.mockRestore();
           }
 
-          expect(await storedTexts("t1")).toEqual(["build it"]);
+          expect(await storedTextsOf("t1")).toEqual(["build it"]);
         });
 
         describe("overtaken by a switch before the read lands", () => {
@@ -2885,7 +2889,7 @@ if (import.meta.vitest) {
               read.mockRestore();
             }
 
-            expect(await storedTexts("t2")).toEqual([
+            expect(await storedTextsOf("t2")).toEqual([
               "from the account",
               "build it",
               "Hello",
@@ -2997,7 +3001,7 @@ if (import.meta.vitest) {
         PgAssistant.closeThread();
         turn = new AbortController();
         PgAssistant.beginTurn(turn);
-        const approval = PgAssistant.requestApproval({
+        const decision = PgAssistant.requestApproval({
           type: "command",
           name: "build",
           effect: "builds",
@@ -3007,7 +3011,7 @@ if (import.meta.vitest) {
         PgAssistant.addToolCall("listed the project");
 
         expect(turn.signal.aborted).toBe(true);
-        await expect(approval).resolves.toMatchObject({ allowed: false });
+        await expect(decision).resolves.toMatchObject({ allowed: false });
         expect(PgAssistant.items.map((i) => i.kind)).toEqual(["approval"]);
         expect(PgAssistant.endTurn(turn)).toBe(false);
       });

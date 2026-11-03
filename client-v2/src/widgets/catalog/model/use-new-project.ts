@@ -71,8 +71,8 @@ export const useNewProject = (
   // Each list refuses its own second Open; this refuses the other's while
   // one runs, and any while Start runs
   const unlessHeld =
-    (open: (id: string) => Promise<void>) => async (id: string) => {
-      if (!held) await open(id);
+    (openProject: (id: string) => Promise<void>) => async (id: string) => {
+      if (!held) await openProject(id);
     };
 
   return {

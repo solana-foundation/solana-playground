@@ -6,10 +6,14 @@ import {
   UploadMetadataInput,
 } from "@metaplex-foundation/js";
 
+import { createLogger } from "@/shared/lib/logger";
+
 import { Emoji } from "../../../../constants";
 import { PgCommon, PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 import { getMetaplex, loadCache, loadConfigData } from "../../utils";
 import { getAssetPairs } from "./assets";
+
+const log = createLogger("sugar:upload");
 
 interface AssetType {
   image: number[];
@@ -221,7 +225,7 @@ export const processUpload = async (rpcUrl: string | undefined) => {
 
               break;
             } catch (e: any) {
-              console.log(e.message);
+              log.warn(e.message);
               // There is a bug where the amount automatically calculated and sent by the sdk
               // is not enough and it throws not enough funds error. We are funding it extra
               // 10_000 lamports and users are able to withdraw their extra balance with

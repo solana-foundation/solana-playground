@@ -460,17 +460,17 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     // A tap: the page opens over the row, and the release lands on its foot
     await page.getByRole("button", { name: "Account, signed out" }).click();
-    const account = page.getByRole("menu", { name: "Account" });
-    await expect(account).toBeVisible();
+    const accountMenu = page.getByRole("menu", { name: "Account" });
+    await expect(accountMenu).toBeVisible();
     // Once its opening animation has settled
     await expect
-      .poll(() => account.boundingBox())
+      .poll(() => accountMenu.boundingBox())
       .toEqual({ x: 0, y: 0, width: 390, height: 844 });
     await expect(
-      account.getByRole("menuitem", { name: "Sign in with GitHub" })
+      accountMenu.getByRole("menuitem", { name: "Sign in with GitHub" })
     ).toBeInViewport();
-    await account.getByRole("menuitem", { name: "Close" }).click();
-    await expect(account).toHaveCount(0);
+    await accountMenu.getByRole("menuitem", { name: "Close" }).click();
+    await expect(accountMenu).toHaveCount(0);
     // The release that opened it was no pick: no sign-in started
     await expect(
       page.getByRole("button", { name: "Account, signed out" })
@@ -1779,10 +1779,10 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
   await page.setViewportSize({ width: 800, height: 812 });
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
   const navigation = page.locator('[data-slot="sidebar"]');
-  const account = navigation.getByRole("button", { name: /^Account/ });
+  const accountButton = navigation.getByRole("button", { name: /^Account/ });
 
   await page.getByRole("button", { name: "Expand navigation" }).click();
-  await account.click();
+  await accountButton.click();
   await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Collapse navigation" }).click();
@@ -1793,7 +1793,7 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
     navigation.getByRole("button", { name: "Cancel" })
   ).toBeVisible();
   release();
-  await expect(account).toContainText("Couldn't sign in");
+  await expect(accountButton).toContainText("Couldn't sign in");
 });
 
 // The scenarios of "Settings are a page of their own" and "The settings page
@@ -1985,8 +1985,10 @@ test.describe("the settings page at 1440 by 900", () => {
           window.innerWidth / 2,
           window.innerHeight / 2
         );
-        const page = el.closest('[role="region"][aria-label="Settings"]');
-        return hit === el && !!page?.contains(middle);
+        const settingsRegion = el.closest(
+          '[role="region"][aria-label="Settings"]'
+        );
+        return hit === el && !!settingsRegion?.contains(middle);
       });
 
     for (const theme of ["Dark", "Light"]) {

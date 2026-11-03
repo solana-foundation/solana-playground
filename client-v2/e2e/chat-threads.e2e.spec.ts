@@ -104,7 +104,7 @@ const storeState = (page: Page) =>
  * finds nothing. "On disk" therefore means both.
  */
 const fileIsListed = (page: Page, needle: string) =>
-  page.evaluate(async (needle) => {
+  page.evaluate(async (needleInPage) => {
     const dbs = await (indexedDB as any).databases();
     const name = dbs
       .map((d: any) => d.name)
@@ -135,7 +135,8 @@ const fileIsListed = (page: Page, needle: string) =>
       node instanceof Map &&
       Array.from(node.entries()).some(
         ([key, child]) =>
-          (typeof key === "string" && key.includes(needle)) || lists(child)
+          (typeof key === "string" && key.includes(needleInPage)) ||
+          lists(child)
       );
     return lists(root);
   }, needle);
@@ -174,10 +175,10 @@ const addMessage = async (
       { timeout: 15_000 }
     )
     .toBe(true);
-  await page.evaluate((text) => {
+  await page.evaluate((textInPage) => {
     const w = window as AssistantWindow;
     if (!w.__pgAssistant) throw new Error("assistant store not exposed");
-    w.__pgAssistant.addUserMessage(text);
+    w.__pgAssistant.addUserMessage(textInPage);
   }, text);
   await expect
     .poll(async () => JSON.stringify(await readThreads(page)), {

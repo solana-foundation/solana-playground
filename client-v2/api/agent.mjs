@@ -158,13 +158,13 @@ const pipeStream = async (res, body, observe) => {
       // here until the platform's duration cap kills it.
       if (!res.write(value)) {
         await new Promise((resolve) => {
-          const settle = () => {
-            res.off("drain", settle);
-            res.off("close", settle);
+          const endWait = () => {
+            res.off("drain", endWait);
+            res.off("close", endWait);
             resolve();
           };
-          res.once("drain", settle);
-          res.once("close", settle);
+          res.once("drain", endWait);
+          res.once("close", endWait);
         });
       }
     }

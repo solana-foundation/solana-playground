@@ -148,7 +148,7 @@ export class PgSugar {
       // Show how to set a custom rpc endpoint if the current endpoint is a known endpoint
       if (
         [Endpoint.DEVNET, Endpoint.TESTNET, Endpoint.MAINNET_BETA].some(
-          (e) => e === PgConnection.current.rpcEndpoint
+          (endpoint) => endpoint === PgConnection.current.rpcEndpoint
         )
       ) {
         PgTerminal.println(

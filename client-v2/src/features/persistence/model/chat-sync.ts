@@ -1108,7 +1108,7 @@ if (import.meta.vitest) {
        * id -- and a pull by that id 404s while the account's conversation sits on
        * the server under the old one.
        */
-      let minted: string;
+      let mintedThread: string;
       let accountThread: string;
       beforeAll(() => {
         accountThread = uuid();
@@ -1131,7 +1131,7 @@ if (import.meta.vitest) {
         await PgThreadIndex.clear();
         PgSession.reset();
         PgSyncClient.reset();
-        minted = await PgThreadIndex.ensure("w1");
+        mintedThread = await PgThreadIndex.ensure("w1");
       });
 
       it("asks by project and repoints the workspace at the newest thread", async () => {
@@ -1150,7 +1150,7 @@ if (import.meta.vitest) {
       it("carries what was typed locally into the account's thread", async () => {
         serverHolds([accountThread]);
         await signedIn();
-        await PgChatStorage.write(minted, [item(3)]);
+        await PgChatStorage.write(mintedThread, [item(3)]);
         await PgChatStorage.write(accountThread, [item(1)]);
 
         await PgChatSync.adoptAccountThread("w1");
@@ -1163,11 +1163,11 @@ if (import.meta.vitest) {
       });
 
       it("leaves a thread the server already knows alone", async () => {
-        serverHolds([uuid(), minted]);
+        serverHolds([uuid(), mintedThread]);
         await signedIn();
 
         expect(await PgChatSync.adoptAccountThread("w1")).toBeNull();
-        expect(await PgThreadIndex.get("w1")).toBe(minted);
+        expect(await PgThreadIndex.get("w1")).toBe(mintedThread);
       });
 
       it("keeps the minted thread when the account has none for the project", async () => {
@@ -1175,17 +1175,17 @@ if (import.meta.vitest) {
         await signedIn();
 
         expect(await PgChatSync.adoptAccountThread("w1")).toBeNull();
-        expect(await PgThreadIndex.get("w1")).toBe(minted);
+        expect(await PgThreadIndex.get("w1")).toBe(mintedThread);
       });
 
       it("keeps the local thread when the server cannot be reached", async () => {
         respondingWith(() => Promise.reject(new Error("offline")));
         await signedIn();
-        await PgChatStorage.write(minted, [item(1)]);
+        await PgChatStorage.write(mintedThread, [item(1)]);
 
         expect(await PgChatSync.adoptAccountThread("w1")).toBeNull();
-        expect(await PgThreadIndex.get("w1")).toBe(minted);
-        expect(await PgChatStorage.read(minted)).toHaveLength(1);
+        expect(await PgThreadIndex.get("w1")).toBe(mintedThread);
+        expect(await PgChatStorage.read(mintedThread)).toHaveLength(1);
       });
 
       it("does nothing when signed out", async () => {

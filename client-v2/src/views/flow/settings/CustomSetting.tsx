@@ -21,9 +21,9 @@ export const CustomSetting: FC<React.PropsWithChildren<CustomSettingProps>> = ({
 
   const [value, setValue] = useState(() => {
     try {
-      const value = `${setting.getValue()}`;
-      custom.parse(value);
-      return value;
+      const stored = `${setting.getValue()}`;
+      custom.parse(stored);
+      return stored;
     } catch {
       return "";
     }

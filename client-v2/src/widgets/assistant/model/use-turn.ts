@@ -283,9 +283,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // arriving can make the default reconnect
     let signedIn = !!PgSession.get();
     const session = PgSession.onDidChange(() => {
-      const now = !!PgSession.get();
-      if (now && !signedIn) void reconnectDefault();
-      signedIn = now;
+      const signedInNow = !!PgSession.get();
+      if (signedInNow && !signedIn) void reconnectDefault();
+      signedIn = signedInNow;
     });
     return () => {
       live = false;
@@ -432,10 +432,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * server's when it names one, and Try now is off until it ends; a wait past
    * `BUSY_WAIT_MAX_SECONDS` is not counted down at all.
    */
-  const waitOnBusy = (text: string, attempt: number, busy: ModelBusyError) => {
-    const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
+  const waitOnBusy = (
+    text: string,
+    attempt: number,
+    busyError: ModelBusyError
+  ) => {
+    const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
     if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
-      PgAssistant.addError(`${busy.message} ${COME_BACK_LATER}`);
+      PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
       return;
     }
     const at = Date.now();
@@ -443,7 +447,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     setWaiting({
       text,
       at: at + seconds * 1000,
-      canTryNow: busy.waitSeconds === undefined,
+      canTryNow: busyError.waitSeconds === undefined,
       attempt: attempt + 1,
       threadId: PgAssistant.threadId,
       conversation: PgAssistant.conversation,
@@ -555,8 +559,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
      * refused because another is under way leaves it in the composer rather
      * than dropping a prompt the user never typed and cannot retype.
      */
-    const run = ({ text, send }: PromptRequest) => {
-      if (!send) {
+    const run = ({ text, send: shouldSend }: PromptRequest) => {
+      if (!shouldSend) {
         place(text);
         return;
       }

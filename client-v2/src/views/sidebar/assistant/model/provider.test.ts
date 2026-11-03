@@ -41,7 +41,7 @@ vi.mock("./prompt", () => ({
 }));
 
 vi.mock("./tools", async () => {
-  const { PgAssistant } = await import("../store");
+  const { PgAssistant: assistant } = await import("../store");
   return {
     createTools: () => [
       {
@@ -49,7 +49,7 @@ vi.mock("./tools", async () => {
         description: "Write a file",
         schema: { type: "object", properties: {}, additionalProperties: false },
         run: () => {
-          PgAssistant.addToolCall("wrote src/lib.rs");
+          assistant.addToolCall("wrote src/lib.rs");
           return "Wrote src/lib.rs.";
         },
       },

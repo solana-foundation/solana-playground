@@ -9,8 +9,8 @@ import ConsoleDrawer from "./ConsoleDrawer";
 // The real drawer, watched, so a test can make the request the design
 // system's drawer would
 vi.mock(import("./BaseConsoleDrawer"), async (load) => {
-  const { CONSOLE_BODY_ID, default: Base } = await load();
-  return { CONSOLE_BODY_ID, default: vi.fn(Base) } as const;
+  const { CONSOLE_BODY_ID: bodyId, default: Base } = await load();
+  return { CONSOLE_BODY_ID: bodyId, default: vi.fn(Base) } as const;
 });
 
 /** Makes the request the design system's drawer would, through the

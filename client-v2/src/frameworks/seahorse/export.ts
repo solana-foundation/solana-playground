@@ -9,7 +9,7 @@ export const convertFromPlayground = async (files: TupleFiles) => {
   // Seahorse program name comes from the file name
   const programName = files
     .find(([path]) => /^src.*\.py$/.test(path))?.[0]
-    .replace(/src\/(.*)\.py$/, (_, programName) => programName)
+    .replace(/src\/(.*)\.py$/, (_, baseName) => baseName)
     .replace(/.*/, PgCommon.toSnakeCase);
   if (!programName) throw new Error("Program file not found");
 

@@ -372,10 +372,10 @@ const RecursiveFolder: FC<React.PropsWithChildren<RecursiveFolderProps>> = ({
       >
         {folders
           .sort((a, b) => a.localeCompare(b))
-          .map((folderName) => (
+          .map((childName) => (
             <RecursiveFolder
-              key={folderName}
-              path={PgCommon.appendSlash(PgCommon.joinPaths(path, folderName))}
+              key={childName}
+              path={PgCommon.appendSlash(PgCommon.joinPaths(path, childName))}
             />
           ))}
 

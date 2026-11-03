@@ -2,6 +2,8 @@
 // https://github.com/jsdoc/jsdoc/issues/1993
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "../common";
 import type { Disposable } from "../types";
 import type {
@@ -17,6 +19,8 @@ import type {
   Updatable,
   updatable,
 } from "./updatable";
+
+const log = createLogger("utils:decorators");
 
 /**
  * Initialize all of the given `initables` without having to care about the
@@ -51,7 +55,7 @@ export const initAll = async (initables: Initable[]): Promise<Disposable> => {
         disposables[i] = await initables[i].init();
       } catch (e: any) {
         // @ts-ignore
-        console.log("Initialization failed:", initables[i].name, e.message);
+        log.warn(`Initialization failed: ${initables[i].name} ${e.message}`);
       } finally {
         attemps++;
 

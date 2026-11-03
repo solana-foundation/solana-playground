@@ -103,8 +103,8 @@ const ask = async (): Promise<Asked> => {
 export const probeDefaultBackend = (): Promise<DefaultBackend> => {
   if (probe) return probe;
   const current: Promise<DefaultBackend> = ask().then(
-    ({ backend, failed }) => {
-      if (failed && probe === current) probe = undefined;
+    ({ backend, failed: askFailed }) => {
+      if (askFailed && probe === current) probe = undefined;
       return backend;
     },
     (error: unknown) => {

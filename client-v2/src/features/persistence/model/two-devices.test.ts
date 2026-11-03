@@ -199,7 +199,7 @@ const asDevice = (
     return Object.fromEntries(
       [...storedFiles()]
         .filter(([path]) => path.startsWith(prefix))
-        .map(([path, content]) => [path, { content }])
+        .map(([path, fileContent]) => [path, { content: fileContent }])
     );
   });
   return vi
@@ -1562,8 +1562,8 @@ describe("the exchange after typing was folded into a rewrite", () => {
     const prefix = `/${HELLO.name}/`;
     vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
       async (name: string, files: Record<string, string>) => {
-        for (const [path, content] of Object.entries(files)) {
-          await PgFs.writeFile(`/${name}/${path}`, content, {
+        for (const [relativePath, content] of Object.entries(files)) {
+          await PgFs.writeFile(`/${name}/${relativePath}`, content, {
             createParents: true,
           });
         }

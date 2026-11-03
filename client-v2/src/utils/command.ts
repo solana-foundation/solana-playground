@@ -214,13 +214,13 @@ type CommandCodeName = keyof InternalCommands;
 /** Ready to be used commands */
 type Commands = {
   [N in CommandCodeName]: InternalCommands[N] extends Command<
-    infer N,
+    infer Name,
     infer A,
     infer O,
     infer S,
     infer R
   >
-    ? ExecutableCommand<N, A, O, S, R>
+    ? ExecutableCommand<Name, A, O, S, R>
     : never;
 };
 
@@ -361,7 +361,9 @@ export class PgCommandManager {
           const token = tokens[i];
           const nextIndex = +i + 1;
           const nextToken = tokens.at(nextIndex);
-          const subcmd = cmd.subcommands?.find((cmd) => cmd.name === token);
+          const subcmd = cmd.subcommands?.find(
+            (candidate) => candidate.name === token
+          );
           if (subcmd) cmd = subcmd;
 
           // Handle checks
@@ -373,7 +375,7 @@ export class PgCommandManager {
           // Early continue if it's not the end of the command
           const isLast = +i === tokens.length - 1;
           const isNextTokenSubcmd = cmd.subcommands?.some(
-            (cmd) => cmd.name === nextToken
+            (candidate) => candidate.name === nextToken
           );
           if (!isLast && isNextTokenSubcmd) continue;
 
@@ -477,7 +479,9 @@ ${PgTerminal.formatList(cmd.subcommands!)}`);
                 throw new Error(
                   `Subcommand doesn't exist: \`${nextToken}\`
 
-Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
+Available subcommands: ${cmd.subcommands
+                    .map((subcommand) => subcommand.name)
+                    .join(", ")}`
                 );
               }
               if (
@@ -494,12 +498,12 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
           // Parse args
           const parsedArgs: Record<string, Arrayable<unknown>> = {};
           if (cmd.args) {
-            for (const i in cmd.args) {
-              const arg = cmd.args[i];
+            for (const argIndex in cmd.args) {
+              const arg = cmd.args[argIndex];
               const inputArgs = arg.multiple
-                ? args.slice(+i)
-                : args[i]
-                ? [args[i]]
+                ? args.slice(+argIndex)
+                : args[argIndex]
+                ? [args[argIndex]]
                 : [];
               if (!inputArgs.length) {
                 if (!arg.optional) {
@@ -514,7 +518,7 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
               if (inputArgs.length && arg.values) {
                 const values =
                   typeof arg.values === "function"
-                    ? arg.values(args[i], tokens)
+                    ? arg.values(args[argIndex], tokens)
                     : arg.values;
                 const invalidValue = inputArgs.find(
                   (inputArg) => !values.includes(inputArg)
@@ -532,7 +536,7 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
               if (arg.parse) {
                 const parse = PgCommandManager._createParse("argument", arg);
                 parsedArgs[arg.name] = arg.multiple
-                  ? inputArgs.map((token) => parse(token, tokens))
+                  ? inputArgs.map((inputArg) => parse(inputArg, tokens))
                   : parse(inputArgs[0], tokens);
               } else {
                 parsedArgs[arg.name] = arg.multiple ? inputArgs : inputArgs[0];
@@ -544,13 +548,13 @@ Available subcommands: ${cmd.subcommands.map((cmd) => cmd.name).join(", ")}`
           const parsedOpts: Record<string, unknown> = {};
           if (cmd.options) {
             for (const opt of cmd.options) {
-              const i = opts.findIndex(
+              const optIndex = opts.findIndex(
                 (o) => o === "--" + opt.name || o === "-" + opt.short
               );
-              if (i === -1) continue;
+              if (optIndex === -1) continue;
 
               if (opt.takeValue) {
-                const val = opts.at(i + 1);
+                const val = opts.at(optIndex + 1);
                 if (!val) {
                   throw new Error(`Option value not given: \`${opt.name}\``);
                 }

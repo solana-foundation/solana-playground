@@ -77,7 +77,7 @@ export const useExplorerContextMenu = () => {
     const itemPath = PgExplorer.getItemPathFromEl(selectedEl)!;
     const itemName = PgExplorer.getItemNameFromPath(itemPath);
 
-    const itemData: ItemData = {
+    const selectedData: ItemData = {
       isFolder: itemType.folder,
       isProgramFolder:
         itemType.folder && itemName === PgExplorer.PATHS.SRC_DIRNAME,
@@ -97,10 +97,10 @@ export const useExplorerContextMenu = () => {
 
     // Convert the `undefined` values to `false` in order to show them only
     // when necessary.
-    for (const key of PgCommon.keys(itemData)) {
-      itemData[key] ??= false;
+    for (const key of PgCommon.keys(selectedData)) {
+      selectedData[key] ??= false;
     }
-    setItemData(itemData);
+    setItemData(selectedData);
 
     const ctxPath = PgExplorer.getItemPathFromEl(selectedEl);
     if (ctxPath) setCtxSelectedPath(ctxPath);

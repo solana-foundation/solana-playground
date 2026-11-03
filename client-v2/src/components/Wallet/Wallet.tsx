@@ -128,15 +128,15 @@ export const WalletName = () => {
   const wallet = useWallet();
   const { darken, lighten } = useDarken();
 
-  const getAccountDisplayName = useCallback((wallet: WalletType) => {
-    const name = PgCommon.withMaxLength(wallet.name, 12);
+  const getAccountDisplayName = useCallback((account: WalletType) => {
+    const name = PgCommon.withMaxLength(account.name, 12);
 
     // On standard wallet disconnect, the `publicKey` field appears `null` for a
     // brief moment until `PgWallet.getConnectedStandardWallets` runs again.
     //
     // TODO: Make sure `publicKey` can never be `null`
-    if (!wallet.publicKey) return name;
-    return `${name} - (${PgCommon.shorten(wallet.publicKey.toBase58())})`;
+    if (!account.publicKey) return name;
+    return `${name} - (${PgCommon.shorten(account.publicKey.toBase58())})`;
   }, []);
 
   if (!wallet) return null;

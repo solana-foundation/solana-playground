@@ -57,13 +57,6 @@ const SAID = "a message from the other device";
 
 /** An account whose work lives entirely on some other browser */
 const stubAccount = async (page: Page) => {
-  const json = (route: Route, body: unknown) =>
-    route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(body),
-    });
-
   await page.route("**/api/auth/get-session", (r) =>
     json(r, { user: { id: "u1", name: "Tester", image: null, login: "t" } })
   );

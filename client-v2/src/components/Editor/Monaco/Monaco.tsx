@@ -345,7 +345,7 @@ const Monaco = () => {
       const model =
         monaco.editor
           .getModels()
-          .find((model) => model.uri.path === curFile.path) ??
+          .find((existing) => existing.uri.path === curFile.path) ??
         monaco.editor.createModel(
           curFile.content!,
           undefined,
@@ -465,7 +465,7 @@ const Monaco = () => {
         try {
           await PgExplorer.fs.writeFile(...args);
         } catch (e: any) {
-          console.log(
+          log.warn(
             `Error saving file ${PgExplorer.currentFilePath}. ${e.message}`
           );
         }

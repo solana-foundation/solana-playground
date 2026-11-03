@@ -22,6 +22,7 @@ export interface Tracker<E extends EventMap> {
  * ```
  */
 export const createTracker = <E extends EventMap>(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the parameter exists for its type: NameGuard fails a bad event map at the call
   ..._guard: NameGuard<E>
 ): Tracker<E> => ({
   track: (name, params, scope) => emit({ name, params, scope }),

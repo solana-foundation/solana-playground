@@ -216,12 +216,12 @@ const buildPython = async (pythonFiles: TupleFiles, signal: AbortSignal) => {
     // Seahorse compile outputs a flattened array like [filepath, content, filepath, content]
     const files: TupleFiles = [];
     for (let i = 0; i < compiledContent.length; i += 2) {
-      const path = compiledContent[i];
-      let content = compiledContent[i + 1];
+      const filePath = compiledContent[i];
+      let fileContent = compiledContent[i + 1];
       // The build server detects #[program] to determine if Anchor
       // Seahorse (without rustfmt) outputs # [program]
-      content = content.replace("# [program]", "#[program]");
-      files.push([path, content]);
+      fileContent = fileContent.replace("# [program]", "#[program]");
+      files.push([filePath, fileContent]);
     }
 
     return files;

@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { createLogger } from "@/shared/lib/logger";
+
 import { useExplorer, useProgramInfo } from "../../../hooks";
 import {
   PgConnection,
@@ -14,6 +16,8 @@ import { PgFlow } from "../state/stage";
 import BaseInteract from "./BaseInteract";
 import IdlActions from "./IdlActions";
 import { interactFacts, interactSurface } from "./interact-surface";
+
+const log = createLogger("flow:interact");
 
 /** Point `PgProgramInfo`'s target at the given deployment. Selecting the
  * record that matches the project's own keypair clears the override so the
@@ -33,7 +37,9 @@ const target = (record: DeployRecord) => {
     const customPk = new PgWeb3.PublicKey(record.programId);
     PgProgramInfo.update({ customPk });
   } catch (e) {
-    console.error("Invalid deploy record program id", record.programId, e);
+    log.error(new Error("Invalid deploy record program id", { cause: e }), {
+      context: { programId: record.programId },
+    });
   }
 };
 

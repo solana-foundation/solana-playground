@@ -17,9 +17,9 @@ export const useSendAndReceiveCustomEvent = <T,>(
       try {
         const data = await cb(e.detail);
         PgCommon.createAndDispatchCustomEvent(eventNames.receive, { data });
-      } catch (e: any) {
+      } catch (error: any) {
         PgCommon.createAndDispatchCustomEvent(eventNames.receive, {
-          error: e.message,
+          error: error.message,
         });
       }
     };

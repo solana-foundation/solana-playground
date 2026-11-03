@@ -1,4 +1,4 @@
-import { Component, ErrorInfo, type JSX, ReactNode } from "react";
+import { Component, type JSX, ReactNode } from "react";
 import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
@@ -57,21 +57,6 @@ class ErrorBoundary extends Component<Props, State> {
   static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.
     return { error };
-  }
-
-  /**
-   * Callback to run when an error is caught.
-   *
-   * @param error error that was thrown
-   * @param info information about the error, e.g. stack trace
-   */
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    // Example `info.componentStack`:
-    //   in ComponentThatThrows (created by App)
-    //   in ErrorBoundary (created by App)
-    //   in div (created by App)
-    //   in App
-    // There is no need to log the error because it's logged automatically
   }
 
   /** Render `fallback` if there is an error, `children` otherwise. */

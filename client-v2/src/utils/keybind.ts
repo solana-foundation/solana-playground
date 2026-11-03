@@ -39,8 +39,8 @@ export class PgKeybind {
     );
 
     const handle = (ev: KeyboardEvent) => {
-      const keybind = keybinds.find(({ keybind }) => {
-        const keys = keybind.toUpperCase().replaceAll(" ", "").split("+");
+      const keybind = keybinds.find(({ keybind: combination }) => {
+        const keys = combination.toUpperCase().replaceAll(" ", "").split("+");
 
         // A modifier the keybind does not name has to be up, so "Ctrl+R" keeps
         // its hands off Ctrl+Shift+R

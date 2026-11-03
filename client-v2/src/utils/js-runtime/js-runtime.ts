@@ -479,9 +479,9 @@ export class PgJsRuntime {
         ];
 
         pkg.workspace = {};
-        for (const name of names) {
-          if (pkg.workspace[name]) continue;
-          Object.defineProperty(pkg.workspace, name, {
+        for (const workspaceName of names) {
+          if (pkg.workspace[workspaceName]) continue;
+          Object.defineProperty(pkg.workspace, workspaceName, {
             get: () => {
               let program = this._getPg().program;
               if (program) {

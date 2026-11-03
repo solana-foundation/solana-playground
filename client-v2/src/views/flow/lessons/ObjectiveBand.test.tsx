@@ -172,10 +172,10 @@ describe("ObjectiveBand", () => {
     expect(props.kind === "step" && props.primary.kind).toBe("continue");
 
     // Continue marks the read step, as the reader's "Mark as read" did
-    const attest = vi.spyOn(PgLesson, "attest").mockImplementation(() => {});
+    const attestSpy = vi.spyOn(PgLesson, "attest").mockImplementation(() => {});
     if (props.kind === "step") props.primary.onClick();
-    expect(attest).toHaveBeenCalledTimes(1);
-    attest.mockRestore();
+    expect(attestSpy).toHaveBeenCalledTimes(1);
+    attestSpy.mockRestore();
   });
 
   it("offers the assistant, not Continue, on a read step already marked", () => {
