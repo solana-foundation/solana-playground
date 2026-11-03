@@ -46,20 +46,20 @@ SHALL fail when the built bundle lacks one of those names.
 - **THEN** the cluster label in the bottom bar changes to Testnet, and the tab
   does not freeze in a loop of change events
 
-### Requirement: Minified output stays within the production browser floor
+### Requirement: Minified output stays within the browser floor
 
-The minifier SHALL emit no syntax newer than the production `browserslist`
+The minifier SHALL emit no syntax newer than the `browserslist`
 allows, and SHALL take its target from that list, not from a list of its own.
 
 #### Scenario: The floor changes (manual)
 
-- **WHEN** a reviewer reads the build configuration after the production
+- **WHEN** a reviewer reads the build configuration after the
   `browserslist` is raised
 - **THEN** the minifier's target follows it with no second edit
 
 #### Scenario: A browser at the floor (manual)
 
-- **WHEN** the production build is opened in the oldest Safari the production
+- **WHEN** the production build is opened in the oldest Safari the
   `browserslist` allows
 - **THEN** every JavaScript chunk loads without a syntax error in the console
 

@@ -218,10 +218,14 @@ counts.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
    before the PR is opened (and before the sx review, if it runs); it never
-   runs `/opsx:archive` unasked. On a yes, confirm every task is ticked, delete
+   runs `/opsx:archive` unasked. On a yes, confirm every task is ticked,
+   replace every link to `tasks.md` in the change's `design.md` and `plans/`
+   with a permalink to it at its last commit
+   (`git log -1 --format=%H -- openspec/changes/<name>/tasks.md`), delete
    `tasks.md`, then `/opsx:archive` merges the deltas into `openspec/specs/`
    and moves the folder to `changes/archive/<date>-<name>/`, all committed in
-   that same PR. On a no, the PR description says
+   that same PR. A relative link to the deleted file breaks for good, since
+   an archived change is never edited. On a no, the PR description says
    `OpenSpec: <change> stays open (<who answered>, <date>)`, and the change is
    closed in a PR of its own once a human says yes; so is a change whose last
    task merged without the question. `specs/` therefore always describes the
@@ -451,7 +455,8 @@ it.
 - **Archiving is a human's call, asked before the PR is opened.** If the
   PR ticks the change's last task, ask whether to close the change before
   opening the PR, and before the first `/sx:review-pr` run if there is one.
-  On a yes, confirm every task is ticked, delete `tasks.md`, run
+  On a yes, confirm every task is ticked, point every link to `tasks.md` at
+  a permalink (step 5 of "Specs and changes"), delete `tasks.md`, run
   `/opsx:archive` and commit the deletion and the archive in this PR; on a
   no, the PR
   description says `OpenSpec: <change> stays open (<who answered>, <date>)`.
