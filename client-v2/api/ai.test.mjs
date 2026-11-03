@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { afterEach, beforeEach, describe, it } from "node:test";
 
+import { AGENT_SUFFIXES } from "../src/shared/config/server-env.mjs";
+
 // `GET /api/ai/status` is the one answer the client gates AI surfaces on
 // (spec `assistant-ai-status`). The session is injected through
 // `statusHandler`, so every caller state is reachable without a database.
@@ -46,10 +48,13 @@ const HOSTED_BODY = {
   model: MODEL,
 };
 
+/** Every deprecated name `agentEnv` falls back to, which an old `.env` may set */
+const DEPRECATED_VARS = AGENT_SUFFIXES.map((suffix) => `AGENT_${suffix}`);
+
 const VARS = [
-  "AGENT_API_KEY",
-  "AGENT_NEWCOMER_API_KEY",
-  "AGENT_MODEL",
+  "PG_AI_API_KEY",
+  "PG_AI_NEWCOMER_API_KEY",
+  "PG_AI_MODEL",
   "AUTH_OAUTH_PROXY_URL",
   "AUTH_OAUTH_PROXY_SECRET",
   // The names in `SIGN_IN`
@@ -61,9 +66,9 @@ const VARS = [
 
 const configureHostedKey = () => {
   Object.assign(process.env, SIGN_IN);
-  process.env.AGENT_API_KEY = KEY;
-  process.env.AGENT_NEWCOMER_API_KEY = NEWCOMER_KEY;
-  process.env.AGENT_MODEL = MODEL;
+  process.env.PG_AI_API_KEY = KEY;
+  process.env.PG_AI_NEWCOMER_API_KEY = NEWCOMER_KEY;
+  process.env.PG_AI_MODEL = MODEL;
 };
 
 describe("GET /api/ai/status", () => {
@@ -71,16 +76,20 @@ describe("GET /api/ai/status", () => {
   const saved = {};
 
   beforeEach(() => {
-    for (const name of VARS) {
-      saved[name] = process.env[name];
-      delete process.env[name];
+    for (const list of [VARS, DEPRECATED_VARS]) {
+      for (const name of list) {
+        saved[name] = process.env[name];
+        delete process.env[name];
+      }
     }
   });
 
   afterEach(() => {
-    for (const name of VARS) {
-      if (saved[name] === undefined) delete process.env[name];
-      else process.env[name] = saved[name];
+    for (const list of [VARS, DEPRECATED_VARS]) {
+      for (const name of list) {
+        if (saved[name] === undefined) delete process.env[name];
+        else process.env[name] = saved[name];
+      }
     }
   });
 
@@ -117,8 +126,8 @@ describe("GET /api/ai/status", () => {
   });
 
   it("assistant-ai-status: No key configured, a key without sign-in", async (t) => {
-    process.env.AGENT_API_KEY = KEY;
-    process.env.AGENT_MODEL = MODEL;
+    process.env.PG_AI_API_KEY = KEY;
+    process.env.PG_AI_MODEL = MODEL;
     const warn = t.mock.method(console, "warn", () => {});
 
     const { res, asked } = await call();
@@ -218,7 +227,7 @@ describe("GET /api/ai/status", () => {
     const setups = {
       "nothing configured": () => {},
       "a key only": () => {
-        process.env.AGENT_API_KEY = KEY;
+        process.env.PG_AI_API_KEY = KEY;
       },
       "sign-in only": () => Object.assign(process.env, SIGN_IN),
       "a key and sign-in": configureHostedKey,

@@ -8,7 +8,7 @@ See [proposal.md](proposal.md), "Why", for the threat. The requirements are in
 State of the route this design starts from:
 
 - `client-v2/api/agent.mjs` relays chat completions to
-  `${AGENT_BASE_URL}/chat/completions` with one key (`AGENT_API_KEY`) and a
+  `${PG_AI_BASE_URL}/chat/completions` with one key (`PG_AI_API_KEY`) and a
   model from `agentEnv` (`client-v2/src/shared/config/server-env.mjs`). It
   forwards only `messages`, `tools` and `tool_choice` (`FORWARDED`), and pipes
   the upstream's SSE bytes to the caller without parsing them (`pipeStream`).
@@ -44,7 +44,7 @@ State of the route this design starts from:
 
 The upstream becomes Vercel AI Gateway's OpenAI-compatible endpoint. The relay
 already speaks chat completions to a configurable base URL, so the move is a
-change of `AGENT_BASE_URL`, `AGENT_MODEL` and the key. The model
+change of `PG_AI_BASE_URL`, `PG_AI_MODEL` and the key. The model
 `zai/glm-5.3-flash` is in the Gateway's catalog
 ([`/v1/models`](https://ai-gateway.vercel.sh/v1/models)). This change is the
 project's first use of the Gateway: no team, key or budget exists before task
@@ -74,7 +74,7 @@ Gateway credits. Three settings follow from the budgets being the ceiling:
   off mid-month. An empty balance (`402` `insufficient_funds`) is still
   answered as `pool-exhausted`, the same as a spent budget.
 
-The previous provider's key (Nous Research, the `AGENT_BASE_URL` default in
+The previous provider's key (Nous Research, the `PG_AI_BASE_URL` default in
 `agentEnv`) is revoked once the Gateway serves production, so nothing can spend
 outside the budgets.
 
@@ -83,15 +83,15 @@ prices from $0.026 to $0.45 per million input tokens, and many keep or train
 on prompts or quantize the model. The model id we used with Nous Research,
 `z-ai/glm-5.3-flash:US`, kept turns in the US. To keep that, every upstream
 request carries `providerOptions: { gateway: { only: [...] } }` with the list
-from `AGENT_PROVIDERS`, defaulting to `baseten,fireworks`: on 2026-10-29 the
+from `PG_AI_PROVIDERS`, defaulting to `baseten,fireworks`: on 2026-10-29 the
 only endpoints for this model marked US-region, both with zero data retention
 and no training, both at $0.15 / $0.50 per million. The Gateway fails over
 between the two. `FORWARDED` keeps a caller from sending its own
-`providerOptions`. An empty `AGENT_PROVIDERS` sends no restriction.
+`providerOptions`. An empty `PG_AI_PROVIDERS` sends no restriction.
 
-The default applies only when `AGENT_BASE_URL` is the Gateway
+The default applies only when `PG_AI_BASE_URL` is the Gateway
 (`ai-gateway.vercel.sh`). Any other upstream gets no `providerOptions` unless
-`AGENT_PROVIDERS` names some: Nous Research refuses the field
+`PG_AI_PROVIDERS` names some: Nous Research refuses the field
 (`400 unknown_parameter`, seen locally on 2026-10-29), and a deployment that
 has not moved to the Gateway yet, or has rolled back, must keep working with
 no variable changed.
@@ -104,7 +104,7 @@ Alternatives:
 
 - **A spend limit at the model provider.** Works only for a provider that has
   one, and gives one pool for everyone. Unverified for Nous Research, the
-  provider behind the `AGENT_BASE_URL` default in `agentEnv`.
+  provider behind the `PG_AI_BASE_URL` default in `agentEnv`.
 - **Our own global counter only.** A bug in the counter is then a bug in the
   ceiling. The Gateway budget is outside our code.
 - **Gateway `user` and `tags` fields.** They feed Custom Reporting and limit
@@ -112,12 +112,12 @@ Alternatives:
 
 ### 2. One Gateway key per tier
 
-`agentEnv` gains a second key, `AGENT_NEWCOMER_API_KEY`. `AGENT_API_KEY` stays
+`agentEnv` gains a second key, `PG_AI_NEWCOMER_API_KEY`. `PG_AI_API_KEY` stays
 the `established` key. Each key has its own daily budget in the Gateway, and
 the team has a monthly budget above both. A sybil attack with new accounts
 spends the `newcomer` key's budget and stops there.
 
-Without `AGENT_NEWCOMER_API_KEY`, newcomers spend through `AGENT_API_KEY` and
+Without `PG_AI_NEWCOMER_API_KEY`, newcomers spend through `PG_AI_API_KEY` and
 are still held to the `newcomer` cap. Pools are then shared, and the per-user
 caps still apply. `scripts/check-agent-env.mjs` does not require the second key.
 
@@ -213,7 +213,7 @@ key `(user_id, day)`. Amounts are integers in micro-USD.
 The route asks the upstream for usage on the stream
 (`stream_options: { include_usage: true }`), reads the SSE events while piping
 them, and takes the last `usage` object. Prices come from configuration
-(`AGENT_PRICE_INPUT`, `AGENT_PRICE_OUTPUT`, per million tokens), since the
+(`PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`, per million tokens), since the
 spec charges for the reported token usage.
 
 Alternative: Upstash Redis. Lower latency per call, but a second store to
@@ -221,10 +221,10 @@ provision and operate. Postgres already serves `readSession` on every turn.
 
 ### 5. Request bounds
 
-- `AGENT_MAX_BODY_BYTES`: a body over the limit is refused with 413 before
+- `PG_AI_MAX_BODY_BYTES`: a body over the limit is refused with 413 before
   `readJson` buffers it, using `content-length` and the byte count while
   reading.
-- `AGENT_MAX_OUTPUT_TOKENS`: sent as `max_completion_tokens` on every upstream
+- `PG_AI_MAX_OUTPUT_TOKENS`: sent as `max_completion_tokens` on every upstream
   request, to the Gateway and Nous alike: both take it, and Nous refuses
   `max_tokens` for GLM. `FORWARDED` already drops a caller's `max_tokens` and
   `max_completion_tokens`.
@@ -269,11 +269,11 @@ would decide its boundary ahead of that change.
 
 - [Both allowed providers fail at once] → turns fail until one recovers.
   Baseten showed 99.10% and Fireworks 99.90% uptime over the day before
-  2026-10-29. Adding a provider to `AGENT_PROVIDERS` needs no deploy, only a
+  2026-10-29. Adding a provider to `PG_AI_PROVIDERS` needs no deploy, only a
   check that it is US-region with zero data retention.
 - [A provider leaves the US region or drops zero data retention] → the
   Gateway's endpoint list (`/v1/models/zai/glm-5.3-flash/endpoints`) is the
-  source; check it when changing `AGENT_PROVIDERS` or the model.
+  source; check it when changing `PG_AI_PROVIDERS` or the model.
 - [Shared office or VPN IPs] → unchanged by this design. Per-user caps key on
   `user.id`, not the IP.
 - [Sybil accounts older than the configured age] → bought aged accounts reach
@@ -292,16 +292,16 @@ would decide its boundary ahead of that change.
 1. Migration: `agent_spend` table and `user."githubCreatedAt"`. Regenerate
    `db/schema.sql`. Run `migrate-production-db` before merging to `master`.
 2. A person buys Gateway credits, turns on auto top-up, creates the two
-   Gateway keys and the budgets, and sets `AGENT_BASE_URL`, `AGENT_MODEL`,
-   `AGENT_API_KEY`, `AGENT_NEWCOMER_API_KEY` and the limit variables in
+   Gateway keys and the budgets, and sets `PG_AI_BASE_URL`, `PG_AI_MODEL`,
+   `PG_AI_API_KEY`, `PG_AI_NEWCOMER_API_KEY` and the limit variables in
    Vercel.
 3. Merge. With the new variables absent the route uses defaults, so the order
    of steps 2 and 3 does not matter for availability.
 4. After a day of production traffic through the Gateway, revoke the Nous
    Research key.
 
-Rollback: before step 4, restore the previous `AGENT_BASE_URL`, `AGENT_MODEL`
-and `AGENT_API_KEY` values; with a non-Gateway base URL no routing restriction
+Rollback: before step 4, restore the previous `PG_AI_BASE_URL`, `PG_AI_MODEL`
+and `PG_AI_API_KEY` values; with a non-Gateway base URL no routing restriction
 is sent. The ledger keeps working against any upstream that
 reports usage on the stream. After step 4, rollback needs a new Nous Research
 key.
@@ -317,11 +317,11 @@ adjust.
 
 | Setting | Value | Reason |
 | --- | --- | --- |
-| `AGENT_PRICE_INPUT` | 0.15 (USD per million) | Gateway list price |
-| `AGENT_PRICE_OUTPUT` | 0.50 (USD per million) | Gateway list price |
-| `AGENT_MAX_BODY_BYTES` | 524288 (512 KB) | About 128k input tokens at 4 bytes per token |
-| `AGENT_MAX_OUTPUT_TOKENS` | 8192 | Room for a long answer with `low` reasoning |
-| `AGENT_PROVIDERS` | `baseten,fireworks` on the Gateway, none elsewhere | The US-region, zero-data-retention endpoints (decision 1) |
+| `PG_AI_PRICE_INPUT` | 0.15 (USD per million) | Gateway list price |
+| `PG_AI_PRICE_OUTPUT` | 0.50 (USD per million) | Gateway list price |
+| `PG_AI_MAX_BODY_BYTES` | 524288 (512 KB) | About 128k input tokens at 4 bytes per token |
+| `PG_AI_MAX_OUTPUT_TOKENS` | 8192 | Room for a long answer with `low` reasoning |
+| `PG_AI_PROVIDERS` | `baseten,fireworks` on the Gateway, none elsewhere | The US-region, zero-data-retention endpoints (decision 1) |
 | Newcomer account age | under 30 days | A month of account history before the larger cap |
 | `newcomer` daily cap per user | $0.10 | About 20 typical steps |
 | `established` daily cap per user | $0.50 | About 100 typical steps |

@@ -16,9 +16,9 @@ current when it starts, and apply the same mapping there.
       Regenerate `db/schema.sql` with `yarn db-dump`. Verify with
       `yarn db-migrate` then `yarn db-status` showing it applied (HOO-1751)
 - [x] 1.2 `agentEnv` in `src/shared/config/server-env.mjs` reads
-      `AGENT_NEWCOMER_API_KEY`, `AGENT_PROVIDERS` (a comma-separated list,
-      empty for none), `AGENT_PRICE_INPUT`, `AGENT_PRICE_OUTPUT`,
-      `AGENT_MAX_BODY_BYTES`, `AGENT_MAX_OUTPUT_TOKENS`, and the tier caps and
+      `PG_AI_NEWCOMER_API_KEY`, `PG_AI_PROVIDERS` (a comma-separated list,
+      empty for none), `PG_AI_PRICE_INPUT`, `PG_AI_PRICE_OUTPUT`,
+      `PG_AI_MAX_BODY_BYTES`, `PG_AI_MAX_OUTPUT_TOKENS`, and the tier caps and
       newcomer age, with the defaults in the design's "Starting values".
       Verify with a unit test of each default and of an empty variable
       reading as unset (HOO-1751; independent of 1.1)
@@ -55,16 +55,16 @@ Run 2.1, 2.2 and 2.3 at the same time; 2.4 follows all three.
       `newcomer`, an old date is `established`, and a pool spy counts one query
       for `reserve` and one for `settle` (HOO-1751; after 1.1)
 - [x] 2.3 `features/agent/server/bounds.mjs`: refuse a body over
-      `AGENT_MAX_BODY_BYTES` with 413 from `content-length` and while
+      `PG_AI_MAX_BODY_BYTES` with 413 from `content-length` and while
       reading, and estimate a turn's worst-case cost from the body size,
-      `AGENT_MAX_OUTPUT_TOKENS` and the prices. Verify with `yarn test-api`
+      `PG_AI_MAX_OUTPUT_TOKENS` and the prices. Verify with `yarn test-api`
       cases for a body just under and just over the limit, and a chunked body
       with no `content-length` (HOO-1751)
 - [x] 2.4 Wire the gate into `api/agent.mjs`: the tier `reserve` returns
       picks the upstream key; reserve before the upstream call and refuse
       with 429 `daily-cap` plus `tier` and `Retry-After`; send `max_completion_tokens`,
       `stream_options.include_usage`, and
-      `providerOptions.gateway.only` from `AGENT_PROVIDERS` when it is
+      `providerOptions.gateway.only` from `PG_AI_PROVIDERS` when it is
       non-empty; read `usage` from the stream while
       `pipeStream` forwards it, and settle at the end, on abort and on a
       broken stream, after the response has ended; when `reserve` reported no

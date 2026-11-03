@@ -1,7 +1,7 @@
 /**
  * The bounds on one `/api/agent` request that make its worst-case cost known
- * before the upstream is called: a body no larger than `AGENT_MAX_BODY_BYTES`,
- * and `AGENT_MAX_OUTPUT_TOKENS` sent as `max_completion_tokens`.
+ * before the upstream is called: a body no larger than `PG_AI_MAX_BODY_BYTES`,
+ * and `PG_AI_MAX_OUTPUT_TOKENS` sent as `max_completion_tokens`.
  */
 
 /** Bytes per input token, for sizing a reservation; the charge uses reported usage */

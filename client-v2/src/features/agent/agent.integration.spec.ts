@@ -214,7 +214,7 @@ beforeEach(() => {
  */
 describe("POST /api/agent sign-in gate", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -280,7 +280,7 @@ describe("POST /api/agent sign-in gate", () => {
 /** Discovery tells the panel whether a turn could be answered at all */
 describe("GET /api/agent", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -316,9 +316,9 @@ describe("GET /api/agent", () => {
 describe("POST /api/agent body validation", () => {
   beforeEach(() => {
     // A configured rail, so requests get past the 503 and into parsing
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -378,7 +378,7 @@ describe("POST /api/agent body validation", () => {
 
   missingKeys.forEach(([label, key]) => {
     it(`answers 503 when the key is ${label}, before reading the body`, async () => {
-      vi.stubEnv("AGENT_API_KEY", key);
+      vi.stubEnv("PG_AI_API_KEY", key);
       const res = await postJson(handler, "null");
       expect(res.statusCode).toBe(503);
     });
@@ -391,10 +391,10 @@ describe("POST /api/agent body validation", () => {
  */
 describe("POST /api/agent upstream request", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_BASE_URL", undefined);
-    vi.stubEnv("AGENT_MODEL", undefined);
-    vi.stubEnv("AGENT_REASONING_EFFORT", undefined);
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_BASE_URL", undefined);
+    vi.stubEnv("PG_AI_MODEL", undefined);
+    vi.stubEnv("PG_AI_REASONING_EFFORT", undefined);
+    vi.stubEnv("PG_AI_API_KEY", "k");
     (globalThis as { fetch: unknown }).fetch = vi.fn(async () => ({
       ok: false,
       status: 418,
@@ -429,7 +429,7 @@ describe("POST /api/agent upstream request", () => {
   });
 
   it("restricts the Gateway to its default providers", async () => {
-    vi.stubEnv("AGENT_BASE_URL", "https://ai-gateway.vercel.sh/v1");
+    vi.stubEnv("PG_AI_BASE_URL", "https://ai-gateway.vercel.sh/v1");
     const { body } = await sent();
     expect(body.providerOptions).toEqual({
       gateway: { only: ["baseten", "fireworks"] },
@@ -437,9 +437,9 @@ describe("POST /api/agent upstream request", () => {
   });
 
   it("lets each variable override its own default", async () => {
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_REASONING_EFFORT", "high");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_REASONING_EFFORT", "high");
     const { url, body } = await sent();
     expect(url).toBe("https://llm.test/v1/chat/completions");
     expect(body.model).toBe("test-model");
@@ -454,9 +454,9 @@ describe("POST /api/agent upstream request", () => {
  */
 describe("POST /api/agent streaming", () => {
   beforeEach(() => {
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_API_KEY", "k");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_API_KEY", "k");
   });
 
   afterEach(() => {
@@ -795,10 +795,10 @@ describe("POST /api/agent spend gate", () => {
   });
 
   beforeEach(() => {
-    vi.stubEnv("AGENT_BASE_URL", "https://llm.test/v1");
-    vi.stubEnv("AGENT_MODEL", "test-model");
-    vi.stubEnv("AGENT_API_KEY", "established-key");
-    vi.stubEnv("AGENT_NEWCOMER_API_KEY", "newcomer-key");
+    vi.stubEnv("PG_AI_BASE_URL", "https://llm.test/v1");
+    vi.stubEnv("PG_AI_MODEL", "test-model");
+    vi.stubEnv("PG_AI_API_KEY", "established-key");
+    vi.stubEnv("PG_AI_NEWCOMER_API_KEY", "newcomer-key");
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-10-29T12:00:00Z"));
   });
@@ -1121,7 +1121,7 @@ describe("POST /api/agent spend gate", () => {
 
   describe("One request's cost is bounded", () => {
     it("refuses an oversized body", async () => {
-      vi.stubEnv("AGENT_MAX_BODY_BYTES", "16");
+      vi.stubEnv("PG_AI_MAX_BODY_BYTES", "16");
       const fetched = network();
 
       const res = await postJson(handler, TURN);
@@ -1150,7 +1150,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("names the output limit the same way to the Gateway", async () => {
-      vi.stubEnv("AGENT_BASE_URL", "https://ai-gateway.vercel.sh/v1");
+      vi.stubEnv("PG_AI_BASE_URL", "https://ai-gateway.vercel.sh/v1");
       const fetched = network();
 
       await postJson(handler, TURN);
@@ -1163,7 +1163,7 @@ describe("POST /api/agent spend gate", () => {
 
   describe("Turns are served only by the configured providers", () => {
     it("names the configured providers in the upstream request", async () => {
-      vi.stubEnv("AGENT_PROVIDERS", "baseten,fireworks");
+      vi.stubEnv("PG_AI_PROVIDERS", "baseten,fireworks");
       const fetched = network();
 
       await postJson(handler, TURN);
@@ -1174,7 +1174,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("ignores the providers the caller names", async () => {
-      vi.stubEnv("AGENT_PROVIDERS", "baseten,fireworks");
+      vi.stubEnv("PG_AI_PROVIDERS", "baseten,fireworks");
       const fetched = network();
 
       await postJson(
@@ -1193,10 +1193,10 @@ describe("POST /api/agent spend gate", () => {
       expect(body).not.toHaveProperty("provider");
     });
 
-    it("sends no routing restriction when AGENT_PROVIDERS is set but empty", async () => {
+    it("sends no routing restriction when PG_AI_PROVIDERS is set but empty", async () => {
       // Set, not unset: an unset variable takes the Gateway's default
       // providers instead ("restricts the Gateway to its default providers")
-      vi.stubEnv("AGENT_PROVIDERS", "");
+      vi.stubEnv("PG_AI_PROVIDERS", "");
       const fetched = network();
 
       await postJson(handler, TURN);
@@ -1248,7 +1248,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("spends through the one key when no newcomer key is set", async () => {
-      vi.stubEnv("AGENT_NEWCOMER_API_KEY", "");
+      vi.stubEnv("PG_AI_NEWCOMER_API_KEY", "");
       db.state.users.set("user-1", {
         githubCreatedAt: createdDaysAgo(3),
         token: "gho_1",

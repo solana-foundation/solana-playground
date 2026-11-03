@@ -32,7 +32,7 @@ with what the rule does, so the dashboard list shows the emergency switches with
 | `Rate limit /api/mcp (IP)` | `/api/mcp` | Anyone relays requests to `mcp.solana.com` through our functions, unmetered |
 | `Rate limit sign-in (IP)` | `/api/auth/sign-in/` | A script starts GitHub OAuth flows without limit |
 | `Rate limit sync (IP)` | `/api/projects`, `/api/conversations` | A signed-in script writes to Postgres as fast as it can send |
-| `[EMERGENCY] Deny /api/agent` (disabled) | `/api/agent` | Stopping spend on the model key needs a redeploy without `AGENT_API_KEY` |
+| `[EMERGENCY] Deny /api/agent` (disabled) | `/api/agent` | Stopping spend on the model key needs a redeploy without `PG_AI_API_KEY`, and without the deprecated `AGENT_API_KEY` if the project still sets it |
 | `[EMERGENCY] Rate limit /api/agent (JA4)` (disabled) | `/api/agent` | No lever against a client rotating IPs faster than the IP limit sees |
 
 The limits in [Rate limits](#rate-limits) are starting values. Read each rule's traffic in the Firewall overview after
@@ -154,7 +154,7 @@ During an incident:
 1. Switch on `[EMERGENCY] Deny /api/agent` and publish.
 2. Check in the model provider's dashboard that spend has stopped.
 3. Find the source in the Firewall overview, grouped by the rule, then by IP or JA4.
-4. Fix the cause: lower a limit, block the source, or rotate `AGENT_API_KEY` if it leaked.
+4. Fix the cause: lower a limit, block the source, or rotate `PG_AI_API_KEY` if it leaked (and delete a deprecated `AGENT_API_KEY`, which an unset `PG_AI_API_KEY` would fall back to).
 5. Switch the rule off and publish. The Firewall's Audit Log holds each change if one has to be undone.
 
 ## Verifying

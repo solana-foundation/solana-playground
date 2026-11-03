@@ -15,7 +15,7 @@ one request.
 
 - The default backend's upstream moves from Nous Research to Vercel AI
   Gateway, the project's first use of the Gateway. The move needs no code:
-  `AGENT_BASE_URL`, `AGENT_MODEL` and `AGENT_API_KEY` change value. Each
+  `PG_AI_BASE_URL`, `PG_AI_MODEL` and `PG_AI_API_KEY` change value. Each
   Gateway key carries a daily budget and the team carries a monthly budget,
   set in the Gateway dashboard, so total spend has a ceiling that holds even
   when our own accounting is wrong. The Gateway is paid from prepaid credits
