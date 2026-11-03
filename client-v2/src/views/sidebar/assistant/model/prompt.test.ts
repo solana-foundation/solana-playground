@@ -19,25 +19,47 @@ describe("describeProject", () => {
       workspaceName: "counter",
       cluster: "devnet",
       walletConnected: false,
-      filePaths: ["src/lib.rs"],
-      openFilePaths: ["src/lib.rs"],
+      contextFiles: [
+        { path: "src/lib.rs", content: "pub fn secret_sauce() {}" },
+        { path: "tests/a.ts", content: "it('works')" },
+      ],
       programId: null,
       idl: null,
       lesson: null,
       currentFilePath: "src/lib.rs",
-      currentFileContent: "pub fn secret_sauce() {}",
       buildError: null,
     }),
+    listFiles: () => ["src/lib.rs", "tests/a.ts", "secret/other.rs"],
   } as unknown as PlaygroundBridge;
 
-  it("sends the open file in full by default", () => {
-    expect(describeProject(bridge)).toContain("pub fn secret_sauce() {}");
+  it("sends every file in the context in full", () => {
+    const text = describeProject(bridge);
+    expect(text).toContain(
+      "Files in context (open tabs and files the user added; you can read only these): src/lib.rs, tests/a.ts"
+    );
+    expect(text).toContain("Active tab: src/lib.rs");
+    expect(text).toContain("pub fn secret_sauce() {}");
+    expect(text).toContain("it('works')");
   });
 
-  it("names the open file without its content when the user left it out", () => {
-    const text = describeProject(bridge, { openFile: false });
-    expect(text).toContain("src/lib.rs");
-    expect(text).not.toContain("pub fn secret_sauce() {}");
-    expect(text).toContain("left its content out of this message");
+  it("names no path outside the context", () => {
+    expect(describeProject(bridge)).not.toContain("secret/other.rs");
+  });
+
+  it("does not name an active tab the user removed from the context", () => {
+    const removed = {
+      getProjectContext: () => ({
+        workspaceName: "counter",
+        cluster: "devnet",
+        walletConnected: false,
+        contextFiles: [{ path: "tests/a.ts", content: "it('works')" }],
+        programId: null,
+        idl: null,
+        lesson: null,
+        currentFilePath: "src/lib.rs",
+        buildError: null,
+      }),
+    } as unknown as PlaygroundBridge;
+    expect(describeProject(removed)).not.toContain("src/lib.rs");
   });
 });

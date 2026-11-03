@@ -1,7 +1,6 @@
 import { describeCatalog } from "../grounding";
 import { PgAssistant } from "../store";
 import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
-import type { TurnContext } from "./types";
 import assistantContext from "../content/assistant-context.md";
 
 /**
@@ -17,6 +16,7 @@ You can read the user's project, propose changes to it, and run builds and deplo
 How to work:
 
 - Read before you propose. Call read_file so a change matches what is actually in the file.
+- You see only the files in the conversation's context: the user's open tabs and the files they added. If you need another file, name it and ask the user to add it with + in the composer; never guess its content.
 - When a build fails, call get_build_error and explain the compiler's actual message against the user's actual code. Quote the real line. Do not give generic Rust advice.
 - Propose the smallest change that fixes the problem. Send complete file content to write_file, not a fragment.
 - Solana specifics matter: programs are Rust compiled server-side, tests are TypeScript run from the browser against the configured cluster, and the crate list is a fixed whitelist. If a fix needs something the environment cannot do, say so plainly instead of proposing it.
@@ -67,25 +67,27 @@ export const systemPrompt = () =>
  * Separate from the system prompt because it changes every turn — keeping it
  * apart leaves the stable half cacheable.
  *
+ * Only the conversation's context goes: the open tabs and the files the user
+ * added, in full. No other path of the project is named, so the user decides
+ * what of their code reaches the model provider (HOO-2424).
+ *
  * @param bridge the playground to read
- * @param context what the user chose to send; the open file in full unless
- * they left it out
  * @returns a plain-text snapshot
  */
-export const describeProject = (
-  bridge: PlaygroundBridge = realBridge,
-  context: TurnContext = { openFile: true }
-) => {
+export const describeProject = (bridge: PlaygroundBridge = realBridge) => {
   const ctx = bridge.getProjectContext();
   const lines = [
     `Workspace: ${ctx.workspaceName ?? "none"}`,
     `Cluster: ${ctx.cluster}`,
     `Wallet connected: ${ctx.walletConnected ? "yes" : "no"}`,
-    `Files: ${ctx.filePaths.join(", ") || "none"}`,
-    // Which files the user is working across; only the active one is sent in
-    // full, the rest are a read_file away
-    `Open tabs: ${ctx.openFilePaths.join(", ") || "none"}`,
+    `Files in context (open tabs and files the user added; you can read only these): ${
+      ctx.contextFiles.map((file) => file.path).join(", ") || "none"
+    }`,
   ];
+  // A tab the user removed from the context is not named, even while active
+  if (ctx.contextFiles.some((file) => file.path === ctx.currentFilePath)) {
+    lines.push(`Active tab: ${ctx.currentFilePath}`);
+  }
 
   if (ctx.programId) lines.push(`Program id: ${ctx.programId}`);
   if (ctx.idl) {
@@ -105,16 +107,8 @@ export const describeProject = (
     );
   }
 
-  if (ctx.currentFilePath && !context.openFile) {
-    lines.push(
-      `\nThe user is looking at ${ctx.currentFilePath}, and left its content out of this message.`
-    );
-  } else if (ctx.currentFilePath) {
-    lines.push(
-      `\nThe user is looking at ${ctx.currentFilePath}:\n\n${
-        ctx.currentFileContent ?? ""
-      }`
-    );
+  for (const file of ctx.contextFiles) {
+    lines.push(`\n${file.path}:\n\n${file.content}`);
   }
 
   lines.push(

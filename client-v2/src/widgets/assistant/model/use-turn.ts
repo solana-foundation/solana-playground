@@ -20,10 +20,7 @@ import {
   PROVIDERS,
   TurnFailure,
 } from "../../../views/sidebar/assistant/model/types";
-import type {
-  Provider,
-  TurnContext,
-} from "../../../views/sidebar/assistant/model/types";
+import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
   CONNECTION_LOST,
   paramsOf,
@@ -90,8 +87,6 @@ interface BusyRetry {
   threadId: string | null;
   /** `PgAssistant.conversation` when it waited: a sign-out drops it too */
   conversation: number;
-  /** What went with the message the first time, sent with it again */
-  context: TurnContext;
   /** The backend the turn was sent to, which its outcome is reported under */
   provider: ModelProvider;
 }
@@ -208,14 +203,6 @@ export interface Turn {
   promptWaiting: boolean;
   /** Bumped whenever the composer's input should take focus */
   focusRequest: number;
-  /** The file whose content the next message leaves out, or `null` */
-  openFileLeftOut: string | null;
-  /**
-   * Leaves `path`'s content out of the next message, whoever sends it, as
-   * long as it is still the open file then: another file the user switched
-   * to goes in full, as its chip says
-   */
-  leaveOutOpenFile(path: string): void;
 }
 
 /**
@@ -306,13 +293,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // the panel's job, not the conversation's: a notice item would outlive the
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
-  const [openFileLeftOut, setOpenFileLeftOut] = useState<string | null>(null);
-  // Read by `start`, which a requested prompt runs from an older render
-  const leftOut = useRef<string | null>(null);
-  const leaveOutOpenFile = (path: string) => {
-    leftOut.current = path;
-    setOpenFileLeftOut(path);
-  };
 
   const provider = useRef<{
     connection: Connection;
@@ -524,15 +504,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
     setInput("");
-    // For this message only: the file goes with the next one again
-    const context = {
-      openFile:
-        leftOut.current === null ||
-        leftOut.current !== PgExplorer.currentFilePath,
-    };
-    leftOut.current = null;
-    setOpenFileLeftOut(null);
-    await runTurn(trimmed, 0, context);
+    await runTurn(trimmed, 0);
     return true;
   };
   /**
@@ -541,11 +513,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    *
    * @param attempt which retry this is, 0 for the first send
    */
-  const runTurn = async (
-    text: string,
-    attempt: number,
-    context: TurnContext
-  ) => {
+  const runTurn = async (text: string, attempt: number) => {
     const { instance, connection: current } = provider.current!;
     const controller = new AbortController();
     turn.current = controller;
@@ -557,7 +525,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     }
 
     try {
-      await instance.send(text, controller.signal, context);
+      await instance.send(text, controller.signal);
       // A provider can still resolve after an abort; the turn's outcome is then the stop's, or none for a cut-off
       if (!controller.signal.aborted) {
         assistantTelemetry.track("assistant_turn_answered", {
@@ -573,7 +541,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         trackTurnFailure(current.id, e);
       }
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
-        waitOnBusy(text, attempt, e, context, current.id);
+        waitOnBusy(text, attempt, e, current.id);
       } else if (
         !controller.signal.aborted &&
         isRejectedKey(e) &&
@@ -653,7 +621,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     text: string,
     attempt: number,
     busy: ModelBusyError,
-    context: TurnContext,
     backend: ModelProvider
   ) => {
     const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
@@ -671,7 +638,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       attempt: attempt + 1,
       threadId: PgAssistant.threadId,
       conversation: PgAssistant.conversation,
-      context,
       provider: backend,
     });
   };
@@ -719,7 +685,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       });
       return;
     }
-    await runTurn(held.text, held.attempt, held.context);
+    await runTurn(held.text, held.attempt);
   };
   const resendRef = useRef(resend);
   resendRef.current = resend;
@@ -881,7 +847,5 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     openConnect,
     promptWaiting,
     focusRequest,
-    openFileLeftOut,
-    leaveOutOpenFile,
   };
 };

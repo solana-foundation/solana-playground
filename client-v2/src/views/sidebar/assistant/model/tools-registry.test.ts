@@ -16,8 +16,9 @@ vi.mock("../bridge/playground-bridge", () => ({ realBridge: {} }));
 const recordingBridge = () => {
   const changes: string[] = [];
   const bridge = {
-    listFiles: () => [],
     readFile: () => "old",
+    listContextFiles: () => ["src/lib.rs"],
+    toProjectPath: (path: string) => path,
     getProjectContext: () => ({ cluster: "devnet", buildError: null }),
     applyPatch: async () => void changes.push("applyPatch"),
     build: async () => void changes.push("build"),
@@ -31,7 +32,6 @@ const INPUT: Record<string, Record<string, unknown>> = {
   list_skills: {},
   load_skill: { id: "playground-env" },
   read_skill_reference: { id: "playground-env", path: "references/x.md" },
-  list_files: {},
   read_file: { path: "src/lib.rs" },
   get_build_error: {},
   write_file: { path: "src/lib.rs", content: "new" },
