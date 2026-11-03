@@ -149,11 +149,11 @@ function runAsync(cmd, cmdArgs, opts) {
     const child = spawn(cmd, cmdArgs, { stdio: "inherit", ...opts });
     child.once("error", (err) => {
       console.error(`ds-add: could not run ${cmd}: ${err.message}`);
-      resolve(1);
+      resolve(2);
     });
     child.once("exit", (code, signal) => {
       if (signal) console.error(`ds-add: ${cmd} was stopped by ${signal}`);
-      resolve(code ?? 1);
+      resolve(code ?? 2);
     });
   });
 }
