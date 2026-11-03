@@ -202,16 +202,32 @@ services:
       - v2
       - v2-prod
 
+  # The stock server image that server-unstable builds on, under its own name; `scale: 0` never runs it
+  server-unstable-base:
+    image: solana-playground-server-unstable-base
+    platform: linux/amd64
+    build:
+      context: ./server
+      args:
+        USER: solpg
+      # Built as a context of server-unstable, it ignores `platform` and builds for the host's architecture
+      platforms:
+        - linux/amd64
+    scale: 0
+    profiles:
+      - v2-unstable
+
   # Local use only: the socket mount gives the container control of the host Docker daemon
   server-unstable:
     <<: *server
     image: solana-playground-server-unstable
     build:
       context: ./server
-      target: unstable
+      dockerfile: ../docker/server-unstable.Dockerfile
       args:
         USER: solpg
-        FEATURES: unstable
+      additional_contexts:
+        server-image: service:server-unstable-base
     env_file:
       - path: .env
         required: false
@@ -220,11 +236,16 @@ services:
       DOCKER_DEFAULT_PLATFORM: linux/amd64
       PG_PORT: "8080" # the container port `ports` maps; a host PG_PORT in .env would move the listener off it
     group_add:
-      - ${PG_DOCKER_GID:-0} # the socket's group: root on Docker Desktop and OrbStack, `docker` on Linux
+      - ${PG_DOCKER_GID:-0} # the socket's numeric group: 0 on Docker Desktop and OrbStack, `stat -c %g /var/run/docker.sock` on Linux
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # Builds the templates of another checkout without rebuilding this image
-      - ${PG_SERVER_DIR:-./server}/templates:/home/solpg/templates:ro
+      # Swaps only the files of existing templates/<name>/ directories; the template list, images/, and src/ stay the image's
+      - type: bind
+        source: ${PG_SERVER_DIR:-./server}/templates
+        target: /home/solpg/templates
+        read_only: true
+        bind:
+          create_host_path: false
     profiles:
       - v2-unstable
 

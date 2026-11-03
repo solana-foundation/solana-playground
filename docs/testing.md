@@ -89,6 +89,7 @@ scenario adds a service or a profile to that file; it never adds a second compos
 | D-6 | `v2` |
 | D-7 | `v2-prod` |
 | D-8, S-7 | `client-v2-standalone` |
+| U-4 | `v2-unstable` |
 
 The profiles for the upstream client (`client/`) stay in `compose.yaml` beside the client-v2 ones. A change for
 client-v2 adds profiles; it does not rename or remove these:
@@ -725,14 +726,11 @@ App Engine deploys the server from [server/Dockerfile](../server/Dockerfile) (`d
 [cicd.yml](../.github/workflows/cicd.yml)).
 
 ```sh
-grep -n 'unstable' server/app.yaml .github/workflows/cicd.yml
-grep -n -e '^ARG FEATURES' -e '^FROM' server/Dockerfile
+grep -n 'unstable' server/Dockerfile server/app.yaml .github/workflows/cicd.yml
 grep -n -A3 '^\[features\]' server/Cargo.toml
 ```
 
-Expect: the first command prints nothing; in the second, `FEATURES` defaults to `""` and the last `FROM` line is
-`FROM server`, so a build without `--target` or `--build-arg` (App Engine's) has no unstable feature and no `docker`
-binary; `[features]` has no `default` entry that includes `unstable`.
+Expect: the first command prints nothing; `[features]` has no `default` entry that includes `unstable`.
 
 ### R-2. deployed server has no unstable routes
 
@@ -783,8 +781,8 @@ Expect:
 
 Run these only when testing the unstable functionality on purpose. They never gate a release; section 5 does.
 
-U-1 to U-3 run the unstable server as a native binary; U-4 runs it through the `v2-unstable` compose profile
-([client-v2 README, "The unstable server"](../client-v2/README.md#the-unstable-server)).
+U-1 to U-3 run the unstable server as a native binary. This is the one exception to P-4. U-4 runs it through the
+`v2-unstable` compose profile ([client-v2 README, "The unstable server"](../client-v2/README.md#the-unstable-server)).
 
 ### U-1. unstable build
 
@@ -830,16 +828,17 @@ Expect: one image per directory in `server/templates/`.
 ### U-4. unstable profile
 
 Precondition: ports 3000, 8080, and 5432 free, or `PG_CLIENT_V2_PORT`, `PG_PORT`, and `PG_POSTGRES_PORT` set to free
-ones. To build another checkout's templates, set `PG_SERVER_DIR` to its `server/` directory.
+ones. To build another checkout's versions of the existing `templates/<name>/` directories, set `PG_SERVER_DIR` to the
+absolute path of its `server/` directory; the template list, `images/`, and `src/` stay the image's.
 
 ```sh
 docker compose --profile v2-unstable up --build -d
-docker compose --profile v2-unstable logs -f server-unstable | grep 'naming to'
-curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' -d '{}' http://localhost:8080/unstable/bundle
+until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' http://localhost:8080/unstable/bundle)" = 422 ]; do sleep 10; done
+docker compose --profile v2-unstable logs server-unstable | grep 'naming to'
 docker compose --profile v2-unstable exec server-unstable docker version
 ```
 
-Steps: once `curl` prints `422` (the route exists and rejects the empty request), open the client, run
+Steps: once the `until` loop ends (the route exists and answers the empty request with `422`), open the client, run
 `setting set experimental.unstable true` in its terminal, build a program, then bundle a package.
 
 Expect:

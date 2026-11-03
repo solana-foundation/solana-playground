@@ -182,12 +182,18 @@ docker compose -f ../compose.yaml --profile v2-unstable up --build
 - Start-up runs `docker build` for the `bundle` image and one
   `program-<template>` image per template before the port answers; a cold
   start takes several minutes under amd64 emulation.
-- `PG_SERVER_DIR` names a `server/` directory whose `templates/` the server
-  builds instead of this checkout's, for example a pull request's worktree.
-  The image needs no rebuild; a restart of `server-unstable` rebuilds the
-  sandbox images from the new templates.
-- `PG_DOCKER_GID` is the group that owns the Docker socket inside a
-  container; `0` fits Docker Desktop and OrbStack.
+- `PG_SERVER_DIR` is the absolute path of another checkout's `server/`
+  directory, for example a pull request's worktree. Its files replace the
+  contents of the existing `templates/<name>/` directories only. The
+  template list and each template's settings (`get_all_templates` in
+  `server/src/templates/mod.rs`), `images/`, and `src/` stay the image's,
+  so a template the pull request adds, renames, or re-versions is not
+  built. A path that does not exist makes `up` refuse. A changed
+  `PG_SERVER_DIR` applies with `docker compose up -d server-unstable`,
+  which recreates the container; `restart` keeps the old mount.
+- `PG_DOCKER_GID` is the numeric group that owns the Docker socket inside a
+  container: `0` on Docker Desktop and OrbStack, and on Linux the output of
+  `stat -c %g /var/run/docker.sock`.
 - client-v2 calls the unstable routes only with the setting on. Run this in
   its terminal:
 
