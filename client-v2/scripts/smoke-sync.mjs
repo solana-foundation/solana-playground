@@ -1,5 +1,5 @@
 // Smoke test for a deployment's database: `GET <url>/api/sync` must answer
-// exactly `{ "enabled": true, "db": "ok" }`. Anything else -- sync off,
+// with `enabled: true` and `db: "ok"`. Anything else -- sync off,
 // `db: "unreachable"`, a login page, a 5xx, a timeout -- is a failure, and the
 // failure names the URL and the body it received, so a red run says which
 // deployment and what it said.
@@ -11,7 +11,7 @@
 // URL behind Deployment Protection needs. `GITHUB_STEP_SUMMARY`, when set,
 // receives the verdict as Markdown. Used by the `smoke` job of
 // `.github/workflows/client-v2.yml`.
-import { appendFileSync } from "node:fs";
+import { appendFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const ATTEMPTS = 3;
@@ -22,7 +22,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
  * One probe of `/api/sync`: `ok` only for status 200 and a body that parses
- * to exactly `enabled: true`, `db: "ok"`. `body` is always the raw text, cut
+ * to `enabled: true` and `db: "ok"`. `body` is always the raw text, cut
  * to 500 characters (a login page is long), or the error message when no
  * response came.
  *
@@ -32,19 +32,21 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function probe(baseUrl, options = {}) {
   const { bypassSecret, fetchImpl = fetch } = options;
-  const url = new URL("/api/sync", baseUrl);
   const headers = { accept: "application/json" };
   if (bypassSecret) headers["x-vercel-protection-bypass"] = bypassSecret;
 
   let res;
+  let text;
   try {
-    // `redirect: "manual"`: Deployment Protection answers a 302 to a login
+    const url = new URL("/api/sync", baseUrl);
+    // `redirect: "manual"`: Deployment Protection answers a redirect to a login
     // page, and following it would report the login page's 200.
     res = await fetchImpl(url, {
       headers,
       redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
+    text = await res.text();
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     return {
@@ -55,7 +57,6 @@ export async function probe(baseUrl, options = {}) {
     };
   }
 
-  const text = await res.text();
   const body = text.length > 500 ? `${text.slice(0, 500)}...` : text;
   if (res.status !== 200) {
     const protectedHint = [301, 302, 303, 307, 308, 401, 403].includes(
@@ -125,6 +126,10 @@ async function main(argv) {
   }
   const result = await smoke(url, {
     bypassSecret: process.env.SMOKE_BYPASS_SECRET || undefined,
+    // Only the entrypoint test sets this, to keep a red case from waiting 10 s.
+    delayMs: process.env.SMOKE_RETRY_DELAY_MS
+      ? Number(process.env.SMOKE_RETRY_DELAY_MS)
+      : undefined,
   });
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryOf(url, result));
@@ -141,6 +146,12 @@ async function main(argv) {
   return 1;
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Both sides resolved: `process.argv[1]` is not a realpath and `import.meta.url`
+// is, so under a symlinked directory a plain comparison is false and the script
+// would exit 0 without probing anything.
+if (
+  process.argv[1] &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   process.exitCode = await main(process.argv.slice(2));
 }
