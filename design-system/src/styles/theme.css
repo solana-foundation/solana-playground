@@ -143,6 +143,11 @@
     62% { opacity: 1; transform: translate3d(0, -0.045em, 0) scale(1.015); }
     100% { opacity: 1; transform: translate3d(0, 0, 0) scale(1); }
   }
+  /* A timed toast's bar (sonner's ToastProgress), full to empty over the toast's duration */
+  @keyframes toast-progress {
+    from { transform: scaleX(1); }
+    to { transform: scaleX(0); }
+  }
 }
 
 /* Sizes and weights are values rather than references, so they sit in a
@@ -252,5 +257,15 @@
 @layer base {
   svg.lucide[stroke-width="2"] {
     stroke-width: 1.5;
+  }
+  /* A border with no colour of its own takes the hairline, as shadcn's base
+     sets it. The site's index.css had this rule, but the registry ships this
+     file and not that one, so in the product Tailwind 4's default,
+     currentColor, drew the edges of sheets, dialog footers, cards and tables
+     in the text's white */
+  *,
+  ::before,
+  ::after {
+    border-color: var(--color-border);
   }
 }

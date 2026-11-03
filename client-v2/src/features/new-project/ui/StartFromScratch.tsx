@@ -8,6 +8,9 @@ import type { Start } from "./BaseStartFromScratch";
 
 const log = createLogger("new-project:start");
 
+/** What `PgExplorer.isWorkspaceNameValid` lets through, as the field says it */
+const NAME_RULE = "Use letters, numbers, spaces, - or _";
+
 const defaultName = (framework: FrameworkName) =>
   `${framework.toLowerCase()}-project`;
 
@@ -44,7 +47,8 @@ const StartFromScratch = ({
 
     const projectName = name.trim() || defaultName(framework);
     if (!PgExplorer.isWorkspaceNameValid(projectName)) {
-      setStart({ state: "invalid", error: "Invalid project name" });
+      // The rule itself, so the message says how to fix the name
+      setStart({ state: "invalid", error: NAME_RULE });
       return;
     }
 
@@ -92,7 +96,6 @@ const StartFromScratch = ({
       }}
       placeholder={framework ? defaultName(framework) : "project name"}
       start={start}
-      valid={name.trim() !== "" && PgExplorer.isWorkspaceNameValid(name.trim())}
       held={held}
       onStart={create}
     />

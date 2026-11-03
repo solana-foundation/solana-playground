@@ -3,6 +3,14 @@ import { CirclePlayIcon } from "lucide-react";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/shared/ui/empty";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Marker, MarkerIcon } from "@/shared/ui/marker";
 import {
@@ -138,21 +146,29 @@ const EmptyThread = ({
   suggestions: readonly string[];
   onSuggestion: (text: string) => void;
 }) => (
-  <div className="flex flex-1 flex-col items-center justify-center gap-3 px-4 text-center">
-    <CirclePlayIcon
-      className="mb-2 size-10 text-primary drop-shadow-[0_0_18px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
-      aria-hidden
-    />
-    {/* Under the panel head, which is the h2; the prototype's display type */}
-    <h3 className="max-w-[16em] font-heading text-[clamp(1.375rem,1.9vw,1.75rem)] leading-[1.12] font-medium tracking-[-0.015em] text-foreground">
-      {project ? `Ask about ${project}` : "Ask the assistant"}
-    </h3>
-    <p className="max-w-[21rem] text-sm leading-normal text-muted-foreground">
-      It reads the file you are looking at and the last build error, and
-      proposes patches you apply yourself.
-    </p>
+  /* The kit's padding, gap and balanced wrapping are for a card; the panel
+     keeps the prototype's tighter column and lets the copy wrap normally */
+  <Empty className="gap-3 p-0 px-4 text-wrap">
+    {/* The header's 24rem cap would wrap the display heading early */}
+    <EmptyHeader className="max-w-none gap-3">
+      <EmptyMedia>
+        <CirclePlayIcon
+          className="size-10 text-primary drop-shadow-[0_0_18px_color-mix(in_oklch,var(--primary)_40%,transparent)]"
+          aria-hidden
+        />
+      </EmptyMedia>
+      {/* Under the panel head, which is the h2; the prototype's display type.
+          EmptyTitle is a div, so the h3 inside keeps the heading level */}
+      <EmptyTitle className="max-w-[16em] text-[clamp(1.375rem,1.9vw,1.75rem)] leading-[1.12] tracking-[-0.015em] text-foreground">
+        <h3>{project ? `Ask about ${project}` : "Ask the assistant"}</h3>
+      </EmptyTitle>
+      <EmptyDescription className="max-w-[21rem] text-sm leading-normal">
+        It reads the file you are looking at and the last build error, and
+        proposes patches you apply yourself.
+      </EmptyDescription>
+    </EmptyHeader>
     {/* A row that wraps, as the prototype lays the questions out */}
-    <div className="flex flex-wrap justify-center gap-1.5 pt-3.5">
+    <EmptyContent className="max-w-none flex-row flex-wrap justify-center gap-1.5 pt-3.5">
       {suggestions.map((suggestion) => (
         <Button
           key={suggestion}
@@ -164,6 +180,6 @@ const EmptyThread = ({
           {suggestion}
         </Button>
       ))}
-    </div>
-  </div>
+    </EmptyContent>
+  </Empty>
 );

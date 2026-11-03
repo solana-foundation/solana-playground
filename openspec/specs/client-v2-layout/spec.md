@@ -5,33 +5,34 @@ How client-v2 lays out the app and its navigation: the project list, New project
 
 ## Requirements
 
-### Requirement: The project name says what is wrong before the field
+### Requirement: The project name says what is wrong under the field
 
-In Start from scratch, a message about the project name SHALL show before the
-name field (on its left while the controls share one row, above it when they
-stack), linked to it with `aria-describedby`, without moving the field off the
-row's centre line, and the field SHALL be
-marked invalid with a red edge. A typed name that passes the format check
-(letters, digits, spaces, `-` and `_`) SHALL give the field a success edge
-(`data-state="valid"`); an empty field, which takes the placeholder, SHALL
-have neither edge. Whether a name is taken SHALL still be checked on Start
-only, and typing SHALL clear the message.
+Start from scratch SHALL be a short form: a title, then a "Framework" row and
+a "Name" row, each with its label, Start at the end of the Name row. A
+message about the project name SHALL show under the name field, linked to it
+with `aria-describedby`, and SHALL name the rule ("Use letters, numbers,
+spaces, - or _"); showing it SHALL move nothing above it. The field SHALL be
+marked invalid with a red edge while the message shows. A valid name SHALL
+get no edge of its own: the field stays quiet while the name is fine.
+Whether a name is taken SHALL still be checked on Start only, and typing
+SHALL clear the message.
 
 #### Scenario: An invalid name (manual)
 
 - **WHEN** a user types `my.project` and presses Start
-- **THEN** the message shows before the name field, the field is
-  `aria-invalid` and described by the message, and no project is created
+- **THEN** the message "Use letters, numbers, spaces, - or _" shows under the
+  name field, the field is `aria-invalid` and described by the message, and
+  no project is created
 
 #### Scenario: A valid name (manual)
 
 - **WHEN** a user types `my-project`
-- **THEN** the name field has the success edge and no message shows
+- **THEN** no message shows and the field has no red or green edge
 
 #### Scenario: An empty name (manual)
 
 - **WHEN** the name field is empty
-- **THEN** it has neither the success nor the invalid edge
+- **THEN** it takes the placeholder and has no red edge
 
 ### Requirement: A started lesson shows its progress in the list
 

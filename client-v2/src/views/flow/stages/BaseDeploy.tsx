@@ -12,6 +12,7 @@ import {
   StageEmpty,
   StageEmptyActions,
   StageEmptyDescription,
+  StageEmptyEyebrow,
   StageEmptyMedia,
   StageEmptyMeta,
   StageEmptyTitle,
@@ -57,7 +58,7 @@ export interface BaseDeployProps {
   txUrl: (signature: string) => string;
   onDeploy: () => void;
   onInteract: () => void;
-  /** The secondary "Upload IDL" action (`IdlActions mode="upload"`) */
+  /** The rare "Upload IDL" action, a link under the pill (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
 }
 
@@ -77,9 +78,13 @@ const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
 /** The cluster for prose; "the network" until the endpoint has been read */
 const clusterName = (p: BaseDeployProps) => p.cluster ?? "the network";
 
+/** The cluster as the status row names it: "devnet" reads "Devnet" */
+const clusterTitle = (cluster: string) =>
+  cluster.charAt(0).toUpperCase() + cluster.slice(1);
+
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
-    return "Build the program first \u2014 the stepper unlocks Deploy once it compiles cleanly.";
+    return "Build the program first. Deploy opens once the build passes.";
   }
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
@@ -213,16 +218,13 @@ const History = ({ p }: { p: BaseDeployProps }) => (
 
 /**
  * The Deploy stage, drawn from props alone; `Deploy` connects it. Before the
- * first deploy it is the prototype's empty stage: centred, the pill and
- * "Upload IDL" under it, no history yet. After one it shows the result and
- * the history, read from the left.
+ * first deploy it is the prototype's empty stage: centred, the network over
+ * the title, the pill and "Upload IDL" under it, no history yet. After one it
+ * shows the result and the history, read from the left.
  */
 const BaseDeploy = (p: BaseDeployProps) => {
   const latest = p.history[0] ?? null;
   const n = p.history.length;
-  const meta = [p.cluster, latest && `${n} deployment${n === 1 ? "" : "s"}`]
-    .filter(Boolean)
-    .join(" · ");
   const running = p.deploy === "running";
 
   return (
@@ -233,10 +235,22 @@ const BaseDeploy = (p: BaseDeployProps) => {
             <Rocket />
           </StageEmptyMedia>
         )}
+        {p.cluster && (
+          <StageEmptyEyebrow>
+            {/* Idle: the stage does not know whether the cluster answers;
+                the status row does, and says it */}
+            <StatusDot />
+            {clusterTitle(p.cluster)}
+          </StageEmptyEyebrow>
+        )}
         <StageEmptyTitle>
           {latest ? "Deploy" : "Nothing deployed yet"}
         </StageEmptyTitle>
-        {meta && <StageEmptyMeta>{meta}</StageEmptyMeta>}
+        {latest && (
+          <StageEmptyMeta>{`${n} deployment${
+            n === 1 ? "" : "s"
+          }`}</StageEmptyMeta>
+        )}
         <StageEmptyDescription>{description(p, latest)}</StageEmptyDescription>
         {p.built && !latest && p.programId && (
           <p className="text-caption text-muted-foreground">
@@ -246,7 +260,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
         {p.deploy === "failed" && (
           <Callout variant="error" role="alert">
             <CalloutDescription>
-              Deploy failed — see the terminal.
+              Deploy failed. The terminal has the details.
             </CalloutDescription>
           </Callout>
         )}
@@ -262,9 +276,10 @@ const BaseDeploy = (p: BaseDeployProps) => {
             {deployLabel(p, latest !== null)}
             {!running && <BrandButtonIcon />}
           </BrandButton>
-          {/* Before the first deploy, centred under the pill on a desk and
-              above it on a phone, where the row stretches the pill to the
-              screen's width; after one, beside the pill */}
+          {/* A link, not a second button: loading an IDL by hand is rare.
+              Before the first deploy, centred under the pill on a desk and
+              above it on a phone, where the pill keeps the foot; after one,
+              beside the pill */}
           <div className="flex justify-center">{p.idlUpload}</div>
         </StageEmptyActions>
       </StageEmpty>

@@ -29,27 +29,42 @@ import { expect, it, vi } from "vitest";
 
 import Instruction from "./Instruction";
 
-it("starts with the Args and Accounts folds open", () => {
+const draw = () =>
   render(
     <Instruction
       idlInstruction={
         {
           name: "increment",
-          args: [],
-          accounts: [],
+          args: [{ name: "amount" }],
+          accounts: [{ name: "owner" }],
         } as unknown as Parameters<typeof Instruction>[0]["idlInstruction"]
       }
     />
   );
-  // The instruction's own fold is closed, so open it to reach the two inside.
-  fireEvent.click(screen.getByRole("button", { name: "increment" }));
 
+it("heads the card with what it takes", () => {
+  draw();
   expect(
-    screen.getByRole("button", { name: "Args" }).getAttribute("aria-expanded")
-  ).toBe("true");
-  expect(
-    screen
-      .getByRole("button", { name: "Accounts" })
-      .getAttribute("aria-expanded")
-  ).toBe("true");
+    screen.getByRole("button", { name: /^increment/ }).textContent
+  ).toContain("1 arg · 1 account");
+});
+
+it("names the arguments and the accounts as plain groups, not folds", () => {
+  draw();
+  fireEvent.click(screen.getByRole("button", { name: /^increment/ }));
+
+  expect(screen.getByRole("heading", { name: "Arguments" })).toBeTruthy();
+  expect(screen.getByRole("heading", { name: "Accounts" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Args" })).toBeNull();
+});
+
+it("says why Test waits while a field is empty", () => {
+  draw();
+  fireEvent.click(screen.getByRole("button", { name: /^increment/ }));
+
+  expect(screen.getByRole("button", { name: "Test" })).toHaveProperty(
+    "disabled",
+    true
+  );
+  expect(screen.getByText("Fill every field to test")).toBeTruthy();
 });

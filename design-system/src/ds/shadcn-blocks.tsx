@@ -14,6 +14,11 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { ToastProgress } from "@/components/ui/sonner"
+
+/** The timed toast's length in the demo: long enough to watch the bar drain */
+const TOAST_DEMO_MS = 6000
+
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
@@ -413,9 +418,23 @@ function Feedback() {
         </Alert>
       </Block>
 
-      <Block id="sonner" title="Toast" note="A quiet confirmation that goes away by itself. Press the button to see one.">
+      <Block id="sonner" title="Toast" note="A quiet confirmation that goes away by itself. Close sits inside, at the end of the first line; a timed toast drains an accent bar along its foot, which stops while the pointer is over the toasts. Press a button to see one.">
         <Button variant="outline" onClick={() => toast("Copied the program id")}>Show a toast</Button>
         <Button variant="outline" onClick={() => toast.success("Deployed to devnet")}>Success toast</Button>
+        <Button
+          variant="outline"
+          onClick={() =>
+            toast(
+              <>
+                Address copied
+                <ToastProgress key={Date.now()} duration={TOAST_DEMO_MS} />
+              </>,
+              { duration: TOAST_DEMO_MS }
+            )
+          }
+        >
+          Timed toast with a bar
+        </Button>
       </Block>
 
       <Block id="progress" title="Progress, spinner and skeleton" note="Progress for a known amount, a spinner for an unknown wait, a skeleton for content on its way.">

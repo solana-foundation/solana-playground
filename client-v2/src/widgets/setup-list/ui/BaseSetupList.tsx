@@ -11,6 +11,7 @@ import {
   SetupListTrigger,
   SetupListValue,
 } from "@/shared/ui/setup-list";
+import { counts } from "../model/steps";
 import type { SetupStep, StepView, TodoStep } from "../model/steps";
 
 const STEP_LABELS: Record<SetupStep, string> = {
@@ -45,10 +46,7 @@ const BaseSetupList = ({
     className="px-2 pb-2"
   >
     <SetupListHeader>
-      <SetupListTrigger
-        done={steps.filter((s) => s.done).length}
-        total={steps.length}
-      >
+      <SetupListTrigger done={steps.filter(counts).length} total={steps.length}>
         Get set up
       </SetupListTrigger>
       <SetupListDismiss onClick={onDismiss} />

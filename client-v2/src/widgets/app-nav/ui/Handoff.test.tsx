@@ -11,6 +11,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { SidebarProvider } from "@/shared/ui/sidebar";
 
 // A session the test moves by hand: who is signed in, and its listeners
 const session = vi.hoisted(() => {
@@ -80,12 +81,21 @@ afterEach(() => {
 
 const names = () => sent.events.map((event) => event.name);
 
+// The row is a menu button of the stock Sidebar, which needs its provider
+const draw = () =>
+  render(
+    <SidebarProvider>
+      <Handoff />
+    </SidebarProvider>
+  );
+
 const open = () => {
-  render(<Handoff />);
+  draw();
   fireEvent.click(screen.getByTestId("handoff-open"));
 };
 
 it("gives the app's address and the current path", () => {
+  session.user = { login: "ada" };
   open();
   expect(screen.getByTestId("handoff-link").textContent).toBe(
     `${window.location.origin}/tutorials/hello-solana`
@@ -93,7 +103,8 @@ it("gives the app's address and the current path", () => {
 });
 
 it("reads the page's path when the sheet opens, not when it mounted", () => {
-  render(<Handoff />);
+  session.user = { login: "ada" };
+  draw();
   window.history.replaceState(null, "", "/tutorials/another");
   fireEvent.click(screen.getByTestId("handoff-open"));
   expect(screen.getByTestId("handoff-link").textContent).toBe(
@@ -123,6 +134,7 @@ it("counts an opening signed in", () => {
 });
 
 it("copies the link and counts it", async () => {
+  session.user = { login: "ada" };
   open();
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
@@ -136,6 +148,7 @@ it("copies the link and counts it", async () => {
 });
 
 it("reports a refused copy and counts nothing", async () => {
+  session.user = { login: "ada" };
   writeText.mockRejectedValueOnce(new Error("denied"));
   open();
   await act(async () => {
@@ -147,6 +160,7 @@ it("reports a refused copy and counts nothing", async () => {
 });
 
 it("reports a copy where the browser has no clipboard", async () => {
+  session.user = { login: "ada" };
   vi.stubGlobal("navigator", { share: vi.fn(), userAgent: "test" });
   open();
   await act(async () => {
@@ -157,6 +171,7 @@ it("reports a copy where the browser has no clipboard", async () => {
 });
 
 it("counts a share, and a cancelled one is neither counted nor reported", async () => {
+  session.user = { login: "ada" };
   const share = navigator.share as ReturnType<typeof vi.fn>;
   share.mockRejectedValueOnce(new DOMException("closed", "AbortError"));
   open();
@@ -180,6 +195,7 @@ it("counts a share, and a cancelled one is neither counted nor reported", async 
 });
 
 it("reports a share that failed for another reason, and counts nothing", async () => {
+  session.user = { login: "ada" };
   const share = navigator.share as ReturnType<typeof vi.fn>;
   share.mockRejectedValueOnce(new DOMException("no", "NotAllowedError"));
   open();
@@ -191,6 +207,7 @@ it("reports a share that failed for another reason, and counts nothing", async (
 });
 
 it("draws no Share where the browser has no share sheet", () => {
+  session.user = { login: "ada" };
   vi.stubGlobal("navigator", { clipboard: { writeText }, userAgent: "test" });
   open();
   expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
@@ -231,8 +248,9 @@ it("reports an unknown sign-in failure to the team and the user", async () => {
   expect(reported.actions).toEqual(["sign in with GitHub"]);
 });
 
-it("turns to the signed-in words once the sign-in lands", () => {
+it("turns to the signed-in words and the link once the sign-in lands", () => {
   open();
+  expect(screen.queryByTestId("handoff-link")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "Sign in with GitHub" }));
   expect(session.signIn).toHaveBeenCalledTimes(1);
   act(() => {
@@ -240,4 +258,7 @@ it("turns to the signed-in words once the sign-in lands", () => {
     session.listeners.forEach((cb) => cb());
   });
   expect(screen.getByText(/@ada/)).toBeTruthy();
+  expect(screen.getByTestId("handoff-link").textContent).toBe(
+    `${window.location.origin}/tutorials/hello-solana`
+  );
 });

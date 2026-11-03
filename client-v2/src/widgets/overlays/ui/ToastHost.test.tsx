@@ -295,10 +295,14 @@ describe("the progress bar", () => {
     render(<ToastHost />);
     show({ name: "demo", id: "k" });
 
-    expect(barOf("message k")?.className).toContain("pg-toast-progress");
+    expect(barOf("message k")?.className).toContain("toast-progress");
+    // The bar and its keyframes come from the design system's sonner
     const { readFileSync } = await import("node:fs");
-    const css = readFileSync(`${process.cwd()}/src/index.css`, "utf8");
-    expect(css).toContain("@keyframes pg-toast-progress");
+    const css = readFileSync(
+      `${process.cwd()}/src/app/styles/playground-theme.css`,
+      "utf8"
+    );
+    expect(css).toContain("@keyframes toast-progress");
   });
 
   it("should start again when a toast is shown again by its id", () => {

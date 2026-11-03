@@ -323,7 +323,11 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
           >
             {PHONE_ICONS.menu}
           </BarButton>
-          <span className="min-w-0 flex-1 truncate pl-0.5 text-title font-act text-foreground">
+          {/* The name keeps at least six characters, and the status chip
+              gives way first, down to its dot. Ten pushed the bar 17px past a
+              390 screen and Run off its edge: menu, chip, Chat and Code and
+              Run leave the name about 80px there */}
+          <span className="min-w-[6ch] flex-1 truncate pl-0.5 text-title font-act text-foreground">
             {props.title}
           </span>
           {props.status}

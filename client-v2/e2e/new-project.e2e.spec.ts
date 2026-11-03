@@ -56,7 +56,10 @@ test("client-v2-layout: New project's controls line up and its list shows it scr
   const heights = boxes.map((b) => Math.round(b!.height));
   const middles = boxes.map((b) => Math.round(b!.y + b!.height / 2));
   expect(new Set(heights).size).toBe(1);
-  expect(new Set(middles).size).toBe(1);
+  // Framework is its own row; the name and Start share the one under it
+  const [framework, name, start] = middles;
+  expect(name).toBe(start);
+  expect(framework).toBeLessThan(name);
 
   // The list runs past the dialog's foot: a fade there says there is more
   const body = dialog(page).locator('[data-slot="modal-body"]');

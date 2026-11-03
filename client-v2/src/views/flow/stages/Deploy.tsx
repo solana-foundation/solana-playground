@@ -96,7 +96,7 @@ const Deploy = () => {
           .catch(reportButtonFailure("deploy"));
       }}
       onInteract={() => PgFlow.setStage("interact")}
-      idlUpload={<IdlActions mode="upload" />}
+      idlUpload={<IdlActions mode="upload" look="link" />}
     />
   );
 };

@@ -104,7 +104,9 @@ export const StatusChip = (actions: StatusActions) => {
       open={open}
       onOpenChange={(next) => {
         if (next) {
-          statusTelemetry.track("status_sheet_opened", { worst: chip.state });
+          statusTelemetry.track("status_sheet_opened", {
+            worst: measured(chip.state),
+          });
         }
         setOpen(next);
       }}

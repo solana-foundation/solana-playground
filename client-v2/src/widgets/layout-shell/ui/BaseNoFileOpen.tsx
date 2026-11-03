@@ -29,7 +29,14 @@ const BaseNoFileOpen = ({ onShowFiles }: BaseNoFileOpenProps) => (
       </EmptyTitle>
     </EmptyHeader>
     <EmptyContent>
-      <Button type="button" variant="outline" onClick={onShowFiles}>
+      {/* A finger's 44 on a phone, as the stages' actions are: the kit's
+          default size was 32 there */}
+      <Button
+        type="button"
+        variant="outline"
+        className="pointer-coarse:h-11 pointer-coarse:px-5"
+        onClick={onShowFiles}
+      >
         Show files
       </Button>
     </EmptyContent>

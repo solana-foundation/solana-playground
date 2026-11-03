@@ -3,12 +3,6 @@ import { FC, useCallback, useEffect, useReducer, useState } from "react";
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
 import Interaction from "../Interaction";
-import {
-  Collapsible,
-  CollapsibleChevron,
-  CollapsibleContent,
-  CollapsibleHeading,
-} from "@/shared/ui/collapsible";
 import { Emoji } from "../../../../../constants";
 import {
   PgCommand,
@@ -20,6 +14,7 @@ import {
 } from "../../../../../utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
+import { cn } from "@/shared/lib/utils";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   IdlInstruction,
@@ -139,77 +134,71 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
   };
 
   const wallet = useWallet();
+  const { args, accounts } = instruction.values;
+  const hasInputs = args.length > 0 || accounts.length > 0;
+  const held = heldBecause({ wallet: !!wallet, filled: !disabled });
 
   return (
     <InstructionProvider
       instruction={instruction}
       setInstruction={setInstruction}
     >
-      <Interaction name={instruction.name}>
-        <div className="flex flex-col gap-4">
-          {instruction.values.args.length > 0 && (
-            <Collapsible defaultOpen>
-              <CollapsibleHeading>
-                <CollapsibleChevron />
-                Args
-              </CollapsibleHeading>
-              <CollapsibleContent className="mt-2">
-                <div className="flex flex-col gap-3 text-xs">
-                  {instruction.values.args.map((arg) => (
-                    <InstructionInput
-                      key={arg.name + refreshCount}
-                      prefix="args"
-                      updateInstruction={({
-                        updateGenerator,
-                        updateRefs,
-                        checkErrors,
-                      }) => {
-                        updateGenerator(arg);
-                        updateRefs(arg, "Arguments");
-                        setDisabled(checkErrors());
-                        refresh();
-                      }}
-                      {...arg}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+      <Interaction name={instruction.name} meta={inputsMeta(args, accounts)}>
+        <div className="flex flex-col gap-5">
+          {args.length > 0 && (
+            <Group title="Arguments">
+              {args.map((arg) => (
+                <InstructionInput
+                  key={arg.name + refreshCount}
+                  prefix="args"
+                  updateInstruction={({
+                    updateGenerator,
+                    updateRefs,
+                    checkErrors,
+                  }) => {
+                    updateGenerator(arg);
+                    updateRefs(arg, "Arguments");
+                    setDisabled(checkErrors());
+                    refresh();
+                  }}
+                  {...arg}
+                />
+              ))}
+            </Group>
           )}
 
-          {instruction.values.accounts.length > 0 && (
-            <Collapsible defaultOpen>
-              <CollapsibleHeading>
-                <CollapsibleChevron />
-                Accounts
-              </CollapsibleHeading>
-              <CollapsibleContent className="mt-2">
-                <div className="flex flex-col gap-3 text-xs">
-                  {instruction.values.accounts.map((acc) => (
-                    <InstructionInput
-                      key={acc.name + refreshCount}
-                      prefix="accounts"
-                      type="publicKey"
-                      updateInstruction={({
-                        updateGenerator,
-                        updateRefs,
-                        checkErrors,
-                      }) => {
-                        updateGenerator(acc);
-                        updateRefs(acc, "Accounts");
-                        setDisabled(checkErrors());
-                        refresh();
-                      }}
-                      {...acc}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+          {accounts.length > 0 && (
+            <Group title="Accounts">
+              {accounts.map((acc) => (
+                <InstructionInput
+                  key={acc.name + refreshCount}
+                  prefix="accounts"
+                  type="publicKey"
+                  updateInstruction={({
+                    updateGenerator,
+                    updateRefs,
+                    checkErrors,
+                  }) => {
+                    updateGenerator(acc);
+                    updateRefs(acc, "Accounts");
+                    setDisabled(checkErrors());
+                    refresh();
+                  }}
+                  {...acc}
+                />
+              ))}
+            </Group>
           )}
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        {/* Test is the card's one action; filling and clearing the fields
+            are quiet beside it, and a held Test says what it waits for */}
+        <div
+          className={cn(
+            "flex flex-wrap items-center gap-x-2 gap-y-3",
+            hasInputs && "mt-5 border-t border-border pt-4"
+          )}
+        >
           <AsyncButton
             onClick={handleTest}
             onError={reportButtonFailure("run the test")}
@@ -218,21 +207,59 @@ const Instruction: FC<React.PropsWithChildren<InstructionProps>> = ({
             Test
           </AsyncButton>
 
-          {(instruction.values.accounts.length > 0 ||
-            instruction.values.args.length > 0) && (
+          {hasInputs && (
             <>
-              <Button variant="outline" onClick={fillRandom}>
-                Fill
+              <Button variant="ghost" onClick={fillRandom}>
+                Fill with Random
               </Button>
-              <Button variant="outline" onClick={reset}>
+              <Button variant="ghost" onClick={reset}>
                 Reset
               </Button>
             </>
+          )}
+
+          {held && (
+            <p className="ml-auto text-caption text-muted-foreground">{held}</p>
           )}
         </div>
       </Interaction>
     </InstructionProvider>
   );
 };
+
+/** "1 arg · 2 accounts", or nothing for an instruction that takes none */
+const inputsMeta = (args: unknown[], accounts: unknown[]) =>
+  [plural(args.length, "arg"), plural(accounts.length, "account")]
+    .filter(Boolean)
+    .join(" · ") || undefined;
+
+const plural = (n: number, word: string) =>
+  n ? `${n} ${word}${n === 1 ? "" : "s"}` : "";
+
+/** Why Test is held, said beside it; nothing once it can run */
+const heldBecause = ({
+  wallet,
+  filled,
+}: {
+  wallet: boolean;
+  filled: boolean;
+}) => {
+  if (!wallet) return "Connect a wallet to test";
+  if (!filled) return "Fill every field to test";
+  return null;
+};
+
+/** One kind of input under the instruction, named once above its fields */
+const Group = ({
+  title,
+  children,
+}: React.PropsWithChildren<{ title: string }>) => (
+  <section className="flex flex-col gap-3">
+    <h4 className="m-0 text-caption font-medium text-muted-foreground">
+      {title}
+    </h4>
+    {children}
+  </section>
+);
 
 export default Instruction;

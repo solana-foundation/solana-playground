@@ -48,6 +48,29 @@ const resolveEditorColors = (colors: Record<string, string>) =>
     ])
   );
 
+/** Monaco's own scrollbar sizes, which the desktop keeps */
+const DESK_SCROLLBAR = {
+  verticalScrollbarSize: 14,
+  horizontalScrollbarSize: 10,
+  verticalSliderSize: 14,
+  horizontalSliderSize: 10,
+  useShadows: true,
+};
+
+/**
+ * iOS's: a 3 px slider centred in a 9 px track, so it sits 3 px in, shown
+ * only while the code moves (`auto` fades it out once it stops)
+ */
+const PHONE_SCROLLBAR = {
+  vertical: "auto" as const,
+  horizontal: "auto" as const,
+  verticalScrollbarSize: 9,
+  horizontalScrollbarSize: 9,
+  verticalSliderSize: 3,
+  horizontalSliderSize: 3,
+  useShadows: false,
+};
+
 const Monaco = () => {
   const [editor, setEditor] = useState<monaco.editor.IStandaloneCodeEditor>();
   const [isThemeSet, setIsThemeSet] = useState(false);
@@ -221,7 +244,12 @@ const Monaco = () => {
     if (editor) return () => editor.dispose();
   }, [editor]);
 
-  // Set font: a step up on a phone (`editorFont`)
+  // Set font: a step up on a phone (`editorFont`). A phone has no minimap:
+  // at its width the map is unreadable, takes the code's room and draws a
+  // band beside the lines. Its scrollbar is the phone's own: a 3 px pill 3 px
+  // from the edge that shows while the code moves and fades when it stops
+  // (the pill's look is `.pg-monaco[data-phone]` in index.css), no shadow
+  // under the head and no overview ruler, whose border read as a stray line
   const phone = useViewport() === "phone";
   useEffect(() => {
     if (!editor) return;
@@ -229,6 +257,12 @@ const Monaco = () => {
     editor.updateOptions({
       fontFamily: theme.components.editor.default.fontFamily,
       ...editorFont({ phone }),
+      minimap: { enabled: !phone },
+      scrollbar: phone ? PHONE_SCROLLBAR : DESK_SCROLLBAR,
+      overviewRulerLanes: phone ? 0 : 3,
+      overviewRulerBorder: !phone,
+      hideCursorInOverviewRuler: phone,
+      smoothScrolling: phone,
     });
   }, [editor, theme, phone]);
 
@@ -823,7 +857,11 @@ const Monaco = () => {
 
   return (
     <SpinnerWithBg loading={!isThemeSet} size="2rem">
-      <div ref={monacoRef} className="pg-monaco h-full w-full" />
+      <div
+        ref={monacoRef}
+        className="pg-monaco h-full w-full"
+        data-phone={phone || undefined}
+      />
     </SpinnerWithBg>
   );
 };

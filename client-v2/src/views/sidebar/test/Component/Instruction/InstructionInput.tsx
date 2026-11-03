@@ -164,32 +164,39 @@ const InstructionInput: FC<React.PropsWithChildren<InstructionInputProps>> = ({
         </div>
       )}
 
-      <div className="flex">
-        <div className="flex w-full items-center gap-1 [&>*:first-child]:flex-1">
-          <SearchBar
-            id={instruction.name + prefix + name}
-            value={value}
-            onChange={(ev) => setValue(ev.target.value)}
-            error={error}
-            setError={setError}
-            setSelectedItems={setSelectedItems}
-            restoreIfNotSelected
-            labelToSelectOnPaste="Custom"
-            {...getSearchBarProps(
-              name,
-              type,
-              generator,
-              accountProps,
-              instruction,
-              idl
-            )}
-            {...searchBarProps}
-          />
-          <div className="flex h-8 items-center">
+      <SearchBar
+        id={instruction.name + prefix + name}
+        value={value}
+        onChange={(ev) => setValue(ev.target.value)}
+        error={error}
+        setError={setError}
+        setSelectedItems={setSelectedItems}
+        restoreIfNotSelected
+        labelToSelectOnPaste="Custom"
+        // Random is one press beside the value, not a menu of one
+        inlineItem={{ label: "Random" }}
+        placeholder={
+          typeName === "publicKey"
+            ? "Paste an address or pick one"
+            : `Enter a ${typeName} value`
+        }
+        // Copy sits in the field with the value it copies, not loose
+        // beside it
+        endAddon={
+          value ? (
             <CopyButton value={value} onError={reportButtonFailure("copy")} />
-          </div>
-        </div>
-      </div>
+          ) : undefined
+        }
+        {...getSearchBarProps(
+          name,
+          type,
+          generator,
+          accountProps,
+          instruction,
+          idl
+        )}
+        {...searchBarProps}
+      />
     </div>
   );
 };

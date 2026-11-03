@@ -23,3 +23,10 @@ export type StepView =
   | { step: SetupStep; done: true; value?: string }
   | { step: TodoStep; done: false }
   | { step: "network"; done: false; warn: string; value?: string };
+
+/**
+ * Whether a step counts towards "n of total": a done one, and the network
+ * while it warns, since a network that is not answering is still the one
+ * chosen and an outage takes no step back
+ */
+export const counts = (view: StepView) => view.done || "warn" in view;

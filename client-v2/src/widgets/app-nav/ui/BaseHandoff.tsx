@@ -11,6 +11,8 @@ import {
   DrawerHeader,
   DrawerTitle,
 } from "@/shared/ui/drawer";
+import { SidebarMenuButton } from "@/shared/ui/sidebar";
+import { GithubMark } from "@/shared/lib/github-mark";
 
 export const HANDOFF_TITLE = "Continue on a computer";
 
@@ -67,8 +69,9 @@ const Wrapped = ({ link }: { link: string }) => (
  * The phone's way out for work a phone does poorly, such as typing code: a
  * row on the menu page and the sheet it opens, in the shape of the lesson's
  * "Write it yourself on a computer" sheet (Almaz's prototype), so the phone
- * has one look for it. Signed in, account sync carries the project; signed
- * out, it says the project stays here and offers the sign-in.
+ * has one look for it. Signed in, account sync carries the project and the
+ * sheet gives the link; signed out, it says the project stays here and
+ * offers only the sign-in, since the link would find nothing on a computer.
  */
 const BaseHandoff = ({
   open,
@@ -93,15 +96,15 @@ const BaseHandoff = ({
 
   return (
     <>
-      <Button
-        variant="ghost"
+      {/* The menu's own row, so it reads as one of the items and not as a
+          project; `BaseAppNav` gives it a group of its own */}
+      <SidebarMenuButton
         data-testid="handoff-open"
         onClick={() => onOpenChange(true)}
-        className="h-12 w-full justify-start gap-2 rounded-xl px-2 text-control font-act text-muted-foreground hover:text-foreground"
       >
-        <Monitor strokeWidth={1.75} className="size-5" aria-hidden />
-        {HANDOFF_TITLE}
-      </Button>
+        <Monitor strokeWidth={1.75} aria-hidden />
+        <span>{HANDOFF_TITLE}</span>
+      </SidebarMenuButton>
       <Drawer open={open} onOpenChange={onOpenChange}>
         <DrawerContent className="max-h-[82dvh]">
           <div className="min-h-0 flex-1 overflow-y-auto pb-2">
@@ -113,76 +116,78 @@ const BaseHandoff = ({
                 {HANDOFF_TITLE}
               </DrawerTitle>
             </DrawerHeader>
-            <div className="px-4">
+            {/* One rhythm: 16 px between blocks, 12 px between buttons */}
+            <div className="flex flex-col gap-4 px-4">
               {/* text-body needs the ! here: cn drops it next to a colour
                   class and the stock 14 px comes back */}
-              <DrawerDescription className="text-body! font-read text-muted-foreground">
+              <DrawerDescription className="text-body! font-read text-pretty text-muted-foreground">
                 {account.status === "signed-in"
                   ? `Your projects are saved to your account. Open this link on a computer and sign in with GitHub as @${account.login}: this project is in your list there.`
                   : "This project is saved on this phone only. Sign in with GitHub to keep it in your account, then open this link on a computer and sign in there too."}
               </DrawerDescription>
-              {account.status === "signed-out" && (
-                <>
-                  <BrandButton
-                    className="mt-4 h-12 w-full"
-                    disabled={account.signingIn}
-                    onClick={onSignIn}
+              {account.status === "signed-out" ? (
+                <SignIn account={account} onSignIn={onSignIn} />
+              ) : (
+                // Signed in only: signed out, the computer would open the
+                // link without the project, which is on this phone alone
+                <div className="flex flex-col gap-3">
+                  <p
+                    data-testid="handoff-link"
+                    className="rounded-control border border-border bg-surface-well px-3 py-3 font-mono text-code wrap-anywhere text-foreground select-all"
                   >
-                    Sign in with GitHub
-                  </BrandButton>
-                  {account.error && (
-                    <p
-                      role="alert"
-                      className="mt-2 text-caption font-read text-destructive"
+                    <Wrapped link={link} />
+                  </p>
+                  <div className="flex gap-3">
+                    <Button
+                      variant="secondary"
+                      className={SHEET_BUTTON}
+                      onClick={copy}
                     >
-                      {account.error}
-                    </p>
-                  )}
-                </>
+                      {copied ? (
+                        <Check
+                          strokeWidth={2}
+                          className="size-4 text-success"
+                          aria-hidden
+                        />
+                      ) : (
+                        <Copy
+                          strokeWidth={1.75}
+                          className="size-4"
+                          aria-hidden
+                        />
+                      )}
+                      {/* Announced as it changes, so a screen reader hears it worked */}
+                      <span aria-live="polite">
+                        {copied ? "Copied" : "Copy link"}
+                      </span>
+                    </Button>
+                    {onShare && (
+                      <Button
+                        variant="secondary"
+                        className={SHEET_BUTTON}
+                        onClick={() => void onShare()}
+                      >
+                        <Share
+                          strokeWidth={1.75}
+                          className="size-4"
+                          aria-hidden
+                        />
+                        Share
+                      </Button>
+                    )}
+                  </div>
+                </div>
               )}
-              <p
-                data-testid="handoff-link"
-                className="mt-4 rounded-control border border-border bg-surface-well px-3 py-3 font-mono text-code wrap-anywhere text-foreground select-all"
-              >
-                <Wrapped link={link} />
-              </p>
-              <div className="mt-2 flex gap-2">
-                <Button
-                  variant="secondary"
-                  className="h-12 flex-1 gap-2"
-                  onClick={copy}
-                >
-                  {copied ? (
-                    <Check
-                      strokeWidth={2}
-                      className="size-4 text-success"
-                      aria-hidden
-                    />
-                  ) : (
-                    <Copy strokeWidth={1.75} className="size-4" aria-hidden />
-                  )}
-                  {/* Announced as it changes, so a screen reader hears it worked */}
-                  <span aria-live="polite">
-                    {copied ? "Copied" : "Copy link"}
-                  </span>
-                </Button>
-                {onShare && (
-                  <Button
-                    variant="secondary"
-                    className="h-12 flex-1 gap-2"
-                    onClick={() => void onShare()}
-                  >
-                    <Share strokeWidth={1.75} className="size-4" aria-hidden />
-                    Share
-                  </Button>
-                )}
-              </div>
             </div>
           </div>
-          <DrawerFooter className="shrink-0 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+          {/* pt-1 over the scroller's pb-2 keeps the 12 px between buttons;
+              the pb-2 stays so the last button's focus ring is not clipped */}
+          <DrawerFooter className="shrink-0 pt-1 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            {/* It only closes the sheet, so it is the quiet one, not a
+                second call to action */}
             <Button
-              variant="secondary"
-              className="h-14"
+              variant="ghost"
+              className="h-target self-center rounded-full px-4 text-control text-muted-foreground"
               onClick={() => onOpenChange(false)}
             >
               Stay on the phone
@@ -193,5 +198,37 @@ const BaseHandoff = ({
     </>
   );
 };
+
+/**
+ * The sheet's buttons share the phone's touch target (`--target`, 48 px)
+ * and the sign-in's pill, the brand button's own radius, so the sheet has one
+ */
+const SHEET_BUTTON = "h-target flex-1 gap-2 rounded-full text-control";
+
+/** Signed out, the sheet's one action: the sign-in, and why the last one failed */
+const SignIn = ({
+  account,
+  onSignIn,
+}: {
+  account: Extract<HandoffAccount, { status: "signed-out" }>;
+  onSignIn: () => void;
+}) => (
+  <div className="flex flex-col gap-2">
+    <BrandButton
+      className="h-target w-full"
+      disabled={account.signingIn}
+      onClick={onSignIn}
+    >
+      {/* The mark every GitHub sign-in in the product carries */}
+      <GithubMark />
+      Sign in with GitHub
+    </BrandButton>
+    {account.error && (
+      <p role="alert" className="text-caption font-read text-destructive">
+        {account.error}
+      </p>
+    )}
+  </div>
+);
 
 export default BaseHandoff;

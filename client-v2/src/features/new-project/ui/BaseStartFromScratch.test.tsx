@@ -34,7 +34,6 @@ const draw = (props: Partial<BaseStartFromScratchProps> = {}) => {
       onName={handlers.onName}
       placeholder={props.placeholder ?? "anchor-project"}
       start={props.start ?? { state: "idle" }}
-      valid={props.valid}
       onStart={handlers.onStart}
     />
   );
@@ -79,7 +78,7 @@ it("starts on Enter in the name field", () => {
   expect(on.onStart).toHaveBeenCalledTimes(1);
 });
 
-it("shows an error above the field, describing it", () => {
+it("shows an error under the field, describing it", () => {
   draw({ start: { state: "invalid", error: "Invalid project name" } });
 
   const alert = screen.getByRole("alert");
@@ -87,31 +86,19 @@ it("shows an error above the field, describing it", () => {
   expect(alert.textContent).toBe("Invalid project name");
   expect(field.getAttribute("aria-invalid")).toBe("true");
   expect(field.getAttribute("aria-describedby")).toBe(alert.id);
-  expect(field.getAttribute("data-state")).toBeNull();
-  // Above: the message comes first in the document
+  // Under: the message follows the field, so showing it moves nothing before it
   expect(
-    alert.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING
+    alert.compareDocumentPosition(field) & Node.DOCUMENT_POSITION_PRECEDING
   ).toBeTruthy();
-});
-
-it("gives a valid typed name the success edge", () => {
-  draw({ name: "my-project", valid: true });
-
-  const field = screen.getByLabelText("Project name");
-  expect(field.getAttribute("data-state")).toBe("valid");
-  expect(field.getAttribute("aria-invalid")).toBeNull();
-  expect(screen.queryByRole("alert")).toBeNull();
 });
 
 it("gives a well-formed name that Start refused the invalid edge only", () => {
   draw({
     name: "my-project",
-    valid: true,
     start: { state: "failed", error: "A project named my-project exists" },
   });
 
   const field = screen.getByLabelText("Project name");
-  expect(field.getAttribute("data-state")).toBeNull();
   expect(field.getAttribute("aria-invalid")).toBe("true");
 });
 
@@ -119,7 +106,6 @@ it("gives an empty name neither edge", () => {
   draw();
 
   const field = screen.getByLabelText("Project name");
-  expect(field.getAttribute("data-state")).toBeNull();
   expect(field.getAttribute("aria-invalid")).toBeNull();
 });
 

@@ -48,4 +48,20 @@ function CalloutDescription({ className, ...props }: React.ComponentProps<"div">
   )
 }
 
-export { Callout, CalloutDescription, CalloutTitle, calloutVariants }
+/* What the callout asks you to do: its buttons under the text, the answer it
+   expects filled. Under, not beside: a row that put them on the right broke
+   them onto a line of their own at some widths and not others. On a phone
+   they run the width, a finger's 44 tall. The buttons take the page's text
+   colour, not the callout's: in a warning's yellow ink an outlined button
+   read as a link */
+function CalloutActions({ className, ...props }: React.ComponentProps<"div">) {
+  return (
+    <div
+      data-slot="callout-actions"
+      className={cn("mt-2 flex flex-wrap gap-2 text-foreground group-has-[>svg]/callout:col-start-2 max-md:flex-col max-md:*:h-11 max-md:*:w-full", className)}
+      {...props}
+    />
+  )
+}
+
+export { Callout, CalloutActions, CalloutDescription, CalloutTitle, calloutVariants }

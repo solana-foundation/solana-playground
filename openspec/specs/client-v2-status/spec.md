@@ -11,9 +11,13 @@ person can name what is not ready from the indicator alone.
 
 The network, the AI and the Rust analyzer SHALL each show as one status
 indicator: a dot and words, drawn as a button whose accessible name says the
-indicator and its state. Each SHALL be in one of three states: ready (green
-dot), working (pulsing dot) or not ready (red dot). The words SHALL say the
-state; colour SHALL never be the only sign.
+indicator and its state. Each SHALL be in one of five states: ready (green
+dot), working (pulsing dot), waiting (warning dot: offline, a cluster that
+does not answer, an analyzer start that takes longer), failed (red dot: the
+analyzer's start threw) or idle (grey dot: the AI with no model connected, the
+analyzer before a Rust file or where the browser cannot run it). Red SHALL be
+used for a failure only. The words SHALL say the state; colour SHALL never be
+the only sign.
 
 #### Scenario: Three indicators in one pattern
 
@@ -27,29 +31,31 @@ state; colour SHALL never be the only sign.
 
 The network indicator SHALL show the cluster's name. While the connection
 has not answered yet it SHALL be working and read "<Name> · Connecting";
-when the cluster does not answer it SHALL be not ready, read "<Name> · Not
-answering" and be named "Change cluster, currently <name>, not answering".
-A click SHALL open the settings on the cluster, as the cluster row did.
+when the cluster does not answer it SHALL be waiting (warning dot), read
+"<Name> · Not answering" and be named "Change cluster, currently <name>, not
+answering". A click SHALL open the settings on the cluster, as the cluster row
+did.
 
 #### Scenario: A cluster that stops answering
 
 - **WHEN** the cluster stops answering
-- **THEN** the network indicator's dot is red, it reads "<Name> · Not
-  answering", and a click opens the settings on the cluster
+- **THEN** the network indicator's dot is the warning colour, it reads
+  "<Name> · Not answering", and a click opens the settings on the cluster
 
 ### Requirement: The AI indicator
 
 The AI indicator SHALL be ready while a model is connected and usable, show
 the model's name and be named "AI, ready" (not the model's name, which the
 composer's model button is named by). With no model connected,
-or the default backend while nobody is signed in, it SHALL be not ready, read
-"AI · Off" and be named "AI, off". A click SHALL open Connect a model.
+or the default backend while nobody is signed in, it SHALL be idle (grey
+dot), read "AI · Off" and be named "AI, off": no model is the user's choice,
+not a failure. A click SHALL open Connect a model.
 
 #### Scenario: No model connected
 
 - **WHEN** a signed-out user with no model connected opens the app
-- **THEN** the AI indicator reads "AI · Off", and a click opens Connect a
-  model
+- **THEN** the AI indicator reads "AI · Off" with a grey dot, and a click
+  opens Connect a model
 
 ### Requirement: The Rust analyzer indicator
 
@@ -78,23 +84,25 @@ offers nothing to press.
 
 ### Requirement: Offline reads on every indicator
 
-While the browser reports no connection, all three indicators SHALL be not
-ready and read "<Name> · Offline" ("AI · Offline", "Rust · Offline"), and their panels and sheet rows SHALL say
-"You're offline. Editing still works. Build, Deploy and the assistant need a
-connection." They SHALL return to their own state when the connection comes
-back.
+While the browser reports no connection, all three indicators SHALL be
+waiting (warning dot), the same colour as the offline notice over the stage,
+and read "<Name> · Offline" ("AI · Offline", "Rust · Offline"), and their
+panels and sheet rows SHALL say "You're offline. Editing still works. Build,
+Deploy and the assistant need a connection." They SHALL return to their own
+state when the connection comes back.
 
 #### Scenario: Going offline and back
 
 - **WHEN** the browser goes offline, then online again
-- **THEN** the three indicators read "Offline" with red dots, then return to
-  their own states
+- **THEN** the three indicators read "Offline" with warning dots, then return
+  to their own states
 
 ### Requirement: The rail shows three dots
 
 On the collapsed navigation (the rail), the three indicators SHALL show as
 three dot buttons, each named as its indicator and each doing what its
-indicator does.
+indicator does. Each dot SHALL show its words in a tooltip on hover and on
+focus, and SHALL be at least 44 px wide and tall under a finger.
 
 #### Scenario: The rail's dots
 
@@ -102,24 +110,32 @@ indicator does.
 - **THEN** it shows three dot buttons: "Cluster: <name>", the AI's and the
   Rust analyzer's
 
+#### Scenario: A rail dot says its state (manual)
+
+- **WHEN** a user hovers or focuses the AI's dot on the rail with no model
+  connected
+- **THEN** a tooltip reads "AI · Off"
+
 ### Requirement: The phone folds status into one chip
 
 Below 768 px the work page's bar SHALL show one status chip with the worst
-state: "Offline" while the browser reports no connection, "Ready" when all
-are ready, "Starting" when one is working and none is not ready, "<n> not
-ready" otherwise, named "Status, <words>". A tap SHALL open a sheet titled
-"Status" with one row per indicator: its dot, name and state words, what it
-means when not ready, and its action ("Change network", "Connect a model",
-"Reload"). The chip, each row's action and the sheet's close SHALL be at
-least 44 px tall.
+state: "Offline" while the browser reports no connection, "<n> not ready"
+when any indicator is waiting or failed (idle ones are not counted), red only
+when one has failed, "Starting" when one is working and none is waiting or
+failed, "Ready" otherwise, named "Status, <words>". Beside a project name the
+chip SHALL give way first: the name keeps at least 6 characters and the chip
+folds to its dot. A tap SHALL open a sheet titled "Status" with one row per
+indicator: its dot, name and state words, what it means when not ready, and
+its action ("Change network", "Connect a model", "Reload"). The chip, each
+row's action and the sheet's close SHALL be at least 44 px tall.
 
 #### Scenario: The phone chip names what is down
 
-- **WHEN** a user on a 390 px wide screen with no model connected taps the
-  status chip
-- **THEN** the chip reads "1 not ready" or more, and the sheet lists
-  Network, AI and Rust analyzer, with "AI · Off" and "Connect a model" on
-  the AI row
+- **WHEN** a user on a 390 px wide screen with no model connected, whose
+  cluster does not answer, taps the status chip
+- **THEN** the chip reads "1 not ready" (the cluster; the AI off is not
+  counted), and the sheet lists Network, AI and Rust analyzer, with "AI · Off"
+  and "Connect a model" on the AI row
 
 #### Scenario: The phone chip reads Offline
 
@@ -130,13 +146,15 @@ least 44 px tall.
 
 The slice SHALL send `status_indicator_picked` each time a user clicks an
 indicator or a sheet row's action, with `indicator` (`network`, `ai`, `rust`),
-`state` (`ready`, `working`, `not-ready`) and `from` (`row`, `rail`,
-`sheet`); and `status_sheet_opened` each time the phone's sheet opens, with
-`worst` (`ready`, `working`, `not-ready`). Connect a model opened from the AI
+`state` (`ready`, `working`, `not-ready`; a failure is sent as `not-ready` and
+an idle indicator as `ready`) and `from` (`row`, `rail`, `sheet`); and
+`status_sheet_opened` each time the phone's sheet opens, with `worst`
+(`ready`, `working`, `not-ready`). Connect a model opened from the AI
 indicator SHALL send the assistant's `assistant_connect_opened` with `via:
-"status"`, a new value of that event's `via`. The stage notice SHALL send
-`status_notice_shown` once each time a notice appears, with `notice`
-(`offline`, `cluster-down`), and `status_notice_action` each time a user
+"status"`. The stage notice SHALL send `status_notice_shown` once each time a
+notice appears, with `notice` (`offline`, `cluster-down`);
+`status_notice_dismissed` each time a user presses its Dismiss, with `notice`
+(`offline`, `cluster-down`); and `status_notice_action` each time a user
 presses one of its actions, with `notice` (`cluster-down`) and `action`
 (`retry`, `change-network`).
 
@@ -145,13 +163,18 @@ presses one of its actions, with `notice` (`cluster-down`) and `action`
 - **WHEN** a user clicks the AI indicator in the status row while no model
   is connected
 - **THEN** `status_indicator_picked` is sent with `indicator: "ai"`,
-  `state: "not-ready"`, `from: "row"`
+  `state: "ready"`, `from: "row"`
 
 #### Scenario: A notice is measured once per onset
 
 - **WHEN** the browser goes offline on the Build stage and the user switches
   to Deploy and back
 - **THEN** `status_notice_shown` is sent once, with `notice: "offline"`
+
+#### Scenario: Dismissing a notice is measured (manual)
+
+- **WHEN** a user presses Dismiss on the offline notice
+- **THEN** `status_notice_dismissed` is sent with `notice: "offline"`
 
 ### Requirement: A notice over the stage says why work waits
 
@@ -165,7 +188,9 @@ Playground keeps trying. You can switch network." with two buttons: "Try
 again", which asks the cluster again at once and is busy while it asks, and
 "Change network", which opens the settings with the network field focused.
 The Write and Build stages SHALL show no cluster notice. Each notice is a
-`role="alert"` callout and SHALL clear by itself when its condition ends.
+`role="alert"` callout with a "Dismiss" button (44 px under a finger) that
+hides it until its condition ends and comes back, and SHALL clear by itself
+when its condition ends.
 
 #### Scenario: Offline shows one line over the stage
 

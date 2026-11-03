@@ -1,11 +1,15 @@
 import type { AnalyzerState } from "@/components/Editor/Monaco/languages/rust/rust-analyzer/status";
 
 /**
- * One indicator's state. `idle` is neither ready nor not ready (the analyzer
- * before a Rust file, or where the browser cannot run it): grey, and left out
- * of the phone chip's count.
+ * One indicator's state. `not-ready` waits on something outside it (offline,
+ * a cluster that does not answer, a start that takes longer) and draws the
+ * warning colour the offline notice has; `failed` is broken (the analyzer
+ * threw) and is the only red. `idle` is neither ready nor not ready (the
+ * analyzer before a Rust file, or where the browser cannot run it; the AI
+ * with no model connected, which is the user's choice and not a failure):
+ * grey, and left out of the phone chip's count.
  */
-export type StatusState = "ready" | "working" | "not-ready" | "idle";
+export type StatusState = "ready" | "working" | "not-ready" | "failed" | "idle";
 
 export type IndicatorId = "network" | "ai" | "rust";
 
@@ -27,13 +31,18 @@ export interface StatusIndicator {
   label: string;
   /** The rail dot's name, where it differs from `label` */
   railLabel: string;
+  /** The rail dot's tooltip: the indicator and its state in the row's words,
+   * with the state said even where the row leaves it out ("Devnet · Ready"),
+   * because the rail shows no words beside its dot */
+  tip: string;
   /** What it means when not ready, for the panel and the sheet; null when
    * there is nothing to add to the words */
   detail: string | null;
   action: StatusAction | null;
 }
 
-/** The phone chip: the worst state of the three, in words */
+/** The phone chip: the worst state of the three, in words; one that failed
+ * outranks one that waits */
 export interface ChipView {
   state: Exclude<StatusState, "idle">;
   words: string;
@@ -82,6 +91,8 @@ export const networkIndicator = (
     // first load, and the settings' focus return and its tests look the
     // trigger up by its plain name meanwhile
     const spoken = suffix && state === "not-ready" ? `, ${suffix}` : "";
+    // Only ready and an unstarted Playnet come without a suffix
+    const tipWord = suffix ?? (state === "idle" ? "not started" : "ready");
     return {
       id: "network",
       name: "Network",
@@ -91,6 +102,7 @@ export const networkIndicator = (
       // dot keeps its own shorter one
       label: `Change cluster, currently ${name}${spoken}`,
       railLabel: `Cluster: ${name}${spoken}`,
+      tip: `${shown} · ${capitalize(tipWord)}`,
       detail,
       action: NETWORK_ACTION,
     };
@@ -124,6 +136,7 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
       words: "AI · Offline",
       label: "AI, offline",
       railLabel: "AI, offline",
+      tip: "AI · Offline",
       detail: OFFLINE_LINE,
       action: null,
     };
@@ -137,16 +150,20 @@ export const aiIndicator = (ai: AiInput, online: boolean): StatusIndicator => {
       // and a second button holding it would make that lookup ambiguous
       label: "AI, ready",
       railLabel: "AI, ready",
+      tip: `AI · Ready (${ai.model})`,
       detail: null,
       action: { kind: "ai", text: "Change model" },
     };
   }
+  // No model is the user's choice, not a failure: grey like the analyzer's
+  // Off, and not counted by the phone chip. Red stays for what is broken.
   return {
     ...base,
-    state: "not-ready",
+    state: "idle",
     words: "AI · Off",
     label: "AI, off",
     railLabel: "AI, off",
+    tip: "AI · Off",
     detail: ai.needsSignIn
       ? "Sign in to use the hosted model, or connect a model with your own key."
       : "Connect a model to ask the assistant. Write and Build work without it.",
@@ -176,6 +193,8 @@ export const analyzerIndicator = (
     words: word ? `Rust · ${word}` : "Rust",
     label: `Rust analyzer, ${spoken}`,
     railLabel: `Rust analyzer, ${spoken}`,
+    // Only the analyzer that has not started comes without a word
+    tip: `Rust · ${word ?? "Not started"}`,
     detail,
     action,
   });
@@ -212,7 +231,7 @@ export const analyzerIndicator = (
       );
     case "failed":
       return view(
-        "not-ready",
+        "failed",
         "Failed",
         "failed",
         "Code builds as normal. Hints and errors in the editor are off until it restarts.",
@@ -254,10 +273,15 @@ export const chipOf = (
   if (!online) {
     return { state: "not-ready", words: "Offline", label: "Status, offline" };
   }
-  const down = indicators.filter((i) => i.state === "not-ready").length;
+  const down = indicators.filter(
+    (i) => i.state === "not-ready" || i.state === "failed"
+  ).length;
   if (down > 0) {
     const words = `${down} not ready`;
-    return { state: "not-ready", words, label: `Status, ${words}` };
+    const state = indicators.some((i) => i.state === "failed")
+      ? "failed"
+      : "not-ready";
+    return { state, words, label: `Status, ${words}` };
   }
   if (indicators.some((i) => i.state === "working")) {
     return { state: "working", words: "Starting", label: "Status, starting" };
@@ -278,11 +302,12 @@ if (import.meta.vitest) {
     describe("networkIndicator", () => {
       it("names the cluster when it answers, under the settings trigger's name", () => {
         const n = networkIndicator(UP, true);
-        expect([n.state, n.words, n.label, n.railLabel]).toEqual([
+        expect([n.state, n.words, n.label, n.railLabel, n.tip]).toEqual([
           "ready",
           "Devnet",
           "Change cluster, currently devnet",
           "Cluster: devnet",
+          "Devnet · Ready",
         ]);
       });
 
@@ -291,10 +316,11 @@ if (import.meta.vitest) {
           { name: "devnet", isConnected: null, slotStalled: null },
           true
         );
-        expect([n.state, n.words, n.label]).toEqual([
+        expect([n.state, n.words, n.label, n.tip]).toEqual([
           "working",
           "Devnet · Connecting",
           "Change cluster, currently devnet",
+          "Devnet · Connecting",
         ]);
       });
 
@@ -303,10 +329,11 @@ if (import.meta.vitest) {
           { name: "playnet", isConnected: null, slotStalled: null },
           true
         );
-        expect([n.state, n.words, n.label]).toEqual([
+        expect([n.state, n.words, n.label, n.tip]).toEqual([
           "idle",
           "Playnet",
           "Change cluster, currently playnet",
+          "Playnet · Not started",
         ]);
       });
 
@@ -325,6 +352,7 @@ if (import.meta.vitest) {
           "Change cluster, currently devnet, not answering",
         ]);
         expect(stalled.words).toBe("Devnet · Not answering");
+        expect(down.tip).toBe("Devnet · Not answering");
         expect(down.action).toEqual({
           kind: "network",
           text: "Change network",
@@ -344,19 +372,21 @@ if (import.meta.vitest) {
     describe("aiIndicator", () => {
       it("names the model when one is connected", () => {
         const a = aiIndicator({ kind: "ready", model: "Opus 5.5" }, true);
-        expect([a.state, a.words, a.label]).toEqual([
+        expect([a.state, a.words, a.label, a.tip]).toEqual([
           "ready",
           "Opus 5.5",
           "AI, ready",
+          "AI · Ready (Opus 5.5)",
         ]);
       });
 
-      it("reads Off with Connect a model when none is", () => {
+      it("reads Off, grey, with Connect a model when none is", () => {
         const a = aiIndicator({ kind: "off", needsSignIn: false }, true);
-        expect([a.state, a.words, a.label, a.action]).toEqual([
-          "not-ready",
+        expect([a.state, a.words, a.label, a.tip, a.action]).toEqual([
+          "idle",
           "AI · Off",
           "AI, off",
+          "AI · Off",
           { kind: "ai", text: "Connect a model" },
         ]);
       });
@@ -368,7 +398,11 @@ if (import.meta.vitest) {
 
       it("reads Offline offline", () => {
         const a = aiIndicator({ kind: "ready", model: "Opus 5.5" }, false);
-        expect([a.state, a.words]).toEqual(["not-ready", "AI · Offline"]);
+        expect([a.state, a.words, a.tip]).toEqual([
+          "not-ready",
+          "AI · Offline",
+          "AI · Offline",
+        ]);
       });
     });
 
@@ -414,14 +448,14 @@ if (import.meta.vitest) {
         const words = (["ready", "failed", "off", "idle"] as const).map(
           (kind) => {
             const r = analyzerIndicator({ kind }, 0, true);
-            return [r.state, r.words];
+            return [r.state, r.words, r.tip];
           }
         );
         expect(words).toEqual([
-          ["ready", "Rust · Ready"],
-          ["not-ready", "Rust · Failed"],
-          ["idle", "Rust · Off"],
-          ["idle", "Rust"],
+          ["ready", "Rust · Ready", "Rust · Ready"],
+          ["failed", "Rust · Failed", "Rust · Failed"],
+          ["idle", "Rust · Off", "Rust · Off"],
+          ["idle", "Rust", "Rust · Not started"],
         ]);
       });
 
@@ -442,6 +476,15 @@ if (import.meta.vitest) {
 
       it("is Ready when nothing is down or starting, idle aside", () => {
         expect(chipOf([ready, ai, idle], true).words).toBe("Ready");
+      });
+
+      it("is Ready with only the AI off: no model is a choice, not a failure", () => {
+        const off = aiIndicator({ kind: "off", needsSignIn: true }, true);
+        expect(chipOf([ready, off, idle], true)).toEqual({
+          state: "ready",
+          words: "Ready",
+          label: "Status, ready",
+        });
       });
 
       it("is Starting when one works and none is down", () => {
@@ -470,13 +513,22 @@ if (import.meta.vitest) {
         });
       });
 
-      it("counts what is not ready", () => {
+      it("counts what is not ready, the AI off aside, red once one failed", () => {
+        const down = networkIndicator(
+          { name: "devnet", isConnected: false, slotStalled: null },
+          true
+        );
         const off = aiIndicator({ kind: "off", needsSignIn: false }, true);
         const failed = analyzerIndicator({ kind: "failed" }, 0, true);
-        expect(chipOf([ready, off, failed], true)).toEqual({
-          state: "not-ready",
+        expect(chipOf([down, off, failed], true)).toEqual({
+          state: "failed",
           words: "2 not ready",
           label: "Status, 2 not ready",
+        });
+        expect(chipOf([down, off, idle], true)).toEqual({
+          state: "not-ready",
+          words: "1 not ready",
+          label: "Status, 1 not ready",
         });
       });
     });

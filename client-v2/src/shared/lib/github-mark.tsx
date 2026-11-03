@@ -8,11 +8,13 @@ const GITHUB_MARK_PATH =
   " 2.2-.8.3.7.3 1.5.1 2.1a3 3 0 0 1 .8 2.1c0 3.1-1.9 3.8-3.7 4" +
   " .3.3.6.8.6 1.5v2.1c0 .2.1.4.5.4A8 8 0 0 0 8 .2Z";
 
-/** GitHub's mark; lucide no longer ships brand icons */
-const GithubMark = ({ className }: { className?: string }) => (
+/**
+ * GitHub's mark; lucide no longer ships brand icons. In `shared` because
+ * every GitHub sign-in draws it, and those sit in more than one widget
+ * (`session-footer`, `app-nav`), which may not import each other.
+ */
+export const GithubMark = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 16 16" aria-hidden className={className}>
     <path fill="currentColor" d={GITHUB_MARK_PATH} />
   </svg>
 );
-
-export default GithubMark;

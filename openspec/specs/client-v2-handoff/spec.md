@@ -9,8 +9,9 @@ the way out shows, what it tells them, and the link it hands over.
 ### Requirement: The way to a computer shows only on a phone
 
 Below the phone breakpoint the menu page SHALL show a button named
-"Continue on a computer" (test id `handoff-open`) under the project list. At
-the breakpoint and above, no such button SHALL be rendered.
+"Continue on a computer" (test id `handoff-open`) in a group of its own at the
+page's foot, drawn as one of the menu's rows and not as a project. At the
+breakpoint and above, no such button SHALL be rendered.
 
 #### Scenario: The phone's menu page offers it
 
@@ -24,15 +25,17 @@ the breakpoint and above, no such button SHALL be rendered.
 
 ### Requirement: The sheet gives a link to open on a computer
 
-The button SHALL open a bottom sheet titled "Continue on a computer" that
-shows a link (test id `handoff-link`): the app's origin and the current
-path. "Copy link" SHALL copy it and then read "Copied". Where the browser
-offers a share sheet, Share SHALL hand it the link. "Stay on the phone"
-SHALL close the sheet.
+The button SHALL open a bottom sheet titled "Continue on a computer". Signed
+in, it SHALL show a link (test id `handoff-link`): the app's origin and the
+current path; "Copy link" SHALL copy it and then read "Copied", and where the
+browser offers a share sheet, Share SHALL hand it the link. Signed out, the
+sheet SHALL show no link, Copy or Share: a computer would open the link
+without the project, which is on the phone alone. "Stay on the phone" SHALL
+close the sheet. Every button in the sheet SHALL be at least 48 px tall.
 
 #### Scenario: The link names this app and page
 
-- **WHEN** the sheet opens on a page of the app
+- **WHEN** a signed-in person opens the sheet on a page of the app
 - **THEN** the link reads the app's origin followed by that page's path
 - **AND** "Copy link" puts that link on the clipboard and reads "Copied"
 
@@ -41,7 +44,8 @@ SHALL close the sheet.
 Signed in, the sheet SHALL say the project is saved to their account and
 name the GitHub login to sign in with on the computer. Signed out, it SHALL
 say the project is saved on this phone only and offer "Sign in with GitHub",
-which starts the sign-in; once signed in the sheet reads as signed in.
+with the GitHub mark, as its one action; it starts the sign-in, and once
+signed in the sheet reads as signed in.
 
 #### Scenario: Signed in
 
@@ -52,7 +56,7 @@ which starts the sign-in; once signed in the sheet reads as signed in.
 
 - **WHEN** a signed-out person opens the sheet
 - **THEN** it says the project is on this phone only
-- **AND** it shows a "Sign in with GitHub" button
+- **AND** it shows a "Sign in with GitHub" button and no link
 
 ### Requirement: The hand-off is measured
 

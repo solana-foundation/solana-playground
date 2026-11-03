@@ -1,4 +1,4 @@
-// An input's label: its name in mono, its type and modifiers as tags.
+// An input's label: its name in mono, its type quiet beside it, modifiers as tags.
 import { render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
 
@@ -8,32 +8,37 @@ const tags = (container: HTMLElement) =>
   Array.from(container.querySelectorAll('[data-slot="tag"]')).map(
     (t) => t.textContent
   );
+const type = (container: HTMLElement) =>
+  container.querySelector('[data-slot="input-type"]');
 
-it("labels name the type, mut and signer as tags", () => {
+it("labels name the type, then mut and signer as tags", () => {
   const { container } = render(
     <InputLabel name="authority" type="publicKey" isMut isSigner />
   );
   expect(screen.getByText("authority").className).toContain("font-mono");
-  expect(tags(container)).toEqual(["publicKey", "mut", "signer"]);
+  expect(type(container)?.textContent).toBe("publicKey");
+  expect(tags(container)).toEqual(["mut", "signer"]);
 });
 
-// `Tag` sets its text in capitals; a type is code and keeps its own case
-it("the type tag keeps the type's case, in mono", () => {
+// A modifier is a fact about the account, not a warning
+it("mut and signer take the neutral tag", () => {
   const { container } = render(
-    <InputLabel name="authority" type="publicKey" />
+    <InputLabel name="authority" type="publicKey" isMut isSigner />
   );
-  const type = container.querySelector('[data-slot="tag"]')!;
-  expect(type.className).toContain("normal-case");
-  expect(type.className).toContain("font-mono");
+  const variants = Array.from(
+    container.querySelectorAll('[data-slot="tag"]')
+  ).map((t) => t.getAttribute("data-variant"));
+  expect(variants).toEqual(["neutral", "neutral"]);
 });
 
 it("a plain input carries its type alone", () => {
   const { container } = render(<InputLabel name="amount" type="u64" />);
-  expect(tags(container)).toEqual(["u64"]);
+  expect(type(container)?.textContent).toBe("u64");
+  expect(tags(container)).toEqual([]);
 });
 
 // A seed still being picked has no type yet (`FromSeed`)
-it("an empty type draws no tag", () => {
+it("an empty type draws nothing for it", () => {
   const { container } = render(<InputLabel name="seed(1)" type="" />);
-  expect(tags(container)).toEqual([]);
+  expect(type(container)).toBeNull();
 });

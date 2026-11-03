@@ -320,10 +320,10 @@ test.describe("client-v2-search-field", () => {
     // Reached by its id: `updateRefs` (InstructionInput) finds dependent
     // inputs by it, so SearchBar must keep it
     const amount = panel.locator("#initializeargsamount");
-    await amount.click();
-    await page
-      .locator('[data-slot="command"]')
-      .getByRole("option", { name: "Random" })
+    // A number's one pick is Random, a button in the field with no list
+    await amount
+      .locator("xpath=..")
+      .getByRole("button", { name: "Random" })
       .click();
     await expect(amount).toHaveValue(/^\d+$/);
   });

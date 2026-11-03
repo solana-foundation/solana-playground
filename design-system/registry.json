@@ -529,7 +529,7 @@
       "name": "callout",
       "type": "registry:ui",
       "title": "Callout",
-      "description": "A tinted note in a page or form: default, info, warning, success, error.",
+      "description": "A tinted note in a page or form: default, info, warning, success, error. CalloutActions holds its buttons under the text.",
       "registryDependencies": [
         "@playground/playground-tokens",
         "@playground/utils"
@@ -889,7 +889,7 @@
       "name": "stage-empty",
       "type": "registry:ui",
       "title": "Stage empty",
-      "description": "What a stage says before it has anything: media, title, meta, description, notice, actions, footer.",
+      "description": "What a stage says before it has anything: media, eyebrow, title, meta, description, notice, actions, footer.",
       "registryDependencies": [
         "@playground/playground-tokens",
         "@playground/utils"
@@ -1037,7 +1037,7 @@
       "name": "sonner",
       "type": "registry:ui",
       "title": "Sonner",
-      "description": "Stock shadcn sonner, as the design system ships it.",
+      "description": "Shadcn sonner with Close inside the toast at its end, and ToastProgress, the accent bar a timed toast drains over its duration.",
       "files": [
         {
           "path": "src/components/ui/sonner.tsx",

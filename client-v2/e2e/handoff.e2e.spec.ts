@@ -18,6 +18,8 @@ const openMenu = async (page: Page) => {
 
 const sheet = (page: Page) => page.getByRole("dialog", { name: TITLE });
 
+const ADA = { id: "u1", name: "Ada", image: null, login: "ada" };
+
 test.describe("on a phone", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
@@ -33,6 +35,8 @@ test.describe("on a phone", () => {
     context,
   }) => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    // The link and its buttons show signed in only
+    await stubSession(page, ADA);
     const lines = linesOn(page);
     const menu = await openMenu(page);
     await menu.getByRole("button", { name: TITLE }).click();
@@ -64,12 +68,7 @@ test.describe("on a phone", () => {
   });
 
   test("client-v2-handoff: Signed in", async ({ page }) => {
-    await stubSession(page, {
-      id: "u1",
-      name: "Ada",
-      image: null,
-      login: "ada",
-    });
+    await stubSession(page, ADA);
     const menu = await openMenu(page);
     await menu.getByRole("button", { name: TITLE }).click();
     await expect(sheet(page)).toContainText("saved to your account");
@@ -87,6 +86,11 @@ test.describe("on a phone", () => {
     await expect(
       sheet(page).getByRole("button", { name: "Sign in with GitHub" })
     ).toBeVisible();
+    // No link before the sign-in: the computer would find nothing at it
+    await expect(page.getByTestId("handoff-link")).toHaveCount(0);
+    await expect(
+      sheet(page).getByRole("button", { name: "Copy link" })
+    ).toHaveCount(0);
   });
 
   test("client-v2-handoff: Opening is counted", async ({ page }) => {
