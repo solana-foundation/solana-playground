@@ -5,7 +5,8 @@ import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
 import type { FundingFailure } from "@/commands/deploy/run";
-import { formatSol, networkName, shortKey } from "../model/format";
+import { networkInSentence, solOn } from "@/constants";
+import { formatSol, shortKey } from "../model/format";
 
 /** Solana's web faucet; it serves devnet and testnet */
 export const WEB_FAUCET_URL = "https://faucet.solana.com";
@@ -24,9 +25,9 @@ export interface BaseNotEnoughSolProps {
   onSignIn: () => void;
 }
 
-const reasonLine = (reason: FundingFailure, network: string) => {
+const reasonLine = (reason: FundingFailure, network: string | null) => {
   const lines: Record<FundingFailure, string> = {
-    signed_out: `Sign in with GitHub to request ${network} SOL.`,
+    signed_out: `Sign in with GitHub to request ${solOn(network)}.`,
     no_faucet: "This network has no faucet. Send SOL to the wallet below.",
     airdrop_failed: "The faucet did not send SOL.",
   };
@@ -35,17 +36,17 @@ const reasonLine = (reason: FundingFailure, network: string) => {
 
 /** The deploy stopped because the paying wallet holds too little SOL */
 const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
-  const network = networkName(p.cluster);
+  const network = networkInSentence(p.cluster);
   const hasWebFaucet = p.cluster === "devnet" || p.cluster === "testnet";
 
   return (
     <Callout variant="error" role="alert" aria-label="Not enough SOL">
       <CircleAlert />
-      <CalloutTitle>Not enough {network} SOL</CalloutTitle>
+      <CalloutTitle>Not enough {solOn(network)}</CalloutTitle>
       <CalloutDescription className="flex flex-col gap-2">
         <span>
-          This deploy needs {formatSol(p.needed)} SOL. The wallet has{" "}
-          {formatSol(p.balance)} SOL.
+          Your wallet has {formatSol(p.balance)} SOL, this deploy needs about{" "}
+          {formatSol(p.needed)} SOL.
         </span>
         <span>
           {reasonLine(p.reason, network)}
@@ -66,7 +67,7 @@ const BaseNotEnoughSol = (p: BaseNotEnoughSolProps) => {
         <span className="flex flex-wrap gap-2">
           {p.reason === "signed_out" ? (
             <Button size="sm" onClick={p.onSignIn}>
-              Sign in with GitHub
+              Sign in
             </Button>
           ) : (
             <Button size="sm" onClick={p.onRetry}>

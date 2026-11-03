@@ -1,4 +1,4 @@
-import { clusterName } from "@/constants";
+import { networkInSentence } from "@/constants";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
@@ -96,9 +96,9 @@ const amountNote = (
     return {
       ok: true,
       error: false,
-      text: cluster
-        ? `Sent on ${clusterName(cluster)}.`
-        : "Sent on the Playground's cluster.",
+      text: `Sent on ${
+        networkInSentence(cluster) ?? "the Playground's cluster"
+      }.`,
     };
   }
   const notes: Record<Exclude<SendCheck, { ok: true }>["problem"], string> = {
@@ -127,13 +127,13 @@ const failureText = (failure: FundFailure) => {
     case "send-declined":
       return { title: declinedIn(failure.wallet), detail: null };
     case "connect-failed":
-      return { title: "Couldn't connect the wallet.", detail: failure.detail };
+      return { title: "Could not connect the wallet.", detail: failure.detail };
     case "send-failed":
-      return { title: "Couldn't send the SOL.", detail: failure.detail };
+      return { title: "Could not send.", detail: failure.detail };
     case "send-unconfirmed":
       return {
-        title: "The SOL was sent, but not confirmed yet.",
-        detail: `Look up ${failure.signature} in an explorer before sending again.`,
+        title: "Sent, not confirmed yet.",
+        detail: `${failure.signature}. Check it in Explorer before you send again.`,
       };
   }
 };
@@ -184,7 +184,8 @@ const BaseFundDialog = ({
               No wallet extension found in this browser.
             </p>
             <p className="text-muted-foreground text-sm">
-              Install Phantom, Backpack or Solflare, then reload.
+              Install Phantom, Backpack or Solflare, then reload. Or keep using
+              the Playground wallet.
             </p>
           </div>
         )}

@@ -50,7 +50,8 @@ const props = (
   selected: over.deployments?.[0]?.id ?? null,
   onPick: over.onPick ?? vi.fn(),
   surface,
-  cluster: over.cluster === undefined ? "devnet" : over.cluster,
+  cluster: over.cluster === undefined ? "Devnet" : over.cluster,
+  network: over.cluster === undefined ? "devnet" : over.cluster,
   onGoTo: over.onGoTo ?? vi.fn(),
   idlLoad: <button>Upload IDL</button>,
   form: <div>FORM</div>,
@@ -194,7 +195,7 @@ describe("BaseInteract", () => {
     ["no-project", "No project open", false],
     ["checking", "Checking the program", false],
     ["not-built", "Nothing to call yet", true],
-    ["no-idl", "No IDL yet", true],
+    ["no-idl", "This program has no IDL", true],
     ["no-program-id", "No program id", true],
     ["bad-idl", "This IDL can't be read", false],
     ["unreachable", "Can't reach the network", false],
@@ -207,6 +208,13 @@ describe("BaseInteract", () => {
     expect(
       container.querySelector('[data-slot="stage-empty-actions"]') !== null
     ).toBe(hasAction);
+  });
+
+  it("a program with no IDL asks for its IDL", () => {
+    render(<BaseInteract {...props("no-idl")} />);
+    expect(
+      screen.getByText("Upload its IDL to call it from a form.")
+    ).toBeTruthy();
   });
 
   it("an unreachable network shows the error notice", () => {
@@ -224,7 +232,7 @@ describe("BaseInteract", () => {
       screen.getByRole("button", { name: "Copy program id" })
     ).toBeTruthy();
     expect(screen.getByText("Program").parentElement?.textContent).toContain(
-      "devnet"
+      "Devnet"
     );
   });
 

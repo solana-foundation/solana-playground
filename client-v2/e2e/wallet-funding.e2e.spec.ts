@@ -23,7 +23,7 @@ const account = (page: Page) =>
     .locator('[data-slot="sidebar-footer"]')
     .getByRole("button", { name: /^Account/ });
 const fundItem = (page: Page) =>
-  page.getByRole("menuitem", { name: "Fund from a wallet" });
+  page.getByRole("menuitem", { name: "Fund from a wallet…" });
 const dialog = (page: Page) =>
   page.getByRole("dialog", { name: "Fund your Playground wallet" });
 

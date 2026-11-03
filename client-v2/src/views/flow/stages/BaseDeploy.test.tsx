@@ -131,7 +131,7 @@ describe("BaseDeploy", () => {
     expect(warning?.textContent).toContain("Playground wallet");
     expect(warning?.textContent).toContain("your own machine");
     const deploy = screen.getByRole("button", {
-      name: "Deploy to Mainnet",
+      name: "Deploy to mainnet",
     });
     expect(deploy).toHaveProperty("disabled", false);
     expect(lastIsActions(container)).toBe("stage-empty-actions");
@@ -235,7 +235,7 @@ describe("BaseDeploy", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing deployed yet" })
     ).toBeTruthy();
-    const deploy = screen.getByRole("button", { name: "Deploy to Devnet" });
+    const deploy = screen.getByRole("button", { name: "Deploy to devnet" });
     expect(deploy).toHaveProperty("disabled", true);
     expect(deploy.getAttribute("title")).toBe("Build successfully first");
     expect(lastIsActions(container)).toBe("stage-empty-actions");
@@ -245,7 +245,7 @@ describe("BaseDeploy", () => {
     const p = props({ built: true, deploy: "idle", history: [] });
     const { container } = render(<BaseDeploy {...p} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Deploy to Devnet" }));
+    fireEvent.click(screen.getByRole("button", { name: "Deploy to devnet" }));
     expect(p.onDeploy).toHaveBeenCalled();
     expect(screen.getByText(PROGRAM_ID)).toBeTruthy();
     expect(brandButtons(container)).toHaveLength(1);
@@ -294,7 +294,7 @@ describe("BaseDeploy", () => {
     const { container } = render(<BaseDeploy {...p} />);
 
     const result = screen.getByRole("status", { name: "Deploy result" });
-    expect(result.textContent).toContain("Deployed to Devnet");
+    expect(result.textContent).toContain("Deployed to devnet");
     expect(result.querySelector("code")?.textContent).toBe(SHORT_ID);
     expect(result.querySelector('[data-slot="copy-button"]')).toBeTruthy();
     const explorer = within(result).getByRole("link", {
@@ -315,7 +315,7 @@ describe("BaseDeploy", () => {
 
     expect(brandButtons(container)).toHaveLength(1);
     expect(
-      screen.getByRole("button", { name: "Redeploy to Devnet" })
+      screen.getByRole("button", { name: "Redeploy to devnet" })
     ).toBeTruthy();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
   });
@@ -436,7 +436,24 @@ describe("BaseDeploy", () => {
       <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
     );
     expect(screen.getByLabelText("Who pays").textContent).toBe(
-      "Deploys from your Playground wallet · 7xKX…gAsU · 4.20 SOL"
+      "From your Playground wallet · 7xKX…gAsU · 4.20 SOL"
+    );
+    expect(screen.getByText(/^Deploying sends/).textContent).toBe(
+      "Deploying sends the compiled program to devnet."
+    );
+
+    rerender(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [],
+          payer: { address: WALLET, balance: 4.2, playground: false },
+        })}
+      />
+    );
+    expect(screen.getByLabelText("Who pays").textContent).toBe(
+      "From your wallet · 7xKX…gAsU · 4.20 SOL"
     );
 
     rerender(
@@ -448,7 +465,7 @@ describe("BaseDeploy", () => {
       "Deploys from a Playground wallet created on your first deploy."
     );
     expect(
-      screen.getByRole("button", { name: "Deploy to Devnet" })
+      screen.getByRole("button", { name: "Deploy to devnet" })
     ).toHaveProperty("disabled", false);
   });
 
@@ -486,7 +503,7 @@ describe("BaseDeploy", () => {
     render(<BaseDeploy {...p} />);
 
     const card = screen.getByRole("alert", { name: "Not enough SOL" });
-    expect(card.textContent).toContain("Not enough Devnet SOL");
+    expect(card.textContent).toContain("Not enough devnet SOL");
     expect(screen.queryByText("Deploy failed - see the console.")).toBeNull();
     fireEvent.click(within(card).getByRole("button", { name: "Try again" }));
     expect(p.onDeploy).toHaveBeenCalledOnce();
@@ -520,7 +537,7 @@ describe("BaseDeploy", () => {
       (b) => b.textContent
     );
     expect(labels).toEqual([
-      "Deploy to Devnet",
+      "Deploy to devnet",
       "Upload IDL",
       "Deploy with the CLI",
     ]);

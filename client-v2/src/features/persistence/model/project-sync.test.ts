@@ -542,7 +542,7 @@ describe("a conflict is asked once, not retried forever", () => {
     // A 409 on a tombstoned or missing row, and the merge's read of it a 404.
     // Asked as a divergence, both answers merge against a server that has
     // nothing to merge with and fail, so the banner could never be cleared --
-    // and "Keep as a new project", the answer that works, was never offered.
+    // and "Keep a copy", the answer that works, was never offered.
     global.fetch = vi.fn().mockImplementation((url: string, init: any) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (init?.method === "PUT") return Promise.resolve(refusal);

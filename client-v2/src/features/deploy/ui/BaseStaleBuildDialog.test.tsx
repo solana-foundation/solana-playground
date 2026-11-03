@@ -13,7 +13,12 @@ describe("BaseStaleBuildDialog", () => {
     render(<BaseStaleBuildDialog open={true} onAnswer={onAnswer} />);
 
     expect(
-      screen.getByRole("dialog", { name: "Your last build failed" })
+      screen.getByRole("dialog", { name: "The last build failed" })
+    ).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Deploy the last good build? It does not include your latest changes."
+      )
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: button }));
     expect(onAnswer).toHaveBeenCalledWith(answer);

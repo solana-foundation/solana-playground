@@ -1,6 +1,11 @@
 export { deployTelemetry } from "./model/telemetry";
 export type { DeployCluster, DeployFailedStep } from "./model/telemetry";
-export { formatSol, networkName, shortKey } from "./model/format";
+export {
+  formatSol,
+  networkInSentence,
+  networkName,
+  shortKey,
+} from "./model/format";
 export { answerBackup, isBackupAnswered } from "./model/backup";
 export { useDeployRun } from "./model/use-deploy-run";
 export { PgStageDeploy, useStageDeploy } from "./model/stage-deploy";

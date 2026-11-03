@@ -85,7 +85,7 @@ describe("InteractBody", () => {
     expect(screen.getByText("form initialize")).toBeTruthy();
     expect(screen.queryByText("form increment")).toBeNull();
     expect(
-      screen.getByText("Fee paid by Playground wallet · 0.5 SOL")
+      screen.getByText("Fee payer · Playground wallet · 0.5 SOL")
     ).toBeTruthy();
 
     fireEvent.click(screen.getByRole("radio", { name: "increment" }));

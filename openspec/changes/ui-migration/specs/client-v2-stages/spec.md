@@ -39,7 +39,7 @@ project without `src/lib.rs` builds as before.
   presses Build
 - **THEN** no request reaches the build server, the terminal and the Build
   stage say "lib.rs is empty. Write a program, or ask the assistant for one."
-- **AND** Deploy then warns "Your last build failed" and asks before it
+- **AND** Deploy then warns "The last build failed" and asks before it
   uploads the earlier binary
 
 ### Requirement: A slow build says so

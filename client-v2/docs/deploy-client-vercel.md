@@ -442,8 +442,8 @@ Vercel refuses a Function request body over 4.5 MB with its own `413`
 ([Functions limits](https://vercel.com/docs/functions/limitations)) on every
 plan, before the handler runs. The browser refuses a larger body before
 sending it and `PUT /api/projects` refuses it again, both as `too-large`, so the
-user reads the banner's "over the 4 MB sync limit" and never the platform's
-error.
+user reads the banner's "This project is over 4 MB. Remove or shrink its
+largest files, then try again." and never the platform's error.
 
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A

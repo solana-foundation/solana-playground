@@ -136,7 +136,7 @@ const FeePayer = () => {
   const sol = typeof balance === "number" ? `${+balance.toFixed(4)} SOL` : "—";
   return (
     <p className="m-0 mt-4 text-xs text-muted-foreground">
-      Fee paid by {who} · {sol}
+      Fee payer · {who} · {sol}
     </p>
   );
 };

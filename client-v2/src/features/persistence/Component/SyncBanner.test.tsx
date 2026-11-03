@@ -165,7 +165,34 @@ describe("SyncBanner wording", () => {
     });
     await act(async () => root.render(<SyncBanner />));
     expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
-      "This project is over the 4 MB sync limit. Remove or shrink its largest files, then try again."
+      "This project is over 4 MB. Remove or shrink its largest files, then try again."
     );
+  });
+
+  it("says another project in the account uses the name", async () => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+      projectId: "p1",
+      kind: "name-taken",
+    });
+    await act(async () => root.render(<SyncBanner />));
+    expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
+      "Another project in your account uses this name. Rename this one, then try again."
+    );
+  });
+
+  it("offers to keep a copy of a project deleted on another device", async () => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+      projectId: "p1",
+      kind: "deleted-elsewhere",
+    });
+    await act(async () => root.render(<SyncBanner />));
+    expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
+      "This project was deleted on another device, but this one has unsaved changes."
+    );
+    const labels = [...container.querySelectorAll("button")].map(
+      (b) => b.textContent
+    );
+    expect(labels).toContain("Keep a copy");
+    expect(labels).toContain("Delete anyway");
   });
 });

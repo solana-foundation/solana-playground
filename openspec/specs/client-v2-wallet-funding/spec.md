@@ -8,17 +8,17 @@ stays the one that deploys.
 ## Requirements
 
 ### Requirement: The account menu offers funding
-The account menu SHALL show the item "Fund from a wallet" whenever a
+The account menu SHALL show the item "Fund from a wallet…" whenever a
 Playground wallet account exists, and picking it SHALL open the Fund dialog.
 The item SHALL be hidden before the Playground wallet has been set up.
 
 #### Scenario: Playground wallet set up
 - **WHEN** the user has a Playground wallet and opens the account menu
-- **THEN** the menu shows "Fund from a wallet" in its wallet group
+- **THEN** the menu shows "Fund from a wallet…" in its wallet group
 
 #### Scenario: No Playground wallet yet
 - **WHEN** the Playground wallet has not been set up and the user opens the account menu
-- **THEN** the menu does not show "Fund from a wallet"
+- **THEN** the menu does not show "Fund from a wallet…"
 
 ### Requirement: The Fund dialog sends to the deploying wallet
 The dialog, titled "Fund your Playground wallet", SHALL name the receiving
@@ -93,11 +93,11 @@ updates on its own.
 
 #### Scenario: The transfer fails on the network
 - **WHEN** the transaction never reaches the cluster, or the cluster runs it and it fails
-- **THEN** the dialog stays open, shows "Couldn't send the SOL." with the reason, and the send button can be pressed again
+- **THEN** the dialog stays open, shows "Could not send." with the reason, and the send button can be pressed again
 
 #### Scenario: The transfer is sent but not confirmed
 - **WHEN** the transaction was sent and its confirmation times out or fails
-- **THEN** the dialog shows "The SOL was sent, but not confirmed yet." with the signature, and the send button stays disabled so the SOL cannot be sent twice
+- **THEN** the dialog shows "Sent, not confirmed yet." with the signature and "Check it in Explorer before you send again.", and the send button stays disabled so the SOL cannot be sent twice
 
 ### Requirement: Funding is measured
 The `features/fund-wallet` slice SHALL emit, with prefix `fund`:

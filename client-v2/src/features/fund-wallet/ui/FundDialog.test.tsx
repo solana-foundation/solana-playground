@@ -220,9 +220,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
       fireEvent.click(sendButton());
     });
 
-    expect(screen.getByRole("alert").textContent).toContain(
-      "Couldn't send the SOL."
-    );
+    expect(screen.getByRole("alert").textContent).toContain("Could not send.");
     expect(screen.getByRole("alert").textContent).toContain(
       "Blockhash not found"
     );
@@ -262,7 +260,7 @@ describe("features/fund-wallet/ui/FundDialog", () => {
     await connectPhantom();
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Couldn't connect the wallet."
+      "Could not connect the wallet."
     );
     expect(events("fund_wallet_connected")).toEqual([]);
   });

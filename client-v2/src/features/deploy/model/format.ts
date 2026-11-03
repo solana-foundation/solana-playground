@@ -1,4 +1,6 @@
-import { clusterName } from "@/constants";
+import { clusterName, networkInSentence, UNKNOWN_NETWORK } from "@/constants";
+
+export { networkInSentence };
 
 /** Lamports in one SOL */
 const LAMPORTS_PER_SOL = 1_000_000_000;
@@ -19,7 +21,7 @@ export const shortKey = (key: string): string =>
 
 /** The network's name in prose: "Mainnet" for mainnet-beta, "the network" while unknown */
 export const networkName = (cluster: string | null): string =>
-  clusterName(cluster) ?? "the network";
+  clusterName(cluster) ?? UNKNOWN_NETWORK;
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;

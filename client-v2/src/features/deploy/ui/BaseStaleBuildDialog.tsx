@@ -10,7 +10,7 @@ import {
 
 export interface BaseStaleBuildDialogProps {
   open: boolean;
-  /** `true` deploys the last successful build; closing the dialog is `false` */
+  /** `true` deploys the last good build; closing the dialog is `false` */
   onAnswer: (deploy: boolean) => void;
 }
 
@@ -22,10 +22,9 @@ const BaseStaleBuildDialog = ({
   <Dialog open={open} onOpenChange={(next) => !next && onAnswer(false)}>
     <DialogContent>
       <DialogHeader>
-        <DialogTitle>Your last build failed</DialogTitle>
+        <DialogTitle>The last build failed</DialogTitle>
         <DialogDescription>
-          Deploy the last successful build? It does not include your latest
-          changes.
+          Deploy the last good build? It does not include your latest changes.
         </DialogDescription>
       </DialogHeader>
       <DialogFooter>

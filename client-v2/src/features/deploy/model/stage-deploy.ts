@@ -37,7 +37,7 @@ export type StageDeployState =
   | { phase: "idle" }
   | {
       phase: "running";
-      /** The run is waiting on "Your last build failed" */
+      /** The run is waiting on "The last build failed" */
       askingStaleBuild: boolean;
     }
   | { phase: "stopped"; stop: StageStop }
@@ -186,7 +186,7 @@ export class PgStageDeploy {
     }
   }
 
-  /** The user answered "Your last build failed" */
+  /** The user answered "The last build failed" */
   static answerStaleBuild(deploy: boolean) {
     const resolve = PgStageDeploy._staleResolve;
     PgStageDeploy._staleResolve = null;

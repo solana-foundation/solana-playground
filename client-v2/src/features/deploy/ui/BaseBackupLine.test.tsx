@@ -13,7 +13,7 @@ describe("BaseBackupLine", () => {
     );
 
     expect(screen.getByLabelText("Keypair backup").textContent).toContain(
-      "Your program on Devnet is tied to this browser's wallet"
+      "Your program on devnet is tied to this browser's Playground wallet."
     );
     fireEvent.click(screen.getByRole("button", { name: "Save keypair" }));
     fireEvent.click(screen.getByRole("button", { name: "Not now" }));

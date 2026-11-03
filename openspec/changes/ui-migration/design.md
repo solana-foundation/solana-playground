@@ -947,7 +947,7 @@ and program info, in the order the pre-5.12 form checked:
 |---|---|---|
 | `no-project` | no workspace open | "No project open" |
 | `not-built` | no IDL, the project's own program | "Nothing to call yet", Go to Build |
-| `no-idl` | no IDL, an imported program | "No IDL yet", Load IDL file |
+| `no-idl` | no IDL, an imported program | "This program has no IDL", Load IDL file |
 | `no-program-id` | the program has no public key | "No program id", Go to Build (a build creates the key) |
 | `bad-idl` | the IDL's `instructions` is not a list | an error `StageEmptyNotice`, the pre-5.12 text |
 | `checking` | the first chain read has not settled | "Checking the program" |

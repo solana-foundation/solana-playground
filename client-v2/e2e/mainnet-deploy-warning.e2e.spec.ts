@@ -44,7 +44,7 @@ test("mainnet-deploy-warning: Deploy stage on mainnet shows the warning", async 
   await expect(warning).toContainText("Playground wallet");
   await expect(warning).toContainText("your own machine");
   await expect(
-    panel.getByRole("button", { name: "Deploy to Mainnet" })
+    panel.getByRole("button", { name: "Deploy to mainnet" })
   ).toBeVisible();
 });
 
@@ -56,7 +56,7 @@ test("mainnet-deploy-warning: Deploy stage on devnet shows no warning", async ({
   // The stage names its cluster once the endpoint is read; only then is
   // the warning's absence an answer
   await expect(
-    panel.getByRole("button", { name: "Deploy to Devnet" })
+    panel.getByRole("button", { name: "Deploy to devnet" })
   ).toBeVisible(LONG);
   await expect(
     panel.getByRole("alert", { name: "Mainnet deploy warning" })
@@ -94,7 +94,7 @@ test("mainnet-deploy-warning: Mainnet picked in Settings", async ({
   await pick("Devnet");
   await settings.getByRole("button", { name: "Back to app" }).click();
   await expect(
-    panel.getByRole("button", { name: "Deploy to Devnet" })
+    panel.getByRole("button", { name: "Deploy to devnet" })
   ).toBeVisible(LONG);
   await expect(
     panel.getByRole("alert", { name: "Mainnet deploy warning" })

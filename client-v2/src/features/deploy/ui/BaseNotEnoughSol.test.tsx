@@ -14,7 +14,7 @@ const renderCard = (props: Partial<BaseNotEnoughSolProps>) => {
   render(
     <TooltipProvider>
       <BaseNotEnoughSol
-        cluster={props.cluster ?? "devnet"}
+        cluster={props.cluster === undefined ? "devnet" : props.cluster}
         reason={props.reason ?? "airdrop_failed"}
         balance={props.balance ?? 0}
         needed={props.needed ?? 1_420_000_000}
@@ -36,9 +36,10 @@ describe("BaseNotEnoughSol", () => {
   it("names the network, the amounts, the address and the faucet's answer", () => {
     const { card, onRetry } = renderCard({ cause: "429 Too Many Requests" });
 
-    expect(card.textContent).toContain("Not enough Devnet SOL");
-    expect(card.textContent).toContain("needs 1.42 SOL");
-    expect(card.textContent).toContain("has 0.00 SOL");
+    expect(card.textContent).toContain("Not enough devnet SOL");
+    expect(card.textContent).toContain(
+      "Your wallet has 0.00 SOL, this deploy needs about 1.42 SOL."
+    );
     expect(card.textContent).toContain("7xKX…gAsU");
     expect(card.textContent).toContain("429 Too Many Requests");
     expect(
@@ -52,16 +53,26 @@ describe("BaseNotEnoughSol", () => {
     const { onSignIn } = renderCard({ reason: "signed_out" });
 
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Sign in with GitHub" })
-    );
+    expect(
+      screen.getByText("Sign in with GitHub to request devnet SOL.")
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     expect(onSignIn).toHaveBeenCalledOnce();
   });
 
   it("offers no web faucet on a network it does not serve", () => {
     renderCard({ cluster: "mainnet-beta", reason: "no_faucet" });
 
-    expect(screen.getByText("Not enough Mainnet SOL")).toBeTruthy();
+    expect(screen.getByText("Not enough mainnet SOL")).toBeTruthy();
     expect(screen.queryByRole("link", { name: "Open faucet" })).toBeNull();
+  });
+
+  it("names no network while the cluster is unknown", () => {
+    renderCard({ cluster: null, reason: "signed_out" });
+
+    expect(screen.getByText("Not enough SOL")).toBeTruthy();
+    expect(
+      screen.getByText("Sign in with GitHub to request SOL.")
+    ).toBeTruthy();
   });
 });

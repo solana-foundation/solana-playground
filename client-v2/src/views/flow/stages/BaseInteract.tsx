@@ -14,6 +14,7 @@ import {
   StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
+import { UNKNOWN_NETWORK } from "@/constants";
 import type { Stage } from "../state/stage";
 import { shortenId } from "./interact-callouts";
 import type { InteractSurface } from "./interact-surface";
@@ -32,8 +33,10 @@ export interface BaseInteractProps {
   selected: string | null;
   onPick: (id: string) => void;
   surface: InteractSurface;
-  /** The cluster for prose; null until the endpoint has been read */
+  /** The cluster's name for the program chip; null until the endpoint has been read */
   cluster: string | null;
+  /** The cluster as a sentence names it ("devnet"); null until the endpoint has been read */
+  network: string | null;
   onGoTo: (stage: Extract<Stage, "build" | "deploy">) => void;
   /** The "Upload IDL" action (`IdlActions mode="upload"`) */
   idlLoad: ReactNode;
@@ -62,7 +65,7 @@ type EmptySurface = Exclude<InteractSurface, "ready">;
 /** What an empty surface says; `notice` is an error, shown as a callout */
 interface EmptyCopy {
   title: string;
-  description?: (cluster: string) => string;
+  description?: (network: string) => string;
   notice?: string;
 }
 
@@ -85,9 +88,8 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
   // Deploy then asks for the build
   "not-built": NOTHING_TO_CALL,
   "no-idl": {
-    title: "No IDL yet",
-    description: () =>
-      "This program's Anchor IDL was not found. Upload the IDL file to call its instructions.",
+    title: "This program has no IDL",
+    description: () => "Upload its IDL to call it from a form.",
   },
   "no-program-id": {
     title: "No program id",
@@ -96,8 +98,8 @@ const COPY: Record<EmptySurface, EmptyCopy> = {
   },
   checking: {
     title: "Checking the program",
-    description: (cluster) =>
-      `Reading the program from ${cluster} to see whether it is deployed.`,
+    description: (network) =>
+      `Reading the program from ${network} to see whether it is deployed.`,
   },
   "bad-idl": {
     title: "This IDL can't be read",
@@ -152,7 +154,7 @@ const Empty = ({
       <StageEmptyTitle>{copy.title}</StageEmptyTitle>
       {copy.description && (
         <StageEmptyDescription>
-          {copy.description(p.cluster ?? "the network")}
+          {copy.description(p.network ?? UNKNOWN_NETWORK)}
         </StageEmptyDescription>
       )}
       {notice && (

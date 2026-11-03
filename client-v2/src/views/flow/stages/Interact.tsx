@@ -1,4 +1,8 @@
-import { clusterName } from "../../../constants";
+import {
+  clusterName,
+  networkInSentence,
+  UNKNOWN_NETWORK,
+} from "../../../constants";
 import { useEffect, useRef, useState } from "react";
 
 import BaseInteract from "./BaseInteract";
@@ -116,7 +120,7 @@ const Interact = () => {
     wallet && typeof balance === "number" && solNeeded(balance) && cluster
       ? {
           balance: +balance.toFixed(4),
-          cluster: clusterName(cluster),
+          cluster: networkInSentence(cluster) ?? UNKNOWN_NETWORK,
           airdrop: faucet === "available" ? airdrop : null,
         }
       : null;
@@ -144,6 +148,7 @@ const Interact = () => {
       onPick={pick}
       surface={surface}
       cluster={clusterName(cluster)}
+      network={networkInSentence(cluster)}
       onGoTo={(stage) => PgFlow.setStage(stage)}
       idlLoad={<IdlActions mode="upload" />}
       idlRefusal={idlRefusal(PgProgramInfo.readIdl())}

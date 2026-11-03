@@ -11,7 +11,8 @@ before on the same network.
 When the Interact stage has a program to call, its head SHALL show the program
 id shortened in the middle (first four and last four characters joined by
 "…") with a copy button labelled "Copy program id" that copies the full id,
-and the network name, capitalised ("Devnet", "Mainnet" for mainnet-beta).
+and the network name as a label, capitalised ("Devnet", "Mainnet" for
+mainnet-beta). Inside a sentence (the fee callout) the network is lower case.
 
 #### Scenario: A deployed program (manual)
 - **WHEN** a program is deployed on devnet and the person opens Interact
@@ -31,7 +32,7 @@ the picked one leaves the IDL.
 ### Requirement: The form calls with a Call button
 The form SHALL keep the typed Arguments and Accounts inputs, Fill and Reset,
 and SHALL show a Fee payer row naming who pays the fee and their balance
-("Fee paid by Playground wallet · 0.5 SOL", or the connected wallet's name).
+("Fee payer · Playground wallet · 0.5 SOL", or the connected wallet's name).
 Its main button SHALL read "Call <instruction>" (for example "Call increment"), and "Calling…" while the call is in flight,
 when the inputs are locked. Call SHALL be off without a wallet, while an input
 is invalid, and while the SOL needed callout shows.

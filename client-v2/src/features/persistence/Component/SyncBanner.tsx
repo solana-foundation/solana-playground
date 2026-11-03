@@ -85,10 +85,10 @@ const PROMPTS: Record<
   },
   "deleted-elsewhere": {
     message: () =>
-      "This project was deleted on another device, but you have unsaved changes here.",
+      "This project was deleted on another device, but this one has unsaved changes.",
     actions: [
       {
-        label: "Keep as a new project",
+        label: "Keep a copy",
         resolution: "keep-as-new",
         primary: true,
       },
@@ -103,12 +103,12 @@ const PROMPTS: Record<
   // stuck anyway.
   "name-taken": {
     message: () =>
-      "Another project in your account already uses this name, so this one cannot be uploaded. Rename it, then try again.",
+      "Another project in your account uses this name. Rename this one, then try again.",
     actions: [{ label: "Try again", resolution: "retry", primary: true }],
   },
   "too-large": {
     message: () =>
-      `This project is over the ${MAX_PROJECT_BODY_LABEL} sync limit. Remove or shrink its largest files, then try again.`,
+      `This project is over ${MAX_PROJECT_BODY_LABEL}. Remove or shrink its largest files, then try again.`,
     actions: [{ label: "Try again", resolution: "retry", primary: true }],
   },
 };
