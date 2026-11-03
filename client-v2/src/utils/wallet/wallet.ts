@@ -10,6 +10,7 @@ import {
 } from "../decorators";
 import { PgWeb3 } from "../web3";
 import { parseKeypairFile } from "./keypair-file";
+import { indexedDbStoreFor } from "./keystore";
 import type {
   AnyTransaction,
   SerializedWalletState,
@@ -18,6 +19,7 @@ import type {
   WalletAccount,
   WalletState,
 } from "./types";
+import { walletStorageWith } from "./wallet-storage";
 
 const defaultState: WalletState = {
   state: "setup",
@@ -28,17 +30,17 @@ const defaultState: WalletState = {
   standardName: null,
 };
 
+/** The wallet's state lives in its own IndexedDB database (`wallet-storage`) */
+const walletStorage = walletStorageWith(
+  indexedDbStoreFor("pg-wallet"),
+  localStorage
+);
+
 const storage = {
-  /** Relative path to program info */
-  KEY: "wallet",
-
   /** Read from storage and deserialize the data. */
-  read(): WalletState {
-    const serializedStateStr = localStorage.getItem(this.KEY);
-    if (!serializedStateStr) return defaultState;
-
-    const serializedState: SerializedWalletState =
-      JSON.parse(serializedStateStr);
+  async read(): Promise<WalletState> {
+    const serializedState = await walletStorage.read();
+    if (!serializedState) return defaultState;
     return { ...defaultState, ...serializedState };
   },
 
@@ -52,7 +54,7 @@ const storage = {
       standardName: wallet.standardName,
     };
 
-    localStorage.setItem(this.KEY, JSON.stringify(serializedState));
+    return walletStorage.write(serializedState);
   },
 };
 
@@ -174,9 +176,15 @@ const derive = () => ({
   }),
 });
 
-// TODO: Remove in 2024
+/** Where the wallet lived before the keystore; `walletStorage` moves it out */
+const LEGACY_KEY = "wallet";
+
+/**
+ * Upgrade the pre-accounts format (`sk`) in place in `localStorage`, before
+ * `walletStorage.read` moves the result to IndexedDB.
+ */
 const migrate = () => {
-  const walletStr = localStorage.getItem(storage.KEY);
+  const walletStr = localStorage.getItem(LEGACY_KEY);
   if (!walletStr) return;
 
   interface OldWalletState {
@@ -200,7 +208,7 @@ const migrate = () => {
   };
 
   // Set the new wallet format
-  localStorage.setItem(storage.KEY, JSON.stringify(newWallet));
+  localStorage.setItem(LEGACY_KEY, JSON.stringify(newWallet));
 
   // Remove wallet adapter key
   localStorage.removeItem("walletName");
