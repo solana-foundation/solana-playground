@@ -4,6 +4,7 @@ import {
   json,
   LONG,
   startProject,
+  stubAiStatus,
   stubSession,
   test,
   TEST_USER,
@@ -15,9 +16,10 @@ import { REMEMBERED_BACKEND_KEY } from "../src/views/sidebar/assistant/model/rem
  * The default backend is offered only to a signed-in user, because
  * `/api/agent` refuses anyone else.
  *
- * The probe is stubbed as configured, so this runs where no key exists, CI
- * included. Signed out, nothing pops up: a send opens Connect a model, which
- * offers sign-in in place of Start, and the prompt stays in the composer.
+ * The `/api/ai/status` probe is stubbed as hosted, so this runs where no key exists, CI
+ * included. Signed out, nothing pops up: Send waits, the composer's off row
+ * says why, and its Add a key opens Connect a model, which offers sign-in in
+ * place of Start; the prompt stays in the composer.
  */
 
 type AssistantWindow = Window & {
@@ -34,19 +36,19 @@ const connectDialog = (page: Page) =>
   page.getByRole("dialog", { name: "Connect a model" });
 
 /** A deployment that serves a default backend, which refuses every turn as signed out */
-const defaultBackendRefusing = (page: Page) =>
-  page.route("**/api/agent", (r) =>
-    r.request().method() === "GET"
-      ? json(r, { configured: true, model: "test-model" })
-      : r.fulfill({
-          status: 401,
-          contentType: "application/json",
-          body: JSON.stringify({
-            error: "Sign in with GitHub to use the default backend.",
-            reason: SIGNED_OUT_REASON,
-          }),
-        })
+const defaultBackendRefusing = async (page: Page) => {
+  await stubAiStatus(page, "test-model");
+  await page.route("**/api/agent", (r) =>
+    r.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({
+        error: "Sign in with GitHub to use the default backend.",
+        reason: SIGNED_OUT_REASON,
+      }),
+    })
   );
+};
 
 /** ...and a browser that picked the default before */
 const defaultBackendRemembered = async (page: Page) => {
@@ -67,6 +69,20 @@ const openProject = async (page: Page, name: string) => {
 const send = async (page: Page, text: string) => {
   await composer(page).fill(text);
   await page.getByRole("button", { name: "Send", exact: true }).click();
+};
+
+/**
+ * Asks once more after the session ended. The panel knows nobody is signed
+ * in by then (a sign-out, or the turn's 401 re-reading the session), so Send
+ * waits and the off row's Add a key is the way to Connect a model
+ */
+const askAgain = async (page: Page, text: string) => {
+  await composer(page).fill(text);
+  const addKey = page
+    .locator("#assistant-ai-off")
+    .getByRole("button", { name: "Add a key" });
+  await expect(addKey).toBeVisible(LONG);
+  await addKey.click();
 };
 
 /** Connect a model, open on the default backend and offering sign-in for it */
@@ -99,7 +115,14 @@ test("assistant-own-key: Signed out, the default backend offers sign-in", async 
   await stubSession(page, null);
   await openProject(page, "signed-out");
 
-  await send(page, "Why did my build fail?");
+  // The off row stands once the page has read the session, before any send
+  const addKey = page
+    .locator("#assistant-ai-off")
+    .getByRole("button", { name: "Add a key" });
+  await expect(addKey).toBeVisible(LONG);
+  await composer(page).fill("Why did my build fail?");
+  await composer(page).press("Enter");
+  await addKey.click();
 
   await expectSignInOffered(page);
   expect(await isConnected(page)).toBe(false);
@@ -158,9 +181,10 @@ test("assistant-own-key: Signing out while connected to the default backend", as
     page.getByRole("button", { name: "Account, signed out" })
   ).toBeVisible(LONG);
 
-  // Nothing pops up on its own; the next send asks
+  // Nothing pops up on its own; the off row says why and Send waits
   await expect(connectDialog(page)).toBeHidden();
-  await send(page, "Still there?");
+  await expect(page.locator("#assistant-ai-off")).toBeVisible(LONG);
+  await askAgain(page, "Still there?");
   await expectSignInOffered(page);
 });
 
@@ -177,6 +201,6 @@ test("assistant-own-key: The session ends mid-chat on the default backend", asyn
     page.getByText("Sign in with GitHub to use the default backend.")
   ).toBeVisible(LONG);
 
-  await send(page, "And now?");
+  await askAgain(page, "And now?");
   await expectSignInOffered(page);
 });

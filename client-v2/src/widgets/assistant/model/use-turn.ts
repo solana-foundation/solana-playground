@@ -199,6 +199,12 @@ export interface Turn {
   setInput(value: string): void;
   /** Open Connect a model, on `preset`'s backend when given */
   openConnect: ConnectOpener;
+  /**
+   * The off row's Add a key: Connect a model, on the backend that answered
+   * the open thread when that one needs a key, so a key-based conversation is
+   * never offered to another backend from here either (HOO-1719)
+   */
+  addKey(): void;
   /** A requested prompt waits in the composer for a backend to be connected */
   promptWaiting: boolean;
   /** Bumped whenever the composer's input should take focus */
@@ -409,6 +415,11 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   opener.current = open;
   const openConnect = (via: ConnectVia, preset?: ConnectPreset) =>
     opener.current(via, preset);
+
+  const addKey = () => {
+    const backend = resolveSendBackend();
+    openConnect("ai-off", backend.kind === "ask" ? backend.preset : undefined);
+  };
 
   /**
    * Whether a turn, a send still finding its backend, or a message waiting on
@@ -845,6 +856,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     input,
     setInput,
     openConnect,
+    addKey,
     promptWaiting,
     focusRequest,
   };

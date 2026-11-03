@@ -1,6 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
-import { expect, home, homeRegion, test } from "./fixtures";
+import { expect, home, homeRegion, stubAiStatus, test } from "./fixtures";
 
 const FIRST = "Define the hello instruction and log a message";
 
@@ -17,9 +17,7 @@ const rows = (page: Page) =>
  */
 const startHelloAnchor = async (page: Page) => {
   // No default backend, whatever the dev server is configured with
-  await page.route("**/api/agent", (route) =>
-    route.fulfill({ json: { configured: false, model: null } })
-  );
+  await stubAiStatus(page, "own");
   await page.goto("/");
   await expect(home(page)).toBeVisible();
   // A wide Home opens it with the card's "Open" button; a phone's card is

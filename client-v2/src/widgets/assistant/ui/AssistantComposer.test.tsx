@@ -29,6 +29,7 @@ vi.mock("../model/default-backend", async (importOriginal) => {
   return {
     probeDefaultBackend: original.probeDefaultBackend,
     resetDefaultBackendProbe: original.resetDefaultBackendProbe,
+    retryDefaultBackend: vi.fn(() => Promise.resolve(backend)),
     useDefaultBackend: () => backend,
   };
 });
@@ -138,7 +139,14 @@ beforeEach(() => {
   backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
   vi.spyOn(globalThis, "fetch").mockResolvedValue({
     ok: true,
-    json: async () => ({ configured: false }),
+    // `GET /api/ai/status` for a deployment with no hosted key; the session
+    // read finds no user in it
+    json: async () => ({
+      available: false,
+      key: "own",
+      reason: null,
+      model: null,
+    }),
   } as Response);
   PgAssistant.disconnect();
   PgAssistant.connect(anthropic);
@@ -452,6 +460,13 @@ describe("AssistantComposer, re-picking and busy", () => {
   });
 
   it("sends nothing for a re-pick of the connected default", async () => {
+    // Signed in, so the connected default answers and no off row is reported
+    await PgSession.refreshWith({
+      id: "u1",
+      name: null,
+      image: null,
+      login: null,
+    });
     PgAssistant.connect({ id: "default", apiKey: "" });
     const connect = vi.spyOn(PgAssistant, "connect");
     render(<Harness />);
@@ -531,18 +546,50 @@ describe("AssistantComposer, nothing connected", () => {
     ).toBeTruthy();
   });
 
+  it("keeps Send while the default is still being asked about", async () => {
+    PgAssistant.disconnect();
+    backend = { state: "checking" };
+    render(<Harness />);
+    await typeIn();
+    expect(sendBlocked()).toBe(false);
+  });
+
+  it("keeps Send where the default is served to a signed-in user", async () => {
+    await PgSession.refreshWith({
+      id: "u1",
+      name: null,
+      image: null,
+      login: null,
+    });
+    PgAssistant.disconnect();
+    backend = { state: "present", model: null };
+    render(<Harness />);
+    await typeIn();
+    expect(sendBlocked()).toBe(false);
+  });
+
   it.each([
-    ["could not be reached, so a send asks again", { state: "unreachable" }],
-    ["is still being asked about", { state: "checking" }],
-    ["is served, for a signed-out user", { state: "present", model: null }],
+    [
+      "the default could not be reached",
+      { state: "unreachable" },
+      "Can't reach the model",
+    ],
+    [
+      "the default is served to a signed-out user",
+      { state: "present", model: null },
+      "Sign in to send",
+    ],
   ] as const)(
-    "keeps Send where the default %s",
-    async (_, answer: DefaultBackend) => {
+    "blocks Send, with its reason, where %s",
+    async (_, answer: DefaultBackend, reason) => {
+      await PgSession.refreshWith(null);
       PgAssistant.disconnect();
       backend = answer;
       render(<Harness />);
       await typeIn();
-      expect(sendBlocked()).toBe(false);
+      expect(sendBlocked()).toBe(true);
+      expect(screen.getByRole("status").id).toBe("assistant-ai-off");
+      expect(document.body.innerHTML).toContain(reason);
     }
   );
 
@@ -557,6 +604,8 @@ describe("AssistantComposer, nothing connected", () => {
 
   it("says a requested prompt is waiting, in an info callout", async () => {
     PgAssistant.disconnect();
+    // Still being asked about, so nothing says the assistant is off
+    backend = { state: "checking" };
     render(<Harness />);
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
@@ -569,15 +618,141 @@ describe("AssistantComposer, nothing connected", () => {
     );
   });
 
-  it("names no sign-in in the waiting notice where there is no default", async () => {
+  it("folds a waiting prompt into the off row where there is no default", async () => {
     PgAssistant.disconnect();
     backend = { state: "absent" };
     render(<Harness />);
 
     act(() => PgAssistant.requestPrompt("Explain this error"));
 
-    expect((await screen.findByRole("status")).textContent).toBe(
-      "Connect a model to send this to the assistant. Your prompt is waiting in the composer."
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain(
+        "Your prompt is waiting in the composer."
+      )
     );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status").id).toBe("assistant-ai-off");
+  });
+});
+
+describe("AssistantComposer, the off row", () => {
+  const row = () => document.getElementById("assistant-ai-off");
+  /** The row, once the page's session read has answered */
+  const shownRow = () =>
+    waitFor(() => {
+      const found = row();
+      expect(found).not.toBeNull();
+      return found!;
+    });
+
+  beforeEach(async () => {
+    await PgSession.refreshWith(null);
+    PgAssistant.disconnect();
+  });
+
+  it("says a deployment with no hosted key needs a key, and Add a key opens Connect a model", async () => {
+    backend = { state: "absent" };
+    render(<Harness />);
+    expect(row()?.getAttribute("role")).toBe("status");
+    expect(row()?.textContent).toContain(
+      "The assistant needs a key of your own on this deployment."
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Add a key" }));
+    expect(openConnect).toHaveBeenCalledWith("ai-off", undefined);
+    expect(tracked()).toEqual([
+      ["assistant_ai_off_shown", { reason: "no-key" }],
+    ]);
+  });
+
+  it("offers sign-in or a key to a signed-out user, and signs in from the assistant", async () => {
+    backend = { state: "present", model: "m" };
+    const signIn = vi.spyOn(PgSession, "signIn").mockResolvedValue(undefined);
+    render(<Harness />);
+    expect((await shownRow()).textContent).toContain(
+      "Sign in with GitHub to use the hosted model, or add a key of your own."
+    );
+    expect(screen.getByRole("button", { name: "Add a key" })).toBeTruthy();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Sign in with GitHub" }));
+    expect(signIn).toHaveBeenCalledWith({ from: "assistant" });
+    expect(tracked()).toEqual([
+      ["assistant_ai_off_shown", { reason: "signed-out" }],
+    ]);
+  });
+
+  it("says a failed sign-in in the row", async () => {
+    backend = { state: "present", model: "m" };
+    vi.spyOn(PgSession, "signIn").mockRejectedValue(new Error("boom"));
+    render(<Harness />);
+    await shownRow();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Sign in with GitHub" }));
+    await waitFor(() =>
+      expect(row()?.textContent).toContain("Sign-in failed. Try again.")
+    );
+  });
+
+  it("goes away once the user signs in", async () => {
+    backend = { state: "present", model: "m" };
+    render(<Harness />);
+    await shownRow();
+    await act(() =>
+      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+    );
+    expect(row()).toBeNull();
+  });
+
+  it("asks again from Try again where the model could not be reached", async () => {
+    backend = { state: "unreachable" };
+    const { retryDefaultBackend } = await import("../model/default-backend");
+    render(<Harness />);
+    expect(row()?.textContent).toContain(
+      "The assistant can't reach its model. Try again in a minute."
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Try again" }));
+    expect(retryDefaultBackend).toHaveBeenCalled();
+  });
+
+  it("is reported once per reason however often it draws", () => {
+    backend = { state: "absent" };
+    const { rerender } = render(<Harness />);
+    rerender(<Harness />);
+    act(() => PgAssistant.addUserMessage("again"));
+    expect(
+      tracked().filter(([name]) => name === "assistant_ai_off_shown")
+    ).toEqual([["assistant_ai_off_shown", { reason: "no-key" }]]);
+  });
+
+  it("does not show while a key-based backend is connected", () => {
+    backend = { state: "absent" };
+    act(() => PgAssistant.connect(anthropic));
+    render(<Harness />);
+    expect(row()).toBeNull();
+  });
+
+  it("starts no session read of its own: the page's session effect reads it", () => {
+    PgSession.reset();
+    backend = { state: "present", model: "m" };
+    const reads = vi.mocked(globalThis.fetch);
+    reads.mockClear();
+    render(<Harness />);
+    expect(
+      reads.mock.calls.filter(([url]) =>
+        String(url).includes("/api/auth/get-session")
+      )
+    ).toEqual([]);
+    expect(row()).toBeNull();
+  });
+
+  it("does not show while the default is being asked about", () => {
+    backend = { state: "checking" };
+    render(<Harness />);
+    expect(row()).toBeNull();
   });
 });

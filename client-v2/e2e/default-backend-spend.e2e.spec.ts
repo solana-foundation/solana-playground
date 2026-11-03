@@ -1,9 +1,9 @@
 import type { Page, Route } from "@playwright/test";
 import {
   expect,
-  json,
   LONG,
   startProject,
+  stubAiStatus,
   stubSession,
   test,
 } from "./fixtures";
@@ -20,7 +20,7 @@ import {
  * What the panel says when the default backend refuses a turn by a limit,
  * and that the user can keep going on a key-based backend.
  *
- * `/api/agent` is stubbed: configured, signed in, answering the first turn
+ * `/api/ai/status` and `/api/agent` are stubbed: hosted, signed in, answering the first turn
  * and refusing the second. The limits themselves are tested on the route
  * (`src/features/agent/agent.integration.spec.ts`); this is what the user sees.
  */
@@ -53,10 +53,8 @@ const answersOnceThenRefuses = async (
   reason: typeof DAILY_CAP_REASON | typeof POOL_EXHAUSTED_REASON
 ) => {
   let turns = 0;
+  await stubAiStatus(page, "test-model");
   await page.route("**/api/agent", (route) => {
-    if (route.request().method() === "GET") {
-      return json(route, { configured: true, model: "test-model" });
-    }
     turns += 1;
     if (turns === 1) return streamed(route, FIRST_REPLY);
     return route.fulfill({

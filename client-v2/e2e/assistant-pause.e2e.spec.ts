@@ -1,16 +1,16 @@
 import type { Locator, Page } from "@playwright/test";
 import {
   expect,
-  json,
   LONG,
   startProject,
+  stubAiStatus,
   stubSession,
   test,
 } from "./fixtures";
 
 /**
  * The `pause_turn` scenarios of the `client-v2-ai` spec, run through the
- * default backend: the session and `/api/agent` are answered by `page.route`,
+ * default backend: the session, `/api/ai/status` and `/api/agent` are answered by `page.route`,
  * so no key and no server are needed, CI included.
  *
  * The resume limit is read off the error text rather than imported:
@@ -40,10 +40,8 @@ type Sent = { messages: { role: string; content: unknown }[] };
  */
 const serveAgent = async (page: Page, body: (n: number) => string) => {
   const sent: Sent[] = [];
+  await stubAiStatus(page, "test-model");
   await page.route("**/api/agent", (r) => {
-    if (r.request().method() === "GET") {
-      return json(r, { configured: true, model: "test-model" });
-    }
     sent.push(r.request().postDataJSON());
     return r.fulfill({
       status: 200,

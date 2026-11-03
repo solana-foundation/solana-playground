@@ -66,7 +66,11 @@ let provider: { id: "default"; label: string; send: ReturnType<typeof vi.fn> };
 const defaultBackend = (configured: boolean) =>
   vi.spyOn(globalThis, "fetch").mockResolvedValue({
     ok: true,
-    json: async () => ({ configured, model: "z-ai/glm-5.3-flash:US" }),
+    json: async () => ({
+      key: configured ? "hosted" : "own",
+      reason: null,
+      model: configured ? "z-ai/glm-5.3-flash:US" : null,
+    }),
   } as Response);
 
 /** A provider whose turn runs until its signal aborts, then rejects */
@@ -277,7 +281,7 @@ describe("useTurn", () => {
     await act(async () =>
       answer({
         ok: true,
-        json: async () => ({ configured: true, model: null }),
+        json: async () => ({ key: "hosted", reason: null, model: null }),
       } as Response)
     );
 
@@ -806,6 +810,25 @@ describe("useTurn when the key is gone", () => {
       },
     ]);
 
+  it("opens Connect from the off row's Add a key on the thread's own backend", () => {
+    defaultBackend(false);
+    threadAnsweredBy(OPENAI);
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => result.current.addKey());
+
+    expect(open).toHaveBeenCalledWith("ai-off", OPENAI);
+  });
+
+  it("opens Connect plain from Add a key on a thread no key-based backend answered", () => {
+    defaultBackend(false);
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => result.current.addKey());
+
+    expect(open).toHaveBeenCalledWith("ai-off", undefined);
+  });
+
   it("opens Connect on the thread's own backend instead of the default", async () => {
     defaultBackend(true);
     threadAnsweredBy(OPENAI);
@@ -905,7 +928,7 @@ describe("useTurn without a session", () => {
       if (!String(input).includes("/api/auth/get-session")) {
         return {
           ok: true,
-          json: async () => ({ configured: true, model: null }),
+          json: async () => ({ key: "hosted", reason: null, model: null }),
         } as Response;
       }
       reads();
@@ -1012,7 +1035,7 @@ describe("useTurn without a session", () => {
   });
 });
 
-/** A probe held until the test answers it, `configured` with no model */
+/** A probe held until the test answers it: a hosted key with no model, or none */
 const heldProbe = () => {
   let release!: (configured: boolean) => void;
   vi.spyOn(globalThis, "fetch").mockReturnValue(
@@ -1021,7 +1044,11 @@ const heldProbe = () => {
         resolve({
           ok: true,
           status: 200,
-          json: async () => ({ configured, model: null }),
+          json: async () => ({
+            key: configured ? "hosted" : "own",
+            reason: null,
+            model: null,
+          }),
         } as Response);
     })
   );
