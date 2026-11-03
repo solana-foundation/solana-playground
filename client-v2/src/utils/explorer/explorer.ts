@@ -1101,7 +1101,9 @@ export class PgExplorer {
    * `checkProjectLimits` drops the paths sync does not carry.
    */
   private static _projectFiles(): Record<string, string> {
-    const files: Record<string, string> = {};
+    // No prototype, as in `checkProjectLimits`: a root file named
+    // `__proto__` would otherwise go to the inherited setter, not the map
+    const files: Record<string, string> = Object.create(null);
     for (const [path, item] of Object.entries(this.files)) {
       if (item.content === undefined) continue;
       files[this.getRelativePath(path)] = item.content;

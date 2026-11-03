@@ -2083,10 +2083,14 @@ describe("a project over a sync limit", () => {
         count: 52,
       }),
     }));
+    await agreedOn("p1", "mine", many(2));
+    const before = markOf();
 
     expect(await PgProjectSync.push("p1", { files: many(3) }, "mine")).toBe(
       "conflict"
     );
+    // Not recorded: a mark here would make the refused file read as synced
+    expect(markOf()).toBe(before);
     expect(PgProjectSync.conflictFor("p1")).toEqual({
       projectId: "p1",
       kind: "too-large",

@@ -188,6 +188,13 @@ describe("/api/projects", () => {
       });
     });
 
+    it("reads a body of exactly 1,048,576 bytes", async () => {
+      const mod = await load();
+      const body = Buffer.from(`"${"x".repeat(1_048_574)}"`);
+      assert.equal(body.length, 1_048_576);
+      assert.equal((await mod.readBody(streamOf(body))).body.length, 1_048_574);
+    });
+
     it("refuses a body of 1,048,577 bytes", async () => {
       const mod = await load();
       assert.deepEqual(
@@ -521,6 +528,19 @@ describe("/api/projects", () => {
         limit: 50,
         count: 51,
       });
+    });
+
+    it("refuses the pre-#40 snapshot shape over a limit too", async () => {
+      // An old tab has no client check, so the route is its only one
+      const mod = await load();
+      const files = Object.fromEntries(
+        Array.from({ length: 51 }, (_, i) => [`f${i}`, ""])
+      );
+      assert.deepEqual(
+        mod.describeWrite({ snapshot: { files }, baseUpdatedAt, force: false })
+          .limit,
+        { reason: "too-many-files", limit: 50, count: 51 }
+      );
     });
 
     it("refuses a .workspace/ file sync does not carry, but lets one be removed", async () => {

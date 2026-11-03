@@ -824,6 +824,21 @@ describe("releasing local projects at sign-out", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it("removes a project whose generated files the account already holds", async () => {
+    // The other half of the check above: a built project, synced, is no
+    // more this browser's to keep than one never built
+    withLocal({ alpha: "p1" });
+    const files = {
+      "src/lib.rs": "same",
+      ".workspace/program-info.json": '{"kp":"same"}',
+    };
+    withFiles("alpha", files);
+    await agreed("p1", { files }, "t1");
+    stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual(["alpha"]);
+  });
+
   it("keeps a project with a sync question outstanding", async () => {
     // A refused push (`too-large`, a divergence) writes no mark, so the mark
     // says nothing about what the refusal left unsent
