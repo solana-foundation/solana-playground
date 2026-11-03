@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { useOnline } from "@/shared/lib/hooks/use-online";
 import { PgConnection } from "@/utils";
@@ -24,6 +24,11 @@ export const StageNotice = ({ stage, onOpenNetwork }: StageNoticeProps) => {
   const condition = noticeCondition(network, online);
   const notice = stageNotice(condition, network.name, stage);
 
+  // Put away for this episode only: once the condition ends or turns into
+  // another, the next one shows again
+  const [dismissed, setDismissed] = useState<NoticeCondition | null>(null);
+  if (dismissed !== null && dismissed !== condition) setDismissed(null);
+
   // Once per onset of a condition, when it first shows: a stage switch that
   // hides and shows the same condition again is not a new one
   const told = useRef<NoticeCondition | null>(null);
@@ -38,7 +43,14 @@ export const StageNotice = ({ stage, onOpenNetwork }: StageNoticeProps) => {
 
   return (
     <BaseStageNotice
-      notice={notice}
+      notice={dismissed === condition ? null : notice}
+      onDismiss={() => {
+        if (!notice) return;
+        statusTelemetry.track("status_notice_dismissed", {
+          notice: notice.kind,
+        });
+        setDismissed(notice.kind);
+      }}
       onRetry={async () => {
         statusTelemetry.track("status_notice_action", {
           notice: "cluster-down",

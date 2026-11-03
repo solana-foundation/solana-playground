@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
+import { SidebarProvider } from "@/shared/ui/sidebar";
+
 import type { BaseHandoffProps, HandoffAccount } from "./BaseHandoff";
 import BaseHandoff from "./BaseHandoff";
 
@@ -30,9 +32,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+// The row is a menu button of the stock Sidebar, which needs its provider
+const sheet = (over: Partial<BaseHandoffProps> = {}) => (
+  <SidebarProvider>
+    <BaseHandoff {...props(over)} />
+  </SidebarProvider>
+);
+
 it("opens from the row named Continue on a computer", () => {
   const onOpenChange = vi.fn();
-  render(<BaseHandoff {...props({ open: false, onOpenChange })} />);
+  render(sheet({ open: false, onOpenChange }));
   fireEvent.click(screen.getByTestId("handoff-open"));
   expect(onOpenChange).toHaveBeenCalledWith(true);
   expect(screen.getByTestId("handoff-open")).toBe(
@@ -41,7 +50,7 @@ it("opens from the row named Continue on a computer", () => {
 });
 
 it("signed in, says the project is in the account and names the login", () => {
-  render(<BaseHandoff {...props()} />);
+  render(sheet());
   expect(
     screen.getByRole("dialog", { name: "Continue on a computer" })
   ).toBeTruthy();
@@ -54,19 +63,30 @@ it("signed in, says the project is in the account and names the login", () => {
 
 it("signed out, says the project is on this phone only and offers sign-in", () => {
   const onSignIn = vi.fn();
-  render(<BaseHandoff {...props({ account: SIGNED_OUT, onSignIn })} />);
+  render(sheet({ account: SIGNED_OUT, onSignIn }));
   expect(screen.getByText(/on this phone only/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Sign in with GitHub" }));
+  const signIn = screen.getByRole("button", { name: "Sign in with GitHub" });
+  // GitHub's mark, as on every GitHub sign-in
+  expect(signIn.querySelector("svg")).toBeTruthy();
+  fireEvent.click(signIn);
   expect(onSignIn).toHaveBeenCalledTimes(1);
+});
+
+it("signed out, keeps the link and its buttons back until the sign-in", () => {
+  render(sheet({ account: SIGNED_OUT }));
+  expect(screen.queryByTestId("handoff-link")).toBeNull();
+  expect(screen.queryByRole("button", { name: "Copy link" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Stay on the phone" })
+  ).toBeTruthy();
 });
 
 it("holds the sign-in button while a sign-in is under way", () => {
   render(
-    <BaseHandoff
-      {...props({
-        account: { status: "signed-out", signingIn: true, error: null },
-      })}
-    />
+    sheet({
+      account: { status: "signed-out", signingIn: true, error: null },
+    })
   );
   expect(
     screen
@@ -77,15 +97,13 @@ it("holds the sign-in button while a sign-in is under way", () => {
 
 it("says why the last sign-in failed, under its button", () => {
   render(
-    <BaseHandoff
-      {...props({
-        account: {
-          status: "signed-out",
-          signingIn: false,
-          error: "The sign-in window was closed.",
-        },
-      })}
-    />
+    sheet({
+      account: {
+        status: "signed-out",
+        signingIn: false,
+        error: "The sign-in window was closed.",
+      },
+    })
   );
   expect(screen.getByRole("alert").textContent).toBe(
     "The sign-in window was closed."
@@ -93,14 +111,14 @@ it("says why the last sign-in failed, under its button", () => {
 });
 
 it("shows the whole link in its well", () => {
-  render(<BaseHandoff {...props()} />);
+  render(sheet());
   expect(screen.getByTestId("handoff-link").textContent).toBe(LINK);
 });
 
 it("reads Copied after a copy, and Copy link again 2 s later", async () => {
   vi.useFakeTimers();
   const onCopy = vi.fn().mockResolvedValue(true);
-  render(<BaseHandoff {...props({ onCopy })} />);
+  render(sheet({ onCopy }));
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
   });
@@ -112,7 +130,7 @@ it("reads Copied after a copy, and Copy link again 2 s later", async () => {
 
 it("never reads Copied when the copy is refused", async () => {
   const onCopy = vi.fn().mockResolvedValue(false);
-  render(<BaseHandoff {...props({ onCopy })} />);
+  render(sheet({ onCopy }));
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
   });
@@ -120,7 +138,7 @@ it("never reads Copied when the copy is refused", async () => {
 });
 
 it("forgets Copied when the sheet closes", async () => {
-  const draw = (open: boolean) => <BaseHandoff {...props({ open })} />;
+  const draw = (open: boolean) => sheet({ open });
   const { rerender } = render(draw(true));
   await act(async () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy link" }));
@@ -132,17 +150,17 @@ it("forgets Copied when the sheet closes", async () => {
 
 it("draws Share only where the browser can share", () => {
   const onShare = vi.fn().mockResolvedValue(undefined);
-  const { unmount } = render(<BaseHandoff {...props({ onShare })} />);
+  const { unmount } = render(sheet({ onShare }));
   fireEvent.click(screen.getByRole("button", { name: "Share" }));
   expect(onShare).toHaveBeenCalledTimes(1);
   unmount();
-  render(<BaseHandoff {...props({ onShare: null })} />);
+  render(sheet({ onShare: null }));
   expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
 });
 
 it("closes on Stay on the phone", () => {
   const onOpenChange = vi.fn();
-  render(<BaseHandoff {...props({ onOpenChange })} />);
+  render(sheet({ onOpenChange }));
   fireEvent.click(screen.getByRole("button", { name: "Stay on the phone" }));
   expect(onOpenChange).toHaveBeenCalledWith(false);
 });

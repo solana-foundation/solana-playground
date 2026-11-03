@@ -59,6 +59,23 @@ describe("IdlActions", () => {
     );
   });
 
+  /** Outlined where it is the way in; under Deploy's pill, a link */
+  it("draws Upload IDL outlined, or as a link when asked", () => {
+    const { rerender } = render(<IdlActions mode="upload" />);
+    expect(
+      screen
+        .getByRole("button", { name: "Upload IDL" })
+        .getAttribute("data-variant")
+    ).toBe("outline");
+
+    rerender(<IdlActions mode="upload" look="link" />);
+    expect(
+      screen
+        .getByRole("button", { name: "Upload IDL" })
+        .getAttribute("data-variant")
+    ).toBe("link");
+  });
+
   it("uses an IDL picked through it", async () => {
     const { container } = render(<IdlActions mode="upload" />);
 

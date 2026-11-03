@@ -52,8 +52,14 @@ const DownloadIdl = () => {
   );
 };
 
+/**
+ * How Upload IDL looks: an outlined button where it is the way in (Interact's
+ * toolbar and its no-IDL stage), a link under Deploy's pill, where it is rare
+ */
+type UploadLook = "outline" | "link";
+
 /** Loads an IDL file into this browser, picked through a button */
-const UploadIdl = () => {
+const UploadIdl = ({ look }: { look: UploadLook }) => {
   const [note, setNote] = useState<Note | null>(null);
 
   /** Refuses a file that is not an IDL; a throw after that is ours */
@@ -99,6 +105,7 @@ const UploadIdl = () => {
     <>
       <ImportButton
         accept=".json"
+        variant={look}
         title={LOAD_HINT}
         onImport={(ev) => {
           const file = ev.target.files?.[0];
@@ -118,7 +125,9 @@ const UploadIdl = () => {
  * saves what the build already produced, "Upload IDL" replaces the IDL
  * this app uses -- neither touches the chain.
  */
-const IdlActions: FC<{ mode: IdlActionsMode }> = ({ mode }) =>
-  mode === "download" ? <DownloadIdl /> : <UploadIdl />;
+const IdlActions: FC<{ mode: IdlActionsMode; look?: UploadLook }> = ({
+  mode,
+  look = "outline",
+}) => (mode === "download" ? <DownloadIdl /> : <UploadIdl look={look} />);
 
 export default IdlActions;

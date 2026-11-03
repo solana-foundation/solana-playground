@@ -8,7 +8,9 @@ import { cn } from "@/shared/lib/utils";
    of Solana's two colours that fills with them on hover. Its label takes the
    theme's text colour at rest (the fill is the surface, light in the light
    theme) and white over the gradient. accent is the flat purple, for where
-   the ring would be too loud. */
+   the ring would be too loud. A label alone sits in even padding; the
+   trailing mark (BrandButtonIcon) brings its own air, so the right side
+   gives up 4 px only when it is there. */
 const brandButtonVariants = cva(
   "group/brand-button inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap outline-none select-none transition-[transform,filter,opacity] duration-200 ease-[cubic-bezier(0.22,0.61,0.36,1)] focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 motion-reduce:transition-none [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
@@ -20,7 +22,7 @@ const brandButtonVariants = cva(
       },
       size: {
         default:
-          "h-10 pr-4 pl-5 font-heading text-[0.9375rem] [&_svg:not([class*='size-'])]:size-[1.15em]",
+          "h-10 px-5 has-data-[slot=brand-button-icon]:pr-4 font-heading text-[0.9375rem] [&_svg:not([class*='size-'])]:size-[1.15em]",
         sm: "h-[1.625rem] px-3 text-xs [&_svg:not([class*='size-'])]:size-3.5",
         icon: "size-8 [&_svg:not([class*='size-'])]:size-4",
       },

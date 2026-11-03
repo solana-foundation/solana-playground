@@ -7,7 +7,6 @@ import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import {
   Collapsible,
   CollapsibleChevron,
@@ -30,7 +29,6 @@ import {
   StageEmptyDescription,
   StageEmptyMedia,
   StageEmptyMeta,
-  StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 
@@ -163,11 +161,21 @@ const ContinueButton = ({ p }: { p: BaseBuildProps }) => (
 );
 
 /**
- * The first build: the prototype's brand pill with the play mark. A
+ * Build as the surface's brand pill: the first build, with the play mark,
+ * and Try again after a build that never reached the compiler, which is
+ * that surface's main action as Continue to Deploy is the success's. A
  * `BrandButton` rather than `AsyncButton`, which is a `Button` and has no
  * brand look, so the busy state and the failure report are kept here.
  */
-const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
+const BrandBuildButton = ({
+  p,
+  label,
+  icon = false,
+}: {
+  p: BaseBuildProps;
+  label: string;
+  icon?: boolean;
+}) => (
   <BrandButton
     disabled={p.building || p.offline}
     aria-busy={p.building || undefined}
@@ -176,8 +184,8 @@ const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
       Promise.resolve().then(p.onBuild).catch(reportButtonFailure("build"));
     }}
   >
-    {p.building ? "Building…" : "Build"}
-    {!p.building && <BrandButtonIcon />}
+    {p.building ? "Building…" : label}
+    {icon && !p.building && <BrandButtonIcon />}
   </BrandButton>
 );
 
@@ -199,7 +207,7 @@ const Empty = (p: BaseBuildProps) => (
         ? `Compiling on ${p.host}. A first build there can take several minutes.`
         : "Build compiles your program on the server. Only the source leaves your browser."
     }
-    actions={<FirstBuildButton p={p} />}
+    actions={<BrandBuildButton p={p} label="Build" icon />}
     // A first build says it is slow in its own words below (Spec 06), so
     // Spec 08's line stays empty here: two lines would say it twice
     progress={{ building: p.building, slow: false }}
@@ -225,32 +233,34 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   }
   const noAnswer = p.failure?.kind === "no-answer";
   return (
+    // No duration: a build that never ran took no time worth naming. The
+    // reason is the description, as on every other surface: the red icon
+    // already says it failed, so a red box under it would say it twice
     <Surface
       icon={<CircleX className="text-error" />}
-      // Spec 08 ANY-00 ends the title with a full stop
-      title={noAnswer ? "Build did not start" : "Could not build."}
-      meta={msLabel(p.ms)}
+      title={noAnswer ? "Build did not start" : "Could not build"}
+      description={
+        noAnswer
+          ? "The Playground server did not answer. Your code is unchanged."
+          : "Build stopped for a reason we can't name. The full log has the details."
+      }
       actions={
         <>
-          <BuildButton p={p} label="Try again" />
+          <BrandBuildButton p={p} label="Try again" />
           {!noAnswer && (
-            <Button variant="outline" onClick={p.onShowLog}>
-              Show full log
-            </Button>
+            // A link under the pill, as Deploy's Upload IDL: the log is
+            // there if wanted, Try again is the way on. Full width, so the
+            // row wraps and the link takes a line of its own
+            <div className="flex w-full justify-center">
+              <Button variant="link" onClick={p.onShowLog}>
+                Show full log
+              </Button>
+            </div>
           )}
         </>
       }
       progress={p}
     >
-      <StageEmptyNotice>
-        <Callout variant="error">
-          <CalloutDescription>
-            {noAnswer
-              ? "The Playground server did not answer. Your code is unchanged."
-              : "Build stopped for a reason we can't name. The full log has the details."}
-          </CalloutDescription>
-        </Callout>
-      </StageEmptyNotice>
       {noAnswer && (
         <Details serverUrl={p.serverUrl} failure={p.failure?.message ?? null} />
       )}

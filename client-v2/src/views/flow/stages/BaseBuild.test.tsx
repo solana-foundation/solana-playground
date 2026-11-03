@@ -195,10 +195,10 @@ describe("BaseBuild", () => {
       kind: "unreached",
       failure: { kind: "other", message: "Server request failed: boom" },
     });
-    render(<BaseBuild {...p} />);
+    const { container } = render(<BaseBuild {...p} />);
 
     expect(
-      screen.getByRole("heading", { name: "Could not build." })
+      screen.getByRole("heading", { name: "Could not build" })
     ).toBeTruthy();
     // Spec 08 ANY-00: what happened, then where the details are
     expect(
@@ -212,6 +212,53 @@ describe("BaseBuild", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
     expect(p.onShowLog).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  /** The red icon says it failed; the reason reads as any other description */
+  it.each([
+    ["ANY-00", { kind: "other", message: "boom" }],
+    ["BUILD-04", { kind: "no-answer", message: "Failed to fetch" }],
+  ] as const)(
+    "gives a build that never ran (%s) its reason as the description, with no duration",
+    (_, failure) => {
+      const { container } = render(
+        <BaseBuild {...props({ kind: "unreached", failure })} />
+      );
+
+      expect(container.querySelector('[data-slot="callout"]')).toBeNull();
+      expect(
+        container.querySelector('[data-slot="stage-empty-description"]')
+      ).toBeTruthy();
+      expect(
+        container.querySelector('[data-slot="stage-empty-meta"]')
+      ).toBeNull();
+      expect(screen.queryByText(/2\.9 s/)).toBeNull();
+    }
+  );
+
+  /** Try again is the surface's main action, the same pill as Continue to Deploy */
+  it("offers Try again as the brand pill, the full log a link under it", async () => {
+    const p = props({
+      kind: "unreached",
+      failure: { kind: "other", message: "boom" },
+    });
+    const { container } = render(<BaseBuild {...p} />);
+
+    const brand = brandButtons(container);
+    expect(brand).toHaveLength(1);
+    expect(brand[0].textContent).toBe("Try again");
+    expect(brand[0].getAttribute("data-variant")).toBe("ring");
+    expect(brand[0].getAttribute("data-size")).toBe("default");
+    expect(
+      screen
+        .getByRole("button", { name: "Show full log" })
+        .getAttribute("data-variant")
+    ).toBe("link");
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    });
+    expect(p.onBuild).toHaveBeenCalled();
   });
 
   it("keeps BUILD-04 on its details, with no full log", () => {

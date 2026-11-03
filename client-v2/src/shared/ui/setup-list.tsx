@@ -132,7 +132,7 @@ function SetupListIndicator({
       data-slot="setup-list-indicator"
       aria-hidden="true"
       className={cn(
-        "grid size-3.5 shrink-0 place-items-center rounded-full border-[1.5px] border-subtle group-data-[status=done]/setup-item:border-success group-data-[status=done]/setup-item:bg-success group-data-[status=warn]/setup-item:border-error",
+        "grid size-3.5 shrink-0 place-items-center rounded-full border-[1.5px] border-subtle group-data-[status=done]/setup-item:border-success group-data-[status=done]/setup-item:bg-success group-data-[status=warn]/setup-item:border-warning",
         className
       )}
       {...props}
@@ -161,7 +161,7 @@ function SetupListValue({ className, ...props }: React.ComponentProps<"span">) {
     <span
       data-slot="setup-list-value"
       className={cn(
-        "ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-error [&_svg]:size-3",
+        "ml-auto shrink-0 text-xs text-muted-foreground group-data-[status=warn]/setup-item:text-warning [&_svg]:size-3",
         className
       )}
       {...props}

@@ -233,6 +233,21 @@
  * Monaco's inlay hints. Monaco writes their `dyn-rule-*` classes into an
  * unlayered stylesheet of its own, so this stays unlayered to beat them.
  */
+/* A phone's scrollbar is a pill over the code, as iOS draws it, with no
+   track and no hover colours of its own (Monaco.tsx, PHONE_SCROLLBAR) */
+.pg-monaco[data-phone] .monaco-scrollable-element > .scrollbar > .slider,
+.pg-monaco[data-phone] .monaco-scrollable-element > .scrollbar > .slider:hover,
+.pg-monaco[data-phone]
+  .monaco-scrollable-element
+  > .scrollbar
+  > .slider.active {
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--text-primary) 42%, transparent);
+}
+.pg-monaco[data-phone] .monaco-scrollable-element > .scrollbar {
+  background: transparent;
+}
+
 .pg-monaco span[class^="dyn-rule"],
 .pg-monaco span[class*=" dyn-rule"] {
   font-size: 12px;
@@ -247,16 +262,6 @@
   }
   100% {
     opacity: 1;
-  }
-}
-
-/* A timed toast's bar, drained over its duration (widgets/overlays) */
-@keyframes pg-toast-progress {
-  from {
-    transform: scaleX(1);
-  }
-  to {
-    transform: scaleX(0);
   }
 }
 

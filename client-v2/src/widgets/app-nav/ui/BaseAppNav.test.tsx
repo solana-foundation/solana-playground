@@ -121,7 +121,7 @@ it("on a phone, heads the menu with the logo and a close, not a collapse", () =>
   expect(onToggle).toHaveBeenCalledOnce();
 });
 
-it("draws the way to a computer only on a phone, under the project list", () => {
+it("draws the way to a computer only on a phone, in its own group above Get set up", () => {
   const nav = (phone: boolean) => (
     <TooltipProvider>
       <SidebarProvider>
@@ -143,8 +143,16 @@ it("draws the way to a computer only on a phone, under the project list", () => 
   const { rerender } = render(nav(true));
   const projects = screen.getByText("projects");
   const handoff = screen.getByText("handoff");
+  const setup = screen.getByText("setup");
+  // Not in the group the project list sits in, where it read as a project
+  const group = (node: Element) => node.closest("[data-sidebar=group]");
+  expect(group(handoff)).toBeTruthy();
+  expect(group(handoff)).not.toBe(group(projects));
   expect(
     projects.compareDocumentPosition(handoff) & Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy();
+  expect(
+    handoff.compareDocumentPosition(setup) & Node.DOCUMENT_POSITION_FOLLOWING
   ).toBeTruthy();
   rerender(nav(false));
   expect(screen.queryByText("handoff")).toBeNull();

@@ -66,7 +66,8 @@ test.describe("on a 1440 px window", () => {
     await ai(page).click();
     await expect
       .poll(() => lineOf(lines, "status_indicator_picked"))
-      .toContain("{indicator: ai, state: not-ready, from: row}");
+      // No model is grey (`idle`), which is measured as ready
+      .toContain("{indicator: ai, state: ready, from: row}");
   });
 
   test("client-v2-status: A cluster that stops answering", async ({
@@ -81,9 +82,10 @@ test.describe("on a 1440 px window", () => {
     await expect(down).toHaveText("Devnet · Not answering", {
       timeout: 15_000,
     });
+    // Waiting, not broken: the offline notice's warning colour, not red
     await expect(down.locator('[data-slot="status-dot"]')).toHaveAttribute(
       "data-variant",
-      "error"
+      "warning"
     );
     const lines = linesOn(page);
     await down.click();
@@ -230,6 +232,9 @@ test("client-v2-status: The rail's dots", async ({ page }) => {
   await expect(
     rail.getByRole("button", { name: /^Rust analyzer/ })
   ).toBeVisible();
+  // The rail has no words, so each dot's tooltip says its state
+  await rail.getByRole("button", { name: /^Cluster: devnet/ }).hover();
+  await expect(page.getByRole("tooltip")).toHaveText(/^Devnet · /);
   const lines = linesOn(page);
   await rail.getByRole("button", { name: /^Cluster: devnet/ }).click();
   await expect
@@ -243,13 +248,18 @@ test.describe("on a phone", () => {
   test("client-v2-status: The phone chip names what is down", async ({
     page,
   }) => {
+    // No model alone is not a failure and is not counted: something has to
+    // be down for the chip to name it
+    await stallDevnet(page);
     // The seed waits on the tree a phone keeps in a closed Sheet
     await page.setViewportSize({ width: 1280, height: 800 });
     await seedWorkspace(page);
     await page.setViewportSize({ width: 390, height: 844 });
 
     const chip = page.getByTestId("status-chip");
-    await expect(chip).toHaveAccessibleName(/^Status, \d not ready$/);
+    await expect(chip).toHaveAccessibleName("Status, 1 not ready", {
+      timeout: 15_000,
+    });
     expect((await chip.boundingBox())?.height).toBeGreaterThanOrEqual(44);
     await chip.click();
 

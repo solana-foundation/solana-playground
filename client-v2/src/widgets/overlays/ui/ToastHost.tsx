@@ -7,14 +7,13 @@ import { useIsMobile } from "@/shared/lib/hooks/use-mobile";
 import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import { uuid } from "@/shared/lib/ids";
 import { createLogger } from "@/shared/lib/logger";
-import { Toaster } from "@/shared/ui/sonner";
+import { Toaster, ToastProgress } from "@/shared/ui/sonner";
 import type { Elementable } from "@/utils/types";
 import type { ToastId, ToastOptions, ToastRequest } from "@/utils/view";
 import { PgView } from "@/utils/view";
 import { DEFAULT_TOAST_DURATION } from "@/utils/view";
 
 import { overlayTelemetry } from "../model/telemetry";
-import { ToastProgress } from "./ToastProgress";
 
 const log = createLogger("overlays:toast-host");
 

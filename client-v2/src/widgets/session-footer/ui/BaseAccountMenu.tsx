@@ -11,6 +11,7 @@ import {
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 
+import { GithubMark } from "@/shared/lib/github-mark";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { shortAddress } from "@/shared/lib/short-address";
@@ -37,7 +38,6 @@ import {
   SIGN_OUT_QUESTION,
 } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
-import GithubMark from "./GithubMark";
 
 export interface BaseAccountMenuProps {
   account: AccountView;

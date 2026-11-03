@@ -113,7 +113,8 @@ it("warns on a network that does not answer, with no tick and no button", () => 
     "Choose a network, devnet is not respondingdevnet"
   );
   expect(screen.queryByRole("button", { name: /Choose a network/ })).toBeNull();
+  // The warning network still counts: it is chosen, only not answering
   expect(screen.getByRole("button", { name: /^Get set up/ }).textContent).toBe(
-    "Get set up· 1 of 4"
+    "Get set up· 2 of 4"
   );
 });

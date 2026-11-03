@@ -19,8 +19,10 @@ import { DOT, StatusDetail } from "./parts";
 
 /**
  * The status row on the rail: the three dots, one button each, doing what
- * their indicators do in the row. The names carry the words the rail has no
- * room for, and show as tooltips.
+ * their indicators do in the row (the network opens the settings, the AI
+ * Connect a model, the analyzer its panel). The rail has no room for words,
+ * so each dot's tooltip, on hover and on focus, says the indicator and its
+ * state in the row's words.
  */
 const BaseStatusRail = ({
   indicators,
@@ -35,7 +37,13 @@ const BaseStatusRail = ({
         "aria-label": indicator.railLabel,
         "data-status": indicator.id,
         "data-state-kind": indicator.state,
-        className: "justify-center",
+        // A fingertip wide and tall on a touch screen (Spec 06,
+        // "Accessibility"). The stock rail fixes its buttons at 32 px with an
+        // important size under the same group selector, so the override
+        // repeats it; the margin keeps the dot on the rail icons' centre line.
+        className:
+          "justify-center pointer-coarse:group-data-[collapsible=icon]:-ml-1.5 pointer-coarse:group-data-[collapsible=icon]:size-11!",
+        tooltip: indicator.tip,
       };
 
       if (indicator.id === "rust") {
@@ -43,9 +51,7 @@ const BaseStatusRail = ({
           <SidebarMenuItem key={indicator.id}>
             <Popover onOpenChange={(open) => open && onPick(indicator)}>
               <PopoverTrigger asChild>
-                <SidebarMenuButton tooltip={indicator.railLabel} {...common}>
-                  {dot}
-                </SidebarMenuButton>
+                <SidebarMenuButton {...common}>{dot}</SidebarMenuButton>
               </PopoverTrigger>
               <PopoverContent side="right" align="end" className="w-72">
                 <PopoverHeader>
@@ -61,7 +67,6 @@ const BaseStatusRail = ({
       return (
         <SidebarMenuItem key={indicator.id}>
           <SidebarMenuButton
-            tooltip={indicator.railLabel}
             {...common}
             {...(indicator.id === "network" && {
               "aria-expanded": settingsOpen,

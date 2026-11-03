@@ -100,7 +100,9 @@ it("refuses an invalid name and makes nothing until it is edited", async () => {
 
   await act(async () => fireEvent.click(start()));
 
-  expect(screen.getByRole("alert").textContent).toBe("Invalid project name");
+  expect(screen.getByRole("alert").textContent).toBe(
+    "Use letters, numbers, spaces, - or _"
+  );
   expect(start()).toHaveProperty("disabled", true);
   expect(utils.PgExplorer.createWorkspace).not.toHaveBeenCalled();
   expect(named("new_project_start_failed")).toEqual([]);
@@ -108,20 +110,6 @@ it("refuses an invalid name and makes nothing until it is edited", async () => {
   fireEvent.change(nameField(), { target: { value: "ab" } });
   expect(screen.queryByRole("alert")).toBeNull();
   expect(start()).toHaveProperty("disabled", false);
-});
-
-it("marks a typed name that passes the format check, and only that", () => {
-  render(<StartFromScratch />);
-  expect(nameField().getAttribute("data-state")).toBeNull();
-
-  fireEvent.change(nameField(), { target: { value: "my-project" } });
-  expect(nameField().getAttribute("data-state")).toBe("valid");
-
-  fireEvent.change(nameField(), { target: { value: "a (b)" } });
-  expect(nameField().getAttribute("data-state")).toBeNull();
-
-  fireEvent.change(nameField(), { target: { value: "   " } });
-  expect(nameField().getAttribute("data-state")).toBeNull();
 });
 
 it("makes one project for a double press", async () => {

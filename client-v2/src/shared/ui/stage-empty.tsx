@@ -35,6 +35,23 @@ function StageEmptyMedia({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
+/* Where the stage acts, above its title: the network a deploy goes to. A
+   quiet caption, so the title stays the one heading; a StatusDot may lead
+   it. It sits closer to the title than the stage's gap, to read as part of
+   it. */
+function StageEmptyEyebrow({ className, ...props }: React.ComponentProps<"p">) {
+  return (
+    <p
+      data-slot="stage-empty-eyebrow"
+      className={cn(
+        "-mb-2 inline-flex items-center gap-1.5 text-caption font-act text-muted-foreground",
+        className
+      )}
+      {...props}
+    />
+  );
+}
+
 function StageEmptyTitle({
   className,
   children,
@@ -65,6 +82,8 @@ function StageEmptyMeta({ className, ...props }: React.ComponentProps<"p">) {
   );
 }
 
+/* Balanced, as a centred line of two should be: left to wrap on its own it
+   dropped one word onto the second line ("passes.") */
 function StageEmptyDescription({
   className,
   ...props
@@ -73,7 +92,7 @@ function StageEmptyDescription({
     <p
       data-slot="stage-empty-description"
       className={cn(
-        "max-w-[28rem] text-body font-read text-muted-foreground",
+        "max-w-[28rem] text-body font-read text-balance text-muted-foreground",
         className
       )}
       {...props}
@@ -103,7 +122,10 @@ function StageEmptyActions({
     <div
       data-slot="stage-empty-actions"
       className={cn(
-        "flex flex-wrap items-center justify-center gap-x-2 gap-y-5 pt-3 max-md:sticky max-md:bottom-0 max-md:w-full max-md:flex-col-reverse max-md:items-stretch max-md:bg-gradient-to-t max-md:from-background max-md:from-60% max-md:pt-5 max-md:pb-4",
+        // A plain button beside the brand pill takes its height and shape,
+        // so the pair reads as one row of actions. A rare action is a link
+        // under the pill, in the text's colour: the brand stays the pill's.
+        "flex flex-wrap items-center justify-center gap-x-2 gap-y-5 pt-3 [&>[data-slot=button]]:h-10 [&>[data-slot=button]]:rounded-full [&>[data-slot=button]]:px-5 [&_[data-variant=link]]:text-foreground max-md:sticky max-md:bottom-0 max-md:w-full max-md:flex-col-reverse max-md:items-stretch max-md:bg-gradient-to-t max-md:from-background max-md:from-60% max-md:pt-5 max-md:pb-4",
         className
       )}
       {...props}
@@ -128,6 +150,7 @@ export {
   StageEmpty,
   StageEmptyActions,
   StageEmptyDescription,
+  StageEmptyEyebrow,
   StageEmptyFooter,
   StageEmptyMedia,
   StageEmptyMeta,

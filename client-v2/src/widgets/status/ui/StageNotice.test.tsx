@@ -84,21 +84,28 @@ describe("BaseStageNotice", () => {
         notice={null}
         onRetry={vi.fn()}
         onChangeNetwork={vi.fn()}
+        onDismiss={vi.fn()}
       />
     );
     expect(container.innerHTML).toBe("");
   });
 
-  it("says offline as an alert, with nothing to press", () => {
+  it("says offline as an alert, with only its close to press", async () => {
+    const onDismiss = vi.fn();
     render(
       <BaseStageNotice
         notice={{ kind: "offline", text: OFFLINE }}
         onRetry={vi.fn()}
         onChangeNetwork={vi.fn()}
+        onDismiss={onDismiss}
       />
     );
     expect(screen.getByRole("alert").textContent).toBe(OFFLINE);
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(
+      screen.getAllByRole("button").map((b) => b.getAttribute("aria-label"))
+    ).toEqual(["Dismiss"]);
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(onDismiss).toHaveBeenCalledTimes(1);
   });
 
   it("offers Try again and Change network for a cluster that does not answer", async () => {
@@ -109,6 +116,7 @@ describe("BaseStageNotice", () => {
         notice={{ kind: "cluster-down", text: CLUSTER }}
         onRetry={onRetry}
         onChangeNetwork={onChangeNetwork}
+        onDismiss={vi.fn()}
       />
     );
     expect(screen.getByRole("alert").textContent).toContain(CLUSTER);
@@ -129,6 +137,7 @@ describe("BaseStageNotice", () => {
         notice={{ kind: "cluster-down", text: CLUSTER }}
         onRetry={() => pending}
         onChangeNetwork={vi.fn()}
+        onDismiss={vi.fn()}
       />
     );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -144,6 +153,7 @@ describe("BaseStageNotice", () => {
         notice={{ kind: "cluster-down", text: CLUSTER }}
         onRetry={() => Promise.reject(new Error("devnet did not answer"))}
         onChangeNetwork={vi.fn()}
+        onDismiss={vi.fn()}
       />
     );
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
@@ -176,6 +186,36 @@ describe("StageNotice", () => {
       { notice: "offline" },
       { notice: "offline" },
     ]);
+  });
+
+  it("puts the offline line away until the next time offline, measured", async () => {
+    const { rerender } = render(
+      <StageNotice stage="build" onOpenNetwork={vi.fn()} />
+    );
+    goOnline(false);
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(eventsNamed("status_notice_dismissed")).toEqual([
+      { notice: "offline" },
+    ]);
+    // A stage switch is the same episode: it stays away
+    rerender(<StageNotice stage="deploy" onOpenNetwork={vi.fn()} />);
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    goOnline(true);
+    goOnline(false);
+    expect(screen.getByRole("alert").textContent).toBe(OFFLINE);
+  });
+
+  it("shows the cluster line after an offline line put away", async () => {
+    net.input = DOWN;
+    render(<StageNotice stage="deploy" onOpenNetwork={vi.fn()} />);
+    goOnline(false);
+    await userEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Back online with the cluster still down is another condition
+    goOnline(true);
+    expect(screen.getByRole("alert").textContent).toContain(CLUSTER);
   });
 
   it("clears the cluster line by itself when the cluster answers again", () => {

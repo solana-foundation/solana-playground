@@ -3,14 +3,19 @@ import { StatusDot } from "@/shared/ui/status-dot";
 
 import type { StatusIndicator, StatusState } from "../model/indicators";
 
-/** The one mapping from a state to its dot, for every place status shows */
+/**
+ * The one mapping from a state to its dot, for every place status shows.
+ * Waiting is the warning colour, as the offline notice over the stage is, so
+ * one state never shows two severities; only a failure is red.
+ */
 export const DOT: Record<
   StatusState,
-  "success" | "running" | "error" | "idle"
+  "success" | "running" | "warning" | "error" | "idle"
 > = {
   ready: "success",
   working: "running",
-  "not-ready": "error",
+  "not-ready": "warning",
+  failed: "error",
   idle: "idle",
 };
 

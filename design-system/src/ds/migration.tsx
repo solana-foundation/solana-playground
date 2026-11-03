@@ -27,7 +27,7 @@ const STOCK: Row[] = [
 const OURS: Row[] = [
   { now: "Button, every kind", next: "Button, BrandButton, AsyncButton, CopyButton", keep: "The brand ring, the flat accent, waiting on its own promise, Copy turning to Copied.", state: "built" },
   { now: "Card that opens", next: "ActionCard, frame", keep: "The ring of brand colours on hover, and the lift.", state: "built" },
-  { now: "Input with a validator", next: "Field and FieldError", keep: "The message above the field, a success edge.", state: "planned" },
+  { now: "Input with a validator", next: "Field and FieldError", keep: "The message under the field, naming the rule; the field never moves. A success edge (data-state=valid on Input).", state: "built" },
   { now: "SearchBar", next: "Command inside a Popover", keep: "Drill-down pages, paste to pick, the last value restored.", state: "planned" },
   { now: "Text (callout)", next: "Callout", keep: "Five kinds, each with its tint and icon. Actions are CalloutAction, in the callout's tone.", state: "built" },
   { now: "Tag", next: "Tag", keep: "The level colours. Framework and language icons.", state: "built" },

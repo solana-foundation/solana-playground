@@ -132,7 +132,7 @@ describe("BaseDeploy", () => {
     );
 
     expect(screen.getByRole("alert").textContent).toContain(
-      "Deploy failed — see the terminal."
+      "Deploy failed. The terminal has the details."
     );
   });
 
@@ -259,16 +259,77 @@ describe("BaseDeploy", () => {
     ).toBeTruthy();
   });
 
-  it("writes a dash, not two hyphens", () => {
+  it("asks for a build first, without naming the stepper", () => {
     render(
       <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
     );
 
     expect(
       screen.getByText(
-        "Build the program first \u2014 the stepper unlocks Deploy once it compiles cleanly."
+        "Build the program first. Deploy opens once the build passes."
       )
     ).toBeTruthy();
+  });
+
+  /** The network is a quiet eyebrow over the title, not a mono line under it */
+  it("names the network above the title", () => {
+    const { container } = render(
+      <BaseDeploy {...props({ built: false, deploy: "idle", history: [] })} />
+    );
+
+    const eyebrow = container.querySelector(
+      '[data-slot="stage-empty-eyebrow"]'
+    );
+    expect(eyebrow?.textContent).toBe("Devnet");
+    expect(eyebrow?.querySelector('[data-slot="status-dot"]')).toBeTruthy();
+    expect(eyebrow?.nextElementSibling?.getAttribute("data-slot")).toBe(
+      "stage-empty-title"
+    );
+    expect(
+      container.querySelector('[data-slot="stage-empty-meta"]')
+    ).toBeNull();
+  });
+
+  it("counts the deployments under the title once there are some", () => {
+    const { container } = render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [record("a", null), record("b", null)],
+        })}
+      />
+    );
+
+    expect(
+      container.querySelector('[data-slot="stage-empty-eyebrow"]')?.textContent
+    ).toBe("Devnet");
+    expect(
+      container.querySelector('[data-slot="stage-empty-meta"]')?.textContent
+    ).toBe("2 deployments");
+  });
+
+  it("names no network until the endpoint has been read", () => {
+    const p = props({ built: false, deploy: "idle", history: [] });
+    const { container } = render(
+      <BaseDeploy
+        cluster={null}
+        built={p.built}
+        deploy={p.deploy}
+        programId={p.programId}
+        details={p.details}
+        history={p.history}
+        addressUrl={p.addressUrl}
+        txUrl={p.txUrl}
+        onDeploy={p.onDeploy}
+        onInteract={p.onInteract}
+        idlUpload={p.idlUpload}
+      />
+    );
+
+    expect(
+      container.querySelector('[data-slot="stage-empty-eyebrow"]')
+    ).toBeNull();
   });
 
   it("says nothing deployed once", () => {

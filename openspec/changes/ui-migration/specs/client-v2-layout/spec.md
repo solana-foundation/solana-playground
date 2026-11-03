@@ -622,8 +622,9 @@ here and on the pages, SHALL be one target that ends in a chevron.
 #### Scenario: New project's controls line up and its list shows it scrolls
 
 - **WHEN** a user opens New project at 1280 px
-- **THEN** the framework chips, the name field and Start share one height
-  and centre line, and a fade at the dialog's foot shows the list runs on
+- **THEN** the framework chips, the name field and Start share one height,
+  the name field and Start share a centre line under the framework row, and a
+  fade at the dialog's foot shows the list runs on
 
 #### Scenario: New project on a phone is a page
 

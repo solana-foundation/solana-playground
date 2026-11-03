@@ -355,6 +355,15 @@ describe("the network row", () => {
     expect(networkRow().getAttribute("title")).toBe("devnet is not responding");
   });
 
+  it("keeps a network that does not answer in the count", () => {
+    health.isConnected = false;
+    health.slotStalled = null;
+    draw();
+    expect(networkRow().getAttribute("data-status")).toBe("warn");
+    // Chosen all the same: an outage takes no step back
+    expect(title()?.textContent).toBe("Get set up· 1 of 4");
+  });
+
   it("ticks while the cluster has not been asked yet", () => {
     health.isConnected = null;
     health.slotStalled = null;

@@ -1,4 +1,4 @@
-import { ArrowLeft, Search, X } from "lucide-react";
+import { ArrowLeft, ChevronDown, Search, X } from "lucide-react";
 import {
   Dispatch,
   FC,
@@ -7,12 +7,14 @@ import {
   SetStateAction,
   useEffect,
   useId,
+  useMemo,
   useRef,
   useState,
 } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   Command,
@@ -41,10 +43,22 @@ export interface SearchBarProps extends InputProps {
   showSearchOnMount?: boolean;
   labelToSelectOnPaste?: string;
   restoreIfNotSelected?: boolean;
-  /** Which side of the field the search icon sits on */
+  /**
+   * Shows a magnifier, on the given side, for a field that searches a list.
+   * Without it a field with items gets a chevron and one without gets no
+   * icon, so a value field does not read as a search box.
+   */
   searchButton?: {
     position?: "left" | "right";
   };
+  /**
+   * The item, by label, that gets a button of its own in the field instead
+   * of a row in the list: Interact's Random, one press and no menu. The
+   * button says its label: an icon this small read as the Copy beside it.
+   */
+  inlineItem?: { label: string };
+  /** Drawn last inside the field, after its own buttons: Interact's Copy */
+  endAddon?: ReactNode;
   onSearch?: (ev: { input: InputProps["value"]; item: NormalizedItem }) => void;
   filter?: (args: {
     input: InputProps["value"];
@@ -85,12 +99,14 @@ export type DropdownProps = {
 };
 
 const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
-  items,
+  items: allItems,
   initialSelectedItems,
   showSearchOnMount,
   labelToSelectOnPaste,
   restoreIfNotSelected,
   searchButton,
+  inlineItem: inline,
+  endAddon,
   onSearch,
   filter,
   setSelectedItems: _setSelectedItems,
@@ -103,6 +119,25 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
   ...props
 }) => {
   const searchButtonPosition = searchButton?.position ?? "left";
+  const inlineLabel = inline?.label;
+  const inlineItem = inlineLabel
+    ? allItems?.find((item) => normalizeItem(item).label === inlineLabel)
+    : undefined;
+  const items = useMemo(
+    () =>
+      inlineLabel
+        ? allItems?.filter((item) => normalizeItem(item).label !== inlineLabel)
+        : allItems,
+    [allItems, inlineLabel]
+  );
+  // A field with nothing to pick (Account's address, an Interact number whose
+  // one pick is its inline Random) is a plain textbox. An item shown only
+  // when the input is valid (Custom) echoes what was typed: not a pick.
+  const offersPicks = !!items?.some(
+    (item) => !normalizeItem(item).onlyShowIfValid
+  );
+  // The magnifier already opens the list, so a search field needs no chevron
+  const showsChevron = offersPicks && !searchButton;
 
   const inputRef = useRef<HTMLInputElement>(null);
   const lastValue = useRef(props.value);
@@ -157,8 +192,13 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
     // Reset back to the original items
     setItemState({ items, isInSubSearch: false });
 
-    // Reset the input to its last saved value
-    if (restoreIfNotSelected) setInputValue(lastValue.current);
+    // Reset the input to its last saved value. A plain textbox keeps what
+    // was typed: there is no list it could have been picked from.
+    if (restoreIfNotSelected && offersPicks) setInputValue(lastValue.current);
+  };
+  /** Opens the list, if the field has one */
+  const openList = () => {
+    if (offersPicks) setIsVisible(true);
   };
   useKeybind("Escape", () => {
     if (document.activeElement === inputRef.current) reset();
@@ -301,7 +341,7 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
     if (filteredItems && keyboardSelectionIndex !== null) {
       const selectedItem = filteredItems.at(keyboardSelectionIndex);
       if (selectedItem) pick(selectedItem);
-    } else setIsVisible(true);
+    } else openList();
   };
   useKeybind("Enter", {
     handle: () => {
@@ -342,7 +382,7 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
         keybind: "ArrowDown",
         handle: () => {
           if (!filteredItems?.length) {
-            if (document.activeElement === inputRef.current) setIsVisible(true);
+            if (document.activeElement === inputRef.current) openList();
             return;
           }
 
@@ -357,7 +397,7 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
         keybind: "ArrowUp",
         handle: () => {
           if (!filteredItems?.length) {
-            if (document.activeElement === inputRef.current) setIsVisible(true);
+            if (document.activeElement === inputRef.current) openList();
             return;
           }
 
@@ -425,32 +465,35 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
       <Popover open={isOpen}>
         <PopoverAnchor>
           <InputGroup>
-            <InputGroupAddon
-              align={
-                searchButtonPosition === "left" ? "inline-start" : "inline-end"
-              }
-            >
-              <InputGroupButton
-                size="icon-xs"
-                aria-label="Search"
-                onClick={searchTopResult}
+            {searchButton && (
+              <InputGroupAddon
+                align={
+                  searchButtonPosition === "left"
+                    ? "inline-start"
+                    : "inline-end"
+                }
               >
-                <Search />
-              </InputGroupButton>
-            </InputGroupAddon>
+                <InputGroupButton
+                  size="icon-xs"
+                  aria-label="Search"
+                  onClick={searchTopResult}
+                >
+                  <Search />
+                </InputGroupButton>
+              </InputGroupAddon>
+            )}
 
             <InputGroupInput
               ref={inputRef}
-              // A field with nothing to pick (Account's address) is a textbox
-              role={items === undefined ? undefined : "combobox"}
-              aria-expanded={items === undefined ? undefined : isOpen}
-              aria-autocomplete={items === undefined ? undefined : "list"}
+              role={offersPicks ? "combobox" : undefined}
+              aria-expanded={offersPicks ? isOpen : undefined}
+              aria-autocomplete={offersPicks ? "list" : undefined}
               aria-invalid={shownError ? true : undefined}
               autoComplete="off"
               autoFocus={showSearchOnMount}
               onClick={(ev) => {
                 onClick?.(ev);
-                setIsVisible(true);
+                openList();
               }}
               onChange={(ev) => {
                 let err: InputError = null;
@@ -495,19 +538,57 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
               {...props}
             />
 
-            {props.value && (
+            {(props.value || inlineItem || showsChevron || endAddon) && (
               <InputGroupAddon align="inline-end">
-                <InputGroupButton
-                  size="icon-xs"
-                  aria-label="Clear search"
-                  onClick={() => {
-                    setInputValue("", { focus: true });
-                    setSelectedItems({ completed: [], pending: [] });
-                    setIsVisible(true);
-                  }}
-                >
-                  <X />
-                </InputGroupButton>
+                {props.value && (
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label="Clear search"
+                    onClick={() => {
+                      setInputValue("", { focus: true });
+                      setSelectedItems({ completed: [], pending: [] });
+                      openList();
+                    }}
+                  >
+                    <X />
+                  </InputGroupButton>
+                )}
+                {inline && inlineItem && (
+                  <InputGroupButton
+                    size="xs"
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => pick(inlineItem)}
+                  >
+                    {inline.label}
+                  </InputGroupButton>
+                )}
+                {showsChevron && (
+                  <InputGroupButton
+                    size="icon-xs"
+                    aria-label="Show options"
+                    // The field is the tab stop and ArrowDown opens the list
+                    // from it, as in a combobox; the chevron is for the mouse
+                    tabIndex={-1}
+                    onClick={() => {
+                      if (isOpen) {
+                        reset();
+                        return;
+                      }
+                      // Focus goes back to the field so typing filters and
+                      // the arrow keys and Enter act there
+                      inputRef.current?.focus();
+                      setIsVisible(true);
+                    }}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "size-4 text-muted-foreground transition-transform duration-150",
+                        isOpen && "rotate-180"
+                      )}
+                    />
+                  </InputGroupButton>
+                )}
+                {endAddon}
               </InputGroupAddon>
             )}
           </InputGroup>

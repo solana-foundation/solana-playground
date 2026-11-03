@@ -81,7 +81,8 @@ it("measures a pick in the row and runs the network's and the AI's action", asyn
   expect(onConnectAi).toHaveBeenCalledOnce();
   expect(onOpenNetwork).toHaveBeenCalledOnce();
   expect(eventsNamed("status_indicator_picked")).toEqual([
-    { indicator: "ai", state: "not-ready", from: "row" },
+    // No model is grey (`idle`), which is measured as ready
+    { indicator: "ai", state: "ready", from: "row" },
     { indicator: "network", state: "ready", from: "row" },
     { indicator: "rust", state: "working", from: "row" },
   ]);
@@ -107,14 +108,14 @@ it("measures the sheet opening and a row's action", async () => {
   const onConnectAi = vi.fn();
   render(<StatusChip onOpenNetwork={vi.fn()} onConnectAi={onConnectAi} />);
   await userEvent.click(
-    screen.getByRole("button", { name: "Status, 1 not ready" })
+    screen.getByRole("button", { name: "Status, starting" })
   );
   await userEvent.click(
     await screen.findByRole("button", { name: "Connect a model" })
   );
   expect(onConnectAi).toHaveBeenCalledOnce();
-  expect(eventsNamed("status_sheet_opened")).toEqual([{ worst: "not-ready" }]);
+  expect(eventsNamed("status_sheet_opened")).toEqual([{ worst: "working" }]);
   expect(eventsNamed("status_indicator_picked")).toEqual([
-    { indicator: "ai", state: "not-ready", from: "sheet" },
+    { indicator: "ai", state: "ready", from: "sheet" },
   ]);
 });

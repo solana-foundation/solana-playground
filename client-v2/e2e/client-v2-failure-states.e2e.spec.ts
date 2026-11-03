@@ -20,7 +20,7 @@ test.describe("on a 1440 px window", () => {
     await page.getByRole("button", { name: "Build", exact: true }).click();
 
     await expect(
-      page.getByRole("heading", { name: "Could not build." })
+      page.getByRole("heading", { name: "Could not build" })
     ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Show details" })

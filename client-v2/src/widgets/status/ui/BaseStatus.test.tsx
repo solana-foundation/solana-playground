@@ -41,6 +41,8 @@ const STARTING = analyzerIndicator(
   true
 );
 const SLOW = analyzerIndicator({ kind: "starting", since: 0 }, 61_000, true);
+const FAILED = analyzerIndicator({ kind: "failed" }, 0, true);
+const NOT_STARTED = analyzerIndicator({ kind: "idle" }, 0, true);
 
 const dotOf = (el: HTMLElement) =>
   el.querySelector('[data-slot="status-dot"]')?.getAttribute("data-variant");
@@ -63,7 +65,7 @@ const drawRow = (indicators: StatusIndicator[]) => {
   return { onPick, onAction };
 };
 
-it("draws the three indicators as buttons with a dot and words", () => {
+it("draws the three indicators as buttons with a dot and words, the AI off grey", () => {
   drawRow([UP, AI_OFF, STARTING]);
   const network = screen.getByRole("button", {
     name: "Change cluster, currently devnet",
@@ -79,9 +81,15 @@ it("draws the three indicators as buttons with a dot and words", () => {
   ]);
   expect([dotOf(network), dotOf(ai), dotOf(rust)]).toEqual([
     "success",
-    "error",
+    "idle",
     "running",
   ]);
+});
+
+it("keeps red for a failure: an analyzer that failed", () => {
+  drawRow([UP, AI_OFF, FAILED]);
+  const rust = screen.getByRole("button", { name: "Rust analyzer, failed" });
+  expect(dotOf(rust)).toBe("error");
 });
 
 it("marks the network indicator as a settings trigger that opens the settings", async () => {
@@ -95,13 +103,13 @@ it("marks the network indicator as a settings trigger that opens the settings", 
 });
 
 // Spec 08's NET-02, which replaced the "Switch to localnet?" toast
-it("says a cluster that is down is not answering, in words and a red dot", () => {
+it("says a cluster that is down is not answering, in words and a warning dot", () => {
   drawRow([DOWN, AI_OFF, STARTING]);
   const network = screen.getByRole("button", {
     name: "Change cluster, currently devnet, not answering",
   });
   expect(network.textContent).toBe("Devnet · Not answering");
-  expect(dotOf(network)).toBe("error");
+  expect(dotOf(network)).toBe("warning");
 });
 
 it("goes straight to Connect a model from the AI", async () => {
@@ -178,8 +186,71 @@ it("draws three dots on the rail, named as their indicators", async () => {
   expect(onPick).toHaveBeenCalledExactlyOnceWith(UP);
 });
 
+it("labels each rail dot with its state in the row's words, on focus", async () => {
+  render(
+    <TooltipProvider>
+      <SidebarProvider defaultOpen={false}>
+        <BaseStatusRail
+          indicators={[UP, AI_OFF, STARTING]}
+          onPick={vi.fn()}
+          onAction={vi.fn()}
+          settingsOpen={false}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  await userEvent.tab();
+  expect((await screen.findByRole("tooltip")).textContent).toBe(
+    "Devnet · Ready"
+  );
+  await userEvent.tab();
+  expect((await screen.findByRole("tooltip")).textContent).toBe("AI · Off");
+  await userEvent.tab();
+  expect((await screen.findByRole("tooltip")).textContent).toBe(
+    "Rust · Starting 12 s"
+  );
+});
+
+it("opens the analyzer's panel from its rail dot, as the row does", async () => {
+  const onPick = vi.fn();
+  render(
+    <TooltipProvider>
+      <SidebarProvider defaultOpen={false}>
+        <BaseStatusRail
+          indicators={[UP, AI_OFF, SLOW]}
+          onPick={onPick}
+          onAction={vi.fn()}
+          settingsOpen={false}
+        />
+      </SidebarProvider>
+    </TooltipProvider>
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: /^Rust analyzer, taking longer/ })
+  );
+  const panel = await screen.findByRole("dialog");
+  expect(within(panel).getByText("Rust · Taking longer")).toBeTruthy();
+  expect(within(panel).getByRole("button", { name: "Reload" })).toBeTruthy();
+  expect(onPick).toHaveBeenCalledExactlyOnceWith(SLOW);
+});
+
+it("reads Ready on the chip with only the AI off", () => {
+  const indicators = [UP, AI_OFF, NOT_STARTED];
+  render(
+    <BaseStatusChip
+      chip={chipOf(indicators, true)}
+      indicators={indicators}
+      open={false}
+      onOpenChange={vi.fn()}
+      onAction={vi.fn()}
+    />
+  );
+  const chip = screen.getByRole("button", { name: "Status, ready" });
+  expect([chip.textContent, dotOf(chip)]).toEqual(["Ready", "success"]);
+});
+
 it("folds the three into one chip whose sheet names what is down", async () => {
-  const indicators = [UP, AI_OFF, STARTING];
+  const indicators = [DOWN, AI_OFF, STARTING];
   const onAction = vi.fn();
   const draw = (open: boolean) => (
     <BaseStatusChip
@@ -192,7 +263,7 @@ it("folds the three into one chip whose sheet names what is down", async () => {
   );
   const { rerender } = render(draw(false));
   const chip = screen.getByRole("button", { name: "Status, 1 not ready" });
-  expect(chip.textContent).toBe("1 not ready");
+  expect([chip.textContent, dotOf(chip)]).toEqual(["1 not ready", "warning"]);
 
   rerender(draw(true));
   const sheet = await screen.findByRole("dialog", { name: "Status" });
