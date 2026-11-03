@@ -36,6 +36,26 @@ Drop the `$(grep ...)` part on an x86-64 host.
 | all of `ci.yml` | `act pull_request -C .. -W .github/workflows/ci.yml` |
 | `cicd.yml` | `act workflow_dispatch -C .. -W .github/workflows/cicd.yml` |
 
-`--input use-wasm-stubs=true` skips the `wasm` job, as `client-v2-with-stubs.yml` does. Without it, the other jobs
-take the real packages from the `wasm` job's artifact; that path is unverified under act.
-The `wasm` job and `build` need amd64 on every host, wasm-pack 0.10.3 ships no arm64 `wasm-opt`, so on an arm64 host run it without the overrides; the amd64 image is pulled once, and the job needs a clean tree. Without `-W`, `-j checks` also matches the `checks` jobs of `ci.yml` and `cicd.yml`.
+`--input use-wasm-stubs=true` skips the `wasm` job, as `client-v2-with-stubs.yml` does, and no stub job runs `wasm-pack`, so the arm64 overrides apply. The input has no default: a run without it fails before any job starts. Without `-W`, `-j checks` also matches the `checks` jobs of `ci.yml` and `cicd.yml`.
+
+## On the real packages
+
+`--input use-wasm-stubs=false` runs the jobs as `client-v2.yml` does: the `wasm` job builds the six packages and the other jobs download them as the `wasm-pkg` artifact. The `wasm` job runs wasm-pack 0.10.3, which ships no arm64 `wasm-opt`, so this run keeps the amd64 of `.actrc` on every host: leave out the arm64 overrides. The amd64 image is pulled once, and the job needs a clean tree.
+
+```sh
+cd client-v2
+main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+act workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j build --input use-wasm-stubs=false \
+  --container-options "--group-add 0 -v $main/.git:$main/.git:ro -v $main/client/public:$main/client/public:ro"
+```
+
+Unverified under act: whether `-j build` runs the `wasm` job it needs first (if the log starts with `build`, run `-j wasm` first, then `-j build`), and whether `build` downloads `wasm-pkg` through the artifact server `.actrc` configures. A cold build of every crate takes about an hour natively and longer under emulation, which can exceed the `wasm` job's `timeout-minutes`.
+
+The same checks of the `build` job without act, from `client-v2`:
+
+```sh
+yarn setup
+REACT_APP_GA_MEASUREMENT_ID= yarn build-fast
+yarn test-build
+node scripts/wasm-stubs.mjs check-build build
+```

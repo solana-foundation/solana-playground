@@ -1,10 +1,10 @@
-# act configuration for client-v2.yml, for an x86-64 host. act reads this file from the directory
+# act configuration for reusable-client-v2.yml, the jobs client-v2.yml runs, for an x86-64 host. act reads this file from the directory
 # it is launched in, so run from client-v2 (docs/local-ci-with-act.md says how). On an arm64 host
 # add the lines of .arm64.actrc to the command line; they come after this file and win. Lines that
 # do not start with "-" are ignored by act.
 
-# GitHub's runners are amd64, and the build job needs it on every host (wasm-pack 0.10.3 ships no
-# arm64 wasm-opt).
+# GitHub's runners are amd64, and a run on the real wasm packages needs it on every host: the wasm
+# job runs wasm-pack 0.10.3, which ships no arm64 wasm-opt. A run on the stubs runs no wasm-pack.
 --container-architecture=linux/amd64
 
 # catthehacker's full Ubuntu 24.04 image: rustup, cargo, node and yarn preinstalled.
