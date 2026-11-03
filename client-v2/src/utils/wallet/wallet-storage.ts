@@ -77,6 +77,12 @@ const isStoredWallet = (value: unknown): value is SerializedWalletState => {
   );
 };
 
+/** Whether `value` is the pre-accounts format, a single `sk` keypair */
+const isLegacyWallet = (value: unknown) =>
+  typeof value === "object" &&
+  value !== null &&
+  Array.isArray((value as { sk?: unknown }).sk);
+
 /** An account's public key: the last 32 bytes of its keypair */
 const publicKeyOf = (account: WalletAccount) => account.kp.slice(32).join(",");
 
@@ -164,6 +170,9 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
       reportFailure("Unreadable wallet in localStorage", error);
       return undefined;
     }
+    // The pre-accounts format: `wallet.ts`'s `migrate` upgrades it in place
+    // before this runs in its own tab, so here it is another tab mid-upgrade
+    if (isLegacyWallet(value)) return undefined;
     if (!isStoredWallet(value)) {
       keepUnreadable(text);
       reportFailure("Unreadable wallet in localStorage", new Error("shape"));
@@ -698,6 +707,17 @@ if (import.meta.vitest) {
       await storage.write(walletOf([account(1, "Wallet 1")]));
 
       expect(store.exclusive).toHaveBeenCalledTimes(2);
+    });
+
+    it("leaves a legacy single-key wallet for its upgrade", async () => {
+      const legacy = JSON.stringify({ setupCompleted: true, sk: kp(1) });
+      const store = memoryStore(undefined);
+      const local = memoryLocal(legacy);
+
+      expect(await walletStorageWith(store, local).read()).toBeUndefined();
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(legacy);
+      expect(local.items.has("wallet.unreadable")).toBe(false);
+      expect(logged.entries).toHaveLength(0);
     });
 
     it("logs no keypair bytes and no account names", async () => {
