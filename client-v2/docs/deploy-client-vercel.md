@@ -154,6 +154,10 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 - **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending.
 - **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
 
+### Smoke test after a push to `master`
+
+The `smoke` job of `client-v2.yml` runs on every push to `master` in `solana-foundation/solana-playground` and fails unless that commit's production deployment answers `{"enabled":true,"db":"ok"}` on `GET /api/sync`, so a database production cannot reach is a red run, not users staying local unnoticed. It reads the commit's `Production` deployment from the GitHub deployments API, where the Vercel GitHub app records it (no Vercel token), waits up to 30 minutes for a `success` status, and probes that deployment's own URL with `scripts/smoke-sync.mjs <url>`, which you can run by hand against any URL. A failure names the URL and the body in the log and the run summary. The deployment's URL is behind Deployment Protection, so the job sends Vercel's Protection Bypass for Automation secret from the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`; without it the job warns and skips the probe.
+
 `vercel-link-preview` or `vercel-link-production` runs automatically as a prerequisite of the preview and full production targets.
 
 A Git-integration build with no cache does not finish inside Vercel's [build time limit](https://vercel.com/docs/builds#limits-and-resources). A local build has no such limit, and it reuses the Rust state of earlier local builds (see [Build cache](#build-cache)).
