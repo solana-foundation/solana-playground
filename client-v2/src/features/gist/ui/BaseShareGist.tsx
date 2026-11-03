@@ -33,15 +33,22 @@ export interface BaseShareGistProps {
   onGrant: () => Promise<unknown>;
 }
 
+/**
+ * A refused gist (422) fails the same on every retry, so it offers none.
+ * `request-failed` also covers a gist GitHub may have created (a 201 whose
+ * body did not parse, a drop after GitHub accepted), so its text sends the
+ * user to their gists before a retry that could publish a second copy.
+ */
 const FAILURE: Record<ShareFailure, (name: string) => string> = {
   "too-large": (name) =>
     `${name} is too large to share as a gist: over 4 MB or 300 files.`,
   "github-unauthorized": () =>
     "GitHub no longer accepts this sign-in. Sign in again to share.",
   "rate-limited": () =>
-    "GitHub is limiting requests right now. Try again in a few minutes.",
-  rejected: () => "GitHub refused the gist.",
-  "request-failed": () => "Could not reach GitHub. Try again.",
+    "GitHub is limiting requests from this browser. Try again in a few minutes.",
+  rejected: () => "GitHub refused the gist. Nothing was published.",
+  "request-failed": () =>
+    "Could not export to GitHub. Check your gists on GitHub before you try again.",
   "scope-not-granted": () =>
     "GitHub did not grant gist access, so the gist was not created.",
 };
@@ -52,7 +59,7 @@ const ACTION: Record<
   { label: string; run: "create" | "sign-in" | "grant" }
 > = {
   ready: { label: "Create public gist", run: "create" },
-  "sign-in": { label: "Sign in with GitHub to share", run: "sign-in" },
+  "sign-in": { label: "Sign in with GitHub", run: "sign-in" },
   grant: { label: "Allow gists on GitHub", run: "grant" },
   failed: { label: "Try again", run: "create" },
 };
@@ -107,14 +114,19 @@ const BaseShareGist = ({
     );
   }
 
-  let action = ACTION[state.step];
+  let action: typeof ACTION[keyof typeof ACTION] | undefined =
+    ACTION[state.step];
   // A revoked grant is mended by signing in again, not by the same request
   if (state.step === "failed" && state.reason === "github-unauthorized") {
     action = { label: "Sign in with GitHub again", run: "sign-in" };
   }
-  const run = { create: onCreate, "sign-in": onSignIn, grant: onGrant }[
-    action.run
-  ];
+  // A refused gist fails the same on every retry, so only Close is left
+  if (state.step === "failed" && state.reason === "rejected") {
+    action = undefined;
+  }
+  const run = action
+    ? { create: onCreate, "sign-in": onSignIn, grant: onGrant }[action.run]
+    : undefined;
 
   let problem: string | undefined;
   if (state.step === "failed") problem = FAILURE[state.reason](name);
@@ -147,14 +159,16 @@ const BaseShareGist = ({
         </Callout>
       )}
 
-      <AsyncButton
-        type="button"
-        className="self-start"
-        onClick={run}
-        onError={onError}
-      >
-        {action.label}
-      </AsyncButton>
+      {action && run && (
+        <AsyncButton
+          type="button"
+          className="self-start"
+          onClick={run}
+          onError={onError}
+        >
+          {action.label}
+        </AsyncButton>
+      )}
     </div>
   );
 };
