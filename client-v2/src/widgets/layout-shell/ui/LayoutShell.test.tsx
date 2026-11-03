@@ -89,6 +89,7 @@ vi.mock("react-resizable-panels", async (importOriginal) => {
 import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+import { requestConsole } from "../model/console-request";
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
 import { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import { TooltipProvider } from "@/shared/ui/tooltip";
@@ -710,6 +711,13 @@ it("should open the console when a deploy starts, as auto", () => {
   expect(toggled()).toEqual([{ panel: "console", open: true, via: "auto" }]);
 });
 
+it("should open the console on a request, as a button press", () => {
+  shell();
+  act(() => requestConsole());
+  expect(consoleButton().getAttribute("aria-expanded")).toBe("true");
+  expect(toggled()).toEqual([{ panel: "console", open: true, via: "button" }]);
+});
+
 it("should open the console once when a deploy fails, not for one already failed", () => {
   // The reducer is the only way to set a deploy's status without a deploy
   const dispatch = (ev: Parameters<typeof PgFlow.reduce>[1]) =>
@@ -1028,6 +1036,13 @@ describe("on a phone", () => {
     expect(consoleBox().classList.contains("h-2/5")).toBe(false);
     expect((consoleBox() as HTMLElement).style.height).toBe("28px");
     act(() => deploy.starts.forEach((cb) => cb(null)));
+    expect(consoleBox().classList.contains("h-2/5")).toBe(true);
+    expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
+  });
+
+  it("opens the console on a request, for the visit and unsaved", () => {
+    phoneShell();
+    act(() => requestConsole());
     expect(consoleBox().classList.contains("h-2/5")).toBe(true);
     expect(localStorage.getItem(LAYOUT_STORAGE_KEY)).toBeNull();
   });

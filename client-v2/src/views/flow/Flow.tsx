@@ -39,7 +39,12 @@ import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
-import { StatusChip, StatusRail, StatusRow } from "@/widgets/status";
+import {
+  StageNotice,
+  StatusChip,
+  StatusRail,
+  StatusRow,
+} from "@/widgets/status";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { SetupList } from "@/widgets/setup-list";
 
@@ -382,6 +387,17 @@ const FlowFrame = () => {
                 onRead={read}
                 onOpenGallery={openGallery}
                 phone={phone}
+              />
+              {/* Why work waits: offline on every stage, a cluster that does
+                  not answer on Deploy and Interact (Spec 08 NET-01, NET-02) */}
+              <StageNotice
+                stage={state.stage}
+                onOpenNetwork={() =>
+                  toggleSettings(closeNavSheet.current)({
+                    from: "cluster",
+                    focus: "network",
+                  })
+                }
               />
               {/* `flex` matters: Primary's own wrapper sizes itself with
                   flex: 1; min-height: 0, which only takes effect inside a flex

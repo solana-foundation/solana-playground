@@ -1,0 +1,58 @@
+import { TriangleAlertIcon } from "lucide-react";
+
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import type { StageNoticeView } from "../model/notice";
+
+export interface BaseStageNoticeProps {
+  notice: StageNoticeView | null;
+  /** Asks the cluster again; the button is busy until it resolves */
+  onRetry: () => Promise<unknown>;
+  /** Opens the settings with the network field focused */
+  onChangeNetwork: () => void;
+}
+
+/**
+ * The line over the stage that says why work waits (Spec 08 NET-01, NET-02).
+ * A warning callout, so it is announced as an alert; it clears by itself
+ * when its condition ends, so it has no close.
+ */
+const BaseStageNotice = ({
+  notice,
+  onRetry,
+  onChangeNetwork,
+}: BaseStageNoticeProps) => {
+  if (!notice) return null;
+  return (
+    <div className="shrink-0 px-4 pt-3" data-testid="stage-notice">
+      <Callout variant="warning">
+        <TriangleAlertIcon />
+        {/* Message left, buttons right; the buttons drop below when it gets
+            narrow, as the sync banner's do */}
+        <CalloutDescription className="flex min-w-0 flex-wrap items-center justify-between gap-x-4 gap-y-2 opacity-100">
+          <p className="m-0 flex-[1_1_20rem] text-foreground">{notice.text}</p>
+          {notice.kind === "cluster-down" && (
+            <div className="flex flex-wrap gap-2">
+              <AsyncButton
+                size="sm"
+                variant="outline"
+                loadingText="Trying…"
+                onClick={onRetry}
+                onError={reportButtonFailure("reach the network")}
+              >
+                Try again
+              </AsyncButton>
+              <Button size="sm" variant="outline" onClick={onChangeNetwork}>
+                Change network
+              </Button>
+            </div>
+          )}
+        </CalloutDescription>
+      </Callout>
+    </div>
+  );
+};
+
+export default BaseStageNotice;

@@ -1,4 +1,5 @@
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
+import { askAgain, onAskAgain } from "./ask-again";
 import { PLATFORM_ENDPOINTS } from "../constants";
 import { PgCommon } from "./common";
 import { createDerivable, declareDecorator, derivable } from "./decorators";
@@ -44,63 +45,64 @@ const derive = () => ({
   /** Whether there is a successful connection */
   isConnected: createDerivable({
     derive: _PgConnection.getIsConnected,
-    onChange: (cb) => {
-      // Asked again when the connection is replaced, which is when Playnet's
-      // becomes ready. Kept apart from `disposables`, whose entries after the
-      // first are replaced on every cluster change.
-      const currentChange = PgConnection.onDidChangeCurrent(() => cb());
+    onChange: [
+      onAskAgain,
+      (cb) => {
+        // Asked again when the connection is replaced, which is when Playnet's
+        // becomes ready. Kept apart from `disposables`, whose entries after the
+        // first are replaced on every cluster change.
+        const currentChange = PgConnection.onDidChangeCurrent(() => cb());
 
-      const disposables: Disposable[] = [];
-      disposables.push(
-        PgConnection.onDidChangeCluster((cluster) => {
-          // Dispose and remove old disposables
-          for (const i of Object.keys(disposables)) {
-            if (+i) disposables.pop()!.dispose();
-          }
+        const disposables: Disposable[] = [];
+        disposables.push(
+          PgConnection.onDidChangeCluster((cluster) => {
+            // Dispose and remove old disposables
+            for (const i of Object.keys(disposables)) {
+              if (+i) disposables.pop()!.dispose();
+            }
 
-          // Refresh intervals
-          const successInterval = cluster === "localnet" ? 5000 : 60000;
-          const errorInterval = cluster === "localnet" ? 5000 : 10000;
+            // Refresh intervals
+            const successInterval = cluster === "localnet" ? 5000 : 60000;
+            const errorInterval = cluster === "localnet" ? 5000 : 10000;
 
-          // Keep track of `isConnected` and only run the `cb` when the value
-          // actually changes. This is because the decorators such as `derivable`
-          // and `updatable` trigger a change event each time the value is set
-          // independent of whether the value has changed unlike React which only
-          // re-renders when the memory location of the value changes.
-          //
-          // TODO: Allow specifying whether the value should be compared with the
-          // previous value and trigger the change event **only if** there is a
-          // difference in comparison.
-          let isConnected: boolean | null = false;
+            // Only run the `cb` when the value actually changes. This is
+            // because the decorators such as `derivable` and `updatable`
+            // trigger a change event each time the value is set independent
+            // of whether the value has changed unlike React which only
+            // re-renders when the memory location of the value changes. The
+            // polls compare against the derived value itself, not a copy of
+            // their own, so a value a user's "Try again" (`onAskAgain`)
+            // derived in between is the one they compare with.
+            //
+            // TODO: Allow specifying whether the value should be compared with the
+            // previous value and trigger the change event **only if** there is a
+            // difference in comparison.
 
-          // Initial run
-          cb();
+            // Initial run
+            cb();
 
-          const successId = setInterval(async () => {
-            if (!isConnected) return;
+            const successId = setInterval(async () => {
+              if (!PgConnection.isConnected) return;
+              if (!(await PgConnection.getIsConnected())) cb();
+            }, successInterval);
+            disposables.push({ dispose: () => clearInterval(successId) });
 
-            isConnected = await PgConnection.getIsConnected();
-            if (!isConnected) cb();
-          }, successInterval);
-          disposables.push({ dispose: () => clearInterval(successId) });
+            const errorId = setInterval(async () => {
+              if (PgConnection.isConnected) return;
+              if (await PgConnection.getIsConnected()) cb();
+            }, errorInterval);
+            disposables.push({ dispose: () => clearInterval(errorId) });
+          })
+        );
 
-          const errorId = setInterval(async () => {
-            if (isConnected) return;
-
-            isConnected = await PgConnection.getIsConnected();
-            if (isConnected) cb();
-          }, errorInterval);
-          disposables.push({ dispose: () => clearInterval(errorId) });
-        })
-      );
-
-      return {
-        dispose: () => {
-          currentChange.dispose();
-          disposables.forEach(({ dispose }) => dispose());
-        },
-      };
-    },
+        return {
+          dispose: () => {
+            currentChange.dispose();
+            disposables.forEach(({ dispose }) => dispose());
+          },
+        };
+      },
+    ],
     infallible: true,
   }),
 
@@ -113,7 +115,7 @@ const derive = () => ({
   /** Whether the cluster is down. `null` indicates potential connection error. */
   isClusterDown: createDerivable({
     derive: _PgConnection.getIsClusterDown,
-    onChange: ["cluster", (cb) => recheckWhileStalled(cb)],
+    onChange: ["cluster", (cb) => recheckWhileStalled(cb), onAskAgain],
     infallible: true,
   }),
 });
@@ -277,6 +279,25 @@ class _PgConnection {
     }
 
     return prevSlot === nextSlot;
+  }
+
+  /**
+   * Asks the cluster again now, for a user's "Try again" (Spec 08 NET-02):
+   * whether it answers and whether its slot moves are derived afresh
+   * (`askAgain`), and their change events fire as on any poll. The derivables
+   * do not hand back their results, so the same two readings are taken here
+   * too and awaited, which keeps the button busy for as long as the slower
+   * one, the stall check, takes.
+   *
+   * @returns whether the cluster answered with a moving slot
+   */
+  static async recheck(): Promise<boolean> {
+    askAgain();
+    const [connected, stalled] = await Promise.all([
+      _PgConnection.getIsConnected(),
+      _PgConnection.getIsClusterDown(),
+    ]);
+    return connected === true && stalled === false;
   }
 
   /**

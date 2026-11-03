@@ -9,6 +9,7 @@ import { PgFlow } from "@/views/flow/state/stage";
 import type { StageStatus } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import { onDidRequestConsole } from "../model/console-request";
 import { CONSOLE_KEY } from "../model/keys";
 import { homeOf, isCovered, screenOf } from "../model/screen";
 import type {
@@ -346,13 +347,14 @@ const LayoutShell = ({
     else setSheet(open, via);
   };
   /**
-   * The console opening on its own: the visit's on a phone, else saved. Not
-   * under Home or a page, which show no console to open.
+   * The console opening on its own (`auto`), or from a stage's button: the
+   * visit's on a phone, else saved. Not under Home or a page, which show no
+   * console to open.
    */
-  const openConsole = () => {
+  const openConsole = (via: "auto" | "button" = "auto") => {
     if (isCovered(screenNow.current)) return;
-    if (phone) setPhoneConsoleOpen(true, "auto");
-    else setOpen("console", { open: true, via: "auto" });
+    if (phone) setPhoneConsoleOpen(true, via);
+    else setOpen("console", { open: true, via });
   };
 
   // The handlers read what they toggle, so they are renewed with it
@@ -418,7 +420,8 @@ const LayoutShell = ({
     // `onDidChange` replays the current state first; that one is the baseline
     let prevDeploy: StageStatus | undefined;
     const subs = [
-      PgCommand.deploy.onDidStart(openConsole),
+      PgCommand.deploy.onDidStart(() => openConsole()),
+      onDidRequestConsole(() => openConsole("button")),
       PgFlow.onDidChange((flow) => {
         if (
           prevDeploy !== undefined &&

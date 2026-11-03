@@ -1,6 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SETUP_REJECTED } from "@/commands/connect/setup-rejected";
 import { PgSession } from "@/features/auth";
@@ -18,6 +18,20 @@ import { SETUP_LIST_KEY, setupMarks } from "../model/storage";
 import SetupList from "./SetupList";
 
 const cluster = vi.hoisted(() => ({ name: "devnet" as string | null }));
+// Whether the cluster answers and whether its slot stalls, as the connection
+// derives them; `null` while not yet asked
+const health = vi.hoisted(() => ({
+  isConnected: true as boolean | null,
+  slotStalled: false as boolean | null,
+}));
+const connection = vi.hoisted(() => {
+  const subscription = () => ({ dispose: () => {} });
+  return {
+    onDidChangeCluster: vi.fn(subscription),
+    onDidChangeIsConnected: vi.fn(subscription),
+    onDidChangeIsClusterDown: vi.fn(subscription),
+  };
+});
 const wallet = vi.hoisted(() => ({
   current: null as null | undefined | { publicKey: { toBase58: () => string } },
 }));
@@ -27,13 +41,22 @@ const setToast = vi.hoisted(() => vi.fn());
 
 // The hooks and utils barrels read generated globals that exist only in the built app
 vi.mock("@/hooks", () => ({
-  // Only the cluster's subscription returns a value; the others re-render
-  useRenderOnChange: () => cluster.name,
+  // The connection's subscriptions return their values; the others re-render
+  useRenderOnChange: (subscribe: unknown) => {
+    if (subscribe === connection.onDidChangeCluster) return cluster.name;
+    if (subscribe === connection.onDidChangeIsConnected) {
+      return health.isConnected;
+    }
+    if (subscribe === connection.onDidChangeIsClusterDown) {
+      return health.slotStalled;
+    }
+    return undefined;
+  },
   useWallet: () => wallet.current,
 }));
 vi.mock("@/utils", () => ({
   PgCommand: { connect },
-  PgConnection: { onDidChangeCluster: () => ({ dispose: () => {} }) },
+  PgConnection: connection,
   PgView: { setToast },
 }));
 vi.mock("@/views/sidebar/assistant/store", () => ({
@@ -64,6 +87,8 @@ afterEach(() => {
   setToast.mockReset();
   wallet.current = null;
   assistant.connected = false;
+  health.isConnected = true;
+  health.slotStalled = false;
   localStorage.clear();
   // What another tab clearing the site's storage looks like: marks start over.
   // In `act`: the list is still mounted, RTL's own cleanup runs after this hook
@@ -300,4 +325,51 @@ it("stays gone after completion when a step is no longer done", async () => {
   assistant.connected = false;
   const again = draw();
   expect(again.view.container.textContent).toBe("");
+});
+
+// The network row agrees with the status row and the notice over the stage
+// (Spec 08 NET-02): a cluster that does not answer, or whose slot stalls,
+// warns instead of ticking, and ticks again once it answers
+describe("the network row", () => {
+  const networkRow = () =>
+    screen
+      .getAllByRole("listitem")
+      .find((item) => item.textContent?.startsWith("Choose a network"))!;
+
+  it.each([
+    ["does not answer", { isConnected: false, slotStalled: null }],
+    ["answers with a stalled slot", { isConnected: true, slotStalled: true }],
+  ] as const)("warns while the cluster %s", (_, reading) => {
+    health.isConnected = reading.isConnected;
+    health.slotStalled = reading.slotStalled;
+    draw();
+    expect(networkRow().getAttribute("data-status")).toBe("warn");
+    expect(networkRow().getAttribute("title")).toBe("devnet is not responding");
+  });
+
+  it("ticks while the cluster has not been asked yet", () => {
+    health.isConnected = null;
+    health.slotStalled = null;
+    draw();
+    expect(networkRow().getAttribute("data-status")).toBe("done");
+  });
+
+  it("ticks again once the cluster answers", () => {
+    health.isConnected = false;
+    const { view, onConnectAssistant } = draw();
+    expect(networkRow().getAttribute("data-status")).toBe("warn");
+    health.isConnected = true;
+    view.rerender(<SetupList onConnectAssistant={onConnectAssistant} />);
+    expect(networkRow().getAttribute("data-status")).toBe("done");
+  });
+
+  it("names no cluster it does not know", () => {
+    cluster.name = null;
+    health.isConnected = false;
+    draw();
+    expect(networkRow().getAttribute("title")).toBe(
+      "The network is not responding"
+    );
+    cluster.name = "devnet";
+  });
 });

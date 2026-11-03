@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { useOnline } from "@/shared/lib/hooks/use-online";
 import { chipOf } from "../model/indicators";
 import type { StatusIndicator } from "../model/indicators";
 import { measured, statusTelemetry } from "../model/telemetry";
@@ -94,7 +95,7 @@ export const StatusRail = ({ settingsOpen, ...actions }: StatusProps) => {
 /** The phone's status chip and sheet, on the live sources */
 export const StatusChip = (actions: StatusActions) => {
   const indicators = useStatus();
-  const chip = chipOf(indicators);
+  const chip = chipOf(indicators, useOnline());
   const [open, setOpen] = useState(false);
   return (
     <BaseStatusChip

@@ -49,6 +49,8 @@ const SetupList = ({
 }: SetupListProps) => {
   const marks = useSetupMarks();
   const cluster = useRenderOnChange(PgConnection.onDidChangeCluster);
+  const isConnected = useRenderOnChange(PgConnection.onDidChangeIsConnected);
+  const slotStalled = useRenderOnChange(PgConnection.onDidChangeIsClusterDown);
   useRenderOnChange(PgSession.onDidChange);
   useRenderOnChange(PgAssistant.onDidChange);
   const wallet = useWallet();
@@ -64,9 +66,20 @@ const SetupList = ({
     },
   };
   const steps: StepView[] = SETUP_STEPS.map((step): StepView => {
-    // A network is always chosen: Devnet until the user picks another
+    // A network is always chosen: Devnet until the user picks another. One
+    // that does not answer, or whose slot stalls, warns instead of ticking,
+    // read as the status row's network indicator and the stage notice read it
     if (step === "network") {
-      return { step, done: true, value: cluster ?? undefined };
+      const value = cluster ?? undefined;
+      if (isConnected === false || slotStalled === true) {
+        return {
+          step,
+          done: false,
+          warn: `${cluster ?? "The network"} is not responding`,
+          value,
+        };
+      }
+      return { step, done: true, value };
     }
     const { done, value } = states[step];
     return done ? { step, done, value } : { step, done };

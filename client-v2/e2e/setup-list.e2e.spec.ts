@@ -34,6 +34,24 @@ const stubNoDefaultBackend = (context: BrowserContext) =>
       : route.abort()
   );
 
+/**
+ * Devnet answers `getSlot` with a slot that moves, so the network step ticks
+ * whatever the public endpoint does: it warns while the cluster does not
+ * answer (Spec 08 NET-02), and a rate-limited CI runner must not flip it
+ */
+const answeringDevnet = (context: BrowserContext) => {
+  let slot = 1_000;
+  return context.route("https://api.devnet.solana.com/**", (route) => {
+    const body = route.request().postDataJSON() as {
+      id?: unknown;
+      method?: string;
+    } | null;
+    if (body?.method !== "getSlot") return route.continue();
+    slot += 1;
+    return json(route, { jsonrpc: "2.0", result: slot, id: body.id });
+  });
+};
+
 /** Through the step itself: the Playground wallet's setup, then Continue */
 const connectWallet = async (page: Page) => {
   await step(page, "Connect a wallet").click();
@@ -46,6 +64,7 @@ const connectWallet = async (page: Page) => {
 
 test.beforeEach(async ({ context }) => {
   await stubNoDefaultBackend(context);
+  await answeringDevnet(context);
 });
 
 test("client-v2-layout: Counting the steps", async ({ page }) => {

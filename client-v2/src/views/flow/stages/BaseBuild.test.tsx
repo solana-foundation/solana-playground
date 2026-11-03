@@ -38,12 +38,14 @@ const props = (
   surface: BuildSurfaceView,
   building = false,
   slow = false,
-  elapsedMs: number | null = null
+  elapsedMs: number | null = null,
+  offline = false
 ): BaseBuildProps => ({
   surface,
   building,
   slow,
   elapsedMs,
+  offline,
   host: "api.solpg.io",
   serverUrl: "https://api.solpg.io",
   ms: 2900,
@@ -52,6 +54,7 @@ const props = (
   onExport: vi.fn(() => Promise.resolve()),
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
+  onShowLog: vi.fn(),
   idlActions: null,
 });
 
@@ -197,10 +200,59 @@ describe("BaseBuild", () => {
     expect(
       screen.getByRole("heading", { name: "Could not build." })
     ).toBeTruthy();
-    expect(screen.getByText("The full log has the details.")).toBeTruthy();
+    // Spec 08 ANY-00: what happened, then where the details are
+    expect(
+      screen.getByText(
+        "Build stopped for a reason we can't name. The full log has the details."
+      )
+    ).toBeTruthy();
     expect(screen.queryByText(/did not answer/)).toBeNull();
+    // The whole output is in the terminal: Spec 08 ANY-00's secondary
+    expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    expect(p.onShowLog).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+  });
+
+  it("keeps BUILD-04 on its details, with no full log", () => {
+    render(
+      <BaseBuild
+        {...props({
+          kind: "unreached",
+          failure: { kind: "no-answer", message: "Failed to fetch" },
+        })}
+      />
+    );
+    expect(
+      screen.getByRole("heading", { name: "Build did not start" })
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show details" }));
-    expect(screen.getByText(/Server request failed: boom/)).toBeTruthy();
+    expect(
+      screen.getByText(/Build server: https:\/\/api\.solpg\.io/)
+    ).toBeTruthy();
+  });
+
+  // Spec 08 ERR-23: offline, Build waits; the line over the stage says why
+  it.each([
+    ["the first build", { kind: "empty" }, "Build"],
+    [
+      "a failed one",
+      { kind: "unreached", failure: { kind: "other", message: "x" } },
+      "Try again",
+    ],
+    ["a compiler failure", "failed", "Try again"],
+    ["one from before the reload", { kind: "restored", failed: true }, "Build"],
+  ] as const)("disables Build offline, on %s", (_, surface, label) => {
+    const view =
+      surface === "failed"
+        ? failed([typeError("a", null)])
+        : (surface as BuildSurfaceView);
+    render(<BaseBuild {...props(view, false, false, null, true)} />);
+    expect(
+      (screen.getByRole("button", { name: label }) as HTMLButtonElement)
+        .disabled
+    ).toBe(true);
   });
 
   it("says a failed build happened before the reload", () => {
