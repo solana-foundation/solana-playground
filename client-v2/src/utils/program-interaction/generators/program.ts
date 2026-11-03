@@ -52,9 +52,10 @@ const PROGRAMS: Readonly<Program[]> = [
  * @returns the programs
  */
 export const getPrograms = () => {
-  if (PgProgramInfo.idl && PgProgramInfo.pk) {
+  const idl = PgProgramInfo.callableIdl();
+  if (idl && PgProgramInfo.pk) {
     const currentProgram: Readonly<Program> = {
-      name: PgCommon.toTitleFromSnake(PgProgramInfo.idl.name),
+      name: PgCommon.toTitleFromSnake(idl.name),
       programId: PgProgramInfo.getPkStr()!,
     };
     return [currentProgram].concat(PROGRAMS);

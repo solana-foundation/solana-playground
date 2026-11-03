@@ -387,8 +387,9 @@ export class PgJsRuntime {
     // TODO: Remove after adding general support for local imports.
     // Add a special case for Anchor's `target/types`
     if (path.includes("target/types")) {
-      if (PgProgramInfo.idl) return { IDL: PgProgramInfo.idl };
-      throw new Error("IDL not found, build the program to create the IDL.");
+      const idl = PgProgramInfo.callableIdl();
+      if (idl) return { IDL: idl };
+      throw new Error(PgProgramInfo.noCallableIdlMessage());
     }
 
     throw new Error("File imports are not yet supported.");
@@ -453,8 +454,9 @@ export class PgJsRuntime {
       };
 
       // Add `anchor.workspace`
-      if (PgProgramInfo.idl) {
-        const snakeCaseName = PgProgramInfo.idl.name;
+      const idl = PgProgramInfo.callableIdl();
+      if (idl) {
+        const snakeCaseName = idl.name;
         const names = [
           PgCommon.toPascalFromSnake(snakeCaseName), // default before 0.29.0
           PgCommon.toCamelFromSnake(snakeCaseName),
@@ -475,6 +477,30 @@ export class PgJsRuntime {
               return program;
             },
           });
+        }
+      } else if (PgProgramInfo.readIdl()?.kind === "refused") {
+        // The program's names under `anchor.workspace` report why there is no
+        // program; every other key reads as on a plain object.
+        // TODO(HOO-1765 task 1.4): no unit test drives `_overridePackage`
+        // (it needs the iframe runtime); the manual check on the preview runs
+        // a script against a refused IDL
+        const raw = PgProgramInfo.idl as { metadata?: { name?: unknown } };
+        const snakeCaseName = raw.metadata?.name;
+        if (typeof snakeCaseName === "string") {
+          pkg.workspace = {};
+          const names = new Set([
+            PgCommon.toPascalFromSnake(snakeCaseName),
+            PgCommon.toCamelFromSnake(snakeCaseName),
+            PgCommon.toKebabFromSnake(snakeCaseName),
+            snakeCaseName,
+          ]);
+          for (const name of names) {
+            Object.defineProperty(pkg.workspace, name, {
+              get: () => {
+                throw new Error(PgProgramInfo.noCallableIdlMessage());
+              },
+            });
+          }
         }
       }
     }
@@ -521,8 +547,16 @@ export class PgJsRuntime {
     if (PgProgramInfo.pk) pg.PROGRAM_ID = PgProgramInfo.pk;
 
     // Anchor Program
-    if (pg.wallet && PgProgramInfo.idl) {
+    if (pg.wallet && PgProgramInfo.callableIdl()) {
       pg.program = PgProgramInteraction.getAnchorProgram();
+    } else if (PgProgramInfo.readIdl()?.kind === "refused") {
+      // A script that reaches for the program learns why there is none;
+      // not enumerable, so code that walks `pg` does not trip on it
+      Object.defineProperty(pg, "program", {
+        get: () => {
+          throw new Error(PgProgramInfo.noCallableIdlMessage());
+        },
+      });
     }
 
     return pg;

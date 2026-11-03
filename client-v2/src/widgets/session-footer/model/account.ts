@@ -13,7 +13,8 @@ export type AccountItem =
   | "cluster-down"
   | "connect-wallet"
   | "wallet"
-  | "disconnect-wallet";
+  | "disconnect-wallet"
+  | "fund-wallet";
 
 /** Where the account menu opens from: the footer's account row, or the rail's "Account" */
 export type AccountSurface = "footer" | "rail";
@@ -47,6 +48,11 @@ export interface AccountView {
   cluster: ClusterStatus;
   /** A feedback send is in flight behind a closed form */
   sending: boolean;
+  /**
+   * A Playground account exists to receive SOL, so the menu offers "Fund from
+   * a wallet" (`features/fund-wallet`); false before the wallet's setup
+   */
+  canFund: boolean;
 }
 
 /** The line under the account's name */
@@ -123,11 +129,14 @@ export const lineText = (line: AccountLine) => {
   }
 };
 
+/** What a cluster that is down is called, in Spec 08's words (NET-02) */
+export const NOT_ANSWERING = "not answering";
+
 /** Named, not only coloured, so a screen reader hears a cluster that is down */
 export const clusterLabel = (
   cluster: ClusterStatus,
   prefix: "Cluster: " | "Change cluster, currently "
-) => `${prefix}${cluster.name}${cluster.down ? ", down" : ""}`;
+) => `${prefix}${cluster.name}${cluster.down ? `, ${NOT_ANSWERING}` : ""}`;
 
 /**
  * Down when the cluster does not answer (`PgConnection.isConnected`, polled),
@@ -159,6 +168,7 @@ if (import.meta.vitest) {
       wallet: fields.wallet ?? null,
       cluster: fields.cluster ?? UP,
       sending: fields.sending ?? false,
+      canFund: fields.canFund ?? false,
     });
 
     const TESTER = { name: "Tester", login: "t", image: null };
@@ -313,14 +323,14 @@ if (import.meta.vitest) {
     });
 
     describe("clusterLabel", () => {
-      it("says down in words, not by colour alone", () => {
+      it("says down in Spec 08's words, not by colour alone", () => {
         expect(clusterLabel(UP, "Cluster: ")).toBe("Cluster: devnet");
         expect(
           clusterLabel(
             { name: "devnet", down: true },
             "Change cluster, currently "
           )
-        ).toBe("Change cluster, currently devnet, down");
+        ).toBe("Change cluster, currently devnet, not answering");
       });
     });
 

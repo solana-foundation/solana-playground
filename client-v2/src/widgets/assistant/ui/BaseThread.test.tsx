@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { BaseThread } from "./BaseThread";
+import type { BusyRetryView } from "./BaseThread";
 import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
@@ -11,6 +12,16 @@ vi.mock("../../../components/Markdown", () => ({
 }));
 
 const CREATED = "2026-10-19T00:00:00.000Z";
+const SIGN_IN_TO_KEEP =
+  "Sign in to keep this conversation on your other devices.";
+
+const userMessage = (text: string): ChatItem => ({
+  kind: "user",
+  id: `user-${text}`,
+  createdAt: CREATED,
+  text,
+});
+
 const SUGGESTIONS = ["What does this program do?", "Why did my build fail?"];
 
 const renderThread = (
@@ -18,8 +29,10 @@ const renderThread = (
   overrides: {
     working?: boolean;
     unsaved?: boolean;
+    signIn?: { pending: boolean; onSignIn: () => void } | null;
     project?: string | null;
     onSuggestion?: (text: string) => void;
+    retry?: BusyRetryView;
   } = {}
 ) =>
   render(
@@ -27,11 +40,13 @@ const renderThread = (
       items={items}
       working={overrides.working ?? false}
       unsaved={overrides.unsaved ?? false}
+      signIn={overrides.signIn ?? null}
       project={overrides.project === undefined ? "Counter" : overrides.project}
       suggestions={SUGGESTIONS}
       onSuggestion={overrides.onSuggestion ?? vi.fn()}
       actionsFor={() => undefined}
       onAnswer={vi.fn()}
+      retry={overrides.retry}
     />
   );
 
@@ -69,6 +84,46 @@ describe("BaseThread", () => {
     expect(screen.queryByText(THREAD_NOT_SAVED)).toBeNull();
   });
 
+  it("a signed-out thread ends in an offer to sign in", () => {
+    const onSignIn = vi.fn();
+    renderThread([userMessage("Hi")], {
+      signIn: { pending: false, onSignIn },
+    });
+    const line = screen.getByText(SIGN_IN_TO_KEEP);
+    const log = screen.getByRole("log", { name: "Conversation" });
+    expect(log.contains(line)).toBe(true);
+    // At the foot: after the conversation's last item
+    expect(
+      screen.getByText("Hi").compareDocumentPosition(line) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Sign in with GitHub" })
+    );
+    expect(onSignIn).toHaveBeenCalledTimes(1);
+  });
+
+  it("the offer's button waits while a sign-in is pending", () => {
+    renderThread([userMessage("Hi")], {
+      signIn: { pending: true, onSignIn: vi.fn() },
+    });
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Sign in with GitHub",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+  });
+
+  it("no offer, no sign-in line", () => {
+    renderThread([userMessage("Hi")]);
+    expect(screen.queryByText(SIGN_IN_TO_KEEP)).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Sign in with GitHub" })
+    ).toBeNull();
+  });
+
   it("lays the suggestions out as a row that wraps", () => {
     renderThread([]);
     const suggestion = screen.getByRole("button", {
@@ -101,6 +156,48 @@ describe("BaseThread", () => {
     expect(
       screen.queryByRole("status", { name: "Assistant is working" })
     ).toBeNull();
+  });
+
+  describe("a busy model (Spec 08 AI-03)", () => {
+    const USER_ITEM: ChatItem = {
+      kind: "user",
+      id: "u1",
+      createdAt: CREATED,
+      text: "hi",
+    };
+    const busy = (canTryNow: boolean) => ({
+      secondsLeft: 7,
+      canTryNow,
+      onTryNow: vi.fn(),
+      onStop: vi.fn(),
+    });
+
+    it("counts down under the message with Try now and Stop", () => {
+      const retry = busy(true);
+      renderThread([USER_ITEM], { retry });
+
+      expect(screen.getByText("The model is busy")).toBeTruthy();
+      expect(screen.getByText("Trying again in 7 s.")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Try now" }));
+      fireEvent.click(screen.getByRole("button", { name: "Stop" }));
+      expect(retry.onTryNow).toHaveBeenCalled();
+      expect(retry.onStop).toHaveBeenCalled();
+    });
+
+    it("keeps Try now off while the server's wait runs", () => {
+      renderThread([USER_ITEM], { retry: busy(false) });
+
+      expect(
+        (screen.getByRole("button", { name: "Try now" }) as HTMLButtonElement)
+          .disabled
+      ).toBe(true);
+    });
+
+    it("says nothing about it when no message waits", () => {
+      renderThread([USER_ITEM]);
+
+      expect(screen.queryByText("The model is busy")).toBeNull();
+    });
   });
 
   it("every item is a scroller item", () => {

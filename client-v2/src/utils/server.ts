@@ -3,6 +3,9 @@ import type { Idl } from "@coral-xyz/anchor";
 import { PgCommon } from "./common";
 import { PgSettings } from "./settings";
 import type { TupleFiles } from "./explorer";
+import { PgServerError, UNREADABLE_BODY } from "./server-error";
+
+export { PgServerError };
 
 /** Rust `Option` type */
 type Option<T> = T | null;
@@ -38,9 +41,10 @@ export class PgServer {
    * Build the program files.
    *
    * @param req build request
+   * @param opts.signal aborts the request
    * @returns the build response
    */
-  static async build(req: BuildRequest) {
+  static async build(req: BuildRequest, opts?: { signal?: AbortSignal }) {
     interface BuildResponse {
       /** Build output */
       stderr: string;
@@ -53,6 +57,7 @@ export class PgServer {
     const response = await this._send("/build", {
       post: { body: JSON.stringify(req) },
       unstable: PgSettings.experimental.unstable,
+      signal: opts?.signal,
     });
     return (await response.json()) as BuildResponse;
   }
@@ -111,7 +116,8 @@ export class PgServer {
   /**
    * Send an HTTP request to the Playground server.
    *
-   * @param opts server send request options
+   * @param opts server send request options; an aborted `signal` fails the
+   * request like any other network failure ("Server request failed")
    * @throws when the response is not OK (with the decoded response)
    * @returns the HTTP response
    */
@@ -122,9 +128,10 @@ export class PgServer {
       post?: { body: string };
       useDbServer?: boolean;
       unstable?: boolean;
+      signal?: AbortSignal;
     }
   ) {
-    const requestInit: RequestInit = {};
+    const requestInit: RequestInit = { signal: opts?.signal };
     if (!opts?.cache) requestInit.cache = "no-store";
 
     if (opts?.post) {
@@ -138,16 +145,21 @@ export class PgServer {
       : PgSettings.server.endpoint;
     if (opts?.unstable) path = PgCommon.joinPaths("unstable", path);
     const requestUrl = PgCommon.joinPaths(serverUrl, path);
+    let response: Response;
     try {
-      const response = await fetch(requestUrl, requestInit);
-      if (!response.ok) {
-        const message = await response.text();
-        throw new Error(message);
-      }
-
-      return response;
+      response = await fetch(requestUrl, requestInit);
     } catch (e: any) {
-      throw new Error(`Server request failed (${requestUrl}): ${e?.message}`);
+      throw new PgServerError(requestUrl, null, e?.message || String(e), {
+        cause: e,
+      });
     }
+    if (!response.ok) {
+      // A body cut off mid-read still leaves the status to report; the
+      // placeholder says in the error's message that the body was lost
+      const body = await response.text().catch(() => UNREADABLE_BODY);
+      throw new PgServerError(requestUrl, response.status, body);
+    }
+
+    return response;
   }
 }

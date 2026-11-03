@@ -30,8 +30,8 @@ export const helloAnchorPath: LessonPath = {
     },
     {
       id: "deploy",
-      objective: "Deploy the program to devnet",
-      verifiedBy: "the program is live on devnet",
+      objective: "Deploy the program to Devnet",
+      verifiedBy: "the program is live on Devnet",
       verify: { kind: "deployed" },
       readPage: () => require("../../../../tutorials/hello-anchor/pages/2.md"),
       hints: [

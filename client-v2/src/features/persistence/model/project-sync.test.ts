@@ -2,6 +2,7 @@ import type { Mock } from "vitest";
 import { PgProjectSync } from "./project-sync";
 import { clearFailures, getFailures } from "./diagnostics";
 import { PgEditorModels } from "./editor-models";
+import { MAX_PROJECT_BODY_BYTES } from "./project-write.mjs";
 import { hashFiles } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClaim } from "./sync-claim";
@@ -563,7 +564,7 @@ describe("a conflict is asked once, not retried forever", () => {
     // A 409 on a tombstoned or missing row, and the merge's read of it a 404.
     // Asked as a divergence, both answers merge against a server that has
     // nothing to merge with and fail, so the banner could never be cleared --
-    // and "Keep as a new project", the answer that works, was never offered.
+    // and "Keep a copy", the answer that works, was never offered.
     stubFetch((url: string, init: any) => {
       if (url === "/api/sync") return Promise.resolve(okProbe);
       if (init?.method === "PUT") return Promise.resolve(refusal);
@@ -799,6 +800,41 @@ describe("resolving a conflict", () => {
     });
     await signedIn();
     asWorkspace("p1", "mine");
+    // Clean against an agreement, so the snapshot is the only thing that can
+    // stop the adoption
+    await agreedOn("p1", "mine", { "src/lib.rs": "mine" });
+    const replace = vi
+      .spyOn(PgExplorer, "replaceWorkspaceFiles")
+      .mockResolvedValue(undefined);
+
+    expect(await PgProjectSync.adopt("p1")).toBeNull();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("refuses to empty a workspace over an empty file map", async () => {
+    // `{files: {}}` is a well-formed file map, and taking it is the same
+    // deletion as a malformed one: the server refuses a full write of one,
+    // but an older row, or a patch that removed every file, can hold one.
+    stubFetch((url: string) => {
+      if (url === "/api/sync") return Promise.resolve(okProbe);
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          project: {
+            id: "p1",
+            name: "mine",
+            kind: "project",
+            snapshot: { files: {} },
+            updatedAt: "t9",
+          },
+        }),
+      });
+    }) as unknown as typeof fetch;
+    await signedIn();
+    asWorkspace("p1", "mine");
+    // Clean against an agreement, so the snapshot is the only thing that can
+    // stop the adoption
+    await agreedOn("p1", "mine", { "src/lib.rs": "mine" });
     const replace = vi
       .spyOn(PgExplorer, "replaceWorkspaceFiles")
       .mockResolvedValue(undefined);
@@ -1620,6 +1656,82 @@ describe("a refusal the user has to clear", () => {
     );
     expect(PgProjectSync.conflictFor("p1")?.kind).toBe("too-large");
   });
+
+  it("refuses a workspace over the limit itself, before sending it", async () => {
+    // The platform refuses a body over its own cap before our handler runs,
+    // so the only way the user sees our refusal rather than the platform's is
+    // to not send it. The banner is the same either way.
+    refusing({
+      ok: true,
+      status: 200,
+      json: async () => ({ updatedAt: "t2" }),
+    });
+    await signedIn();
+
+    // Under every project limit, over the cap once JSON escapes it: a control
+    // character is one byte in the file and six (`\u0001`) in the body
+    const escaped = "\u0001".repeat(MAX_PROJECT_BODY_BYTES / 12 + 1);
+    expect(
+      await PgProjectSync.push("p1", { files: { a: escaped, b: escaped } })
+    ).toBe("conflict");
+    // The body cap's refusal, which names no project limit
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    expect(putCalls()).toHaveLength(0);
+    // Not recorded: a mark here would make the project read as uploaded
+    expect(await PgSyncMark.read("p1")).toBeNull();
+  });
+
+  it("measures the limit in bytes, not characters", async () => {
+    // The platform counts bytes. Two-byte characters under the limit in
+    // characters are over it in bytes, and sent they meet the platform's 413.
+    refusing({
+      ok: true,
+      status: 200,
+      json: async () => ({ updatedAt: "t2" }),
+    });
+    await signedIn();
+
+    // Escaped control characters bring the body to 924,000 characters, one
+    // byte each; 120,000 accented characters add 120,000 more characters but
+    // 240,000 bytes. Under the cap in characters, over it in bytes, and under
+    // every project limit.
+    const escaped = "\u0001".repeat(77_000);
+    const accented = "é".repeat(60_000);
+    const files = { a: escaped, b: escaped, c: accented, d: accented };
+    const body = JSON.stringify({ files });
+    expect(body.length).toBeLessThan(MAX_PROJECT_BODY_BYTES);
+    expect(new TextEncoder().encode(body).length).toBeGreaterThan(
+      MAX_PROJECT_BODY_BYTES
+    );
+    expect(await PgProjectSync.push("p1", { files })).toBe("conflict");
+    expect(PgProjectSync.conflictFor("p1")).toEqual({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    expect(putCalls()).toHaveLength(0);
+  });
+
+  // A loop rather than `it.each`: the global `it` here is typed by
+  // `@types/mocha`, which has no `each`
+  for (const [id, kind] of [
+    ["tut:hello-anchor", "tutorial"],
+    ["4f1c9a52-5d0e-4c55-9a3b-2d6f0b8e7c11", "project"],
+  ]) {
+    it(`sends ${id} as a ${kind}, the kind the server checks`, async () => {
+      refusing({
+        ok: true,
+        status: 200,
+        json: async () => ({ updatedAt: "t2" }),
+      });
+      await signedIn();
+
+      expect(await PgProjectSync.push(id, { files: { a: "1" } })).toBe("ok");
+      expect(lastBody().kind).toBe(kind);
+    });
+  }
 
   it("stops pushing a refused project, exactly like a divergence", async () => {
     refusing({

@@ -14,8 +14,8 @@ action within reach of the thumb on a phone.
 The Build stage SHALL show each compiler error as a diagnostic
 (`data-slot="diagnostic"`) with its error code, a plain explanation and the
 source lines around it, the faulty line marked (`data-fault`) with the
-compiler's label, and SHALL offer "Fix with assistant" on it. The stage keeps
-`flow-stage-panel-build`.
+compiler's label, and SHALL offer Explain and Fix on it, each sending the
+error to the assistant. The stage keeps `flow-stage-panel-build`.
 
 #### Scenario: A failed build marks the faulty line
 
@@ -23,7 +23,39 @@ compiler's label, and SHALL offer "Fix with assistant" on it. The stage keeps
 - **THEN** the stage shows one diagnostic with the code E0308
 - **AND** line 5 is marked as the faulty one, with "expected u32, found &str"
   beside it
-- **AND** "Fix with assistant" is offered on it
+- **AND** Explain and Fix are offered on it
+
+### Requirement: Build refuses an empty program file
+
+When `src/lib.rs` exists and holds nothing but whitespace, Build SHALL send no
+build request, SHALL name the file as empty with "Write a program, or ask the
+assistant for one.", and SHALL count the attempt as a failed build, so Deploy
+does not go on with the binary of the program the file used to hold. A
+project without `src/lib.rs` builds as before.
+
+#### Scenario: Building an empty lib.rs (manual)
+
+- **WHEN** a user empties `src/lib.rs` in a project that built before and
+  presses Build
+- **THEN** no request reaches the build server, the terminal and the Build
+  stage say "lib.rs is empty. Write a program, or ask the assistant for one."
+- **AND** Deploy then warns "The last build failed" and asks before it
+  uploads the earlier binary
+
+### Requirement: A slow build says so
+
+While a build runs, the Build stage SHALL keep a polite status region, and
+SHALL put "This build is taking longer than usual." in it once the run has
+lasted 60 seconds, counted from the run's own start so a remount does not
+restart the clock. The line is never in a warning colour.
+
+#### Scenario: A build past 60 seconds (manual)
+
+- **WHEN** a build has run for more than 60 seconds, the Build stage
+  remounting once on the way
+- **THEN** the stage shows "This build is taking longer than usual." in muted
+  text under the build's progress, and a screen reader announces it once
+- **AND** the line is gone when the build ends
 
 ### Requirement: The Deploy stage shows the latest deployment
 

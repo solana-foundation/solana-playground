@@ -10,6 +10,8 @@ import {
   PgProgramInfo,
   PgWallet,
 } from "../../../../utils";
+import { estimateDeployCostWithin } from "../../../../commands/deploy/estimate";
+import { networkInSentence } from "@/features/deploy";
 import { PgLesson } from "../../../flow/lessons";
 
 /** A condensed view of the program's interface, cheaper than the whole IDL */
@@ -17,6 +19,8 @@ export interface IdlSummary {
   name: string;
   instructions: string[];
   accounts: string[];
+  /** Why the Playground cannot call this IDL; absent when it can */
+  refused?: string;
 }
 
 /** What the assistant is allowed to know about the project without asking */
@@ -71,6 +75,16 @@ export interface PlaygroundBridge {
   build(): Promise<void>;
   /** @returns where the deployed program can be seen, when that is known */
   deploy(): Promise<{ programId: string; explorerUrl: string } | null>;
+  /**
+   * @returns the network a deploy would go to, named as a sentence writes it
+   * ("devnet", `null` while unknown), its estimated cost in lamports (`null`
+   * when it cannot be estimated), and whether the Playground wallet pays
+   */
+  quoteDeploy(): Promise<{
+    network: string | null;
+    cost: number | null;
+    playground: boolean;
+  }>;
 }
 
 const toRelative = (fullPath: string) => {
@@ -82,7 +96,23 @@ const toRelative = (fullPath: string) => {
 };
 
 const summarizeIdl = (): IdlSummary | null => {
-  const idl = PgProgramInfo.idl;
+  const reading = PgProgramInfo.readIdl();
+  // TODO(HOO-1765 task 1.4): the refused branch has no unit test (the bridge
+  // reads the whole playground); `describeProject`'s test pins its wording
+  if (reading?.kind === "refused") {
+    const raw = PgProgramInfo.idl as {
+      name?: unknown;
+      metadata?: { name?: unknown };
+    };
+    const name = raw.metadata?.name ?? raw.name;
+    return {
+      name: typeof name === "string" ? name : "unknown",
+      instructions: [],
+      accounts: [],
+      refused: reading.reason,
+    };
+  }
+  const idl = PgProgramInfo.callableIdl();
   if (!idl) return null;
 
   return {
@@ -166,11 +196,21 @@ export const realBridge: PlaygroundBridge = {
     await PgCommand.build.execute();
   },
 
+  async quoteDeploy() {
+    const cluster = PgConnection.cluster;
+    return {
+      network: networkInSentence(cluster),
+      cost: await estimateDeployCostWithin(),
+      // No wallet yet: the Playground wallet is made on the deploy and pays
+      playground: !PgWallet.current || PgWallet.current.isPg === true,
+    };
+  },
+
   async deploy() {
     await PgCommand.deploy.execute();
 
-    // The deploy command prints the transaction to the terminal but does not
-    // return it; the program address is the stable thing to link to.
+    // The program address is the stable thing to link to: an upgrade keeps
+    // it, while the transaction differs on every deploy.
     const programId = PgProgramInfo.getPkStr();
     if (!programId) return null;
     return {

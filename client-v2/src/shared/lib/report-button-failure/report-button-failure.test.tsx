@@ -112,6 +112,17 @@ describe("reportButtonFailure", () => {
     expect(setToast).toHaveBeenCalledTimes(1);
   });
 
+  // The terminal and the stage can both mark one thrown string
+  it("marks a string shown twice as one failure", () => {
+    markFailureShown("AccountNotFound");
+    markFailureShown("AccountNotFound");
+
+    reportButtonFailure("deploy")("AccountNotFound");
+    reportButtonFailure("send SOL")("AccountNotFound");
+
+    expect(setToast).toHaveBeenCalledTimes(1);
+  });
+
   it("never treats null or undefined as shown", () => {
     markFailureShown(undefined);
     markFailureShown(null);

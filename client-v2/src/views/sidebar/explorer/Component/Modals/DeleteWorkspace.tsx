@@ -38,6 +38,10 @@ export const DeleteWorkspace: FC<
           <Desc>This action is irreversible!</Desc>
           <Desc>- All files and folders will be deleted.</Desc>
           <Desc>- Program credentials will be deleted.</Desc>
+          <Desc>
+            - The assistant chat will be deleted, from your account too if you
+            are signed in.
+          </Desc>
           {/* Progress lives in `.workspace/tutorial-storage.json`, inside the
               directory about to be removed */}
           {isLesson && <Desc>- Your progress through the lesson is lost.</Desc>}

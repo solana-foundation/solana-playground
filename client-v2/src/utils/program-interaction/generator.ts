@@ -95,7 +95,7 @@ type PublicKeyGenerator =
   | {
       type: "From seed";
       seeds: Seed[];
-      programId: WithGenerator<ProgramGenerator>;
+      programId: WithGenerator<SeedProgramGenerator>;
     }
   | { type: "All programs"; name: string }
   | { type: "Token accounts"; name: string }
@@ -104,6 +104,15 @@ type PublicKeyGenerator =
 
 /** Program public key generator */
 type ProgramGenerator = { type: "Current program" };
+
+/**
+ * The program a PDA derives with: the current one, or the seed program an IDL
+ * names (an address, or an argument or account that holds it)
+ */
+type SeedProgramGenerator =
+  | ProgramGenerator
+  | { type: "Custom"; value: string }
+  | { type: "Arguments" | "Accounts"; name: string };
 
 /** Generatable derivation seed */
 export type Seed = { type: IdlType; generator: InstructionValueGenerator };

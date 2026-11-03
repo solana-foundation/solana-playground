@@ -1,8 +1,12 @@
 import { useEffect, useState } from "react";
 
+import { DownloadProgram } from "@/features/cli-deploy";
+
 import BaseBuild from "./BaseBuild";
 import IdlActions from "./IdlActions";
+import { useSlowBuild } from "./use-slow-build";
 import { buildSurface, ownOutput } from "./build-surface";
+import { toldByStage } from "./stage-failure";
 import { failedView } from "./build-view";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
@@ -40,6 +44,8 @@ const Build = () => {
     };
   }, []);
 
+  const building = flow.build === "running";
+  const slow = useSlowBuild(building, flow.buildStartedAt);
   const own = ownOutput(out, PgExplorer.currentWorkspaceName ?? null);
   const surface = buildSurface({ flow, own });
 
@@ -57,15 +63,23 @@ const Build = () => {
             }
           : surface
       }
-      building={flow.build === "running"}
+      building={building}
+      slow={slow}
       host={serverHost()}
+      serverUrl={PgSettings.server.endpoint}
       ms={flow.buildMs}
-      onBuild={() => PgCommand.build.execute()}
+      // The stage's catch rethrows; BaseBuild's buttons report what is left
+      onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}
       onExport={() => PgFramework.exportWorkspace()}
-      onFix={(prompt) => PgAssistant.requestPrompt(prompt)}
+      onAsk={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
-      idlActions={<IdlActions mode="download" />}
+      idlActions={
+        <>
+          <IdlActions mode="download" />
+          <DownloadProgram from="build-stage" />
+        </>
+      }
     />
   );
 };

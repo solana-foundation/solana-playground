@@ -3,8 +3,8 @@ import { PgBlockExplorer, PgConnection } from "../utils";
 export const solscan = PgBlockExplorer.create({
   name: "Solscan",
   url: "https://solscan.io",
-  getClusterParam: () => {
-    switch (PgConnection.cluster) {
+  getClusterParam: (cluster = PgConnection.cluster) => {
+    switch (cluster) {
       case "testnet":
         return "?cluster=testnet";
       case "devnet":

@@ -89,16 +89,17 @@ between by a swipe or by the buttons in each page's bar: the menu (the
 navigation), the work page (the assistant or the code, switched by Chat and
 Code) and the preview (the current stage over the console). A load SHALL
 land on the work page showing the code. The code editor SHALL edit at every
-width. The 768 px value SHALL be held in one place.
+width, and on a phone SHALL set its code at 15 px on a 23 px line, a step
+up from the desktop's, since a phone is read at arm's length. The 768 px value SHALL be held in one place.
 
 #### Scenario: A phone
 
 - **WHEN** a user on a 390 px wide screen opens a project, types in the
   editor, picks another file from "Files", opens "Preview the build", goes
   "Back to the code", opens "Menu" and then Chat
-- **THEN** the code changes, the other file opens, the Build stage shows
-  over the console, the code is shown again, the navigation fills the
-  screen, and the assistant accepts a prompt
+- **THEN** the code is set at 15 px on a 23 px line, the code changes, the
+  other file opens, the Build stage shows over the console, the code is shown
+  again, the navigation fills the screen, and the assistant accepts a prompt
 
 #### Scenario: Turning a phone across 768 px
 
@@ -112,6 +113,43 @@ width. The 768 px value SHALL be held in one place.
 - **WHEN** a user opens a project on a 768 px wide screen and types in the
   editor
 - **THEN** the code changes
+
+### Requirement: A phone moves only as the system allows
+
+On a phone, moving between pages SHALL glide and a sheet and its scrim SHALL
+slide and fade in and out, unless the system asks for reduced motion. Then
+the pager SHALL jump to the page asked for, a sheet and its scrim SHALL
+appear and leave with no animation, and the jump SHALL be reported once, as
+the button that asked for it, never as a swipe.
+
+#### Scenario: Reduced motion on a phone
+
+- **WHEN** a user whose system asks for reduced motion opens "Files" on a
+  390 px wide screen, closes it with Escape, then opens "Preview the build"
+- **THEN** the sheet and its scrim appear and leave without sliding or
+  fading, the pager jumps to the preview instead of gliding, and one
+  `layout_page_shown` event is sent, `via: button`
+
+#### Scenario: Motion on a phone by default
+
+- **WHEN** a user whose system states no motion preference opens "Files" on a
+  390 px wide screen
+- **THEN** the pager scrolls smoothly, and the sheet and its scrim animate
+
+### Requirement: The editor's keyboard button on an iPhone
+
+On iOS the code editor SHALL keep its own button that raises the on-screen
+keyboard, because a tap on the code does not always raise it. The button
+SHALL be drawn as one of the product's controls: 48 px square, 14 px
+corners, a 1 px border in the product's border colour, not the editor's own
+grey frame. A tap on it SHALL focus the code.
+
+#### Scenario: The editor's keyboard button on an iPhone
+
+- **WHEN** a user on an iPhone opens a project and taps the editor's keyboard
+  button
+- **THEN** the button is 48 px square with 14 px corners and the product's
+  border, the code takes the focus, and typing changes it
 
 ### Requirement: The editor does not take focus from a field
 
@@ -317,18 +355,20 @@ entries are measured by `features/feedback`.
 From 768 px wide, and on a phone's menu page, the navigation SHALL show
 "Get set up · <n> of 4" above the session footer, with four steps in order:
 "Connect the assistant", "Choose a network", "Sign in with GitHub" and
-"Connect a wallet". A step SHALL be done while a model is connected, once
-the user has picked a network in the settings (the network already chosen
-included), while signed in, and while a wallet is connected, respectively.
-A done step SHALL show a tick and its value (the cluster's name, the login,
-the wallet's shortened address); a step to do SHALL run its action when
-clicked: open Connect a model, open the settings on the network, start the
-GitHub sign-in, connect the wallet. The title SHALL fold the list.
+"Connect a wallet". The first SHALL be done while a model is connected, the
+second always (the default network counts as chosen), the third while
+signed in, and the fourth while a wallet is connected. A done step SHALL show a tick and its
+value (the cluster's name, the login, the wallet's shortened address); a
+step to do SHALL run its action when clicked: open Connect a model, start
+the GitHub sign-in, connect the wallet. The title SHALL fold the list, and
+the user's last fold SHALL be kept on the device across a reload, one fold
+for the device wherever it was made; until the user has folded or unfolded
+it, a phone's menu page SHALL show it folded.
 "Dismiss the checklist" SHALL hide it for good on the device, and so SHALL
 all four steps being done at once. The rail SHALL show no checklist.
 
 The checklist SHALL send `setup_item_picked` with `item` (`assistant`,
-`network`, `github` or `wallet`) each time a user clicks a step to do,
+`github` or `wallet`) each time a user clicks a step to do,
 `setup_dismissed` with `done` (how many steps were done) when it is
 dismissed, and `setup_completed` the first time all four steps are done
 together on the device.
@@ -337,15 +377,27 @@ together on the device.
 
 - **WHEN** a signed-out user with a wallet connected and no model connected
   opens the product
-- **THEN** the navigation shows "Get set up · 1 of 4", with "Connect a
-  wallet" ticked and the wallet's shortened address beside it
+- **THEN** the navigation shows "Get set up · 2 of 4", with "Choose a
+  network" ticked and the cluster's name beside it, and "Connect a wallet"
+  ticked and the wallet's shortened address beside it
 
-#### Scenario: Choosing a network
+#### Scenario: The default network counts
 
-- **WHEN** a user clicks "Choose a network" in the checklist and picks the
-  network already selected in the settings
-- **THEN** the settings open on the network, and after the pick, back in
-  the app, the step is ticked and the count goes up by one
+- **WHEN** a user opens the product for the first time on a device
+- **THEN** the navigation shows "Get set up · 1 of 4", with "Choose a
+  network" ticked and "devnet" beside it
+
+#### Scenario: The fold survives a reload
+
+- **WHEN** a user clicks "Get set up" to fold the checklist, then reloads
+- **THEN** the checklist shows only its title, folded
+
+#### Scenario: The checklist on a phone's menu page
+
+- **WHEN** a user who has never folded the checklist opens a phone's menu
+  page, unfolds the checklist there, then reloads and opens the menu again
+- **THEN** the checklist shows only its title at first, and is unfolded
+  after the reload
 
 #### Scenario: A step opens its action
 
@@ -424,6 +476,16 @@ the page.
 - **WHEN** the user opens it again and presses ⌘,
 - **THEN** the settings page and the dialog both close
 
+#### Scenario: Importing a project from the settings shows it (manual)
+
+- **WHEN** a user imports a project with "From GitHub" or "From files" on
+  the settings page
+- **THEN** the dialog and the settings page both close and the imported
+  project shows
+- **WHEN** the user opens "From GitHub" on the settings page and closes it
+  without importing
+- **THEN** the settings page stays open
+
 #### Scenario: A fresh load focuses no settings trigger
 
 - **WHEN** a user loads the page at 1440 or 834 px wide and does nothing
@@ -445,8 +507,9 @@ the page.
 ### Requirement: The settings page is measured
 
 The product SHALL send `settings_opened` with where it was opened from
-(`cluster`, `rail`, `menu`, `key` or `setup`, the Get set up checklist), `settings_closed` with how it was
-closed (`back`, `escape` or `key`), and `settings_section_picked` with the
+(`cluster`, `rail`, `menu` or `key`), `settings_closed` with how it was
+closed (`back`, `escape`, `key`, or `import` when a project imported from
+the page closed it), and `settings_section_picked` with the
 section, each time a user picks one in the section list.
 
 #### Scenario: Opening and closing the settings is counted
@@ -800,7 +863,7 @@ The product SHALL send `layout_viewport` with the `viewport` class (`wide`,
 panel (`nav`, `files`, `assistant` or `console`; the files column's earlier
 name, `left`, is not sent), whether it is open, and whether a button, a key, a
 drag of the panel's edge or the product itself did it (the product opens the
-console on a deploy and the assistant on "Fix with assistant", and closes the
+console on a deploy and the assistant on a build error's Explain or Fix, and closes the
 phone's Files sheet when a modal opens, since the sheet would keep focus from
 it);
 `layout_page_shown` with the page (`menu`, `work` or `preview`) and whether

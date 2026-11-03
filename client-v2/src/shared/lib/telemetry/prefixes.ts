@@ -5,9 +5,12 @@ export const EVENT_PREFIXES = {
   "app-nav": "nav",
   assistant: "assistant",
   catalog: "catalog",
+  "cli-deploy": "cli",
+  deploy: "deploy",
   // The legacy `utils/explorer`, which has no slice yet
   explorer: "explorer",
   feedback: "feedback",
+  "fund-wallet": "fund",
   home: "home",
   "layout-shell": "layout",
   mcp: "mcp",

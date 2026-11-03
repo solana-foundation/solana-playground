@@ -17,6 +17,7 @@ import {
   accountLines,
   accountUser,
   clusterLabel,
+  NOT_ANSWERING,
   lineText,
 } from "../model/account";
 import type { AccountLine, AccountView } from "../model/account";
@@ -76,9 +77,14 @@ const BaseSessionFooter = ({
               size="lg"
             />
           </span>
-          {/* "Devnet", as the prototype writes it; the name stays lower case
-              in the label the screen reader reads */}
-          <span className="truncate capitalize">{account.cluster.name}</span>
+          {/* Already "Devnet", as the prototype writes it (`clusterName`);
+              the screen reader's label reads the same name. Down, the row is
+              Spec 08's NET-02 chip, "Devnet · not answering", in place of the
+              old "Switch to localnet?" toast */}
+          <span className="truncate">
+            {account.cluster.name}
+            {account.cluster.down && ` · ${NOT_ANSWERING}`}
+          </span>
         </SidebarMenuButton>
       </SidebarMenuItem>
       <SidebarMenuItem>

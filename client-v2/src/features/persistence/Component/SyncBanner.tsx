@@ -8,6 +8,7 @@ import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { ConflictResolver } from "../ui/ConflictResolver";
 import { PgProjectSync } from "../model/project-sync";
+import { MAX_PROJECT_BODY_LABEL } from "../model/project-write.mjs";
 import { persistenceTelemetry } from "../model/telemetry";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import type { Conflict, Resolution } from "../model/project-sync";
@@ -88,10 +89,10 @@ const PROMPTS: Record<
   },
   "deleted-elsewhere": {
     message: () =>
-      "This project was deleted on another device, but you have unsaved changes here.",
+      "This project was deleted on another device, but this one has unsaved changes.",
     actions: [
       {
-        label: "Keep as a new project",
+        label: "Keep a copy",
         resolution: "keep-as-new",
         primary: true,
       },
@@ -106,7 +107,7 @@ const PROMPTS: Record<
   // stuck anyway.
   "name-taken": {
     message: () =>
-      "Another project in your account already uses this name, so this one cannot be uploaded. Rename it, then try again.",
+      "Another project in your account uses this name. Rename this one, then try again.",
     actions: [{ label: "Try again", resolution: "retry", primary: true }],
   },
   // A limit names itself and what is over it; the body cap names no limit
@@ -114,7 +115,7 @@ const PROMPTS: Record<
     message: (conflict) =>
       conflict.kind === "too-large" && conflict.limit
         ? limitBannerText(conflict.limit)
-        : "This project is too large to sync. Remove or shrink its largest files, then try again.",
+        : `This project is over ${MAX_PROJECT_BODY_LABEL}. Remove or shrink its largest files, then try again.`,
     actions: [{ label: "Try again", resolution: "retry", primary: true }],
   },
 };

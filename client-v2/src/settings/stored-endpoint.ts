@@ -1,14 +1,10 @@
 // Loaded by `utils/settings.ts` before everything else, so this file only
 // imports modules whose own imports end at `shared/config/client-env`, which
 // imports nothing.
-import { Endpoint, PLATFORM_ENDPOINTS } from "../constants/connection";
-import type { PlatformEndpoint } from "../constants/connection";
+import { Endpoint, NETWORKS } from "../constants/connection";
+import type { Network } from "../constants/connection";
 import { SERVER_URL } from "../shared/config/client-env";
-import {
-  FOUNDATION_ENDPOINT,
-  LOCAL_ENDPOINT,
-  SOLPG_ENDPOINT,
-} from "./server/default-endpoint";
+import { FOUNDATION_ENDPOINT, LOCAL_ENDPOINT } from "./server/default-endpoint";
 
 /** The settings whose value is an address */
 const ENDPOINT_SETTINGS = ["connection.endpoint", "server.endpoint"] as const;
@@ -35,21 +31,31 @@ type StoredEndpoint = { option: string } | { option: "custom"; url: string };
 /**
  * Every address we provide, keyed.
  *
- * @param platform the platform RPC endpoints the env configures
+ * The first entry for a key is what the key reads back as; the first entry
+ * for an address is the key it is stored under. So the offered Devnet and
+ * Mainnet come first under the keys the public picks always had, and a
+ * profile on a public URL or under a platform key that the network list no
+ * longer offers reads back as the offered network.
+ *
+ * @param networks the networks Settings offers
  * @param configuredServer the build server `REACT_APP_SERVER_URL` names, if
  * any -- ours too, so it follows the env like the rest
  */
 export const buildEndpointOptions = (
-  platform: ReadonlyArray<PlatformEndpoint>,
+  networks: ReadonlyArray<Network>,
   configuredServer?: string
 ): EndpointOptions => ({
   "connection.endpoint": [
+    ...networks.map((n) => ({ key: n.cluster, url: n.value })),
+    // The public URLs, stored under the offered network's key
+    { key: "devnet", url: Endpoint.DEVNET },
+    { key: "mainnet-beta", url: Endpoint.MAINNET_BETA },
+    // Keys the platform options were stored under before HOO-2488
+    ...networks.map((n) => ({ key: `${n.cluster}-platform`, url: n.value })),
+    // Not offered, still keyed: code paths set Localnet and Playnet
     { key: "playnet", url: Endpoint.PLAYNET },
     { key: "localnet", url: Endpoint.LOCALNET },
-    { key: "devnet", url: Endpoint.DEVNET },
     { key: "testnet", url: Endpoint.TESTNET },
-    { key: "mainnet-beta", url: Endpoint.MAINNET_BETA },
-    ...platform.map((p) => ({ key: `${p.cluster}-platform`, url: p.value })),
   ],
   "server.endpoint": [
     // First, so a profile on the configured server follows the env even
@@ -59,11 +65,12 @@ export const buildEndpointOptions = (
     ...(configuredServer ? [{ key: "configured", url: configuredServer }] : []),
     { key: "foundation", url: FOUNDATION_ENDPOINT },
     { key: "local", url: LOCAL_ENDPOINT },
-    { key: "solpg", url: SOLPG_ENDPOINT },
+    // No `solpg` (api.solpg.io): a profile stored under that key reads as
+    // the default, like any key whose option is gone (`fromStoredEndpoints`)
   ],
 });
 
-const ENDPOINT_OPTIONS = buildEndpointOptions(PLATFORM_ENDPOINTS, SERVER_URL);
+const ENDPOINT_OPTIONS = buildEndpointOptions(NETWORKS, SERVER_URL);
 
 type State = Record<string, unknown>;
 
@@ -150,10 +157,25 @@ if (import.meta.vitest) {
       ({ SERVER_ENDPOINT_OPTIONS } = await import("./server/default-endpoint"));
     });
     const PLATFORM_DEVNET = "https://devnet.rpc.test/?api-key=old";
+    const PLATFORM_MAINNET = "https://mainnet.rpc.test/?api-key=old";
 
-    const options = buildEndpointOptions([
-      { name: "Devnet (Platform)", value: PLATFORM_DEVNET, cluster: "devnet" },
-    ]);
+    /** The two offered networks on the given URLs */
+    const networks = (devnet: string, mainnet: string) => [
+      { name: "Devnet", value: devnet, cluster: "devnet" as const },
+      { name: "Mainnet", value: mainnet, cluster: "mainnet-beta" as const },
+    ];
+
+    const options = buildEndpointOptions(
+      networks(PLATFORM_DEVNET, PLATFORM_MAINNET)
+    );
+
+    /** An entry that is both its key's reading and its address's key */
+    const canonical = (id: keyof typeof options) =>
+      options[id].filter(
+        (o) =>
+          options[id].find((x) => x.key === o.key) === o &&
+          options[id].find((x) => x.url === o.url) === o
+      );
 
     const defaults = {
       connection: {
@@ -192,14 +214,14 @@ if (import.meta.vitest) {
         );
 
         expect(at(stored, "connection.endpoint")).toEqual({
-          option: "devnet-platform",
+          option: "devnet",
         });
         expect(at(stored, "server.endpoint")).toEqual({ option: "foundation" });
         expect(JSON.stringify(stored)).not.toContain("api-key");
       });
 
       it("round-trips every option we provide", () => {
-        for (const { url } of options["connection.endpoint"]) {
+        for (const { url } of canonical("connection.endpoint")) {
           expect(
             roundTrip(state(url, FOUNDATION_ENDPOINT)).connection.endpoint
           ).toBe(url);
@@ -214,16 +236,12 @@ if (import.meta.vitest) {
       it("resolves a stored option to the address the env provides now", () => {
         const stored = JSON.parse(
           JSON.stringify(
-            toStoredEndpoints(state(PLATFORM_DEVNET, SOLPG_ENDPOINT), options)
+            toStoredEndpoints(state(PLATFORM_DEVNET, LOCAL_ENDPOINT), options)
           )
         );
-        const rotated = buildEndpointOptions([
-          {
-            name: "Devnet (Platform)",
-            value: "https://devnet.rpc.test/?api-key=new",
-            cluster: "devnet",
-          },
-        ]);
+        const rotated = buildEndpointOptions(
+          networks("https://devnet.rpc.test/?api-key=new", PLATFORM_MAINNET)
+        );
 
         expect(
           fromStoredEndpoints(stored, defaults, rotated).connection.endpoint
@@ -306,7 +324,7 @@ if (import.meta.vitest) {
         );
 
         expect(at(stored, "connection.endpoint")).toEqual({
-          option: "devnet-platform",
+          option: "devnet",
         });
         expect(at(stored, "server.endpoint")).toEqual({
           option: "custom",
@@ -315,16 +333,113 @@ if (import.meta.vitest) {
       });
 
       it("falls back to the default when a stored option is gone", () => {
-        const stored = JSON.parse(
-          JSON.stringify(
-            toStoredEndpoints(state(PLATFORM_DEVNET, LOCAL_ENDPOINT), options)
-          )
-        );
-        const withoutPlatform = buildEndpointOptions([]);
+        // The platform Testnet option was offered before HOO-2488
+        const stored = {
+          connection: { endpoint: { option: "testnet-platform" } },
+          server: { endpoint: { option: "local" } },
+        };
 
-        const read = fromStoredEndpoints(stored, defaults, withoutPlatform);
+        const read = fromStoredEndpoints(stored, defaults, options);
         expect(read.connection.endpoint).toBe(defaults.connection.endpoint);
         expect(read.server.endpoint).toBe(LOCAL_ENDPOINT);
+      });
+
+      it("reads the dropped SolPg build server as the default", () => {
+        // A profile that picked upstream's server when the picker offered it
+        const stored = { server: { endpoint: { option: "solpg" } } };
+
+        expect(
+          fromStoredEndpoints(stored, defaults, options).server.endpoint
+        ).toBe(defaults.server.endpoint);
+      });
+
+      it("keeps api.solpg.io as a custom address, legacy string included", () => {
+        const solpg = "https://api.solpg.io";
+
+        expect(
+          at(
+            toStoredEndpoints(state(Endpoint.DEVNET, solpg), options),
+            "server.endpoint"
+          )
+        ).toEqual({ option: "custom", url: solpg });
+        expect(roundTrip(state(Endpoint.DEVNET, solpg)).server.endpoint).toBe(
+          solpg
+        );
+        // Written as a plain string before endpoints were stored as keys
+        expect(
+          fromStoredEndpoints(state(Endpoint.DEVNET, solpg), defaults, options)
+            .server.endpoint
+        ).toBe(solpg);
+      });
+
+      it.each([
+        ["devnet", PLATFORM_DEVNET],
+        ["mainnet-beta", PLATFORM_MAINNET],
+        ["devnet-platform", PLATFORM_DEVNET],
+        ["mainnet-beta-platform", PLATFORM_MAINNET],
+      ])(
+        "reads the pre-HOO-2488 key %s as the offered network",
+        (option, url) => {
+          const stored = { connection: { endpoint: { option } } };
+          expect(
+            fromStoredEndpoints(stored, defaults, options).connection.endpoint
+          ).toBe(url);
+        }
+      );
+
+      it("stores a public URL under the offered network's key", () => {
+        for (const [url, option] of [
+          [Endpoint.DEVNET, "devnet"],
+          [Endpoint.MAINNET_BETA, "mainnet-beta"],
+        ]) {
+          expect(
+            at(
+              toStoredEndpoints(state(url, LOCAL_ENDPOINT), options),
+              "connection.endpoint"
+            )
+          ).toEqual({ option });
+        }
+      });
+
+      it("moves a profile on a public URL to the offered network", () => {
+        expect(
+          roundTrip(state(Endpoint.DEVNET, LOCAL_ENDPOINT)).connection.endpoint
+        ).toBe(PLATFORM_DEVNET);
+        expect(
+          roundTrip(state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT)).connection
+            .endpoint
+        ).toBe(PLATFORM_MAINNET);
+      });
+
+      it("keeps Testnet, Localnet and Playnet on their own addresses", () => {
+        for (const url of [
+          Endpoint.TESTNET,
+          Endpoint.LOCALNET,
+          Endpoint.PLAYNET,
+        ]) {
+          expect(
+            roundTrip(state(url, LOCAL_ENDPOINT)).connection.endpoint
+          ).toBe(url);
+        }
+      });
+
+      it("offers the public URLs under the same keys when the env sets none", () => {
+        const publicOnly = buildEndpointOptions(
+          networks(Endpoint.DEVNET, Endpoint.MAINNET_BETA)
+        );
+        expect(
+          roundTrip(state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT), publicOnly)
+            .connection.endpoint
+        ).toBe(Endpoint.MAINNET_BETA);
+        expect(
+          at(
+            toStoredEndpoints(
+              state(Endpoint.MAINNET_BETA, LOCAL_ENDPOINT),
+              publicOnly
+            ),
+            "connection.endpoint"
+          )
+        ).toEqual({ option: "mainnet-beta" });
       });
 
       it("keeps a custom address byte for byte, token and all", () => {
@@ -356,7 +471,7 @@ if (import.meta.vitest) {
       });
 
       it("leaves every other setting alone", () => {
-        const s = state(Endpoint.MAINNET_BETA, FOUNDATION_ENDPOINT);
+        const s = state(PLATFORM_MAINNET, FOUNDATION_ENDPOINT);
         const stored = toStoredEndpoints(s, options);
 
         expect(stored.ui).toEqual(s.ui);

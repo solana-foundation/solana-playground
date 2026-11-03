@@ -43,6 +43,12 @@ export interface CommandApproval {
   name: "build" | "deploy";
   /** Plain-language description of what running it will do */
   effect: string;
+  /**
+   * The card's title, a question naming the program, and for a deploy the
+   * network and, when it could be estimated, the cost; absent on a card
+   * saved without one, which falls back to its name
+   */
+  question?: string;
 }
 
 export type ApprovalRequest = PatchApproval | CommandApproval;

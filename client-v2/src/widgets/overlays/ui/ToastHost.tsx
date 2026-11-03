@@ -105,8 +105,7 @@ export const ToastHost = () => {
     // A random small int could repeat and silently replace a live toast
     const id = options?.id ?? uuid();
 
-    // The component gets the toast's id, so it can close itself (NonLocal
-    // does)
+    // The component gets the toast's id, so it can close itself
     toast(
       <ToastBoundary id={id} name={name}>
         {PgView.normalizeElement(elementable, { ...props?.componentProps, id })}

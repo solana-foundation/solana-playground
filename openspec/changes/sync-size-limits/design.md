@@ -53,8 +53,10 @@ and returns the first limit the map is over with its measure, or `null`. It
 measures with `new TextEncoder().encode(s).length` and `[...path].length`, so
 the browser and Node run the same lines. The slice's `index.ts` serves browser
 code and its `server.mjs` serves `persistence/server.mjs`, as the layer rules
-require. `MAX_BODY_BYTES` stays in `api/projects.mjs`: it is a property of
-that route, not of a project.
+require. The body cap stays out of the slice: it is a property of the write,
+not of a project, and lives as `MAX_PROJECT_BODY_BYTES` in
+`features/persistence/model/project-write.mjs`, where HOO-1729 put it so the
+browser and the route read one number.
 
 Alternatives: `features/persistence/config.mjs`, as the `auth` and `agent`
 slices hold theirs, which the explorer would then import from a feature for a
@@ -179,7 +181,8 @@ over it need `NOT VALID`. `api/projects.mjs` is the only writer of
 1 MiB is twice the project limit, so a full upload of a project at the limit
 fits unless JSON escaping more than doubles it, which takes content made mostly
 of control characters. Such a body is refused with `too-large`, and the banner
-keeps its generic copy. The cap is below Vercel's documented 4.5 MB, so the
+names the body cap (`MAX_PROJECT_BODY_LABEL`, which HOO-1729 introduced at
+4 MB and this change lowers). The cap is below Vercel's documented 4.5 MB, so the
 platform figure no longer decides anything; the PR still records a dated probe,
 as HOO-2418 asks.
 

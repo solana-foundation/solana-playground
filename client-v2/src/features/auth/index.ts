@@ -29,7 +29,9 @@ if (import.meta.vitest) {
       afterEach(() => PgSession.reset());
 
       it("throws for a signed-out user, so the airdrop command stops", () => {
-        expect(() => checkSignedIn()).toThrow(/sign in with github/i);
+        expect(() => checkSignedIn()).toThrow(
+          "Sign in with GitHub to request devnet SOL."
+        );
       });
 
       it("passes once a session exists", async () => {

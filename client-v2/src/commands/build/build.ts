@@ -11,18 +11,36 @@ import {
   PgWeb3,
   TupleFiles,
 } from "../../utils";
+import { STOPPED, throwIfStopped } from "../../utils/stopped";
 import { createCmd } from "../create";
+import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
 import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 
 export const build = createCmd({
   name: "build",
   description: "Build your program",
-  handle: async () => {
+  stoppable: true,
+  handle: async ({ signal }) => {
+    // Spec 09: an empty program file is named and nothing is sent. The
+    // refusal counts as a failed build, so Deploy does not go on with the
+    // binary of the program that file used to hold.
+    if (isEmptyProgram(PgExplorer.getFileContent(PROGRAM_FILE))) {
+      PgProgramInfo.update({ lastBuildFailed: true });
+      throw emptySourceError(PROGRAM_FILE);
+    }
+
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
     try {
-      const result = await buildProgram();
+      const result = await buildProgram(signal).catch((e: unknown) => {
+        // The aborted request fails; say it was stopped, not that it failed.
+        // Only "Stopped.": the server may still finish, its reply is not kept
+        throwIfStopped(signal, STOPPED);
+        throw e;
+      });
+      // A reply that lands after a stop is dropped: nothing of it is kept
+      throwIfStopped(signal, STOPPED);
       // Server only returns `uuid` on the first build of a session, so we
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
@@ -46,15 +64,16 @@ export const build = createCmd({
 /**
  * Compile the current project.
  *
+ * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildProgram = async () => {
+const buildProgram = async (signal: AbortSignal) => {
   const buildFiles = getBuildFiles();
   const pythonFiles = buildFiles.filter(
     ([path]) => PgLanguage.getFromPath(path)?.name === "Python"
   );
-  if (pythonFiles.length > 0) return await buildPython(pythonFiles);
-  return await buildRust(buildFiles);
+  if (pythonFiles.length > 0) return await buildPython(pythonFiles, signal);
+  return await buildRust(buildFiles, signal);
 };
 
 /**
@@ -179,9 +198,10 @@ const getBuildFiles = () => {
  * Convert Python files into Rust with seahorse-compile-wasm and run `_buildRust`.
  *
  * @param pythonFiles Python files in `src/`
+ * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildPython = async (pythonFiles: TupleFiles) => {
+const buildPython = async (pythonFiles: TupleFiles, signal: AbortSignal) => {
   const { compileSeahorse } = await PgPackage.import("seahorse-compile");
 
   const rustFiles = pythonFiles.flatMap(([path, content]) => {
@@ -207,23 +227,27 @@ const buildPython = async (pythonFiles: TupleFiles) => {
     return files;
   });
 
-  return await buildRust(rustFiles);
+  return await buildRust(rustFiles, signal);
 };
 
 /**
  * Build Rust files and return the output.
  *
  * @param files Rust files from `src/`
+ * @param signal aborts the request to the build server
  * @returns the build response
  */
-const buildRust = async (files: TupleFiles) => {
+const buildRust = async (files: TupleFiles, signal: AbortSignal) => {
   if (!files.length) throw new Error("Couldn't find any Rust files.");
 
-  return await PgServer.build({
-    files,
-    uuid: PgProgramInfo.uuid,
-    flags: PgSettings.build.flags,
-  });
+  return await PgServer.build(
+    {
+      files,
+      uuid: PgProgramInfo.uuid,
+      flags: PgSettings.build.flags,
+    },
+    { signal }
+  );
 };
 
 /**

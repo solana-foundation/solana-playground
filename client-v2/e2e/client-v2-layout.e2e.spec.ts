@@ -279,6 +279,55 @@ test("client-v2-layout: Folding the console", async ({ seededPage: page }) => {
   await expect(page.locator(".xterm-rows")).toContainText("echo-marker");
 });
 
+// The terminal was a grid item as wide as its own content, so when the stage
+// narrowed after it mounted (as it does while the layout settles on load) it
+// overhung the console and shrank one scrollbar per throttled fit, 15 fits on
+// a load here. On the runner a `help` sent in that window once printed with
+// the view left at the top of the buffer (HOO-2370); that xterm step is not
+// reproduced, so this guards the overhang, the condition it ran in
+test("the terminal never overhangs the console while it opens and runs a command", async ({
+  page,
+}) => {
+  // How far the terminal reaches past the console, every frame from the load
+  await page.addInitScript(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    w.overhang = 0;
+    w.samples = 0;
+    const sample = () => {
+      const terminal = document.querySelector(".xterm");
+      const well = document.querySelector(
+        '[data-slot="console-drawer-content"]'
+      );
+      if (terminal && well) {
+        w.samples++;
+        w.overhang = Math.max(
+          w.overhang,
+          terminal.getBoundingClientRect().width -
+            well.getBoundingClientRect().width
+        );
+      }
+      requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+  });
+  await seedWorkspace(page);
+
+  // Typed and sent while the drawer is still opening: no wait for it
+  await consoleHandle(page).click();
+  await page.getByLabel("Terminal input").first().focus();
+  await page.keyboard.type("help");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".xterm-rows")).toContainText(HELP_TAIL);
+
+  const { overhang, samples } = await page.evaluate(() => {
+    const w = window as unknown as { overhang: number; samples: number };
+    return { overhang: w.overhang, samples: w.samples };
+  });
+  // A renamed selector would measure nothing and pass
+  expect(samples).toBeGreaterThan(0);
+  expect(overhang).toBeLessThanOrEqual(0);
+});
+
 // React's StrictMode runs an effect twice in dev; opening the terminal on
 // both runs printed the welcome twice and left `$ $` as the prompt
 test("client-v2-layout: The terminal greets once", async ({
@@ -291,7 +340,7 @@ test("client-v2-layout: The terminal greets once", async ({
   await expect(consoleHandle(page)).toHaveAttribute("aria-expanded", "true");
   await drag(page, consoleSeparator(page), 0, -600);
   const rows = page.locator(".xterm-rows");
-  await expect(rows).toContainText("Type help to see all commands");
+  await expect(rows).toContainText("Type help to see commands");
   await expect
     .poll(() =>
       page
@@ -305,7 +354,9 @@ test("client-v2-layout: The terminal greets once", async ({
       (row.textContent ?? "").replace(/\u00a0/g, " ").trimEnd()
     ).filter((line) => line !== "")
   );
-  expect(lines.filter((line) => line.includes("Welcome to"))).toHaveLength(1);
+  expect(
+    lines.filter((line) => line.includes("Output from Build"))
+  ).toHaveLength(1);
   expect(lines.at(-1)).toBe("$");
 });
 
@@ -479,6 +530,15 @@ test.describe("on a phone", () => {
     await seedThenNarrow(page);
     const lines = page.locator(".monaco-editor .view-lines");
     await expect(lines).toContainText("use anchor_lang");
+    // The code is read at arm's length, a step up from the desktop's
+    await expect(lines.locator(".view-line").first()).toHaveCSS(
+      "font-size",
+      "15px"
+    );
+    await expect(lines.locator(".view-line").first()).toHaveCSS(
+      "line-height",
+      "23px"
+    );
     await page.locator(".monaco-editor textarea.inputarea").focus();
     await page.keyboard.press("ControlOrMeta+Home");
     await page.keyboard.type("// phone\n");
@@ -513,6 +573,70 @@ test.describe("on a phone", () => {
     await expect(composer).toHaveValue("hello");
   });
 
+  // The page's pager and a sheet, as read under one motion preference
+  const motionOf = async (page: Page) => {
+    const pager = page.getByTestId("phone-pager");
+    const scroll = await pager.evaluate(
+      (el) => getComputedStyle(el).scrollBehavior
+    );
+    await page.getByRole("button", { name: /^Files, .* open$/ }).click();
+    const files = page.getByRole("dialog", { name: "Files" });
+    await expect(files).toBeVisible();
+    const sheet = await files.evaluate(
+      (el) => getComputedStyle(el).animationName
+    );
+    const overlay = await page
+      .locator('[data-slot="sheet-overlay"]')
+      .evaluate((el) => getComputedStyle(el).animationName);
+    return { scroll, sheet, overlay };
+  };
+
+  test("client-v2-layout: Reduced motion on a phone", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await seedThenNarrow(page);
+    const lines = linesOn(page);
+    // The page change does not animate: the pager jumps, it does not glide,
+    // and a sheet and its scrim appear without sliding or fading
+    expect(await motionOf(page)).toEqual({
+      scroll: "auto",
+      sheet: "none",
+      overlay: "none",
+    });
+    // and leave the same way. A 200 ms exit animation would keep them mounted
+    // two frames after the key, so the check is made in the page, not by a
+    // retrying assertion that would wait the animation out
+    const goneAtOnce = await page.evaluate(async () => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true })
+      );
+      for (let i = 0; i < 2; i++) {
+        await new Promise((done) => requestAnimationFrame(done));
+      }
+      return !document.querySelector(
+        '[role="dialog"], [data-slot="sheet-overlay"]'
+      );
+    });
+    expect(goneAtOnce).toBe(true);
+    // The jump lands on the page asked for, and its settle is no swipe
+    await page.getByRole("button", { name: "Preview the build" }).click();
+    await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
+    await page.waitForTimeout(400);
+    const shown = lines.filter((line) =>
+      line.startsWith("[telemetry:event] layout_page_shown ")
+    );
+    expect(shown).toHaveLength(1);
+    expect(shown[0]).toContain("via: button");
+  });
+
+  test("client-v2-layout: Motion on a phone by default", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    await seedThenNarrow(page);
+    const motion = await motionOf(page);
+    expect(motion.scroll).toBe("smooth");
+    expect(motion.sheet).not.toBe("none");
+    expect(motion.overlay).not.toBe("none");
+  });
+
   test("client-v2-layout: Turning a phone across 768 px", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await seedWorkspace(page);
@@ -535,9 +659,16 @@ test.describe("on a phone", () => {
     await expect(lines).toContainText("// across");
     const before = await savedLayout(page);
 
+    // The code is a step up on a phone and Monaco's own size again off one
+    const viewLine = lines.locator(".view-line").first();
+    const wide = await viewLine.evaluate((el) => getComputedStyle(el).fontSize);
     for (const width of [390, 767, 768, 1024, 390, 1280]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(lines).toContainText("// across");
+      await expect(viewLine).toHaveCSS(
+        "font-size",
+        width < 768 ? "15px" : wide
+      );
     }
     await expect(page.locator(".xterm-rows").first()).toContainText(HELP_TAIL);
     expect(await savedLayout(page)).toBe(before);
@@ -559,9 +690,13 @@ test.describe("on a phone", () => {
     const settings = page.getByRole("region", { name: "Settings" });
     const network = settings.getByRole("radiogroup", { name: "Network" });
     await expect(network.getByRole("radio", { checked: true })).toBeFocused();
-    await network.getByRole("radio", { name: "Localnet" }).click();
+    // Mainnet's requests are refused, so CI never reaches it
+    await page.route("https://api.mainnet-beta.solana.com/**", (route) =>
+      route.abort("connectionrefused")
+    );
+    await network.getByRole("radio", { name: "Mainnet" }).click();
     await expect(
-      network.getByRole("radio", { name: "Localnet" })
+      network.getByRole("radio", { name: "Mainnet" })
     ).toHaveAttribute("aria-checked", "true");
     await network.getByRole("radio", { name: "Devnet", exact: true }).click();
     await expect(
@@ -591,6 +726,46 @@ test.describe("on a phone", () => {
     await expect(
       page.getByRole("button", { name: "Menu", exact: true })
     ).toBeFocused();
+  });
+
+  // A swipe made while the editor loads stays. Opening its file must not
+  // focus the editor while it is swiped out of the window, and its tab row
+  // must scroll only itself: either would scroll the pager back to the work
+  // page. The touch stays down until the editor is in, so the pager has not
+  // settled when the editor mounts.
+  test("a swipe made while the editor loads stays on the preview", async ({
+    page,
+  }) => {
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    // The editor's chunk (webpack's name for it), held so it mounts under the
+    // swipe; a name that stopped matching would hold nothing and pass for the
+    // wrong reason
+    let heldChunk = false;
+    await page.route(/src_components_Editor_Monaco_index_ts/, async (route) => {
+      heldChunk = true;
+      await held;
+      await route.continue();
+    });
+    await seedThenNarrow(page);
+    const pager = page.getByTestId("phone-pager");
+    await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
+    await pager.evaluate((el) => {
+      el.dispatchEvent(new TouchEvent("touchstart"));
+      el.scrollTo({ left: el.clientWidth * 2, behavior: "instant" });
+    });
+    const preview = page.getByRole("region", { name: "Preview" });
+    await expect(preview).toBeInViewport({ ratio: 1 });
+
+    await expect.poll(() => heldChunk).toBe(true);
+    release();
+    await expect(page.locator(".monaco-editor .view-lines")).toContainText(
+      "use anchor_lang"
+    );
+    await pager.evaluate((el) => el.dispatchEvent(new TouchEvent("touchend")));
+
+    await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
+    await expect(preview).toBeInViewport({ ratio: 1 });
   });
 
   // The gallery is a dialog over the menu page; the project it starts opens
@@ -745,6 +920,49 @@ test("client-v2-layout: A fresh load focuses no settings trigger", async ({
     ).toBe(false);
     await expect(page.getByRole("tooltip")).toHaveCount(0);
   }
+});
+
+test.describe("on an iPhone", () => {
+  // Monaco mounts its keyboard button only where it reads iOS: an iPhone's
+  // user agent on a touch screen. Without both the button is never there
+  test.use({
+    viewport: { width: 390, height: 844 },
+    userAgent:
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    hasTouch: true,
+  });
+
+  test("client-v2-layout: The editor's keyboard button on an iPhone", async ({
+    page,
+  }) => {
+    // A project is started from the desktop's Home, as "on a phone" does
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    const lines = page.locator(".monaco-editor .view-lines");
+    await expect(lines).toContainText("use anchor_lang");
+    // A tap on the code does not always raise the keyboard on an iPhone, so
+    // the editor's own button for it stays, drawn as one of the product's
+    const button = page.locator(".monaco-editor .iPadShowKeyboard");
+    await expect(button).toBeVisible();
+    await expect(button).toHaveCSS("width", "48px");
+    await expect(button).toHaveCSS("height", "48px");
+    await expect(button).toHaveCSS("border-radius", "14px");
+    await expect(button).toHaveCSS("border-top-width", "1px");
+    // The product's border, not the editor's own 4 px grey frame
+    // (#252526 dark, #F6F6F6 light)
+    const border = await button.evaluate(
+      (el) => getComputedStyle(el).borderTopColor
+    );
+    expect(["rgb(37, 37, 38)", "rgb(246, 246, 246)"]).not.toContain(border);
+    // A tap hands the focus to the code, which takes typing
+    await button.tap();
+    await expect(
+      page.locator(".monaco-editor textarea.inputarea")
+    ).toBeFocused();
+    await page.keyboard.type("// iphone\n");
+    await expect(lines).toContainText("// iphone");
+  });
 });
 
 test.describe("on a compact window", () => {
@@ -1399,7 +1617,7 @@ test("client-v2-layout: Signing out asks first", async ({ page }) => {
 
   await account(page).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  const dialog = page.getByRole("dialog", { name: "Sign out of GitHub?" });
+  const dialog = page.getByRole("dialog", { name: "Sign out of Playground?" });
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
   expect(signedOut).toBe(false);
@@ -1463,7 +1681,7 @@ test("client-v2-layout: A cluster that is down", async ({
   await page.reload();
 
   const row = nav(page).getByRole("button", {
-    name: "Change cluster, currently devnet, down",
+    name: "Change cluster, currently Devnet, not answering",
   });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await account(page).click();
@@ -1471,7 +1689,7 @@ test("client-v2-layout: A cluster that is down", async ({
     .getByRole("menu", { name: "Account" })
     .getByRole("menuitem")
     .first();
-  await expect(first).toContainText("devnet is not answering");
+  await expect(first).toContainText("Devnet is not answering");
   await first.click();
   const network = page
     .getByRole("region", { name: "Settings" })
@@ -1517,7 +1735,7 @@ test("a cluster that does not answer is down", async ({ seededPage: page }) => {
 
   await expect(
     nav(page).getByRole("button", {
-      name: "Change cluster, currently devnet, down",
+      name: "Change cluster, currently Devnet, not answering",
     })
   ).toBeVisible({ timeout: 15_000 });
 });
@@ -1540,13 +1758,13 @@ test("a stalled cluster that moves again is not down", async ({
   });
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, down",
+    "Change cluster, currently Devnet, not answering",
     { timeout: 15_000 }
   );
 
   moving = true;
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet",
+    "Change cluster, currently Devnet",
     { timeout: 20_000 }
   );
 });
@@ -1557,13 +1775,13 @@ test("a cluster that answers again is not down", async ({
   await refuseCluster(page);
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, down",
+    "Change cluster, currently Devnet, not answering",
     { timeout: 15_000 }
   );
 
   await page.unrouteAll();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet",
+    "Change cluster, currently Devnet",
     { timeout: 20_000 }
   );
 });
@@ -1592,7 +1810,7 @@ test("the wallet asks about the validator when localnet does not answer", async 
   // and the open dialog hides the page from role queries: the account's
   // label is read once it is closed, never in a race with it
   await createWallet(page);
-  const howTo = page.getByRole("dialog", { name: "Connect to localnet" });
+  const howTo = page.getByRole("dialog", { name: "Connect to Localnet" });
   await expect(howTo).toBeVisible({ timeout: 15_000 });
   await page.keyboard.press("Escape");
   await expect(howTo).toBeHidden();
@@ -1616,7 +1834,7 @@ test("playnet is not down while it starts", async ({ seededPage: page }) => {
   // recovers must fail here, not be waited out
   for (let i = 0; i < 12; i++) {
     expect(await clusterRow(page).getAttribute("aria-label")).toBe(
-      "Change cluster, currently playnet"
+      "Change cluster, currently Playnet"
     );
     await page.waitForTimeout(500);
   }

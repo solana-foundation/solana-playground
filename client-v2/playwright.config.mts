@@ -230,6 +230,14 @@ export default defineConfig({
     // early".
     stdout: "pipe",
     stderr: "pipe",
-    env: { BROWSER: "none", PORT: String(port) },
+    // Blank, not unset: dotenv keeps a variable already set, so the platform
+    // RPC URLs from `.env` stay out and Devnet and Mainnet fall back to the
+    // public endpoints the specs stub
+    env: {
+      BROWSER: "none",
+      PORT: String(port),
+      REACT_APP_DEVNET_RPC_URL: "",
+      REACT_APP_MAINNET_RPC_URL: "",
+    },
   },
 });

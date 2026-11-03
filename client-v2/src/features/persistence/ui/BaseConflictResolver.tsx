@@ -11,6 +11,7 @@ import { createPortal } from "react-dom";
 import { useTheme } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import {
   Merge,
   MergeCount,
@@ -167,6 +168,7 @@ export const BaseConflictResolver = ({
     | { components?: { editor?: { default?: { fontFamily?: string } } } }
     | undefined;
   const fontFamily = theme?.components?.editor?.default?.fontFamily;
+  const phone = useViewport() === "phone";
 
   const hosts = {
     left: useRef<HTMLDivElement>(null),
@@ -203,7 +205,7 @@ export const BaseConflictResolver = ({
         result: hosts.result.current,
         right: file.deleted.right ? null : hosts.right.current,
       },
-      { single, showAll, fontFamily }
+      { single, showAll, fontFamily, phone }
     );
     setEditor(created);
     setLayout(created.layout);
@@ -234,8 +236,8 @@ export const BaseConflictResolver = ({
   }, [mounted, file]);
 
   useEffect(() => {
-    editor?.update({ single, showAll, fontFamily });
-  }, [editor, single, showAll, fontFamily]);
+    editor?.update({ single, showAll, fontFamily, phone });
+  }, [editor, single, showAll, fontFamily, phone]);
 
   const unresolved = merges.reduce((n, m) => n + m.unresolved, 0);
 

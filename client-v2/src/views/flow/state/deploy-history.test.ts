@@ -103,7 +103,7 @@ describe("PgDeployHistory.init wiring", () => {
     deployCallback!({ err: new Error("deploy failed") });
     expect(PgDeployHistory.list("w")).toHaveLength(0);
 
-    // Test success case: should record with null signature
+    // A finish that reports no result records a null signature
     deployCallback!({ ok: undefined });
     const list = PgDeployHistory.list("w");
     expect(list).toHaveLength(1);
@@ -150,6 +150,67 @@ describe("PgDeployHistory.init wiring", () => {
     expect(PgDeployHistory.list("w")).toHaveLength(1);
 
     sub.dispose();
+  });
+});
+
+describe("PgDeployHistory deploy result", () => {
+  beforeEach(() => localStorage.clear());
+
+  it("keeps the signature, cost and upgrade the deploy reported", async () => {
+    const { PgCommand, PgConnection, PgExplorer, PgGlobal, PgProgramInfo } =
+      await mockedUtils();
+    let deployCallback: ((result: unknown) => void) | undefined;
+    PgCommand.deploy.onDidFinish.mockImplementation((cb) => {
+      deployCallback = cb;
+      return { dispose: vi.fn() };
+    });
+    PgGlobal.deployState = "ready";
+    PgConnection.cluster = "devnet";
+    PgExplorer.currentWorkspaceName = "w";
+    PgProgramInfo.getPkStr.mockReturnValue("Prog111");
+
+    const sub = PgDeployHistory.init();
+    deployCallback!({
+      ok: { signature: "sig1", cost: 1_500_000_000, upgraded: true },
+    });
+
+    const [record] = PgDeployHistory.list("w");
+    expect(record.signature).toBe("sig1");
+    expect(record.cost).toBe(1_500_000_000);
+    expect(record.upgraded).toBe(true);
+    sub.dispose();
+  });
+
+  it("still reads a record written before cost and upgrade were kept", () => {
+    const old = {
+      id: "A-1",
+      workspace: "w",
+      cluster: "devnet",
+      programId: "A",
+      signature: null,
+      at: 1,
+    };
+    localStorage.setItem("flow.deploys", JSON.stringify([old]));
+
+    const [record] = PgDeployHistory.list("w");
+    expect(record.programId).toBe("A");
+    expect(record.cost).toBeUndefined();
+    expect(record.upgraded).toBeUndefined();
+  });
+
+  it("drops a record whose cost is not a number", () => {
+    const bad = {
+      id: "A-1",
+      workspace: "w",
+      cluster: "devnet",
+      programId: "A",
+      signature: null,
+      at: 1,
+      cost: "lots",
+    };
+    localStorage.setItem("flow.deploys", JSON.stringify([bad]));
+
+    expect(PgDeployHistory.list("w")).toEqual([]);
   });
 });
 

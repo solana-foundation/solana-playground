@@ -15,7 +15,9 @@ const shownStrings: unknown[] = [];
 /**
  * Mark a failure as already shown to the user, so `reportButtonFailure` logs
  * it without a toast. `PgTerminal.process` calls it for every failure it
- * printed to an open console.
+ * printed to an open console, `toldByStage` for a Build or Deploy run whose
+ * stage shows it failed, and the wallet's airdrop for a sign-in failure the
+ * account row shows.
  *
  * Objects are matched by identity. A thrown primitive (`Send` throws the
  * transaction's error string) can only be matched by value, so it answers one
@@ -30,6 +32,9 @@ export const markFailureShown = (error: unknown): void => {
     shownObjects.add(error);
     return;
   }
+  // The terminal and a stage may both mark one thrown string; kept twice, the
+  // spare copy would hide a later, unrelated failure with the same text
+  if (shownStrings.includes(error)) return;
   shownStrings.push(error);
   if (shownStrings.length > SHOWN_STRINGS_CAP) shownStrings.shift();
 };
@@ -81,9 +86,8 @@ export const unavailableHere = (error: unknown): string | null =>
  * reporting (which failures reach error tracking is decided in HOO-1800),
  * and tells the user "Could not <action>." in a toast, or "Can't <action>
  * here: <way out>." for a failure `markUnavailableHere` marked. The raw
- * error never reaches the screen. A failure already shown, such as one the terminal
- * printed to an open console, is only logged: the user hears of a failure
- * once.
+ * error never reaches the screen. A failure already shown (`markFailureShown`)
+ * is only logged: the user hears of a failure once.
  *
  * @param action what did not happen, completing "Could not …", such as
  * "export the project"

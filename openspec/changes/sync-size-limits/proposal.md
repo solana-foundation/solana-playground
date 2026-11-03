@@ -42,7 +42,8 @@ the platform's.
 - **BREAKING** for any account holding a project over a limit: the project's next
   upload is refused until the user shrinks it. Reading, restoring and deleting
   the project still work.
-- `MAX_BODY_BYTES` for `PUT /api/projects` drops from 8 MB to 1 MiB, which a
+- The request body cap for `PUT /api/projects` (`MAX_PROJECT_BODY_BYTES`,
+  which HOO-1729 set at 4 MB in place of the 8 MB above) drops to 1 MiB, which a
   512 KiB project fits inside with room for JSON escaping. A body over it keeps
   the `too-large` reason.
 - Telemetry: the persistence slice (`sync` prefix) adds three events,

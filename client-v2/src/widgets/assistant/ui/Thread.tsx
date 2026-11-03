@@ -17,6 +17,7 @@ import {
   verifyingStage,
 } from "../../../views/flow/lessons";
 import type { LessonState } from "../../../views/flow/lessons";
+import { useSignInOffer } from "../model/sign-in-offer";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
 import { BaseThread } from "./BaseThread";
@@ -69,6 +70,7 @@ export const Thread = ({
 
   const items = PgAssistant.items;
   const status = PgAssistant.status;
+  const signIn = useSignInOffer({ hasItems: items.length > 0 });
   const { busy } = turn;
   const lesson = describeLesson(lessonState);
 
@@ -171,6 +173,7 @@ export const Thread = ({
       // From state, not a stored item: it must survive a render reset
       // (`clear`) and must never be saved or synced with the thread
       unsaved={PgAssistant.unsaved}
+      signIn={signIn}
       project={project}
       suggestions={lesson ? SUGGESTIONS.lesson : SUGGESTIONS.project}
       onSuggestion={(text) => {
@@ -179,6 +182,16 @@ export const Thread = ({
       }}
       actionsFor={actionsFor}
       onAnswer={onAnswer}
+      retry={
+        turn.retry
+          ? {
+              secondsLeft: turn.retry.secondsLeft,
+              canTryNow: turn.retry.canTryNow,
+              onTryNow: turn.tryNow,
+              onStop: turn.stop,
+            }
+          : undefined
+      }
     />
   );
 };

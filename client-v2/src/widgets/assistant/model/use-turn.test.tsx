@@ -15,6 +15,7 @@ import * as reportModule from "@/shared/lib/report-button-failure";
 import { PgSession } from "@/features/auth";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { createProvider } from "../../../views/sidebar/assistant/model";
+import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
@@ -330,6 +331,150 @@ describe("useTurn", () => {
       )
     ).toBe(true);
     expect(result.current.busy).toBe(false);
+  });
+
+  describe("a busy model (Spec 08 AI-03)", () => {
+    const BUSY = "The model is busy.";
+    const LATER = "The model is busy. Send your message again in a minute.";
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      PgAssistant.connect({ id: "default", apiKey: "" });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    const userMessages = () =>
+      PgAssistant.items.filter((item) => item.kind === "user").length;
+    const errors = () =>
+      PgAssistant.items.filter((item) => item.kind === "error");
+
+    it("counts down from 10 s, then sends the same message again", async () => {
+      provider.send
+        .mockRejectedValueOnce(new ModelBusyError(undefined, BUSY))
+        .mockResolvedValueOnce(undefined);
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      expect(result.current.retry).toEqual({
+        secondsLeft: 10,
+        canTryNow: true,
+      });
+      expect(result.current.busy).toBe(true);
+      expect(errors()).toEqual([]);
+
+      await act(() => vi.advanceTimersByTimeAsync(4_000));
+      expect(result.current.retry?.secondsLeft).toBe(6);
+
+      await act(() => vi.advanceTimersByTimeAsync(6_000));
+      await waitFor(() => expect(provider.send).toHaveBeenCalledTimes(2));
+      expect(provider.send.mock.calls[1][0]).toBe("hi");
+      await waitFor(() => expect(result.current.retry).toBeNull());
+      expect(userMessages()).toBe(1);
+      expect(errors()).toEqual([]);
+    });
+
+    it("waits as long as the server says, with Try now off", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(30, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      expect(result.current.retry).toEqual({
+        secondsLeft: 30,
+        canTryNow: false,
+      });
+    });
+
+    it("Try now sends at once", async () => {
+      provider.send
+        .mockRejectedValueOnce(new ModelBusyError(undefined, BUSY))
+        .mockResolvedValueOnce(undefined);
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      await act(() => result.current.tryNow());
+
+      expect(provider.send).toHaveBeenCalledTimes(2);
+      expect(result.current.retry).toBeNull();
+    });
+
+    it("Stop ends the wait and leaves the message where it is", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      act(() => result.current.stop());
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+
+      expect(result.current.retry).toBeNull();
+      expect(result.current.busy).toBe(false);
+      // In the thread once, not handed back to be sent a second time
+      expect(userMessages()).toBe(1);
+      expect(result.current.input).toBe("");
+      expect(provider.send).toHaveBeenCalledTimes(1);
+    });
+
+    it("starts no other turn while a message waits", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      await act(() => result.current.send("something else"));
+
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(userMessages()).toBe(1);
+    });
+
+    it("Try now does nothing while the server's wait runs", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(30, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      await act(() => result.current.tryNow());
+
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(result.current.retry?.canTryNow).toBe(false);
+    });
+
+    it("counts no wait longer than a minute down; it says to come back", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(3600, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+
+      expect(result.current.retry).toBeNull();
+      expect(
+        errors().map((item) => item.kind === "error" && item.text)
+      ).toEqual([LATER]);
+    });
+
+    it("drops the wait when the conversation changes, sending nothing", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      act(() => PgAssistant.clear());
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+
+      expect(result.current.retry).toBeNull();
+      expect(provider.send).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives up with one line after three busy answers in a row", async () => {
+      provider.send.mockRejectedValue(new ModelBusyError(1, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("hi"));
+      for (let i = 0; i < 3; i++) {
+        await act(() => vi.advanceTimersByTimeAsync(1_000));
+      }
+
+      await waitFor(() => expect(provider.send).toHaveBeenCalledTimes(4));
+      await waitFor(() => expect(result.current.retry).toBeNull());
+      expect(
+        errors().map((item) => item.kind === "error" && item.text)
+      ).toEqual([LATER]);
+    });
   });
 
   it("rebuilds the provider when the connection changes", async () => {

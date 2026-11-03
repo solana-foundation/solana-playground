@@ -22,28 +22,14 @@ import {
   getProject,
   isEnabled,
   listProjects,
+  MAX_PROJECT_BODY_BYTES,
+  NO_FILES_REASON,
+  projectKindOf,
   saveProject,
 } from "../src/features/persistence/server.mjs";
 
-/**
- * The largest request body this route reads, in bytes.
- *
- * Twice `PROJECT_LIMITS.projectBytes`, so a full upload of a project at the
- * size limit fits with room for JSON escaping. The project limits, not this,
- * are what a user meets: the client checks them before every upload and the
- * route checks them again below. This only stops a body no project under
- * those limits produces before it is buffered. Vercel's own cap on a Function's
- * request body is 4.5 MB (its limits page), so this is the lower of the two.
- *
- * The rejection carries `reason: "too-large"` for the same reason the name
- * collision below carries one: the client files every failure it cannot name
- * under a silent "skipped", so a workspace that is genuinely too big has to
- * arrive as something it can tell apart and say out loud.
- */
-const MAX_BODY_BYTES = 1024 * 1024;
-
 /** `describeWrite`'s refusal of a file sync does not carry */
-const UNSYNCED = { error: "A path under .workspace/ is not synced" };
+const UNSYNCED_ERROR = "A path under .workspace/ is not synced";
 
 /** Matches `projects_kind_check`, so a bad kind is a 400 and not a 500 */
 const KINDS = ["project", "tutorial"];
@@ -58,7 +44,39 @@ const isFileMap = (value) =>
   );
 
 /**
- * Which of the two write shapes a body is, or why it is neither.
+ * The row a write names, or why it names none.
+ *
+ * - `name` must hold something: it is what the project list shows, and a
+ *   blank one is a project no one can find or tell apart.
+ * - `kind` must be the one the id stands for (`projectKindOf`). The client
+ *   derives one from the other, so a mismatch is never a user's choice, and
+ *   stored it is a tutorial listed as a project or the other way round.
+ *
+ * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
+ *
+ * @returns {{id: string, name: string, kind: "project" | "tutorial"}
+ *   | {error: string}}
+ */
+export const describeProject = (body) => {
+  const { id, name, kind } = body;
+  if (typeof id !== "string" || !id || typeof name !== "string") {
+    return { error: "id and name required" };
+  }
+  if (!KINDS.includes(kind)) {
+    return { error: `kind must be one of ${KINDS.join(", ")}` };
+  }
+  if (!name.trim()) return { error: "name must not be empty" };
+  if (kind !== projectKindOf(id)) {
+    return { error: `kind must be ${projectKindOf(id)} for this id` };
+  }
+  return { id, name, kind };
+};
+
+/** A refusal of the body itself: every one is a 400 but `force: true`'s */
+const refuse = (error, status = 400) => ({ error, status });
+
+/**
+ * Which write a body is, or why it is none.
  *
  * Checked on the way *in* because the read side is destructive: restoring a
  * project replaces the workspace's files with what the row holds, so a row
@@ -67,11 +85,13 @@ const isFileMap = (value) =>
  *
  * - `files`: the whole set. Refused when empty -- a full write replaces the
  *   file set, so an empty one would delete every file, and no editor ever has
- *   a reason to send it (`pushCurrent` already refuses to build one).
+ *   a reason to send it (the client's `push` refuses an empty snapshot).
+ * - `snapshot.files`: the same, as the pre-#40 client spells it (below).
  * - `changed` + `removed`: a patch against the state `baseUpdatedAt` names.
- *   Without a token there is nothing for it to be relative to.
+ *   Without a token there is nothing for it to be relative to. Whether it
+ *   leaves the project any files only the row can say: `saveProject` checks.
  *
- * `force` is refused outright. There is no unconditional overwrite any more:
+ * `force: true` is refused. There is no unconditional overwrite any more:
  * two devices' copies are merged on the client, so every write is either a
  * create or a swap against the row the caller read.
  *
@@ -86,52 +106,100 @@ const isFileMap = (value) =>
  * would sit in the project unchecked. Removing one is allowed, so a row stored
  * before this check can still go.
  *
+ * A tab left open across the #40 deploy still runs the client from before it,
+ * and keeps doing so until reloaded. That client sends `{snapshot: {files},
+ * baseUpdatedAt, force: false}` on every push and files every refusal except
+ * 409 and 413 under a silent "skipped". So `force: false` reads as absent and
+ * `snapshot` as a whole file set, which is exactly what it was then. `force:
+ * true`, which that client sends only when the user answers its banner with
+ * "keep this version", is a 409: the banner stays up rather than the answer
+ * vanishing. It cannot be cleared until the tab is reloaded, and the body's
+ * `error` saying so is not shown by that client. Both doors can go once no tab
+ * from before the deploy can still be open.
+ *
  * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
  *
  * @returns {{files: Record<string, string>}
  *   | {changed: Record<string, string>, removed: string[]}
  *   | {limit: import("../src/entities/project/limits.mjs").LimitExceeded}
- *   | {error: string}}
+ *   | {error: string, status: 400 | 409}}
  */
 export const describeWrite = (body) => {
-  if (body.force !== undefined) return { error: "force is not supported" };
+  if (body.force === true) {
+    return refuse("force is not supported; reload the page to sync", 409);
+  }
+  if (body.force !== undefined && body.force !== false) {
+    return refuse("force is not supported");
+  }
+  const old = body.snapshot !== undefined;
   const full = body.files !== undefined;
   const patch = body.changed !== undefined || body.removed !== undefined;
-  if (full === patch) {
-    return { error: "Send either files, or changed and removed" };
+  if (Number(old) + Number(full) + Number(patch) !== 1) {
+    return refuse("Send either files, or changed and removed");
   }
 
-  if (full) {
-    if (!isFileMap(body.files) || !Object.keys(body.files).length) {
-      return { error: "files must be a non-empty map of paths to strings" };
+  if (old || full) {
+    const files = old ? body.snapshot?.files : body.files;
+    if (!isFileMap(files) || !Object.keys(files).length) {
+      return refuse("files must be a non-empty map of paths to strings");
     }
-    if (!Object.keys(body.files).every(isSyncedPath)) return UNSYNCED;
-    const limit = checkProjectLimits(body.files);
-    return limit ? { limit } : { files: body.files };
+    if (!Object.keys(files).every(isSyncedPath)) return refuse(UNSYNCED_ERROR);
+    const limit = checkProjectLimits(files);
+    return limit ? { limit } : { files };
   }
 
   if (!body.baseUpdatedAt) {
-    return { error: "A patch needs baseUpdatedAt" };
+    return refuse("A patch needs baseUpdatedAt");
   }
   const changed = body.changed ?? {};
   const removed = body.removed ?? [];
   if (!isFileMap(changed)) {
-    return { error: "changed must be a map of paths to strings" };
+    return refuse("changed must be a map of paths to strings");
   }
   if (
     !Array.isArray(removed) ||
     !removed.every((path) => typeof path === "string" && path.length > 0)
   ) {
-    return { error: "removed must be a list of paths" };
+    return refuse("removed must be a list of paths");
   }
   if (removed.some((path) => path in changed)) {
-    return { error: "A path cannot be both changed and removed" };
+    return refuse("A path cannot be both changed and removed");
   }
-  if (!Object.keys(changed).every(isSyncedPath)) return UNSYNCED;
+  if (!Object.keys(changed).every(isSyncedPath)) {
+    return refuse(UNSYNCED_ERROR);
+  }
   // Every changed file is in the project the patch produces, so their count
   // and size are a floor under its own
   const limit = checkProjectLimits(changed);
   return limit ? { limit } : { changed, removed };
+};
+
+/**
+ * What to answer for what `saveProject` returned.
+ *
+ * A write that would leave the project with no files is a 400 naming itself
+ * in `reason`, not a 409. A 409 means "someone else wrote" to both clients:
+ * the pre-#40 one would ask "keep this version?" about it, and the current one
+ * would merge against a row that holds nothing. The current client only sends
+ * such a patch against a row that is already empty -- its patches are built
+ * from a non-empty snapshot -- and answers the `reason` with its whole file
+ * set, which puts the files back.
+ *
+ * Exported for `api/projects.test.mjs`, like `describeWrite`.
+ *
+ * @returns {{status: number, body: object}}
+ */
+export const describeSaved = (result) => {
+  if (result.refused === NO_FILES_REASON) {
+    return {
+      status: 400,
+      body: {
+        error: "A write must leave the project at least one file",
+        reason: NO_FILES_REASON,
+      },
+    };
+  }
+  return { status: result.conflict ? 409 : 200, body: result };
 };
 
 const sendJson = (res, status, body) => {
@@ -145,14 +213,13 @@ const sendJson = (res, status, body) => {
  * The status and body a write is answered with, from `describeWrite`'s limit
  * or `saveProject`'s outcome. A limit is 413 with its `reason` and measure at
  * the top level, so the client raises the same banner from this body as from
- * its own check; a missed swap or a tombstone is 409; anything else was
- * written. Both sources come through here so neither can reach a 200 with a
- * limit.
+ * its own check; every other outcome is `describeSaved`'s. Both sources come
+ * through here so neither can reach a 200 with a limit.
  *
  * Exported for `api/projects.test.mjs`: the handler is behind the auth gate.
  *
  * @param {{limit: import("../src/entities/project/limits.mjs").LimitExceeded}
- *   | {conflict: true} | {updatedAt: string}} outcome
+ *   | {refused: string} | {conflict: true} | {updatedAt: string}} outcome
  * @returns {{status: number, body: object}}
  */
 export const answerWrite = (outcome) => {
@@ -162,8 +229,7 @@ export const answerWrite = (outcome) => {
       body: { error: "The project is over a sync limit", ...outcome.limit },
     };
   }
-  if ("conflict" in outcome) return { status: 409, body: outcome };
-  return { status: 200, body: outcome };
+  return describeSaved(outcome);
 };
 
 /**
@@ -186,7 +252,7 @@ export const readBody = async (req) => {
   let size = 0;
   for await (const chunk of req) {
     size += chunk.length;
-    if (size > MAX_BODY_BYTES) return { error: "too-large" };
+    if (size > MAX_PROJECT_BODY_BYTES) return { error: "too-large" };
     chunks.push(chunk);
   }
   try {
@@ -273,25 +339,27 @@ async function handler(req, res) {
 
     if (req.method === "PUT") {
       const read = await readBody(req);
+      // `reason` because the client files every failure it cannot name under
+      // a silent "skipped", so a workspace that is genuinely too big has to
+      // arrive as something it can tell apart and say out loud. The browser
+      // refuses the same size before sending; this is the half for a client
+      // that did not.
       if (read.error === "too-large") {
         return sendJson(res, 413, {
-          error: `A workspace upload must be under ${MAX_BODY_BYTES} bytes`,
+          error: `A workspace upload must be under ${MAX_PROJECT_BODY_BYTES} bytes`,
           reason: "too-large",
         });
       }
       if (read.error) return sendJson(res, 400, { error: "Body must be JSON" });
       const { body } = read;
 
-      if (
-        typeof body.id !== "string" ||
-        typeof body.name !== "string" ||
-        !KINDS.includes(body.kind)
-      ) {
-        return sendJson(res, 400, { error: "id, name and kind required" });
-      }
+      const project = describeProject(body);
+      if (project.error) return sendJson(res, 400, { error: project.error });
 
       const write = describeWrite(body);
-      if (write.error) return sendJson(res, 400, { error: write.error });
+      if (write.error) {
+        return sendJson(res, write.status, { error: write.error });
+      }
       if (write.limit) {
         const answer = answerWrite(write);
         return sendJson(res, answer.status, answer.body);
@@ -312,13 +380,21 @@ async function handler(req, res) {
       // Named fields rather than the body passed through, so nothing a client
       // adds reaches the write without this handler having checked it
       const result = await saveProject(user.id, {
-        id: body.id,
-        name: body.name,
-        kind: body.kind,
+        ...project,
         baseUpdatedAt: body.baseUpdatedAt,
         ...write,
       });
       const answer = answerWrite(result);
+      // The one refusal that says something reached a state it should not
+      // have: a row already empty, or a client building patches wrongly. Ids
+      // only; file contents never travel to the logs.
+      if (result.refused) {
+        console.warn("api/projects: write refused", {
+          userId: user.id,
+          projectId: project.id,
+          reason: result.refused,
+        });
+      }
       return sendJson(res, answer.status, answer.body);
     }
 

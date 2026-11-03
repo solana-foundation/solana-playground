@@ -1,3 +1,4 @@
+import { clusterName } from "@/constants";
 import { useRenderOnChange } from "../../../hooks";
 import { PgConnection } from "../../../utils";
 import { clusterIsDown } from "./account";
@@ -20,7 +21,7 @@ export const useClusterStatus = (): ClusterStatus => {
   const isConnected = useRenderOnChange(PgConnection.onDidChangeIsConnected);
   const slotStalled = useRenderOnChange(PgConnection.onDidChangeIsClusterDown);
   return {
-    name: cluster ?? "unknown",
+    name: clusterName(cluster) ?? "unknown",
     down: clusterIsDown({ isConnected, slotStalled }),
   };
 };

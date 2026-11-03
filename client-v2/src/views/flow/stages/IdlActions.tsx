@@ -75,7 +75,9 @@ const UploadIdl = () => {
       return;
     }
     PgProgramInfo.update({ idl });
-    setNote({ kind: "used", text: `Using ${idl.name ?? file.name}` });
+    // A 1.x IDL names its program under `metadata`
+    const name = idl.name ?? idl.metadata?.name ?? file.name;
+    setNote({ kind: "used", text: `Using ${name}` });
   };
 
   const noteLine = note && (
@@ -87,7 +89,7 @@ const UploadIdl = () => {
           : "font-mono text-xs text-muted-foreground"
       }
     >
-      {note.kind === "refused" ? "Not an Anchor IDL JSON file" : note.text}
+      {note.kind === "refused" ? "That file is not an Anchor IDL." : note.text}
     </span>
   );
 

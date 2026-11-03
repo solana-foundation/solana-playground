@@ -2,7 +2,13 @@ import { createMcpTools } from "./mcp-tools";
 import { createSkillTools } from "./skill-tools";
 import { PgAssistant } from "../store";
 import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
+import { formatSol } from "@/features/deploy";
+import { solOn, UNKNOWN_NETWORK } from "@/constants";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
+
+/** The project's name, as the approval cards name the program */
+const programName = (bridge: PlaygroundBridge) =>
+  bridge.getProjectContext().workspaceName ?? "the program";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {
@@ -163,6 +169,7 @@ export const createTools = (
         name: "build",
         effect:
           "Sends src/ to the build server and replaces the compiled program.",
+        question: `Build ${programName(bridge)}?`,
       });
       if (!allowed) return "The user declined to build.";
 
@@ -190,14 +197,27 @@ export const createTools = (
     name: "deploy",
     description:
       "Deploy the compiled program to the configured cluster. Requires the " +
-      "user's approval. Costs SOL and needs a funded wallet.",
+      "user's approval. Costs SOL from the connected wallet; when it holds " +
+      "too little, the terminal asks the user whether to request an airdrop.",
     schema: { type: "object", properties: {}, additionalProperties: false },
     run: async () => {
       const { cluster } = bridge.getProjectContext();
+      const quote = await bridge.quoteDeploy();
+      const cost =
+        quote.cost === null
+          ? ""
+          : ` It costs about ${formatSol(quote.cost)} ${solOn(
+              quote.network
+            )} from ${
+              quote.playground ? "your Playground wallet" : "your wallet"
+            }.`;
       const { id: approvalId, allowed } = await PgAssistant.requestApproval({
         type: "command",
         name: "deploy",
         effect: `Sends a transaction to ${cluster} and spends SOL from the connected wallet.`,
+        question: `Deploy ${programName(bridge)} to ${
+          quote.network ?? UNKNOWN_NETWORK
+        }?${cost}`,
       });
       if (!allowed) return "The user declined to deploy.";
 

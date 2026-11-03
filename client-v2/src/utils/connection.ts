@@ -1,5 +1,5 @@
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
-import { PLATFORM_ENDPOINTS } from "../constants";
+import { NETWORKS } from "../constants";
 import { PgCommon } from "./common";
 import { createDerivable, declareDecorator, derivable } from "./decorators";
 import { OverridableConnection, PgPlaynet } from "./playnet";
@@ -229,10 +229,10 @@ class _PgConnection {
         return "mainnet-beta";
     }
 
-    // Platform endpoints declare their cluster, so resolve them without
+    // The offered networks declare their cluster, so resolve them without
     // paying for the genesis hash round trip below.
-    const platform = PLATFORM_ENDPOINTS.find((e) => e.value === endpoint);
-    if (platform) return platform.cluster;
+    const network = NETWORKS.find((e) => e.value === endpoint);
+    if (network) return network.cluster;
 
     // Decide custom endpoints from the genesis hash of the cluster
     const genesisHash = await PgConnection.create({

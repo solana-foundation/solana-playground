@@ -184,10 +184,11 @@ Precondition: the install of B-3, on the stubs or on B-1; a free slot port from 
 server, no Postgres, and no default backend: every spec answers the account and model endpoints with `page.route`.
 `AGENT_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
 backend, as CI's does. With one configured, the panel opens with "Bring your own key" collapsed, and the specs that
-fill that form without expanding it fail. The platform RPC variables in `client-v2/.env.local`
-(`REACT_APP_DEVNET_RPC_URL` and the others) can stay set: the `test` fixture in
-[e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on the public devnet, the endpoint the
-specs stub, instead of the platform devnet those variables make the default.
+fill that form without expanding it fail. The platform RPC variables in `client-v2/.env`
+(`REACT_APP_DEVNET_RPC_URL` and `REACT_APP_MAINNET_RPC_URL`) can stay set: the suite's dev server blanks them
+([playwright.config.mts](../client-v2/playwright.config.mts)), so Devnet and Mainnet are the public endpoints the
+specs stub, and the `test` fixture in [e2e/fixtures.ts](../client-v2/e2e/fixtures.ts) starts every fresh profile on
+Devnet.
 
 ```sh
 k=5

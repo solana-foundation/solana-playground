@@ -14,6 +14,7 @@ import {
 } from "../../../../../utils";
 import { useMounted } from "../../../../../hooks";
 import { FieldError } from "@/shared/ui/field";
+import { IMPORTED } from "./imported";
 import { useLimitRefusal } from "./useLimitRefusal";
 
 interface ImportFsProps {
@@ -67,7 +68,10 @@ export const ImportFs: FC<React.PropsWithChildren<ImportFsProps>> = (props) => {
       title="Import project"
       buttonProps={{
         text: "Import",
-        onSubmit: guard(() => PgExplorer.createWorkspace(name, { files })),
+        onSubmit: guard(async () => {
+          await PgExplorer.createWorkspace(name, { files });
+          return IMPORTED;
+        }),
         disabled: !files || !!nameError || !!importError,
       }}
     >

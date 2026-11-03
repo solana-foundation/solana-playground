@@ -101,11 +101,15 @@ export const getIdlType: <T extends IdlType>(
   >;
 
   if (defined) {
-    if (!idl?.types) {
+    if (!idl?.types && !idl?.accounts) {
       throw new Error(`Defined type \`${defined}\` requires idl.types`);
     }
 
-    const definedType = idl.types.find((type) => type.name === defined);
+    // An argument may name an account's struct, which 0.29 lists under
+    // `accounts` only
+    const definedType = [...(idl.types ?? []), ...(idl.accounts ?? [])].find(
+      (type) => type.name === defined
+    );
     if (!definedType) throw new Error(`Type \`${defined}\` not found`);
 
     switch (definedType.type.kind) {
@@ -479,6 +483,14 @@ const u128 = createIdlType({
   generateRandom: () => generateRandomUint(16),
 });
 
+/**
+ * A signed integer as Anchor writes it into a seed: little-endian two's
+ * complement. `toArrayLike` alone writes the magnitude, so -5 became 5.
+ */
+const signedLe = (value: number | BN, bytes: number) =>
+  new BN(value).toTwos(bytes * 8).toArrayLike(Buffer, "le", bytes);
+
+// `Buffer.from` wraps a negative byte (-5 -> 0xfb), so i8 needs no `signedLe`
 const i8 = createIdlType({
   name: "i8",
   parse: (value) => {
@@ -495,7 +507,7 @@ const i16 = createIdlType({
     assertInt(value, 2);
     return parseInt(value);
   },
-  toBuffer: (value) => new BN(value).toArrayLike(Buffer, "le", 2),
+  toBuffer: (value) => signedLe(value, 2),
   generateRandom: () => generateRandomInt(2),
 });
 
@@ -505,7 +517,7 @@ const i32 = createIdlType({
     assertInt(value, 4);
     return parseInt(value);
   },
-  toBuffer: (value) => new BN(value).toArrayLike(Buffer, "le", 4),
+  toBuffer: (value) => signedLe(value, 4),
   generateRandom: () => generateRandomInt(4),
 });
 
@@ -515,7 +527,7 @@ const i64 = createIdlType({
     assertInt(value, 8);
     return new BN(value);
   },
-  toBuffer: (value) => value.toArrayLike(Buffer, "le", 8),
+  toBuffer: (value) => signedLe(value, 8),
   generateRandom: () => generateRandomInt(8),
 });
 
@@ -525,7 +537,7 @@ const i128 = createIdlType({
     assertInt(value, 16);
     return new BN(value);
   },
-  toBuffer: (value) => value.toArrayLike(Buffer, "le", 16),
+  toBuffer: (value) => signedLe(value, 16),
   generateRandom: () => generateRandomInt(16),
 });
 
@@ -631,4 +643,47 @@ function generateRandomUint(len: number) {
 function generateRandomInt(len: number) {
   const max = BigInt(new BN(new Array(len).fill(0xff)).toString()) / 2n;
   return PgCommon.generateRandomBigInt(-(max + 1n), max).toString();
+}
+
+if (import.meta.vitest) {
+  const { describe, expect, it } = import.meta.vitest;
+
+  describe("utils/program-interaction/idl-types", () => {
+    // Anchor's seed bytes, written out: little-endian two's complement
+    const SIGNED_SEEDS: Array<[string, string, string]> = [
+      ["i8", "-5", "fb"],
+      ["i8", "-128", "80"],
+      ["i8", "127", "7f"],
+      ["i16", "-5", "fbff"],
+      ["i16", "-1", "ffff"],
+      ["i16", "-32768", "0080"],
+      ["i16", "32767", "ff7f"],
+      ["i32", "0", "00000000"],
+      ["i32", "7", "07000000"],
+      ["i32", "-5", "fbffffff"],
+      ["i32", "-2147483648", "00000080"],
+      ["i32", "2147483647", "ffffff7f"],
+      ["i64", "-5", "fb" + "ff".repeat(7)],
+      ["i64", "-9223372036854775808", "00".repeat(7) + "80"],
+      ["i64", "9223372036854775807", "ff".repeat(7) + "7f"],
+      ["i128", "-5", "fb" + "ff".repeat(15)],
+      ["i128", "-1", "ff".repeat(16)],
+      ["i128", "7", "07" + "00".repeat(15)],
+      [
+        "i128",
+        "-170141183460469231731687303715884105728",
+        "00".repeat(15) + "80",
+      ],
+      [
+        "i128",
+        "170141183460469231731687303715884105727",
+        "ff".repeat(15) + "7f",
+      ],
+    ];
+
+    it.each(SIGNED_SEEDS)("writes %s %s as %s", (type, value, hex) => {
+      const { parse, toBuffer } = getIdlType(type as IdlType);
+      expect(toBuffer(parse(value)).toString("hex")).toBe(hex);
+    });
+  });
 }

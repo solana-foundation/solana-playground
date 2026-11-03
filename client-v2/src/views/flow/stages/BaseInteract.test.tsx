@@ -1,11 +1,23 @@
 // The Interact stage drawn from props: what each surface says, which action
 // it offers, and that the IDL action is on screen exactly once.
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import {
+  fireEvent,
+  render as rtlRender,
+  screen,
+  within,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import BaseInteract from "./BaseInteract";
 import type { BaseInteractProps, DeploymentOption } from "./BaseInteract";
 import type { InteractSurface } from "./interact-surface";
+
+const render = (ui: ReactElement) =>
+  rtlRender(<TooltipProvider>{ui}</TooltipProvider>);
+
+const PROGRAM_ID = "6PNd3SLJU8V6mqVmDNaV6x2UR6A8ZedA3p5FPrBjAVkj";
 
 const SURFACES: InteractSurface[] = [
   "no-project",
@@ -27,6 +39,10 @@ const props = (
     deployments?: DeploymentOption[];
     onGoTo?: BaseInteractProps["onGoTo"];
     onPick?: BaseInteractProps["onPick"];
+    programId?: string | null;
+    builtAfterDeploy?: boolean;
+    solNeeded?: BaseInteractProps["solNeeded"];
+    idlRefusal?: string | null;
   } = {}
 ): BaseInteractProps => ({
   meta: "no deployments yet",
@@ -34,10 +50,15 @@ const props = (
   selected: over.deployments?.[0]?.id ?? null,
   onPick: over.onPick ?? vi.fn(),
   surface,
-  cluster: over.cluster === undefined ? "devnet" : over.cluster,
+  cluster: over.cluster === undefined ? "Devnet" : over.cluster,
+  network: over.cluster === undefined ? "devnet" : over.cluster,
   onGoTo: over.onGoTo ?? vi.fn(),
   idlLoad: <button>Upload IDL</button>,
   form: <div>FORM</div>,
+  programId: over.programId ?? null,
+  builtAfterDeploy: over.builtAfterDeploy ?? false,
+  solNeeded: over.solNeeded ?? null,
+  idlRefusal: over.idlRefusal ?? null,
 });
 
 const actions = (container: HTMLElement) =>
@@ -52,7 +73,9 @@ describe("BaseInteract", () => {
     expect(
       screen.getByRole("heading", { name: "Nothing to call yet" })
     ).toBeTruthy();
-    expect(screen.getByText(/Once it is on devnet,/)).toBeTruthy();
+    expect(
+      screen.getByText("Deploy the program, and its instructions show up here.")
+    ).toBeTruthy();
     fireEvent.click(
       within(actions(container)).getByRole("button", { name: "Go to Deploy" })
     );
@@ -60,16 +83,20 @@ describe("BaseInteract", () => {
     expect(screen.queryByText("FORM")).toBeNull();
   });
 
-  it("an unknown cluster reads as the network", () => {
-    render(<BaseInteract {...props("not-deployed", { cluster: null })} />);
-    expect(screen.getByText(/Once it is on the network,/)).toBeTruthy();
+  it("an unknown cluster reads as the network while checking", () => {
+    render(<BaseInteract {...props("checking", { cluster: null })} />);
+    expect(
+      screen.getByText(/^Reading the program from the network/)
+    ).toBeTruthy();
   });
 
   /** The prototype says what is missing for Interact: a deployment */
   it("before a build it asks for a deploy and offers Go to Deploy", () => {
     const onGoTo = vi.fn();
     render(<BaseInteract {...props("not-built", { onGoTo })} />);
-    expect(screen.getByText(/^Deploy the program first\./)).toBeTruthy();
+    expect(
+      screen.getByText("Deploy the program, and its instructions show up here.")
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Go to Deploy" }));
     expect(onGoTo).toHaveBeenCalledWith("deploy");
   });
@@ -98,6 +125,20 @@ describe("BaseInteract", () => {
     expect(
       container.querySelector('[data-slot="callout"]')!.textContent
     ).toContain("corrupted IDL");
+  });
+
+  it("a refused Anchor 1.x IDL names the reason", () => {
+    const { container } = render(
+      <BaseInteract
+        {...props("bad-idl", {
+          idlRefusal: "a custom discriminator on initialize",
+        })}
+      />
+    );
+    expect(container.querySelector('[data-slot="callout"]')!.textContent).toBe(
+      "This IDL uses a custom discriminator on initialize, which Interact cannot call yet."
+    );
+    expect(screen.queryByText("FORM")).toBeNull();
   });
 
   it("ready draws the form and no empty state", () => {
@@ -154,7 +195,7 @@ describe("BaseInteract", () => {
     ["no-project", "No project open", false],
     ["checking", "Checking the program", false],
     ["not-built", "Nothing to call yet", true],
-    ["no-idl", "No IDL yet", true],
+    ["no-idl", "This program has no IDL", true],
     ["no-program-id", "No program id", true],
     ["bad-idl", "This IDL can't be read", false],
     ["unreachable", "Can't reach the network", false],
@@ -169,10 +210,85 @@ describe("BaseInteract", () => {
     ).toBe(hasAction);
   });
 
+  it("a program with no IDL asks for its IDL", () => {
+    render(<BaseInteract {...props("no-idl")} />);
+    expect(
+      screen.getByText("Upload its IDL to call it from a form.")
+    ).toBeTruthy();
+  });
+
   it("an unreachable network shows the error notice", () => {
     const { container } = render(<BaseInteract {...props("unreachable")} />);
     expect(
       container.querySelector('[data-slot="callout"]')!.textContent
     ).toContain("Connection error");
+  });
+
+  it("names the program it calls, with copy, and the network", () => {
+    render(<BaseInteract {...props("ready", { programId: PROGRAM_ID })} />);
+    const program = screen.getByTitle(PROGRAM_ID);
+    expect(program.textContent).toBe("6PNd\u2026AVkj");
+    expect(
+      screen.getByRole("button", { name: "Copy program id" })
+    ).toBeTruthy();
+    expect(screen.getByText("Program").parentElement?.textContent).toContain(
+      "Devnet"
+    );
+  });
+
+  it("built after deploy offers Redeploy", () => {
+    const onGoTo = vi.fn();
+    render(
+      <BaseInteract {...props("ready", { onGoTo, builtAfterDeploy: true })} />
+    );
+    expect(
+      screen.getByText(
+        "The deployed program is older than your code. Redeploy to call the latest version."
+      )
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Redeploy" }));
+    expect(onGoTo).toHaveBeenCalledWith("deploy");
+  });
+
+  it("an empty wallet asks for SOL, with the faucet when there is one", () => {
+    const airdrop = vi.fn(() => Promise.resolve());
+    render(
+      <BaseInteract
+        {...props("ready", {
+          solNeeded: { balance: 0, cluster: "devnet", airdrop },
+        })}
+      />
+    );
+    expect(
+      screen.getByText(
+        "This call needs a small fee in devnet SOL. Your wallet has 0 SOL."
+      )
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Get devnet SOL" }));
+    expect(airdrop).toHaveBeenCalled();
+  });
+
+  it("without a faucet the SOL callout offers nothing to press", () => {
+    render(
+      <BaseInteract
+        {...props("ready", {
+          solNeeded: { balance: 0, cluster: "localnet", airdrop: null },
+        })}
+      />
+    );
+    expect(screen.queryByRole("button", { name: /Get .* SOL/ })).toBeNull();
+  });
+
+  it("callouts only show beside the form", () => {
+    render(
+      <BaseInteract
+        {...props("not-deployed", {
+          builtAfterDeploy: true,
+          solNeeded: { balance: 0, cluster: "devnet", airdrop: null },
+        })}
+      />
+    );
+    expect(screen.queryByRole("button", { name: "Redeploy" })).toBeNull();
+    expect(screen.queryByText(/needs a small fee/)).toBeNull();
   });
 });

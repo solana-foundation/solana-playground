@@ -71,8 +71,8 @@ if (import.meta.vitest) {
         },
         {
           id: "deploy",
-          objective: "Deploy it to devnet",
-          verifiedBy: "the program is on devnet",
+          objective: "Deploy it to Devnet",
+          verifiedBy: "the program is on Devnet",
           verify: { kind: "deployed" },
           hints: ["one", "two", "three"],
         },

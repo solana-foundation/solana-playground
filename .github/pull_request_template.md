@@ -8,6 +8,14 @@ Linear: [HOO-](https://linear.app/solana-fndn/issue/HOO-)
      of change in the first words: a fix, a move, a new rule, a new capability,
      an OpenSpec task (name it: `ui-migration` 4.2). -->
 
+## Blast radius
+
+<!-- Required. The tier, XS to XL, of the damage this change does if it merges
+     without a human approval, and the files that set it: the
+     `## Blast radius:` block of `/sx:review-pr`, or `/sx:review-pr radius`
+     alone. Without the `sx` plugin, give the tier you judge and one line of
+     reason per file at that tier. -->
+
 ## Context
 
 <!-- What is true before this PR that the reader needs: the state of the code,

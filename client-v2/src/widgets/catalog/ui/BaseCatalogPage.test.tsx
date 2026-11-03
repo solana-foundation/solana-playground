@@ -124,7 +124,7 @@ it("offers a retry when the list failed", () => {
 
   expect(screen.getByText("Could not load.")).toBeTruthy();
   expect(screen.queryByText("Loading tutorials…")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  fireEvent.click(screen.getByRole("button", { name: "Try again" }));
   expect(onRetry).toHaveBeenCalledTimes(1);
 });
 

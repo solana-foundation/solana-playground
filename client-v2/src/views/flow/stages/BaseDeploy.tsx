@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
-import { ExternalLink, Rocket } from "lucide-react";
+import { ExternalLink, Rocket, TriangleAlert } from "lucide-react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton, BrandButtonIcon } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
 import { CopyButton } from "@/shared/ui/copy-button";
 import {
   StageEmpty,
@@ -17,6 +17,25 @@ import {
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 import { StatusDot } from "@/shared/ui/status-dot";
+import {
+  BaseBackupLine,
+  BaseDeployProgress,
+  BaseNotEnoughSol,
+  BaseStaleBuildDialog,
+  formatSol,
+  networkInSentence,
+  networkName,
+  shortKey,
+} from "@/features/deploy";
+import { UNKNOWN_NETWORK } from "@/constants";
+import type { DeployRunState, DeployFundingError } from "@/commands/deploy/run";
+import {
+  MAINNET_DEPLOY_WARNING_BODY,
+  MAINNET_DEPLOY_WARNING_GUIDE,
+  MAINNET_DEPLOY_WARNING_TITLE,
+  warnsOnDeploy,
+} from "../../../commands/deploy/mainnet-warning";
+import type { GuideFrom } from "@/features/cli-deploy";
 import type { DeployRecord } from "../state/deploy-history";
 import {
   STAGE_BODY,
@@ -38,6 +57,17 @@ export interface DeployDetails {
 /** Where the project's last deploy stands */
 export type DeployStatus = "idle" | "running" | "failed";
 
+/** The wallet that pays for the deploy; `balance` is SOL, `null` until read */
+export interface DeployPayer {
+  address: string;
+  balance: number | null;
+  /** The Playground wallet, not a connected one such as Phantom */
+  playground: boolean;
+}
+
+/** Why the last run could not fund its wallet */
+export type FundingStop = DeployFundingError["detail"];
+
 export interface BaseDeployProps {
   /** The cluster's name, `null` until the endpoint has been read */
   cluster: string | null;
@@ -53,12 +83,32 @@ export interface BaseDeployProps {
   details: DeployDetails;
   /** Every deployment of the project, newest first */
   history: DeployRecord[];
-  addressUrl: (programId: string) => string;
-  txUrl: (signature: string) => string;
+  /** The wallet that pays, Playground or connected; `null` while none is current */
+  payer: DeployPayer | null;
+  /** The running deploy's steps */
+  run: DeployRunState;
+  /** The last run stopped for lack of SOL */
+  funding: FundingStop | null;
+  /** Show the keypair backup line under the result */
+  backup: boolean;
+  /** Ask whether to deploy the last good build */
+  staleBuild: boolean;
+  /**
+   * An Explorer link that opens `cluster`, whatever network is selected;
+   * `null` when the explorer cannot open it, and the link is left out
+   */
+  addressUrl: (programId: string, cluster: string) => string | null;
+  txUrl: (signature: string, cluster: string) => string | null;
   onDeploy: () => void;
+  onSignIn: () => void;
+  onSaveKeypair: () => void;
+  onDismissBackup: () => void;
+  onStaleBuildAnswer: (deploy: boolean) => void;
   onInteract: () => void;
   /** The secondary "Upload IDL" action (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
+  /** Opens the CLI deploy guide; `from` is the control pressed */
+  onOpenCliGuide: (from: GuideFrom) => void;
 }
 
 /** Why the Deploy button is off, for its tooltip; undefined when it is on */
@@ -70,12 +120,28 @@ const deployBlockedReason = (p: BaseDeployProps) => {
 
 const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
   if (p.deploy === "running") return redeploy ? "Upgrading..." : "Deploying...";
-  const where = clusterName(p);
+  const where = deployNetwork(p);
   return redeploy ? `Redeploy to ${where}` : `Deploy to ${where}`;
 };
 
-/** The cluster for prose; "the network" until the endpoint has been read */
-const clusterName = (p: BaseDeployProps) => p.cluster ?? "the network";
+/**
+ * The cluster in the deploy button's label and the stage's prose, lowercase
+ * mid-sentence: "mainnet" for mainnet-beta; "the network" until the endpoint
+ * has been read
+ */
+const deployNetwork = (p: BaseDeployProps) =>
+  networkInSentence(p.cluster) ?? UNKNOWN_NETWORK;
+
+/** Who pays, before a deploy */
+const payerLine = (payer: DeployPayer | null) => {
+  if (!payer) {
+    return "Deploys from a Playground wallet created on your first deploy.";
+  }
+  const balance =
+    payer.balance === null ? "" : ` · ${payer.balance.toFixed(2)} SOL`;
+  const which = payer.playground ? "your Playground wallet" : "your wallet";
+  return `From ${which} · ${shortKey(payer.address)}${balance}`;
+};
 
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
@@ -84,15 +150,24 @@ const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
   }
-  return `Deploying sends the compiled program to ${clusterName(
-    p
-  )} using the connected wallet.`;
+  return `Deploying sends the compiled program to ${deployNetwork(p)}.`;
 };
 
-const ExplorerLink = ({ href, label }: { href: string; label: string }) => (
-  <Button size="sm" variant="ghost" asChild>
+/** An Explorer link whose text names the network it opens */
+const ExplorerLink = ({
+  href,
+  label,
+  children,
+  className,
+}: {
+  href: string;
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) => (
+  <Button size="sm" variant="ghost" className={className} asChild>
     <a href={href} target="_blank" rel="noopener noreferrer" aria-label={label}>
-      Explorer
+      {children}
       <ExternalLink data-icon="inline-end" />
     </a>
   </Button>
@@ -106,7 +181,7 @@ const Fact = ({ name, children }: { name: string; children: ReactNode }) => (
   </>
 );
 
-/** After a deploy: the program id to copy, where to see it, the facts */
+/** After a deploy: what happened, the program id to copy, where to see it */
 const DeployResult = ({
   latest,
   p,
@@ -115,14 +190,22 @@ const DeployResult = ({
   p: BaseDeployProps;
 }) => {
   const { upgradable, authority, programSize } = p.details;
+  const network = networkName(latest.cluster);
+  const programUrl = p.addressUrl(latest.programId, latest.cluster);
+  const txUrl = latest.signature && p.txUrl(latest.signature, latest.cluster);
   return (
     <div
       role="status"
+      aria-label="Deploy result"
       className="flex w-full flex-col gap-3 rounded-xl border border-border bg-surface-panel p-4"
     >
       <div className="flex items-center gap-2 text-control font-act text-foreground">
         <StatusDot variant="success" size="lg" />
-        Deployed to {latest.cluster}
+        {latest.upgraded
+          ? "Upgraded. The program id stays the same."
+          : `Deployed to ${
+              networkInSentence(latest.cluster) ?? UNKNOWN_NETWORK
+            }`}
       </div>
       <div className="flex items-center gap-2 rounded-lg bg-surface-base px-3 py-2">
         <span className="shrink-0 text-caption text-subtle">Program id</span>
@@ -130,7 +213,7 @@ const DeployResult = ({
           className="min-w-0 truncate font-mono text-code text-foreground"
           title={latest.programId}
         >
-          {latest.programId}
+          {shortKey(latest.programId)}
         </code>
         <CopyButton
           value={latest.programId}
@@ -140,10 +223,8 @@ const DeployResult = ({
         />
       </div>
       <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5 text-caption">
-        {latest.signature && (
-          <Fact name="Transaction">
-            {latest.signature.slice(0, 20)}&hellip;
-          </Fact>
+        {latest.cost !== undefined && (
+          <Fact name="Cost">{formatSol(latest.cost)} SOL</Fact>
         )}
         {upgradable !== null && (
           <Fact name="Upgradable">{upgradable ? "Yes" : "No"}</Fact>
@@ -160,25 +241,48 @@ const DeployResult = ({
         <Button size="sm" variant="outline" onClick={p.onInteract}>
           Interact
         </Button>
-        <ExplorerLink
-          href={p.addressUrl(latest.programId)}
-          label={`View latest deployment (${latest.programId}) on Explorer`}
-        />
-        {latest.signature && (
-          <Button size="sm" variant="ghost" asChild>
-            <a
-              href={p.txUrl(latest.signature)}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={`View latest deployment transaction (${latest.signature}) on Explorer`}
-            >
-              Transaction
-              <ExternalLink data-icon="inline-end" />
-            </a>
-          </Button>
+        {programUrl && (
+          <ExplorerLink
+            href={programUrl}
+            label={`View latest deployment (${latest.programId}) on Explorer (${network})`}
+          >
+            View on Explorer ({network})
+          </ExplorerLink>
+        )}
+        {txUrl && (
+          <ExplorerLink
+            href={txUrl}
+            label={`View latest deployment transaction (${latest.signature}) on Explorer (${network})`}
+          >
+            Transaction ({network})
+          </ExplorerLink>
         )}
       </div>
+      {p.backup && (
+        <BaseBackupLine
+          cluster={latest.cluster}
+          onSave={p.onSaveKeypair}
+          onDismiss={p.onDismissBackup}
+        />
+      )}
     </div>
+  );
+};
+
+/** A history row's Explorer link, left out when the explorer cannot open its network */
+const HistoryLink = ({ p, r }: { p: BaseDeployProps; r: DeployRecord }) => {
+  const href = p.addressUrl(r.programId, r.cluster);
+  if (!href) return null;
+  const network = networkName(r.cluster);
+  return (
+    <ExplorerLink
+      href={href}
+      // On a phone the link takes a row of its own, under the id
+      className="max-md:col-start-2 max-md:justify-self-start"
+      label={`View deployment (${r.programId}) on Explorer (${network})`}
+    >
+      Explorer ({network})
+    </ExplorerLink>
   );
 };
 
@@ -192,8 +296,8 @@ const History = ({ p }: { p: BaseDeployProps }) => (
           key={r.id}
           className="grid grid-cols-[5.5rem_1fr_auto] items-center gap-3 py-1.5 text-caption max-md:grid-cols-[5.5rem_1fr]"
         >
-          <Badge variant="outline" className="font-mono lowercase">
-            {r.cluster}
+          <Badge variant="outline" className="font-mono">
+            {networkName(r.cluster)}
           </Badge>
           <span className="min-w-0 truncate font-mono" title={r.programId}>
             {r.programId.slice(0, 8)}&hellip;{r.programId.slice(-4)}
@@ -201,10 +305,7 @@ const History = ({ p }: { p: BaseDeployProps }) => (
               {new Date(r.at).toLocaleString()}
             </span>
           </span>
-          <ExplorerLink
-            href={p.addressUrl(r.programId)}
-            label={`View deployment (${r.programId}) on Explorer`}
-          />
+          <HistoryLink p={p} r={r} />
         </li>
       ))}
     </ul>
@@ -212,15 +313,42 @@ const History = ({ p }: { p: BaseDeployProps }) => (
 );
 
 /**
+ * The mainnet warning's body, its "deploy from your own machine" turned into
+ * the button that opens the CLI deploy guide; the words stay the terminal's
+ */
+const MainnetWarningBody = ({ p }: { p: BaseDeployProps }) => {
+  const [before, after] = MAINNET_DEPLOY_WARNING_BODY.split(
+    MAINNET_DEPLOY_WARNING_GUIDE
+  );
+  return (
+    <>
+      {before}
+      <Button
+        variant="link"
+        className="inline h-auto p-0 align-baseline text-[length:inherit] whitespace-normal"
+        onClick={() => p.onOpenCliGuide("mainnet-warning")}
+      >
+        {MAINNET_DEPLOY_WARNING_GUIDE}
+      </Button>
+      {after}
+    </>
+  );
+};
+
+/**
  * The Deploy stage, drawn from props alone; `Deploy` connects it. Before the
- * first deploy it is the prototype's empty stage: centred, the pill and
- * "Upload IDL" under it, no history yet. After one it shows the result and
- * the history, read from the left.
+ * first deploy it is the prototype's empty stage: centred, the pill with
+ * "Upload IDL" and "Deploy with the CLI" under it, no history yet. After one
+ * it shows the result and the history, read from the left. The CLI guide's
+ * button shows on every cluster.
  */
 const BaseDeploy = (p: BaseDeployProps) => {
   const latest = p.history[0] ?? null;
   const n = p.history.length;
-  const meta = [p.cluster, latest && `${n} deployment${n === 1 ? "" : "s"}`]
+  const meta = [
+    p.cluster && networkName(p.cluster),
+    latest && `${n} deployment${n === 1 ? "" : "s"}`,
+  ]
     .filter(Boolean)
     .join(" · ");
   const running = p.deploy === "running";
@@ -243,16 +371,50 @@ const BaseDeploy = (p: BaseDeployProps) => {
             Program id <code className="font-mono">{p.programId}</code>
           </p>
         )}
-        {p.deploy === "failed" && (
+        {p.built && !running && (
+          <p
+            aria-label="Who pays"
+            className="text-caption text-muted-foreground"
+          >
+            {payerLine(p.payer)}
+          </p>
+        )}
+        {p.funding && (
+          <BaseNotEnoughSol
+            cluster={p.cluster}
+            reason={p.funding.reason}
+            balance={p.funding.balance}
+            needed={p.funding.needed}
+            address={p.funding.address}
+            cause={p.funding.cause}
+            onRetry={p.onDeploy}
+            onSignIn={p.onSignIn}
+          />
+        )}
+        {p.deploy === "failed" && !p.funding && (
           <Callout variant="error" role="alert">
             <CalloutDescription>
-              Deploy failed - see the console.
+              Deploy failed — see the terminal.
+            </CalloutDescription>
+          </Callout>
+        )}
+        {warnsOnDeploy(p.cluster) && (
+          <Callout variant="warning" aria-label="Mainnet deploy warning">
+            <TriangleAlert />
+            <CalloutTitle>{MAINNET_DEPLOY_WARNING_TITLE}</CalloutTitle>
+            <CalloutDescription>
+              <MainnetWarningBody p={p} />
             </CalloutDescription>
           </Callout>
         )}
         {latest && <DeployResult latest={latest} p={p} />}
         {latest && <History p={p} />}
+        <BaseStaleBuildDialog
+          open={p.staleBuild}
+          onAnswer={p.onStaleBuildAnswer}
+        />
         <StageEmptyActions className={cn(STAGE_FOOT, !latest && "flex-col")}>
+          {running && p.run.step && <BaseDeployProgress state={p.run} />}
           <BrandButton
             disabled={!p.built || running}
             aria-busy={running || undefined}
@@ -262,10 +424,19 @@ const BaseDeploy = (p: BaseDeployProps) => {
             {deployLabel(p, latest !== null)}
             {!running && <BrandButtonIcon />}
           </BrandButton>
-          {/* Before the first deploy, centred under the pill on a desk and
-              above it on a phone, where the row stretches the pill to the
-              screen's width; after one, beside the pill */}
-          <div className="flex justify-center">{p.idlUpload}</div>
+          {/* Upload IDL and the CLI guide: before the first deploy, centred
+              under the pill on a desk and above it on a phone, where the row
+              stretches the pill to the screen's width; after one, beside the
+              pill */}
+          <div className="flex flex-wrap justify-center gap-2">
+            {p.idlUpload}
+            <Button
+              variant="ghost"
+              onClick={() => p.onOpenCliGuide("deploy-stage")}
+            >
+              Deploy with the CLI
+            </Button>
+          </div>
         </StageEmptyActions>
       </StageEmpty>
     </div>

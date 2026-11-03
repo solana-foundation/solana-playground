@@ -158,6 +158,44 @@ describe("SyncBanner wording", () => {
       "src/lib.rs changed on another device while you were resolving. Review before applying."
     );
   });
+
+  it("names the limit a project too large to sync is over", async () => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+      projectId: "p1",
+      kind: "too-large",
+    });
+    await act(async () => root.render(<SyncBanner />));
+    expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
+      "This project is over 1 MiB. Remove or shrink its largest files, then try again."
+    );
+  });
+
+  it("says another project in the account uses the name", async () => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+      projectId: "p1",
+      kind: "name-taken",
+    });
+    await act(async () => root.render(<SyncBanner />));
+    expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
+      "Another project in your account uses this name. Rename this one, then try again."
+    );
+  });
+
+  it("offers to keep a copy of a project deleted on another device", async () => {
+    vi.spyOn(PgProjectSync, "conflictFor").mockReturnValue({
+      projectId: "p1",
+      kind: "deleted-elsewhere",
+    });
+    await act(async () => root.render(<SyncBanner />));
+    expect(container.querySelector('[role="alert"] p')!.textContent).toBe(
+      "This project was deleted on another device, but this one has unsaved changes."
+    );
+    const labels = [...container.querySelectorAll("button")].map(
+      (b) => b.textContent
+    );
+    expect(labels).toContain("Keep a copy");
+    expect(labels).toContain("Delete anyway");
+  });
 });
 
 describe("SyncBanner limit wording", () => {
@@ -266,9 +304,9 @@ describe("SyncBanner limit wording", () => {
     );
   });
 
-  it("keeps the generic copy for the body cap", async () => {
+  it("names the body cap when the refusal names no limit", async () => {
     expect((await bannerFor()).text).toBe(
-      "This project is too large to sync. Remove or shrink its largest files, then try again."
+      "This project is over 1 MiB. Remove or shrink its largest files, then try again."
     );
   });
 });
