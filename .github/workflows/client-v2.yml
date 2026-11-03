@@ -128,6 +128,8 @@ jobs:
               fi
               api_failures=0
               IFS=$'\x1f' read -r state url description <<< "$row"
+              # Vercel's text goes into a workflow command: one line, no `::`.
+              description=$(printf '%s' "$description" | tr -d '\r\n' | sed 's/::/: :/g')
               echo "deployment $id: $state"
               case "$state" in
                 success)

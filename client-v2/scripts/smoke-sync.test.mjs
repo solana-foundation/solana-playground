@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { createServer } from "node:http";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -145,7 +145,6 @@ const runAgainst = async (body) => {
   const { server, url } = await serve(body);
   try {
     // spawnSync would block the server's event loop, so use the async form.
-    const { spawn } = await import("node:child_process");
     const child = spawn(process.execPath, [script, url], {
       env: { ...process.env, SMOKE_RETRY_DELAY_MS: "0" },
     });
