@@ -213,17 +213,15 @@ const Succeeded = (p: BaseBuildProps) => (
 );
 
 /**
- * One compiler error. A screen has one brand action, so only the first
- * error's fix takes it; the rest are outlined.
+ * One compiler error. Every error's fix is outlined: a brand fix on the
+ * first card only read as a stray style among equal ones.
  */
 const ErrorCard = ({
   view,
-  fix,
   onFix,
   onOpenFile,
 }: {
   view: DiagnosticView;
-  fix: "brand" | "outline";
   onFix: (prompt: string) => void;
   onOpenFile: (path: string) => void;
 }) => {
@@ -257,15 +255,9 @@ const ErrorCard = ({
         </DiagnosticSource>
       )}
       <DiagnosticFooter>
-        {fix === "brand" ? (
-          <BrandButton size="sm" onClick={sendFix}>
-            Fix with assistant
-          </BrandButton>
-        ) : (
-          <Button size="sm" variant="outline" onClick={sendFix}>
-            Fix with assistant
-          </Button>
-        )}
+        <Button size="sm" variant="outline" onClick={sendFix}>
+          Fix with assistant
+        </Button>
         {file && (
           <Button size="sm" variant="ghost" onClick={() => onOpenFile(file)}>
             Open in editor
@@ -311,7 +303,6 @@ const Failed = (p: BaseBuildProps & FailedView) => (
         <ErrorCard
           key={i}
           view={view}
-          fix={i === 0 ? "brand" : "outline"}
           onFix={p.onFix}
           onOpenFile={p.onOpenFile}
         />

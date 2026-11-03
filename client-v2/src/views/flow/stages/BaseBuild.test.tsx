@@ -169,14 +169,14 @@ describe("BaseBuild", () => {
     expect(fault?.textContent).toContain("Wrong type");
   });
 
-  it("keeps the brand button for the first error only", () => {
+  it("gives every error the same outlined fix", () => {
     const { container } = render(
       <BaseBuild
         {...props(failed([typeError("first", "a"), typeError("second", "b")]))}
       />
     );
 
-    expect(brandButtons(container)).toHaveLength(1);
+    expect(brandButtons(container)).toHaveLength(0);
     expect(
       screen.getAllByRole("button", { name: "Fix with assistant" })
     ).toHaveLength(2);
