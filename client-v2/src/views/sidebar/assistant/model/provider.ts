@@ -12,13 +12,6 @@ import type { LanguageModel, ModelMessage } from "ai";
 
 import { agentTelemetry } from "@/features/agent";
 import type { ModelProvider } from "@/shared/lib/ai";
-import { loadAi } from "@/shared/lib/ai";
-
-import { PgSession } from "../../../../features/auth";
-import type { ReplayMessage } from "../../../../features/persistence/model/replay";
-import { MAX_RESUMES, MAX_STEPS } from "../config";
-import { PgAssistant } from "../store";
-import { ModelBusyError } from "./model-busy";
 import type { ModelProviderInput } from "./model-providers";
 import { EVERYTHING, TurnFailure, type Provider } from "./types";
 
@@ -62,18 +55,17 @@ const createReplies = () => {
 /**
  * One conversation with any model provider, on `runTurn`. The history keeps the SDK's messages, so
  * tool calls and Gemini's thought signatures go back as sent; a failed turn leaves it unchanged.
+ * The thread still stores each call that turn finished (`PgAssistant.addToolResult`), so a provider
+ * rebuilt later replays them: they ran, and the model must not run them again.
  */
 export const createProvider = (
   connection: ProviderConnection,
-  /** Prior turns, text only, when reopening a stored thread (`toReplayMessages`) */
-  seed: readonly ReplayMessage[] = []
+  /** Prior turns, their stored tool calls included, when reopening a thread (`toReplayMessages`) */
+  seed: readonly ModelMessage[] = []
 ): Provider => {
   const { supportsTools } = MODEL_PROVIDER_PROFILES[connection.id];
   const profile = MODEL_PROVIDER_PROFILES[connection.id].profile(connection);
-  let history: ModelMessage[] = seed.map((m) => ({
-    role: m.role,
-    content: m.content,
-  }));
+  let history: ModelMessage[] = Array.from(seed);
   let model: LanguageModel | undefined;
 
   return {
@@ -123,6 +115,9 @@ export const createProvider = (
             calledTool = true;
             replies.close();
           },
+          // Stored with the thread, so a provider built for it later replays the call
+          onToolResult: (result) =>
+            PgAssistant.addToolResult(result, connection.apiKey),
         });
       } catch (e) {
         if (!(e instanceof ai.AiTurnError)) throw e;

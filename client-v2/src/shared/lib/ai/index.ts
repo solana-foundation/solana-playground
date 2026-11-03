@@ -12,6 +12,7 @@ export type {
   AiTurnErrorKind,
   RunTurnOptions,
   ToolCallEvent,
+  ToolResultEvent,
   TurnResult,
 } from "./run-turn";
 export type {

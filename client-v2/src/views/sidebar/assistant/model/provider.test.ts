@@ -31,7 +31,23 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-
+import { createProvider } from "./provider";
+import { MODEL_PROVIDER_PROFILES } from "./model-providers";
+import { ModelBusyError } from "./model-busy";
+import { TurnFailure } from "./types";
+import {
+  DAILY_CAP_REASON,
+  POOL_EXHAUSTED_REASON,
+  REFUSAL_MESSAGES,
+} from "@/features/agent";
+import { PgAssistant, isToolCallRecord, type ChatItem } from "../store";
+import { toReplayMessages } from "@/features/persistence";
+import {
+  decodeThread,
+  encodeThread,
+  mergeThreads,
+} from "@/features/persistence/model/chat-codec";
+import { PgChatStorage } from "@/features/persistence/model/chat-storage";
 import { PgSession } from "../../../../features/auth";
 import { DEFAULT_BACKEND_URL, MAX_RESUMES, MAX_STEPS } from "../config";
 import { type ChatItem, PgAssistant } from "../store";
@@ -53,10 +69,34 @@ vi.mock("./prompt", () => ({
   describeProject: () => "project",
 }));
 
+/** Holds the `slow` tool until a test lets it finish */
+const slow = vi.hoisted(() => {
+  let release = () => {};
+  let started = () => {};
+  return {
+    started: new Promise<void>((resolve) => (started = resolve)),
+    reset() {
+      this.started = new Promise<void>((resolve) => (started = resolve));
+    },
+    run: () =>
+      new Promise<string>((resolve) => {
+        release = () => resolve("Done slowly.");
+        started();
+      }),
+    release: () => release(),
+  };
+});
+
 vi.mock("./tools", async () => {
   const { PgAssistant: assistant } = await import("../store");
   return {
     createTools: () => [
+      {
+        name: "slow",
+        description: "Takes a while",
+        schema: { type: "object", properties: {}, additionalProperties: false },
+        run: () => slow.run(),
+      },
       {
         name: "write_file",
         description: "Write a file",
@@ -160,14 +200,17 @@ const anthropicThinkingThenText = (thinking: string, text: string) =>
 const defaultBackend = () => createProvider({ id: "default", apiKey: "" });
 const anthropic = () => createProvider({ id: "anthropic", apiKey: KEY });
 
+/** What the thread draws: a stored call is for the replay, not the thread */
 const rendered = () =>
-  PgAssistant.items.map((item: ChatItem) => {
-    if (item.kind === "tool") return `tool: ${item.label}`;
-    if (item.kind === "assistant" || item.kind === "error") {
-      return `${item.kind}: ${item.text}`;
-    }
-    return item.kind;
-  });
+  PgAssistant.items
+    .filter((item) => !isToolCallRecord(item))
+    .map((item: ChatItem) => {
+      if (item.kind === "tool") return `tool: ${item.label}`;
+      if (item.kind === "assistant" || item.kind === "error") {
+        return `${item.kind}: ${item.text}`;
+      }
+      return item.kind;
+    });
 
 const messagesOf = (body: Record<string, unknown>) =>
   body.messages as Array<Record<string, unknown>>;
@@ -262,6 +305,175 @@ describe("the assistant's provider", () => {
       "tool: wrote src/lib.rs",
       "assistant: Done.",
     ]);
+  });
+
+  describe("tool calls kept in the history", () => {
+    /** A turn that calls write_file once, then answers */
+    const writeTurn = () =>
+      respond(
+        chatStream(
+          [
+            {
+              role: "assistant",
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "sdk-id-1",
+                  type: "function",
+                  function: {
+                    name: "write_file",
+                    arguments: '{"path":"src/lib.rs"}',
+                  },
+                },
+              ],
+            },
+          ],
+          "tool_calls"
+        ),
+        openAiText("Done.")
+      );
+
+    const toolMessages = (body: Record<string, unknown>) =>
+      messagesOf(body).filter(
+        (m) => m.role === "tool" || (m.role === "assistant" && m.tool_calls)
+      );
+
+    it("stores the tool's result after the tool's own marker", async () => {
+      writeTurn();
+
+      await defaultBackend().send("make the change");
+
+      expect(
+        PgAssistant.items.map((item) =>
+          isToolCallRecord(item)
+            ? `call: ${item.call.name} -> ${item.call.output}`
+            : item.kind
+        )
+      ).toEqual(["tool", "call: write_file -> Wrote src/lib.rs.", "assistant"]);
+      expect(rendered()).toEqual([
+        "tool: wrote src/lib.rs",
+        "assistant: Done.",
+      ]);
+    });
+
+    it("replays a stored call to Anthropic as tool_use and tool_result", async () => {
+      PgAssistant.addToolResult(
+        {
+          toolName: "read_file",
+          input: { path: "src/lib.rs" },
+          output: "Not found",
+          failed: true,
+        },
+        undefined
+      );
+      const asked: ChatItem = {
+        id: "u-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        kind: "user",
+        text: "read lib.rs",
+      };
+      const seed = toReplayMessages(
+        Array.of<ChatItem>(asked).concat(PgAssistant.items)
+      );
+      const sent = respond(anthropicText("It is missing.", "end_turn"));
+
+      await createProvider({ id: "anthropic", apiKey: KEY }, seed).send("why?");
+
+      expect(messagesOf(sent[0].body).slice(0, 3)).toEqual([
+        { role: "user", content: [{ type: "text", text: "read lib.rs" }] },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "call_1",
+              name: "read_file",
+              input: { path: "src/lib.rs" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            expect.objectContaining({
+              type: "tool_result",
+              tool_use_id: "call_1",
+              is_error: true,
+            }),
+            expect.objectContaining({ type: "text", text: "why?" }),
+          ],
+        },
+      ]);
+    });
+
+    it.each([
+      ["stopped", () => PgAssistant.stopTurn()],
+      ["its thread closed", () => PgAssistant.closeThread()],
+    ])(
+      "stores no call whose turn was %s while the tool ran",
+      async (_, cut) => {
+        slow.reset();
+        respond(openAiToolCall("c1", "slow", {}), openAiText("Late."));
+        // Closing cuts the turn only while a thread is open, as in the panel
+        await PgAssistant.loadThread("slow-turn");
+        const turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+
+        const sent = defaultBackend().send("go slowly", turn.signal);
+        await slow.started;
+        cut();
+        slow.release();
+        await sent.catch(() => undefined);
+        PgAssistant.endTurn(turn);
+
+        expect(PgAssistant.items.filter(isToolCallRecord)).toEqual([]);
+        PgAssistant.closeThread();
+      }
+    );
+
+    it("survives storage and a pull from another device, and goes with the next request", async () => {
+      writeTurn();
+      // The panel adds the message before the turn (`use-turn`)
+      PgAssistant.addUserMessage("make the change");
+      await defaultBackend().send("make the change");
+      vi.restoreAllMocks();
+
+      // This device's storage, then the account's copy as another device reads it
+      await PgChatStorage.write("round-trip", PgAssistant.items);
+      const local = (await PgChatStorage.read("round-trip")) ?? [];
+      const pulled = decodeThread(
+        JSON.parse(JSON.stringify(encodeThread(local)))
+      );
+      const thread = mergeThreads([], pulled);
+
+      const sent = respond(openAiText("It is written."));
+      await createProvider(
+        { id: "default", apiKey: "" },
+        toReplayMessages(thread)
+      ).send("is it written?");
+
+      expect(toolMessages(sent[0].body)).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: {
+                name: "write_file",
+                arguments: '{"path":"src/lib.rs"}',
+              },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: "Wrote src/lib.rs.",
+        },
+      ]);
+    });
   });
 
   it("reports an empty response when the turn did nothing at all", async () => {

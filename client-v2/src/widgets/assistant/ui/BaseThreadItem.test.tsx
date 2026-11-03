@@ -130,6 +130,26 @@ describe("BaseThreadItem", () => {
     expect(screen.queryByRole("button")).toBeNull();
   });
 
+  it("a stored tool call draws nothing; the tool's own marker is drawn", () => {
+    const { container } = render(
+      <BaseThreadItem
+        item={{
+          id: "t-2",
+          createdAt: CREATED,
+          kind: "tool",
+          label: "read_file",
+          call: {
+            name: "read_file",
+            input: { path: "src/lib.rs" },
+            output: "fn main() {}",
+          },
+        }}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(container.innerHTML).toBe("");
+  });
+
   it("a tool line is a marker", () => {
     const { container } = render(
       <BaseThreadItem
