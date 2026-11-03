@@ -182,6 +182,19 @@ docker compose -f ../compose.yaml --profile v2-unstable up --build
 - Start-up runs `docker build` for the `bundle` image and one
   `program-<template>` image per template before the port answers; a cold
   start takes several minutes under amd64 emulation.
+- The ports are the `v2` profile's: client-v2 on `3000`, the server on
+  `8080`, Postgres on `5432`. `PG_CLIENT_V2_PORT`, `PG_PORT`, and
+  `PG_POSTGRES_PORT` move them, in the shell or the root `.env`, for example
+  beside a running `v2` stack:
+
+  ```sh
+  PG_CLIENT_V2_PORT=3001 PG_PORT=8081 PG_POSTGRES_PORT=5433 \
+    docker compose -f ../compose.yaml -p solana-playground-unstable --profile v2-unstable up --build
+  ```
+
+  A second stack needs its own `-p` project name: in the same project both
+  profiles share `postgres`, `migrate`, and `wasm`, and the new ports recreate
+  them under the running `v2` stack.
 - `PG_SERVER_DIR` is the absolute path of another checkout's `server/`
   directory, for example a pull request's worktree. Its `templates/`
   replaces the image's whole, but start-up builds only the names in the
