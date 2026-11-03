@@ -127,7 +127,8 @@
     "@types/react-dom": "^19.2.0",
     "elliptic": "^6.6.1",
     "crypto-js": "^4.2.0",
-    "axios": "^0.32.0"
+    "axios": "^0.34.0",
+    "toml": "^5.0.1"
   },
   "engines": {
     "node": "^22.23.4"
