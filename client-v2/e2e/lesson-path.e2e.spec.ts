@@ -1,4 +1,12 @@
-import { expect, home, homeRegion, startProject, test } from "./fixtures";
+import {
+  expect,
+  home,
+  homeRegion,
+  startProject,
+  stubAiStatus,
+  test,
+} from "./fixtures";
+
 import { openGallery } from "./fixtures";
 
 /**
@@ -56,9 +64,7 @@ test("a lesson step is finished by the toolchain, not by a click", async ({
 
   // No default backend, so the ask below has no model to go to whatever the
   // dev server is configured with
-  await page.route("**/api/agent", (route) =>
-    route.fulfill({ json: { configured: false, model: null } })
-  );
+  await stubAiStatus(page, "own");
   await page.goto("/");
 
   // Home's tutorial cards: only the "Open <name>" button has a click handler;

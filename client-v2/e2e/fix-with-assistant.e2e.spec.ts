@@ -1,6 +1,5 @@
 import { expect, test } from "@playwright/test";
-
-import { json, startProject } from "./fixtures";
+import { startProject, stubAiStatus } from "./fixtures";
 
 /**
  * A build error's Explain pressed before any backend is connected.
@@ -13,8 +12,9 @@ import { json, startProject } from "./fixtures";
 
 const LONG = { timeout: 60_000 };
 const PROMPT = "Explain this build error in plain words: E0308";
-// The test serves no default backend, so the model is the one way in
-const HINT = /Connect a model to send this to the assistant/;
+// The test serves no default backend, so the composer's off row says the
+// assistant needs a key, and that the prompt waits
+const HINT = /Your prompt is waiting in the composer/;
 
 type AssistantWindow = Window & {
   __pgAssistant?: {
@@ -30,9 +30,7 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
   test.setTimeout(240_000);
 
   // No default backend, so the requested prompt has nothing to go to
-  await page.route("**/api/agent", (route) =>
-    json(route, { configured: false, model: null })
-  );
+  await stubAiStatus(page, "own");
   await page.goto("/");
   await startProject(page, "fix-prompt", LONG);
 

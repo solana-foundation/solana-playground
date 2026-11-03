@@ -115,6 +115,25 @@ export class PgSession {
     return PgSession._reading ?? PgSession.refresh();
   }
 
+  /**
+   * Settles once a session read has answered, without starting one: for a
+   * reader that only displays the session. `whenRead` starts the first read
+   * when none is in flight, and a read that early would reach the session
+   * effect as a sign-in, opening the account's latest project under the user.
+   */
+  static afterFirstRead(): Promise<void> {
+    if (PgSession._hasRead) return Promise.resolve();
+    return new Promise((resolve) => PgSession._readWaiters.add(resolve));
+  }
+
+  /** A read has answered: `get()` is now what the server said */
+  private static _markRead() {
+    PgSession._hasRead = true;
+    const waiters = [...PgSession._readWaiters];
+    PgSession._readWaiters.clear();
+    waiters.forEach((resolve) => resolve());
+  }
+
   private static async _read() {
     let next: SessionUser | null = null;
 
@@ -147,7 +166,7 @@ export class PgSession {
       log.error(error, { report: true, context: { step: "refresh" } });
     }
 
-    PgSession._hasRead = true;
+    PgSession._markRead();
     PgSession._set(next);
   }
 
@@ -396,7 +415,7 @@ export class PgSession {
 
   /** Test seam: set the user without a network round trip */
   static async refreshWith(user: SessionUser | null) {
-    PgSession._hasRead = true;
+    PgSession._markRead();
     PgSession._set(user);
   }
 
@@ -418,6 +437,7 @@ export class PgSession {
     PgSession._pending = undefined;
     PgSession._signInState = IDLE;
     PgSession._hasRead = false;
+    PgSession._readWaiters.clear();
     PgSession._reading = undefined;
   }
 
@@ -431,6 +451,8 @@ export class PgSession {
   private static _pending: Promise<void> | undefined;
   /** A session read has answered, so `get()` is what the server said */
   private static _hasRead = false;
+  /** Callers of `afterFirstRead` waiting for the first read to answer */
+  private static readonly _readWaiters = new Set<() => void>();
   private static _reading: Promise<void> | undefined;
   private static _signInState: SignInState = IDLE;
 

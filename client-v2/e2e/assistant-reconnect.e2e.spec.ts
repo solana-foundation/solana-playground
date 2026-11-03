@@ -1,8 +1,10 @@
 import type { Page, Request } from "@playwright/test";
-import { expect, test } from "@playwright/test";
-
-import { requireFor } from "../src/test-utils/require-for";
-import { json, seedWorkspace, startProject, stubSession } from "./fixtures";
+import {
+  seedWorkspace,
+  startProject,
+  stubAiStatus,
+  stubSession,
+} from "./fixtures";
 
 /**
  * The panel comes back usable after a reload, without being asked twice.
@@ -12,7 +14,7 @@ import { json, seedWorkspace, startProject, stubSession } from "./fixtures";
  * -- and making the user click the same button on every single reload, before
  * the assistant could be used at all, was the whole of the difference.
  *
- * Each test stubs `/api/agent` to what it needs: the default's tests to a
+ * Each test stubs `/api/ai/status` (and `/api/agent` for turns) to what it needs: the default's tests to a
  * deployment that serves one, the `assistant-own-key` block to one that
  * serves none unless a test says otherwise. So every test runs wherever the
  * dev server runs, configured or not.
@@ -40,16 +42,16 @@ const signIn = (page: Page) => stubSession(page);
 const isConnected = (page: Page) =>
   page.evaluate(() => !!(window as AssistantWindow).__pgAssistant?.isConnected);
 
-const stubDefault = (page: Page) =>
-  page.route("**/api/agent", (route) => {
-    if (route.request().method() === "GET")
-      return json(route, { configured: true, model: "z-ai/glm-5.3-flash:US" });
-    return route.fulfill({
+const stubDefault = async (page: Page) => {
+  await stubAiStatus(page, "z-ai/glm-5.3-flash:US");
+  await page.route("**/api/agent", (route) =>
+    route.fulfill({
       status: 200,
       contentType: "text/event-stream",
       body: 'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\ndata: [DONE]\n\n',
-    });
-  });
+    })
+  );
+};
 
 const composer = (page: Page) =>
   page.getByRole("textbox", { name: "Message the assistant" });
@@ -199,12 +201,7 @@ const expectNothingConnected = async (page: Page) => {
  * composer's model button then reads "Connect a model" wherever the suite
  * runs
  */
-const stubNoDefault = (page: Page) =>
-  page
-    .context()
-    .route("**/api/agent", (route) =>
-      json(route, { configured: false, model: null })
-    );
+const stubNoDefault = (page: Page) => stubAiStatus(page.context(), "own");
 
 /** Forget key, from the head's More */
 const forgetKey = async (page: Page) => {
@@ -256,9 +253,7 @@ test.describe("assistant-own-key", () => {
     // once: the key kept for this tab still wins, because it reconnects on
     // load before the probe can answer and the default's reconnect then
     // finds a connection
-    await page.route("**/api/agent", (route) =>
-      json(route, { configured: true, model: "z-ai/glm-5.3-flash:US" })
-    );
+    await stubAiStatus(page, "z-ai/glm-5.3-flash:US");
     await seedWorkspace(page, "own-key-reload");
     await connectOwn(page);
     await page.evaluate(() =>
@@ -502,12 +497,8 @@ test.describe("assistant-own-key", () => {
    */
   const keyedThreadInNewTab = async (page: Page) => {
     const defaultTurns: string[] = [];
+    await stubAiStatus(page.context(), "z-ai/glm-5.3-flash:US");
     await page.context().route("**/api/agent", (route) => {
-      if (route.request().method() === "GET")
-        return json(route, {
-          configured: true,
-          model: "z-ai/glm-5.3-flash:US",
-        });
       defaultTurns.push(route.request().postData() ?? "");
       return route.fulfill({ status: 500 });
     });
@@ -659,12 +650,8 @@ test.describe("assistant-own-key", () => {
   /** A deployment serving a default whose turns are counted, signed in */
   const countedDefault = async (page: Page) => {
     const defaultTurns: string[] = [];
+    await stubAiStatus(page.context(), "z-ai/glm-5.3-flash:US");
     await page.context().route("**/api/agent", (route) => {
-      if (route.request().method() === "GET")
-        return json(route, {
-          configured: true,
-          model: "z-ai/glm-5.3-flash:US",
-        });
       defaultTurns.push(route.request().postData() ?? "");
       return route.fulfill({
         status: 200,

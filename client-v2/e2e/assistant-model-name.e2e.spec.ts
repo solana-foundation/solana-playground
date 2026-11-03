@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { expect, json, LONG, startProject, test } from "./fixtures";
+import { expect, LONG, startProject, stubAiStatus, test } from "./fixtures";
 
 /**
  * A long model name in the composer, laid out by a real browser: unit tests
@@ -11,10 +11,7 @@ const PHONE = { width: 390, height: 844 };
 
 /** Connected to OpenRouter on a model with a long id, as a kept connection the panel reconnects to */
 const connectLong = async (page: Page) => {
-  await page.route("**/api/agent", (route) =>
-    // eslint-disable-next-line unicorn/no-null -- the `GET /api/agent` body: `model: null` is on the wire
-    json(route, { configured: false, model: null })
-  );
+  await stubAiStatus(page, "own");
   await page.addInitScript((model) => {
     sessionStorage.setItem(
       "assistant.connection",

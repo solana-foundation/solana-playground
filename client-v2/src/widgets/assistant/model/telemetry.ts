@@ -4,6 +4,7 @@ import { createTracker } from "@/shared/lib/telemetry";
 
 import type { Effort } from "../../../views/sidebar/assistant/model";
 import type { TurnFailureReason } from "../../../views/sidebar/assistant/model/types";
+import type { AiOffReason } from "./ai-off";
 
 /** Why a turn failed, as `assistant_turn_failed` reports it: the provider's reasons but the cap, which is its own event, and `other` for a failure raised on this side */
 export type TurnFailedReason = Exclude<TurnFailureReason, "capped"> | "other";
@@ -13,7 +14,7 @@ export type AssistantEvents = {
   assistant_model_picked: { provider: ModelProvider; via: "menu" | "dialog" };
   /** The user changed the reasoning effort in the composer's menu. */
   assistant_effort_changed: { effort: Effort };
-  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Enter key button of a rejected key or the composer's + menu. */
+  /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected, a send that reopened the thread's own backend, the Get set up checklist, the Enter key button of a rejected key, the composer's + menu or the off row's Add a key. */
   assistant_connect_opened: {
     via:
       | "menu"
@@ -22,8 +23,11 @@ export type AssistantEvents = {
       | "thread"
       | "setup"
       | "key-rejected"
-      | "add";
+      | "add"
+      | "ai-off";
   };
+  /** The composer's off row appeared, once per reason while the composer stays mounted (Sources and tools unmounts it); `reason` says whether the deployment has no hosted key, the user is signed out of the hosted model, or the hosted model could not be reached. */
+  assistant_ai_off_shown: { reason: AiOffReason };
   /** The user stopped a turn with the stop button, while it ran or while it counted down to sending a busy message again; it is then the turn's only outcome. */
   assistant_turn_stopped: NoParams;
   /** A message went to the backend as a new turn: once per message, not again when a busy model's resend sends it a second time. Never the prompt. It ends with one outcome (answered, failed, capped or stopped), except a turn the store cuts off (its thread closed, the backend changed, a sign-out) or a busy message dropped because the conversation changed, which end with none. */
@@ -40,8 +44,12 @@ export type AssistantEvents = {
   assistant_turn_capped: { provider: ModelProvider };
   /** A turn on a key-based backend ended on the provider refusing the key with a 401. Never the key, the model or the base URL. */
   assistant_key_rejected: { provider: ModelProvider };
-  /** The default backend's probe failed and the default was treated as absent; `reason` says whether the request, the status (not a 404, which is a deployment without the agent) or the body. */
-  assistant_default_probe_failed: { reason: "network" | "status" | "body" };
+  /** The probe of `GET /api/ai/status` failed and the hosted model was treated as unreachable; `reason` says whether the request, the status (not a 404, which is a deployment without the route), the body, or the server's reading of the session (`reason: "unavailable"` in the answer). */
+  assistant_default_probe_failed: {
+    reason: "network" | "status" | "body" | "session";
+  };
+  /** The user pressed Try again in the composer's off row, which asks `GET /api/ai/status` again. */
+  assistant_default_probe_retried: NoParams;
   /** The user answered an approval card, once per card; `kind` says whether it proposed a patch or a command. */
   assistant_approval_answered: {
     kind: "patch" | "command";

@@ -4,9 +4,9 @@ import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
   FAILED_BUILD_STDERR,
-  json,
   LONG,
   seedWorkspace,
+  stubAiStatus,
   test,
 } from "./fixtures";
 
@@ -133,9 +133,7 @@ test.describe("client-v2-controls", () => {
   test("client-v2-controls: The backend list by keyboard", async ({ page }) => {
     // The toggle only exists while a default backend is offered, and CI
     // configures none: answer the probe here
-    await page.route("**/api/agent", (route) =>
-      json(route, { configured: true })
-    );
+    await stubAiStatus(page, null);
     await seedWorkspace(page);
     // The editor takes focus once the project opens; wait for that, or it
     // takes it back from the radio between the keys

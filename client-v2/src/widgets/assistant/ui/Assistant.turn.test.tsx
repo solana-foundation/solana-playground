@@ -77,7 +77,7 @@ beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue({
     ok: true,
     status: 200,
-    json: async () => ({ configured: false, model: null }),
+    json: async () => ({ key: "own", reason: null, model: null }),
   } as Response);
   vi.spyOn(PgAssistant, "initMcp").mockResolvedValue(undefined);
   PgAssistant.disconnect();

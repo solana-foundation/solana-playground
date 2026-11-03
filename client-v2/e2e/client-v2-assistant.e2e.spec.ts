@@ -5,9 +5,9 @@ import {
   expect,
   home,
   homeRegion,
-  json,
   LONG,
   startProject,
+  stubAiStatus,
   stubSession,
   test,
 } from "./fixtures";
@@ -16,7 +16,7 @@ import { lineOf, linesOn } from "./telemetry";
 /**
  * The assistant's composer: the model it names, sending without a key,
  * Send turning to Stop; and its thread at phone width, while reading back,
- * across a reload, and when an approval is answered. Every test stubs `/api/agent`, so none depends on the
+ * across a reload, and when an approval is answered. Every test stubs `/api/ai/status` and `/api/agent`, so none depends on the
  * dev server's own default backend.
  */
 
@@ -36,16 +36,14 @@ const modelButton = (page: Page, name: string | RegExp) =>
 const effortControl = (page: Page) =>
   page.getByRole("button", { name: /: \d of \d$/ });
 
-/** `GET` answers the probe; `POST` is handed to `onTurn` */
+/** `/api/ai/status` answers the probe; turns to `/api/agent` are handed to `onTurn` */
 const stubAgent = async (
   page: Page,
   probe: { configured: boolean; model: string | null },
   onTurn: (route: Route) => Promise<void> | void
 ) => {
-  await page.route("**/api/agent", (route) => {
-    if (route.request().method() === "GET") return json(route, probe);
-    return onTurn(route);
-  });
+  await stubAiStatus(page, probe.configured ? probe.model : "own");
+  await page.route("**/api/agent", (route) => onTurn(route));
 };
 
 const answer = (route: Route) =>

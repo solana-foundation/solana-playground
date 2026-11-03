@@ -1,7 +1,7 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
-import { PgSession } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
+import { isSignInFailure, PgSession } from "@/features/auth";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
@@ -14,10 +14,19 @@ import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-b
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { PgAssistantContext } from "@/entities/assistant-context";
 import type { Connection } from "../../../views/sidebar/assistant/store";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
+import type { LessonState } from "../../../views/flow/lessons";
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgProgramInfo } from "../../../utils/program-info";
+import { aiOff } from "../model/ai-off";
+import type { AiOffInput, AiOffReason } from "../model/ai-off";
+import { modelOptions, modelShown } from "../model/choice";
 import type { ModelOption } from "../model/choice";
 import { connectLabel, DEFAULT_CONNECTION } from "../model/connection";
-import { useDefaultBackend } from "../model/default-backend";
+import {
+  retryDefaultBackend,
+  useDefaultBackend,
+} from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import { withEffort, withModel } from "../model/tune";
 import type { Turn, TurnPhase } from "../model/use-turn";
@@ -25,6 +34,7 @@ import {
   BaseAssistantComposer,
   type ComposerContextChip,
 } from "./BaseAssistantComposer";
+import { AI_OFF_SEND_BLOCKED, BaseAiOffRow } from "./BaseAiOffRow";
 import { BaseEffortMenu } from "./BaseEffortMenu";
 import { BaseModelMenu } from "./BaseModelMenu";
 
@@ -122,6 +132,44 @@ const PLACEHOLDERS: Record<TurnPhase, string> = {
 };
 
 /**
+ * Whether someone is signed in, or `null` until the page's session read has
+ * answered: a signed-in user must not see "Sign in" flash on load. It waits
+ * for the page's read and never starts one (`afterFirstRead`, not
+ * `whenRead`).
+ */
+const useSignedIn = (): boolean | null => {
+  const [read, setRead] = useState(false);
+  const [, render] = useReducer((n: number) => n + 1, 0);
+  useEffect(() => {
+    let live = true;
+    void PgSession.afterFirstRead().then(() => {
+      if (live) setRead(true);
+    });
+    const session = PgSession.onDidChange(render);
+    return () => {
+      live = false;
+      session.dispose();
+    };
+  }, []);
+  return read ? !!PgSession.get() : null;
+};
+
+/**
+ * Why the assistant is off, reported once per reason while the composer is
+ * mounted, however often it redraws
+ */
+const useAiOff = (input: AiOffInput) => {
+  const reason = aiOff(input);
+  const reported = useRef(new Set<AiOffReason>());
+  useEffect(() => {
+    if (!reason || reported.current.has(reason)) return;
+    reported.current.add(reason);
+    assistantTelemetry.track("assistant_ai_off_shown", { reason });
+  }, [reason]);
+  return reason;
+};
+
+/**
  * The assistant's composer, connected: the context it reads, the model and
  * effort menus, the + menu, and the turn shared with the thread.
  */
@@ -160,6 +208,45 @@ export function AssistantComposer({
   const defaultBackend = useDefaultBackend();
   const connection = PgAssistant.connection;
   const shown = modelShown(connection, defaultBackend);
+  const signedIn = useSignedIn();
+  const off = useAiOff({
+    connected: connection?.id ?? null,
+    backend: defaultBackend,
+    signedIn,
+  });
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const [retrying, setRetrying] = useState(false);
+  // A failed sign-in speaks for the row it was pressed in, never a later one
+  useEffect(() => setSignInError(null), [off]);
+
+  /** The off row's sign-in: Connect a model's, which keeps the open project */
+  const signIn = () => {
+    setSignInError(null);
+    PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
+      if (isSignInFailure(error)) {
+        // Not reported: a blocked popup or a cancelled sign-in is expected,
+        // and its message says what to do
+        log.info("sign-in from the off row failed", {
+          context: { error: String(error) },
+        });
+        setSignInError((error as Error).message);
+        return;
+      }
+      log.error(error, { report: true, context: { from: "ai-off" } });
+      setSignInError("Sign-in failed. Try again.");
+    });
+  };
+
+  const retry = () => {
+    setRetrying(true);
+    retryDefaultBackend()
+      .catch((error: unknown) => {
+        // The probe answers its own failures and has told every reader the
+        // default is unreachable; this is the bug past them
+        log.error(error, { report: true, context: { from: "ai-off" } });
+      })
+      .finally(() => setRetrying(false));
+  };
 
   /**
    * Apply a model or effort pick, then `track` it. Nothing when `next` is
@@ -239,14 +326,25 @@ export function AssistantComposer({
 
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 pt-2 pb-3">
-      {turn.promptWaiting && (
+      {off && (
+        <BaseAiOffRow
+          reason={off}
+          promptWaiting={turn.promptWaiting}
+          signInError={signInError}
+          signingIn={PgSession.signInState().status === "pending"}
+          retrying={retrying}
+          onAddKey={turn.addKey}
+          onSignIn={signIn}
+          onRetry={retry}
+        />
+      )}
+      {!off && turn.promptWaiting && (
+        // With no default at all the off row says it; this is the wait for a
+        // thread's own key, or for the deployment's answer
         <Callout variant="info" role="status">
           <CalloutDescription>
-            {/* No default to sign in for: the model is the one way in */}
-            {shown.kind === "none"
-              ? "Connect a model to send this to the assistant."
-              : "Connect a backend, or sign in for the default one, to send this to the assistant."}{" "}
-            Your prompt is waiting in the composer.
+            Connect a backend, or sign in for the default one, to send this to
+            the assistant. Your prompt is waiting in the composer.
           </CalloutDescription>
         </Callout>
       )}
@@ -278,15 +376,9 @@ export function AssistantComposer({
         onConnect={() => turn.openConnect("add")}
         connectLabel={connectLabel(connection)}
         focusPicked={focusPicked}
-        // The deployment serves no default and nothing is connected: the model
-        // button reads "Connect a model" and is the way in, so Send waits for
-        // it. A default the probe could not reach keeps Send, whose send asks
-        // again
-        sendBlocked={
-          shown.kind === "none" && defaultBackend.state === "absent"
-            ? "Connect a model to send"
-            : null
-        }
+        // While no model can answer this user, Send waits with the reason
+        // and the off row above names the way in
+        sendBlocked={off ? AI_OFF_SEND_BLOCKED[off] : null}
       />
     </div>
   );
