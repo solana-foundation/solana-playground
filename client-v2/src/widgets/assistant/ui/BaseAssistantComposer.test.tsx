@@ -70,9 +70,12 @@ const setup = ({
 };
 
 /** A chip, by its short label */
-const chipOf = (label: string) =>
+const chipOf = (label: string) => {
   // The tooltip's trigger renames the chip's `data-slot`; the chip is the tab stop
-  screen.getByText(label).closest<HTMLElement>('[tabindex="0"]')!;
+  const chip = screen.getByText(label).closest<HTMLElement>('[tabindex="0"]');
+  if (!chip) throw new Error(`no chip labelled ${label}`);
+  return chip;
+};
 
 const input = () =>
   screen.getByRole("textbox", { name: "Message the assistant" });
@@ -339,8 +342,8 @@ describe("BaseAssistantComposer", () => {
             onStop={vi.fn()}
             busy={false}
             placeholder="Ask"
-            model={null}
-            effort={null}
+            model={undefined}
+            effort={undefined}
             onSources={vi.fn()}
             onConnect={vi.fn()}
             connectLabel="Connect a model…"

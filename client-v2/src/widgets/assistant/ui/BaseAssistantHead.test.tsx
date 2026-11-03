@@ -303,7 +303,8 @@ it("is the frame's 44 px column bar", () => {
   setup();
   const head = screen.getByRole("heading", {
     name: "Assistant · GLM 5.3 Flash · hosted",
-  }).parentElement!;
+  }).parentElement;
+  if (!head) throw new Error("the heading has no bar");
   expect(head.className).toMatch(/\bh-11\b/);
   expect(head.className).toMatch(/\bborder-b\b/);
 });

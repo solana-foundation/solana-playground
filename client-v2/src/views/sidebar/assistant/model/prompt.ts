@@ -70,60 +70,60 @@ export const systemPrompt = () =>
  * apart leaves the stable half cacheable.
  *
  * @param bridge the playground to read
- * @param context what the user chose to send; the open file in full unless
- * they left it out
- * @returns a plain-text snapshot
+ * @returns a plain-text snapshot of what the user chose to send: the open file
+ * in full (`EVERYTHING`) unless they left it out
  */
-export const describeProject = (
-  bridge: PlaygroundBridge = realBridge,
-  context: TurnContext = { openFile: true }
-) => {
-  const ctx = bridge.getProjectContext();
-  const lines = [
-    `Workspace: ${ctx.workspaceName ?? "none"}`,
-    `Cluster: ${ctx.cluster}`,
-    `Wallet connected: ${ctx.walletConnected ? "yes" : "no"}`,
-    `Files: ${ctx.filePaths.join(", ") || "none"}`,
-    // Which files the user is working across; only the active one is sent in
-    // full, the rest are a read_file away
-    `Open tabs: ${ctx.openFilePaths.join(", ") || "none"}`,
-  ];
+export const describeProjectWith =
+  (bridge: PlaygroundBridge) => (context: TurnContext) => {
+    const ctx = bridge.getProjectContext();
+    const lines = [
+      `Workspace: ${ctx.workspaceName ?? "none"}`,
+      `Cluster: ${ctx.cluster}`,
+      `Wallet connected: ${ctx.walletConnected ? "yes" : "no"}`,
+      `Files: ${ctx.filePaths.join(", ") || "none"}`,
+      // Which files the user is working across; only the active one is sent in
+      // full, the rest are a read_file away
+      `Open tabs: ${ctx.openFilePaths.join(", ") || "none"}`,
+    ];
 
-  if (ctx.programId) lines.push(`Program id: ${ctx.programId}`);
-  if (ctx.idl) {
+    if (ctx.programId) lines.push(`Program id: ${ctx.programId}`);
+    if (ctx.idl) {
+      lines.push(
+        `Program interface: ${ctx.idl.name} — instructions: ${
+          ctx.idl.instructions.join(", ") || "none"
+        }`
+      );
+    }
+
+    if (ctx.lesson) {
+      lines.push(
+        `\nLesson: ${ctx.lesson.name}, step ${ctx.lesson.stepIndex} of ${ctx.lesson.stepCount}`,
+        `Objective: ${ctx.lesson.objective}`,
+        `Proven by: ${ctx.lesson.verifiedBy}`,
+        `Step already satisfied: ${ctx.lesson.satisfied ? "yes" : "no"}`
+      );
+    }
+
+    if (ctx.currentFilePath && !context.openFile) {
+      lines.push(
+        `\nThe user is looking at ${ctx.currentFilePath}, and left its content out of this message.`
+      );
+    } else if (ctx.currentFilePath) {
+      lines.push(
+        `\nThe user is looking at ${ctx.currentFilePath}:\n\n${
+          ctx.currentFileContent ?? ""
+        }`
+      );
+    }
+
     lines.push(
-      `Program interface: ${ctx.idl.name} — instructions: ${
-        ctx.idl.instructions.join(", ") || "none"
-      }`
+      ctx.buildError
+        ? `\nThe last build FAILED. Compiler output:\n\n${ctx.buildError}`
+        : "\nThe last build did not fail."
     );
-  }
 
-  if (ctx.lesson) {
-    lines.push(
-      `\nLesson: ${ctx.lesson.name}, step ${ctx.lesson.stepIndex} of ${ctx.lesson.stepCount}`,
-      `Objective: ${ctx.lesson.objective}`,
-      `Proven by: ${ctx.lesson.verifiedBy}`,
-      `Step already satisfied: ${ctx.lesson.satisfied ? "yes" : "no"}`
-    );
-  }
+    return lines.join("\n");
+  };
 
-  if (ctx.currentFilePath && !context.openFile) {
-    lines.push(
-      `\nThe user is looking at ${ctx.currentFilePath}, and left its content out of this message.`
-    );
-  } else if (ctx.currentFilePath) {
-    lines.push(
-      `\nThe user is looking at ${ctx.currentFilePath}:\n\n${
-        ctx.currentFileContent ?? ""
-      }`
-    );
-  }
-
-  lines.push(
-    ctx.buildError
-      ? `\nThe last build FAILED. Compiler output:\n\n${ctx.buildError}`
-      : "\nThe last build did not fail."
-  );
-
-  return lines.join("\n");
-};
+/** `describeProjectWith` on the playground itself */
+export const describeProject = describeProjectWith(realBridge);

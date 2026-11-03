@@ -49,7 +49,8 @@ if (import.meta.vitest) {
     it("bindTool takes the description and schema from the registry", () => {
       const run = () => "ran";
       const tool = bindTool("read_file", run);
-      const declared = BUILTIN_TOOLS.find((t) => t.name === "read_file")!;
+      const declared = BUILTIN_TOOLS.find((t) => t.name === "read_file");
+      if (!declared) throw new Error("read_file is not in the registry");
 
       expect(tool.description).toBe(declared.description);
       expect(tool.schema).toBe(declared.schema);

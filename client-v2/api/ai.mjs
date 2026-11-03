@@ -41,10 +41,11 @@ import { agentEnv } from "../src/shared/config/server-env.mjs";
  *
  * @type {AiStatus}
  */
+// eslint-disable-next-line unicorn/no-null -- the JSON body `AiStatus` defines; `null` survives the wire, `undefined` drops the key
 const OWN = { available: false, key: "own", reason: null, model: null };
 
 /**
- * The hosted model's id, or `null` when this deployment offers no hosted key.
+ * The hosted model's id, or `undefined` when this deployment offers no hosted key.
  *
  * The rule of `api/agent.mjs`'s `GET`, written again here: a key alone is not
  * enough, because without sign-in that route refuses every turn. A case in
@@ -58,13 +59,13 @@ const OWN = { available: false, key: "own", reason: null, model: null };
  */
 const hostedModel = () => {
   const agent = agentEnv();
-  if (!agent.API_KEY) return null;
+  if (!agent.API_KEY) return undefined;
   const missing = missingConfig();
   if (missing.length > 0) {
     // A key with sign-in half set up is a deployment mistake, not a choice:
     // say which settings are missing (names only, see `missingConfig`)
     console.warn("ai/status: a hosted key is set, but sign-in lacks", missing);
-    return null;
+    return undefined;
   }
   return agent.MODEL;
 };
@@ -82,6 +83,7 @@ const hostedModel = () => {
 const hostedStatus = (model, session) => {
   switch (session.status) {
     case "signed-in":
+      // eslint-disable-next-line unicorn/no-null -- the JSON body `AiStatus` defines
       return { available: true, key: "hosted", reason: null, model };
     case "signed-out":
       return { available: false, key: "hosted", reason: "signed-out", model };
@@ -129,7 +131,7 @@ export const statusHandler =
     }
 
     const model = hostedModel();
-    if (model === null) return send(req, res, 200, OWN);
+    if (model === undefined) return send(req, res, 200, OWN);
 
     return send(req, res, 200, hostedStatus(model, await readSession(req)));
   };

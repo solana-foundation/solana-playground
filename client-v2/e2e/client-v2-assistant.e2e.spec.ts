@@ -602,7 +602,8 @@ test.describe("The thread", () => {
 
     await storeReady(page);
     await page.evaluate(() => {
-      const store = (window as ThreadWindow).__pgAssistant!;
+      const store = (window as ThreadWindow).__pgAssistant;
+      if (!store) throw new Error("the assistant store is not ready");
       for (let i = 0; i < 30; i++) store.addUserMessage(`Message ${i}`);
     });
     await expect(thread(page).getByText("Message 29")).toBeInViewport(LONG);
@@ -768,6 +769,7 @@ test("assistant-turn-states: Try again after Stop", async ({ page }) => {
 test("assistant-composer-context: Connect a model from the + menu", async ({
   page,
 }) => {
+  // eslint-disable-next-line unicorn/no-null -- the `GET /api/agent` body: `model: null` is on the wire
   await stubAgent(page, { configured: false, model: null }, answer);
   const lines = linesOn(page);
   await openProject(page, "add-menu");

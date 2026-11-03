@@ -41,6 +41,7 @@ const shownLong: ModelShown = {
   provider: "openrouter",
   model: LONG,
   label: LONG,
+  // eslint-disable-next-line unicorn/no-null -- `ModelShown.effort` is typed `| null`
   effort: null,
 };
 
@@ -120,6 +121,7 @@ describe("BaseModelMenu", () => {
             provider: "openrouter",
             model: "vendor/model-b",
             label: "Model",
+            // eslint-disable-next-line unicorn/no-null -- `ModelShown.effort` is typed `| null`
             effort: null,
           }}
           options={[

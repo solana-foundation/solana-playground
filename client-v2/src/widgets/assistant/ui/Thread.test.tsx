@@ -62,7 +62,7 @@ vi.mock("../../../views/sidebar/assistant/bridge/lesson-context", () => ({
 // the same barrel; the thread only decides when to offer it and what to report
 const undo = vi.hoisted(() => ({
   can: vi.fn(() => false),
-  original: vi.fn((): string | null => null),
+  original: vi.fn((): string | undefined => undefined),
   undo: vi.fn(
     async (): Promise<
       import("../../../views/sidebar/assistant/patch-undo").UndoResult
@@ -120,7 +120,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  undo.original.mockReturnValue(null);
+  undo.original.mockReturnValue(undefined);
   // The thread is still mounted here: RTL's own cleanup runs after this hook
   act(() => PgAssistant.clear());
   resetTelemetry();
@@ -320,7 +320,9 @@ describe("Thread, try again", () => {
       before: "old",
       after: "new",
     });
-    PgAssistant.resolveApproval(PgAssistant.items.at(-1)!.id, true);
+    const card = PgAssistant.items.at(-1);
+    if (!card) throw new Error("the thread is empty");
+    PgAssistant.resolveApproval(card.id, true);
     PgAssistant.addError(CONNECTION_LOST);
     render(<Thread turn={stubTurn(false)} project="Counter" />);
 
@@ -396,9 +398,8 @@ describe("Thread, a refused key", () => {
   it("offers Enter key on the error, opening Connect on that backend", () => {
     act(() => {
       PgAssistant.addUserMessage("hi");
-      PgAssistant.addError(
-        "OpenAI-compatible did not accept this key.",
-        RECOVER
+      PgAssistant.addErrorWith(RECOVER)(
+        "OpenAI-compatible did not accept this key."
       );
     });
     const openConnect = vi.fn();
@@ -412,9 +413,8 @@ describe("Thread, a refused key", () => {
   it("offers nothing once a reply came after the error", () => {
     act(() => {
       PgAssistant.addUserMessage("hi");
-      PgAssistant.addError(
-        "OpenAI-compatible did not accept this key.",
-        RECOVER
+      PgAssistant.addErrorWith(RECOVER)(
+        "OpenAI-compatible did not accept this key."
       );
     });
     act(() => finishedReply("Hello."));
@@ -426,9 +426,9 @@ describe("Thread, a refused key", () => {
   it("offers nothing for a backend this build does not have", () => {
     act(() => {
       PgAssistant.addUserMessage("hi");
-      PgAssistant.addError("Gone did not accept this key.", {
+      PgAssistant.addErrorWith({
         provider: "gone" as typeof RECOVER.provider,
-      });
+      })("Gone did not accept this key.");
     });
     render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
 

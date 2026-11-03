@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, json, LONG, startProject, test } from "./fixtures";
 
 /**
@@ -12,6 +12,7 @@ const PHONE = { width: 390, height: 844 };
 /** Connected to OpenRouter on a model with a long id, as a kept connection the panel reconnects to */
 const connectLong = async (page: Page) => {
   await page.route("**/api/agent", (route) =>
+    // eslint-disable-next-line unicorn/no-null -- the `GET /api/agent` body: `model: null` is on the wire
     json(route, { configured: false, model: null })
   );
   await page.addInitScript((model) => {
@@ -26,19 +27,24 @@ const connectLong = async (page: Page) => {
   }, LONG_ID);
 };
 
+/** The element's box; a hidden element has none, which fails the test */
+const boxOf = async (locator: Locator) => {
+  const box = await locator.boundingBox();
+  if (box === null) throw new Error("the element has no box: it is hidden");
+  return box;
+};
+
 const expectCut = async (page: Page) => {
   const composer = page.locator("form").filter({
     has: page.getByRole("textbox", { name: "Message the assistant" }),
   });
   const model = composer.getByRole("button", { name: LONG_ID });
   await expect(model).toBeVisible(LONG);
-  const box = (await model.boundingBox())!;
+  const box = await boxOf(model);
   // 12rem at the 16 px root
   expect(box.width).toBeLessThanOrEqual(192);
-  const form = (await composer.boundingBox())!;
-  const send = (await composer
-    .getByRole("button", { name: "Send" })
-    .boundingBox())!;
+  const form = await boxOf(composer);
+  const send = await boxOf(composer.getByRole("button", { name: "Send" }));
   expect(send.x + send.width).toBeLessThanOrEqual(form.x + form.width);
   // One line: the name is cut, not wrapped
   expect(box.height).toBeLessThanOrEqual(32);

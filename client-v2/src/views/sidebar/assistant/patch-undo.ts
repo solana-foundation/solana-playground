@@ -61,7 +61,15 @@ const holdsOriginal = (now: string | null, request: PatchApproval) =>
  * one. An id that is still the one the patch wrote is the patch's, and goes
  * back with the rest of it.
  */
-const keepId = (content: string, now: string | null, after: string) => {
+const keepId = ({
+  content,
+  now,
+  after,
+}: {
+  content: string;
+  now: string | null;
+  after: string;
+}) => {
   const id = now?.match(DECLARE_ID)?.[0];
   if (!id || id === after.match(DECLARE_ID)?.[0]) return content;
   return content.replace(DECLARE_ID, id);
@@ -72,7 +80,15 @@ const keepId = (content: string, now: string | null, after: string) => {
  * finish and why, stored with the thread, and this tab keeps the original
  * for the card to offer (none for a patch that created its file)
  */
-const strand = (item: ApprovalItem, request: PatchApproval, why: string) => {
+const strand = ({
+  item,
+  request,
+  why,
+}: {
+  item: ApprovalItem;
+  request: PatchApproval;
+  why: string;
+}) => {
   if (!PgAssistant.items.some((i) => i.id === item.id)) {
     // The thread moved on during the write: no card is left to say it
     log.warn("an undo did not finish and its card is gone", {
@@ -84,7 +100,11 @@ const strand = (item: ApprovalItem, request: PatchApproval, why: string) => {
   stranded.set(item.id, request);
   PgAssistant.markUndoStranded(
     item.id,
-    undoStrandedOutcome(request.path, why, request.before === null)
+    undoStrandedOutcome({
+      path: request.path,
+      why,
+      created: request.before === null,
+    })
   );
 };
 
@@ -95,12 +115,17 @@ const strand = (item: ApprovalItem, request: PatchApproval, why: string) => {
  * read says so too, and keeps Undo for when it can. Throws nothing of its
  * own, so the caller rethrows the write's error.
  */
-const settleFailedUndo = (
-  item: ApprovalItem,
-  request: PatchApproval,
-  bridge: PlaygroundBridge,
-  writeError: unknown
-) => {
+const settleFailedUndo = ({
+  item,
+  request,
+  bridge,
+  writeError,
+}: {
+  item: ApprovalItem;
+  request: PatchApproval;
+  bridge: PlaygroundBridge;
+  writeError: unknown;
+}) => {
   let now: string | null;
   try {
     now = bridge.readFile(request.path);
@@ -111,7 +136,7 @@ const settleFailedUndo = (
     );
     // Unknown, not lost: `can` reads the file again on the next render
     written.set(item.id, request);
-    strand(item, request, "could not be read back");
+    strand({ item, request, why: "could not be read back" });
     return;
   }
   if (holdsPatch(now, request.after)) {
@@ -124,7 +149,7 @@ const settleFailedUndo = (
   }
   if (!holdsOriginal(now, request)) {
     report(`undo ${request.path}: it changed while Undo wrote it`, writeError);
-    strand(item, request, "changed while Undo wrote it");
+    strand({ item, request, why: "changed while Undo wrote it" });
     return;
   }
   finishUndo(item, request);
@@ -186,76 +211,91 @@ export class PgPatchUndo {
 
   /**
    * The file's content before the patch, for a card whose Undo could not
-   * finish; `null` for any other card, or a patch that created its file
+   * finish; `undefined` for any other card, or a patch that created its file
    */
   static original(item: ApprovalItem) {
     const request = stranded.get(item.id);
-    if (!request || item.undo === "done") return null;
-    return request.before;
+    if (!request || item.undo === "done") return undefined;
+    return request.before ?? undefined;
   }
 
   /** Whether the card's patch can still be taken back with one press */
-  static can(item: ApprovalItem, bridge: PlaygroundBridge = realBridge) {
-    const request = heldPatch(item);
-    if (!request) return false;
-    let now: string | null;
-    try {
-      now = bridge.readFile(request.path);
-    } catch (error) {
-      // Called while rendering: a throw here would take the panel down. No
-      // project open (mid-switch, the last one deleted) is the known cause;
-      // Undo comes back on the next render that can read the file
-      if (!unreadable.has(item.id)) {
-        unreadable.add(item.id);
-        report(`undo ${request.path}: read the file to offer Undo`, error);
-      }
-      return false;
-    }
-    // Readable again: the next outage is reported afresh
-    unreadable.delete(item.id);
-    // A stranded attempt whose write did land: the press finishes it
-    return (
-      (now !== null && holdsPatch(now, request.after)) ||
-      (stranded.has(item.id) && holdsOriginal(now, request))
-    );
+  static can(item: ApprovalItem) {
+    return PgPatchUndo.canWith(realBridge)(item);
   }
 
-  static async undo(
-    item: ApprovalItem,
-    bridge: PlaygroundBridge = realBridge
-  ): Promise<UndoResult> {
-    const request = heldPatch(item);
-    if (!request) return "not-undoable";
-    const now = bridge.readFile(request.path);
-    if (now === null || !holdsPatch(now, request.after)) {
-      // A stranded attempt whose write did land: the file is already back
-      if (stranded.has(item.id) && holdsOriginal(now, request)) {
-        finishUndo(item, request);
-        return "undone";
+  /** `can`, reading the file through `bridge` */
+  static canWith(bridge: PlaygroundBridge) {
+    return (item: ApprovalItem) => {
+      const request = heldPatch(item);
+      if (!request) return false;
+      let now: string | null;
+      try {
+        now = bridge.readFile(request.path);
+      } catch (error) {
+        // Called while rendering: a throw here would take the panel down. No
+        // project open (mid-switch, the last one deleted) is the known cause;
+        // Undo comes back on the next render that can read the file
+        if (!unreadable.has(item.id)) {
+          unreadable.add(item.id);
+          report(`undo ${request.path}: read the file to offer Undo`, error);
+        }
+        return false;
       }
-      PgAssistant.addNotice(editedAfterApply(request.path));
-      return "moved-on";
-    }
+      // Readable again: the next outage is reported afresh
+      unreadable.delete(item.id);
+      // A stranded attempt whose write did land: the press finishes it
+      return (
+        (now !== null && holdsPatch(now, request.after)) ||
+        (stranded.has(item.id) && holdsOriginal(now, request))
+      );
+    };
+  }
 
-    // Before the write, so a second press while it runs takes nothing back
-    written.delete(item.id);
-    try {
-      if (request.before === null) await bridge.deleteFile(request.path);
-      else
-        await bridge.applyPatch({
-          path: request.path,
-          content: keepId(request.before, now, request.after),
-        });
-    } catch (error) {
-      // A write can land before what follows it fails (the editor's model
-      // sync), so the file says what happened: still the patch, and Undo is
-      // offered again; back as it was, and the card says so; anything else,
-      // or a file that cannot be read, and the card says Undo did not finish
-      // and offers the original to copy, unless the patch created the file
-      settleFailedUndo(item, request, bridge, error);
-      throw error;
-    }
-    finishUndo(item, request);
-    return "undone";
+  static undo(item: ApprovalItem): Promise<UndoResult> {
+    return PgPatchUndo.undoWith(realBridge)(item);
+  }
+
+  /** `undo`, reading and writing the file through `bridge` */
+  static undoWith(bridge: PlaygroundBridge) {
+    return async (item: ApprovalItem): Promise<UndoResult> => {
+      const request = heldPatch(item);
+      if (!request) return "not-undoable";
+      const now = bridge.readFile(request.path);
+      if (now === null || !holdsPatch(now, request.after)) {
+        // A stranded attempt whose write did land: the file is already back
+        if (stranded.has(item.id) && holdsOriginal(now, request)) {
+          finishUndo(item, request);
+          return "undone";
+        }
+        PgAssistant.addNotice(editedAfterApply(request.path));
+        return "moved-on";
+      }
+
+      // Before the write, so a second press while it runs takes nothing back
+      written.delete(item.id);
+      try {
+        if (request.before === null) await bridge.deleteFile(request.path);
+        else
+          await bridge.applyPatch({
+            path: request.path,
+            content: keepId({
+              content: request.before,
+              now,
+              after: request.after,
+            }),
+          });
+      } catch (error) {
+        // A write can land before what follows it fails (the editor's model
+        // sync), so the file says what happened: still the patch, and Undo is
+        // offered again; back as it was, and the card says so; anything else,
+        // or a file that cannot be read, and the card says Undo did not finish
+        // and offers the original to copy, unless the patch created the file
+        settleFailedUndo({ item, request, bridge, writeError: error });
+        throw error;
+      }
+      finishUndo(item, request);
+      return "undone";
+    };
   }
 }

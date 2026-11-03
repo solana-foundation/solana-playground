@@ -37,15 +37,18 @@ export const paramsOf = (
  * Backend parameters read from anywhere they may have been written by another
  * build, or by hand: a stored thread, the account's copy of it, the remembered
  * choice. Rebuilt field by field so nothing unknown rides along; a provider
- * this build does not have reads as `null`, since Connect a model cannot open
+ * this build does not have reads as `undefined`, since Connect a model cannot open
  * on it, and an effort the provider does not offer is left out.
  */
-export const backendParamsFrom = (value: unknown): BackendParams | null => {
-  if (typeof value !== "object" || value === null) return null;
+export const backendParamsFrom = (
+  value: unknown
+): BackendParams | undefined => {
+  // `!value` is the stored JSON's null, whose `typeof` is "object"
+  if (typeof value !== "object" || !value) return undefined;
   const stored = value as Record<string, unknown>;
 
   const provider = PROVIDERS.find((p) => p.id === stored.provider);
-  if (!provider) return null;
+  if (!provider) return undefined;
   const params: BackendParams = { provider: provider.id };
   if (typeof stored.model === "string") params.model = stored.model;
   if (typeof stored.baseUrl === "string") params.baseUrl = stored.baseUrl;
@@ -89,10 +92,10 @@ if (import.meta.vitest) {
     });
 
     it("backendParamsFrom refuses what is not a known provider's params", () => {
-      expect(backendParamsFrom(null)).toBeNull();
-      expect(backendParamsFrom("openai")).toBeNull();
-      expect(backendParamsFrom(["openai"])).toBeNull();
-      expect(backendParamsFrom({ provider: "gone" })).toBeNull();
+      expect(backendParamsFrom(JSON.parse("null"))).toBeUndefined();
+      expect(backendParamsFrom("openai")).toBeUndefined();
+      expect(backendParamsFrom(["openai"])).toBeUndefined();
+      expect(backendParamsFrom({ provider: "gone" })).toBeUndefined();
     });
   });
 }

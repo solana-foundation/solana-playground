@@ -46,7 +46,7 @@ if (import.meta.vitest) {
       logger = await import("@/shared/lib/logger");
     });
 
-    const reply = (origin?: BackendParams): ChatItem => ({
+    const reply = (origin: BackendParams | undefined): ChatItem => ({
       kind: "assistant",
       id: `a-${origin?.provider ?? "none"}`,
       createdAt: "2026-10-28T00:00:00.000Z",
@@ -74,7 +74,9 @@ if (import.meta.vitest) {
 
     it("skips replies with no origin", () => {
       const anthropic: BackendParams = { provider: "anthropic" };
-      expect(threadBackend([reply(anthropic), reply()])).toEqual(anthropic);
+      expect(threadBackend([reply(anthropic), reply(undefined)])).toEqual(
+        anthropic
+      );
     });
 
     afterEach(() => logger.resetLogger());

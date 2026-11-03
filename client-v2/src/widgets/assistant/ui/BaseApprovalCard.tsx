@@ -46,11 +46,15 @@ const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
 };
 
 /** An undo that did not finish is a warning; a patch still applied, a success */
-const outcomeTone = (
-  status: ApprovalStatus,
-  undone: boolean,
-  stranded: boolean
-) => {
+const outcomeTone = ({
+  status,
+  undone,
+  stranded,
+}: {
+  status: ApprovalStatus;
+  undone: boolean;
+  stranded: boolean;
+}) => {
   if (stranded) return "text-warning";
   if (status === "allowed" && !undone) return "text-success";
   return "text-muted-foreground";
@@ -138,7 +142,10 @@ export const BaseApprovalCard = ({
         ) : (
           <>
             <span
-              className={cn("text-xs", outcomeTone(status, undone, stranded))}
+              className={cn(
+                "text-xs",
+                outcomeTone({ status, undone, stranded })
+              )}
             >
               {item.outcome ?? OUTCOME[status]}
             </span>

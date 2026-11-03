@@ -181,9 +181,10 @@ describe("AssistantComposer, context chips", () => {
     // The send starts after the default backend's probe; slow under load
     await waitFor(
       () =>
-        expect(send).toHaveBeenCalledWith("hi", expect.anything(), {
-          openFile: false,
-        }),
+        expect(send).toHaveBeenCalledWith(
+          "hi",
+          expect.objectContaining({ context: { openFile: false } })
+        ),
       { timeout: 5_000 }
     );
     expect(

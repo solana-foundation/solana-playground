@@ -38,8 +38,8 @@ vi.mock("./AssistantComposer", async () => {
         onStop={turn.stop}
         busy={turn.busy}
         placeholder="Ask"
-        model={null}
-        effort={null}
+        model={undefined}
+        effort={undefined}
         focusRequest={turn.focusRequest}
         onSources={onSources}
         onConnect={() => turn.openConnect("add")}

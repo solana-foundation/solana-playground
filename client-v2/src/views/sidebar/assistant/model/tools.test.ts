@@ -94,7 +94,9 @@ describe("write_file", () => {
     await applied;
 
     const item = PgAssistant.items.find((i) => i.id === card);
-    expect(item?.kind === "approval" && PgPatchUndo.can(item, b)).toBe(true);
+    expect(item?.kind === "approval" && PgPatchUndo.canWith(b)(item)).toBe(
+      true
+    );
 
     vi.mocked(b.applyPatch).mockRejectedValueOnce(new Error("disk"));
     const failed = writeFile(b).run({ path: "src/lib.rs", content: "newer" });
@@ -106,7 +108,7 @@ describe("write_file", () => {
     file.content = "newer";
     const failedItem = PgAssistant.items.find((i) => i.id === failedCard);
     expect(
-      failedItem?.kind === "approval" && PgPatchUndo.can(failedItem, b)
+      failedItem?.kind === "approval" && PgPatchUndo.canWith(b)(failedItem)
     ).toBe(false);
   });
 });

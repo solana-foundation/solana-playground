@@ -418,17 +418,19 @@ if (import.meta.vitest) {
 
     describe("decodeItem", () => {
       /** A stored patch card, as another build or a hand edit may have left it */
-      const storedCard = (status: string, undo: unknown, type = "patch") => ({
-        id: base.id,
-        createdAt: base.createdAt,
-        kind: "approval",
-        status,
-        undo,
-        request:
-          type === "patch"
-            ? { type, path: "src/lib.rs", before: "a", after: "b" }
-            : { type, name: "build" },
-      });
+      const storedCardOf =
+        (type: string) => (status: string, undo: unknown) => ({
+          id: base.id,
+          createdAt: base.createdAt,
+          kind: "approval",
+          status,
+          undo,
+          request:
+            type === "patch"
+              ? { type, path: "src/lib.rs", before: "a", after: "b" }
+              : { type, name: "build" },
+        });
+      const storedCard = storedCardOf("patch");
       const undoOf = (item: ChatItem | null) =>
         item?.kind === "approval" ? item.undo : "not a card";
 
@@ -468,7 +470,7 @@ if (import.meta.vitest) {
           undoOf(decodeItem(storedCard("denied", "done")))
         ).toBeUndefined();
         expect(
-          undoOf(decodeItem(storedCard("allowed", "done", "command")))
+          undoOf(decodeItem(storedCardOf("command")("allowed", "done")))
         ).toBeUndefined();
         expect(
           undoOf(decodeItem(storedCard("allowed", "maybe")))

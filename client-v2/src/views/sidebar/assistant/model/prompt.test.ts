@@ -5,7 +5,8 @@ const store = vi.hoisted(() => ({
 vi.mock("../store", () => store);
 vi.mock("../bridge/playground-bridge", () => ({ realBridge: {} }));
 
-import { describeProject, systemPrompt } from "./prompt";
+import { describeProjectWith, systemPrompt } from "./prompt";
+import { EVERYTHING } from "./types";
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
 
 // `prompt.ts` imports the assistant context as `.md`: webpack hands it over
@@ -35,6 +36,7 @@ describe("systemPrompt", () => {
 
 describe("describeProject", () => {
   const bridge = {
+    /* eslint-disable unicorn/no-null -- `ProjectContext` types these fields `| null` */
     getProjectContext: () => ({
       workspaceName: "counter",
       cluster: "devnet",
@@ -48,14 +50,17 @@ describe("describeProject", () => {
       currentFileContent: "pub fn secret_sauce() {}",
       buildError: null,
     }),
+    /* eslint-enable unicorn/no-null */
   } as unknown as PlaygroundBridge;
 
   it("sends the open file in full by default", () => {
-    expect(describeProject(bridge)).toContain("pub fn secret_sauce() {}");
+    expect(describeProjectWith(bridge)(EVERYTHING)).toContain(
+      "pub fn secret_sauce() {}"
+    );
   });
 
   it("names the open file without its content when the user left it out", () => {
-    const text = describeProject(bridge, { openFile: false });
+    const text = describeProjectWith(bridge)({ openFile: false });
     expect(text).toContain("src/lib.rs");
     expect(text).not.toContain("pub fn secret_sauce() {}");
     expect(text).toContain("left its content out of this message");

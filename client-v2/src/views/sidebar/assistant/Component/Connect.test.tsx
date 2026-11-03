@@ -361,12 +361,14 @@ describe("Connect", () => {
       defaultBackend: "present",
       preset: { provider: "anthropic", effort: "low" },
     });
-    await user.type(
-      document.querySelector<HTMLInputElement>("#assistant-api-key")!,
-      "sk-ant-fake"
-    );
+    const key = document.querySelector<HTMLInputElement>("#assistant-api-key");
+    if (!key) throw new Error("the form has no key field");
+    await user.type(key, "sk-ant-fake");
 
-    act(() => action!.connect());
+    act(() => {
+      if (!action) throw new Error("the form handed its host no action");
+      action.connect();
+    });
 
     expect(PgAssistant.connection?.settings?.effort).toBe("low");
   });

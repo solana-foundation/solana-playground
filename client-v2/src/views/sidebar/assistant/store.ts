@@ -187,11 +187,15 @@ export type UndoState = "done" | "stranded";
 const UNDO_STRANDED = "Undo did not finish:";
 
 /** A card's outcome when its Undo threw and did not finish */
-export const undoStrandedOutcome = (
-  path: string,
-  why: string,
-  created: boolean
-) =>
+export const undoStrandedOutcome = ({
+  path,
+  why,
+  created,
+}: {
+  path: string;
+  why: string;
+  created: boolean;
+}) =>
   `${UNDO_STRANDED} ${path} ${why}.` +
   (created ? " It did not exist before the patch." : "");
 
@@ -982,7 +986,7 @@ export class PgAssistant {
     const id = PgAssistant._turn?.replies.at(-1);
     const last = PgAssistant._items[PgAssistant._items.length - 1];
     if (!id || last?.id !== id || last.kind !== "assistant" || !last.text) {
-      return null;
+      return undefined;
     }
     return id;
   }
@@ -1044,7 +1048,16 @@ export class PgAssistant {
     PgAssistant._emit();
   }
 
-  static addError(text: string, recover?: BackendParams) {
+  static addError(text: string) {
+    PgAssistant.addErrorWith(undefined)(text);
+  }
+
+  /** `addError`, offering to reconnect to `recover` when there is one */
+  static addErrorWith(recover: BackendParams | undefined) {
+    return (text: string) => PgAssistant._addError(text, recover);
+  }
+
+  private static _addError(text: string, recover: BackendParams | undefined) {
     if (PgAssistant._dropsCut("error", text)) return;
     PgAssistant._items.push({
       kind: "error",
@@ -1126,7 +1139,7 @@ export class PgAssistant {
    * @returns `false` when the open thread no longer holds that applied card
    */
   static markUndone(id: string, outcome: string) {
-    return PgAssistant._setUndo(id, "done", outcome);
+    return PgAssistant._setUndo(id, { undo: "done", outcome });
   }
 
   /**
@@ -1137,18 +1150,17 @@ export class PgAssistant {
    * or its Undo already finished
    */
   static markUndoStranded(id: string, outcome: string) {
-    return PgAssistant._setUndo(id, "stranded", outcome);
+    return PgAssistant._setUndo(id, { undo: "stranded", outcome });
   }
 
   /** A stranded card whose patch is whole again: Undo is simply offered */
   static clearUndoStranded(id: string, outcome: string) {
-    return PgAssistant._setUndo(id, undefined, outcome);
+    return PgAssistant._setUndo(id, { undo: undefined, outcome });
   }
 
   private static _setUndo(
     id: string,
-    undo: UndoState | undefined,
-    outcome: string
+    { undo, outcome }: { undo: UndoState | undefined; outcome: string }
   ) {
     const item = PgAssistant._items.find((i) => i.id === id);
     if (
@@ -1849,7 +1861,13 @@ if (import.meta.vitest) {
 
     describe("undoStrandedOutcome", () => {
       it("says which file, why, and whether it existed before", () => {
-        expect(undoStrandedOutcome("src/new.rs", "changed", true)).toBe(
+        expect(
+          undoStrandedOutcome({
+            path: "src/new.rs",
+            why: "changed",
+            created: true,
+          })
+        ).toBe(
           "Undo did not finish: src/new.rs changed. It did not exist before the patch."
         );
       });
@@ -1885,7 +1903,10 @@ if (import.meta.vitest) {
 
       it("reads done once Undo finishes, stranded or not", () => {
         const id = card(true);
-        PgAssistant.markUndoStranded(id, undoStrandedOutcome("a", "b", false));
+        PgAssistant.markUndoStranded(
+          id,
+          undoStrandedOutcome({ path: "a", why: "b", created: false })
+        );
 
         PgAssistant.markUndone(id, "undone");
 
@@ -2266,8 +2287,11 @@ if (import.meta.vitest) {
           state: "streaming",
           updatedAt,
         });
-        const folded = () =>
-          PgAssistant.items.find((i) => i.kind === "assistant")!;
+        const folded = () => {
+          const reply = PgAssistant.items.find((i) => i.kind === "assistant");
+          if (!reply) throw new Error("the thread holds no reply");
+          return reply;
+        };
 
         afterEach(() => vi.useRealTimers());
 
@@ -3109,10 +3133,13 @@ if (import.meta.vitest) {
       });
 
       describe("a reply's state", () => {
-        const reply = (id: string) =>
-          PgAssistant.items.find(
+        const reply = (id: string) => {
+          const found = PgAssistant.items.find(
             (i): i is Extract<ChatItem, { kind: "assistant" }> => i.id === id
-          )!;
+          );
+          if (!found) throw new Error(`the thread holds no reply ${id}`);
+          return found;
+        };
 
         it("streams while its turn runs and settles when the turn ends", () => {
           const id = PgAssistant.startAssistantMessage();
@@ -3187,9 +3214,9 @@ if (import.meta.vitest) {
         });
 
         it("names the running turn's latest reply with text", () => {
-          expect(PgAssistant.turnReplyWithText()).toBeNull();
+          expect(PgAssistant.turnReplyWithText()).toBeUndefined();
           const empty = PgAssistant.startAssistantMessage();
-          expect(PgAssistant.turnReplyWithText()).toBeNull();
+          expect(PgAssistant.turnReplyWithText()).toBeUndefined();
           PgAssistant.appendToAssistantMessage(empty, "Hel");
           expect(PgAssistant.turnReplyWithText()).toBe(empty);
         });

@@ -18,12 +18,20 @@ const recordingBridge = () => {
   const bridge = {
     listFiles: () => [],
     readFile: () => "old",
+    // eslint-disable-next-line unicorn/no-null -- `ProjectContext.buildError` is `string | null`
     getProjectContext: () => ({ cluster: "devnet", buildError: null }),
     applyPatch: async () => void changes.push("applyPatch"),
     build: async () => void changes.push("build"),
     deploy: async () => void changes.push("deploy"),
   } as unknown as PlaygroundBridge;
   return { bridge, changes };
+};
+
+/** The tool registered under `name`; a missing one fails the test */
+const toolNamed = (tools: ReturnType<typeof createTools>, name: string) => {
+  const tool = tools.find((t) => t.name === name);
+  if (!tool) throw new Error(`no tool named ${name}`);
+  return tool;
 };
 
 /** Arguments that get each tool past its input checks */
@@ -68,7 +76,7 @@ describe("the panel's built-in tools", () => {
     BUILTIN_TOOLS.filter((tool) => tool.approval).map((tool) => [tool.name])
   )("%s asks for approval and changes nothing when declined", async (name) => {
     const { bridge, changes } = recordingBridge();
-    const tool = createTools(bridge).find((t) => t.name === name)!;
+    const tool = toolNamed(createTools(bridge), name);
 
     const pending = tool.run(inputFor(name));
     await vi.waitFor(() => expect(approvalCards()).toHaveLength(1));
@@ -84,7 +92,7 @@ describe("the panel's built-in tools", () => {
     BUILTIN_TOOLS.filter((tool) => !tool.approval).map((tool) => [tool.name])
   )("%s neither asks nor changes anything", async (name) => {
     const { bridge, changes } = recordingBridge();
-    const tool = createTools(bridge).find((t) => t.name === name)!;
+    const tool = toolNamed(createTools(bridge), name);
 
     await tool.run(inputFor(name));
 

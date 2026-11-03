@@ -204,6 +204,7 @@ describe("runTurn", () => {
       [429, "Rate limit reached", "busy"],
     ])(
       "a %i (%s) is %s: no resend, nothing reported",
+      // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
       async (status, said, kind) => {
         const failure = await failOn(openAiError(status, said));
 

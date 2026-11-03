@@ -78,10 +78,13 @@ const defaultBackend = (configured: boolean) =>
     json: async () => ({ configured, model: "z-ai/glm-5.3-flash:US" }),
   } as Response);
 
+/** What `Provider.send` is handed with the text: the signal and the context */
+type SendTurn = Parameters<Provider["send"]>[1];
+
 /** A provider whose turn runs until its signal aborts, then rejects */
-const untilAborted = (_: string, signal?: AbortSignal) =>
+const untilAborted = (_: string, turn: SendTurn) =>
   new Promise<void>((_resolve, reject) => {
-    signal?.addEventListener("abort", () => reject(new Error("aborted")));
+    turn?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
   });
 
 const USER = { id: "u1", name: null, image: null, login: null };
@@ -122,6 +125,20 @@ const turnEvents = () =>
     .filter((e) => e.name.startsWith("assistant_turn_"))
     .map((e) => [e.name, e.params]);
 const SENT_ON_DEFAULT = ["assistant_turn_sent", { provider: "default" }];
+
+/** The thread's first reply; none fails the test */
+const firstReply = () => {
+  const reply = PgAssistant.items.find((i) => i.kind === "assistant");
+  if (!reply) throw new Error("the thread holds no reply");
+  return reply;
+};
+
+/** The thread's last item; an empty thread fails the test */
+const lastItem = () => {
+  const last = PgAssistant.items.at(-1);
+  if (!last) throw new Error("the thread is empty");
+  return last;
+};
 
 describe("useTurn", () => {
   it("connects the default and sends when nothing is connected", async () => {
@@ -228,21 +245,24 @@ describe("useTurn", () => {
     act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
     expect(result.current.openFileLeftOut).toBe("/src/lib.rs");
     await act(() => result.current.send("first"));
-    expect(provider.send.mock.calls[0][2]).toEqual({ openFile: false });
-    expect(result.current.openFileLeftOut).toBeNull();
+    expect(provider.send.mock.calls[0][1]?.context).toEqual({
+      openFile: false,
+    });
+    expect(result.current.openFileLeftOut).toBeUndefined();
 
     await act(() => result.current.send("second"));
-    expect(provider.send.mock.calls[1][2]).toEqual({ openFile: true });
+    expect(provider.send.mock.calls[1][1]?.context).toEqual({ openFile: true });
   });
 
   it("leaves nothing out with no file open and nothing left out", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
+    // eslint-disable-next-line unicorn/no-null -- `PgExplorer.currentFilePath` is `null` with no file open
     vi.spyOn(PgExplorer, "currentFilePath", "get").mockReturnValue(null);
     const { result } = renderHook(() => useTestTurn());
 
     await act(() => result.current.send("hi"));
 
-    expect(provider.send.mock.calls[0][2]).toEqual({ openFile: true });
+    expect(provider.send.mock.calls[0][1]?.context).toEqual({ openFile: true });
   });
 
   it("sends a file the user switched to in full, though another was left out", async () => {
@@ -256,7 +276,7 @@ describe("useTurn", () => {
     current.mockReturnValue("/src/other.rs");
     await act(() => result.current.send("first"));
 
-    expect(provider.send.mock.calls[0][2]).toEqual({ openFile: true });
+    expect(provider.send.mock.calls[0][1]?.context).toEqual({ openFile: true });
   });
 
   it("keeps the open file left out when a send opens Connect instead of starting a turn", async () => {
@@ -401,7 +421,7 @@ describe("useTurn", () => {
       void result.current.send("hi");
     });
     expect(result.current.busy).toBe(true);
-    const signal: AbortSignal = provider.send.mock.calls[0][1];
+    const signal: AbortSignal = provider.send.mock.calls[0][1].signal;
     let answer!: Promise<{ allowed: boolean }>;
     act(() => {
       answer = PgAssistant.requestApproval({
@@ -472,26 +492,30 @@ describe("useTurn", () => {
   it.each([
     ["a 403, which a valid key without access gets too", "forbidden", 403],
     ["a 500", "provider", 500],
-  ] as const)("shows the turn's own words for %s", async (_, kind, status) => {
-    PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
-    provider.send.mockRejectedValue(
-      new TurnFailure("Provider says no", {
-        reason: "provider",
-        status,
-        cause: new AiTurnError("Provider says no", { kind, status }),
-      })
-    );
-    const { result } = renderHook(() => useTestTurn());
+  ] as const)(
+    "shows the turn's own words for %s",
+    // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
+    async (_, kind, status) => {
+      PgAssistant.connect({ id: "anthropic", apiKey: "sk-test" });
+      provider.send.mockRejectedValue(
+        new TurnFailure("Provider says no", {
+          reason: "provider",
+          status,
+          cause: new AiTurnError("Provider says no", { kind, status }),
+        })
+      );
+      const { result } = renderHook(() => useTestTurn());
 
-    await act(() => result.current.send("hi"));
+      await act(() => result.current.send("hi"));
 
-    const error = PgAssistant.items.at(-1);
-    expect(error).toMatchObject({ kind: "error", text: "Provider says no" });
-    expect(error).not.toHaveProperty("recover");
-    expect(eventNames().map(([name]) => name)).not.toContain(
-      "assistant_key_rejected"
-    );
-  });
+      const error = PgAssistant.items.at(-1);
+      expect(error).toMatchObject({ kind: "error", text: "Provider says no" });
+      expect(error).not.toHaveProperty("recover");
+      expect(eventNames().map(([name]) => name)).not.toContain(
+        "assistant_key_rejected"
+      );
+    }
+  );
 
   it("keeps the ordinary error for a 401 from the default", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
@@ -1410,7 +1434,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("What does this program do?"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(reply).toMatchObject({ text: "The program", state: "cut-off" });
       expect(PgAssistant.isCutOff(reply)).toBe(true);
       expect(PgAssistant.items.some((i) => i.kind === "error")).toBe(false);
@@ -1434,7 +1458,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("What does this program do?"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(reply).toMatchObject({ text: "The program", state: "cut-off" });
       expect(PgAssistant.items.some((i) => i.kind === "error")).toBe(false);
     });
@@ -1446,7 +1470,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const last = PgAssistant.items.at(-1)!;
+      const last = lastItem();
       expect(last.kind).toBe("error");
       expect(isConnectionLost(last)).toBe(true);
       expect(PgAssistant.items.some((i) => i.kind === "assistant")).toBe(false);
@@ -1467,7 +1491,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(PgAssistant.isCutOff(reply)).toBe(false);
       expect(PgAssistant.items.at(-1)).toMatchObject({ kind: "error" });
     });
@@ -1484,9 +1508,9 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(PgAssistant.isCutOff(reply)).toBe(false);
-      expect(isConnectionLost(PgAssistant.items.at(-1)!)).toBe(true);
+      expect(isConnectionLost(lastItem())).toBe(true);
     });
 
     it.each([
@@ -1505,7 +1529,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(PgAssistant.isCutOff(reply)).toBe(true);
     });
 
@@ -1529,7 +1553,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(PgAssistant.isCutOff(reply)).toBe(false);
       expect(PgAssistant.items.at(-1)).toMatchObject({ kind: "error" });
     });
@@ -1541,7 +1565,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(PgAssistant.isCutOff(reply)).toBe(false);
       expect(PgAssistant.items.at(-1)).toMatchObject({ kind: "error" });
     });
@@ -1553,7 +1577,7 @@ describe("useTurn's failures and races", () => {
 
       await act(() => result.current.send("hi"));
 
-      const reply = PgAssistant.items.find((i) => i.kind === "assistant")!;
+      const reply = firstReply();
       expect(PgAssistant.isCutOff(reply)).toBe(false);
       expect(PgAssistant.items.at(-1)).toMatchObject({
         kind: "error",
@@ -1588,9 +1612,9 @@ describe("useTurn's failures and races", () => {
   it("logs the abort a stopped turn ends with at debug only", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     provider.send.mockImplementation(
-      (_: string, signal?: AbortSignal) =>
+      (_: string, turn: SendTurn) =>
         new Promise<void>((_resolve, reject) => {
-          signal?.addEventListener("abort", () =>
+          turn?.signal?.addEventListener("abort", () =>
             reject(new DOMException("The user aborted", "AbortError"))
           );
         })
@@ -1709,8 +1733,11 @@ describe("useTurn when the thread closes mid-turn", () => {
 
     held = new Promise((started) => {
       provider.send.mockImplementation(
-        (_text: string, signal: AbortSignal) =>
-          new Promise<void>((finish) => started({ signal, finish }))
+        (_text: string, turn: SendTurn) =>
+          new Promise<void>((finish) => {
+            if (!turn?.signal) throw new Error("the turn has no signal");
+            started({ signal: turn.signal, finish });
+          })
       );
     });
   });

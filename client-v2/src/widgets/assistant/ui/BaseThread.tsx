@@ -207,6 +207,7 @@ const FollowOnSend = ({
     seen.current = lastSent;
     if (lastSent && working) scrollToEnd({ behavior: "auto" });
   }, [lastSent, working, scrollToEnd]);
+  // eslint-disable-next-line unicorn/no-null -- a component that renders nothing returns `null`
   return null;
 };
 

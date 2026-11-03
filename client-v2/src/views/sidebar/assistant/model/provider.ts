@@ -20,10 +20,7 @@ import { MAX_RESUMES, MAX_STEPS } from "../config";
 import { PgAssistant } from "../store";
 import { ModelBusyError } from "./model-busy";
 import type { ModelProviderInput } from "./model-providers";
-import { MODEL_PROVIDER_PROFILES } from "./model-providers";
-import { describeProject, systemPrompt } from "./prompt";
-import { createTools } from "./tools";
-import { type Provider, TurnFailure } from "./types";
+import { EVERYTHING, TurnFailure, type Provider } from "./types";
 
 const log = createLogger("assistant:provider");
 
@@ -83,7 +80,8 @@ export const createProvider = (
     id: connection.id,
     label: profile.label,
 
-    async send(input, signal, context) {
+    async send(input, turn) {
+      const signal = turn?.signal;
       const ai = await loadAi();
       signal?.throwIfAborted();
       model ??= ai.createModel(profile.connection);
@@ -105,8 +103,7 @@ export const createProvider = (
             {
               role: "system",
               content: `Current project state:\n\n${describeProject(
-                undefined,
-                context
+                turn?.context ?? EVERYTHING
               )}`,
             },
           ],

@@ -19,6 +19,13 @@ vi.mock("./bridge/playground-bridge", () => ({ realBridge: {} }));
 
 type ApprovalItem = Extract<ChatItem, { kind: "approval" }>;
 
+/**
+ * No file: what `PlaygroundBridge.readFile` answers for one, and the `before`
+ * a patch that created its file carries in the stored thread
+ */
+// eslint-disable-next-line unicorn/no-null -- the bridge's and the stored card's type for an absent file
+const NO_FILE = null;
+
 describe("PgPatchUndo", () => {
   /** A bridge over one file, recording what it is asked to write */
   const fakeBridge = (content: string | null) => {
@@ -29,7 +36,7 @@ describe("PgPatchUndo", () => {
         file.content = content;
       }),
       deleteFile: vi.fn(async () => {
-        file.content = null;
+        file.content = NO_FILE;
       }),
     } as unknown as PlaygroundBridge;
     return { bridge, file };
@@ -46,7 +53,11 @@ describe("PgPatchUndo", () => {
     const card = PgAssistant.items[PgAssistant.items.length - 1];
     PgAssistant.resolveApproval(card.id, true);
     await asked;
-    return PgAssistant.items.find((i): i is ApprovalItem => i.id === card.id)!;
+    const held = PgAssistant.items.find(
+      (i): i is ApprovalItem => i.id === card.id
+    );
+    if (!held) throw new Error("the card left the thread");
+    return held;
   };
 
   beforeEach(() => {
@@ -56,16 +67,16 @@ describe("PgPatchUndo", () => {
   it("can undo a patch this tab wrote while the file holds it", async () => {
     const card = await applied("old", "new");
     const { bridge } = fakeBridge("new");
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
     PgPatchUndo.wrote(card.id);
-    expect(PgPatchUndo.can(card, bridge)).toBe(true);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
   });
 
   it("cannot undo a card restored from history", async () => {
     const card = await applied("old", "new");
     const { bridge } = fakeBridge("new");
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
-    expect(await PgPatchUndo.undo(card, bridge)).toBe("not-undoable");
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("not-undoable");
     expect(bridge.applyPatch).not.toHaveBeenCalled();
   });
 
@@ -81,8 +92,8 @@ describe("PgPatchUndo", () => {
     expect(reopened.request).not.toEqual(card.request);
     const { bridge, file } = fakeBridge(after);
 
-    expect(PgPatchUndo.can(reopened, bridge)).toBe(true);
-    expect(await PgPatchUndo.undo(reopened, bridge)).toBe("undone");
+    expect(PgPatchUndo.canWith(bridge)(reopened)).toBe(true);
+    expect(await PgPatchUndo.undoWith(bridge)(reopened)).toBe("undone");
     expect(file.content).toBe(before);
   });
 
@@ -91,21 +102,21 @@ describe("PgPatchUndo", () => {
     PgPatchUndo.wrote(card.id);
     const { bridge, file } = fakeBridge("new");
 
-    expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
 
     expect(file.content).toBe("old");
     expect(card.undo).toBe("done");
     expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
     expect(card.updatedAt).toBeDefined();
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
   });
 
   it("deletes a file the patch created", async () => {
-    const card = await applied(null, "new");
+    const card = await applied(NO_FILE, "new");
     PgPatchUndo.wrote(card.id);
     const { bridge, file } = fakeBridge("new");
 
-    expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
 
     expect(bridge.deleteFile).toHaveBeenCalledWith("src/lib.rs");
     expect(file.content).toBeNull();
@@ -119,8 +130,8 @@ describe("PgPatchUndo", () => {
     PgPatchUndo.wrote(card.id);
     const { bridge, file } = fakeBridge('declare_id!("Built1111");\nnew');
 
-    expect(PgPatchUndo.can(card, bridge)).toBe(true);
-    await PgPatchUndo.undo(card, bridge);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    await PgPatchUndo.undoWith(bridge)(card);
 
     expect(file.content).toBe('declare_id!("Built1111");\nold');
   });
@@ -135,7 +146,7 @@ describe("PgPatchUndo", () => {
       'declare_id!("Patched111");\nfn main() {}'
     );
 
-    await PgPatchUndo.undo(card, bridge);
+    await PgPatchUndo.undoWith(bridge)(card);
 
     expect(file.content).toBe('declare_id!("Before1111");\nfn main() {}');
   });
@@ -148,7 +159,7 @@ describe("PgPatchUndo", () => {
     PgPatchUndo.wrote(card.id);
     const { bridge, file } = fakeBridge('declare_id!("Built1111");\nnew');
 
-    await PgPatchUndo.undo(card, bridge);
+    await PgPatchUndo.undoWith(bridge)(card);
 
     expect(file.content).toBe('declare_id!("Built1111");\nold');
   });
@@ -162,19 +173,19 @@ describe("PgPatchUndo", () => {
       throw new Error("no current workspace");
     };
 
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
     expect(getFailures().map((f) => f.what)).toEqual([
       expect.stringContaining("src/lib.rs"),
     ]);
 
     // Readable again: Undo is back, and the next outage is reported again
     bridge.readFile = () => "new";
-    expect(PgPatchUndo.can(card, bridge)).toBe(true);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
     bridge.readFile = () => {
       throw new Error("no current workspace");
     };
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
     expect(getFailures()).toHaveLength(2);
   });
 
@@ -183,8 +194,8 @@ describe("PgPatchUndo", () => {
     PgPatchUndo.wrote(card.id);
     const { bridge, file } = fakeBridge("new, edited");
 
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
-    expect(await PgPatchUndo.undo(card, bridge)).toBe("moved-on");
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("moved-on");
 
     expect(file.content).toBe("new, edited");
     expect(card.undo).toBeUndefined();
@@ -200,8 +211,8 @@ describe("PgPatchUndo", () => {
     const { bridge } = fakeBridge("new");
 
     const results = await Promise.all([
-      PgPatchUndo.undo(card, bridge),
-      PgPatchUndo.undo(card, bridge),
+      PgPatchUndo.undoWith(bridge)(card),
+      PgPatchUndo.undoWith(bridge)(card),
     ]);
 
     expect(results).toEqual(["undone", "not-undoable"]);
@@ -224,7 +235,7 @@ describe("PgPatchUndo", () => {
     });
 
     try {
-      expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
+      expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
       expect(file.content).toBe("old");
       expect(logs.entries.map((e) => [e.ns, e.level, e.report])).toContainEqual(
         ["assistant:patch-undo", "warn", true]
@@ -237,10 +248,10 @@ describe("PgPatchUndo", () => {
   it("writes nothing for a file deleted after Apply", async () => {
     const card = await applied("old", "new");
     PgPatchUndo.wrote(card.id);
-    const { bridge } = fakeBridge(null);
+    const { bridge } = fakeBridge(NO_FILE);
 
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
-    expect(await PgPatchUndo.undo(card, bridge)).toBe("moved-on");
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+    expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("moved-on");
     expect(bridge.applyPatch).not.toHaveBeenCalled();
   });
 
@@ -253,23 +264,23 @@ describe("PgPatchUndo", () => {
       throw new Error("the editor's model could not load");
     });
 
-    await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("model");
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("model");
 
     expect(file.content).toBe("old");
     expect(card.undo).toBe("done");
-    expect(PgPatchUndo.can(card, bridge)).toBe(false);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
   });
 
   it("marks a created file's card undone when the delete landed and what followed failed", async () => {
-    const card = await applied(null, "new");
+    const card = await applied(NO_FILE, "new");
     PgPatchUndo.wrote(card.id);
     const { bridge, file } = fakeBridge("new");
     vi.mocked(bridge.deleteFile).mockImplementationOnce(async () => {
-      file.content = null;
+      file.content = NO_FILE;
       throw new Error("the explorer could not refresh");
     });
 
-    await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("refresh");
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("refresh");
 
     expect(card.undo).toBe("done");
   });
@@ -287,10 +298,10 @@ describe("PgPatchUndo", () => {
         throw new Error("disk");
       });
 
-      await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
 
       expect(card.undo).toBe("stranded");
-      expect(PgPatchUndo.can(card, bridge)).toBe(false);
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs changed while Undo wrote it."
       );
@@ -310,7 +321,7 @@ describe("PgPatchUndo", () => {
         throw new Error("the explorer is gone");
       });
 
-      await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
 
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs could not be read back."
@@ -321,11 +332,11 @@ describe("PgPatchUndo", () => {
       ]);
       // The file still holds the patch once it reads: Undo is offered, and
       // a retry that lands clears the copy
-      expect(PgPatchUndo.can(card, bridge)).toBe(true);
-      expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+      expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
       expect(card.undo).toBe("done");
       expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
-      expect(PgPatchUndo.original(card)).toBeNull();
+      expect(PgPatchUndo.original(card)).toBeUndefined();
     });
 
     it("finishes a retry whose earlier write had landed though it could not be read back", async () => {
@@ -343,12 +354,12 @@ describe("PgPatchUndo", () => {
         throw new Error("the explorer is gone");
       });
 
-      await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("model");
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("model");
       expect(file.content).toBe("old");
 
       // The card offers Undo, and the press finishes it
-      expect(PgPatchUndo.can(card, bridge)).toBe(true);
-      expect(await PgPatchUndo.undo(card, bridge)).toBe("undone");
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+      expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
       expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
       expect(PgAssistant.items.some((i) => i.kind === "notice")).toBe(false);
     });
@@ -364,13 +375,13 @@ describe("PgPatchUndo", () => {
           throw new Error("the explorer is gone");
         });
 
-      await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
       expect(card.outcome).toContain("Undo did not finish");
 
-      await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
       expect(card.outcome).toBe("wrote src/lib.rs");
-      expect(PgPatchUndo.original(card)).toBeNull();
-      expect(PgPatchUndo.can(card, bridge)).toBe(true);
+      expect(PgPatchUndo.original(card)).toBeUndefined();
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
     });
 
     it("logs, and keeps nothing, when the card is gone by the time the write fails", async () => {
@@ -389,8 +400,10 @@ describe("PgPatchUndo", () => {
       });
 
       try {
-        await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
-        expect(PgPatchUndo.original(card)).toBeNull();
+        await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow(
+          "disk"
+        );
+        expect(PgPatchUndo.original(card)).toBeUndefined();
         expect(
           logs.entries.map((e) => [e.ns, e.level, e.report])
         ).toContainEqual(["assistant:patch-undo", "warn", true]);
@@ -400,7 +413,7 @@ describe("PgPatchUndo", () => {
     });
 
     it("offers nothing to copy for a created file, and says it did not exist", async () => {
-      const card = await applied(null, "new");
+      const card = await applied(NO_FILE, "new");
       PgPatchUndo.wrote(card.id);
       const { bridge, file } = fakeBridge("new");
       vi.mocked(bridge.deleteFile).mockImplementationOnce(async () => {
@@ -408,29 +421,29 @@ describe("PgPatchUndo", () => {
         throw new Error("disk");
       });
 
-      await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+      await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
 
       expect(card.outcome).toBe(
         "Undo did not finish: src/lib.rs changed while Undo wrote it. It did not exist before the patch."
       );
       expect(card.undo).toBe("stranded");
-      expect(PgPatchUndo.can(card, bridge)).toBe(false);
-      expect(PgPatchUndo.original(card)).toBeNull();
+      expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
+      expect(PgPatchUndo.original(card)).toBeUndefined();
     });
   });
 
   it("offers Undo again when a created file's delete failed before it landed", async () => {
-    const card = await applied(null, "new");
+    const card = await applied(NO_FILE, "new");
     PgPatchUndo.wrote(card.id);
     const { bridge } = fakeBridge("new");
     vi.mocked(bridge.deleteFile).mockRejectedValueOnce(new Error("disk"));
 
-    await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
 
     expect(card.undo).toBeUndefined();
-    expect(PgPatchUndo.can(card, bridge)).toBe(true);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
     expect(card.outcome).toBeUndefined();
-    expect(PgPatchUndo.original(card)).toBeNull();
+    expect(PgPatchUndo.original(card)).toBeUndefined();
   });
 
   it("offers Undo again when a write failed before it landed, under the build's id", async () => {
@@ -442,11 +455,11 @@ describe("PgPatchUndo", () => {
     const { bridge } = fakeBridge('declare_id!("Built1111");\nnew');
     vi.mocked(bridge.applyPatch).mockRejectedValueOnce(new Error("disk"));
 
-    await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
 
     expect(card.undo).toBeUndefined();
-    expect(PgPatchUndo.can(card, bridge)).toBe(true);
-    expect(PgPatchUndo.original(card)).toBeNull();
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
+    expect(PgPatchUndo.original(card)).toBeUndefined();
   });
 
   it("marks the card undone when the write with the build's id landed and what followed failed", async () => {
@@ -461,11 +474,11 @@ describe("PgPatchUndo", () => {
       throw new Error("the editor's model could not load");
     });
 
-    await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("model");
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("model");
 
     expect(file.content).toBe('declare_id!("Built1111");\nold');
     expect(card.undo).toBe("done");
-    expect(PgPatchUndo.original(card)).toBeNull();
+    expect(PgPatchUndo.original(card)).toBeUndefined();
   });
 
   it("can undo again when the write failed", async () => {
@@ -474,9 +487,9 @@ describe("PgPatchUndo", () => {
     const { bridge } = fakeBridge("new");
     vi.mocked(bridge.applyPatch).mockRejectedValueOnce(new Error("disk"));
 
-    await expect(PgPatchUndo.undo(card, bridge)).rejects.toThrow("disk");
+    await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
 
     expect(card.undo).toBeUndefined();
-    expect(PgPatchUndo.can(card, bridge)).toBe(true);
+    expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
   });
 });

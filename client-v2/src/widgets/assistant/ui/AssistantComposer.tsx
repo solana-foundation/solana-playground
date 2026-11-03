@@ -38,7 +38,7 @@ const sent = (what: string) => `Sent with this message: ${what}`;
  */
 const contextChips = (
   lessonState: LessonState,
-  openFile: { leftOut: string | null; leaveOut(path: string): void }
+  openFile: { leftOut: string | undefined; leaveOut(path: string): void }
 ): ComposerContextChip[] => {
   // Mirror what `describeProject()` actually sends, so the row cannot claim
   // less than the model gets. Paths only — never file content, since this runs

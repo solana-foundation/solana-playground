@@ -35,6 +35,17 @@ const KEY = "sk-agent-hosted-secret-0123456789";
 const NEWCOMER_KEY = "sk-agent-newcomer-secret-9876543210";
 const MODEL = "vendor/model-x";
 
+/** The JSON bodies `AiStatus` defines; `null` is what the wire carries */
+// eslint-disable-next-line unicorn/no-null -- a JSON body: `null` is on the wire
+const OWN_BODY = { available: false, key: "own", reason: null, model: null };
+const HOSTED_BODY = {
+  available: true,
+  key: "hosted",
+  // eslint-disable-next-line unicorn/no-null -- a JSON body: `null` is on the wire
+  reason: null,
+  model: MODEL,
+};
+
 const VARS = [
   "AGENT_API_KEY",
   "AGENT_NEWCOMER_API_KEY",
@@ -101,12 +112,7 @@ describe("GET /api/ai/status", () => {
   it("assistant-ai-status: No key configured", async () => {
     const { res, asked } = await call();
 
-    assert.deepEqual(body(res), {
-      available: false,
-      key: "own",
-      reason: null,
-      model: null,
-    });
+    assert.deepEqual(body(res), OWN_BODY);
     assert.equal(asked, 0);
   });
 
@@ -117,12 +123,7 @@ describe("GET /api/ai/status", () => {
 
     const { res, asked } = await call();
 
-    assert.deepEqual(body(res), {
-      available: false,
-      key: "own",
-      reason: null,
-      model: null,
-    });
+    assert.deepEqual(body(res), OWN_BODY);
     assert.equal(asked, 0);
     // Names only: the warning lists what is missing, never a value
     assert.equal(warn.mock.callCount(), 1);
@@ -134,12 +135,7 @@ describe("GET /api/ai/status", () => {
 
     const { res, asked } = await call();
 
-    assert.deepEqual(body(res), {
-      available: false,
-      key: "own",
-      reason: null,
-      model: null,
-    });
+    assert.deepEqual(body(res), OWN_BODY);
     assert.equal(asked, 0);
   });
 
@@ -163,12 +159,7 @@ describe("GET /api/ai/status", () => {
       session: { status: "signed-in", user: { id: "u1" } },
     });
 
-    assert.deepEqual(body(res), {
-      available: true,
-      key: "hosted",
-      reason: null,
-      model: MODEL,
-    });
+    assert.deepEqual(body(res), HOSTED_BODY);
   });
 
   it("assistant-ai-status: The session lookup fails", async () => {
@@ -190,12 +181,7 @@ describe("GET /api/ai/status", () => {
 
     const { res } = await call({ session: { status: "unconfigured" } });
 
-    assert.deepEqual(body(res), {
-      available: false,
-      key: "own",
-      reason: null,
-      model: null,
-    });
+    assert.deepEqual(body(res), OWN_BODY);
     assert.equal(warn.mock.callCount(), 1);
   });
 
@@ -293,12 +279,7 @@ describe("GET /api/ai/status", () => {
       res
     );
 
-    assert.deepEqual(body(res), {
-      available: false,
-      key: "own",
-      reason: null,
-      model: null,
-    });
+    assert.deepEqual(body(res), OWN_BODY);
   });
 });
 

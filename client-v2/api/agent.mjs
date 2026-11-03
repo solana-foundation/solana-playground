@@ -142,13 +142,14 @@ const pipeStream = async (res, body, observe) => {
   let finished = false;
   // Only the read is the model's connection; a throw past it is ours
   let readFailed = false;
+  const failRead = (e) => {
+    readFailed = true;
+    throw e;
+  };
 
   try {
     for (;;) {
-      const { done, value } = await reader.read().catch((e) => {
-        readFailed = true;
-        throw e;
-      });
+      const { done, value } = await reader.read().catch(failRead);
       if (done) {
         finished = !res.destroyed;
         break;

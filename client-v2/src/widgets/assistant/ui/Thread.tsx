@@ -130,7 +130,9 @@ export const Thread = ({
   // on every load
   const lastWord = items.findLast((item) => item.kind !== "notice");
   const refused =
-    lastWord?.kind === "error" ? backendParamsFrom(lastWord.recover) : null;
+    lastWord?.kind === "error"
+      ? backendParamsFrom(lastWord.recover)
+      : undefined;
 
   const actionsFor = (id: string): ReplyActions | undefined => {
     const actions: ReplyActions = {};
@@ -194,14 +196,14 @@ export const Thread = ({
   const originalFor = (id: string) => {
     const card = items.find((item) => item.id === id);
     if (card?.kind !== "approval") return undefined;
-    return PgPatchUndo.original(card) ?? undefined;
+    return PgPatchUndo.original(card);
   };
 
   // Try again sends the last message once more, from the thread's last item
   // only, and only when that item is where a turn was stopped or cut off
   const lastSent = items.findLast((item) => item.kind === "user");
-  const retryAfter = (): "stopped" | "interrupted" | null => {
-    if (busy || !lastItem || lastSent?.kind !== "user") return null;
+  const retryAfter = (): "stopped" | "interrupted" | undefined => {
+    if (busy || !lastItem || lastSent?.kind !== "user") return undefined;
     if (isStoppedNotice(lastItem)) return "stopped";
     // Not once the turn applied a change: sent again, the same request would
     // propose that change over the code it already rewrote
@@ -211,7 +213,7 @@ export const Thread = ({
     ) {
       return "interrupted";
     }
-    return null;
+    return undefined;
   };
   const after = retryAfter();
   const retryFor = (id: string) => {

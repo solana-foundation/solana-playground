@@ -75,6 +75,7 @@ if (import.meta.vitest) {
           provider: "openrouter",
           model: "deepseek/deepseek-chat-v3.1:free",
           label: "deepseek/deepseek-chat-v3.1:free",
+          // eslint-disable-next-line unicorn/no-null -- `ModelShown.effort` is typed `| null`
           effort: null,
         })
       ).toEqual({
@@ -97,6 +98,7 @@ if (import.meta.vitest) {
         provider,
         model: "m",
         label: "m",
+        // eslint-disable-next-line unicorn/no-null -- `ModelShown.effort` is typed `| null`
         effort: null,
       });
       expect(headText(label)).toBe(`m · your ${owner} key`);

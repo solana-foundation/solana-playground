@@ -255,7 +255,7 @@ export const forgetBackend = () => {
  * the choice was the bare provider id, which is not JSON; it reads as that
  * provider with nothing else.
  */
-const choiceFrom = (raw: string): BackendParams | null => {
+const choiceFrom = (raw: string): BackendParams | undefined => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -270,13 +270,13 @@ const choiceFrom = (raw: string): BackendParams | null => {
  * The backend this browser last chose, without its key: what a send with
  * nothing connected offers when the thread names no backend of its own
  */
-export const rememberedChoice = (): BackendParams | null => {
+export const rememberedChoice = (): BackendParams | undefined => {
   const raw = guarded(
     "read the remembered backend",
-    () => localStorage.getItem(REMEMBERED_BACKEND_KEY),
-    null
+    () => localStorage.getItem(REMEMBERED_BACKEND_KEY) ?? undefined,
+    undefined
   );
-  if (raw === null) return null;
+  if (raw === undefined) return undefined;
   const choice = choiceFrom(raw);
   // Logged without the value, like a dropped connection: without the choice a
   // send can only offer the default, and the log is where that shows
@@ -386,7 +386,7 @@ if (import.meta.vitest) {
         ["JSON null", "null"],
       ])("reads %s as no choice", (_, raw) => {
         localStorage.setItem(REMEMBERED_BACKEND_KEY, raw);
-        expect(rememberedChoice()).toBeNull();
+        expect(rememberedChoice()).toBeUndefined();
         expect(isDefaultBackendRemembered()).toBe(false);
       });
 
@@ -429,7 +429,7 @@ if (import.meta.vitest) {
         rememberBackend(openai);
         expect(forgetBackend()).toBe(true);
         expect(isDefaultBackendRemembered()).toBe(false);
-        expect(rememberedChoice()).toBeNull();
+        expect(rememberedChoice()).toBeUndefined();
         expect(rememberedConnection()).toBeNull();
         expect(sessionStorage.length).toBe(0);
       });
