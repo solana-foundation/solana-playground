@@ -10,8 +10,8 @@ export interface WalletStore {
   read(): Promise<SerializedWalletState | undefined>;
   write(state: SerializedWalletState): Promise<void>;
   /**
-   * Run `task` while no other tab runs one on the same store, so a read, a
-   * merge and a write cannot interleave with another tab's.
+   * Run `task` while no other tab runs one on the same store, so one tab's
+   * read-merge-write cannot interleave with another tab's move or save.
    */
   exclusive<T>(task: () => Promise<T>): Promise<T>;
 }
@@ -38,8 +38,9 @@ const requestIn =
  *
  * The database is the wallet's alone: project files live in lightning-fs's
  * database, which project sync reads and uploads, and a keypair must never
- * sit where an upload can reach it. The database opens on first use, once;
- * every method rejects when IndexedDB is missing or refuses to open.
+ * sit where an upload can reach it. The database opens on first use, and
+ * again after the browser closes the connection; `read` and `write` reject
+ * when IndexedDB is missing or refuses to open.
  *
  * @param name database name
  */
@@ -74,7 +75,7 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     return opened;
   };
 
-  const lockName = `${name}:migrate`;
+  const lockName = `${name}:state`;
 
   return {
     exclusive(task) {

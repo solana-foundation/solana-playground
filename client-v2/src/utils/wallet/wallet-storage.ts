@@ -126,8 +126,9 @@ const mergeWallets = (
  * The wallet's persistence: IndexedDB, with `localStorage` as what it moves
  * from and what it falls back to.
  *
- * `read` moves a wallet found in `localStorage` into the store, under the
- * store's lock so two tabs cannot interleave: it merges it with what the
+ * `read` and every `write` run under the store's lock, so one tab's move
+ * never interleaves with another tab's move or save. `read` moves a wallet
+ * found in `localStorage` into the store: it merges it with what the
  * store holds, writes the result, reads it back, and removes the
  * `localStorage` entry only when the copy reads back equal and nobody wrote
  * the entry meanwhile. `localStorage` is the merge's primary: once a wallet
@@ -135,7 +136,8 @@ const mergeWallets = (
  * that fell back or by a tab still on the previous version.
  *
  * Any store failure leaves `localStorage` as it was and switches this
- * instance to `localStorage` for the rest of the page's life, because losing
+ * instance to `localStorage` for the rest of the page's life (it never
+ * switches back before a reload), because losing
  * a key is worse than leaving one where it was. The next load tries the
  * store again and merges. An account removed while falling back comes back
  * from the store on that merge: a removed key returns, none is lost.
@@ -152,7 +154,7 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
 
   /** The `localStorage` wallet and its text, or `undefined` for none */
   const readLocal = () => {
-    const text = local.getItem(WALLET_WALLET_LOCAL_KEY);
+    const text = local.getItem(WALLET_LOCAL_KEY);
     if (text === null) return undefined;
     let value: unknown;
     try {
@@ -208,8 +210,8 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
   /** Remove the `localStorage` copy unless someone rewrote it meanwhile */
   const removeLocal = (text: string) => {
     try {
-      if (local.getItem(WALLET_WALLET_LOCAL_KEY) === text) {
-        local.removeItem(WALLET_WALLET_LOCAL_KEY);
+      if (local.getItem(WALLET_LOCAL_KEY) === text) {
+        local.removeItem(WALLET_LOCAL_KEY);
       }
     } catch (error) {
       // The store holds the wallet; the next load merges and retries this
@@ -255,16 +257,19 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
     /** Write the wallet; falls back to `localStorage` if the store fails */
     write(state: SerializedWalletState): Promise<void> {
       writes = writes
-        .then(async () => {
-          if (isDegraded) return writeLocal(state);
-          try {
-            await store.write(state);
-          } catch (error) {
-            isDegraded = true;
-            reportFailureFor(state)("Wallet not saved to the store", error);
-            writeLocal(state);
-          }
-        })
+        .then(() =>
+          // Under the lock, so another tab's move cannot land on top of it
+          store.exclusive(async () => {
+            if (isDegraded) return writeLocal(state);
+            try {
+              await store.write(state);
+            } catch (error) {
+              isDegraded = true;
+              reportFailureFor(state)("Wallet not saved to the store", error);
+              writeLocal(state);
+            }
+          })
+        )
         .catch((error: unknown) => {
           // Nothing above should throw; if it does, the next write still runs
           reportFailureFor(state)("Wallet write failed", error);
@@ -593,6 +598,105 @@ if (import.meta.vitest) {
       expect(store.held()?.accounts[0].name).toBe("B");
     });
 
+    it("keeps the first unreadable copy when a later one turns up", async () => {
+      const local = memoryLocal("{first");
+      await walletStorageWith(memoryStore(undefined), local).read();
+      local.items.set(WALLET_LOCAL_KEY, "{second");
+
+      await walletStorageWith(memoryStore(undefined), local).read();
+
+      expect(local.items.get("wallet.unreadable")).toBe("{first");
+    });
+
+    it("moves a fallback write back into the store on the next load", async () => {
+      const store = memoryStore(walletOf([account(1, "Wallet 1")]));
+      const local = memoryLocal(undefined);
+      const failing = walletStorageWith(store, local);
+      await failing.read();
+      store.write.mockRejectedValueOnce(new Error("quota"));
+      const next: SerializedWalletState = {
+        state: "pg",
+        accounts: [account(1, "Wallet 1"), account(2, "Wallet 2")],
+        currentIndex: 1,
+        standardName: NO_STANDARD,
+      };
+      await failing.write(next);
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(next));
+
+      const read = await walletStorageWith(store, local).read();
+
+      expect(read).toEqual(next);
+      expect(store.held()).toEqual(next);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
+    it("reads nothing and logs when the stored record has the wrong shape", async () => {
+      const store = memoryStore(undefined);
+      store.read.mockResolvedValue({ accounts: "corrupt" } as never);
+
+      const read = await walletStorageWith(
+        store,
+        memoryLocal(undefined)
+      ).read();
+
+      expect(read).toBeUndefined();
+      expect(logged.entries).toHaveLength(1);
+    });
+
+    it("sets aside every localStorage wallet that is not a wallet's shape", async () => {
+      const good = account(1, "Wallet 1");
+      const shapes: unknown[] = [
+        [],
+        { state: "pg", currentIndex: 0 },
+        { state: "pg", accounts: [good] },
+        { currentIndex: 0, accounts: [good] },
+        {
+          state: "pg",
+          currentIndex: 0,
+          accounts: [{ kp: kp(1).slice(1), name: "a" }],
+        },
+        {
+          state: "pg",
+          currentIndex: 0,
+          accounts: [{ kp: kp(1).concat(0), name: "a" }],
+        },
+        {
+          state: "pg",
+          currentIndex: 0,
+          accounts: [{ kp: kp(1).fill(256, 0, 1), name: "a" }],
+        },
+        {
+          state: "pg",
+          currentIndex: 0,
+          accounts: [{ kp: kp(1).fill(-1, 0, 1), name: "a" }],
+        },
+        {
+          state: "pg",
+          currentIndex: 0,
+          accounts: [{ kp: kp(1).fill(1.5, 0, 1), name: "a" }],
+        },
+        { state: "pg", currentIndex: 0, accounts: [{ kp: kp(1) }] },
+      ];
+      for (const shape of shapes) {
+        const store = memoryStore(undefined);
+        const local = memoryLocal(JSON.stringify(shape));
+
+        expect(await walletStorageWith(store, local).read()).toBeUndefined();
+        expect(store.write).not.toHaveBeenCalled();
+        expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(shape));
+      }
+    });
+
+    it("saves under the store's lock", async () => {
+      const store = memoryStore(undefined);
+      const storage = walletStorageWith(store, memoryLocal(undefined));
+      await storage.read();
+
+      await storage.write(walletOf([account(1, "Wallet 1")]));
+
+      expect(store.exclusive).toHaveBeenCalledTimes(2);
+    });
+
     it("logs no keypair bytes and no account names", async () => {
       const secret = walletOf([account(9, "Secret name")]);
       const failing = memoryStore(undefined);
@@ -611,8 +715,11 @@ if (import.meta.vitest) {
         memoryLocal(JSON.stringify(secret))
       ).read();
 
-      // A wallet cut off mid-keypair: V8's `SyntaxError` quotes the text
-      const truncated = JSON.stringify(secret).slice(0, 60);
+      // A wallet corrupted mid-keypair: V8's "Unexpected token" `SyntaxError`
+      // quotes the text around it, here secret bytes
+      const stored = JSON.stringify(secret);
+      const at = stored.indexOf("[", stored.indexOf('"kp"')) + 12;
+      const truncated = `${stored.slice(0, at)},,${stored.slice(at)}`;
       await walletStorageWith(
         memoryStore(undefined),
         memoryLocal(truncated)
@@ -629,9 +736,10 @@ if (import.meta.vitest) {
         }))
       );
       const bytes = kp(9);
-      // Any three consecutive secret bytes, as JSON writes them
-      for (let i = 0; i + 3 <= 32; i++) {
-        expect(text).not.toContain(bytes.slice(i, i + 3).join(","));
+      // Any two consecutive secret bytes, as JSON writes them: V8 quotes
+      // about ten characters either side of the bad token
+      for (let i = 0; i + 2 <= 32; i++) {
+        expect(text).not.toContain(bytes.slice(i, i + 2).join(","));
       }
       expect(text).not.toContain(Buffer.from(bytes).toString("base64"));
       expect(text).not.toContain("Secret name");

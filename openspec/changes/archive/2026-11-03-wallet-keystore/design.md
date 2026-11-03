@@ -43,7 +43,8 @@ always read and written whole, and one record keeps the write atomic.
 
 ### The keystore sits behind an interface
 
-`utils/wallet/keystore.ts` defines `WalletStore` (`read`, `write`) and its
+`utils/wallet/keystore.ts` defines `WalletStore` (`read`, `write`, and
+`exclusive`, a Web Lock every move and save runs under) and its
 IndexedDB implementation; `utils/wallet/wallet-storage.ts` takes a
 `WalletStore` and the `localStorage` it migrates from. Unit tests pass an
 in-memory store, and one that throws. The migration and merge
@@ -55,7 +56,9 @@ e2e spec, as the project does for `PgFs`.
 `migrate` runs before `storage.read`:
 
 1. Read `localStorage['wallet']`; nothing there means nothing to do.
-2. Upgrade the legacy `sk` format in memory (the existing step).
+2. The legacy `sk` format has already been upgraded in place in
+   `localStorage` by `wallet.ts`'s `migrate`, which `updatable` runs before
+   `storage.read`; anything else that is not a wallet's shape is set aside.
 3. Read IndexedDB. If it holds a wallet, merge: `localStorage`'s accounts
    first, then each IndexedDB account whose public key is not already present,
    with its name suffixed (`Wallet 1 (2)`) on a clash; `localStorage`'s
