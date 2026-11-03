@@ -13,7 +13,7 @@ export {
 export type { GistFiles, GistFormatReason } from "./lib/format";
 export { isGistUrl, parseGistRef, parseGistUrl } from "./lib/url";
 export type { GistRef } from "./lib/url";
-export { GistImportError, getGistFiles, importGist } from "./model/import";
+export { GistImportError, fetchGistFiles, importGist } from "./model/import";
 export { gistTelemetry } from "./model/telemetry";
 export type {
   GistExportFailure,

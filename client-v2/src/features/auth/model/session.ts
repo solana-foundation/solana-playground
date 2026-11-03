@@ -211,10 +211,10 @@ export class PgSession {
     // cannot answer it, so the caller waits for it to settle and asks again.
     const pending = PgSession._pending;
     if (pending) {
-      const covered = (scopes ?? []).every((scope) =>
+      const isCovered = (scopes ?? []).every((scope) =>
         PgSession._pendingScopes.includes(scope)
       );
-      if (covered) return pending;
+      if (isCovered) return pending;
       return pending.then(
         () => PgSession.signInWith({ from, scopes }),
         () => PgSession.signInWith({ from, scopes })

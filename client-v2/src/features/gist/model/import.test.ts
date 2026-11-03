@@ -11,7 +11,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { getGistFiles, GistImportError, importGist } from "./import";
+import { fetchGistFiles, GistImportError, importGist } from "./import";
 
 const utils = vi.hoisted(() => ({
   PgExplorer: {
@@ -226,14 +226,14 @@ describe("importGist", () => {
   });
 });
 
-describe("getGistFiles", () => {
+describe("fetchGistFiles", () => {
   it("downloads a file the API cut short whole", async () => {
     answers({
       [API]: ok(gist({ "lib.rs": { content: "use anc", truncated: true } })),
       "https://gist.githubusercontent.com/raw/lib.rs": ok(LIB),
     });
 
-    await getGistFiles({ id: ID }, "link");
+    await fetchGistFiles({ id: ID }, "link");
 
     expect(format.fromGistFiles).toHaveBeenCalledWith({
       "lib.rs": { content: LIB },
@@ -303,7 +303,7 @@ describe("getGistFiles", () => {
   ])("names $title", async ({ answer, reason, message }) => {
     answers({ [API]: answer });
 
-    const error = await failure(getGistFiles({ id: ID }, "link"));
+    const error = await failure(fetchGistFiles({ id: ID }, "link"));
 
     expect(error).toBeInstanceOf(GistImportError);
     expect(error.reason).toBe(reason);
@@ -323,7 +323,7 @@ describe("getGistFiles", () => {
       ),
     });
 
-    await getGistFiles({ id: ID }, "link");
+    await fetchGistFiles({ id: ID }, "link");
 
     const [files] = format.fromGistFiles.mock.calls[0];
     expect(Object.hasOwn(files, "__proto__")).toBe(true);
@@ -336,7 +336,7 @@ describe("getGistFiles", () => {
       "https://gist.githubusercontent.com/raw/lib.rs": ok(LIB),
     });
 
-    await getGistFiles({ id: ID }, "link");
+    await fetchGistFiles({ id: ID }, "link");
 
     expect(format.fromGistFiles).toHaveBeenCalledWith({
       "lib.rs": { content: LIB },
@@ -354,7 +354,7 @@ describe("getGistFiles", () => {
       }),
     });
 
-    await getGistFiles({ id: ID }, "link");
+    await fetchGistFiles({ id: ID }, "link");
 
     expect(format.fromGistFiles).toHaveBeenCalledWith({
       "lib.rs": { content: LIB },
@@ -367,7 +367,7 @@ describe("getGistFiles", () => {
       "https://gist.githubusercontent.com/raw/lib.rs": status(404, {}),
     });
 
-    const error = await failure(getGistFiles({ id: ID }, "link"));
+    const error = await failure(fetchGistFiles({ id: ID }, "link"));
 
     expect(error.reason).toBe("not-found");
     expect(error.message).toMatch(/"lib\.rs" was not found/);
@@ -383,7 +383,7 @@ describe("getGistFiles", () => {
       }),
     });
 
-    const error = await failure(getGistFiles({ id: ID }, "link"));
+    const error = await failure(fetchGistFiles({ id: ID }, "link"));
 
     expect(error.reason).toBe("request-failed");
     expect(globalThis.fetch).toHaveBeenCalledTimes(1);
@@ -393,7 +393,7 @@ describe("getGistFiles", () => {
   it("refuses a gist GitHub lists only part of", async () => {
     answers({ [API]: ok(gistWith({ truncated: true })({})) });
 
-    const error = await failure(getGistFiles({ id: ID }, "link"));
+    const error = await failure(fetchGistFiles({ id: ID }, "link"));
 
     expect(error.reason).toBe("too-large");
     expect(format.fromGistFiles).not.toHaveBeenCalled();
@@ -408,7 +408,7 @@ describe("getGistFiles", () => {
       );
     });
 
-    const error = await failure(getGistFiles({ id: ID }, "dialog"));
+    const error = await failure(fetchGistFiles({ id: ID }, "dialog"));
 
     expect(error.reason).toBe("invalid");
     expect(error.message).toMatch(/manifest is invalid: Refusing to write/);
@@ -423,7 +423,7 @@ describe("getGistFiles", () => {
       );
     });
 
-    const error = await failure(getGistFiles({ id: ID }, "dialog"));
+    const error = await failure(fetchGistFiles({ id: ID }, "dialog"));
 
     expect(error.reason).toBe("invalid");
     expect(error.message).toBe(
@@ -439,7 +439,7 @@ describe("getGistFiles", () => {
       throw new TypeError("boom");
     });
 
-    const error = await failure(getGistFiles({ id: ID }, "dialog"));
+    const error = await failure(fetchGistFiles({ id: ID }, "dialog"));
 
     expect(error.reason).toBe("request-failed");
     expect(error.message).toBe(`Could not import gist "${ID}".`);
@@ -462,7 +462,7 @@ describe("getGistFiles", () => {
       );
     });
 
-    const error = await failure(getGistFiles({ id: ID }, "dialog"));
+    const error = await failure(fetchGistFiles({ id: ID }, "dialog"));
 
     expect(error.reason).toBe("no-program");
     expect(utils.PgFramework.getFromFiles).not.toHaveBeenCalled();
@@ -484,7 +484,7 @@ describe("getGistFiles", () => {
     utils.PgFramework.getFromFiles.mockResolvedValue(undefined);
     utils.PgFramework.hasRunnableTypeScript.mockReturnValue(true);
 
-    const result = await getGistFiles({ id: ID }, "dialog");
+    const result = await fetchGistFiles({ id: ID }, "dialog");
 
     expect(result.files).toEqual([
       ["client/client.ts", "x"],
@@ -509,7 +509,7 @@ describe("getGistFiles", () => {
     utils.PgFramework.getFromFiles.mockResolvedValue(undefined);
     utils.PgFramework.hasRunnableTypeScript.mockReturnValue(false);
 
-    const error = await failure(getGistFiles({ id: ID }, "dialog"));
+    const error = await failure(fetchGistFiles({ id: ID }, "dialog"));
 
     expect(error.reason).toBe("no-program");
     expect(error.message).toBe(

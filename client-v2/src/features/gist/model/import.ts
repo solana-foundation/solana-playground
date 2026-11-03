@@ -180,7 +180,7 @@ const downloadWholeFor =
  * @param ref the gist
  * @returns the gist's owner and each file's whole content by name
  */
-const readGist = async (ref: GistRef) => {
+const fetchGist = async (ref: GistRef) => {
   const subject = `Gist "${ref.id}"`;
   const path = ref.revision ? `${ref.id}/${ref.revision}` : ref.id;
   const response = await request(
@@ -249,11 +249,11 @@ const layOut = async (files: Record<string, { content: string }>) => {
   // Opens when a framework recognises it, or with no program when it has a
   // client or tests to run; otherwise there is nothing to open
   const tupleFiles: TupleFiles = Object.entries(laidOut.files);
-  const opens =
+  const canOpen =
     !!tupleFiles.length &&
     (!!(await PgFramework.getFromFiles(tupleFiles)) ||
       PgFramework.hasRunnableTypeScript(tupleFiles.map(([path]) => path)));
-  if (!opens) {
+  if (!canOpen) {
     throw new GistImportError(
       "no-program",
       "This gist holds no Solana program and no TypeScript or JavaScript to open."
@@ -273,10 +273,10 @@ const layOut = async (files: Record<string, { content: string }>) => {
  * @returns the gist's owner and the project's files
  * @throws {GistImportError} with the reason the import stopped
  */
-export const getGistFiles = async (ref: GistRef, from: GistImportSource) => {
+export const fetchGistFiles = async (ref: GistRef, from: GistImportSource) => {
   gistTelemetry.track("gist_import_started", { from });
   try {
-    const { owner, files } = await readGist(ref);
+    const { owner, files } = await fetchGist(ref);
     const laidOut = await layOut(files);
     gistTelemetry.track("gist_import_succeeded", {
       from,
@@ -335,7 +335,7 @@ export const importGist = async (url: string, from: GistImportSource) => {
     return;
   }
 
-  const { owner, files } = await getGistFiles(ref, from);
+  const { owner, files } = await fetchGistFiles(ref, from);
   const name = projectName(owner, ref);
   if (names.includes(name)) {
     await PgExplorer.switchWorkspace(name);

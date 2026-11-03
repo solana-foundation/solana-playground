@@ -1,4 +1,4 @@
-import { getGistFiles, parseGistRef, parseGistUrl } from "@/features/gist";
+import { fetchGistFiles, parseGistRef, parseGistUrl } from "@/features/gist";
 import type { GistRef } from "@/features/gist";
 import { PgRouter } from "../../utils";
 import { handleRoute } from "../common";
@@ -13,7 +13,7 @@ import { handleRoute } from "../common";
 const openGist = (ref: GistRef) =>
   handleRoute({
     getExplorerInitArg: async () => ({
-      files: (await getGistFiles(ref, "link")).files,
+      files: (await fetchGistFiles(ref, "link")).files,
     }),
   });
 

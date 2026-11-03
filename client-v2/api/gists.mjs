@@ -51,14 +51,14 @@ const parseGist = (body) => {
   }
   const entries = Object.entries(files);
   if (!entries.length) return { error: "malformed" };
-  const wellFormed = entries.every(
+  const isWellFormed = entries.every(
     ([name, file]) =>
       name !== "" &&
       !name.includes("/") &&
       typeof file?.content === "string" &&
       file.content !== ""
   );
-  if (!wellFormed) return { error: "malformed" };
+  if (!isWellFormed) return { error: "malformed" };
 
   // The manifest counts toward GitHub's limit like any other file
   if (entries.length > MAX_GIST_FILES) return { error: "too-large" };

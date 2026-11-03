@@ -104,9 +104,9 @@ const ShareGist = ({ name, readFiles, signedIn, signIn }: ShareGistProps) => {
   // Until a step has its own answer, the session decides what is offered: a
   // sign-in elsewhere, or the first session read, moves the dialog along
   let shown = state;
-  const undecided =
+  const isUndecided =
     state.step === "ready" || (state.step === "sign-in" && !state.error);
-  if (undecided) shown = signedIn ? { step: "ready" } : { step: "sign-in" };
+  if (isUndecided) shown = signedIn ? { step: "ready" } : { step: "sign-in" };
 
   return (
     <BaseShareGist

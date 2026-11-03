@@ -1,13 +1,13 @@
 // `@types/mocha` also declares a global `it`, without `each`
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const gist = vi.hoisted(() => ({ getGistFiles: vi.fn() }));
+const gist = vi.hoisted(() => ({ fetchGistFiles: vi.fn() }));
 vi.mock("@/features/gist", async (importOriginal) => {
   const real = await importOriginal<typeof import("@/features/gist")>();
   return {
     parseGistRef: real.parseGistRef,
     parseGistUrl: real.parseGistUrl,
-    getGistFiles: gist.getGistFiles,
+    fetchGistFiles: gist.fetchGistFiles,
   };
 });
 
@@ -29,7 +29,7 @@ const filesOpened = async () => {
 
 beforeEach(() => {
   common.handleRoute.mockReset();
-  gist.getGistFiles.mockReset().mockResolvedValue({
+  gist.fetchGistFiles.mockReset().mockResolvedValue({
     owner: "alice",
     files: FILES,
   });
@@ -49,7 +49,7 @@ describe("/gist/{ref}", () => {
     gistRoute.handle({ ref: "0123abcd/9f8e7d" });
 
     expect(await filesOpened()).toEqual(FILES);
-    expect(gist.getGistFiles).toHaveBeenCalledWith(
+    expect(gist.fetchGistFiles).toHaveBeenCalledWith(
       { id: "0123abcd", revision: "9f8e7d" },
       "link"
     );
@@ -69,7 +69,7 @@ describe("/{gistUrl}", () => {
     gistDefault.handle({ gistUrl: "https://gist.github.com/alice/0123abcd" });
 
     expect(await filesOpened()).toEqual(FILES);
-    expect(gist.getGistFiles).toHaveBeenCalledWith(
+    expect(gist.fetchGistFiles).toHaveBeenCalledWith(
       { owner: "alice", id: "0123abcd" },
       "link"
     );
