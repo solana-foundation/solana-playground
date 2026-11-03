@@ -274,7 +274,47 @@ test("gist-sharing: Rate limited", async ({ page }) => {
     .click();
 
   await expect(
-    dialog(page).getByText(/GitHub is limiting requests/)
+    dialog(page).getByText(
+      "GitHub is limiting requests from this browser. Try again in a few minutes."
+    )
+  ).toBeVisible(LONG);
+  await expect(
+    dialog(page).getByRole("button", { name: "Try again" })
+  ).toBeVisible();
+});
+
+test("gist-sharing: GitHub refused the gist", async ({ page }) => {
+  await stubAuth(page, { signedIn: true });
+  await stubGists(page, [422, { reason: "rejected" }]);
+  await seedWorkspace(page);
+  await openShare(page);
+
+  await dialog(page)
+    .getByRole("button", { name: "Create public gist" })
+    .click();
+
+  await expect(
+    dialog(page).getByText("GitHub refused the gist. Nothing was published.")
+  ).toBeVisible(LONG);
+  await expect(
+    dialog(page).getByRole("button", { name: "Try again" })
+  ).toHaveCount(0);
+});
+
+test("gist-sharing: Request failed", async ({ page }) => {
+  await stubAuth(page, { signedIn: true });
+  await stubGists(page, [502, { reason: "request-failed" }]);
+  await seedWorkspace(page);
+  await openShare(page);
+
+  await dialog(page)
+    .getByRole("button", { name: "Create public gist" })
+    .click();
+
+  await expect(
+    dialog(page).getByText(
+      "Could not export to GitHub. Check your gists on GitHub before you try again."
+    )
   ).toBeVisible(LONG);
   await expect(
     dialog(page).getByRole("button", { name: "Try again" })

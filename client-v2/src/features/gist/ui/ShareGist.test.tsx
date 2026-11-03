@@ -112,7 +112,7 @@ it("signs a signed-out user in, then creates the gist without a second press", a
     signIn: resolvingSignIn(),
   });
 
-  await press(/Sign in with GitHub to share/);
+  await press(/^Sign in with GitHub$/);
 
   expect(signIn).toHaveBeenCalledWith(undefined);
   expect(screen.getByLabelText("Gist URL")).toHaveProperty("value", URL);
@@ -125,11 +125,11 @@ it("keeps the dialog on sign-in when the user cancels it", async () => {
     signIn: vi.fn().mockRejectedValue(new Error("Sign-in cancelled.")),
   });
 
-  await press(/Sign in with GitHub to share/);
+  await press(/^Sign in with GitHub$/);
 
   expect(screen.getByText("Sign-in cancelled.")).toBeTruthy();
   expect(
-    screen.getByRole("button", { name: "Sign in with GitHub to share" })
+    screen.getByRole("button", { name: "Sign in with GitHub" })
   ).toBeTruthy();
   expect(fetch).not.toHaveBeenCalled();
   expect(sent.events).toEqual([
@@ -150,7 +150,7 @@ it("moves on to create once the session reads as signed in", () => {
   );
   const { rerender } = render(share(false));
   expect(
-    screen.getByRole("button", { name: "Sign in with GitHub to share" })
+    screen.getByRole("button", { name: "Sign in with GitHub" })
   ).toBeTruthy();
 
   rerender(share(true));
@@ -195,7 +195,7 @@ it("says so when the browser blocks the sign-in popup", async () => {
       .mockRejectedValue(new Error("Allow popups for this site to sign in.")),
   });
 
-  await press(/Sign in with GitHub to share/);
+  await press(/^Sign in with GitHub$/);
 
   expect(
     screen.getByText("Allow popups for this site to sign in.")
@@ -265,7 +265,7 @@ it("goes back to sign-in when the session ended meanwhile", async () => {
 
   expect(screen.getByText(/Your session ended/)).toBeTruthy();
   expect(
-    screen.getByRole("button", { name: "Sign in with GitHub to share" })
+    screen.getByRole("button", { name: "Sign in with GitHub" })
   ).toBeTruthy();
   expect(sent.events.at(-1)).toEqual({
     name: "gist_export_failed",
@@ -277,27 +277,35 @@ it.each([
   [
     429,
     { reason: "rate-limited" },
-    /GitHub is limiting requests/,
+    "GitHub is limiting requests from this browser. Try again in a few minutes.",
     "rate-limited",
+    true,
   ],
-  [422, { reason: "rejected" }, /GitHub refused the gist/, "rejected"],
+  [
+    422,
+    { reason: "rejected" },
+    "GitHub refused the gist. Nothing was published.",
+    "rejected",
+    false,
+  ],
   [
     502,
     { reason: "request-failed" },
-    /Could not reach GitHub/,
+    "Could not export to GitHub. Check your gists on GitHub before you try again.",
     "request-failed",
+    true,
   ],
 ])(
-  "tells a %i apart and offers to try again",
+  "tells a %i apart, offering a retry unless GitHub refused the gist",
   // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
-  async (status, body, message, reason) => {
+  async (status, body, message, reason, retry) => {
     answers([status, body]);
     renderShare();
 
     await press(/Create public gist/);
 
     expect(screen.getByText(message)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Try again" })).toBeTruthy();
+    expect(!!screen.queryByRole("button", { name: "Try again" })).toBe(retry);
     expect(sent.events.at(-1)).toEqual({
       name: "gist_export_failed",
       params: { reason },
