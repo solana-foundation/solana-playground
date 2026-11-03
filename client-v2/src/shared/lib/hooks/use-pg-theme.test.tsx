@@ -4,14 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 type Listener = () => void;
 
 const { theme, listeners, disposed, subscribe } = vi.hoisted(() => {
-  const disposed = { count: 0 };
+  const disposals = { count: 0 };
   return {
     theme: { current: { name: "Dark" } },
     listeners: { name: [] as Listener[], font: [] as Listener[] },
-    disposed,
+    disposed: disposals,
     subscribe: (list: Listener[]) => (cb: Listener) => {
       list.push(cb);
-      return { dispose: () => disposed.count++ };
+      return { dispose: () => disposals.count++ };
     },
   };
 });

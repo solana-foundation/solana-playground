@@ -1,5 +1,4 @@
 import { InfoIcon } from "lucide-react";
-import styled from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";

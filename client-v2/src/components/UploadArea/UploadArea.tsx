@@ -1,6 +1,5 @@
 import { FC } from "react";
 import { DropzoneOptions, DropzoneState, useDropzone } from "react-dropzone";
-import styled, { css, DefaultTheme } from "styled-components";
 
 import { cn } from "@/shared/lib/utils";
 

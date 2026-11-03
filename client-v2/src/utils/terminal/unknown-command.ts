@@ -9,8 +9,8 @@ const MAX_EDITS = 2;
  * (optimal string alignment), so `biuld` is one edit from `build`.
  */
 const editDistance = (a: string, b: string) => {
-  const d = Array.from({ length: a.length + 1 }, (_, i) =>
-    Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : i))
+  const d = Array.from({ length: a.length + 1 }, (_row, i) =>
+    Array.from({ length: b.length + 1 }, (_cell, j) => (i === 0 ? j : i))
   );
   for (let i = 1; i <= a.length; i++) {
     for (let j = 1; j <= b.length; j++) {

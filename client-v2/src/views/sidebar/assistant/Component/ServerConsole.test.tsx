@@ -1,5 +1,4 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, expect, it, vi } from "vitest";
 
 // The utils barrel reaches generated globals and wasm packages that exist only

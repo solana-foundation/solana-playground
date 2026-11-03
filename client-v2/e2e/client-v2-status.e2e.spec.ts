@@ -187,16 +187,16 @@ test.describe("on a 1440 px window", () => {
   test("client-v2-status: The setup row warns while the cluster does not answer", async ({
     seededPage: page,
   }) => {
-    const row = page
+    const setupRow = page
       .getByRole("listitem")
       .filter({ hasText: "Choose a network" });
-    await expect(row).toHaveAttribute("data-status", "done");
+    await expect(setupRow).toHaveAttribute("data-status", "done");
     await stallDevnet(page);
     await page.reload();
-    await expect(row).toHaveAttribute("data-status", "warn", {
+    await expect(setupRow).toHaveAttribute("data-status", "warn", {
       timeout: 15_000,
     });
-    await expect(row).toHaveAttribute("title", "devnet is not responding");
+    await expect(setupRow).toHaveAttribute("title", "devnet is not responding");
   });
 
   test("client-v2-status: Change network from the notice", async ({

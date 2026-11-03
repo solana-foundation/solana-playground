@@ -3,7 +3,6 @@ import type { CSSProperties, FormEvent, RefObject } from "react";
 import { useRef } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { brandButtonVariants } from "@/shared/ui/brand-button";
 import { Input } from "@/shared/ui/input";

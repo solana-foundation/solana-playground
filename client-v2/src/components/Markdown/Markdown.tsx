@@ -3,7 +3,6 @@ import "./Markdown.css";
 import { FC, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import styled, { css } from "styled-components";
 
 import { cn } from "@/shared/lib/utils";
 
