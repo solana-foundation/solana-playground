@@ -1,6 +1,13 @@
 import { Keypair } from "@solana/web3.js";
 
-import { expect, LONG, runInTerminal, seedWorkspace, test } from "./fixtures";
+import {
+  expect,
+  LONG,
+  runInTerminal,
+  seedLocalWallet,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 /**
  * The built-in wallet signs through its signer provider
@@ -33,11 +40,11 @@ test("wallet-signing: Project code signs with pg.wallet.keypair", async ({
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
 
-  await page.addInitScript((wallet) => {
-    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
-    sessionStorage.setItem("e2e-wallet-seeded", "1");
-    localStorage.setItem("wallet", wallet);
-  }, JSON.stringify({ state: "pg", accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }], currentIndex: 0 }));
+  await seedLocalWallet(page, {
+    state: "pg",
+    accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+    currentIndex: 0,
+  });
 
   await seedWorkspace(page);
 

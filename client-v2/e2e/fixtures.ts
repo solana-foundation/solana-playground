@@ -52,6 +52,18 @@ export const startTutorialFromAbout = async (page: Page) => {
 };
 
 /**
+ * Puts `wallet` in `localStorage['wallet']` as an earlier version left it, on
+ * the first load only, so a reload finds what the wallet's migration wrote
+ * rather than a fresh seed.
+ */
+export const seedLocalWallet = (page: Page, wallet: unknown) =>
+  page.addInitScript((text) => {
+    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
+    sessionStorage.setItem("e2e-wallet-seeded", "1");
+    localStorage.setItem("wallet", text);
+  }, JSON.stringify(wallet));
+
+/**
  * A browser with one project already created.
  *
  * A fresh profile shows Home, not the work, so any test that clicks the

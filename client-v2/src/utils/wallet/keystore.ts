@@ -1,4 +1,7 @@
+import { createLogger } from "../../shared/lib/logger";
 import type { SerializedWalletState } from "./types";
+
+const log = createLogger("wallet:storage");
 
 /**
  * Where the wallet's serialized state, secret keys included, is kept.
@@ -29,7 +32,7 @@ const OPEN_TIMEOUT_MS = 5000;
 const RECORD_KEY = "wallet";
 
 /** Run one request in its own transaction and resolve with its result */
-const requestIn =
+const requestWith =
   (db: IDBDatabase, mode: IDBTransactionMode) =>
   <T>(run: (store: IDBObjectStore) => IDBRequest<T>) =>
     new Promise<T>((resolve, reject) => {
@@ -121,12 +124,20 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         // The task's own failure is the caller's; a lock that cannot be taken
         // (a sandboxed origin's SecurityError) must not cost the save
         if (hasStarted) throw error;
+        // The name only: nothing the lock refused with is worth the risk
+        const refusal = error instanceof Error ? error.name : typeof error;
+        log.error(
+          new Error(`Wallet lock unavailable, saving unguarded: ${refusal}`),
+          {
+            report: true,
+          }
+        );
         return task();
       }
     },
     async read() {
       const db = await open();
-      const value = await requestIn(
+      const value = await requestWith(
         db,
         "readonly"
       )<SerializedWalletState | undefined>((store) => store.get(RECORD_KEY));
@@ -134,7 +145,10 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     },
     async write(state) {
       const db = await open();
-      await requestIn(db, "readwrite")((store) => store.put(state, RECORD_KEY));
+      await requestWith(
+        db,
+        "readwrite"
+      )((store) => store.put(state, RECORD_KEY));
     },
   };
 };

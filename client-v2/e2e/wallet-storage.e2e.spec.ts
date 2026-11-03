@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
-import { expect, LONG, seedWorkspace, test } from "./fixtures";
+import { expect, LONG, seedLocalWallet, seedWorkspace, test } from "./fixtures";
 
 /**
  * The built-in wallet's storage (`utils/wallet/wallet-storage.ts`): a wallet
@@ -43,13 +43,12 @@ test("wallet-storage: A wallet in localStorage moves to IndexedDB", async ({
   const kp = Array.from(keypair.secretKey);
   const address = keypair.publicKey.toBase58();
 
-  // The wallet as the previous version left it, on the first load only:
-  // the reload below must find what the migration wrote, not a fresh seed
-  await page.addInitScript((wallet) => {
-    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
-    sessionStorage.setItem("e2e-wallet-seeded", "1");
-    localStorage.setItem("wallet", wallet);
-  }, JSON.stringify({ state: "pg", accounts: [{ kp, name: "Wallet 1" }], currentIndex: 0 }));
+  // The wallet as the previous version left it
+  await seedLocalWallet(page, {
+    state: "pg",
+    accounts: [{ kp, name: "Wallet 1" }],
+    currentIndex: 0,
+  });
 
   await seedWorkspace(page);
 
@@ -79,11 +78,7 @@ test("wallet-storage: A legacy single-key wallet moves to IndexedDB", async ({
   const address = keypair.publicKey.toBase58();
 
   // The pre-accounts format, which `migrate` upgrades before the move
-  await page.addInitScript((wallet) => {
-    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
-    sessionStorage.setItem("e2e-wallet-seeded", "1");
-    localStorage.setItem("wallet", wallet);
-  }, JSON.stringify({ setupCompleted: true, connected: true, sk }));
+  await seedLocalWallet(page, { setupCompleted: true, connected: true, sk });
 
   await seedWorkspace(page);
 
