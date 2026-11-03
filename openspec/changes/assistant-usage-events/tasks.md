@@ -19,7 +19,7 @@ Both tasks are HOO-2078, one PR each, in this order.
 
 ## 2. The events
 
-- [ ] 2.1 Declare `assistant_turn_sent`, `assistant_turn_answered`,
+- [x] 2.1 Declare `assistant_turn_sent`, `assistant_turn_answered`,
       `assistant_turn_failed` and `assistant_turn_capped` in
       `widgets/assistant/model/telemetry.ts` with a TSDoc comment each, and
       send them from `use-turn.ts` around the provider's send as

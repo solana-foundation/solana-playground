@@ -2,7 +2,10 @@ import type { ModelProvider } from "@/shared/lib/ai";
 import type { NoParams } from "@/shared/lib/telemetry";
 import { createTracker } from "@/shared/lib/telemetry";
 
-import type { Effort } from "../../../views/sidebar/assistant/model";
+import type {
+  Effort,
+  TurnFailureReason,
+} from "../../../views/sidebar/assistant/model";
 
 export type AssistantEvents = {
   /** The user picked a model; `via` says whether from the composer's menu or the Connect dialog, where re-picking the connection it opened over is not a pick. */
@@ -11,6 +14,18 @@ export type AssistantEvents = {
   assistant_effort_changed: { effort: Effort };
   /** The Connect dialog opened; `via` says whether from the head's More, the model chip, a send with nothing connected or the Get set up checklist. */
   assistant_connect_opened: { via: "menu" | "model" | "send" | "setup" };
+  /** A prompt was handed to the backend, once per user send: a busy message sent again is the same turn. */
+  assistant_turn_sent: { provider: ModelProvider };
+  /** The backend's answer completed. */
+  assistant_turn_answered: { provider: ModelProvider };
+  /** The turn ended without an answer and was not stopped; `reason` is the `TurnFailure`'s, or `other` for a failure raised on this side, and `status` the HTTP status when the backend answered with one. */
+  assistant_turn_failed: {
+    provider: ModelProvider;
+    reason: Exclude<TurnFailureReason, "capped"> | "other";
+    status?: number;
+  };
+  /** The default backend refused the turn under its cost gate; the cap's kind and the tier are on `agent_refused`. */
+  assistant_turn_capped: { provider: ModelProvider };
   /** The user stopped a turn in progress with the stop button. */
   assistant_turn_stopped: NoParams;
   /** The default backend's probe failed and the default was treated as absent; `reason` says whether the request, the status (not a 404, which is a deployment without the agent) or the body. */
