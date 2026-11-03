@@ -94,6 +94,7 @@ describe("utils/wallet/wallet", () => {
         publicKey.equals(keypair.publicKey) ? kp : undefined
       );
       const secretKeyFor = vi.spyOn(provider, "secretKeyFor");
+      const walletFor = vi.spyOn(provider, "walletFor");
       PgWallet.setSignerProvider(provider);
       const wallet = PgWallet.create({ kp, name: "Wallet 1" });
       // `derivable` defines `current` only once the wallet initializes
@@ -101,7 +102,7 @@ describe("utils/wallet/wallet", () => {
         get: (): Wallet => wallet,
         configurable: true,
       });
-      return { wallet, secretKeyFor };
+      return { wallet, secretKeyFor, walletFor };
     };
 
     afterEach(() => {
@@ -109,8 +110,12 @@ describe("utils/wallet/wallet", () => {
     });
 
     it("create hands the provider's keypair to pg.wallet.keypair", () => {
-      const { wallet } = connect();
+      const { wallet, walletFor } = connect();
       expect(wallet.isPg && Array.from(wallet.keypair.secretKey)).toEqual(kp);
+      expect(walletFor).toHaveBeenCalledWith({
+        name: "Wallet 1",
+        publicKey: keypair.publicKey,
+      });
     });
 
     it("getKeypairBytes gives the WASM CLIs the current account's key", () => {

@@ -101,6 +101,12 @@ through the logger with `report: true`.
 - **THEN** the wallet loads from IndexedDB
 - **AND** one error is logged under the wallet's logger namespace
 
+#### Scenario: The cross-tab lock cannot be taken
+
+- **WHEN** the browser refuses the wallet's Web Lock
+- **THEN** the move and the saves run without it
+- **AND** one error is logged for the page, however many saves follow
+
 #### Scenario: A save to IndexedDB fails
 
 - **WHEN** the wallet changes and writing it to IndexedDB fails
