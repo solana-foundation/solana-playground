@@ -68,12 +68,11 @@ const send = (entry) => {
  */
 export const createServerLogger = (ns) => {
   /**
-   * @param {ServerLevel} level
    * @param {ServerLogOptions | undefined} options
-   * @param {Pick<ServerLogEntry, "message" | "error">} fields
-   * @returns {ServerLogEntry}
+   * @param {ServerLevel} level
+   * @returns {(fields: Pick<ServerLogEntry, "message" | "error">) => ServerLogEntry}
    */
-  const entry = (level, options, fields) => ({
+  const entryWith = (options, level) => (fields) => ({
     ns: options?.ns ?? ns,
     level,
     ...fields,
@@ -81,17 +80,19 @@ export const createServerLogger = (ns) => {
     report: (level === "error" || level === "warn") && options?.report === true,
   });
 
+  /* eslint-disable layers/curry-order -- `options` last is the signature the client-v2-logging spec fixes, the browser logger's */
   return {
     /** @param {unknown} error @param {ServerLogOptions} [options] */
     error: (error, options) =>
-      send(entry("error", options, { error: toError(error) })),
+      send(entryWith(options, "error")({ error: toError(error) })),
     /** @param {string} message @param {ServerLogOptions} [options] */
-    warn: (message, options) => send(entry("warn", options, { message })),
+    warn: (message, options) => send(entryWith(options, "warn")({ message })),
     /** @param {string} message @param {Omit<ServerLogOptions, "report">} [options] */
-    info: (message, options) => send(entry("info", options, { message })),
+    info: (message, options) => send(entryWith(options, "info")({ message })),
     /** @param {string} message @param {Omit<ServerLogOptions, "report">} [options] */
-    debug: (message, options) => send(entry("debug", options, { message })),
+    debug: (message, options) => send(entryWith(options, "debug")({ message })),
   };
+  /* eslint-enable layers/curry-order */
 };
 
 /** @type {Record<ServerLevel, "error" | "warning" | "info" | "debug">} */

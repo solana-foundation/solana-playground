@@ -164,6 +164,7 @@ describe("createServerLogger", () => {
       { captureException: [], captureMessage: [] },
     ],
   ]) {
+    // eslint-disable-next-line jest/valid-title -- a table test: the title is its row's label
     test(label, () => {
       const Sentry = { captureException: mock.fn(), captureMessage: mock.fn() };
       initServerLogger({ providers: [sentryServerProvider(Sentry)] });

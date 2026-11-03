@@ -115,7 +115,7 @@ describe("withObservability", () => {
     const print = vi.spyOn(console, "error").mockImplementation(() => {});
     const { withObservability } = await load();
     const { createServerLogger } = await import(
-      "../../../shared/lib/logger/server.mjs"
+      "@/shared/lib/logger/server.mjs"
     );
     const error = new Error("insert failed");
 

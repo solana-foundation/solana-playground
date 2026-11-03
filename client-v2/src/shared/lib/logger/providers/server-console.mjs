@@ -12,11 +12,10 @@ const METHOD = {
  * An error as a plain object: its own properties (`pg` adds `constraint`,
  * `detail` and more), `message`, `code`, `stack`, and an Error cause the same way, once each.
  *
- * @param {Error} error
- * @param {Set<unknown>} [seen]
- * @returns {Record<string, unknown>}
+ * @param {Set<unknown>} seen the errors already flattened, so a cause cycle ends
+ * @returns {(error: Error) => Record<string, unknown>}
  */
-const fieldsOf = (error, seen = new Set([error])) => {
+const fieldsWithin = (seen) => (error) => {
   const { cause } = error;
   const nested = cause instanceof Error && !seen.has(cause);
   if (nested) seen.add(cause);
@@ -25,9 +24,12 @@ const fieldsOf = (error, seen = new Set([error])) => {
     message: error.message,
     code: /** @type {{ code?: unknown }} */ (error).code,
     stack: error.stack,
-    cause: nested ? fieldsOf(cause, seen) : cause,
+    cause: nested ? fieldsWithin(seen)(cause) : cause,
   };
 };
+
+/** @param {Error} error */
+const fieldsOf = (error) => fieldsWithin(new Set([error]))(error);
 
 /**
  * Prints every entry with the matching `console` method into Vercel's function
