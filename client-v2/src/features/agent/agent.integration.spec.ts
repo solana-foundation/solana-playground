@@ -1414,7 +1414,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     /** One turn whose upstream answers `answer`, dialled with `key` */
-    const failing = async (answer: Answer, key = KEY) => {
+    const failingWith = (key: string) => async (answer: Answer) => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
       const fetched = network(answer);
@@ -1424,6 +1424,7 @@ describe("POST /api/agent spend gate", () => {
       expect(sent(fetched).key).toBe(`Bearer ${key}`);
       return { res, logged: consoleText(error, warn) };
     };
+    const failing = failingWith(KEY);
 
     /** An upstream that masks the key's middle when it quotes it */
     const masked = (key: string) => `${key.slice(0, 12)}****${key.slice(-10)}`;
@@ -1493,10 +1494,11 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("keeps the newcomer key out of a newcomer's failed turn", async () => {
+      // eslint-disable-next-line unicorn/no-null -- the `users` row: a newcomer's `github_created_at` is SQL `NULL`
       db.state.users.set("user-1", { githubCreatedAt: null, token: "gho_1" });
-      const { res, logged } = await failing(() => {
+      const { res, logged } = await failingWith(NEWCOMER_KEY)(() => {
         throw new Error(`refused Bearer ${NEWCOMER_KEY}`);
-      }, NEWCOMER_KEY);
+      });
 
       expect(res.statusCode).toBe(502);
       expect(leak(res.body())).toBeUndefined();
@@ -1533,18 +1535,20 @@ describe("POST /api/agent spend gate", () => {
 
   describe("Every turn that reaches the ledger is recorded", () => {
     /** The one turn recorded, for a turn by user-1 at the established tier */
-    const recorded = (
-      outcome: string,
-      charged: number,
-      tokens: [number, number] | null = null
-    ) => [
+    const recorded = (turn: {
+      outcome: string;
+      charged: number;
+      tokens?: [number, number];
+    }) => [
       {
         userId: "user-1",
         tier: "established",
-        outcome,
-        promptTokens: tokens?.[0] ?? null,
-        completionTokens: tokens?.[1] ?? null,
-        charged,
+        outcome: turn.outcome,
+        /* eslint-disable unicorn/no-null -- the `agent_turns` row: no usage is SQL `NULL` */
+        promptTokens: turn.tokens?.[0] ?? null,
+        completionTokens: turn.tokens?.[1] ?? null,
+        /* eslint-enable unicorn/no-null */
+        charged: turn.charged,
       },
     ];
 
@@ -1554,16 +1558,23 @@ describe("POST /api/agent spend gate", () => {
       await postJson(handler, TURN);
 
       expect(db.state.turns).toEqual(
-        recorded("completed", USAGE_COST, [1000, 100])
+        recorded({
+          outcome: "completed",
+          charged: USAGE_COST,
+          tokens: [1000, 100],
+        })
       );
     });
 
     it("records a turn that ends without usage with no tokens", async () => {
+      // eslint-disable-next-line unicorn/no-null -- `streamed(null)` is an upstream that sends no usage frame
       network(() => streamed(null));
 
       await postJson(handler, TURN);
 
-      expect(db.state.turns).toEqual(recorded("unfinished", RESERVED));
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "unfinished", charged: RESERVED })
+      );
     });
 
     it("records a turn the upstream refuses, charged nothing", async () => {
@@ -1571,7 +1582,9 @@ describe("POST /api/agent spend gate", () => {
 
       await postJson(handler, TURN);
 
-      expect(db.state.turns).toEqual(recorded("refused", 0));
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "refused", charged: 0 })
+      );
     });
 
     it("records a turn the caller abandons before the upstream is dialled", async () => {
@@ -1585,7 +1598,9 @@ describe("POST /api/agent spend gate", () => {
 
       await handler(makeReq(TURN), res as never);
 
-      expect(db.state.turns).toEqual(recorded("abandoned", 0));
+      expect(db.state.turns).toEqual(
+        recorded({ outcome: "abandoned", charged: 0 })
+      );
     });
 
     it("records a completed turn whose usage cannot be priced at its reservation", async () => {
@@ -1599,6 +1614,7 @@ describe("POST /api/agent spend gate", () => {
           userId: "user-1",
           tier: "established",
           outcome: "completed",
+          // eslint-disable-next-line unicorn/no-null -- the `agent_turns` row: a count the upstream left out is SQL `NULL`
           promptTokens: null,
           completionTokens: 5,
           charged: RESERVED,

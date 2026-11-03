@@ -200,6 +200,7 @@ export class PgChatSync {
         `push ${threadId}: larger than the ${MAX_BATCH_BYTES}-byte batch cap, kept on this device only: ${unreported.join(
           ", "
         )}`,
+        // eslint-disable-next-line unicorn/no-null -- no cause, as every other `report` here says it
         null
       );
     }
@@ -635,12 +636,15 @@ if (import.meta.vitest) {
          * 200 items, the most a device keeps, each of a three-byte
          * character: about 12 MB on the wire against a 2 MB cap
          */
-        const longReply = (n: number, chars = 20_000): ChatItem => ({
-          kind: "assistant",
-          id: idOf(`long:${n}`),
-          createdAt: new Date(n * 1000).toISOString(),
-          text: "語".repeat(chars),
-        });
+        const longReplyOf =
+          (chars: number) =>
+          (n: number): ChatItem => ({
+            kind: "assistant",
+            id: idOf(`long:${n}`),
+            createdAt: new Date(n * 1000).toISOString(),
+            text: "語".repeat(chars),
+          });
+        const longReply = longReplyOf(20_000);
         const longThread = () =>
           Array.from({ length: 200 }, (_, n) => longReply(n));
 
@@ -731,7 +735,7 @@ if (import.meta.vitest) {
             Promise.resolve({ ok: true, json: async () => ({ written: 1 }) })
           );
           await signedIn();
-          const huge = longReply(1, 1_000_000);
+          const huge = longReplyOf(1_000_000)(1);
           await PgChatStorage.write(threadId, [item(0), huge, item(2)]);
 
           // Not `pushed`: a sign-out drops what the server holds, and the

@@ -145,6 +145,7 @@ export const BaseThreadItem = ({
     case "tool":
       // A stored call is for the model's replay; any marker the tool drew is
       // an item of its own
+      // eslint-disable-next-line unicorn/no-null -- a component that renders nothing
       if (isToolCallRecord(item)) return null;
       return (
         <Marker>

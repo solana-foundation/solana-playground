@@ -202,7 +202,8 @@ export const stubAiStatus = (
     json(
       r,
       hosted === "own"
-        ? { available: false, key: "own", reason: null, model: null }
+        ? // eslint-disable-next-line unicorn/no-null -- the `GET /api/ai/status` body: `null` is on the wire
+          { available: false, key: "own", reason: null, model: null }
         : {
             available: false,
             key: "hosted",

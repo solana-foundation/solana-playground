@@ -3,6 +3,7 @@ import { beforeEach, describe, it } from "node:test";
 
 import {
   batchPush,
+  batchPushWith,
   DELETED_REASON,
   MAX_BATCH_BYTES,
   MAX_BATCH_ITEMS,
@@ -307,12 +308,12 @@ describe("/api/conversations", () => {
       // Room for exactly two items: the empty body, two items and one comma
       const two = weigh(bodyOf(items.slice(0, 2)));
 
-      const exact = batchPush(envelope, items, { maxBytes: two }).bodies;
+      const exact = batchPushWith({ maxBytes: two })(envelope, items).bodies;
       assert.equal(exact.length, 2);
       exact.forEach((b) => assert.equal(weigh(b), two));
 
       assert.equal(
-        batchPush(envelope, items, { maxBytes: two - 1 }).bodies.length,
+        batchPushWith({ maxBytes: two - 1 })(envelope, items).bodies.length,
         4
       );
     });
@@ -321,14 +322,17 @@ describe("/api/conversations", () => {
       const [item] = longThread();
       const alone = weigh(bodyOf([item]));
 
-      assert.deepEqual(batchPush(envelope, [item], { maxBytes: alone }), {
+      assert.deepEqual(batchPushWith({ maxBytes: alone })(envelope, [item]), {
         bodies: [bodyOf([item])],
         oversized: [],
       });
-      assert.deepEqual(batchPush(envelope, [item], { maxBytes: alone - 1 }), {
-        bodies: [bodyOf([])],
-        oversized: [item.id],
-      });
+      assert.deepEqual(
+        batchPushWith({ maxBytes: alone - 1 })(envelope, [item]),
+        {
+          bodies: [bodyOf([])],
+          oversized: [item.id],
+        }
+      );
     });
 
     it("lets a body of exactly the cap through the server", async () => {

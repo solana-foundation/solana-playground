@@ -16,16 +16,17 @@ const IN_CONTEXT = ["src/lib.rs", "src/a.rs", "src/b.rs"];
 /** The real normaliser is the entity's; a leading `/` is all these cases use */
 const toProjectPath = (path: string) => path.replace(/^\/+/, "");
 
-const bridge = (
-  content: string | null,
-  context: readonly string[] = IN_CONTEXT
-): PlaygroundBridge =>
-  ({
-    readFile: () => content,
-    applyPatch: vi.fn(async () => {}),
-    listContextFiles: () => context,
-    toProjectPath,
-  } as unknown as PlaygroundBridge);
+/** A bridge whose context is `context`, every file of it holding `content` */
+const bridgeIn =
+  (context: readonly string[]) =>
+  (content: string | null): PlaygroundBridge =>
+    ({
+      readFile: () => content,
+      applyPatch: vi.fn(async () => {}),
+      listContextFiles: () => context,
+      toProjectPath,
+    } as unknown as PlaygroundBridge);
+const bridge = bridgeIn(IN_CONTEXT);
 
 const writeFile = (b: PlaygroundBridge) =>
   requireFor("the write_file tool")(
@@ -127,7 +128,7 @@ describe("write_file", () => {
 
 describe("write_file outside the context", () => {
   it("does not tell the model a guess matches a file it may not read", async () => {
-    const pending = writeFile(bridge("secret", [])).run({
+    const pending = writeFile(bridgeIn([])("secret")).run({
       path: "secret/other.rs",
       content: "secret",
     });
@@ -157,10 +158,11 @@ describe("write_file outside the context", () => {
 
   it("refuses a path that leaves the project", async () => {
     const b = {
+      // eslint-disable-next-line unicorn/no-null -- `PlaygroundBridge.readFile` gives `null` for a missing file
       readFile: () => null,
       applyPatch: vi.fn(async () => {}),
       listContextFiles: () => IN_CONTEXT,
-      toProjectPath: () => null,
+      toProjectPath: () => undefined,
     } as unknown as PlaygroundBridge;
 
     expect(
@@ -176,15 +178,17 @@ describe("read_file", () => {
     "secret/other.rs": "pub fn secret() {}",
   };
   const contextBridge = {
+    // eslint-disable-next-line unicorn/no-null -- `PlaygroundBridge.readFile` gives `null` for a missing file
     readFile: (path: string) => files[path] ?? null,
     listContextFiles: () => ["src/lib.rs"],
     toProjectPath: (path: string) =>
-      path.startsWith("..") ? null : path.replace(/^\.?\/+/, ""),
+      path.startsWith("..") ? undefined : path.replace(/^\.?\/+/, ""),
   } as unknown as PlaygroundBridge;
-  const readFile = (path: string) =>
-    createTools(contextBridge)
-      .find((tool) => tool.name === "read_file")!
-      .run({ path });
+  const readFile = (path: string) => {
+    const tool = createTools(contextBridge).find((t) => t.name === "read_file");
+    if (!tool) throw new Error("no read_file tool");
+    return tool.run({ path });
+  };
 
   it("reads a file in the context", async () => {
     expect(await readFile("src/lib.rs")).toBe("pub fn in_context() {}");

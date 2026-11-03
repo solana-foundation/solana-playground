@@ -12,15 +12,15 @@ export type AiOffReason = "no-key" | "signed-out" | "unreachable";
 
 /** What decides the off row: the connection, the deployment's answer and the session */
 export interface AiOffInput {
-  /** The connected backend's provider, or `null` with nothing connected */
-  connected: ModelProvider | null;
+  /** The connected backend's provider; absent with nothing connected */
+  connected?: ModelProvider;
   backend: DefaultBackend;
-  /** Whether someone is signed in; `null` until the page's session read has answered */
-  signedIn: boolean | null;
+  /** Whether someone is signed in; `undefined` until the page's session read has answered */
+  signedIn: boolean | undefined;
 }
 
 /**
- * Why the assistant is off for this user, or `null` while it can answer or
+ * Why the assistant is off for this user, or `undefined` while it can answer or
  * that is not known yet. A connected key-based backend is the user's own key
  * and always answers here; a connected default still needs a session.
  */
@@ -28,18 +28,18 @@ export const aiOff = ({
   connected,
   backend,
   signedIn,
-}: AiOffInput): AiOffReason | null => {
-  if (connected !== null && !isDefaultBackend(connected)) return null;
+}: AiOffInput): AiOffReason | undefined => {
+  if (connected !== undefined && !isDefaultBackend(connected)) return;
   switch (backend.state) {
     case "checking":
-      return null;
+      return;
     case "absent":
       return "no-key";
     case "unreachable":
       return "unreachable";
     case "present":
-      if (signedIn === null) return null;
-      return signedIn ? null : "signed-out";
+      if (signedIn === undefined) return;
+      return signedIn ? undefined : "signed-out";
     default: {
       const unknown: never = backend;
       return unknown;
@@ -54,15 +54,12 @@ if (import.meta.vitest) {
     const present: DefaultBackend = { state: "present", model: "m" };
 
     it("is off for no key, signed out or unreachable", () => {
-      expect(
-        aiOff({ connected: null, backend: { state: "absent" }, signedIn: true })
-      ).toBe("no-key");
-      expect(
-        aiOff({ connected: null, backend: present, signedIn: false })
-      ).toBe("signed-out");
+      expect(aiOff({ backend: { state: "absent" }, signedIn: true })).toBe(
+        "no-key"
+      );
+      expect(aiOff({ backend: present, signedIn: false })).toBe("signed-out");
       expect(
         aiOff({
-          connected: null,
           backend: { state: "unreachable" },
           signedIn: true,
         })
@@ -70,22 +67,17 @@ if (import.meta.vitest) {
     });
 
     it("is on for a signed-in user with a hosted model", () => {
-      expect(
-        aiOff({ connected: null, backend: present, signedIn: true })
-      ).toBeNull();
+      expect(aiOff({ backend: present, signedIn: true })).toBeUndefined();
     });
 
     it("says nothing while the deployment or the session is still being read", () => {
       expect(
         aiOff({
-          connected: null,
           backend: { state: "checking" },
           signedIn: false,
         })
-      ).toBeNull();
-      expect(
-        aiOff({ connected: null, backend: present, signedIn: null })
-      ).toBeNull();
+      ).toBeUndefined();
+      expect(aiOff({ backend: present, signedIn: undefined })).toBeUndefined();
     });
 
     it("is on with a key of one's own, whatever the deployment says", () => {
@@ -95,7 +87,7 @@ if (import.meta.vitest) {
           backend: { state: "absent" },
           signedIn: false,
         })
-      ).toBeNull();
+      ).toBeUndefined();
     });
 
     it("is off for a connected default once its user signs out", () => {

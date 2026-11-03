@@ -44,7 +44,7 @@ const log = createLogger("assistant:composer");
 const sent = (what: string) => `Sent with this message: ${what}`;
 
 /** The workspace a context choice belongs to, by its stable id */
-const workspace = () => PgExplorer.currentWorkspaceId ?? null;
+const workspace = () => PgExplorer.currentWorkspaceId;
 
 /**
  * What the assistant reads each turn, as chips over the input: the lesson
@@ -132,12 +132,12 @@ const PLACEHOLDERS: Record<TurnPhase, string> = {
 };
 
 /**
- * Whether someone is signed in, or `null` until the page's session read has
+ * Whether someone is signed in, or `undefined` until the page's session read has
  * answered: a signed-in user must not see "Sign in" flash on load. It waits
  * for the page's read and never starts one (`afterFirstRead`, not
  * `whenRead`).
  */
-const useSignedIn = (): boolean | null => {
+const useSignedIn = (): boolean | undefined => {
   const [read, setRead] = useState(false);
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => {
@@ -151,7 +151,7 @@ const useSignedIn = (): boolean | null => {
       session.dispose();
     };
   }, []);
-  return read ? !!PgSession.get() : null;
+  return read ? !!PgSession.get() : undefined;
 };
 
 /**
@@ -210,18 +210,18 @@ export function AssistantComposer({
   const shown = modelShown(connection, defaultBackend);
   const signedIn = useSignedIn();
   const off = useAiOff({
-    connected: connection?.id ?? null,
+    connected: connection?.id,
     backend: defaultBackend,
     signedIn,
   });
-  const [signInError, setSignInError] = useState<string | null>(null);
+  const [signInError, setSignInError] = useState<string>();
   const [retrying, setRetrying] = useState(false);
   // A failed sign-in speaks for the row it was pressed in, never a later one
-  useEffect(() => setSignInError(null), [off]);
+  useEffect(() => setSignInError(undefined), [off]);
 
   /** The off row's sign-in: Connect a model's, which keeps the open project */
   const signIn = () => {
-    setSignInError(null);
+    setSignInError(undefined);
     PgSession.signIn({ from: "assistant" }).catch((error: unknown) => {
       if (isSignInFailure(error)) {
         // Not reported: a blocked popup or a cancelled sign-in is expected,
@@ -378,7 +378,7 @@ export function AssistantComposer({
         focusPicked={focusPicked}
         // While no model can answer this user, Send waits with the reason
         // and the off row above names the way in
-        sendBlocked={off ? AI_OFF_SEND_BLOCKED[off] : null}
+        sendBlocked={off ? AI_OFF_SEND_BLOCKED[off] : undefined}
       />
     </div>
   );

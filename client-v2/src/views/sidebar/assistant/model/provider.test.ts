@@ -457,6 +457,7 @@ describe("the assistant's provider", () => {
       expect(toolMessages(sent[0].body)).toEqual([
         {
           role: "assistant",
+          // eslint-disable-next-line unicorn/no-null -- the OpenAI-compatible body: a call-only message has `content: null`
           content: null,
           tool_calls: [
             {

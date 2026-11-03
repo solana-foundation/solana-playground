@@ -165,42 +165,45 @@ if (import.meta.vitest) {
       });
 
       const id = (n: number) => `00000000-0000-4000-8000-00000000000${n}`;
-      const said = (
-        n: number,
-        kind: "user" | "assistant",
-        text: string
-      ): ChatItem => ({
-        id: id(n),
+      const said = (item: {
+        n: number;
+        kind: "user" | "assistant";
+        text: string;
+      }): ChatItem => ({
+        id: id(item.n),
         createdAt: base.createdAt,
-        kind,
-        text,
+        kind: item.kind,
+        text: item.text,
       });
-      const record = (
-        n: number,
-        name: string,
-        output: string,
-        failed?: true
-      ): ChatItem => ({
-        id: id(n),
-        createdAt: base.createdAt,
-        kind: "tool",
-        label: name,
-        call: failed
-          ? { name, input: { path: "src/lib.rs" }, output, failed }
-          : { name, input: { path: "src/lib.rs" }, output },
-      });
+      const record = (call: {
+        n: number;
+        name: string;
+        output: string;
+        failed?: true;
+      }): ChatItem => {
+        const { n, name, output, failed } = call;
+        return {
+          id: id(n),
+          createdAt: base.createdAt,
+          kind: "tool",
+          label: name,
+          call: failed
+            ? { name, input: { path: "src/lib.rs" }, output, failed }
+            : { name, input: { path: "src/lib.rs" }, output },
+        };
+      };
 
       it("replays a stored call as a tool call and its result, in place", () => {
         const items: ChatItem[] = [
-          said(1, "user", "read lib.rs"),
+          said({ n: 1, kind: "user", text: "read lib.rs" }),
           {
             id: id(2),
             createdAt: base.createdAt,
             kind: "tool",
             label: "read src/lib.rs",
           },
-          record(3, "read_file", "fn main() {}"),
-          said(4, "assistant", "It has one function."),
+          record({ n: 3, name: "read_file", output: "fn main() {}" }),
+          said({ n: 4, kind: "assistant", text: "It has one function." }),
         ];
 
         expect(toReplayMessages(items)).toEqual([
@@ -233,8 +236,13 @@ if (import.meta.vitest) {
 
       it("replays a failed call as an error result", () => {
         const [, , result] = toReplayMessages([
-          said(0, "user", "read it"),
-          record(1, "read_file", "Not found", true),
+          said({ n: 0, kind: "user", text: "read it" }),
+          record({
+            n: 1,
+            name: "read_file",
+            output: "Not found",
+            failed: true,
+          }),
         ]);
 
         expect(result).toEqual({
@@ -252,9 +260,9 @@ if (import.meta.vitest) {
 
       it("numbers two calls in order, each result naming its own call", () => {
         const ids = toReplayMessages([
-          said(0, "user", "look around"),
-          record(1, "list_files", "a"),
-          record(2, "read_file", "b"),
+          said({ n: 0, kind: "user", text: "look around" }),
+          record({ n: 1, name: "list_files", output: "a" }),
+          record({ n: 2, name: "read_file", output: "b" }),
         ])
           .slice(1)
           .map(
@@ -266,9 +274,15 @@ if (import.meta.vitest) {
       });
 
       it("sends only the newest calls that fit its budget", () => {
-        const items = [said(0, "user", "read them all")].concat(
+        const items = [
+          said({ n: 0, kind: "user", text: "read them all" }),
+        ].concat(
           Array.from({ length: 30 }, (_, n) =>
-            record(n + 1, "read_file", `${n + 1}`.padEnd(4_000, "x"))
+            record({
+              n: n + 1,
+              name: "read_file",
+              output: `${n + 1}`.padEnd(4_000, "x"),
+            })
           )
         );
 
@@ -295,10 +309,10 @@ if (import.meta.vitest) {
 
       it("opens on the first user message, as Anthropic requires", () => {
         const messages = toReplayMessages([
-          said(1, "assistant", "the end of an older answer"),
-          record(2, "read_file", "fn main() {}"),
-          said(3, "user", "and now?"),
-          said(4, "assistant", "Now this."),
+          said({ n: 1, kind: "assistant", text: "the end of an older answer" }),
+          record({ n: 2, name: "read_file", output: "fn main() {}" }),
+          said({ n: 3, kind: "user", text: "and now?" }),
+          said({ n: 4, kind: "assistant", text: "Now this." }),
         ]);
 
         expect(messages).toEqual([

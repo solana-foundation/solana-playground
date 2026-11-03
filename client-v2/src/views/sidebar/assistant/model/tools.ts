@@ -56,7 +56,7 @@ export const createTools = (
     const path = bridge.toProjectPath(asked);
     // The context is the user's decision (HOO-2424): a file they did not open
     // or add stays on this side, whatever the model asks
-    if (path === null || !bridge.listContextFiles().includes(path)) {
+    if (path === undefined || !bridge.listContextFiles().includes(path)) {
       PgAssistant.addToolCall(`was refused ${path ?? asked}: not in context`);
       return notInContext(path ?? asked);
     }
@@ -77,7 +77,7 @@ export const createTools = (
   bindTool("write_file", async (input) => {
     const asked = str(input, "path");
     const path = bridge.toProjectPath(asked);
-    if (path === null) {
+    if (path === undefined) {
       return `Could not write ${asked}: it is outside the project.`;
     }
     const content = str(input, "content");

@@ -9,7 +9,7 @@ import {
 } from "../../../../utils";
 import { PgLesson } from "../../../flow/lessons";
 import {
-  contextPaths,
+  contextPathsWith,
   normalizeProjectPath,
   PgAssistantContext,
 } from "@/entities/assistant-context";
@@ -74,9 +74,9 @@ export interface PlaygroundBridge {
   listContextFiles(): string[];
   /**
    * A path the model wrote (`/src/lib.rs`, `./src/lib.rs`) as `src/lib.rs`,
-   * or `null` when it names nothing in the project
+   * or `undefined` when it names nothing in the project
    */
-  toProjectPath(path: string): string | null;
+  toProjectPath(path: string): string | undefined;
   /**
    * Any file of the project, context or not: for the approval card and the
    * tools' own checks. What the model may read goes through `read_file`,
@@ -152,10 +152,9 @@ export const realBridge: PlaygroundBridge = {
 
   listContextFiles() {
     const files = new Set(this.listFiles());
-    return contextPaths(
+    return contextPathsWith((path) => files.has(path))(
       this.listOpenFiles(),
-      PgAssistantContext.choice(PgExplorer.currentWorkspaceId ?? null),
-      (path) => files.has(path)
+      PgAssistantContext.choice(PgExplorer.currentWorkspaceId)
     );
   },
 
@@ -164,7 +163,7 @@ export const realBridge: PlaygroundBridge = {
     // relative once its workspace prefix goes; anything else is read as
     // relative to the project root
     const name = PgExplorer.currentWorkspaceName;
-    const prefix = name ? `/${name}/` : null;
+    const prefix = name ? `/${name}/` : undefined;
     const trimmed = path.trim();
     return normalizeProjectPath(
       prefix && trimmed.startsWith(prefix)
@@ -234,6 +233,6 @@ export const realBridge: PlaygroundBridge = {
 PgExplorer.onDidDeleteItem((fullPath) => {
   const path = realBridge.toProjectPath(fullPath);
   if (path) {
-    PgAssistantContext.forget(PgExplorer.currentWorkspaceId ?? null, path);
+    PgAssistantContext.forget(PgExplorer.currentWorkspaceId, path);
   }
 });

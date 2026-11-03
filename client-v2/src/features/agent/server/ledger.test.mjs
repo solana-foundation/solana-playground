@@ -45,6 +45,7 @@ describe("ledger arithmetic", () => {
 
   // The upstream's usage is not ours: a count that cannot be priced charges
   // the reservation, never NaN, a negative or an overflow
+  // eslint-disable-next-line unicorn/no-null -- a JSON usage frame can carry `null`
   for (const bad of ["x", -1, 2.5, 2 ** 31, Number.NaN, null]) {
     it(`charges the reservation for a completed turn reporting ${String(
       bad
@@ -111,16 +112,20 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
     return rows;
   };
 
-  /** A settle of a newcomer's turn that ended `unfinished`, unless told otherwise */
-  const close = (userId, reserved, charge, turn = {}, run = query) =>
+  /**
+   * A settle through `run` of a newcomer's turn that ended `unfinished`,
+   * unless `turn` says otherwise
+   */
+  const closeOn = (run) => (turn) =>
     settle(run, {
-      userId,
+      userId: turn.userId,
       day: DAY,
-      reserved,
-      charge,
+      reserved: turn.reserved,
+      charge: turn.charge,
       tier: turn.tier ?? "newcomer",
       end: turn.end ?? { kind: "unfinished" },
     });
+  const close = closeOn(query);
 
   /** The count of capped turns on `userId`'s day row */
   const capped = async (userId) => {
@@ -215,13 +220,16 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("settles a reservation to its charge", async () => {
     await take(NEW, 5000);
-    await close(NEW, 5000, 1200);
+    await close({ userId: NEW, reserved: 5000, charge: 1200 });
     assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
   });
 
   it("records the settled turn with its tokens and charge", async () => {
     await take(OLD, 5000);
-    await close(OLD, 5000, 1200, {
+    await close({
+      userId: OLD,
+      reserved: 5000,
+      charge: 1200,
       tier: "established",
       end: {
         kind: "completed",
@@ -243,21 +251,28 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("records an unfinished turn with no tokens, charged its reservation", async () => {
     await take(NEW, 5000);
-    await close(NEW, 5000, 5000);
+    await close({ userId: NEW, reserved: 5000, charge: 5000 });
     assert.deepEqual(await turns(NEW), [
       {
         day: DAY,
         tier: "newcomer",
         outcome: "unfinished",
+        /* eslint-disable unicorn/no-null -- `agent_turn` columns: no usage is SQL `NULL` */
         prompt_tokens: null,
         completion_tokens: null,
+        /* eslint-enable unicorn/no-null */
         charged: 5000,
       },
     ]);
   });
 
   it("records the turn even when the day has no row to settle", async () => {
-    await close(NEW, 10, 0, { end: { kind: "refused" } });
+    await close({
+      userId: NEW,
+      reserved: 10,
+      charge: 0,
+      end: { kind: "refused" },
+    });
     assert.equal((await turns(NEW)).length, 1);
     assert.equal(await row(NEW), undefined);
   });
@@ -269,7 +284,10 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
       bad
     )} tokens`, async () => {
       await take(NEW, 5000);
-      await close(NEW, 5000, 1200, {
+      await close({
+        userId: NEW,
+        reserved: 5000,
+        charge: 1200,
         end: {
           kind: "completed",
           usage: { prompt_tokens: bad, completion_tokens: 7 },
@@ -277,6 +295,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
       });
       assert.deepEqual(await row(NEW), { reserved: 0, spent: 1200 });
       const [turn] = await turns(NEW);
+      // eslint-disable-next-line unicorn/no-null -- an `agent_turn` column: a count it cannot hold is SQL `NULL`
       assert.equal(turn.prompt_tokens, null);
       assert.equal(turn.completion_tokens, 7);
     });
@@ -310,7 +329,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("counts settled spend against the cap", async () => {
     await take(NEW, 90000);
-    await close(NEW, 90000, 90000);
+    await close({ userId: NEW, reserved: 90000, charge: 90000 });
     assert.equal((await take(NEW, 20000)).admitted, false);
     assert.equal((await take(NEW, 10000)).admitted, true);
   });
@@ -335,7 +354,7 @@ describe("ledger", { skip: !DB && "DATABASE_URL not set" }, () => {
 
     await take(NEW, 10, DAY, counted);
     assert.equal(count, 1);
-    await close(NEW, 10, 5, {}, counted);
+    await closeOn(counted)({ userId: NEW, reserved: 10, charge: 5 });
     assert.equal(count, 2);
   });
 

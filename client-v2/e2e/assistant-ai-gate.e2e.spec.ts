@@ -51,6 +51,7 @@ test("assistant-ai-gate: No hosted key, nothing connected", async ({
 
 test("assistant-ai-gate: Signed out with a hosted model", async ({ page }) => {
   await stubAiStatus(page, "glm-5.3-flash");
+  // eslint-disable-next-line unicorn/no-null -- the get-session body: no user is `user: null` on the wire
   await stubSession(page, null);
   await page.goto("/");
   await startProject(page, "ai-off-signed-out", LONG);
@@ -97,11 +98,11 @@ test("assistant-ai-gate: A prompt sent from outside the panel while the assistan
 
   // The entry every outside surface uses: Build's Ask, the server console,
   // a lesson's objective
-  await page.evaluate(() =>
-    (window as AssistantWindow).__pgAssistant!.requestPrompt(
-      "Explain this build error"
-    )
-  );
+  await page.evaluate(() => {
+    const assistant = (window as AssistantWindow).__pgAssistant;
+    if (!assistant) throw new Error("the assistant's window hook is missing");
+    assistant.requestPrompt("Explain this build error");
+  });
   await page.keyboard.press("Escape");
 
   await expect(input(page)).toHaveValue("Explain this build error", LONG);

@@ -15,20 +15,17 @@ const EMPTY: ContextChoice = { added: [], removed: [] };
  * A removed tab stays out while it is open: removal outlasts tab switches
  * until the user adds the file back.
  *
- * @param tabs the open tabs' relative paths, in tab order
- * @param choice what the user added and removed
  * @param exists whether a path is still a file of the project
- * @returns relative paths, each once
+ * @returns from the open tabs' relative paths, in tab order, and what the
+ * user added and removed: relative paths, each once
  */
-export const contextPaths = (
-  tabs: readonly string[],
-  choice: ContextChoice,
-  exists: (path: string) => boolean
-): string[] => {
-  const removed = new Set(choice.removed);
-  const paths = [...new Set([...tabs, ...choice.added])];
-  return paths.filter((path) => !removed.has(path) && exists(path));
-};
+export const contextPathsWith =
+  (exists: (path: string) => boolean) =>
+  (tabs: readonly string[], choice: ContextChoice): string[] => {
+    const removed = new Set(choice.removed);
+    const paths = [...new Set([...tabs, ...choice.added])];
+    return paths.filter((path) => !removed.has(path) && exists(path));
+  };
 
 /**
  * A path the model wrote, as the project-relative path the context lists.
@@ -38,10 +35,10 @@ export const contextPaths = (
  * not through the explorer.
  *
  * @param path what the model asked for, e.g. `/src/lib.rs`
- * @returns the relative path, or `null` for an empty path or one that leaves
- * the project
+ * @returns the relative path, or `undefined` for an empty path or one that
+ * leaves the project
  */
-export const normalizeProjectPath = (path: string): string | null => {
+export const normalizeProjectPath = (path: string): string | undefined => {
   const parts: string[] = [];
   for (const part of path.trim().replace(/\\/g, "/").split("/")) {
     if (part === "" || part === ".") continue;
@@ -49,10 +46,10 @@ export const normalizeProjectPath = (path: string): string | null => {
       parts.push(part);
       continue;
     }
-    if (parts.length === 0) return null;
+    if (parts.length === 0) return;
     parts.pop();
   }
-  return parts.length ? parts.join("/") : null;
+  return parts.length ? parts.join("/") : undefined;
 };
 
 /** `path` itself, or a file under it when it is a folder */
@@ -68,16 +65,16 @@ const isAtOrUnder = (path: string, target: string) =>
  * Kept in memory only, so a reload starts from the open tabs.
  */
 class AssistantContextStore {
-  private readonly choices = new Map<string | null, ContextChoice>();
+  private readonly choices = new Map<string | undefined, ContextChoice>();
   private readonly listeners = new Set<() => void>();
 
   /** The choice for `workspace`; empty until one is made there */
-  choice(workspace: string | null): ContextChoice {
+  choice(workspace: string | undefined): ContextChoice {
     return this.choices.get(workspace) ?? EMPTY;
   }
 
   /** Puts `path` into the context, undoing an earlier removal */
-  add(workspace: string | null, path: string) {
+  add(workspace: string | undefined, path: string) {
     const { added, removed } = this.choice(workspace);
     this.write(workspace, {
       added: added.includes(path) ? added : [...added, path],
@@ -86,7 +83,7 @@ class AssistantContextStore {
   }
 
   /** Keeps `path` out of the context until it is added back */
-  remove(workspace: string | null, path: string) {
+  remove(workspace: string | undefined, path: string) {
     const { added, removed } = this.choice(workspace);
     this.write(workspace, {
       added: added.filter((p) => p !== path),
@@ -98,7 +95,7 @@ class AssistantContextStore {
    * Drops every choice about `path` and what is under it: a deleted file's.
    * A new file made at that path later is the user's to add, not an old pick
    */
-  forget(workspace: string | null, path: string) {
+  forget(workspace: string | undefined, path: string) {
     const { added, removed } = this.choice(workspace);
     this.write(workspace, {
       added: added.filter((p) => !isAtOrUnder(p, path)),
@@ -111,7 +108,7 @@ class AssistantContextStore {
     return { dispose: () => void this.listeners.delete(cb) };
   }
 
-  private write(workspace: string | null, next: ContextChoice) {
+  private write(workspace: string | undefined, next: ContextChoice) {
     const before = this.choice(workspace);
     const same = (x: readonly string[], y: readonly string[]) =>
       x.length === y.length && x.every((p, i) => p === y[i]);
@@ -137,32 +134,33 @@ if (import.meta.vitest) {
 
     it("lists the tabs in order, then the added files", () => {
       expect(
-        contextPaths(
+        contextPathsWith(all)(
           ["src/lib.rs", "client/client.ts"],
-          choiceOf(["tests/a.ts"], []),
-          all
+          choiceOf(["tests/a.ts"], [])
         )
       ).toEqual(["src/lib.rs", "client/client.ts", "tests/a.ts"]);
     });
 
     it("lists a tab that was also added once", () => {
       expect(
-        contextPaths(["src/lib.rs"], choiceOf(["src/lib.rs"], []), all)
+        contextPathsWith(all)(["src/lib.rs"], choiceOf(["src/lib.rs"], []))
       ).toEqual(["src/lib.rs"]);
     });
 
     it("keeps a removed tab out while it stays open", () => {
       expect(
-        contextPaths(["src/lib.rs", "b.ts"], choiceOf([], ["src/lib.rs"]), all)
+        contextPathsWith(all)(
+          ["src/lib.rs", "b.ts"],
+          choiceOf([], ["src/lib.rs"])
+        )
       ).toEqual(["b.ts"]);
     });
 
     it("drops a file that no longer exists", () => {
       expect(
-        contextPaths(
+        contextPathsWith((p) => p !== "gone.ts")(
           ["src/lib.rs"],
-          choiceOf(["gone.ts"], []),
-          (p) => p !== "gone.ts"
+          choiceOf(["gone.ts"], [])
         )
       ).toEqual(["src/lib.rs"]);
     });
@@ -171,10 +169,9 @@ if (import.meta.vitest) {
       const store = new AssistantContextStore();
       store.remove("w", "a.ts");
       store.add("w", "a.ts");
-      expect(contextPaths(["a.ts", "b.ts"], store.choice("w"), all)).toEqual([
-        "a.ts",
-        "b.ts",
-      ]);
+      expect(
+        contextPathsWith(all)(["a.ts", "b.ts"], store.choice("w"))
+      ).toEqual(["a.ts", "b.ts"]);
     });
 
     it("keeps one workspace's choice out of another", () => {
@@ -224,9 +221,9 @@ if (import.meta.vitest) {
     });
 
     it("refuses a path that leaves the project", () => {
-      expect(normalizeProjectPath("../outside.rs")).toBeNull();
-      expect(normalizeProjectPath("src/../../x")).toBeNull();
-      expect(normalizeProjectPath("")).toBeNull();
+      expect(normalizeProjectPath("../outside.rs")).toBeUndefined();
+      expect(normalizeProjectPath("src/../../x")).toBeUndefined();
+      expect(normalizeProjectPath("")).toBeUndefined();
     });
 
     it("tells listeners about an add and a remove", () => {

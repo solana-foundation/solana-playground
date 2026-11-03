@@ -86,37 +86,34 @@ const cut = (raw: string, cap: number) => {
  * function or symbol is dropped, and an object inside itself is replaced by
  * `[circular]`.
  */
-const capInputValue = (
-  value: unknown,
-  apiKey: string | undefined,
-  seen: WeakSet<object>
-): unknown => {
-  if (typeof value === "string") {
-    return cut(redactKey(value, apiKey), INPUT_STRING_CAP);
-  }
-  if (typeof value === "bigint") return value.toString();
-  if (typeof value === "function" || typeof value === "symbol") {
-    return undefined;
-  }
-  if (value === null || typeof value !== "object") return value;
-  if (seen.has(value)) return "[circular]";
-  const { toJSON } = value as { toJSON?: unknown };
-  if (typeof toJSON === "function") {
-    return capInputValue(toJSON.call(value), apiKey, seen);
-  }
-  // Ancestors only: the same object twice side by side is not a cycle
-  seen.add(value);
-  const capped = Array.isArray(value)
-    ? value.map((v) => capInputValue(v, apiKey, seen))
-    : Object.fromEntries(
-        Object.entries(value).map(([k, v]) => [
-          storable(k),
-          capInputValue(v, apiKey, seen),
-        ])
-      );
-  seen.delete(value);
-  return capped;
-};
+const capInputValueWith =
+  (call: { apiKey: string | undefined; seen: WeakSet<object> }) =>
+  (value: unknown): unknown => {
+    const { apiKey, seen } = call;
+    const capInputValue = capInputValueWith(call);
+    if (typeof value === "string") {
+      return cut(redactKey(value, apiKey), INPUT_STRING_CAP);
+    }
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "function" || typeof value === "symbol") {
+      return undefined;
+    }
+    if (value === null || typeof value !== "object") return value;
+    if (seen.has(value)) return "[circular]";
+    const { toJSON } = value as { toJSON?: unknown };
+    if (typeof toJSON === "function") {
+      return capInputValue(toJSON.call(value));
+    }
+    // Ancestors only: the same object twice side by side is not a cycle
+    seen.add(value);
+    const capped = Array.isArray(value)
+      ? value.map((v) => capInputValue(v))
+      : Object.fromEntries(
+          Object.entries(value).map(([k, v]) => [storable(k), capInputValue(v)])
+        );
+    seen.delete(value);
+    return capped;
+  };
 
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
@@ -130,7 +127,7 @@ const capInput = (
   input: unknown,
   apiKey: string | undefined
 ): Record<string, unknown> => {
-  const capped = capInputValue(input, apiKey, new WeakSet());
+  const capped = capInputValueWith({ apiKey, seen: new WeakSet() })(input);
   let object: Record<string, unknown> = {};
   if (isPlainObject(capped)) object = capped;
   else if (capped !== undefined) object = { value: capped };
@@ -163,11 +160,12 @@ if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("features/persistence/model/tool-call", () => {
-    const record = (input: unknown, output = "ok") =>
+    const recordWith = (output: string) => (input: unknown) =>
       toToolCallRecord(
         { toolName: "probe", input, output, failed: false },
         undefined
       );
+    const record = recordWith("ok");
 
     it("wraps an input that is not an object, so Anthropic takes the replay", () => {
       expect(record('{"path": "src/li').input).toEqual({
@@ -184,29 +182,28 @@ if (import.meta.vitest) {
     });
 
     it("says there was no output rather than storing an empty one", () => {
-      expect(record({}, "").output).toBe(NO_OUTPUT);
-      expect(record({}, "  ").output).toBe(NO_OUTPUT);
+      expect(recordWith("")({}).output).toBe(NO_OUTPUT);
+      expect(recordWith("  ")({}).output).toBe(NO_OUTPUT);
     });
 
     it("cuts nothing at exactly the cap", () => {
-      expect(record({}, "x".repeat(4_000)).output).toBe("x".repeat(4_000));
+      expect(recordWith("x".repeat(4_000))({}).output).toBe("x".repeat(4_000));
       expect(record({ s: "y".repeat(1_000) }).input).toEqual({
         s: "y".repeat(1_000),
       });
     });
 
     it("stores no NUL and no lone surrogate, which Postgres refuses", () => {
-      const { output, input } = record(
-        { s: "a\u0000b\uD83D" },
-        "x\u0000\uDE00y"
-      );
+      const { output, input } = recordWith("x\u0000\uDE00y")({
+        s: "a\u0000b\uD83D",
+      });
 
       expect(output).toBe("x\uFFFDy");
       expect(input).toEqual({ s: "ab\uFFFD" });
     });
 
     it("never cuts a surrogate pair in half", () => {
-      const output = record({}, `${"x".repeat(3_999)}😀😀`).output;
+      const output = recordWith(`${"x".repeat(3_999)}😀😀`)({}).output;
 
       expect(output.startsWith(`${"x".repeat(3_999)} … [`)).toBe(true);
       expect(output).toBe(`${"x".repeat(3_999)} … [4 characters cut]`);

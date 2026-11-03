@@ -193,6 +193,7 @@ export const decodeItem = (stored: unknown): ChatItem | null => {
     "call" in stored &&
     !isReplayableCall(stored.call)
   ) {
+    // eslint-disable-next-line unicorn/no-null -- `decodeItem` answers `null` for a dropped item, as above
     return null;
   }
   return withValidUndo(withValidVersion(stored));
@@ -580,6 +581,7 @@ if (import.meta.vitest) {
         ],
         [
           "an output that is not text",
+          // eslint-disable-next-line unicorn/no-null -- stored JSON: `null` is what a bad row holds
           { name: "read_file", input: {}, output: null },
         ],
         ["an empty output", { name: "read_file", input: {}, output: " " }],
@@ -587,6 +589,7 @@ if (import.meta.vitest) {
           "failed: false",
           { name: "read_file", input: {}, output: "x", failed: false },
         ],
+        // eslint-disable-next-line unicorn/no-null -- stored JSON: `null` is what a bad row holds
         ["no call at all", null],
       ])("drops a tool item whose stored call has %s", (_, call) => {
         const stored = {
@@ -604,6 +607,7 @@ if (import.meta.vitest) {
         ["a wrapped input", { value: "{bad" }, "x"],
         ["an omitted input", { omitted: "9000 characters of input" }, "x"],
         ["no output", {}, "(no output)"],
+        // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
       ])("keeps a stored call with %s through storage", (_, input, output) => {
         const record: ChatItem = {
           id: base.id,

@@ -69,7 +69,7 @@ const FILES = ["src/lib.rs", "tests/anchor.test.ts", "secret/other.rs"];
 vi.mock(
   "../../../views/sidebar/assistant/bridge/playground-bridge",
   async () => {
-    const { contextPaths, PgAssistantContext } = await import(
+    const { contextPathsWith, PgAssistantContext } = await import(
       "@/entities/assistant-context"
     );
     const { PgExplorer } = await import("../../../utils/explorer/explorer");
@@ -78,10 +78,9 @@ vi.mock(
         listFiles: () => FILES,
         listOpenFiles: () => ["src/lib.rs"],
         listContextFiles: () =>
-          contextPaths(
+          contextPathsWith((path) => FILES.includes(path))(
             ["src/lib.rs"],
-            PgAssistantContext.choice(PgExplorer.currentWorkspaceId ?? null),
-            (path) => FILES.includes(path)
+            PgAssistantContext.choice(PgExplorer.currentWorkspaceId)
           ),
       },
     };
@@ -146,8 +145,10 @@ beforeEach(() => {
     json: async () => ({
       available: false,
       key: "own",
+      /* eslint-disable unicorn/no-null -- a `GET /api/ai/status` body: `null` is on the wire */
       reason: null,
       model: null,
+      /* eslint-enable unicorn/no-null */
     }),
   } as Response);
   PgAssistant.disconnect();
@@ -464,9 +465,11 @@ describe("AssistantComposer, re-picking and busy", () => {
     // Signed in, so the connected default answers and no off row is reported
     await PgSession.refreshWith({
       id: "u1",
+      /* eslint-disable unicorn/no-null -- `SessionUser` types these fields `| null` */
       name: null,
       image: null,
       login: null,
+      /* eslint-enable unicorn/no-null */
     });
     PgAssistant.connect({ id: "default", apiKey: "" });
     const connect = vi.spyOn(PgAssistant, "connect");
@@ -558,11 +561,14 @@ describe("AssistantComposer, nothing connected", () => {
   it("keeps Send where the default is served to a signed-in user", async () => {
     await PgSession.refreshWith({
       id: "u1",
+      /* eslint-disable unicorn/no-null -- `SessionUser` types these fields `| null` */
       name: null,
       image: null,
       login: null,
+      /* eslint-enable unicorn/no-null */
     });
     PgAssistant.disconnect();
+    // eslint-disable-next-line unicorn/no-null -- `DefaultBackend` types `model` `| null`
     backend = { state: "present", model: null };
     render(<Harness />);
     await typeIn();
@@ -577,12 +583,15 @@ describe("AssistantComposer, nothing connected", () => {
     ],
     [
       "the default is served to a signed-out user",
+      // eslint-disable-next-line unicorn/no-null -- `DefaultBackend` types `model` `| null`
       { state: "present", model: null },
       "Sign in to send",
     ],
   ] as const)(
     "blocks Send, with its reason, where %s",
+    // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
     async (_, answer: DefaultBackend, reason) => {
+      // eslint-disable-next-line unicorn/no-null -- `PgSession.refreshWith(null)` is a signed-out session
       await PgSession.refreshWith(null);
       PgAssistant.disconnect();
       backend = answer;
@@ -642,11 +651,12 @@ describe("AssistantComposer, the off row", () => {
   const shownRow = () =>
     waitFor(() => {
       const found = row();
-      expect(found).not.toBeNull();
-      return found!;
+      if (!found) throw new Error("no off row yet");
+      return found;
     });
 
   beforeEach(async () => {
+    // eslint-disable-next-line unicorn/no-null -- `PgSession.refreshWith(null)` is a signed-out session
     await PgSession.refreshWith(null);
     PgAssistant.disconnect();
   });
@@ -702,6 +712,7 @@ describe("AssistantComposer, the off row", () => {
     render(<Harness />);
     await shownRow();
     await act(() =>
+      // eslint-disable-next-line unicorn/no-null -- `SessionUser` types these fields `| null`
       PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
     );
     expect(row()).toBeNull();

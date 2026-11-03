@@ -33,51 +33,56 @@ const bytesOf = (text) => encoder.encode(text).length;
  * the rest of the thread still syncs. A thread with nothing to send still gets
  * one empty body, which is what brings its row into being on the server.
  *
- * @template {{ id: string }} T
- * @param {{ threadId: string, projectId: string }} envelope what every body
- *   carries besides `items`
- * @param {readonly T[]} items
- * @param {{ maxBytes?: number, maxItems?: number }} [caps]
- * @returns {{ bodies: string[], oversized: string[] }}
+ * @param {{ maxBytes?: number, maxItems?: number }} caps the limits, each
+ *   the route's own when absent
+ * @returns a split of `envelope` (what every body carries besides `items`)
+ *   and `items`, as `{ bodies, oversized }`
  */
-export const batchPush = (
-  envelope,
-  items,
-  { maxBytes = MAX_BATCH_BYTES, maxItems = MAX_BATCH_ITEMS } = {}
-) => {
-  // `items` goes last, so the empty body is the envelope plus `[]` and every
-  // item adds its own bytes and one comma after the first
-  const emptyBytes = bytesOf(JSON.stringify({ ...envelope, items: [] }));
+export const batchPushWith =
+  ({ maxBytes = MAX_BATCH_BYTES, maxItems = MAX_BATCH_ITEMS }) =>
+  /**
+   * @template {{ id: string }} T
+   * @param {{ threadId: string, projectId: string }} envelope
+   * @param {readonly T[]} items
+   * @returns {{ bodies: string[], oversized: string[] }}
+   */
+  (envelope, items) => {
+    // `items` goes last, so the empty body is the envelope plus `[]` and every
+    // item adds its own bytes and one comma after the first
+    const emptyBytes = bytesOf(JSON.stringify({ ...envelope, items: [] }));
 
-  /** @type {T[][]} */
-  const batches = [];
-  /** @type {string[]} */
-  const oversized = [];
-  /** @type {T[]} */
-  let batch = [];
-  let size = emptyBytes;
+    /** @type {T[][]} */
+    const batches = [];
+    /** @type {string[]} */
+    const oversized = [];
+    /** @type {T[]} */
+    let batch = [];
+    let size = emptyBytes;
 
-  for (const item of items) {
-    const weight = bytesOf(JSON.stringify(item));
-    if (emptyBytes + weight > maxBytes) {
-      oversized.push(item.id);
-      continue;
+    for (const item of items) {
+      const weight = bytesOf(JSON.stringify(item));
+      if (emptyBytes + weight > maxBytes) {
+        oversized.push(item.id);
+        continue;
+      }
+      // One comma before every item but the first, so the weight to add is
+      // known only once the batch it lands in is
+      const full = batch.length >= maxItems || size + weight + 1 > maxBytes;
+      if (batch.length && full) {
+        batches.push(batch);
+        batch = [];
+        size = emptyBytes;
+      }
+      size += batch.length ? weight + 1 : weight;
+      batch.push(item);
     }
-    // One comma before every item but the first, so the weight to add is
-    // known only once the batch it lands in is
-    const full = batch.length >= maxItems || size + weight + 1 > maxBytes;
-    if (batch.length && full) {
-      batches.push(batch);
-      batch = [];
-      size = emptyBytes;
-    }
-    size += batch.length ? weight + 1 : weight;
-    batch.push(item);
-  }
-  if (batch.length || !batches.length) batches.push(batch);
+    if (batch.length || !batches.length) batches.push(batch);
 
-  return {
-    bodies: batches.map((b) => JSON.stringify({ ...envelope, items: b })),
-    oversized,
+    return {
+      bodies: batches.map((b) => JSON.stringify({ ...envelope, items: b })),
+      oversized,
+    };
   };
-};
+
+/** `batchPushWith` at the route's own limits */
+export const batchPush = batchPushWith({});

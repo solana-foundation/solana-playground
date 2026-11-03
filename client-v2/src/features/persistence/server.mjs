@@ -28,6 +28,7 @@ export {
 
 export {
   batchPush,
+  batchPushWith,
   MAX_BATCH_BYTES,
   MAX_BATCH_ITEMS,
 } from "./model/chat-batch.mjs";

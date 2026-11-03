@@ -77,6 +77,7 @@ beforeEach(() => {
   vi.spyOn(globalThis, "fetch").mockResolvedValue({
     ok: true,
     status: 200,
+    // eslint-disable-next-line unicorn/no-null -- a `GET /api/ai/status` body: `null` is on the wire
     json: async () => ({ key: "own", reason: null, model: null }),
   } as Response);
   vi.spyOn(PgAssistant, "initMcp").mockResolvedValue(undefined);

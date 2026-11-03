@@ -133,6 +133,7 @@ test.describe("client-v2-controls", () => {
   test("client-v2-controls: The backend list by keyboard", async ({ page }) => {
     // The toggle only exists while a default backend is offered, and CI
     // configures none: answer the probe here
+    // eslint-disable-next-line unicorn/no-null -- `stubAiStatus(page, null)` offers a hosted key with no model named
     await stubAiStatus(page, null);
     await seedWorkspace(page);
     // The editor takes focus once the project opens; wait for that, or it

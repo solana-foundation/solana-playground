@@ -94,7 +94,8 @@ const MAX_TOKENS = 2 ** 31 - 1;
 const tokenCount = (count) =>
   Number.isSafeInteger(count) && count >= 0 && count <= MAX_TOKENS
     ? count
-    : null;
+    : // eslint-disable-next-line unicorn/no-null -- stored in `agent_turn`: SQL `NULL` for a count it cannot hold
+      null;
 
 /**
  * What a turn is charged, in micro-USD. A completed turn whose usage cannot
