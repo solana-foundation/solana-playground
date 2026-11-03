@@ -42,7 +42,7 @@ export const platformRules = (config) => {
   );
   return {
     headers,
-    spaFallback: spa ? new RegExp(`^${spa.source}$`) : null,
+    spaFallback: spa ? new RegExp(`^${spa.source}$`) : undefined,
   };
 };
 
