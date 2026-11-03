@@ -35,6 +35,8 @@ const SERVER_START_MS = 10_000;
 // Where components.json's aliases and the registry's file targets write, and
 // the `tailwind.css` file shadcn adds an item's `cssVars` to.
 const INSTALLED = ["src/shared", "src/app/styles", "src/index.css"];
+// The installed paths that hold scripts; the others are CSS, which ESLint cannot parse.
+const SCRIPT_DIRS = ["src/shared"];
 // The shadcn flags that preview instead of writing. Only these pass through,
 // and only bare: a value given to one (`--diff src/x.tsx`) would be read here
 // as a component name.
@@ -91,27 +93,26 @@ try {
 if (status !== 0 || flags.length > 0) process.exit(status);
 
 const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
-// ESLint fails on a file it cannot parse, such as `src/index.css`.
-const scripts = written.filter((dir) => !path.extname(dir));
+const scripts = written.filter((dir) => SCRIPT_DIRS.includes(dir));
 // ESLint runs before prettier: its fixes are not prettier-formatted.
 // ESLint 8's `--quiet` also limits `--fix` to errors (`quietFixPredicate` in eslint/lib/cli.js), so no warning's autofix applies.
 if (scripts.length > 0) {
   status = run(
     ESLINT,
-    [
-      "--fix",
-      "--quiet",
-      "--no-error-on-unmatched-pattern",
-      "--ext",
-      ".ts,.tsx,.mjs,.mts",
-      ...scripts,
-    ],
+    ["--fix", "--quiet", "--ext", ".ts,.tsx,.mjs,.mts", ...scripts],
     { cwd: CLIENT }
   );
-  if (status !== 0) {
+  const linted = scripts.join(", ");
+  // ESLint exits 1 for lint errors it could not fix and 2 when it did not run at all.
+  if (status === 1) {
     console.error(
-      "ds-add: the components were installed, but ESLint could not fix them. " +
+      `ds-add: the components were installed, but ESLint left errors in ${linted}. ` +
         "Fix the errors above and run `yarn eslint --fix --quiet <files>`."
+    );
+  } else if (status !== 0) {
+    console.error(
+      "ds-add: the components were installed, but ESLint did not run on them. " +
+        "Fix the cause above, then run `yarn eslint --fix --quiet <files>`."
     );
   }
 }
