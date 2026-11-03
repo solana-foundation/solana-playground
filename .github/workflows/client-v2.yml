@@ -59,12 +59,11 @@ jobs:
     permissions:
       contents: read
       deployments: read
-    env:
-      SMOKE_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
-
     steps:
       - name: Check the bypass secret is set
         id: gate
+        env:
+          SMOKE_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
         run: |
           if [ -n "$SMOKE_BYPASS_SECRET" ]; then
             echo "armed=true" >> "$GITHUB_OUTPUT"
@@ -154,6 +153,7 @@ jobs:
         run: node client-v2/scripts/smoke-sync.mjs "$DEPLOYMENT_URL"
         env:
           DEPLOYMENT_URL: ${{ steps.deployment.outputs.url }}
+          SMOKE_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
 
   # The status context the default branch's ruleset names (`client-v2`).
   # It sees only the called workflow's conclusion, which counts a skipped
