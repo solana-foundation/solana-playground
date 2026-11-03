@@ -91,11 +91,25 @@ const signIn = (auth, origin, from = origin) =>
  */
 const returnURL = async (res) => {
   const { symmetricDecrypt } = await import("better-auth/crypto");
+  const { hkdf } = await import("@noble/hashes/hkdf.js");
+  const { sha256 } = await import("@noble/hashes/sha2.js");
+  const { bytesToHex, utf8ToBytes } = await import("@noble/hashes/utils.js");
+  // Since 1.7.7 the proxy seals each payload with its own HKDF key (`derivePurposeKey`, not exported)
+  const keyFor = (purpose) =>
+    bytesToHex(
+      hkdf(
+        sha256,
+        utf8ToBytes(PROXY_SECRET),
+        utf8ToBytes("better-auth:oauth-encryption:v1"),
+        utf8ToBytes(`better-auth:${purpose}:v1`),
+        32
+      )
+    );
   const state = new URL((await res.json()).url).searchParams.get("state");
-  const open = async (data) =>
-    JSON.parse(await symmetricDecrypt({ key: PROXY_SECRET, data }));
-  const { stateCookie } = await open(state);
-  return new URL((await open(stateCookie)).callbackURL);
+  const open = async (purpose, data) =>
+    JSON.parse(await symmetricDecrypt({ key: keyFor(purpose), data }));
+  const { stateCookie } = await open("oauth-proxy-package", state);
+  return new URL((await open("oauth-proxy-state", stateCookie)).callbackURL);
 };
 
 describe("oauthProxyPlugins", () => {
