@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
+import { useOnline } from "@/shared/lib/hooks/use-online";
+import { requestConsole } from "@/widgets/layout-shell";
 
 import { PgCommand, PgExplorer, PgFramework, PgSettings } from "../../../utils";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
@@ -47,6 +49,7 @@ const Build = () => {
   const building = flow.build === "running";
   const slow = useSlowBuild(building, flow.buildStartedAt);
   const elapsedMs = useElapsed(building ? flow.buildStartedAt : null);
+  const online = useOnline();
   const own = ownOutput(out, PgExplorer.currentWorkspaceName ?? null);
   const surface = buildSurface({ flow, own });
 
@@ -70,12 +73,14 @@ const Build = () => {
       serverUrl={PgSettings.server.endpoint}
       ms={flow.buildMs}
       elapsedMs={elapsedMs}
+      offline={!online}
       // The stage's catch rethrows; BaseBuild's buttons report what is left
       onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}
       onExport={() => PgFramework.exportWorkspace()}
       onAsk={(prompt) => PgAssistant.requestPrompt(prompt)}
       onOpenFile={(path) => PgExplorer.openFile(path)}
+      onShowLog={requestConsole}
       idlActions={<IdlActions mode="download" />}
     />
   );

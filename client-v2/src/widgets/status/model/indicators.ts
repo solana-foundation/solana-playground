@@ -43,8 +43,9 @@ export interface ChipView {
 /** After this long, a start that has not answered reads "Taking longer" */
 export const SLOW_AFTER_MS = 60_000;
 
+/** The offline line, on the indicators and over the stage alike: one cause, one message */
 export const OFFLINE_LINE =
-  "You're offline. You can keep editing. Building needs a connection.";
+  "You're offline. Editing still works. Build, Deploy and the assistant need a connection.";
 
 export interface NetworkInput {
   /** The cluster's name as the connection has it: "devnet" */
@@ -242,8 +243,17 @@ export const analyzerIndicator = (
   }
 };
 
-/** The phone chip: "Ready", "Starting" or "<n> not ready" */
-export const chipOf = (indicators: readonly StatusIndicator[]): ChipView => {
+/**
+ * The phone chip: "Offline" (Spec 08 NET-01: one cause, not "3 not ready"),
+ * "Ready", "Starting" or "<n> not ready"
+ */
+export const chipOf = (
+  indicators: readonly StatusIndicator[],
+  online: boolean
+): ChipView => {
+  if (!online) {
+    return { state: "not-ready", words: "Offline", label: "Status, offline" };
+  }
   const down = indicators.filter((i) => i.state === "not-ready").length;
   if (down > 0) {
     const words = `${down} not ready`;
@@ -431,7 +441,7 @@ if (import.meta.vitest) {
       const idle = analyzerIndicator({ kind: "idle" }, 0, true);
 
       it("is Ready when nothing is down or starting, idle aside", () => {
-        expect(chipOf([ready, ai, idle]).words).toBe("Ready");
+        expect(chipOf([ready, ai, idle], true).words).toBe("Ready");
       });
 
       it("is Starting when one works and none is down", () => {
@@ -440,17 +450,30 @@ if (import.meta.vitest) {
           0,
           true
         );
-        expect(chipOf([ready, ai, starting])).toEqual({
+        expect(chipOf([ready, ai, starting], true)).toEqual({
           state: "working",
           words: "Starting",
           label: "Status, starting",
         });
       });
 
+      it("reads Offline offline, whatever the count", () => {
+        const offline = [
+          networkIndicator(UP, false),
+          aiIndicator({ kind: "ready", model: "Opus 5.5" }, false),
+          analyzerIndicator({ kind: "ready" }, 0, false),
+        ];
+        expect(chipOf(offline, false)).toEqual({
+          state: "not-ready",
+          words: "Offline",
+          label: "Status, offline",
+        });
+      });
+
       it("counts what is not ready", () => {
         const off = aiIndicator({ kind: "off", needsSignIn: false }, true);
         const failed = analyzerIndicator({ kind: "failed" }, 0, true);
-        expect(chipOf([ready, off, failed])).toEqual({
+        expect(chipOf([ready, off, failed], true)).toEqual({
           state: "not-ready",
           words: "2 not ready",
           label: "Status, 2 not ready",

@@ -10,7 +10,7 @@ import { PgConnection } from "@/utils";
 import { displayModelName } from "@/views/sidebar/assistant/model/labels";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
-import type { AiInput, StatusIndicator } from "./indicators";
+import type { AiInput, NetworkInput, StatusIndicator } from "./indicators";
 import { aiIndicator, analyzerIndicator, networkIndicator } from "./indicators";
 
 const subscribeAnalyzer = (cb: () => void) =>
@@ -30,11 +30,17 @@ const aiInput = (): AiInput => {
   return { kind: "ready", model: displayModelName(model) };
 };
 
-/** The network, the AI and the Rust analyzer, in that order, kept current */
-export const useStatus = (): StatusIndicator[] => {
+/** The cluster as the network indicator and the stage notice read it */
+export const useNetworkInput = (): NetworkInput => {
   const cluster = useRenderOnChange(PgConnection.onDidChangeCluster);
   const isConnected = useRenderOnChange(PgConnection.onDidChangeIsConnected);
   const slotStalled = useRenderOnChange(PgConnection.onDidChangeIsClusterDown);
+  return { name: cluster ?? "unknown", isConnected, slotStalled };
+};
+
+/** The network, the AI and the Rust analyzer, in that order, kept current */
+export const useStatus = (): StatusIndicator[] => {
+  const network = useNetworkInput();
   useRenderOnChange(PgAssistant.onDidChange);
   useRenderOnChange(PgSession.onDidChange);
   const analyzer = useAnalyzer();
@@ -45,10 +51,7 @@ export const useStatus = (): StatusIndicator[] => {
   const now = since === null ? Date.now() : since + (elapsed ?? 0);
 
   return [
-    networkIndicator(
-      { name: cluster ?? "unknown", isConnected, slotStalled },
-      online
-    ),
+    networkIndicator(network, online),
     aiIndicator(aiInput(), online),
     analyzerIndicator(analyzer, now, online),
   ];

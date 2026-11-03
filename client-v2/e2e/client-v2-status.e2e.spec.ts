@@ -12,6 +12,24 @@ const network = (page: Page) =>
 const ai = (page: Page) => row(page).getByRole("button", { name: /^AI, / });
 const rust = (page: Page) =>
   row(page).getByRole("button", { name: /^Rust analyzer/ });
+const notice = (page: Page) => page.getByTestId("stage-notice");
+
+const OFFLINE_LINE =
+  "You're offline. Editing still works. Build, Deploy and the assistant need a connection.";
+
+/**
+ * Devnet answers `getSlot` with one slot that never moves: down by
+ * `PgConnection.getIsClusterDown`, which reads the slot twice a second apart
+ */
+const stallDevnet = (page: Page) =>
+  page.route("https://api.devnet.solana.com/**", async (route) => {
+    const body = route.request().postDataJSON() as {
+      id?: unknown;
+      method?: string;
+    } | null;
+    if (body?.method !== "getSlot") return route.continue();
+    return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
+  });
 
 test.describe("on a 1440 px window", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -54,16 +72,7 @@ test.describe("on a 1440 px window", () => {
   test("client-v2-status: A cluster that stops answering", async ({
     seededPage: page,
   }) => {
-    // A cluster is down when its slot does not move between two reads a
-    // second apart (`PgConnection.getIsClusterDown`)
-    await page.route("https://api.devnet.solana.com/**", async (route) => {
-      const body = route.request().postDataJSON() as {
-        id?: unknown;
-        method?: string;
-      } | null;
-      if (body?.method !== "getSlot") return route.continue();
-      return json(route, { jsonrpc: "2.0", result: 123, id: body.id });
-    });
+    await stallDevnet(page);
     await page.reload();
 
     const down = row(page).getByRole("button", {
@@ -101,6 +110,111 @@ test.describe("on a 1440 px window", () => {
     await expect(ai(page)).toHaveText("AI · Off");
     await expect(rust(page)).not.toContainText("Offline");
     expect(before).not.toContain("Offline");
+  });
+
+  test("client-v2-status: Offline shows one line over the stage", async ({
+    seededPage: page,
+  }) => {
+    const lines = linesOn(page);
+    await page.locator("#flow-stage-tab-build").click();
+    const build = page.getByRole("button", { name: "Build", exact: true });
+    await expect(build).toBeEnabled();
+    await expect(notice(page)).toHaveCount(0);
+
+    await page.context().setOffline(true);
+    await expect(notice(page).getByRole("alert")).toHaveText(OFFLINE_LINE);
+    await expect(build).toBeDisabled();
+    await expect
+      .poll(() => lineOf(lines, "status_notice_shown"))
+      .toContain("{notice: offline}");
+
+    await page.context().setOffline(false);
+    await expect(notice(page)).toHaveCount(0);
+    await expect(build).toBeEnabled();
+  });
+
+  test("client-v2-status: A notice is measured once per onset", async ({
+    seededPage: page,
+  }) => {
+    const lines = linesOn(page);
+    const shown = () =>
+      lines.filter((line) =>
+        line.startsWith("[telemetry:event] status_notice_shown ")
+      );
+    // Deploy's code is loaded while online: offline, a stage not yet opened
+    // cannot load its chunk (sent to Lead as intake, 3 Nov)
+    await page.locator("#flow-stage-tab-deploy").click();
+    await expect(
+      page.locator("#flow-stage-panel-deploy").getByRole("heading").first()
+    ).toBeVisible();
+    await page.locator("#flow-stage-tab-build").click();
+    await page.context().setOffline(true);
+    await expect(notice(page)).toBeVisible();
+    await page.locator("#flow-stage-tab-deploy").click();
+    await page.locator("#flow-stage-tab-build").click();
+    await expect(notice(page)).toBeVisible();
+    await expect.poll(() => shown().length).toBe(1);
+    expect(shown()[0]).toContain("{notice: offline}");
+    await page.context().setOffline(false);
+  });
+
+  test("client-v2-status: A cluster that does not answer on Deploy", async ({
+    seededPage: page,
+  }) => {
+    await stallDevnet(page);
+    await page.reload();
+    await expect(
+      row(page).getByRole("button", {
+        name: "Change cluster, currently devnet, not answering",
+      })
+    ).toBeVisible({ timeout: 15_000 });
+    // Build does not wait for the cluster: no line there
+    await page.locator("#flow-stage-tab-build").click();
+    await expect(notice(page)).toHaveCount(0);
+
+    await page.locator("#flow-stage-tab-deploy").click();
+    await expect(notice(page).getByRole("alert")).toContainText(
+      "Devnet isn't answering. Playground keeps trying. You can switch network."
+    );
+    // The cluster recovers; Try again asks it now, and the line clears
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await notice(page).getByRole("button", { name: "Try again" }).click();
+    await expect(notice(page)).toHaveCount(0, { timeout: 15_000 });
+  });
+
+  test("client-v2-status: The setup row warns while the cluster does not answer", async ({
+    seededPage: page,
+  }) => {
+    const row = page
+      .getByRole("listitem")
+      .filter({ hasText: "Choose a network" });
+    await expect(row).toHaveAttribute("data-status", "done");
+    await stallDevnet(page);
+    await page.reload();
+    await expect(row).toHaveAttribute("data-status", "warn", {
+      timeout: 15_000,
+    });
+    await expect(row).toHaveAttribute("title", "devnet is not responding");
+  });
+
+  test("client-v2-status: Change network from the notice", async ({
+    seededPage: page,
+  }) => {
+    await stallDevnet(page);
+    await page.reload();
+    await page.locator("#flow-stage-tab-deploy").click();
+    const lines = linesOn(page);
+    await notice(page)
+      .getByRole("button", { name: "Change network" })
+      .click({ timeout: 15_000 });
+    await expect(
+      page
+        .getByRole("region", { name: "Settings" })
+        .getByRole("radiogroup", { name: "Network" })
+    ).toBeVisible();
+    await expect
+      .poll(() => lineOf(lines, "status_notice_action"))
+      .toContain("{notice: cluster-down, action: change-network}");
   });
 });
 
@@ -150,5 +264,16 @@ test.describe("on a phone", () => {
     await expect(
       page.getByRole("dialog", { name: "Connect a model" })
     ).toBeVisible();
+  });
+
+  test("client-v2-status: The phone chip reads Offline", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await seedWorkspace(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+
+    await page.context().setOffline(true);
+    const chip = page.getByTestId("status-chip");
+    await expect(chip).toHaveAccessibleName("Status, offline");
+    await expect(chip).toContainText("Offline");
   });
 });

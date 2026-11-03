@@ -183,7 +183,7 @@ it("folds the three into one chip whose sheet names what is down", async () => {
   const onAction = vi.fn();
   const draw = (open: boolean) => (
     <BaseStatusChip
-      chip={chipOf(indicators)}
+      chip={chipOf(indicators, true)}
       indicators={indicators}
       open={open}
       onOpenChange={vi.fn()}

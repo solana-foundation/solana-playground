@@ -69,12 +69,17 @@ export interface BaseBuildProps {
   ms: number | null;
   /** How long the running build has run, `null` while none runs */
   elapsedMs: number | null;
+  /** The browser has no network: Build waits, and the notice over the stage
+   * says why (Spec 08 NET-01) */
+  offline: boolean;
   onBuild: () => unknown;
   onContinue: () => void;
   onExport: () => unknown;
   /** Sends a prompt to the assistant: an error card's Explain or Fix */
   onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
+  /** Opens the console, where the terminal holds the whole output */
+  onShowLog: () => void;
   /** Download IDL, shown with a successful build */
   idlActions: ReactNode;
 }
@@ -145,6 +150,7 @@ const BuildButton = ({
     variant={variant}
     loading={p.building}
     loadingText="Building…"
+    disabled={p.offline}
     onClick={p.onBuild}
     onError={reportButtonFailure("build")}
   >
@@ -163,7 +169,7 @@ const ContinueButton = ({ p }: { p: BaseBuildProps }) => (
  */
 const FirstBuildButton = ({ p }: { p: BaseBuildProps }) => (
   <BrandButton
-    disabled={p.building}
+    disabled={p.building || p.offline}
     aria-busy={p.building || undefined}
     onClick={() => {
       // Through `then`, so a synchronous throw is caught as well
@@ -209,9 +215,9 @@ const Empty = (p: BaseBuildProps) => (
 /**
  * A build that never reached the compiler. A build server that never replied
  * is Spec 08's BUILD-04; an empty program file the build refused to send is
- * Spec 09's, drawn by `EmptySource`; anything else is Spec 08's ANY-00. The server
- * and the raw error sit behind "Show details"; the terminal has the full
- * text.
+ * Spec 09's, drawn by `EmptySource`; anything else is Spec 08's ANY-00.
+ * BUILD-04 keeps the server and the raw error behind "Show details"; ANY-00
+ * offers "Show full log", the console, where the terminal has the whole text.
  */
 const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
   if (p.failure?.kind === "empty-source") {
@@ -224,7 +230,16 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
       // Spec 08 ANY-00 ends the title with a full stop
       title={noAnswer ? "Build did not start" : "Could not build."}
       meta={msLabel(p.ms)}
-      actions={<BuildButton p={p} label="Try again" />}
+      actions={
+        <>
+          <BuildButton p={p} label="Try again" />
+          {!noAnswer && (
+            <Button variant="outline" onClick={p.onShowLog}>
+              Show full log
+            </Button>
+          )}
+        </>
+      }
       progress={p}
     >
       <StageEmptyNotice>
@@ -232,11 +247,13 @@ const Unreached = (p: BaseBuildProps & { failure: BuildFailure | null }) => {
           <CalloutDescription>
             {noAnswer
               ? "The Playground server did not answer. Your code is unchanged."
-              : "The full log has the details."}
+              : "Build stopped for a reason we can't name. The full log has the details."}
           </CalloutDescription>
         </Callout>
       </StageEmptyNotice>
-      <Details serverUrl={p.serverUrl} failure={p.failure?.message ?? null} />
+      {noAnswer && (
+        <Details serverUrl={p.serverUrl} failure={p.failure?.message ?? null} />
+      )}
     </Surface>
   );
 };
@@ -264,7 +281,7 @@ const EmptySource = (p: BaseBuildProps & { file: string }) => {
   );
 };
 
-/** What a build that never started keeps out of its first line: the server and the raw error */
+/** What BUILD-04 keeps out of its first line: the server and the raw error */
 const Details = ({
   serverUrl,
   failure,
