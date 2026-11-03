@@ -1,4 +1,4 @@
-// A side-effect import, so the sort keeps it first: it defines the browser globals `./generated` reads under Node
+// A side-effect import, so the sort keeps it first: it defines the browser globals the modules `./generated` imports read under Node
 import "./node-compatiblity";
 
 import * as S from "./generated";

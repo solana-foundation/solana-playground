@@ -5,10 +5,10 @@
 // Builds the registry in ../design-system, serves it on the port
 // components.json maps `@playground` to, runs the shadcn CLI the design
 // system pins with `--overwrite` (the CLI never overwrites silently, and
-// `shared/ui` is installed, never edited), stops the server, sorts the
-// imports of what landed with this package's ESLint and formats it with this
-// package's prettier, so CI's lint and format checks pass and a reinstall of
-// an unchanged component leaves no diff.
+// `shared/ui` is installed, never edited), stops the server, applies this
+// package's error-level ESLint fixes (import order among them) to what landed
+// and formats it with this package's prettier, so CI's import-order and
+// format checks pass and a reinstall of an unchanged component leaves no diff.
 //
 // Nothing comes from the design system's public site or from ui.shadcn.com:
 // the stock shadcn parts are registry items too, and
@@ -87,13 +87,13 @@ try {
   }
   server.kill();
 }
-// A preview wrote nothing, so there is nothing to format.
+// A preview wrote nothing, so there is nothing to lint or format.
 if (status !== 0 || flags.length > 0) process.exit(status);
 
 const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
 // ESLint fails on a file it cannot parse, such as `src/index.css`.
 const scripts = written.filter((dir) => !path.extname(dir));
-// ESLint runs before prettier: a sorted specifier list can lose a space.
+// ESLint runs before prettier: its fixes are not prettier-formatted.
 if (scripts.length > 0) {
   status = run(
     ESLINT,
@@ -110,7 +110,7 @@ if (scripts.length > 0) {
   if (status !== 0) {
     console.error(
       "ds-add: the components were installed, but ESLint could not fix them. " +
-        "Fix the errors above and run `yarn lint --fix`."
+        "Fix the errors above and run `yarn eslint --fix --quiet <files>`."
     );
   }
 }
