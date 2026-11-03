@@ -134,6 +134,15 @@ describe("BaseThread", () => {
     ).toBeTruthy();
   });
 
+  it("an empty thread says what the assistant reads and does", () => {
+    renderThread([]);
+    expect(
+      screen.getByText(
+        "It reads the open file and the last build error. It proposes changes you apply yourself."
+      )
+    ).toBeTruthy();
+  });
+
   it("an empty thread with no project asks about nothing in particular", () => {
     renderThread([], { project: null });
     expect(

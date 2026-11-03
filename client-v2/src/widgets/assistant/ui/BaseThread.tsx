@@ -230,8 +230,8 @@ const EmptyThread = ({
       {project ? `Ask about ${project}` : "Ask the assistant"}
     </h3>
     <p className="max-w-[21rem] text-sm leading-normal text-muted-foreground">
-      It reads the file you are looking at and the last build error, and
-      proposes patches you apply yourself.
+      It reads the open file and the last build error. It proposes changes you
+      apply yourself.
     </p>
     {/* A row that wraps, as the prototype lays the questions out */}
     <div className="flex flex-wrap justify-center gap-1.5 pt-3.5">

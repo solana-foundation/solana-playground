@@ -29,7 +29,7 @@ const patchCard = (
   request: { type: "patch", path: "src/lib.rs", before, after },
 });
 
-const ANSWERS = /^(Apply|Reject|Allow|Deny)$/;
+const ANSWERS = /^(Apply|Discard|Allow|Deny)$/;
 
 describe("BaseApprovalCard", () => {
   it("allows the request it shows", () => {
@@ -42,10 +42,10 @@ describe("BaseApprovalCard", () => {
     expect(onAnswer).toHaveBeenCalledWith("allow");
   });
 
-  it("denies with Reject on a patch", () => {
+  it("denies with Discard on a patch", () => {
     const onAnswer = vi.fn();
     render(<BaseApprovalCard item={patchCard("a", "b")} onAnswer={onAnswer} />);
-    fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+    fireEvent.click(screen.getByRole("button", { name: "Discard" }));
     expect(onAnswer).toHaveBeenCalledWith("deny");
   });
 
@@ -85,14 +85,14 @@ describe("BaseApprovalCard", () => {
     expect(container.querySelectorAll("pre div")).toHaveLength(0);
   });
 
-  it("an unanswered card says the session ended", () => {
+  it("an unanswered patch says the session ended", () => {
     render(
       <BaseApprovalCard
         item={patchCard("a", "b", "unanswered")}
         onAnswer={vi.fn()}
       />
     );
-    expect(screen.getByText("Not answered")).toBeTruthy();
+    expect(screen.getByText("Not applied")).toBeTruthy();
     expect(
       screen.getByText("not applied -- the session ended before you answered")
     ).toBeTruthy();
@@ -114,7 +114,14 @@ describe("BaseApprovalCard", () => {
     expect(screen.queryByRole("button", { name: ANSWERS })).toBeNull();
   });
 
-  it("a declined card says so", () => {
+  it("an unanswered command says it was not answered", () => {
+    render(
+      <BaseApprovalCard item={commandCard("unanswered")} onAnswer={vi.fn()} />
+    );
+    expect(screen.getByText("Not answered")).toBeTruthy();
+  });
+
+  it("a declined command says so", () => {
     render(
       <BaseApprovalCard item={commandCard("denied")} onAnswer={vi.fn()} />
     );
@@ -122,11 +129,22 @@ describe("BaseApprovalCard", () => {
     expect(screen.getByText("not applied")).toBeTruthy();
   });
 
+  it("a discarded patch says so", () => {
+    render(
+      <BaseApprovalCard
+        item={patchCard("a", "b", "denied")}
+        onAnswer={vi.fn()}
+      />
+    );
+    expect(screen.getByText("Discarded")).toBeTruthy();
+    expect(screen.getByText("not applied")).toBeTruthy();
+  });
+
   it("the actions are thumb-sized on a phone", () => {
     render(<BaseApprovalCard item={patchCard("a", "b")} onAnswer={vi.fn()} />);
     const apply = screen.getByRole("button", { name: "Apply" });
-    const reject = screen.getByRole("button", { name: "Reject" });
-    for (const button of [apply, reject]) {
+    const discard = screen.getByRole("button", { name: "Discard" });
+    for (const button of [apply, discard]) {
       expect(button.classList.contains("h-11")).toBe(true);
       expect(button.classList.contains("md:h-8")).toBe(true);
     }

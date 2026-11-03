@@ -142,7 +142,7 @@ approval card SHALL keep its question and its answer in reach.
 #### Scenario: A patch card on a phone
 
 - **WHEN** a patch longer than the screen is proposed at 390 px wide
-- **THEN** Apply and Reject are on screen with the card's file name, and the
+- **THEN** Apply and Discard are on screen with the card's file name, and the
   diff scrolls inside the card
 
 ### Requirement: The thread does not pull a reader down
@@ -164,8 +164,8 @@ no one, and SHALL offer no way to apply it.
 #### Scenario: Reloading with a card pending
 
 - **WHEN** a user reloads while a patch card waits for an answer
-- **THEN** the card reads "Not answered" and says the session ended before
-  the user answered, with no Apply or Reject
+- **THEN** the card reads "Not applied" and says the session ended before
+  the user answered, with no Apply or Discard
 
 ### Requirement: Connect a model fits the screen
 
