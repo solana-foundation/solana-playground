@@ -57,11 +57,21 @@ export class SubmitCancelled extends Error {
   }
 }
 
-const UNKNOWN_ERROR = "Something went wrong";
+/**
+ * Spec 08's fallback (ANY-00) for a submit that threw nothing to show: it
+ * names the action that stopped, never a generic error. The action is the
+ * submit's label without its closing punctuation ("Delete…" reads "Delete"),
+ * or "This action" when nothing is left of it.
+ * A dialog has no log to point at, so it ends on the retry its button offers.
+ */
+const unknownError = (action: string) => {
+  const verb = action.replace(/[\s.…?!:]+$/u, "") || "This action";
+  return `${verb} stopped for a reason we can't name. Try again.`;
+};
 
-/** The message to show for whatever a submit threw; never empty */
-const messageOf = (error: unknown) => {
-  if (typeof error === "string") return error || UNKNOWN_ERROR;
+/** The message to show for whatever the `action` submit threw; never empty */
+const messageOf = (error: unknown, action: string) => {
+  if (typeof error === "string") return error || unknownError(action);
   // An `Error`, or the bare `{ message }` that
   // `PgCommon.sendAndReceiveCustomEvent` rejects with
   if (
@@ -73,7 +83,7 @@ const messageOf = (error: unknown) => {
   ) {
     return error.message;
   }
-  return UNKNOWN_ERROR;
+  return unknownError(action);
 };
 
 /**
@@ -160,7 +170,7 @@ export const ModalFrame = ({
       // pattern of failing dialogs shows up
       log.error(e, { report: true, context: { name } });
       overlayTelemetry.track("overlay_modal_submit_failed", { name });
-      if (mounted.current) setError(messageOf(e));
+      if (mounted.current) setError(messageOf(e, buttonProps.text));
     } finally {
       submitting.current = false;
       if (mounted.current) setBusy(false);
