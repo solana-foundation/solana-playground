@@ -123,7 +123,7 @@ function MergeTitle({
   return (
     <div data-slot="merge-title" className={cn("flex min-w-0 flex-1 basis-32 items-baseline gap-2 px-1 @max-3xl/merge:order-first @max-3xl/merge:basis-full @max-3xl/merge:py-1", className)} {...props}>
       <span className="min-w-0 truncate font-mono text-[0.8125rem] text-foreground">{path}</span>
-      {index != null && total != null && total > 1 && (
+      {index !== undefined && total !== undefined && total > 1 && (
         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
           file {index} of {total}
         </span>

@@ -470,7 +470,7 @@ const LayoutShell = ({
   });
   // Home's slot renders nothing while the start is pending; no title then,
   // so a returning user's load does not read "Home" before the work shows
-  const homeTitle = homeContent == null ? null : "Home";
+  const homeTitle = PgCommon.isNonNullish(homeContent) ? "Home" : null;
 
   // A page opened on a phone is shown at once, on the work page
   const coverShown = screen.kind === "page";

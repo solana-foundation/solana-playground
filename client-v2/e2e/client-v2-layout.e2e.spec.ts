@@ -821,8 +821,8 @@ test("client-v2-layout: A fresh load focuses no settings trigger", async ({
     // Long enough for an effect that runs after the first render to land
     await page.waitForTimeout(500);
     expect(
-      await page.evaluate(
-        () => document.activeElement?.closest("[data-settings-trigger]") != null
+      await page.evaluate(() =>
+        Boolean(document.activeElement?.closest("[data-settings-trigger]"))
       )
     ).toBe(false);
     await expect(page.getByRole("tooltip")).toHaveCount(0);

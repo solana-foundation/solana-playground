@@ -373,7 +373,11 @@ export class PgLesson {
         // the file's existence separately is what tells the two apart.
         if (hasFile && loaded === EMPTY_STORED) {
           loadFailed = true;
-        } else if (loaded == null || loaded === EMPTY_STORED) {
+        } else if (
+          loaded === undefined ||
+          loaded === null ||
+          loaded === EMPTY_STORED
+        ) {
           record = EMPTY_STORED;
         } else if (isV2(loaded)) {
           record = loaded;
