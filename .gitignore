@@ -38,7 +38,7 @@ server/programs/*
 **/www
 .vercel
 
-# WASM build output (real packages from wasm/build.sh, or stubs from wasm/stub-packages.sh under USE_WASM_STUBS=true)
+# WASM build output (real packages from wasm/build.sh, or stubs from wasm/stub-packages.sh, which setup-wasm.sh runs only under USE_WASM_STUBS=true)
 wasm/*/pkg/
 
 # Rust toolchains and target dir for client-v2/scripts/vercel-install.sh

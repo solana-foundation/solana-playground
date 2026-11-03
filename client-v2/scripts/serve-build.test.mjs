@@ -1,45 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { describe, it } from "node:test";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { after, before, describe, it } from "node:test";
 
-import { createServer, platformRules, resolveRequest } from "./serve-build.mjs";
+import { createServer, platformRules } from "./serve-build.mjs";
 
 const vercelJson = JSON.parse(
   readFileSync(new URL("../vercel.json", import.meta.url), "utf8")
 );
-const { spaFallback } = platformRules(vercelJson);
-const BUILD = "/srv/build";
-
-describe("resolveRequest", () => {
-  const existing = new Set([`${BUILD}/static/js/main.js`]);
-  const isFile = (file) => existing.has(file);
-  const resolve = (pathname, check = isFile) =>
-    resolveRequest(pathname, { buildDir: BUILD, spaFallback, isFile: check });
-
-  for (const [pathname, expected] of [
-    ["/api/auth/get-session", { kind: "api" }],
-    [
-      "/static/js/main.js",
-      { kind: "file", file: `${BUILD}/static/js/main.js` },
-    ],
-    ["/flow/lesson", { kind: "file", file: `${BUILD}/index.html` }],
-    ["/static/js/gone.js", { kind: "missing" }],
-    ["/gone.png", { kind: "missing" }],
-  ]) {
-    it(`answers ${pathname} with ${expected.kind}`, () => {
-      assert.deepEqual(resolve(pathname), expected);
-    });
-  }
-
-  it("never serves a file outside the build folder", () => {
-    assert.deepEqual(
-      resolve("/../package.json", () => true),
-      {
-        kind: "missing",
-      }
-    );
-  });
-});
 
 describe("platformRules", () => {
   it("takes the COOP and COEP headers the app needs from vercel.json", () => {
@@ -56,21 +25,55 @@ describe("platformRules", () => {
 });
 
 describe("createServer", () => {
-  it("answers an unknown /api path from the dispatcher, not the SPA", async () => {
-    const server = createServer({ buildDir: BUILD, config: vercelJson });
-    await new Promise((resolve) => server.listen(0, resolve));
-    try {
-      const res = await fetch(
-        `http://localhost:${server.address().port}/api/no-such-route`
-      );
-      assert.equal(res.status, 404);
-      assert.equal(res.headers.get("content-type"), "application/json");
+  let server;
+  let buildDir;
+  let origin;
+
+  before(async () => {
+    buildDir = mkdtempSync(path.join(tmpdir(), "serve-build-"));
+    writeFileSync(path.join(buildDir, "index.html"), "<!doctype html>");
+    writeFileSync(path.join(buildDir, "x.wasm"), "\0asm");
+    server = createServer({ buildDir, config: vercelJson });
+    await new Promise((resolve) => {
+      server = server.listen(0, resolve);
+    });
+    origin = `http://localhost:${server.address().port}`;
+  });
+
+  after(() => {
+    server.close();
+    rmSync(buildDir, { recursive: true, force: true });
+  });
+
+  for (const [pathname, status, contentType] of [
+    ["/api/health", 200, /^application\/json/],
+    ["/api/no-such-route", 404, /^application\/json/],
+    ["/x.wasm", 200, /^application\/wasm/],
+    // The SPA fallback answers an app path, never a missing asset
+    ["/flow/lesson", 200, /^text\/html/],
+    ["/static/js/gone.js", 404, /^text\/plain/],
+  ]) {
+    it(`answers ${pathname} with ${status}`, async () => {
+      const res = await fetch(`${origin}${pathname}`);
+      assert.equal(res.status, status);
+      assert.match(res.headers.get("content-type"), contentType);
       assert.equal(
         res.headers.get("cross-origin-embedder-policy"),
         "require-corp"
       );
-    } finally {
-      server.close();
-    }
+    });
+  }
+
+  it("names the unknown /api path in the 404", async () => {
+    const res = await fetch(`${origin}/api/no-such-route`);
+    assert.deepEqual(await res.json(), {
+      error: "No API route at /api/no-such-route",
+    });
+  });
+
+  it("keeps serving after a path no file can have", async () => {
+    const res = await fetch(`${origin}/%00`);
+    assert.ok(res.status < 500, `answered ${res.status}`);
+    assert.equal((await fetch(`${origin}/x.wasm`)).status, 200);
   });
 });

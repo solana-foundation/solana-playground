@@ -157,9 +157,9 @@ Asked to build something in the client, look in `openspec/changes/` first.
   is first copied from the main checkout's (an APFS clone on macOS), so a warm
   build takes minutes, not the hour of a cold one. `setup-wasm.sh` unsets
   `CARGO_TARGET_DIR` and fails when a cargo config's `build.target-dir` moves
-  either target folder, since both would share one folder again. The stubs (`wasm/stub-packages.sh`) are
-  written only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
-  the manual `client-v2-with-stubs.yml` set; they make Rust intellisense and the `solana`/`anchor`/
+  either target folder, since both would share one folder again. `setup-wasm.sh` writes the stubs
+  (`wasm/stub-packages.sh`) only under `USE_WASM_STUBS=true`, which the `:with-stubs` scripts and
+  the manual `client-v2-with-stubs.yml` set; the stubs make Rust intellisense and the `solana`/`anchor`/
   `spl-token`/`sugar` terminal commands throw. `yarn start`, `yarn dev`,
   `yarn dev-cra` (which `vercel dev` runs) and `yarn test-e2e` refuse stubs
   nobody asked for, `vercel-install.sh` refuses the variable, and the

@@ -169,12 +169,12 @@ kept out of the image.
 The client image builds from the primary checkout and from a linked worktree
 alike: it reads no git data of the checkout. It clones the assets repository
 at the commit in `scripts/assets-commit.txt` and points `update-static.mjs` at
-the clone through `ASSETS_DIR`. After bumping the `client/public` submodule,
+the clone through `ASSETS_DIR`. After staging a bump of the `client/public` submodule,
 update that file from the repository root (`yarn test-api` fails until it
 matches):
 
 ```sh
-git ls-tree HEAD client/public | awk '{print $3}' > client-v2/scripts/assets-commit.txt
+git ls-files -s client/public | awk '{print $2}' > client-v2/scripts/assets-commit.txt
 ```
 
 The `dev`, `prod` and `client-standalone` profiles build the upstream `client/`,

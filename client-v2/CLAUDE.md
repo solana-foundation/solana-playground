@@ -512,7 +512,10 @@ it.
   CI job itself, in its runner image, see
   [`docs/local-ci-with-act.md`](docs/local-ci-with-act.md).
 - **A PR that changes bundle sizes commits a refreshed `bench/BUNDLE.md`.**
-  Rebase onto the base branch first: CI measures the merge commit. Then run
+  Rebase onto the base branch first: CI measures the merge commit. Run
+  `yarn setup`, not `setup:with-stubs`: the snapshot measures the real wasm
+  packages, as CI does, so `build-fast` refuses stubs nobody asked for and
+  `bundle:info` refuses a build that lacks a real package. Then run
   `REACT_APP_GA_MEASUREMENT_ID= yarn build-fast`: CI's build has no GA id, and
   the empty value keeps CRA from taking one from `client-v2/.env`, since
   dotenv does not override a variable already set. Sentry needs no override:

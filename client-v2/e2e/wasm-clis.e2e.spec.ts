@@ -17,11 +17,14 @@ const run = async (page: Page, command: string) => {
 test.describe("the wasm CLIs", REAL_WASM, () => {
   test.beforeEach(async ({ seededPage: page }) => {
     // Every CLI command asks for the Playground Wallet first
-    await page.getByRole("button", { name: "Connect wallet" }).click();
-    await page.getByRole("button", { name: "Continue" }).click();
-    await page.getByRole("button", { name: "Toggle wallet" }).waitFor();
+    const account = page.getByRole("button", { name: /^Account/ });
+    await account.click();
+    await page.getByRole("menuitem", { name: "Connect wallet" }).click();
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    // The account row shows the balance once the wallet is connected
+    await expect(account).toContainText("SOL", LONG);
 
-    const drawer = page.getByRole("button", { name: "Console", exact: true });
+    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }
@@ -50,3 +53,31 @@ test.describe("the wasm CLIs", REAL_WASM, () => {
     });
   }
 });
+
+// The rust-analyzer stub carries no marker and answers every completion with an empty list.
+test(
+  "rust-analyzer completes Vec:: in lib.rs",
+  REAL_WASM,
+  async ({ seededPage: page }) => {
+    // Loading the crates and the sysroot into the worker takes longer than a CLI call.
+    test.slow();
+    // The seeded project opens lib.rs; a click in its text keeps the focus in the editor.
+    await expect(
+      page.getByRole("button", { name: "Close lib.rs" })
+    ).toBeVisible();
+    await page.locator(".monaco-editor .view-lines").first().click();
+    const input = page.locator(".monaco-editor textarea.inputarea");
+    await expect(input).toBeFocused(LONG);
+    await page.keyboard.press("ControlOrMeta+End");
+    await page.keyboard.press("Enter");
+    // The list renders only its visible rows, so the prefix narrows it to the item
+    await page.keyboard.type("fn probe() { Vec::with_cap");
+    await page.keyboard.press("Control+Space");
+    // Monaco's word-based fallback cannot offer a word lib.rs does not hold.
+    await expect(
+      page.locator(".suggest-widget .monaco-list-row", {
+        hasText: "with_capacity",
+      })
+    ).not.toHaveCount(0, { timeout: 120_000 });
+  }
+);

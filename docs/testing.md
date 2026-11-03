@@ -186,9 +186,13 @@ Expect: exit code 0 for each; `server/target/release/solpg-server` exists.
 
 ### B-5. client-v2: browser suite
 
-Mirrors the `e2e` job in [client-v2.yml](../.github/workflows/client-v2.yml).
+Mirrors the `e2e` matrix and the `e2e-report` job in
+[client-v2-reusable.yml](../.github/workflows/client-v2-reusable.yml), which
+[client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
 
-Precondition: the install of B-3, on the stubs or on B-1; a free slot port from "Slots" in
+Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` and `test-e2e:with-stubs` in place of `test-e2e`, which
+leaves out the `@real-wasm` specs as [client-v2-with-stubs.yml](../.github/workflows/client-v2-with-stubs.yml) does; a
+free slot port from "Slots" in
 [Parallel runs](#8-parallel-runs), with no dev server on it, so the run starts its own. The suite needs no build
 server, no Postgres, and no default backend: every spec answers the account and model endpoints with `page.route`.
 `AGENT_API_KEY=` on the command empties what `client-v2/.env` would set, so the dev server reports no default
@@ -210,7 +214,7 @@ Expect:
 - [ ] the run's `N skipped` equals the number the `grep` prints, less the entries whose `test.fixme` is gated on
       `process.env.CI`, which run locally. A skip beyond that count is one outside `e2e/known-skips.txt`. The job
       reads titles from the `json` reporter, which `playwright.config.mts` enables only in CI, so locally the count
-      stands in for its "Check skips against the known list" step.
+      stands in for the "Check the shards and their skips" step of `e2e-report`.
 - [ ] no `flaky` in the summary. Outside CI `playwright.config.mts` sets no retries, so a test that fails on timing
       fails the run, which is where it gets fixed.
 - [ ] the two `client-v2-ai` tests in `e2e/assistant-pause.e2e.spec.ts` pass rather than skip: they stub
@@ -241,6 +245,18 @@ grep -rl 'local dev stub' client-v2/node_modules/@solana-playground
 Expect: `setup` exits 0; both `grep` lines print nothing. On a warm target folder, `setup` took 148 s on 2026-10-19
 (`39628e59`, measured with the target folder shared between worktrees); a freshly seeded worktree, which also
 recompiles its own crates, is unmeasured. A cold one takes about an hour.
+
+In a linked worktree with no target folder of its own, whose sources of one package differ from the main checkout's,
+run `setup` and compare that package's `.wasm` with the main checkout's, here for `solana-cli`:
+
+```sh
+main=$(dirname "$(git rev-parse --path-format=absolute --git-common-dir)")
+git diff --quiet "$(git -C "$main" rev-parse HEAD)" -- wasm/solana-cli || echo sources differ
+cmp wasm/solana-cli/pkg/solana_cli_wasm_bg.wasm "$main/wasm/solana-cli/pkg/solana_cli_wasm_bg.wasm"
+```
+
+Expect: `sources differ`, then `cmp` reports a difference. Identical files mean the seeded target folder's output
+was packaged without a rebuild, which `seed_target_dirs` in `client-v2/scripts/setup-wasm.sh` exists to prevent.
 
 ## 2. Client dev servers without a server
 

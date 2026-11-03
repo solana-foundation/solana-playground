@@ -1,4 +1,4 @@
-// The Node declaration of the stub switch; scripts/wasm-stubs.sh is the shell one. Both must agree with wasm/stub-packages.sh.
+// The Node declaration of the stub switch; scripts/wasm-stubs.sh is the shell one, which wasm/stub-packages.sh sources. wasm-stubs.test.mjs fails when the two disagree.
 import fs from "node:fs";
 import path from "node:path";
 

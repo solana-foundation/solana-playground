@@ -4,7 +4,7 @@ name: client-v2 build
 on:
   workflow_call:
     inputs:
-      # `true` writes the wasm stubs and skips the bundle check; `false` takes the `wasm-pkg` artifact of the calling run.
+      # `true` writes the wasm stubs and skips "Check the bundle carries the real wasm packages" and the `bench/BUNDLE.md` snapshot test, which measure the real packages; `false` takes the `wasm-pkg` artifact of the calling run.
       use-wasm-stubs:
         type: boolean
         required: true

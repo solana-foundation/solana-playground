@@ -14,25 +14,27 @@ WORKSPACES="wasm wasm/rust-analyzer"
 
 # The environment and cargo config can each point every worktree at one target folder again.
 check_own_target_dirs() {
-  local var workspace target expected
+  local var package workspace target expected
   for var in CARGO_TARGET_DIR CARGO_BUILD_TARGET_DIR; do
     if [ -n "${!var:-}" ]; then
       echo ">>> unsetting $var=${!var}: a target folder shared between worktrees packages one worktree's .wasm into another's pkg"
       unset "$var"
     fi
   done
-  for workspace in $WORKSPACES; do
-    # cargo reads its config and rust-toolchain.toml from the working directory, as wasm/build.sh runs it.
-    if ! target=$(cd "$root_dir/$workspace" && cargo metadata --format-version 1 --no-deps --offline |
+  for package in $WASM_PACKAGES; do
+    workspace=wasm
+    [ "$package" = rust-analyzer ] && workspace=wasm/rust-analyzer
+    # cargo reads its config and rust-toolchain.toml upwards from the package folder, where wasm/build.sh runs wasm-pack.
+    if ! target=$(cd "$root_dir/wasm/$package" && cargo metadata --format-version 1 --no-deps --offline |
       node -p 'JSON.parse(require("fs").readFileSync(0, "utf8")).target_directory'); then
-      echo ">>> warning: cargo metadata failed in $workspace, so its target folder is unchecked"
-      continue
+      echo "cargo metadata failed in wasm/$package, so its target folder is unchecked; fix the error above and rerun." >&2
+      exit 1
     fi
     # cargo reports the physical path, so a symlink in the checkout's path must not read as a mismatch.
     expected="$(cd "$root_dir/$workspace" && pwd -P)/target"
     if [ "$target" != "$expected" ]; then
-      echo "cargo builds $workspace into $target, not $expected." >&2
-      echo "Remove build.target-dir from the cargo config that sets it: a .cargo/config.toml above $workspace, or \$CARGO_HOME/config.toml." >&2
+      echo "cargo builds wasm/$package into $target, not $expected." >&2
+      echo "Remove build.target-dir from the cargo config that sets it: a .cargo/config.toml above wasm/$package, or \$CARGO_HOME/config.toml." >&2
       exit 1
     fi
   done

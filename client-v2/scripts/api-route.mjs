@@ -1,8 +1,12 @@
 // Serves `api/*.mjs` outside Vercel: the dev server mounts `serveApiRoute`
 // through `craco.config.js`, the production bundle through `serve-build.mjs`.
 
+import fs from "node:fs";
+
 /** Answer as the platform would, not as the SPA fallback would */
 const sendJson = (res, status, body) => {
+  // A route that failed mid-stream already sent its status; cut the response.
+  if (res.headersSent) return res.destroy();
   res.statusCode = status;
   res.setHeader("content-type", "application/json");
   res.end(JSON.stringify(body));
@@ -37,7 +41,7 @@ export const resolveApiRoute = (url) => {
 
 /**
  * Dispatch `/api/<name>` to `api/<name>.mjs`, matching how the deployed
- * function is invoked.
+ * function is invoked. Never rejects: neither mount handles a rejection.
  *
  * Never calls `next()`: falling through would hand an unknown `/api` path to
  * the history fallback, which answers `200 text/html` with `index.html` and
@@ -56,21 +60,17 @@ export const serveApiRoute = async (req, res) => {
   // as "does not provide an export named X". Restart the dev server after such
   // an edit.
   const route = resolveApiRoute(req.url);
-  if (!route) {
+  const file = route && new URL(`../api/${route.name}.mjs`, import.meta.url);
+  // Only a missing route file is a 404; a missing import inside a route is a 500.
+  if (!file || !fs.existsSync(file)) {
     return sendJson(res, 404, { error: `No API route at /api${req.url}` });
   }
 
   try {
-    const mod = await import(
-      new URL(`../api/${route.name}.mjs`, import.meta.url).href
-    );
+    const mod = await import(file.href);
     await mod.default(req, res);
   } catch (e) {
-    if (e.code === "ERR_MODULE_NOT_FOUND") {
-      return sendJson(res, 404, {
-        error: `No API route at /api/${route.name}`,
-      });
-    }
+    console.error(`api-route: /api/${route.name} failed:`, e);
     sendJson(res, 500, { error: e.message });
   }
 };

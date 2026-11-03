@@ -27,11 +27,12 @@ jobs:
     with:
       use-wasm-stubs: false
 
-  # The status context the default branch's ruleset names (`client-v2`), so
-  # a job added to or renamed in this workflow needs no ruleset edit: list it
-  # in `needs` and this job passes only when it succeeded. `always()` because
-  # a job whose `needs` failed is skipped, and GitHub reads a skipped required
-  # check as passing. An empty `needs` fails rather than passes.
+  # The status context the default branch's ruleset names (`client-v2`).
+  # It sees only the called workflow's conclusion, which counts a skipped
+  # job as success, so the `gate` job of `client-v2-reusable.yml` fails that
+  # workflow on a skip it does not expect. `always()` because a job whose
+  # `needs` failed is skipped, and GitHub reads a skipped required check as
+  # passing. An empty `needs` fails rather than passes.
   client-v2:
     name: client-v2
     runs-on: ubuntu-latest

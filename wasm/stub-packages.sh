@@ -1,24 +1,30 @@
 #!/usr/bin/env bash
 #
-# stub-packages.sh — create placeholder WASM packages for UI-only development.
+# stub-packages.sh — write placeholder packages into the six wasm/<name>/pkg
+# folders that wasm/build.sh compiles from Rust, for UI-only development.
 #
-# The client depends on 8 local packages under wasm/*/pkg. Two of them
-# (playnet, rustfmt) are committed prebuilt; the other 6 are compiled from
-# Rust by wasm/build.sh, which takes roughly an hour. If you are only working
-# on the React UI you do not need them, but `yarn install` still refuses to
-# run while the directories are missing.
+# NOT GATED: run, this script writes the stubs whatever USE_WASM_STUBS says.
+# The gate is its one caller, client-v2/scripts/setup-wasm.sh, which runs it
+# only under USE_WASM_STUBS=true (the `:with-stubs` scripts and the manual
+# client-v2-with-stubs.yml). Every default path builds the real packages, so
+# never call this script from one. A stub written by hand reaches node_modules
+# at the next install into an empty folder; from there `yarn start`, `dev`,
+# `build-fast` and `test-e2e` refuse it, and `check-build` fails a bundle
+# that carries one.
 #
-# This script writes minimal stand-ins so install and the dev build succeed.
-# What you lose: Rust intellisense in the editor and the `solana`, `anchor`,
-# `spl-token`, `sugar` terminal commands plus Seahorse (Python) builds.
-# What still works: the whole UI, Monaco, rustfmt, Playnet (local validator),
-# wallet, and Rust program builds via the build server.
+# `yarn install` refuses to run while these folders are missing, and a real
+# build takes about an hour on a cold target. A stub loses Rust intellisense in
+# the editor and the `solana`, `anchor`, `spl-token`, `sugar` terminal commands
+# plus Seahorse (Python) builds. The UI, Monaco, rustfmt, Playnet (local
+# validator), the wallet, and Rust program builds via the build server work.
 #
-# Usage: yarn --cwd client-v2 setup:with-stubs, which runs this under USE_WASM_STUBS=true and installs.
-#
-# To switch back to the real packages: yarn --cwd client-v2 setup
+# Usage: yarn --cwd client-v2 setup:with-stubs
+# Back to the real packages: yarn --cwd client-v2 setup
 #
 set -euo pipefail
+
+# shellcheck source=../client-v2/scripts/wasm-stubs.sh
+. "$(dirname -- "${BASH_SOURCE[0]}")/../client-v2/scripts/wasm-stubs.sh"
 
 root="${1:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &>/dev/null && pwd)}"
 wasm_dir="$root/wasm"
@@ -29,7 +35,7 @@ write_pkg() { # write_pkg <dir> <npm-name>
   cat > "$wasm_dir/$1/pkg/package.json" <<JSON
 {
   "name": "$2",
-  "version": "0.0.0-stub",
+  "version": "$WASM_STUB_VERSION",
   "description": "Local UI-dev stub. Real package: yarn --cwd client-v2 setup",
   "module": "index.js",
   "main": "index.js",
@@ -45,7 +51,7 @@ stub_cli() { # stub_cli <dir> <exported-fn>
   cat > "$wasm_dir/$1/pkg/index.js" <<JS
 const notBuilt = () => {
   throw new Error(
-    "\`$1\` is a local dev stub. Run \`yarn --cwd client-v2 setup\` to build and " +
+    "\`$1\` is a $WASM_STUB_MARKER. Run \`yarn --cwd client-v2 setup\` to build and " +
       "install the real WASM packages if you need this command."
   );
 };

@@ -10,8 +10,9 @@ on:
   workflow_call:
     inputs:
       # `true` writes the wasm stubs (`USE_WASM_STUBS=true`) and leaves out
-      # what needs the real packages: the `@real-wasm` specs and the bundle
-      # check. `false` builds the real packages once, in the `wasm` job.
+      # what needs the real packages: the `@real-wasm` specs, the step "Check
+      # the bundle carries the real wasm packages", and the `bench/BUNDLE.md`
+      # snapshot test. `false` builds the real packages once, in the `wasm` job.
       use-wasm-stubs:
         type: boolean
         required: true
@@ -48,7 +49,10 @@ jobs:
         id: key
         run: |
           . scripts/vercel-install.sh
-          echo "key=wasm-pkg-$(wasm_source_key)" >> "$GITHUB_OUTPUT"
+          # Its own line: set -e ignores a failure inside a command substitution used as an argument.
+          key=$(wasm_source_key)
+          [ -n "$key" ] || { echo "wasm_source_key printed nothing" >&2; exit 1; }
+          echo "key=wasm-pkg-$key" >> "$GITHUB_OUTPUT"
 
       - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: pkg-cache
@@ -429,3 +433,28 @@ jobs:
       # with its title -- work to do, not a pass.
       - name: Check the shards and their skips
         run: node scripts/e2e-report.mjs shard-reports e2e/known-skips.txt
+
+  # A called workflow whose jobs were skipped still concludes `success`, and
+  # the caller sees only that conclusion. This job fails the workflow unless
+  # every job ran and succeeded, `wasm` alone being skipped on the stubs.
+  # A job added above joins `needs` and the list below.
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: [wasm, checks, build, e2e, e2e-report]
+    if: always()
+    steps:
+      - name: Every job ran and succeeded
+        env:
+          STUBS: ${{ inputs.use-wasm-stubs }}
+          WASM: ${{ needs.wasm.result }}
+          OTHERS: ${{ needs.checks.result }} ${{ needs.build.result }} ${{ needs.e2e.result }} ${{ needs.e2e-report.result }}
+        run: |
+          echo "wasm: $WASM; checks, build, e2e, e2e-report: $OTHERS"
+          expected=success
+          [ "$STUBS" = true ] && expected=skipped
+          [ "$WASM" = "$expected" ] || exit 1
+          for result in $OTHERS; do
+            [ "$result" = success ] || exit 1
+          done
