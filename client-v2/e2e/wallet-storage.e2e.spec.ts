@@ -70,3 +70,28 @@ test("wallet-storage: A wallet in localStorage moves to IndexedDB", async ({
     { kp, name: "Wallet 1" },
   ]);
 });
+
+test("wallet-storage: A legacy single-key wallet moves to IndexedDB", async ({
+  page,
+}) => {
+  const keypair = Keypair.generate();
+  const sk = Array.from(keypair.secretKey);
+  const address = keypair.publicKey.toBase58();
+
+  // The pre-accounts format, which `migrate` upgrades before the move
+  await page.addInitScript((wallet) => {
+    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
+    sessionStorage.setItem("e2e-wallet-seeded", "1");
+    localStorage.setItem("wallet", wallet);
+  }, JSON.stringify({ setupCompleted: true, connected: true, sk }));
+
+  await seedWorkspace(page);
+
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("wallet")), LONG)
+    .toBeNull();
+  expect((await storedWallet(page))?.accounts).toEqual([
+    { kp: sk, name: "Wallet 1" },
+  ]);
+  await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
+});

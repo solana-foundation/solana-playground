@@ -33,7 +33,8 @@ const defaultState: WalletState = {
 let walletStorageInstance: ReturnType<typeof walletStorageWith> | undefined;
 
 /**
- * The wallet's storage: its own IndexedDB database (`wallet-storage`).
+ * The wallet's storage (`wallet-storage.ts`): its own IndexedDB database,
+ * `pg-wallet`, with `localStorage` as what it moves from and falls back to.
  *
  * Made on first use, not at import: the build imports this module under Node
  * (`src/settings`), where `localStorage` does not exist.
@@ -185,8 +186,11 @@ const derive = () => ({
 });
 
 /**
- * Upgrade the pre-accounts format (`sk`) in place in `localStorage`, before
- * `walletStorage().read` moves the result to IndexedDB.
+ * Upgrade the pre-accounts format (`sk`) in place in `localStorage`.
+ *
+ * `updatable` runs this before `storage.read`, so `walletStorage().read`
+ * only ever sees the accounts format; it sets anything else aside as
+ * unreadable.
  */
 const migrate = () => {
   const walletStr = localStorage.getItem(WALLET_LOCAL_KEY);

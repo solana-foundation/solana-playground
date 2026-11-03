@@ -8,8 +8,10 @@ Where the built-in wallet's state, its secret keys included, is persisted: its o
 ### Requirement: The wallet is not persisted in localStorage
 
 The built-in wallet's state, including every account's secret key, SHALL be
-persisted in IndexedDB, in a database used only by the wallet. Once IndexedDB
-is available, no `localStorage` key SHALL hold a wallet secret key.
+persisted in IndexedDB, in a database used only by the wallet. While
+IndexedDB works, no `localStorage` key SHALL hold a wallet secret key, with
+two exceptions this spec describes: the fallback when IndexedDB fails, and an
+unreadable copy set aside, which nothing removes.
 
 #### Scenario: A new wallet is created
 
