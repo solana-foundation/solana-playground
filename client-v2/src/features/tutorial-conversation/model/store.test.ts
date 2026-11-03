@@ -232,6 +232,31 @@ describe("PgConversation", () => {
     });
   });
 
+  it("lands a write where its own ref has it", async () => {
+    const OLD = "fn already_there() {}";
+    const PLANNED = "fn planned() {}";
+    const own = JSON.parse(JSON.stringify(hello));
+    // The step starts on one line, and its first write puts a block the
+    // step's target lacks above it, where the write's ref has it
+    own.steps[0].start["src/lib.rs"] = `${OLD}\n`;
+    own.steps[0].beats[0].writes = {
+      file: "src/lib.rs",
+      block: PLANNED,
+      ref: `${PLANNED}\n${OLD}\n`,
+    };
+    vi.mocked(PgTutorial).all = [{ name: NAME, definition: own }] as never;
+    const workspace = memoryWorkspace({ "src/lib.rs": "" });
+    open(NAME, { workspace });
+    await settle();
+    PgConversation.start();
+    await settle();
+    // Against the step's target the block is unknown and would go to the end
+    expect(workspace.files["src/lib.rs"]).toBe(`${PLANNED}\n${OLD}`);
+    expect(PgConversation.state.engine.progress.beats["s1.boil"]).toMatchObject(
+      { kind: "written", wrote: { file: "src/lib.rs", lines: [1] } }
+    );
+  });
+
   it("fills around a typed key line, keeping the learner's words", async () => {
     const workspace = memoryWorkspace({ "src/lib.rs": "" });
     open(NAME, { workspace });

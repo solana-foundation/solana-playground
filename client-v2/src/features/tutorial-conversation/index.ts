@@ -40,6 +40,7 @@ export {
 export type { ConversationPorts, ConversationState } from "./model/store";
 export { FINISH_DELAY_MS, TICK_MS } from "./model/clock";
 export {
+  groundOf,
   holds,
   insertBlock,
   keyOf,

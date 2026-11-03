@@ -26,10 +26,15 @@ export interface Chip {
   follow?: Follow;
 }
 
-/** Code written into a file; it appears in its step's target for that file */
+/** Code written into a file; it appears in its step's target for that file,
+ * or once in its own `ref` */
 export interface Block {
   file: string;
   block: string;
+  /** The whole file the block lands in, when that is not the step's target */
+  ref?: string;
+  /** The file as this write finds it, when that is not the step's start */
+  start?: string;
 }
 
 export interface Quote {

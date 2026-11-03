@@ -2,7 +2,7 @@ import { slugOf } from "@/entities/tutorial";
 import type { TutorialDefinition } from "@/entities/tutorial";
 import { createLogger } from "@/shared/lib/logger";
 
-import { insertBlock, typedKey, withOwnText } from "./landing";
+import { groundOf, insertBlock, typedKey, withOwnText } from "./landing";
 import { judgeGoal } from "./goals";
 import { failedResult } from "./ports";
 import type { Judge, Runner, Workspace } from "./ports";
@@ -677,12 +677,8 @@ export class PgConversation {
             rows.splice(at - 1, 1);
             base = rows.join("\n");
           }
-          const placed = insertBlock(
-            base,
-            block,
-            step?.target[effect.file],
-            step?.start[effect.file] ?? ""
-          );
+          const { reference, start } = groundOf(effect, step);
+          const placed = insertBlock(base, block, reference, start);
           await ports.workspace.write(effect.file, placed.code, name);
           if (!stillOpen()) {
             PgConversation._landedLate(name, effect.file);

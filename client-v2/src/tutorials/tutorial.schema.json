@@ -268,7 +268,7 @@
       "description": "A finish chip: pressed, it posts its answer with no model call."
     },
     "block": {
-      "description": "Code written into a file. It must appear in its step's target for that file.",
+      "description": "Code written into a file. It must appear in its step's target for that file, or exactly once in its own `ref`.",
       "type": "object",
       "additionalProperties": false,
       "required": ["file", "block"],
@@ -279,6 +279,15 @@
         "block": {
           "type": "string",
           "minLength": 1
+        },
+        "ref": {
+          "description": "The whole file the block lands in, when that is not the step's target: a planned failure's code, or a fix of it. The block must appear in it exactly once.",
+          "type": "string",
+          "minLength": 1
+        },
+        "start": {
+          "description": "The whole file as this write finds it, when that is not the step's start. Its lines count as known; those its `ref` lacks go when the file is rebuilt from the `ref`.",
+          "type": "string"
         }
       }
     },

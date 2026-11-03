@@ -6,6 +6,7 @@ import type { ErrorObject, ValidateFunction } from "ajv";
 import schema from "../../../../tutorials/tutorial.schema.json";
 import { argName } from "./types";
 import type {
+  Block,
   Beat,
   DefinitionError,
   Files,
@@ -255,16 +256,20 @@ const codeLines = (code: string) =>
     .map((l) => l.trim())
     .filter(Boolean);
 
-/** Whether `file` holds `block`'s lines in a row, indentation and blank lines aside */
-const holds = (file: string, block: string) => {
+/** How many times `file` holds `block`'s lines in a row, indentation and blank lines aside */
+const timesHeld = (file: string, block: string) => {
   const want = codeLines(block);
   const have = codeLines(file);
-  if (want.length === 0) return false;
+  if (want.length === 0) return 0;
+  let times = 0;
   for (let i = 0; i + want.length <= have.length; i++) {
-    if (want.every((line, k) => have[i + k] === line)) return true;
+    if (want.every((line, k) => have[i + k] === line)) times++;
   }
-  return false;
+  return times;
 };
+
+/** Whether `file` holds `block`'s lines in a row, indentation and blank lines aside */
+const holds = (file: string, block: string) => timesHeld(file, block) > 0;
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -347,12 +352,26 @@ const ruleErrors = (
     }
   };
 
-  const block = (
-    target: Files,
-    writes: { file: string; block: string },
-    at: string
-  ) => {
+  const block = (target: Files, writes: Block, at: string) => {
     const file = target[writes.file];
+    if (writes.ref !== undefined) {
+      // A write with its own reference lands where that file has it, so
+      // there it must be, and in one place only
+      const times = timesHeld(writes.ref, writes.block);
+      if (times === 0) {
+        errors.push({
+          path: `${at}.block`,
+          message: `a block in its ref, found ${found(
+            codeLines(writes.block)[0] ?? ""
+          )}`,
+        });
+      } else if (times > 1) {
+        errors.push({
+          path: `${at}.ref`,
+          message: `a ref holding the block once, found it ${times} times`,
+        });
+      }
+    }
     if (file === undefined) {
       errors.push({
         path: `${at}.file`,
@@ -360,7 +379,7 @@ const ruleErrors = (
           writes.file
         )}`,
       });
-    } else if (!holds(file, writes.block)) {
+    } else if (writes.ref === undefined && !holds(file, writes.block)) {
       errors.push({
         path: `${at}.block`,
         message: `a block in the step's target ${writes.file}, found ${found(

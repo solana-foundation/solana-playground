@@ -107,7 +107,8 @@ Every step carries whole files, never edits:
 - `start`: every file as the step finds it. Step 1 usually starts with
   `{ "src/lib.rs": "" }`.
 - `target`: every file as the step leaves it. Each block a beat writes must
-  appear in the target's file, its lines in a row.
+  appear in the target's file, its lines in a row, unless the write names
+  its own `ref` (the planned failure, below).
 - `file`: the step's main file, the one the editor shows.
 - `readOnly`: files the learner cannot edit in this step. A step that only
   deploys and calls changes no file: its `target` equals its `start`, and
@@ -116,8 +117,9 @@ Every step carries whole files, never edits:
 How a block lands: Playground finds the block's lines in the target and
 rebuilds the file from the target, keeping the lines the file already has.
 So blocks land in their place whatever order the beats write them in. The
-check does not test rules 1 and 3; break them and the check still passes,
-but blocks land in the wrong place. The rules:
+check does not test rule 1, nor rule 3 for a write without its own `ref`;
+break them and the check still passes, but blocks land in the wrong place.
+The rules:
 
 1. **A step's `start` is the previous step's `target`, copied exactly.** A
    line the learner's file has that neither the start nor the target knows
@@ -127,7 +129,8 @@ but blocks land in the wrong place. The rules:
    dropping blank ones: any other difference, a space inside a line, a
    comment, the text in a `msg!`, is refused. Keep the target's indentation
    in the block, since what lands is the block's own text.
-3. **Make each block, as a run of lines, unique in the target.** A block
+3. **Make each block, as a run of lines, unique in the target** (or in its
+   `ref`, where the check enforces it). A block
    lands at the first place its lines appear in a row, so a block of only
    `}` lines lands at the first `}`. Start the block from a line that names
    something. Single lines may repeat, with one catch: a line the file
@@ -159,6 +162,38 @@ with a code, a file and a line (`error[E0412]: ...`,
 unplanned. Any such error in that step before the fix counts as the planned
 one, so keep the step free of other errors. Ask the person to build that
 file in Playground before you write the failure's copy around it.
+
+**A write that builds something other than the target: `ref` and `start`.**
+The failing file is not the step's target, and its blocks may not be in the
+target as written (`InitPlayer` without `system_program`) or may sit there
+in another order. Give each such write the file it belongs to:
+
+- `ref`: the whole file the block lands in, here the failing build. The
+  block lands where `ref` has it, and the file is rebuilt from `ref` instead
+  of the target. The check wants the block in `ref` exactly once, and does
+  not look for it in the target.
+- `start`: the file as this write finds it, when that is not the step's
+  `start`. Its lines count as known; any that `ref` lacks go when the file is
+  rebuilt from `ref`. Every line the file can hold at that point must be in
+  `ref` or `start`, or the block goes to the end of the file instead. The fix question's write usually needs it: it replaces lines of
+  the failing build, which the step's `start` does not hold. Give it the
+  failing build as `start` and the step's target as `ref`.
+
+Each falls back on its own: a write with only `ref` still takes the step's
+`start`. The write's `file` must still be a file of the step's target. A
+write with neither lands against the step's target and start, as above. The
+example below is a fix question's write.
+Give every write of the failing build the same `ref`, so the lines the
+failure's copy quotes ("line 20") are the lines the learner sees.
+
+```text
+"writes": {
+  "file": "src/lib.rs",
+  "block": "    pub board: Box<Account<'info, Board>>,",
+  "ref": "<the step's target for src/lib.rs>",
+  "start": "<the failing build of src/lib.rs>"
+}
+```
 
 ## The four beats
 
