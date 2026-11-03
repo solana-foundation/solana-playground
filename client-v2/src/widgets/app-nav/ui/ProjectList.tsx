@@ -52,14 +52,14 @@ const NAME_TAKEN = "A project already has that name.";
  * in the field, not reported: another tab or device is all it takes.
  */
 const refusalOf = (error: unknown, entry: ProjectEntry) => {
-  const message = error instanceof Error ? error.message : null;
+  const message = error instanceof Error ? error.message : undefined;
   if (message === PgWorkspace.errors.NOT_FOUND) {
     return `${entry.name} is no longer in your projects.`;
   }
   if (message === PgWorkspace.errors.ALREADY_EXISTS) {
     return NAME_TAKEN;
   }
-  return null;
+  return undefined;
 };
 
 /**
@@ -113,8 +113,8 @@ const ProjectList = ({
   const [pins, setPins] = useState(readPins);
   const markers = useSyncMarkers();
   const progressOf = useTutorialProgress();
-  const [renaming, setRenaming] = useState<string | null>(null);
-  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | undefined>();
+  const [renameError, setRenameError] = useState<string | undefined>();
   // How the rename was asked for: it is counted on commit, with that `via`
   const renameVia = useRef<"click" | "key">("click");
   // A second Enter, or the blur after it, must not start a second rename of
@@ -173,11 +173,11 @@ const ProjectList = ({
 
   // The project being renamed went (renamed or deleted elsewhere): its field
   // goes with it, rather than come back on a project of that name later
-  const renamingGone = renaming !== null && !names.includes(renaming);
+  const renamingGone = renaming !== undefined && !names.includes(renaming);
   useEffect(() => {
     if (!renamingGone) return;
-    setRenaming(null);
-    setRenameError(null);
+    setRenaming(undefined);
+    setRenameError(undefined);
   }, [renamingGone]);
 
   const projects = listProjects(
@@ -233,7 +233,7 @@ const ProjectList = ({
         return;
       }
       case "rename":
-        setRenameError(null);
+        setRenameError(undefined);
         setRenaming(entry.name);
         return;
       case "duplicate": {
@@ -288,7 +288,7 @@ const ProjectList = ({
       return;
     }
     if (newName === entry.name) {
-      setRenaming(null);
+      setRenaming(undefined);
       return;
     }
     if (names.includes(newName)) {
@@ -308,8 +308,8 @@ const ProjectList = ({
         from: entry.name,
         announce: true,
       });
-      setRenaming(null);
-      setRenameError(null);
+      setRenaming(undefined);
+      setRenameError(undefined);
     } catch (e) {
       const refusal = refusalOf(e, entry);
       if (refusal) {
@@ -331,16 +331,16 @@ const ProjectList = ({
       loading={
         !PgExplorer.isTemporary && PgExplorer.allWorkspaceNames === undefined
       }
-      current={PgExplorer.currentWorkspaceName ?? null}
-      renaming={renamingGone ? null : renaming}
+      current={PgExplorer.currentWorkspaceName}
+      renaming={renamingGone ? undefined : renaming}
       renameError={renameError}
       onAction={onAction}
-      onRenameChange={() => setRenameError(null)}
+      onRenameChange={() => setRenameError(undefined)}
       onRenameCommit={onRenameCommit}
       onRenameCancel={() => {
         if (renamePending.current) return;
-        setRenaming(null);
-        setRenameError(null);
+        setRenaming(undefined);
+        setRenameError(undefined);
       }}
     />
   );
