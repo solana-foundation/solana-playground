@@ -256,7 +256,7 @@ export class PgExplorer {
     // This should no longer be an issue after the partial rewrite of explorer,
     // but keeping it anyway just in case the same problem occurs in the future.
     if (PgExplorer.tabs.length && !PgExplorer.currentFilePath) {
-      log.info("Tab and current file state is partially invalid");
+      log.warn("Tab and current file state is partially invalid");
       PgExplorer.openFile(PgExplorer.tabs[0]);
     }
 

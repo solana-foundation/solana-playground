@@ -465,9 +465,11 @@ const Monaco = () => {
         try {
           await PgExplorer.fs.writeFile(...args);
         } catch (e: any) {
-          log.warn(
-            `Error saving file ${PgExplorer.currentFilePath}. ${e.message}`
-          );
+          // The edit is lost on reload, so the team must hear of it
+          log.error(e, {
+            report: true,
+            context: { path: PgExplorer.currentFilePath },
+          });
         }
       }, 500);
     });

@@ -296,9 +296,12 @@ passes with `// eslint-disable-next-line <rule> -- <why>` on the line before
 it. Import order is an ESLint error in all of `src/`, `api/` and `e2e/`
 (`simple-import-sort/imports`), legacy roots included; in the layers and
 `api/` it also fails the build's `lint:layers`. Unused variables and
-shadowing are ESLint errors across the same three folders, and so is a
-direct `console` call in `src/` and `e2e/` outside the logger's console
-provider and the `.mjs` modules, which plain Node runs without the logger.
+shadowing are ESLint errors across the same three folders, and so is any
+`console` method in `src/` and `e2e/` outside the logger's console provider
+and the `.mjs` modules, which plain Node runs without the logger; in the
+layers and `api/` these fail `lint:layers` too. A leading `_` does not exempt
+an unused name: drop the binding (`[, value]`) or disable the line with a
+reason.
 `yarn eslint --fix --quiet <files>` sorts the imports;
 `yarn lint --fix` would also apply every warning's autofix across the tree.
 

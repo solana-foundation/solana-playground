@@ -201,7 +201,10 @@ export class PgTheme {
         await fontFace.load();
         document.fonts.add(fontFace);
       } catch (e) {
-        log.warn(`Failed to load font: ${this._font.family}\nError: ${e}`);
+        log.warn(`Failed to load font: ${this._font.family}`, {
+          ns: "theme:font",
+          context: { error: e },
+        });
       }
     }
 

@@ -592,7 +592,9 @@ const sendAndConfirmTxWithRetries = async (
       if (!result?.err) return txHash;
       if (await checkConfirmation()) return txHash;
     } catch (e: any) {
-      log.warn("Deploy transaction failed", { context: { error: e } });
+      log.warn("Deploy transaction attempt failed", {
+        context: { error: e, attempt: i + 1, maxAttempts: MAX_RETRIES },
+      });
       err = e;
       if (i === MAX_RETRIES - 1) break;
       await PgCommon.sleep(sleepAmount);
