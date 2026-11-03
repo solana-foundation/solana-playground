@@ -1405,15 +1405,19 @@ describe("POST /api/agent spend gate", () => {
     const leak = (text: string) => runs.find((run) => text.includes(run));
 
     beforeEach(() => {
-      vi.stubEnv("AGENT_API_KEY", KEY);
-      vi.stubEnv("AGENT_NEWCOMER_API_KEY", NEWCOMER_KEY);
+      vi.stubEnv("PG_AI_API_KEY", KEY);
+      vi.stubEnv("PG_AI_NEWCOMER_API_KEY", NEWCOMER_KEY);
     });
 
-    const failing = async (answer: Answer) => {
+    /** One turn whose upstream answers `answer`, dialled with `key` */
+    const failing = async (answer: Answer, key = KEY) => {
       const error = vi.spyOn(console, "error").mockImplementation(() => {});
       const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-      network(answer);
+      const fetched = network(answer);
       const res = await postJson(handler, TURN);
+      // The route must have dialled with the test's key, or it has nothing of
+      // that key to redact and every leak check passes on an empty claim
+      expect(sent(fetched).key).toBe(`Bearer ${key}`);
       return { res, logged: consoleText(error, warn) };
     };
 
@@ -1488,7 +1492,7 @@ describe("POST /api/agent spend gate", () => {
       db.state.users.set("user-1", { githubCreatedAt: null, token: "gho_1" });
       const { res, logged } = await failing(() => {
         throw new Error(`refused Bearer ${NEWCOMER_KEY}`);
-      });
+      }, NEWCOMER_KEY);
 
       expect(res.statusCode).toBe(502);
       expect(leak(res.body())).toBeUndefined();
@@ -1667,7 +1671,7 @@ describe("POST /api/agent spend gate", () => {
       [
         "an oversized body",
         () => {
-          vi.stubEnv("AGENT_MAX_BODY_BYTES", "16");
+          vi.stubEnv("PG_AI_MAX_BODY_BYTES", "16");
         },
       ],
       [

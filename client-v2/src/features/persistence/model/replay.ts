@@ -6,7 +6,7 @@ import { isToolCallRecord, type ToolCallRecord } from "./tool-call";
 /**
  * Characters of stored calls one replay sends, newest first, counted as JSON
  * writes them. The default backend refuses a body over 512 KB
- * (`AGENT_MAX_BODY_BYTES`), which also carries the prompt, the project and the
+ * (`PG_AI_MAX_BODY_BYTES`), which also carries the prompt, the project and the
  * conversation's text, and a character can take three bytes; a thread keeps
  * up to 200 items, so its records alone could pass 1 MB at their caps. Older
  * calls past the budget are left out, as all were before HOO-2425: the
