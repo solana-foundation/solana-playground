@@ -658,7 +658,11 @@ describe("POST /api/agent streaming", () => {
       .split("\n\n")
       .filter((e) => e.startsWith("data: "));
     const last = JSON.parse(events[events.length - 1].slice(6));
-    expect(last.error.message).toMatch(/write failed/);
+    // Reported in the route's own words: the thrown message stays in the log
+    expect(last.error.message).toBe(
+      "The default backend failed while relaying the answer."
+    );
+    expect(last.error.message).not.toMatch(/write failed/);
     expect(last.error.code).toBeUndefined();
   });
 

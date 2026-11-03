@@ -419,7 +419,9 @@ describe("the assistant's provider", () => {
         const turn = new AbortController();
         PgAssistant.beginTurn(turn);
 
-        const sent = defaultBackend().send("go slowly", turn.signal);
+        const sent = defaultBackend().send("go slowly", {
+          signal: turn.signal,
+        });
         await slow.started;
         cut();
         slow.release();
@@ -525,7 +527,8 @@ describe("the assistant's provider", () => {
     });
 
     it.each([
-      [true, ["write_file"]],
+      // Every tool the mocked `createTools` builds
+      [true, ["slow", "write_file"]],
       [false, undefined],
     ])(
       "with supportsTools %s, the request declares tools %j",
