@@ -1,5 +1,8 @@
+// A side-effect import, so the sort keeps it first: it defines the browser globals `./generated` reads under Node
+import "./node-compatiblity";
+
 import * as S from "./generated";
-import { IS_NODE } from "./node-compatiblity"; // Needs to happen first
+import { IS_NODE } from "./node-compatiblity";
 
 /** All configurable settings */
 export const SETTINGS = Object.values(S).flat();
