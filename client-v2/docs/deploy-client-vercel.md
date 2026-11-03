@@ -480,19 +480,28 @@ before this existed.
 ### Sentry on the API functions
 
 The functions report to the same Sentry project as the browser, through
-`withObservability` (`src/features/api/server/with-observability.mjs`), and
-need no variable of their own: `REACT_APP_SENTRY_DSN`, `SENTRY_PREVIEW_ENABLED`
-and `SENTRY_TRACES_SAMPLE_RATE` are described in `.env.example`. Without a DSN,
-or outside Production (and Preview with `SENTRY_PREVIEW_ENABLED=true`), a
-function never loads `@sentry/node` and makes no request. An error that
-escapes a handler is captured and rethrown, so the 500 is unchanged; a handler
-that answers a generic 500 itself calls `captureServerError`. Each function
-flushes before it returns.
+`withObservability` (`src/features/api/server/with-observability.mjs`). They
+share the browser's `REACT_APP_SENTRY_DSN` and `SENTRY_PREVIEW_ENABLED`;
+`SENTRY_TRACES_SAMPLE_RATE` is theirs alone. All three are described in
+`.env.example`. A function loads `@sentry/node` and makes requests only with a
+DSN and a Production deployment, or a Preview one with
+`SENTRY_PREVIEW_ENABLED=true`; otherwise it does neither.
 
-Events carry the route, method, status, release and environment, and the stack.
-`scrubEvent` removes the request body, cookies, query string, the user and every
-header but `accept`, `content-length`, `content-type`, `host`, `user-agent` and
-`x-vercel-id`, so `authorization` and the AI keys never leave the function.
+An error that escapes a handler is captured and rethrown, so the 500 is
+unchanged. A handler that answers a 500 itself (a driver failure, a broken
+catalogue) calls `captureServerError` before it responds; `api/auth.mjs`,
+`api/agent.mjs` and `api/sync.mjs` answer failures without it, so those are not
+reported. Each function flushes before it returns.
+
+An error event carries the stack, release and environment, and where the SDK's
+HTTP integration has seen the request, its method and path. The status is on the
+request's span. Nothing from the request travels: the SDK is told to collect no
+bodies, cookies, headers, query strings, user or IP, and `scrubEvent` and
+`scrubSpan` remove them again, together with the breadcrumbs (the handlers log
+upstream bodies and driver details to the console). A `pg` error is sent as its
+code and constraint, never its message, which echoes request values. Any other
+error is sent with its message as it is. AI keys never reach an event because
+they are only ever sent outbound, from the function's environment.
 
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A

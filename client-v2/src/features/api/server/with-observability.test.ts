@@ -2,6 +2,7 @@
 const sentry = vi.hoisted(() => ({
   init: vi.fn(),
   httpIntegration: vi.fn(),
+  requestDataIntegration: vi.fn(),
   continueTrace: vi.fn((_trace: unknown, run: () => unknown) => run()),
   startSpan: vi.fn((_options: unknown, run: (span: unknown) => unknown) =>
     run({ setAttribute: vi.fn(), setStatus: vi.fn() })
@@ -49,10 +50,11 @@ describe("tracesSampleRate", () => {
 });
 
 describe("scrubEvent", () => {
-  it("drops the body, cookies, query string, user and every header but a safe few", async () => {
+  it("drops the body, cookies, query string, user, breadcrumbs and every header but a safe few", async () => {
     const { scrubEvent } = await load();
     const event = scrubEvent({
       user: { id: "u1", ip_address: "1.2.3.4" },
+      breadcrumbs: [{ message: "api/agent: body" }],
       request: {
         url: "https://x.test/api/auth/callback?code=secret#frag",
         query_string: "code=secret",
@@ -72,6 +74,7 @@ describe("scrubEvent", () => {
     };
 
     expect(event.user).toBeUndefined();
+    expect(event).not.toHaveProperty("breadcrumbs");
     expect(event.request).toEqual({
       url: "https://x.test/api/auth/callback",
       headers: { "User-Agent": "jest", "content-type": "application/json" },
@@ -81,6 +84,47 @@ describe("scrubEvent", () => {
   it("passes an event with no request through", async () => {
     const { scrubEvent } = await load();
     expect(scrubEvent({ message: "m" } as never)).toEqual({ message: "m" });
+  });
+});
+
+describe("scrubSpan", () => {
+  it("drops the query from an outgoing request's URL", async () => {
+    const { scrubSpan } = await load();
+    const span = scrubSpan({
+      attributes: {
+        "url.query": "key=secret",
+        "url.full": "https://mcp.test/x?key=secret",
+        "http.url": { value: "https://mcp.test/x?key=secret", type: "string" },
+        "http.request.method": "GET",
+      },
+    } as never) as never as { attributes: Record<string, unknown> };
+
+    expect(span.attributes).toEqual({
+      "url.full": "https://mcp.test/x",
+      "http.url": "https://mcp.test/x",
+      "http.request.method": "GET",
+    });
+  });
+});
+
+describe("captureServerError", () => {
+  it("sends a pg error by its code and constraint, never its message", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("SENTRY_PREVIEW_ENABLED", "");
+    const { withObservability, captureServerError } = await load();
+    const pgError = Object.assign(new Error("Key (id)=(abc) already exists"), {
+      code: "23505",
+      constraint: "projects_pkey",
+    });
+
+    await withObservability("projects", async () => {
+      captureServerError(pgError);
+    })(req, res);
+
+    const sent = sentry.captureException.mock.calls[0][0] as Error;
+    expect(sent.message).toBe("database error 23505 (projects_pkey)");
+    expect(sent.stack).not.toContain("abc");
   });
 });
 
@@ -108,13 +152,18 @@ describe("withObservability", () => {
   it("scrubs error events, and sends no PII by default", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
     vi.stubEnv("VERCEL_ENV", "production");
-    const { withObservability, scrubEvent } = await load();
+    const { withObservability, scrubEvent, scrubSpan } = await load();
 
     await withObservability("agent", async () => "done")(req, res);
 
     const options = sentry.init.mock.calls[0][0];
     expect(options.beforeSend).toBe(scrubEvent);
-    expect(options.sendDefaultPii).toBe(false);
+    expect(options.dataCollection).toMatchObject({
+      httpBodies: [],
+      cookies: false,
+      httpHeaders: false,
+    });
+    expect(options.beforeSendSpan).toBe(scrubSpan);
   });
 
   it("reports an answered 500 through captureServerError, once", async () => {
@@ -135,6 +184,7 @@ describe("withObservability", () => {
   it("hands the request straight to the handler where Sentry is off", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
     vi.stubEnv("VERCEL_ENV", "preview");
+    vi.stubEnv("SENTRY_PREVIEW_ENABLED", "");
     const { withObservability } = await load();
     const handler = vi.fn(async () => "done");
 
@@ -174,6 +224,7 @@ describe("withObservability", () => {
         throw error;
       })(req, res)
     ).rejects.toBe(error);
+    expect(sentry.captureException).toHaveBeenCalledTimes(1);
     expect(sentry.captureException).toHaveBeenCalledWith(error);
     expect(sentry.flush).toHaveBeenCalled();
   });

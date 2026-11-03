@@ -27,6 +27,10 @@ const errorEvents = () =>
     .filter(([header]) => header.type === "event")
     .map(([, payload]) => payload as Record<string, any>);
 
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 describe("withObservability against the real SDK", () => {
   it("sends a thrown error once, scrubbed, and rethrows it for the 500", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
@@ -55,6 +59,7 @@ describe("withObservability against the real SDK", () => {
         getIsolationScope().setSDKProcessingMetadata({
           normalizedRequest: request,
         });
+        console.error(`upstream said ${key}`);
         throw boom;
       })({ method: "POST", headers: {} } as never, { statusCode: 200 } as never)
     ).rejects.toBe(boom);
@@ -62,9 +67,6 @@ describe("withObservability against the real SDK", () => {
     const events = errorEvents();
     expect(events).toHaveLength(1);
     expect(events[0].exception.values[0].value).toBe("boom");
-    expect(events[0].request.headers).toEqual({ "user-agent": "vitest" });
-    expect(events[0].request.url).toBe("https://x.test/api/agent");
-    expect(JSON.stringify(events[0])).not.toContain(key);
-    vi.unstubAllEnvs();
+    expect(JSON.stringify(sent.envelopes)).not.toContain(key);
   });
 });

@@ -87,8 +87,9 @@ changes archive independently.
 - Until the GA4 measurement id and the Sentry DSN are configured, both
   providers do nothing; the code ships first and the ids follow.
 - Out of scope:
-  - Logging and Sentry for `client-v2/api/*.mjs`. Those routes cannot import
-    `src/`, so they need their own module (ticket to file).
+  - Logging for `client-v2/api/*.mjs`. Sentry on those routes is
+    `withObservability` (`src/features/api/server/with-observability.mjs`),
+    not covered by a spec in this change.
   - A consent prompt or consent gate. Events are sent without one; adding one
     is a separate change.
   - Session replay and performance tracing in Sentry.

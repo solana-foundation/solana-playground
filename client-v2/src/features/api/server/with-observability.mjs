@@ -36,9 +36,9 @@ const KEPT_HEADERS = new Set([
  * What leaves the function on an event: never a body, a cookie, the query
  * string (an OAuth callback carries its `code` there), a header outside
  * `KEPT_HEADERS` (`authorization`, and the key headers a client may send), or
- * the user. Applies to error events: the SDK's default trace lifecycle sends
- * spans one by one, which carry only the route, method and status that
- * `withObservability` sets, and ignores `beforeSendTransaction`.
+ * the user, and the breadcrumbs. A second line behind `dataCollection` in
+ * `loadSentry`, which keeps request data off events and spans alike; spans are
+ * not passed to `beforeSend`.
  *
  * @template {import("@sentry/node").ErrorEvent} E
  * @param {E} event
@@ -46,6 +46,9 @@ const KEPT_HEADERS = new Set([
  */
 export const scrubEvent = (event) => {
   delete event.user;
+  // `console.*` calls land here with their raw arguments, and the handlers log
+  // upstream bodies and driver details on purpose
+  delete event.breadcrumbs;
   const request = event.request;
   if (!request) return event;
   delete request.data;
@@ -62,6 +65,53 @@ export const scrubEvent = (event) => {
   return event;
 };
 
+/** The text of an attribute, whether the SDK holds it raw or as `{ value }` */
+const attributeText = (attribute) =>
+  typeof attribute === "object" && attribute !== null
+    ? attribute.value
+    : attribute;
+
+/**
+ * What leaves on a streamed span: outgoing requests (AI providers, MCP
+ * upstreams) carry their URL, and an MCP source may keep a credential in its
+ * query string, so `url.query` goes and `url.full` and `http.url` lose theirs.
+ * Spans are not passed to `beforeSend`.
+ *
+ * @param {import("@sentry/node").StreamedSpanJSON} span
+ * @returns {import("@sentry/node").StreamedSpanJSON}
+ */
+export const scrubSpan = (span) => {
+  const attributes = span.attributes;
+  delete attributes["url.query"];
+  delete attributes["http.query"];
+  for (const key of ["url.full", "http.url"]) {
+    const text = attributeText(attributes[key]);
+    if (typeof text === "string") attributes[key] = text.split(/[?#]/)[0];
+  }
+  return span;
+};
+
+/**
+ * A copy of `error` that is safe to send: a `pg` error's message echoes
+ * values of the request (an invalid input, a duplicate key) and a connection
+ * failure's names the host, so only its code and constraint stay, with the
+ * original stack. Anything else goes as it is.
+ *
+ * @param {unknown} error
+ */
+const sendable = (error) => {
+  const code = /** @type {{ code?: unknown }} */ (error)?.code;
+  if (!(error instanceof Error) || typeof code !== "string") return error;
+  const constraint = /** @type {{ constraint?: unknown }} */ (error).constraint;
+  const safe = new Error(
+    `database error ${code}${
+      typeof constraint === "string" ? ` (${constraint})` : ""
+    }`
+  );
+  safe.stack = error.stack?.replace(error.message, safe.message);
+  return safe;
+};
+
 /** The initialised SDK, `null` where Sentry is off; one per function instance */
 let sdk;
 
@@ -69,15 +119,15 @@ let sdk;
 let loaded;
 
 /**
- * Reports an error a handler has already answered, as the routes that turn a
- * driver failure into a generic 500 do. An error that escapes the handler is
+ * Reports an error a handler answers with a 500 itself (a driver failure, a
+ * broken catalogue), as the routes do just before they respond. An error that escapes the handler is
  * captured by `withObservability` itself; do not report it twice. Does nothing
  * where Sentry is off.
  *
  * @param {unknown} error
  */
 export const captureServerError = (error) => {
-  loaded?.captureException(error);
+  loaded?.captureException(sendable(error));
 };
 
 const loadSentry = () => {
@@ -91,13 +141,36 @@ const loadSentry = () => {
       dsn: env.REACT_APP_SENTRY_DSN,
       environment: env.VERCEL_ENV,
       release: env.VERCEL_GIT_COMMIT_SHA,
-      sendDefaultPii: false,
+      // v11 collects everything unless told not to (`sendDefaultPii` is gone):
+      // bodies, headers, cookies, query strings and IPs ride on spans as well
+      // as events, and `beforeSend` sees events only
+      dataCollection: {
+        userInfo: false,
+        cookies: false,
+        httpHeaders: false,
+        httpBodies: [],
+        urlQueryParams: false,
+        genAI: { inputs: false, outputs: false },
+        databaseQueryData: false,
+      },
       beforeSend: scrubEvent,
+      beforeSendSpan: scrubSpan,
       // A request the browser already traces keeps the browser's decision
       tracesSampler: ({ inheritOrSampleWith }) => inheritOrSampleWith(rate),
       // `withObservability` names each request's span by route; the SDK's own
       // incoming-request span would be a second, unnamed trace per request
       integrations: [
+        // `dataCollection` alone leaves the request body on the segment span
+        Sentry.requestDataIntegration({
+          include: {
+            cookies: false,
+            data: false,
+            headers: false,
+            ip: false,
+            query_string: false,
+            url: false,
+          },
+        }),
         Sentry.httpIntegration({ disableIncomingRequestSpans: true }),
       ],
     });
