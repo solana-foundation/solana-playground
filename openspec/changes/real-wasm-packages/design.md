@@ -46,7 +46,7 @@ below reads the place its path consumes.
   workflow red by construction. `bundle:info` refuses a stub build, so a stub
   measurement cannot be written by accident.
 - **CI fails on an unexpected skip.** A called workflow concludes `success`
-  when its jobs are skipped, so `client-v2-reusable.yml` ends with a `gate`
+  when its jobs are skipped, so `reusable-client-v2.yml` ends with a `gate`
   job that requires `wasm` to succeed, or to be skipped only on a stub run.
 
 ## Risks / Trade-offs

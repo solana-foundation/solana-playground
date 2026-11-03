@@ -26,7 +26,7 @@ build cannot pass as success.
 
 #### Scenario: The wasm build is skipped (manual)
 
-- **WHEN** a condition in `client-v2-reusable.yml` skips the `wasm` job on a
+- **WHEN** a condition in `reusable-client-v2.yml` skips the `wasm` job on a
   run that was not asked for stubs
 - **THEN** its `gate` job fails, and so does the required `client-v2` check
 

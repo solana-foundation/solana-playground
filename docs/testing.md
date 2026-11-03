@@ -148,7 +148,7 @@ Expect: every command exits 0; `git status --porcelain` prints nothing (generate
 
 ### B-3. client-v2: CI parity
 
-Mirrors the `checks` job in [client-v2-reusable.yml](../.github/workflows/client-v2-reusable.yml) and the `build` job
+Mirrors the `checks` job in [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml) and the `build` job
 in [reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml), which
 [client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
 
@@ -187,7 +187,7 @@ Expect: exit code 0 for each; `server/target/release/solpg-server` exists.
 ### B-5. client-v2: browser suite
 
 Mirrors the `e2e` matrix and the `e2e-report` job in
-[client-v2-reusable.yml](../.github/workflows/client-v2-reusable.yml), which
+[reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml), which
 [client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
 
 Precondition: B-7, or `yarn --cwd client-v2 setup:with-stubs` and `test-e2e:with-stubs` in place of `test-e2e`, which
@@ -334,7 +334,7 @@ Same steps and expectations as C-2, run against the C-4 session.
 Precondition: a C-1 or C-4 session on the real packages. For client-v2,
 [wasm-clis.e2e.spec.ts](../client-v2/e2e/wasm-clis.e2e.spec.ts) runs these steps:
 `PORT=<slot port> yarn --cwd client-v2 test-e2e --grep @real-wasm`. On GitHub, the `e2e` job of
-[client-v2-reusable.yml](../.github/workflows/client-v2-reusable.yml) runs it when `client-v2.yml` calls that workflow;
+[reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml) runs it when `client-v2.yml` calls that workflow;
 `client-v2-with-stubs.yml` excludes the tag.
 
 Steps: connect the Playground Wallet, then run in the terminal `solana config get`, `spl-token --help`,

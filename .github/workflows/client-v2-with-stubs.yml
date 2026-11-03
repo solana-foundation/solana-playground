@@ -15,6 +15,6 @@ permissions:
 
 jobs:
   client-v2:
-    uses: ./.github/workflows/client-v2-reusable.yml
+    uses: ./.github/workflows/reusable-client-v2.yml
     with:
       use-wasm-stubs: true

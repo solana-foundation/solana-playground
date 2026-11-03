@@ -537,7 +537,7 @@ it.
   `DISPLAY_STEP_TOLERANCE_BYTES`, where real change of up to about two display
   steps can stay unrecorded.
 - **The browser suite runs in CI** (`yarn test-e2e`, the `e2e` matrix of
-  `client-v2-reusable.yml`, one shard per matrix entry; `client-v2.yml` runs
+  `reusable-client-v2.yml`, one shard per matrix entry; `client-v2.yml` runs
   that workflow on the real wasm packages) on every PR (GitHub reads the
   workflow from the PR's merge commit; see the root `CLAUDE.md`, "This is a
   fork"), and a red spec fails the PR's checks. The `@real-wasm` specs run

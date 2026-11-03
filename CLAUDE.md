@@ -25,7 +25,7 @@ against it; dev-process changes go straight to `master`.
 `ci.yml` checks formatting for `client/`, `server/`, and `wasm/` and clippy
 for `server/` and `wasm/`, but not `client/`'s build or tests;
 `client-v2.yml` guards `client-v2/` on the real wasm packages through
-`client-v2-reusable.yml`, with its production build and the checks on what
+`reusable-client-v2.yml`, with its production build and the checks on what
 that build emits in `reusable-client-v2-build.yml`. `ci.yml`
 and `client-v2.yml` run on pushes to `master` and on every PR: a
 `pull_request` run reads the workflow from the PR's merge commit, and no
@@ -171,7 +171,7 @@ Asked to build something in the client, look in `openspec/changes/` first.
   keeps the old copy, and an install over an old tree also kept a stale hoisting
   that failed webpack on `@noble/hashes/sha3`. The variable's name lives in `client-v2/scripts/wasm-stubs.sh`
   and `client-v2/scripts/wasm-stubs.mjs`. `client-v2.yml` runs on the real
-  packages: the `wasm` job of `client-v2-reusable.yml` builds them once, cached
+  packages: the `wasm` job of `reusable-client-v2.yml` builds them once, cached
   under Vercel's `wasm_source_key`, and the other jobs download them.
 - **`client-v2/public/` is gitignored and generated**, not authored.
   `scripts/update-static.mjs` copies it out of the `client/public` git submodule
