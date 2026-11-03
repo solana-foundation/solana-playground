@@ -21,8 +21,10 @@ test.describe("the wasm CLIs", REAL_WASM, () => {
     await account.click();
     await page.getByRole("menuitem", { name: "Connect wallet" }).click();
     await page.getByRole("button", { name: "Continue", exact: true }).click();
-    // The account row shows the balance once the wallet is connected
-    await expect(account).toContainText("SOL", LONG);
+    // The account menu's wallet group shows the balance once it is connected
+    await account.click();
+    await expect(page.getByRole("menuitem", { name: /SOL/ })).toBeVisible(LONG);
+    await page.keyboard.press("Escape");
 
     const drawer = page.getByRole("button", { name: "Terminal", exact: true });
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
