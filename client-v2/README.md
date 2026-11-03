@@ -183,12 +183,14 @@ docker compose -f ../compose.yaml --profile v2-unstable up --build
   `program-<template>` image per template before the port answers; a cold
   start takes several minutes under amd64 emulation.
 - `PG_SERVER_DIR` is the absolute path of another checkout's `server/`
-  directory, for example a pull request's worktree. Its files replace the
-  contents of the existing `templates/<name>/` directories only. The
-  template list and each template's settings (`get_all_templates` in
-  `server/src/templates/mod.rs`), `images/`, and `src/` stay the image's,
-  so a template the pull request adds, renames, or re-versions is not
-  built. A path that does not exist makes `up` refuse. A changed
+  directory, for example a pull request's worktree. Its `templates/`
+  replaces the image's whole, but start-up builds only the names in the
+  image's `get_all_templates` (`server/src/templates/mod.rs`), with the
+  image's settings for each: the Rust-side settings, `images/`, and `src/`
+  stay the image's. A listed template that the mounted `templates/` lacks,
+  for example one the pull request renames or re-versions, fails start-up;
+  a directory the pull request adds is ignored. A path that does not exist
+  makes `up` refuse. A changed
   `PG_SERVER_DIR` applies with `docker compose up -d server-unstable`,
   which recreates the container; `restart` keeps the old mount.
 - `PG_DOCKER_GID` is the numeric group that owns the Docker socket inside a

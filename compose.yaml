@@ -239,7 +239,7 @@ services:
       - ${PG_DOCKER_GID:-0} # the socket's numeric group: 0 on Docker Desktop and OrbStack, `stat -c %g /var/run/docker.sock` on Linux
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # Swaps only the files of existing templates/<name>/ directories; the template list, images/, and src/ stay the image's
+      # Replaces templates/ whole, but only get_all_templates names are built: a missing one fails start-up, an added one is ignored
       - type: bind
         source: ${PG_SERVER_DIR:-./server}/templates
         target: /home/solpg/templates

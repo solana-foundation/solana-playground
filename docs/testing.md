@@ -828,23 +828,33 @@ Expect: one image per directory in `server/templates/`.
 ### U-4. unstable profile
 
 Precondition: ports 3000, 8080, and 5432 free, or `PG_CLIENT_V2_PORT`, `PG_PORT`, and `PG_POSTGRES_PORT` set to free
-ones. To build another checkout's versions of the existing `templates/<name>/` directories, set `PG_SERVER_DIR` to the
-absolute path of its `server/` directory; the template list, `images/`, and `src/` stay the image's.
+ones. To build another checkout's templates, set `PG_SERVER_DIR` to the absolute path of its `server/` directory. Its
+`templates/` replaces the image's whole, and start-up builds only the names in the image's `get_all_templates`
+(`server/src/templates/mod.rs`): a listed template the mount lacks fails start-up, an added directory is ignored, and
+the Rust-side settings, `images/`, and `src/` stay the image's.
 
 ```sh
 docker compose --profile v2-unstable up --build -d
-until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' http://localhost:8080/unstable/bundle)" = 422 ]; do sleep 10; done
+tries=60
+until [ "$(curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: application/json' -d '{}' "http://localhost:${PG_PORT:-8080}/unstable/bundle")" = 422 ]; do
+  if [ -n "$(docker compose --profile v2-unstable ps --status exited -q server-unstable)" ]; then
+    echo 'server-unstable exited: read `docker compose --profile v2-unstable logs server-unstable`'; break
+  fi
+  tries=$((tries - 1))
+  if [ "$tries" -eq 0 ]; then echo 'no 422 after 10 minutes'; break; fi
+  sleep 10
+done
 docker compose --profile v2-unstable logs server-unstable | grep 'naming to'
 docker compose --profile v2-unstable exec server-unstable docker version
 ```
 
-Steps: once the `until` loop ends (the route exists and answers the empty request with `422`), open the client, run
-`setting set experimental.unstable true` in its terminal, build a program, then bundle a package.
+Steps: once the `until` loop ends without a message (the route exists and answers the empty request with `422`), open
+the client, run `setting set experimental.unstable true` in its terminal, build a program, then bundle a package.
 
 Expect:
 
 - [ ] the log names `solpg-server-sandbox-bundle` and one `solpg-server-sandbox-program-<template>` image per
-      directory in `templates/`.
+      template in `get_all_templates` (`server/src/templates/mod.rs`).
 - [ ] `docker version` prints a `Server` section: the container reaches the host's daemon.
 - [ ] `POST /unstable/build` and `POST /unstable/bundle` return 200.
 

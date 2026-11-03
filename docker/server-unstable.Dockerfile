@@ -27,7 +27,9 @@ COPY --chown=${USER}:${USER} src src
 COPY --chown=${USER}:${USER} templates templates
 
 # The stock image keeps no build target, so the cache mounts spare a cold rebuild of the dependencies
-RUN --mount=type=cache,target=/home/${USER}/target,uid=1001,gid=1001 \
+# The shared target outlives the checkout and cargo judges freshness by mtime, so the crate fingerprint goes first
+RUN --mount=type=cache,target=/home/${USER}/target,uid=1001,gid=1001,sharing=locked \
     --mount=type=cache,target=/home/${USER}/.cargo/registry,uid=1001,gid=1001 \
-    cargo build --release --features unstable \
+    rm -rf target/release/.fingerprint/solpg-server-* \
+    && cargo build --release --features unstable \
     && install -m 700 target/release/solpg-server solpg-server
