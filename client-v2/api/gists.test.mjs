@@ -74,6 +74,40 @@ describe("/api/gists", () => {
     assert.ok(!res.body.includes(TOKEN));
   });
 
+  it("creates a secret gist when the body names no visibility", async () => {
+    const { deps: d, calls } = deps({});
+
+    await call(post(validBody), d);
+
+    assert.equal(calls.createGist[0].public, false);
+  });
+
+  it("passes the body's visibility to GitHub", async () => {
+    for (const visibility of [true, false]) {
+      const { deps: d, calls } = deps({});
+
+      await call(
+        post({ description: "p", files: FILES, public: visibility }),
+        d
+      );
+
+      assert.equal(calls.createGist[0].public, visibility);
+    }
+  });
+
+  it("400s a visibility that is not a boolean and never calls GitHub", async () => {
+    const { deps: d, calls } = deps({});
+    // eslint-disable-next-line unicorn/no-null -- a JSON body can carry null, which the route must refuse
+    for (const visibility of ["yes", "false", 0, 1, null, {}, []]) {
+      const { status } = await call(
+        post({ description: "p", files: FILES, public: visibility }),
+        d
+      );
+      assert.equal(status, 400, JSON.stringify(visibility));
+    }
+    assert.equal(calls.createGist.length, 0);
+  });
+
   it("405s anything but a POST", async () => {
     const { deps: d } = deps({});
     assert.equal((await call(requestWith("GET")(validBody), d)).status, 405);

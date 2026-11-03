@@ -17,7 +17,12 @@ const answering = (status, { headers, body }) => {
 };
 
 const run = (fetch) =>
-  createGistWith(fetch)({ token: TOKEN, description: "counter", files: FILES });
+  createGistWith(fetch)({
+    token: TOKEN,
+    description: "counter",
+    files: FILES,
+    public: true,
+  });
 
 describe("features/gist/model/create-gist", () => {
   it("creates a public gist and answers its url and id", async () => {
@@ -41,6 +46,22 @@ describe("features/gist/model/create-gist", () => {
       public: true,
       files: FILES,
     });
+  });
+
+  it("creates a secret gist when asked to", async () => {
+    const github = answering(201, {
+      headers: {},
+      body: { id: "abc", html_url: "https://gist.github.com/ada/abc" },
+    });
+
+    await createGistWith(github.fetch)({
+      token: TOKEN,
+      description: "counter",
+      files: FILES,
+      public: false,
+    });
+
+    assert.equal(JSON.parse(github.calls[0].init.body).public, false);
   });
 
   it("reads a 404 from a token without the gist scope as needs-gist-scope", async () => {

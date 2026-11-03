@@ -94,6 +94,11 @@ export interface LayoutShellProps {
   cover?: { title: string; content: ReactNode; onClose: () => void };
   /** While Home shows, keep the work mounted (`BaseLayoutShellProps.keepWork`) */
   keepWork?: boolean;
+  /**
+   * Actions for the open project in the desktop stage bar, as the header's
+   * Share; not drawn under Home or over a page
+   */
+  stageBarActions?: ReactNode;
 }
 
 /** Whether a key pressed on `target` is typed into something */
@@ -120,6 +125,7 @@ const LayoutShell = ({
   home,
   cover,
   keepWork,
+  stageBarActions,
 }: LayoutShellProps) => {
   const viewport = useViewport();
   const phone = viewport === "phone";
@@ -590,6 +596,7 @@ const LayoutShell = ({
           }}
           // Under Home Ctrl+R does nothing, so the hint names no key
           assistantKey={homeShown ? null : "Ctrl+R"}
+          actions={homeShown ? undefined : stageBarActions}
         />
       }
       stageTabs={stageTabs}

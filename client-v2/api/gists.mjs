@@ -1,5 +1,6 @@
 /**
- * Share a project as a public gist on the user's own GitHub account.
+ * Share a project as a gist, secret unless the body asks for a public one, on
+ * the user's own GitHub account.
  *
  * The browser flattens the project (`features/gist/lib/format.ts`) and posts
  * the gist's files; this route holds the user's GitHub token, which Better
@@ -39,10 +40,13 @@ const sendJson = (res, status, body) => {
  * a 413. Sizes are re-checked here although the browser checks them first,
  * because the browser is not the only thing that can post.
  *
- * @returns {{description: string, files: Record<string, {content: string}>} | {error: "malformed" | "too-large"}}
+ * @returns {{description: string, files: Record<string, {content: string}>, public: boolean} | {error: "malformed" | "too-large"}}
  */
 const parseGist = (body) => {
-  const { description, files } = body;
+  const { description, files, public: visibility = false } = body;
+  // Secret when the field is missing, so a caller that forgets it never
+  // publishes by accident
+  if (typeof visibility !== "boolean") return { error: "malformed" };
   if (typeof description !== "string" || description.length > MAX_DESCRIPTION) {
     return { error: "malformed" };
   }
@@ -66,7 +70,7 @@ const parseGist = (body) => {
   for (const [, file] of entries) bytes += Buffer.byteLength(file.content);
   if (bytes > MAX_GIST_BYTES) return { error: "too-large" };
 
-  return { description, files };
+  return { description, files, public: visibility };
 };
 
 /** Thrown when the user has no GitHub grant we can use: signing in again mends it */
@@ -190,6 +194,7 @@ export const createHandler =
       token,
       description: gist.description,
       files: gist.files,
+      public: gist.public,
     });
     return sendJson(res, status, answer);
   };

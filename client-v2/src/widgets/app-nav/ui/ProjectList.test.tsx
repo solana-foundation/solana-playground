@@ -328,9 +328,11 @@ describe("ProjectList", () => {
     expect(deleted.props).toEqual({ name: "Hello Anchor", isLesson: true });
   });
 
-  it("hands Share as gist to the page's opener, with a reader of that project", async () => {
+  it("hands Share to the page's opener, with a reader of that project", async () => {
     const onShareGist = vi.fn().mockResolvedValue(undefined);
     files.readProjectFiles.mockResolvedValue({ "src/lib.rs": "x" });
+    // Share is on the open project's row only
+    app.state.current = "alpha";
     render(
       <TooltipProvider>
         <SidebarProvider>

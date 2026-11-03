@@ -13,9 +13,10 @@ import {
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
 import { ModalHost } from "@/widgets/overlays";
-import { openShareGistDialog } from "./ShareGistDialog";
+import { openShareGistDialogFor } from "./ShareGistDialog";
 
 // The barrels reach the build's generated globals; the dialog needs one hook
 // from them, and the gist feature's import side (`PgExplorer`) is not run here
@@ -28,6 +29,12 @@ vi.mock("@/utils", () => ({}));
 vi.mock("@/widgets/session-footer", async () => ({
   GithubMark: (await import("@/widgets/session-footer/ui/GithubMark")).default,
 }));
+
+/** A cancel the user made is a quiet line, never an error callout */
+const expectQuietCancel = () => {
+  const line = screen.getByText("Sign-in cancelled.");
+  expect(line.closest('[data-slot="callout"]')).toBeNull();
+};
 
 const USER: SessionUser = {
   id: "u1",
@@ -42,7 +49,15 @@ let logs: ReturnType<typeof memoryLog>;
 let fetchSpy: ReturnType<typeof vi.spyOn>;
 const readFiles = vi.fn(async () => ({ "src/lib.rs": "x" }));
 
+/** jsdom has no ResizeObserver, which the visibility radios measure with */
+class NoResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
 beforeEach(() => {
+  vi.stubGlobal("ResizeObserver", NoResizeObserver);
   initTelemetry({ providers: [memoryTelemetry()] });
   logs = memoryLog();
   initLogger({ providers: [logs] });
@@ -59,6 +74,7 @@ afterEach(() => {
     while (PgView.getOpenModals().length) PgView.closeTopModal();
   });
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   PgSession.reset();
   resetTelemetry();
   resetLogger();
@@ -66,9 +82,14 @@ afterEach(() => {
 
 /** Opens the share dialog for "counter" over a mounted host */
 const open = async () => {
-  render(<ModalHost />);
+  // The app's root provides the tooltips the visibility help tip needs
+  render(
+    <TooltipProvider>
+      <ModalHost />
+    </TooltipProvider>
+  );
   await act(async () => {
-    void openShareGistDialog("counter", readFiles);
+    void openShareGistDialogFor("project_menu")(readFiles, "counter");
   });
 };
 
@@ -111,10 +132,10 @@ describe("app/ShareGistDialog", () => {
     expect(cancel).not.toHaveBeenCalled();
     expect(signIn).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("heading", { name: "Share counter as a gist" })
+      screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Create public gist" })
+      screen.getByRole("button", { name: "Share to GitHub" })
     ).toBeTruthy();
     expect(readFiles).not.toHaveBeenCalled();
     expect(gistRequests()).toEqual([]);
@@ -125,7 +146,7 @@ describe("app/ShareGistDialog", () => {
     await open();
 
     expect(
-      screen.getByRole("heading", { name: "Share counter as a gist" })
+      screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Sign in to share" })).toBe(
       null
@@ -152,7 +173,7 @@ describe("app/ShareGistDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Sign in to share" })
     ).toBeTruthy();
-    expect(screen.getByText("Sign-in cancelled.")).toBeTruthy();
+    expectQuietCancel();
     expect(reported()).toEqual([]);
     expect(gistRequests()).toEqual([]);
   });
@@ -183,13 +204,38 @@ describe("app/ShareGistDialog", () => {
 
     await press("Sign in with GitHub");
 
-    const waiting = screen.getByRole("button", { name: "Waiting for GitHub…" });
-    expect((waiting as HTMLButtonElement).disabled).toBe(true);
-    await press("Cancel");
+    // The submit itself is the cancel while the popup waits
+    await press("Cancel sign-in");
+
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(
+      screen.getByRole("heading", { name: "Sign in to share" })
+    ).toBeTruthy();
+    expectQuietCancel();
+    expect(
+      screen.getByRole("button", { name: "Sign in with GitHub" })
+    ).toBeTruthy();
+    expect(reported()).toEqual([]);
+    expect(gistRequests()).toEqual([]);
+  });
+
+  it("gist-sharing: Closing the dialog while sign-in waits", async () => {
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: "https://x/" }),
+    } as Response);
+    const cancel = vi.fn();
+    PgSession.setOpenChannel(() => ({
+      receive: () => new Promise(() => {}),
+      cancel,
+    }));
+    await open();
+    await press("Sign in with GitHub");
+
+    await press(/^Cancel$/);
 
     expect(cancel).toHaveBeenCalledTimes(1);
     expect(PgView.getOpenModals()).toEqual([]);
-    expect(reported()).toEqual([]);
     expect(gistRequests()).toEqual([]);
   });
 
@@ -213,6 +259,28 @@ describe("app/ShareGistDialog", () => {
     await press("Cancel");
 
     expect(PgView.getOpenModals()).toEqual([]);
+    expect(cancel).not.toHaveBeenCalled();
+  });
+
+  it("offers no Cancel sign-in for a sign-in it did not start", async () => {
+    // A sign-in from the account menu, still waiting when Share opens
+    fetchSpy.mockResolvedValue({
+      ok: true,
+      json: async () => ({ url: "https://x/" }),
+    } as Response);
+    const cancel = vi.fn();
+    PgSession.setOpenChannel(() => ({
+      receive: () => new Promise(() => {}),
+      cancel,
+    }));
+    void PgSession.signIn().catch(() => {
+      // Never answered: the reset after the test drops the flow
+    });
+    await open();
+
+    const waiting = screen.getByRole("button", { name: "Waiting for GitHub…" });
+    expect((waiting as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Cancel sign-in" })).toBeNull();
     expect(cancel).not.toHaveBeenCalled();
   });
 
@@ -266,7 +334,7 @@ describe("app/ShareGistDialog", () => {
     }));
     await open();
     await press("Sign in with GitHub");
-    expect(screen.getByText("Sign-in cancelled.")).toBeTruthy();
+    expectQuietCancel();
 
     vi.spyOn(PgSession, "signIn").mockImplementation(() =>
       PgSession.refreshWith(USER)
@@ -275,7 +343,7 @@ describe("app/ShareGistDialog", () => {
 
     expect(screen.queryByText("Sign-in cancelled.")).toBe(null);
     expect(
-      screen.getByRole("heading", { name: "Share counter as a gist" })
+      screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
   });
 
@@ -288,7 +356,7 @@ describe("app/ShareGistDialog", () => {
     });
 
     expect(
-      screen.getByRole("heading", { name: "Share counter as a gist" })
+      screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: "Sign in to share" })).toBe(
       null
@@ -303,7 +371,7 @@ describe("app/ShareGistDialog", () => {
     });
 
     expect(
-      screen.getByRole("heading", { name: "Share counter as a gist" })
+      screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
   });
 });
