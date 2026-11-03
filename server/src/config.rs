@@ -35,7 +35,7 @@ impl Config {
         dotenv().ok();
 
         Ok(Config {
-            client_urls: get_env::<String>("CLIENT_URLS", "http://localhost,https://beta.solpg.io")
+            client_urls: get_env::<String>("CLIENT_URLS", "http://localhost,http://127.0.0.1,https://beta.solpg.io")
                 .split(',')
                 .map(str::trim)
                 .map(ToOwned::to_owned)
