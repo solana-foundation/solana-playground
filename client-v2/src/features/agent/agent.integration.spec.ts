@@ -321,13 +321,13 @@ describe("POST /api/agent body validation", () => {
     ["empty", ""],
   ];
 
-  for (const [label, key] of missingKeys) {
+  missingKeys.forEach(([label, key]) => {
     it(`answers 503 when the key is ${label}, before reading the body`, async () => {
       vi.stubEnv("AGENT_API_KEY", key);
       const res = await postJson(handler, "null");
       expect(res.statusCode).toBe(503);
     });
-  }
+  });
 });
 
 /**

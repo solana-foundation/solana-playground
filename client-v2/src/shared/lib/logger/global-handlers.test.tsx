@@ -67,10 +67,10 @@ describe("installGlobalHandlers", () => {
     expect(logged.entries).toEqual([]);
   });
 
-  for (const message of [
+  [
     "ResizeObserver loop limit exceeded",
     "ResizeObserver loop completed with undelivered notifications",
-  ]) {
+  ].forEach((message) => {
     it(`should log another ResizeObserver error: ${message}`, () => {
       globalThis.dispatchEvent(new ErrorEvent("error", { message }));
 
@@ -83,7 +83,7 @@ describe("installGlobalHandlers", () => {
       ]);
       expect(logged.entries[0].error?.message).toBe(message);
     });
-  }
+  });
 
   it("should log an error thrown with the notice's text", () => {
     const error = new Error(NOTICE);

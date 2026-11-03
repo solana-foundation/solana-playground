@@ -6,7 +6,7 @@ import { ModalFrame } from "@/widgets/overlays";
 interface ApproveProps {}
 
 // TODO:
-const Approve: FC<React.PropsWithChildren<ApproveProps>> = ({}) => {
+const Approve: FC<React.PropsWithChildren<ApproveProps>> = () => {
   const handleApprove = () => {};
 
   return (

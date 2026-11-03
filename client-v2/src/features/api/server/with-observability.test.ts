@@ -40,6 +40,7 @@ describe("tracesSampleRate", () => {
   });
 
   for (const [label, value, rate] of cases) {
+    // eslint-disable-next-line jest/valid-title -- a table test, titled by its row
     it(label, async () => {
       const { tracesSampleRate } = await load();
       expect(tracesSampleRate(value)).toBe(rate);

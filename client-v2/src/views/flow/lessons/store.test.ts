@@ -358,6 +358,25 @@ describe("PgLesson.init -- real PgTutorialStorage default semantics", () => {
     }
   });
 
+  it("starts an empty record when the stored lesson is null", async () => {
+    // JSON on disk can hold `"lesson": null`; it reads as no progress yet
+    // eslint-disable-next-line unicorn/no-null -- a value JSON.parse returns
+    files.set(PATH.tutorial, { lesson: null });
+    explorer.currentWorkspaceName = PATH.tutorial;
+    const sub = PgLesson.init();
+    try {
+      await flush();
+
+      expect(PgLesson.state.loadFailed).toBe(false);
+      expect(PgLesson.state.record.events.map((e) => e.type)).toEqual([
+        "enter",
+      ]);
+    } finally {
+      sub.dispose();
+      files.delete(PATH.tutorial);
+    }
+  });
+
   it("does not leak one lesson's record into the next workspace's load", async () => {
     explorer.currentWorkspaceName = PATH.tutorial;
     const sub = PgLesson.init();
