@@ -65,7 +65,7 @@ print `^C` and one line:
 - after the buffer was closed: "Stopped. The program was not deployed. Its
   buffer account was closed and the SOL returned."
 - if closing failed: "Stopped. The program was not deployed. The buffer
-  account <address> still holds its SOL; run `solana program close
+  account <address> still holds its SOL. Run `solana program close
   --buffers` to reclaim it."
 
 The program on chain SHALL stay as it was. From the final deploy or upgrade
@@ -96,6 +96,14 @@ recorded in the history.
   and the person presses Ctrl+C
 - **THEN** the terminal prints "This step can't be stopped. Wait for it to
   finish." and the deploy ends as it would have
+
+#### Scenario: A stop whose buffer could not be closed (manual)
+
+- **WHEN** a deploy is stopped after its buffer exists and closing the buffer
+  fails
+- **THEN** the terminal prints "Stopped. The program was not deployed. The
+  buffer account <address> still holds its SOL. Run `solana program close
+  --buffers` to reclaim it.", in two sentences with no semicolon
 
 ### Requirement: A command that cannot stop says so
 

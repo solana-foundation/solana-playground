@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgCommandManager } from "./command";
 import { isStopped, StoppedError } from "./stopped";
-import { PgTerminal } from "./terminal";
+import { PgTerminal, TerminalLineError } from "./terminal";
 
 let saved: typeof PgCommandManager.all;
 
@@ -207,5 +207,33 @@ describe("PgCommandManager.stop", () => {
     finish();
     await expect(run).resolves.toBeUndefined();
     expect(PgCommandManager.stop()).toBe(false);
+  });
+});
+
+describe("PgCommandManager.execute, an unknown command", () => {
+  it("suggests the closest command and offers it to Up", async () => {
+    install({ handle: vi.fn() });
+    const offerFromHistory = vi.fn();
+    vi.spyOn(PgTerminal, "get").mockResolvedValue({
+      offerFromHistory,
+    } as never);
+
+    const run = PgCommandManager.execute(["prboe"]);
+
+    await expect(run).rejects.toBeInstanceOf(TerminalLineError);
+    await expect(run).rejects.toThrow(
+      "`prboe` is not a command. Did you mean `probe`?"
+    );
+    expect(offerFromHistory).toHaveBeenCalledWith("probe");
+  });
+
+  it("points to help, offering nothing, when nothing is close", async () => {
+    install({ handle: vi.fn() });
+    const get = vi.spyOn(PgTerminal, "get");
+
+    await expect(PgCommandManager.execute(["xyzzy"])).rejects.toThrow(
+      "`xyzzy` is not a command. Type `help` to see commands."
+    );
+    expect(get).not.toHaveBeenCalled();
   });
 });

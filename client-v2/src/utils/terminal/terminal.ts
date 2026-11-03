@@ -12,7 +12,9 @@ import { PgCommon } from "../common";
 import { isStopped } from "../stopped";
 import type { ClassReturnType, Methods, SyncOrAsync } from "../types";
 import { PgAutocomplete } from "./autocomplete";
+import { confirmReply, confirmSuffix } from "./confirm";
 import { PgHistory } from "./history";
+import { processErrorLine } from "./line-error";
 import { PgShell } from "./shell";
 import { PgTty } from "./tty";
 import type { CommandManager, Prefixes, PrintOptions } from "./types";
@@ -155,7 +157,7 @@ export class PgTerminal {
     try {
       return await term.process<T>(cb);
     } catch (e) {
-      // `PgTerm.process` has shown `Process error: …` in the terminal by now,
+      // `PgTerm.process` has printed the failure's line in the terminal by now,
       // so a button that started this must not show the failure a second
       // time. Only while the console is open: printed into a folded one, the
       // user saw nothing here, so the button's toast tells them, unless the
@@ -570,14 +572,16 @@ export class PgTerm {
         )
       );
     } else if (opts?.confirm) {
-      // Confirm is a special case choice
-      convertedMsg += PgTerminal.secondaryText(` [yes/no]`);
+      // Confirm is a special case choice; the default shows in capitals
+      convertedMsg += PgTerminal.secondaryText(
+        ` ${confirmSuffix(opts.default)}`
+      );
       disposables.push(
         this._autocomplete.temporarilySetHandlers(["yes", "no"])
       );
     }
 
-    if (opts?.default) {
+    if (opts?.default && !opts.confirm) {
       const value = opts.default;
       convertedMsg += ` (default: ${value})`;
       disposables.push(
@@ -592,8 +596,10 @@ export class PgTerm {
       disposables.reverse().forEach(({ dispose }) => dispose());
     }
 
-    // Set the input to the default if it exists on empty input
-    if (!userInput && opts?.default) userInput = opts.default;
+    // Set the input to the default if it exists on empty input; a yes or no
+    // answer also takes `y`, `n` and capitals
+    if (opts?.confirm) userInput = confirmReply(userInput, opts.default);
+    else if (!userInput && opts?.default) userInput = opts.default;
 
     // Default validators
     if (opts && !opts.validator) {
@@ -702,10 +708,8 @@ export class PgTerm {
       // The previous line is not available until the next event loop
       await PgCommon.sleep(0);
 
-      // A stop says what it stopped and what it left, as a plain line
-      const msg = isStopped(e)
-        ? e.message
-        : `Process error: ${e?.message ? e.message : e}`;
+      // A stop, and a failure that is its own line, print with no prefix
+      const msg = processErrorLine(e);
       const previousLine = this._tty.getLine(1)?.translateToString().trim();
       if (previousLine !== msg) this.println(msg);
 
@@ -713,6 +717,16 @@ export class PgTerm {
     } finally {
       this.enable();
     }
+  }
+
+  /**
+   * Offer a command as the next Up at the prompt, as if it had been typed:
+   * the terminal's answer to a typo suggests it (Spec 13, "Not found").
+   *
+   * @param command the command line to offer
+   */
+  offerFromHistory(command: string) {
+    this._shell.history.push(command);
   }
 
   /**
