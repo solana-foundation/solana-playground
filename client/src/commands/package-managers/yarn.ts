@@ -1,9 +1,10 @@
-import { PgCommon, PgJsPackage, PgTerminal } from "../../utils";
 import { createArgs, createCmd, createOptions, createSubcmd } from "../create";
+import { checkExperimentalUnstable, createHandler } from "./common";
 
 export const yarn = createCmd({
   name: "yarn",
   description: "Yarn package manager (v1)",
+  preChecks: checkExperimentalUnstable,
   subcommands: [
     // TODO: `init`
 
@@ -70,22 +71,3 @@ export const yarn = createCmd({
     }),
   ],
 });
-
-/**
- * Create a `yarn` command handler.
- *
- * @param names names to print
- */
-function createHandler(names: { loading: string; success: string }) {
-  return async (input: { tokens: string[] }) => {
-    PgTerminal.println(PgTerminal.info(`${names.loading}...`));
-    const startTime = performance.now();
-    await PgJsPackage.update(input.tokens);
-    const timePassed = (performance.now() - startTime) / 1000;
-    PgTerminal.println(
-      `${PgTerminal.success(
-        `${names.success} successful.`
-      )} Completed in ${PgCommon.formatSeconds(timePassed)}.`
-    );
-  };
-}

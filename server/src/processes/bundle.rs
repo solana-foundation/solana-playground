@@ -3,7 +3,7 @@ use std::{
     env,
     fs::{self, DirEntry},
     io,
-    path::{Path, PathBuf},
+    path::{Path, PathBuf, MAIN_SEPARATOR_STR},
     process::Command,
 };
 
@@ -14,17 +14,36 @@ use solpg_server::{
     utils::Files,
 };
 
+/// Maximum amount of total direct dependencies specified in manifest
+const MAX_DEPENDENCY_AMOUNT: usize = 64;
+
 // TODO: Make the process output a single compressed archive with all the files in it
 fn main() -> Result<()> {
     let args = Args::from_env()?;
-    let manifest = handle_package_manager_command(&args)?;
-    generate_bundle(&manifest)?;
-    generate_types(&manifest)?;
-    Ok(())
+    let manifest_path = Path::new(PACKAGES_DIR).join(MANIFEST_FILE);
+    let manifest = fs::read(manifest_path).map(|b| serde_json::from_slice::<Manifest>(&b))??;
+    match args {
+        Args::Install { command } => {
+            let total_dep_amount = manifest
+                .sum_all_dependencies()
+                .ok_or_else(|| anyhow!("Too many dependencies"))?;
+            if total_dep_amount > MAX_DEPENDENCY_AMOUNT {
+                return Err(anyhow!("Too many dependencies: {total_dep_amount}"));
+            }
+
+            run_package_manager_command(command)
+        }
+        Args::Build => {
+            generate_bundle(&manifest)?;
+            generate_types(&manifest)?;
+            Ok(())
+        }
+    }
 }
 
-struct Args {
-    command: Vec<String>,
+enum Args {
+    Install { command: Vec<String> },
+    Build,
 }
 
 impl Args {
@@ -33,9 +52,18 @@ impl Args {
         if args.next().is_none() {
             return Err(anyhow!("Missing program"));
         };
+        let Some(step) = args.next() else {
+            return Err(anyhow!("Missing step"));
+        };
+        let args = match step.as_str() {
+            "install" => Self::Install {
+                command: args.collect(),
+            },
+            "build" => Self::Build,
+            _ => return Err(anyhow!("Invalid step: {step}")),
+        };
 
-        let command = args.collect();
-        Ok(Self { command })
+        Ok(args)
     }
 }
 
@@ -70,26 +98,68 @@ impl Manifest {
         deps.extend(self.optional_dependencies.clone());
         deps
     }
+
+    /// Get the total number of dependencies. `None` if overflow occured.
+    fn sum_all_dependencies(&self) -> Option<usize> {
+        // Do not use `Self::get_all_dependencies` because it's lossy
+        self.dependencies
+            .len()
+            .checked_add(self.dev_dependencies.len())?
+            .checked_add(self.peer_dependencies.len())?
+            .checked_add(self.optional_dependencies.len())
+    }
 }
 
 /// `package.json` dependencies map
 type Dependencies = HashMap<String, String>;
 
-/// Install packages.
-fn handle_package_manager_command(args: &Args) -> Result<Manifest> {
-    match args.command.as_slice() {
+/// Run the package manager command.
+fn run_package_manager_command(command: Vec<String>) -> Result<()> {
+    // TODO: Only match command name once (merge with the command runner path)
+    let lock_file_name = match command.first().map(|s| s.as_str()).unwrap_or("npm") {
+        "npm" => "package-lock.json",
+        "yarn" => "yarn.lock",
+        name => return Err(anyhow!("Unsupported package manager: `{name}`")),
+    };
+    let packages_path = Path::new(PACKAGES_DIR);
+    let lock_file_in_path = packages_path.join(LOCK_FILE);
+    let lock_file_real_path = packages_path.join(lock_file_name);
+    if fs::exists(&lock_file_in_path)? {
+        fs::rename(lock_file_in_path, &lock_file_real_path)?;
+    }
+
+    match command.as_slice() {
         [name, args @ ..] => match name.as_str() {
+            "npm" => {
+                match args {
+                    [command, args @ ..] => match command.as_str() {
+                        "install" => run_npm(
+                            command,
+                            args,
+                            &[
+                                "--save-dev",
+                                "-D",
+                                "--save-peer", // `-P` is `--save-prod` which is useless
+                                "--save-optional",
+                                "-O",
+                            ],
+                        )?,
+                        "uninstall" | "update" => run_npm(command, args, &[])?,
+                        _ => return Err(anyhow!("Unsupported command: `{command}`")),
+                    },
+                    // Empty `npm` defaults to help output
+                    _ => return Err(anyhow!("Expected a command")),
+                }
+            }
             "yarn" => {
                 match args {
                     [command, args @ ..] => match command.as_str() {
-                        "add" | "install" | "remove" | "upgrade" => run_yarn(
+                        "add" => run_yarn(
                             command,
                             args,
-                            match command.as_str() {
-                                "add" => &["--dev", "-D", "--peer", "-P", "--optional", "-O"],
-                                _ => &[],
-                            },
+                            &["--dev", "-D", "--peer", "-P", "--optional", "-O"],
                         )?,
+                        "install" | "remove" | "upgrade" => run_yarn(command, args, &[])?,
                         _ => return Err(anyhow!("Unsupported command: `{command}`")),
                     },
                     // Empty `yarn` defaults to install
@@ -98,40 +168,51 @@ fn handle_package_manager_command(args: &Args) -> Result<Manifest> {
             }
             _ => return Err(anyhow!("Unsupported package manager: `{name}`")),
         },
-        // TODO: `npm` as a safer default?
-        _ => run_yarn("install", &[], &[])?,
+        // No `command` defaults to `npm install`
+        _ => run_npm("install", &[], &[])?,
     }
 
-    let packages_path = Path::new(PACKAGES_DIR);
     let out_path = get_out_path();
     fs::create_dir_all(&out_path)?;
+    fs::copy(
+        packages_path.join(MANIFEST_FILE),
+        out_path.join(MANIFEST_FILE),
+    )?;
+    fs::copy(lock_file_real_path, out_path.join(LOCK_FILE))?;
 
-    let manifest_path = packages_path.join(MANIFEST_FILE);
-    fs::copy(&manifest_path, out_path.join(MANIFEST_FILE))?;
-
-    let lock_file_path = packages_path.join(LOCK_FILE);
-    fs::copy(lock_file_path, out_path.join(LOCK_FILE))?;
-
-    fs::read(manifest_path)
-        .map(|b| serde_json::from_slice(&b))?
-        .map_err(Into::into)
+    Ok(())
 }
 
-/// Run the `yarn` command using safe(r) defaults.
+/// Run the given `npm` command using safe(r) defaults.
 ///
 /// # Safety
 ///
-/// Only options specified in `allowed_options` are allowed to be passed in.
-///
-/// **Arguments are not sanitized!**
-fn run_yarn(command: &str, args: &[String], allowed_options: &[&'static str]) -> Result<()> {
-    if let Some(opt) = args
-        .iter()
-        .filter(|arg| arg.starts_with('-'))
-        .find(|arg| !allowed_options.iter().any(|opt| opt == arg))
-    {
-        return Err(anyhow!("Invalid option: `{opt}`"));
+/// Scripts are ignored and only `allowed_options` are accepted, but arguments are passed in to the
+/// command as-is without any additional sanitization.
+fn run_npm(command: &str, args: &[String], allowed_options: &[&'static str]) -> Result<()> {
+    check_allowed_options(args, allowed_options)?;
+
+    let status = Command::new("npm")
+        .current_dir(PACKAGES_DIR)
+        .arg("--ignore-scripts")
+        .arg(command)
+        .args(args)
+        .status()?;
+    if !status.success() {
+        return Err(anyhow!("Failed to {command}"));
     }
+
+    Ok(())
+}
+
+/// Run the given `yarn` command using safe(r) defaults.
+///
+/// # Safety
+///
+/// Scripts are ignored and only `allowed_options` are accepted, but arguments are passed in to the
+/// command as-is without any additional sanitization.
+fn run_yarn(command: &str, args: &[String], allowed_options: &[&'static str]) -> Result<()> {
+    check_allowed_options(args, allowed_options)?;
 
     let status = Command::new("yarn")
         .current_dir(PACKAGES_DIR)
@@ -147,6 +228,20 @@ fn run_yarn(command: &str, args: &[String], allowed_options: &[&'static str]) ->
     Ok(())
 }
 
+/// Check that only the options specified in `allowed_options` are allowed to be passed in.
+fn check_allowed_options(args: &[String], allowed_options: &[&'static str]) -> Result<()> {
+    if let Some(opt) = args
+        .iter()
+        .map(|arg| arg.trim())
+        .filter(|arg| arg.starts_with('-'))
+        .find(|arg| !allowed_options.iter().any(|opt| opt == arg))
+    {
+        return Err(anyhow!("Invalid option: `{opt}`"));
+    }
+
+    Ok(())
+}
+
 /// Generate an ESM bundle.
 fn generate_bundle(manifest: &Manifest) -> Result<()> {
     // Create a separate directory for each package
@@ -154,8 +249,10 @@ fn generate_bundle(manifest: &Manifest) -> Result<()> {
     let src_path = packages_path.join(SRC_DIR);
     let mut entries = vec![];
     for pkg in manifest.get_all_dependencies().keys() {
-        // Skip the `@types` organization
-        if pkg.starts_with("@types") {
+        // `typescript` is a massive dependency that takes up a lot of resources to bundle while
+        // having very little benefit. Do not skip all `devDependencies` because the goal is to keep
+        // the behavior as close as possible to the local behavior.
+        if pkg.starts_with("@types") || pkg == "typescript" {
             continue;
         }
 
@@ -278,7 +375,7 @@ fn generate_types(manifest: &Manifest) -> Result<()> {
 
     let files = get_output_files(|entry| {
         let file_name = entry.file_name();
-        file_name == TYPES_FILE || file_name == DEPENDENCIES_FILE
+        file_name == MANIFEST_FILE || file_name == TYPES_FILE
     })?;
     fs::write(
         get_out_path().join(TYPES_FILE),
@@ -289,6 +386,9 @@ fn generate_types(manifest: &Manifest) -> Result<()> {
 }
 
 /// Port of [`generate-packages.mjs`] (without the Monaco editor parts).
+///
+/// Packages are cached eagerly without waiting for their results. This function will return `Ok`
+/// if the package is cached, even if there was an error.
 ///
 /// [`generate-packages.mjs`]: https://github.com/solana-playground/solana-playground/blob/7d9f365a5009fd65aaa388e85bc541e5f4f51ae9/client/scripts/generate-packages.mjs
 fn generate_package_types(name: &str, cache: &mut HashSet<String>) -> Result<()> {
@@ -301,78 +401,52 @@ fn generate_package_types(name: &str, cache: &mut HashSet<String>) -> Result<()>
     // recursion when type generation fails for both circular dependencies.
     cache.insert(name.to_owned());
 
-    let build_path = get_build_path();
-    // Flatten the `@types` into the out directory so that clients have a easier time importing
-    let out_path = build_path.join(name.replace("@types/", ""));
-    let types_path = out_path.join(TYPES_FILE);
-    let deps_path = out_path.join(DEPENDENCIES_FILE);
+    // Get manifest
+    let pkg_path = Path::new(PACKAGES_DIR).join(NODE_MODULES).join(name);
+    let manifest_path = pkg_path.join(MANIFEST_FILE);
+    let manifest = match fs::read(&manifest_path) {
+        Ok(b) => serde_json::from_slice::<Manifest>(&b)?,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(anyhow!("No manifest")),
+        Err(e) => return Err(anyhow!("Unexpected fs error: {e}")),
+    };
 
-    // Node built-ins are handled differently because each file is a different module and we don't
-    // need all of them
-    let node_modules = Path::new(PACKAGES_DIR).join(NODE_MODULES);
-    let types_node_path = node_modules
-        .join("@types")
-        .join("node")
-        .join(name)
-        .with_extension("d.ts");
-    if fs::exists(&types_node_path)? {
-        let content = fs::read_to_string(&types_node_path)?;
-        let files = convert_type_files(vec![(types_node_path, content)])?;
-        fs::create_dir_all(out_path)?;
-        fs::write(types_path, serde_json::to_string(&files)?)?;
-        fs::write(deps_path, "[]")?;
-        return Ok(());
-    }
+    // Get type declarations
+    let files = manifest
+        .types
+        .as_ref()
+        .or(manifest.typings.as_ref())
+        .ok_or_else(|| anyhow!("Failed to find type root"))
+        .map(Path::new)
+        .map(|type_root| pkg_path.join(type_root))
+        .map(|type_root| get_all_declaration_files(&type_root))?
+        .map_err(|e| anyhow!("Failed to get type paths: {e}"))
+        .map(convert_type_files)??;
 
-    let pkg_roots = [&node_modules, &node_modules.join("@types")];
-    for pkg_root in pkg_roots {
-        let pkg_path = pkg_root.join(name);
-        let manifest = match fs::read(pkg_path.join(MANIFEST_FILE)) {
-            Ok(b) => serde_json::from_slice::<Manifest>(&b)?,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            Err(e) => return Err(anyhow!("Unexpected fs error: {e}")),
-        };
+    // Get output paths
+    let out_path = get_build_path().join(name);
+    let types_out_path = out_path.join(TYPES_FILE);
+    let manifest_out_path = out_path.join(MANIFEST_FILE);
 
-        let type_root = manifest
-            .types
-            .as_ref()
-            .or(manifest.typings.as_ref())
-            .ok_or_else(|| anyhow!("Failed to find type root"))
-            .map(Path::new)
-            .map(|type_root| pkg_path.join(type_root))?;
-        let files = get_all_declaration_files(&type_root)
-            .map_err(|e| anyhow!("Failed to get type paths: {e}"))
-            .map(convert_type_files)??;
+    // Save type declarations
+    fs::create_dir_all(out_path)?;
+    fs::write(types_out_path, serde_json::to_string(&files)?)?;
 
-        // Save type declarations
-        fs::create_dir_all(out_path)?;
-        fs::write(types_path, serde_json::to_string(&files)?)?;
+    // Get transitive dependencies that are being referenced in type declarations
+    manifest
+        .get_all_dependencies()
+        .into_keys()
+        // TODO: Make this more robust (if necesssary)
+        .filter(|dep| files.iter().any(|(_, content)| content.contains(dep)))
+        .for_each(|dep| {
+            if let Err(e) = generate_package_types(&dep, cache) {
+                eprintln!("Failed to generate types for `{dep}`: {e}")
+            }
+        });
 
-        // Get transitive dependencies that are being referenced in type declarations
-        let deps = manifest
-            .get_all_dependencies()
-            .into_keys()
-            // TODO: Make this more robust (if necesssary)
-            .filter(|dep| files.iter().any(|(_, content)| content.contains(dep)))
-            .fold(vec![], |mut acc, dep| {
-                match generate_package_types(&dep, cache) {
-                    Ok(_) => acc.push(dep),
-                    Err(e1) => match generate_package_types(&format!("@types/{dep}"), cache) {
-                        Ok(_) => acc.push(dep),
-                        Err(e2) => eprintln!("Failed to generate types for `{dep}`: {e1}\n{e2}"),
-                    },
-                }
+    // Copy the manifest
+    fs::copy(manifest_path, manifest_out_path)?;
 
-                acc
-            });
-
-        // Save type dependencies
-        fs::write(deps_path, serde_json::to_string(&deps)?)?;
-
-        return Ok(());
-    }
-
-    Err(anyhow!("Could not find type declarations"))
+    Ok(())
 }
 
 /// Get all type declaration files recursively.
@@ -418,9 +492,8 @@ fn get_all_declaration_files(path: &Path) -> io::Result<Vec<(PathBuf, String)>> 
 }
 
 /// Convert files to the expected format.
-fn convert_type_files(files: Vec<(PathBuf, String)>) -> anyhow::Result<Files> {
+fn convert_type_files(files: Vec<(PathBuf, String)>) -> Result<Files> {
     // TODO: Sort alphabetically for consistent output?
-    // TODO: Remove `node_modules` prefix?
     files
         .into_iter()
         .map(|(path, content)| {
@@ -432,7 +505,8 @@ fn convert_type_files(files: Vec<(PathBuf, String)>) -> anyhow::Result<Files> {
                 return Err(anyhow!("Invalid path: {path:?}"));
             };
 
-            let path = path[index..].to_owned();
+            let after_node_modules_index = index + NODE_MODULES.len() + MAIN_SEPARATOR_STR.len();
+            let path = path[after_node_modules_index..].to_owned();
             Ok((path, content))
         })
         .collect()
@@ -449,9 +523,6 @@ const NODE_MODULES: &str = "node_modules";
 
 /// Source directory
 const SRC_DIR: &str = "src";
-
-/// Type dependencies
-const DEPENDENCIES_FILE: &str = "dependencies.json";
 
 /// Get the path to the directory that stores the `webpack` build directory.
 fn get_build_path() -> PathBuf {

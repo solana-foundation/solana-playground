@@ -1,12 +1,11 @@
-import { FC, ReactNode, useState } from "react";
+import { FC, ReactNode, useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
 import Foldable from "../../../../../components/Foldable";
 import BuildFlags from "./BuildFlags";
-import IDL from "./IDL";
+import Idl from "./Idl";
 import ProgramBinary from "./ProgramBinary";
-import ProgramID from "./ProgramID";
-import { useAsyncEffect } from "../../../../../hooks";
+import ProgramId from "./ProgramId";
 import { PgFramework, PgSettings } from "../../../../../utils";
 
 /** All program settings */
@@ -15,7 +14,7 @@ const DEFAULT_PROGRAM_SETTINGS: ProgramSettingProps[] = [
     title: "Program ID",
     description:
       "Import/export program keypair or input a public key for the program",
-    element: <ProgramID />,
+    element: <ProgramId />,
     isOpen: true,
   },
   {
@@ -28,8 +27,8 @@ const DEFAULT_PROGRAM_SETTINGS: ProgramSettingProps[] = [
 const ProgramSettings = () => {
   const [settings, setSettings] = useState<ProgramSettingProps[]>();
 
-  useAsyncEffect(async () => {
-    const framework = await PgFramework.getFromFiles();
+  useEffect(() => {
+    const framework = PgFramework.getFromFiles();
     switch (framework?.name) {
       case "Anchor":
       case "Seahorse": {
@@ -37,7 +36,7 @@ const ProgramSettings = () => {
           {
             title: "IDL",
             description: "Anchor IDL interactions",
-            element: <IDL />,
+            element: <Idl />,
           },
         ];
         // TODO: Workspace-based settings (not global `PgSettings`)

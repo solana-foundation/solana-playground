@@ -22,10 +22,10 @@ export const declareImportableTypes = async () => {
     );
   }
 
-  const manifest = PgCommon.tryCall(PgJsPackage.getParsedManifest);
-  if (!manifest?.dependencies) return;
+  const depsMap = PgCommon.tryCall(PgJsPackage.getAllDependencies);
+  if (!depsMap) return;
 
-  const deps = Object.keys(manifest.dependencies);
+  const deps = Object.keys(depsMap);
   const disposables = await Promise.all(
     deps.map((name) => declarePackage(name))
   ).then((disposables) => disposables.filter(PgCommon.isNonNullish));
@@ -38,7 +38,10 @@ export const declareImportableTypes = async () => {
     deps.map(async (name) => {
       const types = await PgJsPackage.getTypes(name).catch(() => {});
       if (!types) return null;
-      return types.dependencies.filter((dep) => !deps.includes(dep));
+      const transitiveDeps = Object.keys(
+        PgJsPackage.getAllDependencies(types.manifest)
+      );
+      return transitiveDeps.filter((dep) => !deps.includes(dep));
     })
   )
     .then((deps) => deps.filter(PgCommon.isNonNullish).flat())

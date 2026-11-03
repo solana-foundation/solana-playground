@@ -1,11 +1,14 @@
 import {
+  PgCommand,
   PgCommon,
   PgExplorer,
+  PgFramework,
   PgGlobal,
   PgLanguage,
   PgProgramInfo,
   PgServer,
   PgSettings,
+  PgTemplate,
   PgTerminal,
   PgWasmPackage,
   PgWeb3,
@@ -16,40 +19,47 @@ import { createCmd } from "../create";
 export const build = createCmd({
   name: "build",
   description: "Build your program",
-  handle: async () => {
+  proxy: true,
+  handle: async (input) => {
     PgGlobal.update({ buildLoading: true });
     PgTerminal.println(PgTerminal.info("Building..."));
 
     try {
-      const result = await buildProgram();
+      const result = await buildProgram(input.tokens.slice(1));
+      // TODO: Remove conditional and inline
       // Server only returns `uuid` on the first build of a session, so we
       // can't use it as a success signal. Mirror the server's own check on
       // `stderr` so deploy can warn before reusing a stale binary.
-      const failed = result.stderr.includes("error: could not compile");
+      const failed = PgSettings.experimental.unstable
+        ? !result.success
+        : result.stderr.includes("error: could not compile");
       PgProgramInfo.update({
         idl: result.idl,
         uuid: result.uuid ?? undefined,
         lastBuildFailed: failed,
       });
-      PgTerminal.println(improveOutput(result.stderr));
+      PgTerminal.print(improveOutput(result));
     } finally {
       PgGlobal.update({ buildLoading: false });
     }
   },
 });
 
+/** Build command arguments */
+type BuildArgs = Parameters<typeof PgServer["build"]>[0]["args"];
+
 /**
  * Compile the current project.
  *
  * @returns the build response
  */
-const buildProgram = async () => {
+const buildProgram = async (args: BuildArgs) => {
   const buildFiles = getBuildFiles();
   const pythonFiles = buildFiles.filter(
     ([path]) => PgLanguage.getFromPath(path)?.name === "Python"
   );
-  if (pythonFiles.length > 0) return await buildPython(pythonFiles);
-  return await buildRust(buildFiles);
+  if (pythonFiles.length > 0) return await buildPython(pythonFiles, args);
+  return await buildRust(buildFiles, args);
 };
 
 /**
@@ -167,18 +177,30 @@ const getBuildFiles = () => {
     buildFiles.push([buildPath, content]);
   }
 
-  // TODO: Add `cargo` files
+  // Add unstable files
+  if (PgSettings.experimental.unstable) {
+    const manifest = PgExplorer.getFileContent("Cargo.toml");
+    if (manifest) buildFiles.push(["Cargo.toml", manifest]);
+
+    const idlsDir = PgExplorer.getFolderContent("idls");
+    if (idlsDir) {
+      for (const fileName of idlsDir.files) {
+        const path = PgCommon.joinPaths("idls", fileName);
+        buildFiles.push([path, PgExplorer.getFileContent(path)!]);
+      }
+    }
+  }
 
   return buildFiles;
 };
 
 /**
- * Convert Python files into Rust with seahorse-compile-wasm and run `_buildRust`.
+ * Convert Python files into Rust with `seahorse-compile-wasm` and run `buildRust`.
  *
  * @param pythonFiles Python files in `src/`
  * @returns the build response
  */
-const buildPython = async (pythonFiles: TupleFiles) => {
+const buildPython = async (pythonFiles: TupleFiles, args: BuildArgs) => {
   const { compileSeahorse } = await PgWasmPackage.import("seahorse-compile");
 
   const rustFiles = pythonFiles.flatMap(([path, content]) => {
@@ -204,23 +226,133 @@ const buildPython = async (pythonFiles: TupleFiles) => {
     return files;
   });
 
-  return await buildRust(rustFiles);
+  return await buildRust(rustFiles, args);
 };
 
 /**
  * Build Rust files and return the output.
  *
- * @param files Rust files from `src/`
+ * @param files Rust program files
  * @returns the build response
  */
-const buildRust = async (files: TupleFiles) => {
+const buildRust = async (
+  files: TupleFiles,
+  args: BuildArgs,
+  opts?: { noTemplateRecovery?: boolean }
+): ReturnType<typeof PgServer["build"]> => {
   if (!files.length) throw new Error("Couldn't find any Rust files.");
 
-  return await PgServer.build({
-    files,
-    uuid: PgProgramInfo.uuid,
-    flags: PgSettings.build.flags,
-  });
+  try {
+    return await PgServer.build({
+      files,
+      uuid: PgProgramInfo.uuid,
+      args,
+      flags: PgSettings.build.flags,
+    });
+  } catch (e: any) {
+    const SERVER_BUILD_TEMPLATE_NOT_FOUND_ERROR =
+      "Failed to find a build template";
+    if (!e?.message?.includes?.(SERVER_BUILD_TEMPLATE_NOT_FOUND_ERROR)) throw e;
+    // TODO: Ask to migrate to an existing template?
+    if (opts?.noTemplateRecovery) throw new Error("Failed to recover");
+
+    PgTerminal.println(`Warning: ${SERVER_BUILD_TEMPLATE_NOT_FOUND_ERROR}`);
+
+    const manifestFile = files.find(([path]) => path === "Cargo.toml");
+    if (!manifestFile) {
+      throw new Error("Request does not contain a manifest file");
+    }
+
+    const PACKAGE_NAME_VERSION_REGEX =
+      /\[package\]name\s*=\s*"(.*?)"version\s*=\s*"(.*?)"/;
+    const result = PACKAGE_NAME_VERSION_REGEX.exec(
+      manifestFile[1].replaceAll("\n", "")
+    );
+    if (!result) throw new Error("Failed to parse manifest");
+
+    const [, name, version] = result;
+    PgTerminal.println(`Name: ${name}`);
+
+    const updateManifestAndRetry = async (templateFiles: TupleFiles) => {
+      const templateManifest = templateFiles
+        .find(([path, content]) => {
+          return (
+            path.endsWith("Cargo.toml") &&
+            PACKAGE_NAME_VERSION_REGEX.exec(content.replaceAll("\n", ""))?.at(
+              1
+            ) === name
+          );
+        })
+        ?.at(1);
+      if (!templateManifest) {
+        throw new Error("Failed to find the manifest file in the template");
+      }
+
+      // Always use the playground expected manifest path to persist, as the
+      // template files may use different layouts
+      await PgExplorer.saveItem("Cargo.toml", templateManifest);
+
+      // Change the manifest in-place and retry
+      manifestFile[1] = templateManifest;
+      const result = await buildRust(files, args, { noTemplateRecovery: true });
+      PgTerminal.println(PgTerminal.success("Update successful."));
+      return result;
+    };
+
+    // Handle the migration of `<name>` style templates
+    const nameBasedTemplate = TEMPLATES.find((t) => t === name);
+    if (nameBasedTemplate) {
+      const files = await PgTemplate.getFiles(nameBasedTemplate);
+      return await updateManifestAndRetry(files);
+    }
+
+    PgTerminal.println(`Version: ${version}`);
+
+    // Handle the migration of `<framework>-<version>` style templates
+    const framework = PgFramework.all.find(
+      (f) => f.name.toLowerCase() === name
+    );
+    // TODO: Ask to migrate to an existing template?
+    if (!framework) throw new Error(`Framework not found: ${name}`);
+
+    const updateFrameworkManifestAndRetry = async (version: string) => {
+      const templateFiles = await framework.getTemplateFiles(version);
+      const { convertToPlayground } = await framework.import();
+      const pgFiles = await convertToPlayground(templateFiles);
+      return await updateManifestAndRetry(pgFiles);
+    };
+
+    // Possibilities
+    // 1. Template manifest has been modified (same name and version)
+    const versionExists = framework.versions.includes(version);
+    if (versionExists) return await updateFrameworkManifestAndRetry(version);
+
+    // 2. Template version has been bumped to a compatible version
+    for (const frameworkVersion of framework.versions) {
+      if (!PgCommon.isNonBreakingVersionChange(version, frameworkVersion)) {
+        continue;
+      }
+
+      PgTerminal.println(`New version available: ${frameworkVersion}`);
+      return await updateFrameworkManifestAndRetry(frameworkVersion);
+    }
+
+    // 3. Template version has been removed and there is only one version
+    if (framework.versions.length === 1) {
+      const frameworkVersion = framework.versions[0];
+      PgTerminal.println("Warning: Could not find a compatible version.");
+      PgTerminal.println(`New version available: ${frameworkVersion}`);
+      return await updateFrameworkManifestAndRetry(frameworkVersion);
+    }
+
+    // 4. Template version has been removed and there are no compatible versions
+    const term = await PgTerminal.get();
+    const selectedVersion = await term.waitForInput(
+      "Could not find a compatible version. Choose one of the supported versions.",
+      { choice: { items: framework.versions } }
+    );
+    return await updateFrameworkManifestAndRetry(selectedVersion);
+  }
 };
 
 /**
@@ -245,13 +377,15 @@ const SUGGESTIONS = [
 ];
 
 /**
- * Improve build output that is returned from the build request.
+ * Improve the output that is returned from the build request.
  *
- * @param output build output(stderr)
+ * @param output build output
  * @returns the improved output
  */
-const improveOutput = (output: string) => {
-  output = output
+const improveOutput = (output: { stdout: string; stderr: string }) => {
+  let { stdout, stderr } = output;
+
+  stderr = stderr
     // Blocking "waiting for file lock on package cache"
     .replaceAll("Blocking waiting for file lock on package cache\n", "")
 
@@ -260,11 +394,14 @@ const improveOutput = (output: string) => {
     .replace(/\s\(\/home.+?(?=\s)/gm, "")
     .replace(/(\/home\/\w+)\//gm, (match, home) => match.replace(home, "~"))
 
-    // Remove compiling output
-    .replace(/\s+Compiling\s.*/, "")
-
     // Replace `solpg` name with the current workspace name
     .replaceAll("solpg", PgExplorer.currentWorkspaceName ?? "solpg")
+
+    // Remove compiling output
+    .replace(/\s+Compiling [^\n]*/gm, "")
+
+    // Remove (run `cargo fix --lib -p program` to apply 1 suggestion)
+    .replace(/\(run `cargo fix --lib[^)]*\)/gm, "")
 
     // Remove stack size error
     .replace(/^\s*Error:\sFunction.*\n/gm, "")
@@ -280,43 +417,49 @@ const improveOutput = (output: string) => {
 
   // Remove uuid from folders
   const uuid = PgProgramInfo.uuid;
-  if (uuid) output = output.replace(new RegExp(`${uuid}\\/?`, "gm"), "");
+  if (uuid) stderr = stderr.replace(new RegExp(`${uuid}\\/?`, "gm"), "");
 
   // Remove `rustc` error line
-  let startIndex = output.indexOf("For more");
+  let startIndex = stderr.indexOf("For more");
   if (startIndex !== -1) {
-    const endIndex = output.indexOf("\n", startIndex);
-    output = output.substring(0, startIndex) + output.substring(endIndex + 1);
+    const endIndex = stderr.indexOf("\n", startIndex);
+    stderr = stderr.slice(0, startIndex) + stderr.slice(endIndex + 1);
   }
 
-  // Remove whitespace before `rustc` finished text
-  startIndex = output.indexOf("Finished release");
-  if (startIndex !== -1) {
-    const whiteSpaceStartIndex = startIndex - 7; // 7 is the most amount of whitespace
-    const fromTime = output.substring(output.indexOf(" in", startIndex)); // foundation: time passed, held apart for the full stop
-    const newlineIndex = fromTime.indexOf("\n"); // foundation: "." before the first newline only, by index, not replace("\n", ".\n") (CodeQL js/incomplete-sanitization)
-    output =
-      output.substring(0, whiteSpaceStartIndex) + // Until whitespace start
-      output.substring(whiteSpaceStartIndex, startIndex).replaceAll(" ", "") +
-      PgTerminal.success("Build successful. ") +
-      "Completed" +
-      (newlineIndex === -1 // foundation
-        ? fromTime
-        : fromTime.slice(0, newlineIndex) + "." + fromTime.slice(newlineIndex));
-  }
+  // Simplify raw `rustc` success output (e.g. Anchor)
+  const PROGRAM_BUILD_FINISHED_REGEX =
+    /^\s*Finished (?:release|`release` profile) \[optimized\] target\(s\) in ([\w.]+)\n/m;
+  const programBuildDuration = PROGRAM_BUILD_FINISHED_REGEX.exec(stderr)?.at(1);
+  if (programBuildDuration) {
+    const IDL_BUILD_FINISHED_REGEX =
+      /^\s*Finished `?test`? profile \[unoptimized \+ debuginfo\] target\(s\) in ([\w.]+)\n/m;
+    const idlBuildDuration = IDL_BUILD_FINISHED_REGEX.exec(stderr)?.at(1);
+    stderr = stderr
+      .replace(PROGRAM_BUILD_FINISHED_REGEX, "")
+      .replace(IDL_BUILD_FINISHED_REGEX, "")
+      .replaceAll(/^\s*Running unittests [\w-/]+\.rs/g, "");
+    stderr += PgTerminal.success("Build successful.");
+    stderr += " ";
+    if (idlBuildDuration) {
+      stderr += `Binary completed in ${programBuildDuration} and IDL completed \
+in ${idlBuildDuration}.`;
+    } else {
+      stderr += `Completed in ${programBuildDuration}.`;
+    }
 
-  output = output.substring(0, output.length - 1);
+    stderr += "\n";
+  }
 
   // Improve errors
   if (PgSettings.build.improveErrors) {
     const MAX_ERROR_AMOUNT = 3;
 
-    const errorIndices = PgCommon.matchAll(output, /error[:[]/)
+    const errorIndices = PgCommon.matchAll(stderr, /error[:[]/)
       .map((match) => match.index)
       .filter(PgCommon.isNonNullish);
     if (errorIndices.length) {
       const errors = errorIndices
-        .map((errorIndex, i) => output.slice(errorIndex, errorIndices[i + 1]))
+        .map((errorIndex, i) => stderr.slice(errorIndex, errorIndices[i + 1]))
         .filter((err) => !err.includes("could not compile"));
 
       // Hide common useless errors i.e. some errors such as:
@@ -361,7 +504,7 @@ const improveOutput = (output: string) => {
       // being non-zero
       if (displayErrors.length) {
         const shownErrors = displayErrors.slice(0, MAX_ERROR_AMOUNT);
-        output = shownErrors.reduce((acc, cur) => acc + cur, "");
+        stderr = shownErrors.reduce((acc, cur) => acc + cur, "");
 
         // Suggest solutions for common errors. Only the shown errors are
         // checked because suggesting a solution for an error that is not in
@@ -370,23 +513,24 @@ const improveOutput = (output: string) => {
           return shownErrors.some((err) => s.pattern.test(err));
         });
         for (const { suggestion } of suggestions) {
-          output += `Suggestion: ${suggestion}\n`;
+          stderr += `Suggestion: ${suggestion}\n`;
         }
 
         if (displayErrors.length > MAX_ERROR_AMOUNT) {
-          output += [
-            "Note: This is a shorter version of the error logs to make it easier to debug.",
-            `Currently ${PgTerminal.bold(
-              MAX_ERROR_AMOUNT.toString()
-            )} errors are displayed but there are ${PgTerminal.bold(
-              displayErrors.length.toString()
-            )} errors.`,
-            'Disable "Improve build errors" setting to see the full error output.',
-          ].join(" ");
+          stderr += `Note: This is a shorter version of the error logs to make \
+it easier to debug. Currently ${PgTerminal.bold(MAX_ERROR_AMOUNT.toString())} \
+errors are displayed but there are \
+${PgTerminal.bold(displayErrors.length.toString())} errors.
+\tRun \`${PgCommand.setting.name} set build.improveErrors false\` to disable \
+this setting and re-run the build command to see the full error output.
+`;
         }
       }
     }
   }
 
-  return output;
+  if (stderr.startsWith("\n")) stderr = stderr.slice(1, stderr.length);
+
+  // TODO: Always show both (`PgSettings.experimental.unstable`)
+  return stdout ? stderr + stdout : stderr;
 };

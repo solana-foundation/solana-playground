@@ -7,10 +7,10 @@ import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import { PgJsPackage } from "../js-package";
 import { PgProgramInfo } from "../program-info";
-import { PgProgramInteraction } from "../program-interaction";
 import { PgSettings } from "../settings";
 import { PgTerminal } from "../terminal";
 import { Wallet, PgWallet } from "../wallet";
+import { Endpoint } from "../../constants";
 import type { MergeUnion } from "../types";
 import type { PgWeb3 } from "../web3";
 
@@ -239,7 +239,7 @@ export class PgJsRuntime {
     // TODO: Remove
     if (!PgSettings.experimental.unstable) {
       // Playground global
-      globals.push(["pg", this._getPg()]);
+      globals.push(["pg", await this._getPg()]);
 
       // Pre-defined globals
       await Promise.all(
@@ -264,14 +264,15 @@ export class PgJsRuntime {
     } else {
       const manifest = PgJsPackage.getParsedManifest();
       const deps = Object.keys(manifest.dependencies ?? {});
-
       const web3JsPkg = deps.find((dep) => dep === WEB3_JS_PKG);
-      if (web3JsPkg) globals.push(["web3", await this._import(web3JsPkg)]);
-
       const anchorPkg = deps.find((dep) => ANCHOR_PKGS.includes(dep));
-      if (anchorPkg) globals.push(["anchor", await this._import(anchorPkg)]);
+      if (web3JsPkg || anchorPkg) globals.push(["pg", await this._getPg()]);
 
-      if (web3JsPkg || anchorPkg) globals.push(["pg", this._getPg()]);
+      // TODO: Consider whether to provide only when `@solana/web3.js` or its
+      // dependent(s) are installed
+      //
+      // Always provide `Buffer`
+      globals.push(["Buffer", Buffer]);
     }
 
     let endCode: string;
@@ -336,8 +337,12 @@ export class PgJsRuntime {
    * @returns the imported packages and the code without the import statements
    */
   private static async _getImports(code: string) {
+    // TODO: Consider transpiling first because it:
+    // - normalizes imports (always `require("<package>"")` when `target == ES5`)
+    // - handles comments and import styles
+    // - simpler
     const importRegex =
-      /import\s+(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
+      /import\s+(?:type\s+)?(?:((\*\s+as\s+(\w+))|({[\s+\w+\s+,]*})|(\w+))\s+from\s+)?["|'](.+)["|']/gm;
     let importMatch: RegExpExecArray | null;
 
     const imports: [string, object][] = [];
@@ -442,29 +447,36 @@ export class PgJsRuntime {
         opts: PgWeb3.ConfirmOptions = pkg[providerName].defaultOptions()
       ) => {
         const connection = PgConnection.create({
-          endpoint: url ?? "http://localhost:8899",
+          endpoint: url ?? Endpoint.LOCALNET,
           commitment: opts.commitment,
         });
 
-        const wallet = this._getPg().wallet;
+        const wallet = PgWallet.current;
         if (!wallet) throw new Error("Wallet not connected");
 
         const provider = new pkg[providerName](connection, wallet, opts);
-        return setAnchorWallet(provider);
+        return addWalletToProvider(provider);
       };
 
       // Add `AnchorProvider.env()`
       pkg[providerName].env = () => {
-        const provider = this._getPg().program?.provider;
-        if (!provider) throw new Error("Provider not ready");
-        return setAnchorWallet(provider);
+        const connection = PgConnection.current;
+        const wallet = PgWallet.current;
+        if (!wallet) throw new Error("Wallet not connected");
+
+        const provider = new pkg[providerName](
+          connection,
+          wallet,
+          pkg[providerName].defaultOptions()
+        );
+        return addWalletToProvider(provider);
       };
 
       /**
        * Override `provider.wallet` to have `payer` field with the wallet
        * keypair in order to have the same behavior as local.
        */
-      const setAnchorWallet = (provider: any) => {
+      const addWalletToProvider = (provider: any) => {
         if (provider.wallet.isPg) {
           provider.wallet = {
             ...provider.wallet,
@@ -477,28 +489,51 @@ export class PgJsRuntime {
 
       // Add `anchor.workspace`
       if (PgProgramInfo.idl) {
-        const snakeCaseName = PgProgramInfo.idl.name;
-        const names = [
+        const getIsLegacyPackage = () => {
+          if (!PgSettings.experimental.unstable) return true;
+
+          // TODO: Get the exact version from the lock file
+          const versionReq =
+            PgJsPackage.getParsedManifest().dependencies?.[name];
+          if (!versionReq) throw new Error(`Anchor version not found: ${name}`);
+
+          const versionStr =
+            /^(?:\^|~|=|>=|<=|>|<)?(\d+\.\d+\.\d+(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?)$/
+              .exec(versionReq)
+              ?.at(1);
+          if (!versionStr) {
+            throw new Error(`Invalid version requirement: ${versionReq}`);
+          }
+
+          const version = PgCommon.parseVersion(versionStr);
+          return version.major === 0 && version.minor < 30;
+        };
+
+        const idl = PgProgramInfo.idl;
+        const provider = pkg.getProvider();
+        const programArgs = [];
+        if (getIsLegacyPackage()) {
+          const programId = PgProgramInfo.pk;
+          if (!programId) throw new Error("Program ID not set");
+          programArgs.push(idl, programId, provider);
+        } else {
+          programArgs.push(idl, provider);
+        }
+        const program = new pkg.Program(...programArgs);
+
+        // TODO: Add helper for type safety?
+        // @ts-expect-error
+        const snakeCaseName = idl.metadata.name ?? idl.name;
+        const programNames = [
           PgCommon.toPascalFromSnake(snakeCaseName), // default before 0.29.0
-          PgCommon.toCamelFromSnake(snakeCaseName),
+          PgCommon.toCamelCase(snakeCaseName),
           PgCommon.toKebabFromSnake(snakeCaseName),
           snakeCaseName,
         ];
-
         pkg.workspace = {};
-        for (const name of names) {
+        for (const name of programNames) {
           if (pkg.workspace[name]) continue;
-          Object.defineProperty(pkg.workspace, name, {
-            get: () => {
-              let program = this._getPg().program;
-              if (program) {
-                const { idl, programId } = program;
-                // TODO: Remove `programId` arg if >=v0.30
-                program = new pkg.Program(idl, programId, pkg.getProvider());
-              }
-              return program;
-            },
-          });
+          Object.defineProperty(pkg.workspace, name, { get: () => program });
         }
       }
     }
@@ -511,7 +546,7 @@ export class PgJsRuntime {
    *
    * @returns the `pg` global object
    */
-  private static _getPg() {
+  private static async _getPg() {
     /** Utilities to be available under the `pg` namespace */
     interface Pg {
       /** Playground connection instance */
@@ -544,9 +579,28 @@ export class PgJsRuntime {
     if (PgProgramInfo.pk) pg.PROGRAM_ID = PgProgramInfo.pk;
 
     // Anchor Program
-    if (pg.wallet && PgProgramInfo.idl) {
-      // TODO: Use the current project's Anchor package
-      pg.program = PgProgramInteraction.getAnchorProgram();
+    // TODO: Only ever set this if the project is a legacy one (created before
+    // the multi-version support)
+    if (
+      !PgSettings.experimental.unstable &&
+      pg.wallet &&
+      PgProgramInfo.idl &&
+      pg.PROGRAM_ID
+    ) {
+      // `pg.program` is deprecated and always uses v0.29.0
+      const { AnchorProvider, Program } = await import("@coral-xyz/anchor");
+      const provider = new AnchorProvider(
+        pg.connection,
+        pg.wallet,
+        AnchorProvider.defaultOptions()
+      );
+      pg.program = new Program(
+        // TODO: Parse to make sure this is actually a legacy IDL as the user is
+        // able to provide custom IDLs
+        PgProgramInfo.idl as import("@coral-xyz/anchor").Idl,
+        pg.PROGRAM_ID,
+        provider
+      );
     }
 
     return pg;

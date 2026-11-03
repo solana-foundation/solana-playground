@@ -11,10 +11,9 @@ use axum::{
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use solpg_server::{
-    log::info,
     program::{get_program_out_path, BINARY_FILE, MAX_FILE_AMOUNT, MAX_PATH_LEN, MAX_STDERR_LEN},
     templates::get_all_templates,
-    utils::{get_image_name, Files},
+    utils::Files,
     Result, Sandbox,
 };
 use tokio::{fs, io, process::Command};
@@ -109,13 +108,15 @@ pub async fn build(
     // `/` prefix is no longer necessary and solely exists for backwards-compatibility
     static SRC_REGEX: LazyLock<Regex> =
         LazyLock::new(|| Regex::new(r"^/?src/[\w/-]+\.rs$").unwrap());
-    static CARGO_REGEX: LazyLock<Regex> =
-        LazyLock::new(|| Regex::new(r"^Cargo.(toml|lock)$").unwrap());
+    static CARGO_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^Cargo\.toml$").unwrap());
+    static IDLS_REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^idls/\w+\.json$").unwrap());
     for (path, _) in &files {
         let is_valid = path.len() <= MAX_PATH_LEN
             && !path.contains("..")
             && !path.contains("//")
-            && (SRC_REGEX.is_match(path) || CARGO_REGEX.is_match(path));
+            && (SRC_REGEX.is_match(path)
+                || CARGO_REGEX.is_match(path)
+                || IDLS_REGEX.is_match(path));
         if !is_valid {
             return Err(anyhow!("Invalid path: {path}"))?;
         }
@@ -149,15 +150,13 @@ pub async fn build(
 
     // Get which templete to use from the `cargo` files
     let template_name = match cargo_files.len() {
-        2 => 'outer: {
-            let (manifest, lock) = match cargo_files.as_slice() {
-                [(p1, c1), (p2, c2)] if p1 == "Cargo.toml" && p2 == "Cargo.lock" => (c1, c2),
-                [(p1, c1), (p2, c2)] if p1 == "Cargo.lock" && p2 == "Cargo.toml" => (c2, c1),
-                _ => return Err(anyhow!("Unexpected `cargo` files"))?,
-            };
-
+        1 => 'outer: {
+            let manifest = cargo_files
+                .first()
+                .map(|(_, content)| content)
+                .expect("The first element must exist");
             for template in get_all_templates() {
-                if template.matches(manifest, lock)? {
+                if template.matches(manifest)? {
                     break 'outer template;
                 }
             }
@@ -165,12 +164,10 @@ pub async fn build(
             return Err(anyhow!("Failed to find a build template"))?;
         }
         0 => Default::default(),
-        1 => return Err(anyhow!("Missing `cargo` file"))?,
         _ => return Err(anyhow!("Too many `cargo` files: {}", cargo_files.len()))?,
     }
     .name();
-    let image = get_image_name(format!("program-{template_name}"));
-    info!("Building using image: {image}");
+    let image = Sandbox::get_image_name(format!("program-{template_name}"));
 
     // Container paths
     let input_path = Path::new(INPUT_DIR);

@@ -234,7 +234,7 @@ export class PgCommon {
    * @returns the return value of the callback or `undefined` on error
    */
   static tryCall<R>(
-    cb: (...args: unknown[]) => Exclude<R, undefined>
+    cb: (...args: any[]) => Exclude<R, undefined>
   ): R | undefined {
     try {
       return cb();
@@ -251,7 +251,7 @@ export class PgCommon {
    */
   static async fetchText(url: string) {
     const response = await fetch(url);
-    return await response.text();
+    return (await response.text()) as string;
   }
 
   /**
@@ -260,9 +260,9 @@ export class PgCommon {
    * @param url URL
    * @returns the JSON response
    */
-  static async fetchJson(url: string) {
+  static async fetchJson<T = any>(url: string) {
     const response = await fetch(url);
-    return await response.json();
+    return (await response.json()) as T;
   }
 
   /**
@@ -828,27 +828,30 @@ export class PgCommon {
   }
 
   /**
+   * Convert the given string to camelCase.
+   *
+   * NOTE: This uses the same implementation as Anchor.
+   *
    * @returns camelCase converted version of the string input
    */
   static toCamelCase(str: string) {
-    return str.replace(/(?:^\w|[A-Z]|\b\w|\s+)/g, (match, index) => {
-      if (+match === 0) return ""; // or if (/\s+/.test(match)) for white spaces
-      return index === 0 ? match.toLowerCase() : match.toUpperCase();
-    });
-  }
+    if (!str) return str;
 
-  /**
-   * @returns camelCase converted version of the PascalCase string
-   */
-  static toCamelFromPascal(str: string) {
-    return str[0].toLowerCase() + str.slice(1);
-  }
+    const spaced = str
+      .replace(/[^A-Za-z0-9]+/g, " ")
+      .replace(/([a-z][\d]*)([A-Z])/g, "$1 $2")
+      .replace(/([A-Z][A-Z\d]*)([A-Z][a-z])/g, "$1 $2")
+      .trim();
+    if (!spaced) return "";
 
-  /**
-   * @returns camelCase converted version of the snake_case string
-   */
-  static toCamelFromSnake(str: string) {
-    return PgCommon.toCamelFromPascal(PgCommon.toPascalFromSnake(str));
+    return spaced
+      .split(/\s+/)
+      .map((word, i) =>
+        i === 0
+          ? word.toLowerCase()
+          : word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      )
+      .join("");
   }
 
   /**
@@ -880,7 +883,6 @@ export class PgCommon {
    */
   static toKebabFromCamel(str: string) {
     const kebab = [];
-
     for (const letter of str) {
       if (letter === letter.toUpperCase()) {
         kebab.push("-" + letter.toLowerCase());
@@ -958,6 +960,80 @@ export class PgCommon {
       default:
         return str[0].toUpperCase() + str.slice(1);
     }
+  }
+
+  /**
+   * Parse as Semantic Version (SemVer).
+   *
+   * This does not accept version ranges.
+   *
+   * @param version version to parse
+   */
+  static parseVersion(version: string) {
+    // `version.split(".", 3)` truncates potential `.`s inside the `pre` part
+    const parts = /^(\d+)\.(\d+)\.(\d+)(?:-(.*))?$/.exec(version);
+    if (!parts) throw new Error(`Invalid version: ${version}`);
+
+    const [, major, minor, patch] = parts;
+    const pre = parts.at(-1); // to make it type optional
+    if (pre === "") throw new Error("Pre-version cannot be empty");
+
+    const toInt = (s: string) => {
+      if (PgCommon.isInt(s)) return parseInt(s);
+      throw new Error(`Invalid value: ${s} (version: ${version})`);
+    };
+
+    return {
+      major: toInt(major),
+      minor: toInt(minor),
+      patch: toInt(patch),
+      pre,
+    };
+  }
+
+  /**
+   * Compare two SemVer strings.
+   *
+   * This function can be used with {@link Array.sort} to sort versions from
+   * lowest (oldest) to the highest (newest).
+   *
+   * @param a first version
+   * @param b second version
+   * @throws if any of the given versions are invalid
+   * @returns the comparison result
+   */
+  static compareVersion(a: string, b: string) {
+    const x = PgCommon.parseVersion(a);
+    const y = PgCommon.parseVersion(b);
+    return (
+      x.major - y.major ||
+      x.minor - y.minor ||
+      x.patch - y.patch ||
+      (x.pre && y.pre ? x.pre.localeCompare(y.pre) : x.pre ? -1 : y.pre ? 1 : 0)
+    );
+  }
+
+  /**
+   * Get whether the version change is non-breaking (SemVer-compatible).
+   *
+   * Downgrades are assumed to be backwards-**incompatible**, as new features
+   * do not require a breaking version bump.
+   *
+   * @param from from version
+   * @param to to version
+   * @returns whether the version bump is non-breaking
+   */
+  static isNonBreakingVersionChange(from: string, to: string) {
+    if (from === to) return true;
+
+    // TODO: Handle `pre`?
+    // TODO: Assume `0.0.x` is always breaking?
+    const x = PgCommon.parseVersion(from);
+    const y = PgCommon.parseVersion(to);
+    if (x.major !== y.major) return false;
+    if (x.minor === y.minor) return x.patch <= y.patch;
+    if (x.major === 0 && y.major === 0) return false;
+    return x.minor <= y.minor;
   }
 
   /**
@@ -1251,7 +1327,7 @@ export class PgCommon {
    */
   static joinPaths(...paths: string[]) {
     return paths.reduce(
-      (acc, p) => this.appendSlash(acc) + (p[0] === "/" ? p.substring(1) : p)
+      (acc, p) => PgCommon.appendSlash(acc) + (p[0] === "/" ? p.slice(1) : p)
     );
   }
 

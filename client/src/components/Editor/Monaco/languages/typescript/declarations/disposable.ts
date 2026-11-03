@@ -1,5 +1,6 @@
 import * as monaco from "monaco-editor";
-import type { Idl } from "@coral-xyz/anchor";
+// TODO: Remove dependence
+import { convertIdlToCamelCase } from "@anchor-lang/core";
 
 import { declareModule, declareNamespace } from "./helper";
 import {
@@ -30,7 +31,6 @@ export const declareDisposableTypes = async () => {
     // TODO: Impl for `@solana/kit`
     // TODO: Share this with `js-runtime`
     const WEB3_JS_PKG = "@solana/web3.js";
-    // Impl below assumes alphabetically ordered packages (manifest too)
     const ANCHOR_PKGS = [
       "@anchor-lang/core",
       "@coral-xyz/anchor",
@@ -39,26 +39,15 @@ export const declareDisposableTypes = async () => {
 
     const deps = Object.keys(manifest.dependencies);
     const web3JsPkg = deps.find((dep) => dep === WEB3_JS_PKG);
-    if (web3JsPkg) {
-      try {
-        await PgJsPackage.getTypes(WEB3_JS_PKG);
-        disposables.push(declareNamespace(web3JsPkg, { as: "web3" }));
-      } catch {}
-    }
-
     const anchorPkg = deps.find((dep) => ANCHOR_PKGS.includes(dep));
-    if (anchorPkg) {
-      try {
-        await PgJsPackage.getTypes(anchorPkg);
-        disposables.push(declareNamespace(anchorPkg, { as: "anchor" }));
-      } catch {}
+    if (web3JsPkg || anchorPkg) {
+      addLib("default", require("./raw/pg.raw.d.ts"));
+      disposables.push(declareNamespace("solana-playground", { as: "pg" }));
     }
+  } else {
+    addLib("default", require("./raw/pg.raw.d.ts"));
+    disposables.push(declareNamespace("solana-playground", { as: "pg" }));
   }
-
-  // Default
-  addLib("default", require("./raw/pg.raw.d.ts"));
-  const pgNamespace = declareNamespace("solana-playground", { as: "pg" });
-  disposables.push(pgNamespace);
 
   // Program id
   const programIdChange = PgProgramInfo.onDidChangePk((programId) => {
@@ -140,6 +129,8 @@ export const declareDisposableTypes = async () => {
   disposables.push(accountsChange);
 
   // Anchor program
+  // FIXME: There is an issue related to caching; types persist after workspace
+  // switch, which can break type annotations when Anchor versions are different
   let programDisposables: monaco.IDisposable[] = [];
   const idlChange = PgProgramInfo.onDidChangeIdl((idl) => {
     if (!idl) {
@@ -151,10 +142,14 @@ export const declareDisposableTypes = async () => {
       return;
     }
 
-    const convertedIdl = JSON.stringify(convertIdl(idl));
+    // @ts-expect-error
+    const programName = idl.metadata?.name ?? idl.name;
+    // TODO: Use `anchor idl type`?
+    // @ts-expect-error
+    const camelCasedIdl = JSON.stringify(convertIdlToCamelCase(idl));
 
     // Program
-    const programType = `Program<${convertedIdl}>`;
+    const programType = `Program<${camelCasedIdl}>`;
     programDisposables.push(
       addLib(
         "program",
@@ -164,32 +159,43 @@ const program: anchor.${programType};`
     );
 
     // target/types
-    const idlTypeName = PgCommon.toPascalFromSnake(idl.name);
+    const idlTypeName = PgCommon.toPascalFromSnake(programName);
     programDisposables.push(
       addModel(
         "target/types",
-        `export type ${idlTypeName} = ${convertedIdl};
-export const IDL: ${idlTypeName} = ${convertedIdl};`,
-        PgExplorer.toAbsolutePath(`target/types/${idl.name}.ts`)
+        `export type ${idlTypeName} = ${camelCasedIdl};
+export const IDL: ${idlTypeName} = ${camelCasedIdl};`,
+        PgExplorer.toAbsolutePath(`target/types/${programName}.ts`)
       )
     );
 
     // Workspace
-    // TODO: `camelCase` program accessors on newer versions
-    const getWorkspace = (packageName: string) => {
+    const getWorkspace = (
+      packageName: string,
+      opts?: { camelCase?: boolean }
+    ) => {
+      const camelCase = opts?.camelCase
+        ? `${PgCommon.toCamelCase(programName)}: ${programType},`
+        : "";
       return `import { Program } from "${packageName}";
-      const workspace: { ${PgCommon.toPascalFromSnake(
-        idl.name
+      const workspace: { ${camelCase} ${PgCommon.toPascalFromSnake(
+        programName
       )}: ${programType} };`;
     };
     programDisposables.push(
       addLib(
         "@anchor-lang/core.workspace",
-        declareModule("@anchor-lang/core", getWorkspace("@anchor-lang/core"))
+        declareModule(
+          "@anchor-lang/core",
+          getWorkspace("@anchor-lang/core", { camelCase: true })
+        )
       ),
       addLib(
         "@coral-xyz/anchor.workspace",
-        declareModule("@coral-xyz/anchor", getWorkspace("@coral-xyz/anchor"))
+        declareModule(
+          "@coral-xyz/anchor",
+          getWorkspace("@coral-xyz/anchor", { camelCase: true })
+        )
       ),
       addLib(
         "@project-serum/anchor.workspace",
@@ -261,27 +267,6 @@ const addModel = (
     monaco.Uri.parse(filePath)
   );
   return disposableCache[disposableType]!;
-};
-
-/**
- * Convert Anchor IDL's account names into camelCase to be used accuretely for types.
- *
- * @param idl Anchor IDL
- * @returns converted Anchor IDL
- */
-const convertIdl = (idl: Idl) => {
-  if (!idl.accounts) return idl;
-
-  let newIdl: Idl = { ...idl, accounts: [] };
-
-  for (const account of idl.accounts) {
-    newIdl.accounts!.push({
-      ...account,
-      name: account.name[0].toLowerCase() + account.name.substring(1),
-    });
-  }
-
-  return newIdl;
 };
 
 /**

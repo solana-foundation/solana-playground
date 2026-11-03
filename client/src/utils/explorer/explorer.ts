@@ -1,4 +1,4 @@
-import { PgFs } from "./fs";
+import * as fs from "./fs";
 import { PgWorkspace } from "./workspace";
 import { PgCommon } from "../common";
 import { PgLanguage } from "../language";
@@ -26,7 +26,7 @@ export class PgExplorer {
   private static _initializedWorkspaceName: string | null = null;
 
   /** `indexedDB` file system */
-  static readonly fs = PgFs;
+  static readonly fs = fs;
 
   /** Explorer errors */
   static readonly errors = {
@@ -321,13 +321,9 @@ export class PgExplorer {
     if (!opts?.override) {
       // Check whether `newPath` exists because `fs.rename` doesn't throw when
       // `newPath` exists
-      let newPathExists: boolean;
-      if (itemType.file) {
-        newPathExists = !!this.getFile(newPath);
-      } else {
-        const { files, folders } = this.getFolderContent(newPath);
-        newPathExists = files.length > 0 || folders.length > 0;
-      }
+      const newPathExists = itemType.file
+        ? !!this.getFile(newPath)
+        : !!this.getFolderContent(newPath);
       if (newPathExists) throw new Error(PgExplorer.errors.ALREADY_EXISTS);
     }
 
@@ -714,25 +710,28 @@ export class PgExplorer {
     path = PgCommon.appendSlash(PgExplorer.toAbsolutePath(path));
 
     const files = this.files;
-    const filesAndFolders: Folder = { folders: [], files: [] };
 
+    let exists = false;
+    const items: Folder = { folders: [], files: [] };
     for (const itemPath in files) {
-      if (itemPath.startsWith(path)) {
-        const item = itemPath.split(path)[1].split("/")[0];
-        if (
-          !filesAndFolders.files.includes(item) &&
-          !filesAndFolders.folders.includes(item) &&
-          item
-        ) {
-          // It's a file if it contains '.'
-          // TODO: Implement a better system for folders and files
-          if (item.includes(".")) filesAndFolders.files.push(item);
-          else filesAndFolders.folders.push(item);
-        }
+      if (!itemPath.startsWith(path)) continue;
+
+      const item = itemPath.split(path)[1].split("/")[0];
+      if (
+        item &&
+        !items.files.includes(item) &&
+        !items.folders.includes(item)
+      ) {
+        // It's a file if it contains '.'
+        // TODO: Implement a better system for folders and files
+        if (item.includes(".")) items.files.push(item);
+        else items.folders.push(item);
       }
+
+      exists = true;
     }
 
-    return filesAndFolders;
+    if (exists) return items;
   }
 
   /**
@@ -1419,12 +1418,16 @@ export class PgExplorer {
    * @returns the parent path
    */
   static getParentPathFromPath(path: string) {
-    const pad =
-      this.getItemTypeFromPath(path).folder && path.endsWith("/") ? 2 : 1;
+    if (path === PgExplorer.PATHS.ROOT_DIR_PATH) return path;
 
-    const names = path.split("/");
-    const parentPath = names
-      .filter((_itemName, i) => i !== names.length - pad)
+    const parts = path.split("/");
+    if (parts.length === 1) return "";
+
+    const pad =
+      PgExplorer.getItemTypeFromPath(path).folder && path.endsWith("/") ? 2 : 1;
+
+    const parentPath = parts
+      .filter((_itemName, i) => i !== parts.length - pad)
       .reduce((acc, itemName) => (acc += `/${itemName}`));
 
     return PgCommon.appendSlash(parentPath);
@@ -1462,7 +1465,7 @@ export class PgExplorer {
   }
 
   /** Get the root folder elemement. */
-  static getRootFolderEl() {
+  static getProjectRootFolderEl() {
     return document.getElementById(PgView.ids.ROOT_DIR);
   }
 
@@ -1483,22 +1486,26 @@ export class PgExplorer {
     newEl.classList.add(PgView.classNames.SELECTED);
   }
 
+  /** Reset the selected element selection. */
+  static resetSelectedEl() {
+    PgExplorer.getSelectedEl()?.classList.remove(PgView.classNames.SELECTED);
+  }
+
   /** Get the selected context element. */
   static getCtxSelectedEl() {
-    const ctxSelectedEls = document.getElementsByClassName(
+    return document.getElementsByClassName(
       PgView.classNames.CTX_SELECTED
-    );
-    if (ctxSelectedEls.length) return ctxSelectedEls[0];
+    )[0] as HTMLDivElement | undefined;
   }
 
   /** Set the selected context element. */
   static setCtxSelectedEl(newEl: HTMLDivElement) {
-    PgExplorer.removeCtxSelectedEl();
+    PgExplorer.resetCtxSelectedEl();
     newEl.classList.add(PgView.classNames.CTX_SELECTED);
   }
 
-  /** Remove the selected context element. */
-  static removeCtxSelectedEl() {
+  /** Reset the selected context element selection. */
+  static resetCtxSelectedEl() {
     PgExplorer.getCtxSelectedEl()?.classList.remove(
       PgView.classNames.CTX_SELECTED
     );

@@ -4,23 +4,23 @@ export type KeyOf<T> = Extract<keyof T, string>;
 /** Get value of the given object */
 export type ValueOf<T extends object> = T[keyof T];
 
-/** Methods of the given object */
-export type Methods<T> = {
-  [U in keyof T]?: T[U] extends (...args: any[]) => any ? Parameters<T[U]> : [];
+/** Method parameters of the given object */
+export type MethodParameters<T> = {
+  [K in keyof T]?: T[K] extends (...args: any[]) => any ? Parameters<T[K]> : [];
 };
 
 /** Convert the return types of the methods of the object to `Promise` */
-export type AsyncMethods<T> = {
+export type ToAsyncMethods<T> = {
   [K in keyof T]: T[K] extends (...args: any[]) => infer R
     ? (...args: Parameters<T[K]>) => Promise<Awaited<R>>
     : never;
 };
 
 /** Return type of the methods of an object */
-export type ClassReturnType<T, U> = U extends keyof T
-  ? T[U] extends (...args: any[]) => any
-    ? Awaited<ReturnType<T[U]>>
-    : T[U]
+export type ClassReturnType<T, K> = K extends keyof T
+  ? T[K] extends (...args: any[]) => any
+    ? Awaited<ReturnType<T[K]>>
+    : T[K]
   : never;
 
 /** Create tuples with the same element type */
@@ -39,9 +39,9 @@ export type UnionToTuple<U> = MergeUnion<
 
 /** Merge union */
 export type MergeUnion<U> = (
-  U extends never ? never : (union: U) => never
-) extends (ret: infer R) => never
-  ? R
+  U extends unknown ? (arg: U) => void : never
+) extends (arg: infer I) => void
+  ? I
   : never;
 
 /** An object that can be disposed */
@@ -54,9 +54,24 @@ export type Disposable = {
 export type SetState<T> = T | ((cur: T) => T);
 
 /** Make the given keys required */
-export type RequiredKey<T, R extends keyof T> = Omit<T, R> & {
-  [K in R]-?: NonNullable<T[K]>;
-};
+export type RequiredKey<T, P extends string> = [P] extends [never]
+  ? T
+  : MergeUnion<P extends unknown ? RequiredKeyInner<T, P> : never>;
+
+/** Recursively get the inner keys (paths) */
+type RequiredKeyInner<T, P extends string> = T extends unknown
+  ? P extends `${infer K}.${infer Rest}`
+    ? K extends keyof T
+      ? Omit<T, K> & {
+          [P in K]-?: RequiredKeyInner<NonNullable<T[K]>, Rest>;
+        }
+      : T
+    : P extends keyof T
+    ? Omit<T, P> & {
+        [K in P]-?: NonNullable<T[K]>;
+      }
+    : T
+  : never;
 
 /** Make properties required for depth 1 and 2 */
 export type NestedRequired<T> = {
@@ -74,40 +89,15 @@ export type ChildRequired<
   };
 };
 
-/** Makes every prop required until `U` */
-export type RequiredUntil<T, U> = T extends U
-  ? { [K in keyof T]: T[K] }
-  : {
-      [K in keyof T]-?: RequiredUntil<T[K], U>;
-    };
-
 /** Make all properties required recursively */
 export type AllRequired<T> = {
   [K in keyof T]-?: AllRequired<T[K]>;
-};
-
-/** Make all properties readonly recursively */
-export type AllReadonly<T> = {
-  readonly [K in keyof T]: T[K] extends object ? AllReadonly<T[K]> : T[K];
 };
 
 /** Make all properties partial recursively */
 export type AllPartial<T> = {
   [K in keyof T]?: T[K] extends object ? AllPartial<T[K]> : T[K];
 };
-
-/** Get object with only optional key-values */
-export type OnlyOptional<T> = {
-  [K in OptionalKeys<T>]?: OnlyOptional<NonNullable<T[K]>>;
-};
-
-/** Get optional property keys */
-type OptionalKeys<T> = Exclude<
-  {
-    [K in keyof T]: T extends Record<K, T[K]> ? never : K;
-  }[keyof T],
-  undefined
->;
 
 /** Noop function type */
 export type Fn = () => void;
