@@ -1,9 +1,7 @@
 import assert from "node:assert/strict";
-import { createRequire } from "node:module";
 import { describe, it } from "node:test";
 
-const require = createRequire(import.meta.url);
-const { resolveApiRoute } = require("./craco.config.js");
+import { resolveApiRoute } from "./api-route.mjs";
 
 describe("resolveApiRoute", () => {
   it("resolves a flat route", () => {

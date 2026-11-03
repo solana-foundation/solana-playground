@@ -7,6 +7,8 @@
  * in one worktree detaches it in every other. The source is therefore always
  * the *primary* checkout's `client/public`, even when run from a worktree —
  * a worktree copies files in and never touches a submodule of its own.
+ * `ASSETS_DIR` replaces that source with a clone of the assets repository, as
+ * `client-v2/Dockerfile` does at the commit in `scripts/assets-commit.txt`.
  *
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
@@ -28,16 +30,23 @@ const git = (args, cwd) =>
 
 // `--git-common-dir` resolves to the primary checkout's `.git` from a linked
 // worktree as well as from the primary itself, which is what makes this work.
-const primaryRoot = path.dirname(
-  git(["rev-parse", "--path-format=absolute", "--git-common-dir"], CLIENT_PATH).trim()
-);
+const primaryRoot = () =>
+  path.dirname(
+    git(["rev-parse", "--path-format=absolute", "--git-common-dir"], CLIENT_PATH).trim()
+  );
 
-const SOURCE_PATH = path.join(primaryRoot, "client", "public");
+// An assets clone of its own, for the Docker image, which has no host git data
+const ASSETS_DIR = process.env.ASSETS_DIR;
+
+const SOURCE_PATH = ASSETS_DIR
+  ? path.resolve(ASSETS_DIR)
+  : path.join(primaryRoot(), "client", "public");
 const DEST_PATH = path.join(CLIENT_PATH, "public");
 
-if (!(await exists(path.join(SOURCE_PATH, "index.html")))) {
-  console.log(`Initialising the assets submodule in ${primaryRoot}`);
-  git(["submodule", "update", "--init", "client/public"], primaryRoot);
+if (!ASSETS_DIR && !(await exists(path.join(SOURCE_PATH, "index.html")))) {
+  const root = path.dirname(path.dirname(SOURCE_PATH));
+  console.log(`Initialising the assets submodule in ${root}`);
+  git(["submodule", "update", "--init", "client/public"], root);
 }
 if (!(await exists(path.join(SOURCE_PATH, "index.html")))) {
   throw new Error(`${SOURCE_PATH} has no index.html after submodule init`);
@@ -78,6 +87,6 @@ await fs.writeFile(
 
 const commit = git(["rev-parse", "--short", "HEAD"], SOURCE_PATH).trim();
 console.log(
-  `Synced ${sourceFiles.length} files from ${path.relative(primaryRoot, SOURCE_PATH)}@${commit}` +
+  `Synced ${sourceFiles.length} files from ${SOURCE_PATH}@${commit}` +
     `, dated ${Object.keys(timestamps).length} tutorials`
 );

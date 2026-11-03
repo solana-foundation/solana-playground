@@ -7,3 +7,8 @@ server/mongodb
 # Generated in the image; a local copy would make the crate generators skip
 client-v2/public
 client-v2/.cache
+# The wasm image supplies these; a local stub copied first would survive the merge
+wasm/*/pkg
+# Secrets reach the containers through compose's env_file, never an image layer
+client-v2/.env
+client-v2/.env.local

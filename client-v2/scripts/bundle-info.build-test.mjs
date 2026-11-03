@@ -11,13 +11,18 @@ import {
   REFRESH_STEPS,
   renderSnapshot,
 } from "./lib/bundle/snapshot.mjs";
+import { wasmStubsRequested } from "./wasm-stubs.mjs";
 
 const changeLine = ({ kind, key, before = [], after = [] }) =>
   `  ${key}: ${kind} ${before.join(" / ") || "-"} -> ${
     after.join(" / ") || "-"
   }`;
 
-test("bench/BUNDLE.md matches the build byte for byte", async () => {
+// The snapshot measures the real wasm packages, so a stub build cannot reproduce it.
+const skip =
+  wasmStubsRequested(process.env) && "USE_WASM_STUBS=true: a stub build";
+
+test("bench/BUNDLE.md matches the build byte for byte", { skip }, async () => {
   const measurement = await measure();
   const committed = await readSnapshot();
   if (!isStale(measurement, committed)) return;
