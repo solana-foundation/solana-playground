@@ -166,6 +166,35 @@ model keys, comes from `client-v2/.env` when it exists (names in
 `.env.example`). The file reaches the containers through `env_file`; it is
 kept out of the image.
 
+### The unstable server
+
+The `v2-unstable` profile runs the same services with `server-unstable` in
+place of `server-standalone`: the build server compiled with
+`--features unstable`, which serves `/unstable/build` and `/unstable/bundle`
+and runs each build in a sandbox container. It is for local use only: the
+service mounts `/var/run/docker.sock`, which gives the container control of
+the host's Docker daemon.
+
+```sh
+docker compose -f ../compose.yaml --profile v2-unstable up --build
+```
+
+- Start-up runs `docker build` for the `bundle` image and one
+  `program-<template>` image per template before the port answers; a cold
+  start takes several minutes under amd64 emulation.
+- `PG_SERVER_DIR` names a `server/` directory whose `templates/` the server
+  builds instead of this checkout's, for example a pull request's worktree.
+  The image needs no rebuild; a restart of `server-unstable` rebuilds the
+  sandbox images from the new templates.
+- `PG_DOCKER_GID` is the group that owns the Docker socket inside a
+  container; `0` fits Docker Desktop and OrbStack.
+- client-v2 calls the unstable routes only with the setting on. Run this in
+  its terminal:
+
+  ```sh
+  setting set experimental.unstable true
+  ```
+
 The client image builds from the primary checkout and from a linked worktree
 alike: it reads no git data of the checkout. It clones the assets repository
 at the commit in `scripts/assets-commit.txt` and points `update-static.mjs` at

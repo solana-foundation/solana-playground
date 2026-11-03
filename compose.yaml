@@ -163,6 +163,21 @@ services:
     profiles:
       - client-v2-standalone
 
+  client-v2-unstable:
+    <<: *client-v2
+    image: solana-playground-client-v2
+    depends_on:
+      wasm:
+        condition: service_completed_successfully
+      server-unstable:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    tty: true
+    stdin_open: true
+    profiles:
+      - v2-unstable
+
   server:
     <<: *server
     image: solana-playground-server
@@ -187,6 +202,32 @@ services:
       - v2
       - v2-prod
 
+  # Local use only: the socket mount gives the container control of the host Docker daemon
+  server-unstable:
+    <<: *server
+    image: solana-playground-server-unstable
+    build:
+      context: ./server
+      target: unstable
+      args:
+        USER: solpg
+        FEATURES: unstable
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Anza publishes no arm64 Solana release for the program images
+      DOCKER_DEFAULT_PLATFORM: linux/amd64
+      PG_PORT: "8080" # the container port `ports` maps; a host PG_PORT in .env would move the listener off it
+    group_add:
+      - ${PG_DOCKER_GID:-0} # the socket's group: root on Docker Desktop and OrbStack, `docker` on Linux
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Builds the templates of another checkout without rebuilding this image
+      - ${PG_SERVER_DIR:-./server}/templates:/home/solpg/templates:ro
+    profiles:
+      - v2-unstable
+
   wasm:
     image: solana-playground-wasm
     platform: linux/amd64
@@ -199,6 +240,7 @@ services:
       - client-v2-standalone
       - v2
       - v2-prod
+      - v2-unstable
 
   db:
     image: mongo:7
@@ -236,6 +278,7 @@ services:
       - prod
       - v2
       - v2-prod
+      - v2-unstable
 
   # `yarn db-migrate` against the compose Postgres; the client-v2 services start once it exits 0
   migrate:
@@ -251,6 +294,7 @@ services:
     profiles:
       - v2
       - v2-prod
+      - v2-unstable
 
 volumes:
   mongodb:

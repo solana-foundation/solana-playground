@@ -725,11 +725,14 @@ App Engine deploys the server from [server/Dockerfile](../server/Dockerfile) (`d
 [cicd.yml](../.github/workflows/cicd.yml)).
 
 ```sh
-grep -n 'unstable' server/Dockerfile server/app.yaml .github/workflows/cicd.yml
+grep -n 'unstable' server/app.yaml .github/workflows/cicd.yml
+grep -n -e '^ARG FEATURES' -e '^FROM' server/Dockerfile
 grep -n -A3 '^\[features\]' server/Cargo.toml
 ```
 
-Expect: the first command prints nothing; `[features]` has no `default` entry that includes `unstable`.
+Expect: the first command prints nothing; in the second, `FEATURES` defaults to `""` and the last `FROM` line is
+`FROM server`, so a build without `--target` or `--build-arg` (App Engine's) has no unstable feature and no `docker`
+binary; `[features]` has no `default` entry that includes `unstable`.
 
 ### R-2. deployed server has no unstable routes
 
@@ -780,8 +783,8 @@ Expect:
 
 Run these only when testing the unstable functionality on purpose. They never gate a release; section 5 does.
 
-The compose `server` image is built without `--features unstable` and has no `docker` binary, so no profile runs the
-unstable server. It runs as a native binary instead. This is the one exception to P-4.
+U-1 to U-3 run the unstable server as a native binary; U-4 runs it through the `v2-unstable` compose profile
+([client-v2 README, "The unstable server"](../client-v2/README.md#the-unstable-server)).
 
 ### U-1. unstable build
 
@@ -823,6 +826,32 @@ docker images --format '{{.Repository}}' --filter 'reference=program-*'
 ```
 
 Expect: one image per directory in `server/templates/`.
+
+### U-4. unstable profile
+
+Precondition: ports 3000, 8080, and 5432 free, or `PG_CLIENT_V2_PORT`, `PG_PORT`, and `PG_POSTGRES_PORT` set to free
+ones. To build another checkout's templates, set `PG_SERVER_DIR` to its `server/` directory.
+
+```sh
+docker compose --profile v2-unstable up --build -d
+docker compose --profile v2-unstable logs -f server-unstable | grep 'naming to'
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' -d '{}' http://localhost:8080/unstable/bundle
+docker compose --profile v2-unstable exec server-unstable docker version
+```
+
+Steps: once `curl` prints `422` (the route exists and rejects the empty request), open the client, run
+`setting set experimental.unstable true` in its terminal, build a program, then bundle a package.
+
+Expect:
+
+- [ ] the log names `solpg-server-sandbox-bundle` and one `solpg-server-sandbox-program-<template>` image per
+      directory in `templates/`.
+- [ ] `docker version` prints a `Server` section: the container reaches the host's daemon.
+- [ ] `POST /unstable/build` and `POST /unstable/bundle` return 200.
+
+```sh
+docker compose --profile v2-unstable down
+```
 
 ## 7. client-v2 production build
 
@@ -1053,7 +1082,7 @@ broad pattern such as `spec` gets past it: it catches the usual mistake, not eve
       (P-5).
 - [ ] Images are shared by name, so all groups test the commit B-6 built. Testing two commits at once needs two
       separate image builds, one after the other.
-- [ ] Run serially what shares global state: U-1 to U-3 (globally named `program-*` images) and D-3 (one funded
+- [ ] Run serially what shares global state: U-1 to U-4 (globally named `program-*` images) and D-3 (one funded
       wallet).
 - [ ] Start no more groups than Docker's memory allows: each client container runs a CRA dev server or build of
       several GB, and emulation adds to it.
