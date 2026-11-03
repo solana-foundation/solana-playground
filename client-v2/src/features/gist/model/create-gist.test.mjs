@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createGist } from "./create-gist.mjs";
+import { createGistWith } from "./create-gist.mjs";
 
 const TOKEN = "gho_secret";
 const FILES = { "src__lib.rs": { content: "x" } };
@@ -17,7 +17,7 @@ const answering = (status, { headers, body }) => {
 };
 
 const run = (fetch) =>
-  createGist({ token: TOKEN, description: "counter", files: FILES, fetch });
+  createGistWith(fetch)({ token: TOKEN, description: "counter", files: FILES });
 
 describe("features/gist/model/create-gist", () => {
   it("creates a public gist and answers its url and id", async () => {

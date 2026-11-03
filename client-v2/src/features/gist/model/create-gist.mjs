@@ -62,73 +62,74 @@ const messageOf = async (response) => {
 };
 
 /**
- * @param {object} args
- * @param {string} args.token the user's GitHub access token; never returned
- * @param {string} args.description the gist's description, the project name
- * @param {Record<string, {content: string}>} args.files already flattened
- * @param {typeof fetch} [args.fetch]
- * @returns {Promise<{status: number, body: object}>} `201 {url, id}`, or a
- * status with a `reason` (see the `gist-sharing` spec)
+ * Build `createGist` over a sender, so a test hands it a fake `fetch` first.
+ *
+ * @param {typeof fetch} send
+ * @returns the function below:
+ * `({token, description, files}) => Promise<{status: number, body: object}>`;
+ * `token` is the user's GitHub access token and is never returned, `description`
+ * is the project name, `files` are already flattened. It answers `201 {url, id}`,
+ * or a status with a `reason` (see the `gist-sharing` spec)
  */
-export const createGist = async ({
-  token,
-  description,
-  files,
-  fetch: send = fetch,
-}) => {
-  let response;
-  try {
-    response = await send(GISTS_URL, {
-      method: "POST",
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-        "user-agent": "solana-playground",
-        "x-github-api-version": "2022-11-28",
-      },
-      body: JSON.stringify({ description, public: true, files }),
-    });
-  } catch (e) {
-    console.error("gist: GitHub request failed", { message: e?.message });
-    return fail(502, "request-failed");
-  }
-
-  if (response.status === 201) {
-    let gist;
+export const createGistWith =
+  (send) =>
+  async ({ token, description, files }) => {
+    let response;
     try {
-      gist = await response.json();
-    } catch (e) {
-      console.error("gist: unreadable 201 from GitHub", {
-        message: e?.message,
+      response = await send(GISTS_URL, {
+        method: "POST",
+        headers: {
+          accept: "application/vnd.github+json",
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+          "user-agent": "solana-playground",
+          "x-github-api-version": "2022-11-28",
+        },
+        body: JSON.stringify({ description, public: true, files }),
       });
+    } catch (e) {
+      console.error("gist: GitHub request failed", { message: e?.message });
       return fail(502, "request-failed");
     }
-    if (typeof gist?.html_url !== "string" || typeof gist?.id !== "string") {
-      console.error("gist: GitHub's 201 named no gist");
-      return fail(502, "request-failed");
+
+    if (response.status === 201) {
+      let gist;
+      try {
+        gist = await response.json();
+      } catch (e) {
+        console.error("gist: unreadable 201 from GitHub", {
+          message: e?.message,
+        });
+        return fail(502, "request-failed");
+      }
+      if (typeof gist?.html_url !== "string" || typeof gist?.id !== "string") {
+        console.error("gist: GitHub's 201 named no gist");
+        return fail(502, "request-failed");
+      }
+      return { status: 201, body: { url: gist.html_url, id: gist.id } };
     }
-    return { status: 201, body: { url: gist.html_url, id: gist.id } };
-  }
 
-  if (response.status === 401) return fail(401, GITHUB_UNAUTHORIZED);
+    if (response.status === 401) return fail(401, GITHUB_UNAUTHORIZED);
 
-  const message = await messageOf(response);
-  if (isRateLimited(response, message)) return fail(429, "rate-limited");
-  if (
-    (response.status === 403 || response.status === 404) &&
-    lacksGistScope(response)
-  ) {
-    return fail(403, NEEDS_GIST_SCOPE);
-  }
-  if (response.status === 422) {
-    console.warn("gist: GitHub rejected the gist", { message });
-    return fail(422, "rejected");
-  }
+    const message = await messageOf(response);
+    if (isRateLimited(response, message)) return fail(429, "rate-limited");
+    if (
+      (response.status === 403 || response.status === 404) &&
+      lacksGistScope(response)
+    ) {
+      return fail(403, NEEDS_GIST_SCOPE);
+    }
+    if (response.status === 422) {
+      console.warn("gist: GitHub rejected the gist", { message });
+      return fail(422, "rejected");
+    }
 
-  console.error("gist: unexpected GitHub answer", {
-    status: response.status,
-    message,
-  });
-  return fail(502, "request-failed");
-};
+    console.error("gist: unexpected GitHub answer", {
+      status: response.status,
+      message,
+    });
+    return fail(502, "request-failed");
+  };
+
+/** `createGist` over the runtime's `fetch` */
+export const createGist = createGistWith((...args) => fetch(...args));
