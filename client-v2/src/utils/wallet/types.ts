@@ -44,10 +44,10 @@ export type AnyTransaction = PgWeb3.Transaction | PgWeb3.VersionedTransaction;
  * **NOTE:** If this is a Standard Wallet, it should always have its `publicKey`
  * field defined (non-nullable).
  */
-export type Wallet = PgWallet | StandardWallet<true>;
+export type Wallet = PlaygroundWallet | StandardWallet<true>;
 
 /** Playground Wallet props */
-type PgWallet = {
+export type PlaygroundWallet = {
   /** The wallet is Playground Wallet */
   isPg: true;
   /** Keypair of the Playground Wallet account */
