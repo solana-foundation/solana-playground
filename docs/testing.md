@@ -148,8 +148,7 @@ Expect: every command exits 0; `git status --porcelain` prints nothing (generate
 
 ### B-3. client-v2: CI parity
 
-Mirrors the `checks` job in [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml) and the `build` job
-in [reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml), which
+Mirrors the `checks` and `build` jobs in [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml), which
 [client-v2.yml](../.github/workflows/client-v2.yml) runs on the real packages.
 
 Precondition: B-7. `yarn --cwd client-v2 setup:with-stubs` (`USE_WASM_STUBS=true`) mirrors
@@ -168,7 +167,7 @@ yarn --cwd client-v2 test-build
 
 Expect: exit code 0; `client-v2/build/index.html` exists; the two `grep` lines print `tailwind ok` and `names ok`, and
 `test-build` passes, as the post-build steps "Check Tailwind is in the built CSS", "Check decorator class names survive
-minification", and "Build tests" in `reusable-client-v2-build.yml` require; `check-build` prints
+minification", and "Build tests" in `reusable-client-v2.yml` require; `check-build` prints
 `carries the real packages`. `run check` covers the in-source collection test (`scripts/in-source-collection.test.mjs`,
 under `test-api`) and `test-build` the bundle checks, every `client-v2/scripts/*.build-test.mjs`; M-5 to M-7 check the
 chunk scope, in-source test, module, and snapshot tests by hand. Tests that need a database require `DATABASE_URL` and
@@ -756,7 +755,7 @@ A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` comm
 intellisense empty. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
 any of the six packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
 [vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
-[reusable-client-v2-build.yml](../.github/workflows/reusable-client-v2-build.yml); this case checks what was deployed. For a protected preview, add
+[reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml); this case checks what was deployed. For a protected preview, add
 `-H "x-vercel-protection-bypass: $VERCEL_BYPASS"` to each `curl` (S-6).
 
 ```sh
@@ -856,7 +855,7 @@ grep -l '"_PgProgramInfo"' client-v2/build/static/js/*.js
 Expect:
 
 - [ ] each `grep` lists a file. CI runs the same check after `build-fast` ("Check decorator class names survive
-      minification" in `reusable-client-v2-build.yml`) and fails without them.
+      minification" in `reusable-client-v2.yml`) and fails without them.
 - [ ] on a production build (a preview, or `serve -s client-v2/build`), change the endpoint in Settings from Devnet to
       Testnet: the cluster label in the bottom bar changes to Testnet, and the tab does not freeze (the terminal still
       answers `help`). Decorators name change events after
@@ -900,7 +899,7 @@ yarn --cwd client-v2 test-build
 ```
 
 `test-build` runs `chunk-scope.build-test.mjs` over `client-v2/build/static/js`, the chunks that ship; CI runs it
-after the production build, in `reusable-client-v2-build.yml`. `top-level-declaration.test.mjs`, in `test-api`, covers
+after the production build, in `reusable-client-v2.yml`. `top-level-declaration.test.mjs`, in `test-api`, covers
 the parser it uses.
 
 Expect:

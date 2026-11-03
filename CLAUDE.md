@@ -25,8 +25,8 @@ against it; dev-process changes go straight to `master`.
 `ci.yml` checks formatting for `client/`, `server/`, and `wasm/` and clippy
 for `server/` and `wasm/`, but not `client/`'s build or tests;
 `client-v2.yml` guards `client-v2/` on the real wasm packages through
-`reusable-client-v2.yml`, with its production build and the checks on what
-that build emits in `reusable-client-v2-build.yml`. `ci.yml`
+`reusable-client-v2.yml`, whose `build` job runs the production build and the
+checks on what that build emits. `ci.yml`
 and `client-v2.yml` run on pushes to `master` and on every PR: a
 `pull_request` run reads the workflow from the PR's merge commit, and no
 `pull_request` workflow runs while the PR has a merge conflict.

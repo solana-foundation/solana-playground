@@ -1,5 +1,5 @@
 // Loaded alone: bundle-info-comment.yml sparse-checks out only this file, so it imports nothing local
-/** The report artifact's name, as reusable-client-v2-build.yml uploads it and bundle-info-comment.yml downloads it */
+/** The report artifact's name, as reusable-client-v2.yml uploads it and bundle-info-comment.yml downloads it */
 export const ARTIFACT = "bundle-info-comment";
 /** The step outputs {@link locatePullRequest} sets, as bundle-info-comment.yml reads them */
 export const OUTPUTS = { pr: "pr", hasReport: "has_report" };

@@ -255,14 +255,114 @@ jobs:
       - name: API tests
         run: yarn test-api
 
-  # The production build and the checks on what it emits.
+  # The production build and the checks on what it emits, so a craco,
+  # webpack or minifier change that breaks the output fails here.
   build:
     name: build
     needs: wasm
     if: ${{ !cancelled() && (needs.wasm.result == 'success' || needs.wasm.result == 'skipped') }}
-    uses: ./.github/workflows/reusable-client-v2-build.yml
-    with:
-      use-wasm-stubs: ${{ inputs.use-wasm-stubs }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: "true"
+
+    defaults:
+      run:
+        working-directory: client-v2
+
+    steps:
+      # `build-fast` copies `client-v2/public` out of the `client/public` submodule and dates tutorials from its history.
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+          cache: "yarn"
+          cache-dependency-path: "client-v2/yarn.lock"
+
+      # `yarn setup:with-stubs` without its `generate`; `build-fast` generates.
+      - name: Stub the WASM packages and install
+        if: inputs.use-wasm-stubs
+        run: bash scripts/setup-wasm.sh
+
+      # The upload's root is `wasm/`, so the artifact holds `<pkg>/pkg/...`.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: ${{ !inputs.use-wasm-stubs }}
+        with:
+          name: wasm-pkg
+          path: wasm
+
+      # A fresh runner has no `node_modules`, so nothing stale can survive.
+      - name: Install
+        if: ${{ !inputs.use-wasm-stubs }}
+        run: yarn install --frozen-lockfile
+
+      - name: Production build
+        run: yarn build-fast
+
+      # Tailwind reaches the bundle only through craco's PostCSS override. If
+      # that stops applying (a craco upgrade, a second CSS rule added after
+      # craco's style pass), the build stays green and the page ships
+      # unstyled, so look for one utility the Flow wrapper always carries.
+      - name: Check Tailwind is in the built CSS
+        run: |
+          grep -q '\.flex{display:flex}' build/static/css/main.*.css || {
+            echo "::error::Tailwind utilities are missing from build/static/css -- craco's PostCSS override is not applying"
+            exit 1
+          }
+
+      # Change events are named after `_Pg*` classes; a minifier that drops the names passes the build and loops at runtime.
+      - name: Check decorator class names survive minification
+        run: |
+          for name in _PgConnection _PgProgramInfo; do
+            grep -q "\"$name\"" build/static/js/*.js || {
+              echo "::error::$name is missing from build/static/js: the minifier drops class names (keepNames in scripts/esbuild-minify.mjs)"
+              exit 1
+            }
+          done
+
+      # Ahead of "Build tests", so the report reaches the pull request in the run where the snapshot test fails.
+      # `github.event_name`, `github.event` and `GITHUB_BASE_REF` are the triggering workflow's (`client-v2.yml`).
+      # continue-on-error: a report failure must not skip "Build tests".
+      - name: Bundle change report
+        id: report
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          scripts/bundle-info-report.sh "$GITHUB_BASE_REF" "$HEAD_SHA" || {
+            echo "::warning::Bundle change report failed; the pull request gets no new bundle comment"
+            exit 1
+          }
+          cat build/bundle-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      # A fork's pull request gets a read-only token here, so bundle-info-comment.yml posts the comment from this artifact.
+      - name: Save bundle change report
+        id: save-report
+        if: steps.report.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: bundle-info-comment
+          path: client-v2/build/bundle-report.md
+          if-no-files-found: error
+
+      - name: Warn about an unsaved bundle change report
+        if: steps.save-report.outcome == 'failure'
+        run: echo "::warning::Saving the bundle change report failed; the pull request gets no new bundle comment"
+
+      # `*.build-test.mjs` reads `build/`, so it runs here rather than in `test-api`.
+      - name: Build tests
+        run: yarn test-build
+
+      # The deploy's own post-build check (`buildCommand` in `vercel.json`).
+      - name: Check the bundle carries the real wasm packages
+        if: ${{ !inputs.use-wasm-stubs }}
+        run: node scripts/wasm-stubs.mjs check-build build
 
   # The browser suite (`client-v2/e2e/`, Playwright) in its own job, so
   # `checks` stays short and a browser failure reads as one. No Postgres and
