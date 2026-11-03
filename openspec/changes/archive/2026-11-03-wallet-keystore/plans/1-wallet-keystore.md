@@ -1,5 +1,11 @@
 # Wallet keystore Implementation Plan
 
+> Superseded in part by the code and `openspec/specs/wallet-storage/spec.md`:
+> the names became `indexedDbStoreFor`, `walletStorageWith` and
+> `read`/`write`/`exclusive`, the tests moved into in-source blocks, and the
+> merge takes `localStorage` first. Read the spec, not this plan, for what
+> the code does.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** The built-in wallet's state lives in IndexedDB, and a wallet in `localStorage['wallet']` moves there without loss.

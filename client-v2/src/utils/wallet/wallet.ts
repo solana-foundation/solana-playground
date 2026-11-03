@@ -202,9 +202,10 @@ const derive = () => ({
 /**
  * Upgrade the pre-accounts format (`sk`) in place in `localStorage`.
  *
- * `updatable` runs this before `storage.read`, so `walletStorage().read`
- * only ever sees the accounts format; it sets anything else aside as
- * unreadable.
+ * `updatable` runs this before `storage.read`, so in this tab
+ * `walletStorage().read` finds the accounts format. A legacy copy it does see
+ * belongs to another tab mid-upgrade and is left alone; any other shape is
+ * set aside as unreadable.
  */
 const migrate = () => {
   const walletStr = localStorage.getItem(WALLET_LOCAL_KEY);

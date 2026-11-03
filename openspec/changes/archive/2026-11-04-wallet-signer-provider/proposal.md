@@ -23,7 +23,8 @@ default, has its own ticket.
   projects work unchanged.
 - `PgWallet.create`, `PgWallet.export`, `PgWallet.getKeypairBytes` and the
   duplicate check in `PgWallet.add` go through the provider or read only the
-  public key. `PgWallet.setSignerProvider` replaces the provider.
+  public key. `pg.wallet.keypair` and the Anchor `payer` read the keypair of
+  the wallet the provider built, so they need no change. `PgWallet.setSignerProvider` replaces the provider.
 - The local provider signs a v0 versioned transaction. The old check read
   `tx.version`, which is `0` there, and sent it to `partialSign`, which a
   versioned transaction lacks.

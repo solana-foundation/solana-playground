@@ -11,7 +11,9 @@ export interface WalletStore {
   write(state: SerializedWalletState): Promise<void>;
   /**
    * Run `task` while no other tab runs one on the same store, so one tab's
-   * read-merge-write cannot interleave with another tab's move or save.
+   * move cannot interleave with another tab's move or save. Where the lock
+   * cannot be taken (no Web Locks, a sandboxed origin) the task runs
+   * unguarded, as every save did before the keystore.
    */
   exclusive<T>(task: () => Promise<T>): Promise<T>;
 }
@@ -19,9 +21,9 @@ export interface WalletStore {
 const STORE_NAME = "state";
 
 /**
- * How long an open may take before the wallet gives up on IndexedDB for the
- * page. An open that never answers (some private modes, a stalled browser)
- * would otherwise hold the lock and the app's start forever.
+ * How long an open may take before it fails. An open that never answers (some
+ * private modes, a stalled browser) would otherwise hold the lock and the
+ * app's start forever; `walletStorageWith` then falls back for the page.
  */
 const OPEN_TIMEOUT_MS = 5000;
 const RECORD_KEY = "wallet";
