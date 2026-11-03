@@ -26,6 +26,12 @@ export {
   ThreadDeleted,
 } from "./model/conversations.mjs";
 
+export {
+  batchPush,
+  MAX_BATCH_BYTES,
+  MAX_BATCH_ITEMS,
+} from "./model/chat-batch.mjs";
+
 export { DELETED_REASON, isDeletedScope } from "./model/deleted.mjs";
 
 export { getPool, isConfigured, isEnabled, query } from "./model/db.mjs";
