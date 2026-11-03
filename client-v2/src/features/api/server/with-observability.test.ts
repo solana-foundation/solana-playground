@@ -128,6 +128,24 @@ describe("captureServerError", () => {
   });
 });
 
+describe("captureServerError and system errors", () => {
+  it("sends a network error as it is", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("SENTRY_PREVIEW_ENABLED", "");
+    const { withObservability, captureServerError } = await load();
+    const reset = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+
+    await withObservability("agent", async () => {
+      captureServerError(reset);
+    })(req, res);
+
+    expect(sentry.captureException).toHaveBeenCalledWith(reset);
+  });
+});
+
 describe("withObservability", () => {
   it("leaves the response alone and loads nothing without a DSN", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "");

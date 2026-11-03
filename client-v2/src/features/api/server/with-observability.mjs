@@ -101,7 +101,10 @@ export const scrubSpan = (span) => {
  */
 const sendable = (error) => {
   const code = /** @type {{ code?: unknown }} */ (error)?.code;
-  if (!(error instanceof Error) || typeof code !== "string") return error;
+  // A SQLSTATE is five characters; a Node system error's code (ECONNRESET) is not one
+  if (!(error instanceof Error) || !/^[0-9A-Z]{5}$/.test(String(code))) {
+    return error;
+  }
   const constraint = /** @type {{ constraint?: unknown }} */ (error).constraint;
   const safe = new Error(
     `database error ${code}${
