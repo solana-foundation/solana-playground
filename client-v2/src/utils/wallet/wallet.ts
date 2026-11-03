@@ -30,16 +30,24 @@ const defaultState: WalletState = {
   standardName: null,
 };
 
-/** The wallet's state lives in its own IndexedDB database (`wallet-storage`) */
-const walletStorage = walletStorageWith(
-  indexedDbStoreFor("pg-wallet"),
-  localStorage
-);
+let walletStorageInstance: ReturnType<typeof walletStorageWith> | undefined;
+
+/**
+ * The wallet's storage: its own IndexedDB database (`wallet-storage`).
+ *
+ * Made on first use, not at import: the build imports this module under Node
+ * (`src/settings`), where `localStorage` does not exist.
+ */
+const walletStorage = () =>
+  (walletStorageInstance ??= walletStorageWith(
+    indexedDbStoreFor("pg-wallet"),
+    localStorage
+  ));
 
 const storage = {
   /** Read from storage and deserialize the data. */
   async read(): Promise<WalletState> {
-    const serializedState = await walletStorage.read();
+    const serializedState = await walletStorage().read();
     if (!serializedState) return defaultState;
     return { ...defaultState, ...serializedState };
   },
@@ -54,7 +62,7 @@ const storage = {
       standardName: wallet.standardName,
     };
 
-    return walletStorage.write(serializedState);
+    return walletStorage().write(serializedState);
   },
 };
 
@@ -181,7 +189,7 @@ const LEGACY_KEY = "wallet";
 
 /**
  * Upgrade the pre-accounts format (`sk`) in place in `localStorage`, before
- * `walletStorage.read` moves the result to IndexedDB.
+ * `walletStorage().read` moves the result to IndexedDB.
  */
 const migrate = () => {
   const walletStr = localStorage.getItem(LEGACY_KEY);
