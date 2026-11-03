@@ -330,7 +330,10 @@ if (import.meta.vitest) {
         write: vi.fn(async (state: SerializedWalletState) => {
           value = structuredClone(state);
         }),
-        exclusive: vi.fn(<T>(task: () => Promise<T>) => task()),
+        // A spy with the store's generic signature: `vi.fn` drops the `<T>`
+        exclusive: vi.fn((task: () => Promise<unknown>) =>
+          task()
+        ) as unknown as WalletStore["exclusive"] & ReturnType<typeof vi.fn>,
         held: () => value,
       };
     };
