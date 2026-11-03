@@ -6,23 +6,43 @@ import type { SerializedWalletState, WalletAccount } from "./types";
 const log = createLogger("wallet:storage");
 
 /** The `localStorage` key the wallet lived under before the keystore */
-const LOCAL_KEY = "wallet";
+export const WALLET_LOCAL_KEY = "wallet";
+
+/**
+ * Where an unreadable `localStorage` wallet is kept, so that a later fallback
+ * write cannot overwrite what may be someone's only copy of a key.
+ */
+const UNREADABLE_KEY = "wallet.unreadable";
 
 /** The part of `Storage` the wallet uses */
 type LocalStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
 /**
+ * Whether an error's message is safe to log next to wallet state.
+ *
+ * IndexedDB and `Storage` fail with `DOMException`s whose messages are fixed
+ * by the browser, and the errors this module throws are plain `Error`s. Any
+ * other error's message may quote its input: V8's `JSON.parse` `SyntaxError`
+ * includes a slice of the text it failed on, which for a wallet is key bytes.
+ */
+const isMessageSafe = (error: Error) =>
+  error instanceof DOMException || error.name === "Error";
+
+/**
  * Log a storage failure without anything the failure may carry.
  *
- * An IndexedDB or JSON error is rebuilt from its name and message only, so no
- * property or `cause` holding wallet state can reach a log provider or error
- * tracking. Callers pass counts, never accounts.
+ * The error is rebuilt from its name, and its message only where
+ * `isMessageSafe` allows, so no property, `cause` or quoted input holding
+ * wallet state can reach a log provider or error tracking. Callers pass
+ * counts, never accounts.
  */
 const reportFailureWith =
   (context: Record<string, number>) => (what: string, error: unknown) => {
     const original = toError(error);
-    const clean = new Error(`${what}: ${original.name}: ${original.message}`);
-    log.error(clean, { report: true, context });
+    const detail = isMessageSafe(original)
+      ? `${original.name}: ${original.message}`
+      : original.name;
+    log.error(new Error(`${what}: ${detail}`), { report: true, context });
   };
 
 const reportFailure = reportFailureWith({});
@@ -30,6 +50,32 @@ const reportFailure = reportFailureWith({});
 /** Report a failure with the count of accounts it concerns */
 const reportFailureFor = (state: SerializedWalletState) =>
   reportFailureWith({ accounts: state.accounts.length });
+
+/** Whether `value` is an account with a 64-byte keypair */
+const isAccount = (value: unknown): value is WalletAccount => {
+  if (typeof value !== "object" || value === null) return false;
+  const { kp, name } = value as Partial<WalletAccount>;
+  return (
+    typeof name === "string" &&
+    Array.isArray(kp) &&
+    kp.length === 64 &&
+    kp.every((byte) => Number.isInteger(byte) && byte >= 0 && byte < 256)
+  );
+};
+
+/** Whether `value` has the shape of a stored wallet */
+const isStoredWallet = (value: unknown): value is SerializedWalletState => {
+  if (typeof value !== "object" || value === null) return false;
+  const { accounts, currentIndex, state } = value as Partial<
+    Record<keyof SerializedWalletState, unknown>
+  >;
+  return (
+    Array.isArray(accounts) &&
+    accounts.every(isAccount) &&
+    typeof currentIndex === "number" &&
+    typeof state === "string"
+  );
+};
 
 /** An account's public key: the last 32 bytes of its keypair */
 const publicKeyOf = (account: WalletAccount) => account.kp.slice(32).join(",");
@@ -80,12 +126,19 @@ const mergeWallets = (
  * The wallet's persistence: IndexedDB, with `localStorage` as what it moves
  * from and what it falls back to.
  *
- * `read` moves a wallet found in `localStorage` into the store: it writes it
- * (merged with what the store holds), reads it back, and removes the
- * `localStorage` entry only when the copy reads back equal. Any store failure
- * leaves `localStorage` as it was and switches this instance to
- * `localStorage` for the rest of the page's life, because losing a key is
- * worse than leaving one where it was. The next load tries the store again.
+ * `read` moves a wallet found in `localStorage` into the store, under the
+ * store's lock so two tabs cannot interleave: it merges it with what the
+ * store holds, writes the result, reads it back, and removes the
+ * `localStorage` entry only when the copy reads back equal and nobody wrote
+ * the entry meanwhile. `localStorage` is the merge's primary: once a wallet
+ * has moved, a copy there is newer than the store's, written by a session
+ * that fell back or by a tab still on the previous version.
+ *
+ * Any store failure leaves `localStorage` as it was and switches this
+ * instance to `localStorage` for the rest of the page's life, because losing
+ * a key is worse than leaving one where it was. The next load tries the
+ * store again and merges. An account removed while falling back comes back
+ * from the store on that merge: a removed key returns, none is lost.
  *
  * `write` calls run one after another, in call order: `updatable` does not
  * await them, and two quick changes must not land out of order.
@@ -97,24 +150,50 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
   let isDegraded = false;
   let writes = Promise.resolve();
 
-  const readLocal = (): SerializedWalletState | undefined => {
-    const text = local.getItem(LOCAL_KEY);
+  /** The `localStorage` wallet and its text, or `undefined` for none */
+  const readLocal = () => {
+    const text = local.getItem(WALLET_WALLET_LOCAL_KEY);
     if (text === null) return undefined;
+    let value: unknown;
     try {
-      return JSON.parse(text) as SerializedWalletState;
+      value = JSON.parse(text);
     } catch (error) {
-      // Left in place: it may be the only copy of a key someone can recover
+      keepUnreadable(text);
       reportFailure("Unreadable wallet in localStorage", error);
       return undefined;
+    }
+    if (!isStoredWallet(value)) {
+      keepUnreadable(text);
+      reportFailure("Unreadable wallet in localStorage", new Error("shape"));
+      return undefined;
+    }
+    return { wallet: value, text };
+  };
+
+  /** Keep the first unreadable copy aside; a later one never replaces it */
+  const keepUnreadable = (text: string) => {
+    try {
+      if (local.getItem(UNREADABLE_KEY) === null) {
+        local.setItem(UNREADABLE_KEY, text);
+      }
+    } catch (error) {
+      reportFailure("Unreadable wallet not kept aside", error);
     }
   };
 
   const writeLocal = (state: SerializedWalletState) => {
     try {
-      local.setItem(LOCAL_KEY, JSON.stringify(state));
+      local.setItem(WALLET_LOCAL_KEY, JSON.stringify(state));
     } catch (error) {
       reportFailureFor(state)("Wallet not saved to localStorage", error);
     }
+  };
+
+  /** Read the store, treating a record of the wrong shape as a failure */
+  const readStore = async () => {
+    const value = await store.read();
+    if (value === undefined || isStoredWallet(value)) return value;
+    throw new Error("The stored wallet has the wrong shape");
   };
 
   /** Copy `state` into the store and confirm it reads back the same */
@@ -126,47 +205,70 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
     }
   };
 
+  /** Remove the `localStorage` copy unless someone rewrote it meanwhile */
+  const removeLocal = (text: string) => {
+    try {
+      if (local.getItem(WALLET_WALLET_LOCAL_KEY) === text) {
+        local.removeItem(WALLET_WALLET_LOCAL_KEY);
+      }
+    } catch (error) {
+      // The store holds the wallet; the next load merges and retries this
+      reportFailure("Wallet left in localStorage", error);
+    }
+  };
+
+  const migrate = async (): Promise<SerializedWalletState | undefined> => {
+    const fromLocal = readLocal();
+    if (isDegraded) return fromLocal?.wallet;
+
+    let stored: SerializedWalletState | undefined;
+    try {
+      stored = await readStore();
+    } catch (error) {
+      isDegraded = true;
+      reportFailure("Wallet store unavailable", error);
+      return fromLocal?.wallet;
+    }
+    if (!fromLocal) return stored;
+
+    const merged = stored
+      ? mergeWallets(fromLocal.wallet, stored)
+      : fromLocal.wallet;
+    try {
+      await copyToStore(merged);
+    } catch (error) {
+      isDegraded = true;
+      reportFailureFor(merged)("Wallet not moved out of localStorage", error);
+      return merged;
+    }
+
+    removeLocal(fromLocal.text);
+    return merged;
+  };
+
   return {
     /** Read the wallet, moving a `localStorage` copy into the store */
-    async read(): Promise<SerializedWalletState | undefined> {
-      const fromLocal = readLocal();
-      if (isDegraded) return fromLocal;
-
-      let stored: SerializedWalletState | undefined;
-      try {
-        stored = await store.read();
-      } catch (error) {
-        isDegraded = true;
-        reportFailure("Wallet store unavailable", error);
-        return fromLocal;
-      }
-      if (!fromLocal) return stored;
-
-      const merged = stored ? mergeWallets(stored, fromLocal) : fromLocal;
-      try {
-        await copyToStore(merged);
-      } catch (error) {
-        isDegraded = true;
-        reportFailureFor(merged)("Wallet not moved out of localStorage", error);
-        return merged;
-      }
-
-      local.removeItem(LOCAL_KEY);
-      return merged;
+    read(): Promise<SerializedWalletState | undefined> {
+      return store.exclusive(migrate);
     },
 
     /** Write the wallet; falls back to `localStorage` if the store fails */
     write(state: SerializedWalletState): Promise<void> {
-      writes = writes.then(async () => {
-        if (isDegraded) return writeLocal(state);
-        try {
-          await store.write(state);
-        } catch (error) {
-          isDegraded = true;
-          reportFailureFor(state)("Wallet not saved to the store", error);
-          writeLocal(state);
-        }
-      });
+      writes = writes
+        .then(async () => {
+          if (isDegraded) return writeLocal(state);
+          try {
+            await store.write(state);
+          } catch (error) {
+            isDegraded = true;
+            reportFailureFor(state)("Wallet not saved to the store", error);
+            writeLocal(state);
+          }
+        })
+        .catch((error: unknown) => {
+          // Nothing above should throw; if it does, the next write still runs
+          reportFailureFor(state)("Wallet write failed", error);
+        });
       return writes;
     },
   };
@@ -223,13 +325,14 @@ if (import.meta.vitest) {
         write: vi.fn(async (state: SerializedWalletState) => {
           value = structuredClone(state);
         }),
+        exclusive: vi.fn(<T>(task: () => Promise<T>) => task()),
         held: () => value,
       };
     };
 
     const memoryLocal = (wallet: string | undefined) => {
       const items = new Map<string, string>();
-      if (wallet !== undefined) items.set(LOCAL_KEY, wallet);
+      if (wallet !== undefined) items.set(WALLET_LOCAL_KEY, wallet);
       return {
         // eslint-disable-next-line unicorn/no-null -- `Storage.getItem` returns null
         getItem: (key: string) => items.get(key) ?? null,
@@ -269,7 +372,7 @@ if (import.meta.vitest) {
       const read = await walletStorageWith(store, local).read();
 
       expect(store.held()).toEqual(old);
-      expect(local.items.has(LOCAL_KEY)).toBe(false);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
       expect(read).toEqual(old);
     });
 
@@ -281,7 +384,7 @@ if (import.meta.vitest) {
 
       const read = await walletStorageWith(store, local).read();
 
-      expect(local.items.get(LOCAL_KEY)).toBe(JSON.stringify(old));
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
       expect(read).toEqual(old);
       expect(logged.entries).toHaveLength(1);
       expect(logged.entries[0].ns).toBe("wallet:storage");
@@ -296,29 +399,28 @@ if (import.meta.vitest) {
 
       const read = await walletStorageWith(store, local).read();
 
-      expect(local.items.get(LOCAL_KEY)).toBe(JSON.stringify(old));
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
       expect(read).toEqual(old);
       expect(logged.entries).toHaveLength(1);
     });
 
-    it("merges both by public key, the store's first, and renames a clash", async () => {
+    it("merges both by public key, localStorage's first, and renames a clash", async () => {
       const inStore: SerializedWalletState = {
-        state: "pg",
+        state: "disconnected",
         accounts: [account(1, "Wallet 1"), account(2, "Main")],
         currentIndex: 1,
-        standardName: NO_STANDARD,
+        standardName: "Phantom",
       };
       const inLocal: SerializedWalletState = {
-        state: "disconnected",
+        state: "pg",
         accounts: [
-          // The same key, renamed in an older tab: one account, the store's name
+          // The same key, renamed since: one account, the newer name
           account(2, "Renamed"),
-          // Another key under a name the store already uses
+          // Another key under a name the other copy also uses
           account(3, "Wallet 1"),
-          account(4, "Spare"),
         ],
-        currentIndex: 2,
-        standardName: "Phantom",
+        currentIndex: 0,
+        standardName: NO_STANDARD,
       };
       const store = memoryStore(inStore);
       const local = memoryLocal(JSON.stringify(inLocal));
@@ -328,17 +430,72 @@ if (import.meta.vitest) {
       const expected: SerializedWalletState = {
         state: "pg",
         accounts: [
-          account(1, "Wallet 1"),
-          account(2, "Main"),
-          account(3, "Wallet 1 (2)"),
-          account(4, "Spare"),
+          account(2, "Renamed"),
+          account(3, "Wallet 1"),
+          account(1, "Wallet 1 (2)"),
         ],
-        currentIndex: 1,
+        currentIndex: 0,
         standardName: NO_STANDARD,
       };
       expect(read).toEqual(expected);
       expect(store.held()).toEqual(expected);
-      expect(local.items.has(LOCAL_KEY)).toBe(false);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
+    it("moves the wallet under the store's lock", async () => {
+      const store = memoryStore(undefined);
+      const storage = walletStorageWith(
+        store,
+        memoryLocal(JSON.stringify(walletOf([account(1, "Wallet 1")])))
+      );
+
+      await storage.read();
+
+      expect(store.exclusive).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps a localStorage copy rewritten while the move ran", async () => {
+      const first = JSON.stringify(walletOf([account(1, "Wallet 1")]));
+      const rewritten = JSON.stringify(walletOf([account(2, "Wallet 2")]));
+      const local = memoryLocal(first);
+      const store = memoryStore(undefined);
+      const write = store.write.getMockImplementation();
+      store.write.mockImplementationOnce(async (state) => {
+        // A tab on the previous version saves while this one copies
+        local.items.set(WALLET_LOCAL_KEY, rewritten);
+        await write?.(state);
+      });
+
+      await walletStorageWith(store, local).read();
+
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(rewritten);
+    });
+
+    it("sets aside a localStorage wallet of the wrong shape and reads the store", async () => {
+      const stored = walletOf([account(1, "Wallet 1")]);
+      const store = memoryStore(stored);
+      const local = memoryLocal(JSON.stringify({ accounts: [{ kp: [1, 2] }] }));
+
+      const read = await walletStorageWith(store, local).read();
+
+      expect(read).toEqual(stored);
+      expect(local.items.get("wallet.unreadable")).toBe(
+        JSON.stringify({ accounts: [{ kp: [1, 2] }] })
+      );
+      expect(logged.entries).toHaveLength(1);
+    });
+
+    it("falls back to localStorage when the stored record has the wrong shape", async () => {
+      const old = walletOf([account(1, "Wallet 1")]);
+      const store = memoryStore(undefined);
+      store.read.mockResolvedValue({ accounts: "corrupt" } as never);
+      const local = memoryLocal(JSON.stringify(old));
+
+      const read = await walletStorageWith(store, local).read();
+
+      expect(read).toEqual(old);
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
+      expect(logged.entries).toHaveLength(1);
     });
 
     it("leaves unreadable localStorage JSON in place", async () => {
@@ -348,9 +505,22 @@ if (import.meta.vitest) {
       const read = await walletStorageWith(store, local).read();
 
       expect(read).toBeUndefined();
-      expect(local.items.get(LOCAL_KEY)).toBe("{not json");
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe("{not json");
+      expect(local.items.get("wallet.unreadable")).toBe("{not json");
       expect(store.write).not.toHaveBeenCalled();
       expect(logged.entries).toHaveLength(1);
+    });
+
+    it("keeps the unreadable copy when a fallback write replaces it", async () => {
+      const store = memoryStore(undefined);
+      store.read.mockRejectedValue(new Error("blocked"));
+      const local = memoryLocal("{not json");
+      const storage = walletStorageWith(store, local);
+
+      await storage.read();
+      await storage.write(walletOf([account(1, "Wallet 1")]));
+
+      expect(local.items.get("wallet.unreadable")).toBe("{not json");
     });
 
     it("uses localStorage and logs once when the store cannot open", async () => {
@@ -369,7 +539,7 @@ if (import.meta.vitest) {
       });
 
       expect(read).toEqual(old);
-      expect(JSON.parse(local.items.get(LOCAL_KEY) ?? "{}").state).toBe(
+      expect(JSON.parse(local.items.get(WALLET_LOCAL_KEY) ?? "{}").state).toBe(
         "disconnected"
       );
       expect(store.write).not.toHaveBeenCalled();
@@ -386,7 +556,7 @@ if (import.meta.vitest) {
       await storage.write(next);
 
       expect(store.held()).toEqual(next);
-      expect(local.items.has(LOCAL_KEY)).toBe(false);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
     });
 
     it("writes to localStorage when a store write fails", async () => {
@@ -399,7 +569,7 @@ if (import.meta.vitest) {
       const next = walletOf([account(1, "Wallet 1")]);
       await storage.write(next);
 
-      expect(local.items.get(LOCAL_KEY)).toBe(JSON.stringify(next));
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(next));
       expect(logged.entries).toHaveLength(1);
     });
 
@@ -441,7 +611,14 @@ if (import.meta.vitest) {
         memoryLocal(JSON.stringify(secret))
       ).read();
 
-      expect(logged.entries.length).toBeGreaterThan(1);
+      // A wallet cut off mid-keypair: V8's `SyntaxError` quotes the text
+      const truncated = JSON.stringify(secret).slice(0, 60);
+      await walletStorageWith(
+        memoryStore(undefined),
+        memoryLocal(truncated)
+      ).read();
+
+      expect(logged.entries.length).toBeGreaterThan(2);
       const text = JSON.stringify(
         logged.entries.map((entry) => ({
           ns: entry.ns,
@@ -452,7 +629,10 @@ if (import.meta.vitest) {
         }))
       );
       const bytes = kp(9);
-      expect(text).not.toContain(bytes.slice(0, 32).join(","));
+      // Any three consecutive secret bytes, as JSON writes them
+      for (let i = 0; i + 3 <= 32; i++) {
+        expect(text).not.toContain(bytes.slice(i, i + 3).join(","));
+      }
       expect(text).not.toContain(Buffer.from(bytes).toString("base64"));
       expect(text).not.toContain("Secret name");
     });

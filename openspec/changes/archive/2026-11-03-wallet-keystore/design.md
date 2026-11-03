@@ -56,12 +56,16 @@ e2e spec, as the project does for `PgFs`.
 
 1. Read `localStorage['wallet']`; nothing there means nothing to do.
 2. Upgrade the legacy `sk` format in memory (the existing step).
-3. Read IndexedDB. If it holds a wallet, merge: IndexedDB's accounts first,
-   then each `localStorage` account whose public key is not already present,
-   with its name suffixed (`Wallet 1 (2)`) on a clash; IndexedDB's
-   `currentIndex`, `state` and `standardName` win.
+3. Read IndexedDB. If it holds a wallet, merge: `localStorage`'s accounts
+   first, then each IndexedDB account whose public key is not already present,
+   with its name suffixed (`Wallet 1 (2)`) on a clash; `localStorage`'s
+   `currentIndex`, `state` and `standardName` win. After a first move a
+   `localStorage` copy only exists because something wrote it later (a
+   session that fell back, a tab on the old bundle), so it is the newer one.
+   The whole step runs under a Web Lock, so two tabs never interleave it.
 4. Write the result, read it back, compare with `PgCommon.isEqual`.
-5. Equal: remove `localStorage['wallet']`.
+5. Equal: remove `localStorage['wallet']`, unless its text changed since
+   step 1 (an old tab saved meanwhile; the next load merges it).
    Otherwise: log, leave `localStorage` alone, and mark the keystore
    unavailable for this load so reads and writes use `localStorage`.
 
@@ -75,10 +79,18 @@ changes land in order. A write that fails logs and writes the same state to
 `localStorage`, so a change is not lost; the next load's migration moves it
 back. Losing a key is worse than leaving one in `localStorage`.
 
+### Unreadable copies are set aside
+
+A `localStorage` wallet that is not JSON, or not a wallet's shape, is copied
+once to `wallet.unreadable` and left where it is. Without that, the first
+fallback write would overwrite what may be the only copy of a key.
+
 ### Logging
 
-One logger, `wallet:storage`. Every entry is built from an error's name and
-message and account counts only; nothing receives the state object. A unit
+One logger, `wallet:storage`. Every entry is built from an error's name, its
+message only for a `DOMException` or this module's own `Error`s, and account
+counts; nothing receives the state object. A `SyntaxError` from `JSON.parse`
+quotes the text it failed on, which for a wallet is key bytes. A unit
 test runs the failure paths through the memory provider and asserts that no
 entry contains any byte sequence of the test keypair.
 

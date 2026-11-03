@@ -105,7 +105,7 @@ const threadIdOf = (fileName: string) =>
  * Chat threads on this device.
  *
  * IndexedDB via `PgFs`, not `localStorage`: the origin's ~5MB of
- * `localStorage` is already shared with `settings`, `wallet`, `theme` and
+ * `localStorage` is already shared with `settings`, `theme` and
  * `flow.deploys`, and a transcript carrying file diffs does not belong in that
  * budget. Living in the same volume as the code also means one store to reason
  * about, and `.config/` is already a non-workspace directory there.

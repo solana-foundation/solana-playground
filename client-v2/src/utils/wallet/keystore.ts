@@ -9,6 +9,11 @@ export interface WalletStore {
   /** The stored wallet, or `undefined` when there is none */
   read(): Promise<SerializedWalletState | undefined>;
   write(state: SerializedWalletState): Promise<void>;
+  /**
+   * Run `task` while no other tab runs one on the same store, so a read, a
+   * merge and a write cannot interleave with another tab's.
+   */
+  exclusive<T>(task: () => Promise<T>): Promise<T>;
 }
 
 const STORE_NAME = "state";
@@ -50,7 +55,17 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
       request.onupgradeneeded = () => {
         request.result.createObjectStore(STORE_NAME);
       };
-      request.onsuccess = () => resolve(request.result);
+      request.onsuccess = () => {
+        const db = request.result;
+        // A closed connection (eviction, another tab's upgrade) is dropped so
+        // the next call opens a fresh one instead of failing forever
+        db.onversionchange = () => {
+          db.close();
+          opened = undefined;
+        };
+        db.onclose = () => (opened = undefined);
+        resolve(db);
+      };
       request.onerror = () => reject(request.error);
       request.onblocked = () => reject(new Error("indexedDB open is blocked"));
     });
@@ -59,7 +74,15 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
     return opened;
   };
 
+  const lockName = `${name}:migrate`;
+
   return {
+    exclusive(task) {
+      // Without Web Locks (old browsers, some test environments) the task runs
+      // unguarded, as every write already does
+      if (typeof navigator === "undefined" || !navigator.locks) return task();
+      return navigator.locks.request(lockName, task);
+    },
     async read() {
       const db = await open();
       const value = await requestIn(
