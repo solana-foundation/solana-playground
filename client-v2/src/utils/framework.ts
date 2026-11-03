@@ -117,6 +117,28 @@ const PROGRAM_SOURCE_REGEX = /\.(rs|py)$/;
 /** TypeScript and JavaScript, the only files a project with no program runs */
 const SCRIPT_FILE_REGEX = /\.[jt]sx?$/;
 
+/**
+ * JSON a project with no program keeps beside its scripts: an IDL a client
+ * imports, a fixture a test reads
+ */
+const DATA_FILE_REGEX = /\.json$/i;
+
+/**
+ * JSON a project with no program leaves out as tool configuration rather
+ * than data: package manifests and npm lockfiles, `tsconfig` and `jsconfig`
+ * files, and any dotfile or file in a dot folder (`.vscode/`)
+ */
+const TOOL_CONFIG_REGEX =
+  /(^|\/)(package\.json|package-lock\.json|npm-shrinkwrap\.json|(ts|js)config[^/]*\.json)$|(^|\/)\./i;
+
+/**
+ * Whether a project with no program keeps the file at `path`: every script,
+ * and JSON that is not tool configuration
+ */
+const isNoProgramFile = (path: string) =>
+  SCRIPT_FILE_REGEX.test(path) ||
+  (DATA_FILE_REGEX.test(path) && !TOOL_CONFIG_REGEX.test(path));
+
 /** A test file, named as the gist format's loose placement names one */
 const TEST_FILE_REGEX = /\.(test|spec)\.[jt]sx?$/;
 
@@ -166,14 +188,18 @@ const freePath = (path: string, taken: Set<string>) => {
 /**
  * Lay out a repository with no program: tests under `tests/`, every other
  * TypeScript or JavaScript file under `client/`, each keeping its path below
- * the folder that placed it. Files of any other kind are left out. When two
+ * the folder that placed it. JSON data is placed by its folder alone (under
+ * `tests/` from a leading `tests/` or `test/`, else under `client/`), so an
+ * import of an IDL or a fixture from within the same folder still resolves;
+ * one that crosses from `client/` to `tests/` does not, as for scripts. Tool
+ * configuration (`TOOL_CONFIG_REGEX`) and files of any other kind are left
+ * out. When two
  * files want one path, the one `placementRank` puts first gets it and the
  * other keeps its whole path, so nothing is overwritten.
  *
  * @param files repository files
  * @param root the imported folder, dropped from the front of every path
- * @returns the files in the playground layout, in the given order, empty
- * when none is a script
+ * @returns the files in the playground layout, in the given order
  */
 const toNoProgramLayout = (files: TupleFiles, root: string): TupleFiles => {
   const prefix = root.replace(/^\/+|\/+$/g, "");
@@ -195,7 +221,7 @@ const toNoProgramLayout = (files: TupleFiles, root: string): TupleFiles => {
         : NO_PROGRAM_FOLDER.CLIENT;
       return { path, content, folder, rest, target };
     })
-    .filter(({ path }) => SCRIPT_FILE_REGEX.test(path));
+    .filter(({ path }) => isNoProgramFile(path));
 
   const taken = new Set<string>();
   const placed = new Map<typeof wanted[number], string>();
@@ -285,7 +311,8 @@ export class PgFramework {
    * no framework recognises are laid out as a project with no program when
    * they hold TypeScript or JavaScript and no Rust or Python: a program in a
    * layout no framework knows is refused, never imported without its source.
-   * Other files of such a project are left out.
+   * Such a project keeps its JSON data too (`toNoProgramLayout`), but JSON
+   * alone is nothing to open.
    *
    * @param files framework files
    * @returns the playground layout converted files
@@ -325,7 +352,9 @@ export class PgFramework {
           throw new Error(NOT_A_PROGRAM);
         }
         const noProgramFiles = toNoProgramLayout(files, root);
-        if (!noProgramFiles.length) throw new Error(noProgramCode(source));
+        if (!noProgramFiles.some(([path]) => SCRIPT_FILE_REGEX.test(path))) {
+          throw new Error(noProgramCode(source));
+        }
         return noProgramFiles;
       }
 
@@ -500,7 +529,10 @@ if (import.meta.vitest) {
       });
     });
 
-    /** A repository no framework recognises: scripts are laid out, anything else refused */
+    /**
+     * A repository no framework recognises: scripts and their JSON data are
+     * laid out; a program in an unknown layout, or nothing to run, is refused
+     */
     describe("PgFramework.convertToPlaygroundLayout", () => {
       // The real frameworks import the settings, which need the app's
       // globals; one that claims `programs/` stands in for Anchor.
@@ -653,6 +685,119 @@ if (import.meta.vitest) {
         ]);
         expect(paths).toContain("src/lib.rs");
         expect(paths).not.toContain("client/programs/p/src/lib.rs");
+      });
+
+      /** A project with no program keeps the JSON its scripts import */
+      describe("JSON files", () => {
+        it("keeps an IDL and a fixture beside the scripts that read them", async () => {
+          expect(
+            await pathsOf([
+              ["src/index.ts", 'import idl from "../idl/x.json";'],
+              ["idl/x.json", "{}"],
+              ["tests/a.test.ts", 'import a from "./fixtures/a.json";'],
+              ["tests/fixtures/a.json", "{}"],
+            ])
+          ).toEqual([
+            "client/idl/x.json",
+            "client/src/index.ts",
+            "tests/a.test.ts",
+            "tests/fixtures/a.json",
+          ]);
+          const [, idl] = (
+            await PgFramework.convertToPlaygroundLayout([
+              ["a.ts", "a"],
+              ["idl/x.json", '{"name":"x"}'],
+            ])
+          )[1];
+          expect(idl).toBe('{"name":"x"}');
+        });
+
+        it("places JSON from a test folder under tests", async () => {
+          expect(
+            await pathsOf([
+              ["run.ts", "a"],
+              ["test/data/b.json", "{}"],
+            ])
+          ).toEqual(["client/run.ts", "tests/data/b.json"]);
+        });
+
+        it("leaves out package manifests and tool configuration", async () => {
+          expect(
+            await pathsOf([
+              ["index.ts", "a"],
+              ["package.json", "{}"],
+              ["client/package.json", "{}"],
+              ["tsconfig.json", "{}"],
+              ["tsconfig.build.json", "{}"],
+              ["tests/tsconfig.json", "{}"],
+              ["jsconfig.json", "{}"],
+              [".eslintrc.json", "{}"],
+              [".vscode/settings.json", "{}"],
+              ["tests/.fixtures/a.json", "{}"],
+              ["package-lock.json", "{}"],
+              ["npm-shrinkwrap.json", "{}"],
+              ["tsconfig-base.json", "{}"],
+              ["TSCONFIG.JSON", "{}"],
+            ])
+          ).toEqual(["client/index.ts"]);
+        });
+
+        it("keeps JSON whatever the case of its extension", async () => {
+          expect(
+            await pathsOf([
+              ["a.ts", "a"],
+              ["idl/X.JSON", "{}"],
+            ])
+          ).toEqual(["client/a.ts", "client/idl/X.JSON"]);
+        });
+
+        it("keeps a fixture whose name only ends like a lockfile", async () => {
+          expect(
+            await pathsOf([
+              ["a.ts", "a"],
+              ["tests/fixtures/file-lock.json", "{}"],
+            ])
+          ).toEqual(["client/a.ts", "tests/fixtures/file-lock.json"]);
+        });
+
+        it("reads JSON paths from the imported folder", async () => {
+          const files = await PgFramework.convertToPlaygroundLayout(
+            [
+              ["token/client/index.ts", "a"],
+              ["token/client/idl/x.json", "{}"],
+              ["token/client/package.json", "{}"],
+              ["token/.config/y.json", "{}"],
+            ],
+            "token/client"
+          );
+          expect(files.map(([path]) => path).sort()).toEqual([
+            "client/idl/x.json",
+            "client/index.ts",
+          ]);
+        });
+
+        it("gives a contested JSON path to the top-level file", async () => {
+          expect(
+            await PgFramework.convertToPlaygroundLayout([
+              ["client/x.json", "nested"],
+              ["x.json", "root"],
+              ["a.ts", "a"],
+            ])
+          ).toEqual([
+            ["client/client/x.json", "nested"],
+            ["client/x.json", "root"],
+            ["client/a.ts", "a"],
+          ]);
+        });
+
+        it("finds nothing to open in JSON alone", async () => {
+          await expect(
+            pathsOf([
+              ["idl/x.json", "{}"],
+              ["data.json", "{}"],
+            ])
+          ).rejects.toThrow("No program code found.");
+        });
       });
     });
 

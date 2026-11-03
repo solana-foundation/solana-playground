@@ -138,6 +138,25 @@ test("project-without-program: Folders are kept", async ({
   await expect(item(page, "package.json")).toHaveCount(0);
 });
 
+test("project-without-program: An IDL and a fixture are kept", async ({
+  seededPage: page,
+}) => {
+  await stubRepository(page, {
+    "src/index.ts": 'import idl from "../idl/x.json";',
+    "idl/x.json": "{}",
+    "tests/a.test.ts": 'import a from "./fixtures/a.json";',
+    "tests/fixtures/a.json": "{}",
+    "tsconfig.json": "{}",
+  });
+  await importRepository(page);
+
+  await expect(item(page, "client/idl/x.json")).toHaveCount(1, LONG);
+  await expect(item(page, "client/src/index.ts")).toHaveCount(1);
+  await expect(item(page, "tests/a.test.ts")).toHaveCount(1);
+  await expect(item(page, "tests/fixtures/a.json")).toHaveCount(1);
+  await expect(item(page, "client/tsconfig.json")).toHaveCount(0);
+});
+
 test("project-without-program: A test file outside a tests folder", async ({
   seededPage: page,
 }) => {
