@@ -90,8 +90,15 @@ through the logger with `report: true`.
 
 #### Scenario: IndexedDB is blocked
 
-- **WHEN** opening the wallet's IndexedDB database fails
+- **WHEN** opening the wallet's IndexedDB database fails, or does not answer
+  within 5 seconds
 - **THEN** the wallet loads from and saves to `localStorage['wallet']`
+- **AND** one error is logged under the wallet's logger namespace
+
+#### Scenario: localStorage refuses to be read
+
+- **WHEN** reading `localStorage` throws (a sandboxed or blocked origin)
+- **THEN** the wallet loads from IndexedDB
 - **AND** one error is logged under the wallet's logger namespace
 
 #### Scenario: A save to IndexedDB fails

@@ -1,6 +1,7 @@
 import { createLogger, toError } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import type { WalletStore } from "./keystore";
+import { publicKeyOf } from "./signer-provider";
 import type { SerializedWalletState, WalletAccount } from "./types";
 
 const log = createLogger("wallet:storage");
@@ -24,9 +25,12 @@ type LocalStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
  * by the browser, and the errors this module throws are plain `Error`s. Any
  * other error's message may quote its input: V8's `JSON.parse` `SyntaxError`
  * includes a slice of the text it failed on, which for a wallet is key bytes.
+ * A thrown value that is not an `Error` at all may be anything, so only an
+ * `Error` object itself qualifies, never one built around another value.
  */
-const isMessageSafe = (error: Error) =>
-  error instanceof DOMException || error.name === "Error";
+const isMessageSafe = (error: unknown) =>
+  error instanceof DOMException ||
+  (error instanceof Error && error.name === "Error");
 
 /**
  * Log a storage failure without anything the failure may carry.
@@ -39,7 +43,7 @@ const isMessageSafe = (error: Error) =>
 const reportFailureWith =
   (context: Record<string, number>) => (what: string, error: unknown) => {
     const original = toError(error);
-    const detail = isMessageSafe(original)
+    const detail = isMessageSafe(error)
       ? `${original.name}: ${original.message}`
       : original.name;
     log.error(new Error(`${what}: ${detail}`), { report: true, context });
@@ -83,8 +87,8 @@ const isLegacyWallet = (value: unknown) =>
   value !== null &&
   Array.isArray((value as { sk?: unknown }).sk);
 
-/** An account's public key: the last 32 bytes of its keypair */
-const keyIdOf = (account: WalletAccount) => account.kp.slice(32).join(",");
+/** An account's public key, as the merge compares it */
+const keyIdOf = (account: WalletAccount) => publicKeyOf(account.kp).toBase58();
 
 /** The name, or the first `<name> (n)` that `taken` does not hold */
 const freeNameFor = (taken: Set<string>) => (name: string) => {
@@ -141,10 +145,10 @@ const mergeWallets = (
  * has moved, a copy there is newer than the store's, written by a session
  * that fell back or by a tab still on the previous version.
  *
- * Any store failure leaves `localStorage` as it was and switches this
- * instance to `localStorage` for the rest of the page's life (it never
- * switches back before a reload), because losing
- * a key is worse than leaving one where it was. The next load tries the
+ * A failed move leaves `localStorage` as it was. Any store failure switches
+ * this instance to `localStorage` for the rest of the page's life, and its
+ * saves then overwrite the entry there, because losing a key is worse than
+ * leaving one where it was. The next load tries the
  * store again and merges. An account removed while falling back comes back
  * from the store on that merge: a removed key returns, none is lost.
  *
@@ -160,7 +164,15 @@ export const walletStorageWith = (store: WalletStore, local: LocalStorage) => {
 
   /** The `localStorage` wallet and its text, or `undefined` for none */
   const readLocal = () => {
-    const text = local.getItem(WALLET_LOCAL_KEY);
+    let text: string | null;
+    try {
+      text = local.getItem(WALLET_LOCAL_KEY);
+    } catch (error) {
+      // Storage refused (a sandboxed or blocked origin): the store may still
+      // hold the wallet, so go on to it
+      reportFailure("localStorage unavailable", error);
+      return undefined;
+    }
     if (text === null) return undefined;
     let value: unknown;
     try {
@@ -374,6 +386,22 @@ if (import.meta.vitest) {
         memoryLocal(undefined)
       );
       expect(await storage.read()).toEqual(stored);
+    });
+
+    it("reads the store and logs when localStorage refuses to be read", async () => {
+      const stored = walletOf([account(1, "Wallet 1")]);
+      const local = memoryLocal(undefined);
+      const refused = {
+        getItem: () => {
+          throw new DOMException("denied", "SecurityError");
+        },
+        setItem: local.setItem,
+        removeItem: local.removeItem,
+      };
+      const storage = walletStorageWith(memoryStore(stored), refused);
+
+      expect(await storage.read()).toEqual(stored);
+      expect(logged.entries).toHaveLength(1);
     });
 
     it("moves a localStorage wallet into the store and removes the key", async () => {
@@ -733,6 +761,12 @@ if (import.meta.vitest) {
 
       const unopened = memoryStore(undefined);
       unopened.read.mockRejectedValue(new Error("blocked"));
+
+      // A rejection that is not an `Error` carries whatever its thrower put
+      // in it, here the whole wallet
+      const throwsText = memoryStore(undefined);
+      throwsText.read.mockRejectedValue(JSON.stringify(secret));
+      await walletStorageWith(throwsText, memoryLocal(undefined)).read();
       await walletStorageWith(
         unopened,
         memoryLocal(JSON.stringify(secret))

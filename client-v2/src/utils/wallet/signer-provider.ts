@@ -16,11 +16,13 @@ export interface SignerAccount {
 /**
  * Holds the built-in wallet's secret keys and signs with them.
  *
- * Everything in the app that needs an account's key, whether to sign, to hand
- * `pg.wallet.keypair` to project code, to export the key file or to give the
- * WASM CLIs their keypair, goes through the provider, so a provider that keeps
- * the keys out of the page can replace the local one without touching those
- * callers.
+ * Every use of an account's key, whether to sign, to hand `pg.wallet.keypair`
+ * to project code, to export the key file or to give the WASM CLIs their
+ * keypair, goes through the provider, so a provider that keeps the keys out of
+ * the page can replace the local one without touching those callers. The
+ * wallet's `keypair` and the synchronous `secretKeyFor` are what only the local
+ * provider can give as they are; a provider that keeps the keys elsewhere
+ * settles what it gives in their place (HOO-1717 step 2).
  */
 export interface WalletSignerProvider {
   /** Short name of the provider, for diagnostics */
