@@ -17,14 +17,14 @@ const METHOD = {
  */
 const fieldsWithin = (seen) => (error) => {
   const { cause } = error;
-  const nested = cause instanceof Error && !seen.has(cause);
-  if (nested) seen.add(cause);
+  const isNested = cause instanceof Error && !seen.has(cause);
+  if (isNested) seen.add(cause);
   return {
     ...Object.fromEntries(Object.entries(error)),
     message: error.message,
     code: /** @type {{ code?: unknown }} */ (error).code,
     stack: error.stack,
-    cause: nested ? fieldsWithin(seen)(cause) : cause,
+    cause: isNested ? fieldsWithin(seen)(cause) : cause,
   };
 };
 
