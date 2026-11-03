@@ -35,11 +35,14 @@ impl Config {
         dotenv().ok();
 
         Ok(Config {
-            client_urls: get_env::<String>("CLIENT_URLS", "http://localhost,http://127.0.0.1,https://beta.solpg.io")
-                .split(',')
-                .map(str::trim)
-                .map(ToOwned::to_owned)
-                .collect(),
+            client_urls: get_env::<String>(
+                "CLIENT_URLS",
+                "http://localhost,http://127.0.0.1,https://beta.solpg.io",
+            )
+            .split(',')
+            .map(str::trim)
+            .map(ToOwned::to_owned)
+            .collect(),
             port: get_env("PORT", 8080u16),
             payload_limit: get_env("PAYLOAD_LIMIT", 1024usize * 1024),
             verbose: get_env("VERBOSE", false),
