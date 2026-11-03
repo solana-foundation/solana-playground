@@ -1,5 +1,3 @@
-import * as ed25519 from "@noble/ed25519";
-
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import {
@@ -11,8 +9,12 @@ import {
 import { PgWeb3 } from "../web3";
 import { parseKeypairFile } from "./keypair-file";
 import { indexedDbStoreFor } from "./keystore";
+import {
+  localSignerProviderWith,
+  publicKeyOf,
+  type WalletSignerProvider,
+} from "./signer-provider";
 import type {
-  AnyTransaction,
   SerializedWalletState,
   StandardWallet,
   Wallet,
@@ -29,6 +31,18 @@ const defaultState: WalletState = {
   standardWallets: [],
   standardName: null,
 };
+
+/**
+ * Holds the accounts' keys and signs with them (`signer-provider.ts`). Every
+ * use of an account's key goes through it; `local` keeps the keys in the page
+ * as the wallet always has.
+ */
+let signerProvider: WalletSignerProvider = localSignerProviderWith(
+  (publicKey) =>
+    PgWallet.accounts.find((account) =>
+      publicKeyOf(account.kp).equals(publicKey)
+    )?.kp
+);
 
 let walletStorageInstance: ReturnType<typeof walletStorageWith> | undefined;
 
@@ -255,7 +269,7 @@ class _PgWallet {
     const accountIndex = PgWallet.accounts.findIndex((acc) => {
       return (
         (name && acc.name === name) ||
-        PgWallet.create(acc).publicKey.equals(keypair.publicKey)
+        publicKeyOf(acc.kp).equals(keypair.publicKey)
       );
     });
     if (accountIndex !== -1) {
@@ -353,7 +367,9 @@ class _PgWallet {
       if (!PgWallet.current.isPg) throw new Error("Not Playground Wallet");
 
       params.name ??= PgWallet.current.name;
-      params.keypair ??= PgWallet.current.keypair;
+      params.keypair ??= PgWeb3.Keypair.fromSecretKey(
+        signerProvider.secretKeyFor(PgWallet.current.publicKey)
+      );
     }
 
     return PgCommon.export(
@@ -424,36 +440,22 @@ class _PgWallet {
    * @returns a Playground Wallet instance
    */
   static create(account: WalletAccount): Wallet {
-    const keypair = PgWeb3.Keypair.fromSecretKey(Uint8Array.from(account.kp));
-
-    return {
-      isPg: true,
-      keypair,
+    return signerProvider.walletFor({
       name: account.name,
-      publicKey: keypair.publicKey,
+      publicKey: publicKeyOf(account.kp),
+    });
+  }
 
-      async signTransaction<T extends AnyTransaction>(tx: T) {
-        if ((tx as PgWeb3.VersionedTransaction).version) {
-          (tx as PgWeb3.VersionedTransaction).sign([keypair]);
-        } else {
-          (tx as PgWeb3.Transaction).partialSign(keypair);
-        }
-
-        return tx;
-      },
-
-      async signAllTransactions<T extends AnyTransaction>(txs: T[]) {
-        for (const tx of txs) {
-          this.signTransaction(tx);
-        }
-
-        return txs;
-      },
-
-      async signMessage(message: Uint8Array) {
-        return await ed25519.sign(message, keypair.secretKey.slice(0, 32));
-      },
-    };
+  /**
+   * Replace the provider that holds the accounts' keys and signs with them.
+   *
+   * The local provider is the default. Set another before the wallet loads:
+   * a wallet already derived keeps the provider it was made with.
+   *
+   * @param provider signer provider for every Playground Wallet account
+   */
+  static setSignerProvider(provider: WalletSignerProvider) {
+    signerProvider = provider;
   }
 
   /**
@@ -483,7 +485,7 @@ class _PgWallet {
     if (!PgWallet.current) throw new Error("Not connected");
     if (!PgWallet.current.isPg) throw new Error("Not Playground Wallet");
 
-    return Array.from(PgWallet.current.keypair.secretKey);
+    return Array.from(signerProvider.secretKeyFor(PgWallet.current.publicKey));
   }
 
   /**

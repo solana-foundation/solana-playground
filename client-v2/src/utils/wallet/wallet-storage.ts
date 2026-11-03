@@ -84,7 +84,7 @@ const isLegacyWallet = (value: unknown) =>
   Array.isArray((value as { sk?: unknown }).sk);
 
 /** An account's public key: the last 32 bytes of its keypair */
-const publicKeyOf = (account: WalletAccount) => account.kp.slice(32).join(",");
+const keyIdOf = (account: WalletAccount) => account.kp.slice(32).join(",");
 
 /** The name, or the first `<name> (n)` that `taken` does not hold */
 const freeNameFor = (taken: Set<string>) => (name: string) => {
@@ -108,15 +108,15 @@ const mergeWallets = (
   primary: SerializedWalletState,
   other: SerializedWalletState
 ): SerializedWalletState => {
-  const keys = new Set(primary.accounts.map(publicKeyOf));
+  const keys = new Set(primary.accounts.map(keyIdOf));
   const names = new Set(primary.accounts.map((account) => account.name));
   const freeName = freeNameFor(names);
   const accounts = [...primary.accounts];
   for (const account of other.accounts) {
-    if (keys.has(publicKeyOf(account))) continue;
+    if (keys.has(keyIdOf(account))) continue;
     const name = freeName(account.name);
     names.add(name);
-    keys.add(publicKeyOf(account));
+    keys.add(keyIdOf(account));
     accounts.push({ kp: account.kp, name });
   }
 
