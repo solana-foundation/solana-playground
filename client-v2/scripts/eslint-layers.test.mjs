@@ -3,7 +3,6 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-
 import { ESLint } from "eslint";
 
 const cwd = path.dirname(path.dirname(fileURLToPath(import.meta.url)));

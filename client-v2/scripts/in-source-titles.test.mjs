@@ -17,6 +17,7 @@ const CASES = [
     guard('  it.each([\n    [1, 2],\n  ])("an each title %s", () => {});'),
     ["an each title %s"],
   ],
+  // eslint-disable-next-line no-template-curly-in-string -- the template literal is the module text under test
   [guard("  it(`a ${kind} title`, () => {});"), []],
   [
     guard(

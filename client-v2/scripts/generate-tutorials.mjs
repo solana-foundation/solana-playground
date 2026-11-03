@@ -18,9 +18,9 @@ for (const name of tutorials) {
   // Get file paths
   const recursivelFindFiles = async (dirPath) => {
     const files = [];
-    const dir = await fs.readdir(dirPath);
-    for (const name of dir) {
-      const path = pathModule.join(dirPath, name);
+    const entries = await fs.readdir(dirPath);
+    for (const entry of entries) {
+      const path = pathModule.join(dirPath, entry);
       const stat = await fs.lstat(path);
       if (stat.isFile()) {
         files.push(path.replace(filesDirPath + pathModule.sep, ""));

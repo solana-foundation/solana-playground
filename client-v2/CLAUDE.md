@@ -289,17 +289,19 @@ error across all of `src/` and `e2e/`, and the id rule holds in `e2e/`. The
 lint catches the common spellings, not every one. The fifth is the boundary
 check's job (Layers, "The boundary check"); the rest hold by review, apart
 from the ESLint warnings an item names. The `lint` script's `--max-warnings`
-caps the total of every ESLint warning in `src/`, `api/` and `e2e/`, not only
+caps the total of every ESLint warning in the folders it lints, not only
 those, and a PR that pushes the total over the cap fails. A sanctioned
 exception, such as `null` on the wire or a signature a library defines,
 passes with `// eslint-disable-next-line <rule> -- <why>` on the line before
-it. Import order is an ESLint error in all of `src/`, `api/` and `e2e/`
-(`simple-import-sort/imports`), legacy roots included; in the layers and
-`api/` it also fails the build's `lint:layers`. Unused variables and
-shadowing are ESLint errors across the same three folders, and so is any
-`console` method in `src/` and `e2e/` outside the logger's console provider
-and the `.mjs` modules, which plain Node runs without the logger; in the
-layers and `api/` these fail `lint:layers` too. A leading `_` does not exempt
+it. Import order is an ESLint error in all of `src/`, `api/`, `e2e/`,
+`scripts/` and `eslint-plugin-layers/` (`simple-import-sort/imports`), legacy
+roots included; in the layers and `api/` it also fails the build's
+`lint:layers`. Unused variables and shadowing are ESLint errors across the
+same five folders, and so is any `console` method in `src/` and `e2e/`
+outside the logger's console provider and the `.mjs` modules, which plain
+Node runs without the logger; in the layers and `api/` these fail
+`lint:layers` too. `scripts/` and `eslint-plugin-layers/` may call `console`:
+they run in Node, outside the app and its logger. A leading `_` does not exempt
 an unused name: drop the binding (`[, value]`) or disable the line with a
 reason.
 `yarn eslint --fix --quiet <files>` sorts the imports;

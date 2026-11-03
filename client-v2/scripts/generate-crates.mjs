@@ -3,12 +3,12 @@
 // Usage: `generate-crates.mjs` generates, or exits early when `KEY_PATH` matches;
 // `generate-crates.mjs --key` prints the key and exits.
 
-import path from "path";
-import fs from "fs/promises";
-import crypto from "crypto";
-import { homedir } from "os";
-import { fileURLToPath } from "url";
 import { spawnSync } from "child_process";
+import crypto from "crypto";
+import fs from "fs/promises";
+import { homedir } from "os";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import {
   CLIENT_PATH,
@@ -156,14 +156,14 @@ async function clearSupportedCrates() {
  *
  * NOTE: Currently only proc macro transitive dependencies are supported.
  *
- * @param {{ [name: string]: string }} crates crates map to get dependencies from
+ * @param {{ [name: string]: string }} versions crates map to get dependencies from
  * @param {boolean} transitive  whether the dependency is a transitive dependency
  */
-async function generateDependencies(crates, transitive) {
-  for (const name in crates) {
+async function generateDependencies(versions, transitive) {
+  for (const name in versions) {
     if (cachedCrates.includes(name) || skippedCrates.includes(name)) continue;
 
-    const version = crates[name];
+    const version = versions[name];
     const dirPath = registry.find(`${name}-${version}`);
     if (!dirPath) {
       // `cargo fetch` downloaded every locked crate, so a miss is a broken setup
@@ -213,15 +213,20 @@ async function generateDependencies(crates, transitive) {
  */
 function getDependencies(name, version) {
   const crate = lockFile.find(
-    (crate) => crate.name === name && crate.version === version
+    (lockedCrate) =>
+      lockedCrate.name === name && lockedCrate.version === version
   );
   if (!crate) {
     throw new Error(`Crate \`${name}(v${version})\` not found in lock file`);
   }
 
-  return crate.dependencies.reduce((acc, { name, version }) => {
-    const deps = lockFile.filter((crate) => crate.name === name);
-    if (deps.length) acc[name] = version ?? deps[0].version;
+  return crate.dependencies.reduce((acc, dependency) => {
+    const deps = lockFile.filter(
+      (lockedCrate) => lockedCrate.name === dependency.name
+    );
+    if (deps.length) {
+      acc[dependency.name] = dependency.version ?? deps[0].version;
+    }
     return acc;
   }, {});
 }
@@ -289,22 +294,19 @@ function run(command, args) {
  * @returns the parsed lock file
  */
 async function parseLockFile(lockPath) {
-  const lockFile = await fs.readFile(lockPath, "utf8");
-  return lockFile
+  const lockText = await fs.readFile(lockPath, "utf8");
+  return lockText
     .split("[[package]]")
     .filter((_, i) => i !== 0)
     .map((pkg) => pkg.replaceAll("\n", ""))
     .map((pkg) => {
       const name = /name\s=\s"([\w-]+)"/.exec(pkg)[1];
-      const version = /version\s=\s"([\w\d-\.\+]+)"/.exec(pkg)[1];
+      const version = /version\s=\s"([\w\d.+-]+)"/.exec(pkg)[1];
       const dependencies = JSON.parse(
         /dependencies\s=\s(.*)/.exec(pkg)?.[1].replace(",]", "]") ?? "[]"
       ).map((dep) => {
         const result = /([\w-]+)\s?(\S*)?\s?(\S*)?/.exec(dep);
-        const name = result[1];
-        const version = result[2];
-        const registry = result[3];
-        return { name, version, registry };
+        return { name: result[1], version: result[2], registry: result[3] };
       });
       return { name, version, dependencies };
     });

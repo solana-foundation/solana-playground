@@ -84,7 +84,9 @@ await fs.writeFile(
       "<IMPORTS>",
       packages.importable.reduce((acc, cur) => {
         const path = IMPORT_PATHS[cur] ?? cur;
-        return acc + `\n      case "${cur}":\n        return import("${path}");`;
+        return (
+          acc + `\n      case "${cur}":\n        return import("${path}");`
+        );
       }, "")
     )
 );
@@ -162,17 +164,16 @@ async function generatePackage(name) {
       // Get transitive dependency names that are being used in types
       deps.push(
         ...Object.entries(pkg)
-          .reduce((acc, [key, value]) => {
-            switch (key) {
-              case "dependencies":
-              case "devDependencies":
-              case "peerDependencies":
-              case "optionalDependencies":
-                acc.push(...Object.keys(value));
-            }
-            return acc;
-          }, [])
-          .filter((dep) => files.some(([_, content]) => content.includes(dep)))
+          .filter(([key]) =>
+            [
+              "dependencies",
+              "devDependencies",
+              "peerDependencies",
+              "optionalDependencies",
+            ].includes(key)
+          )
+          .flatMap(([, value]) => Object.keys(value))
+          .filter((dep) => files.some(([, content]) => content.includes(dep)))
       );
     }
 
@@ -209,13 +210,15 @@ async function generatePackage(name) {
  * @returns the index path and package version
  */
 async function getPackage(path) {
-  const getTypesPath = async (path) => {
+  const getTypesPath = async (packagePath) => {
     try {
-      const packageJSON = await readJSON(pathModule.join(path, "package.json"));
+      const packageJSON = await readJSON(
+        pathModule.join(packagePath, "package.json")
+      );
       if (packageJSON.types) {
         return {
           ...packageJSON,
-          indexPath: pathModule.join(path, packageJSON.types),
+          indexPath: pathModule.join(packagePath, packageJSON.types),
         };
       }
     } catch {}

@@ -7,11 +7,11 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  bundleProblems,
   REAL_WASM_MARKERS,
+  stubbedPackages,
   WASM_STUB_MARKER,
   WASM_STUB_VERSION,
-  bundleProblems,
-  stubbedPackages,
   wasmStubsRequested,
 } from "./wasm-stubs.mjs";
 
@@ -144,7 +144,9 @@ test("the stub writer, both declarations, and wasm/build.sh agree", (t) => {
     REAL_WASM_MARKERS.toSorted(),
     packages.map((name) => `${name.replaceAll("-", "_")}_wasm_bg`).toSorted()
   );
-  for (const name of packages.filter((name) => name !== "rust-analyzer")) {
+  for (const name of packages.filter(
+    (packageName) => packageName !== "rust-analyzer"
+  )) {
     assert.match(
       fs.readFileSync(path.join(root, "wasm", name, "pkg", "index.js"), "utf8"),
       new RegExp(WASM_STUB_MARKER)

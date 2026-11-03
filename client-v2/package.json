@@ -151,13 +151,13 @@
     "build:bundle": "yarn lint:layers && yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
     "build-fast": "node scripts/wasm-stubs.mjs guard build-fast && yarn lint:layers && yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
     "build-wasm": "bash ../wasm/build.sh",
-    "format": "prettier --write src/ api/",
-    "check-format": "prettier --check src/ api/",
+    "format": "prettier --write src/ api/ e2e/ scripts/ eslint-plugin-layers/",
+    "check-format": "prettier --check src/ api/ e2e/ scripts/ eslint-plugin-layers/",
     "format-md": "markdownlint-cli2 --fix",
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --max-warnings 2898 --ext .ts,.tsx,.mjs,.mts src api e2e",
+    "lint": "eslint --max-warnings 2898 --ext .js,.ts,.tsx,.mjs,.mts src api e2e scripts eslint-plugin-layers",
     "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
@@ -393,7 +393,6 @@
         ],
         "plugins": [
           "@typescript-eslint",
-          "simple-import-sort",
           "unicorn"
         ],
         "rules": {
@@ -409,7 +408,21 @@
           "max-params": [
             "warn",
             2
-          ],
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**",
+          "api/**",
+          "e2e/**",
+          "scripts/**",
+          "eslint-plugin-layers/**"
+        ],
+        "plugins": [
+          "simple-import-sort"
+        ],
+        "rules": {
           "no-shadow": "error",
           "no-unused-vars": [
             "error",
@@ -483,6 +496,15 @@
         ],
         "rules": {
           "max-params": "off"
+        }
+      },
+      {
+        "files": [
+          "scripts/**",
+          "eslint-plugin-layers/**"
+        ],
+        "env": {
+          "es2022": true
         }
       },
       {
