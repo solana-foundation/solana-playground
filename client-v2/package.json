@@ -105,6 +105,7 @@
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-boundaries": "7.3.0",
     "eslint-plugin-layers": "link:./eslint-plugin-layers",
+    "eslint-plugin-simple-import-sort": "14.0.0",
     "eslint-plugin-unicorn": "47.0.0",
     "express": "^5.2.1",
     "jsdom": "^29.1.1",
@@ -392,6 +393,7 @@
         ],
         "plugins": [
           "@typescript-eslint",
+          "simple-import-sort",
           "unicorn"
         ],
         "rules": {
@@ -407,6 +409,26 @@
           "max-params": [
             "warn",
             2
+          ],
+          "simple-import-sort/imports": [
+            "error",
+            {
+              "groups": [
+                [
+                  "^\\u0000"
+                ],
+                [
+                  "^node:",
+                  "^@?\\w"
+                ],
+                [
+                  "^@/"
+                ],
+                [
+                  "^\\."
+                ]
+              ]
+            }
           ]
         }
       },

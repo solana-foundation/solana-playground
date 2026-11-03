@@ -125,7 +125,8 @@ yarn ds-add stepper --dry-run   # what would be written; --diff, --view too
 The script builds the registry in `../design-system` (run `npm ci` there
 once, and again whenever its lockfile changes), serves it on the port
 `components.json` maps `@playground` to for as long as the install runs, and
-formats what lands with this package's prettier. Names are the registry's
+sorts the imports of what lands with this package's ESLint, then formats it
+with this package's prettier. Names are the registry's
 (`design-system/registry.json`); `components.json` maps `@playground` to that
 server and the aliases to `@/shared/ui`, `@/shared/lib` and
 `@/shared/lib/hooks`. Nothing comes from the design system's public site
@@ -292,7 +293,8 @@ caps the total of every ESLint warning in `src/`, `api/` and `e2e/`, not only
 those, and a PR that pushes the total over the cap fails. A sanctioned
 exception, such as `null` on the wire or a signature a library defines,
 passes with `// eslint-disable-next-line <rule> -- <why>` on the line before
-it.
+it. Import order is an ESLint error too (`simple-import-sort/imports`), and
+`yarn lint --fix` sorts the imports.
 
 - **The lint warnings are debt, not the normal state.** `yarn lint` reports
   thousands of warnings, and `--max-warnings` in `package.json` records their

@@ -5,9 +5,10 @@
 // Builds the registry in ../design-system, serves it on the port
 // components.json maps `@playground` to, runs the shadcn CLI the design
 // system pins with `--overwrite` (the CLI never overwrites silently, and
-// `shared/ui` is installed, never edited), stops the server, and formats what
-// landed with this package's prettier, so CI's format check passes and a
-// reinstall of an unchanged component leaves no diff.
+// `shared/ui` is installed, never edited), stops the server, sorts the
+// imports of what landed with this package's ESLint and formats it with this
+// package's prettier, so CI's lint and format checks pass and a reinstall of
+// an unchanged component leaves no diff.
 //
 // Nothing comes from the design system's public site or from ui.shadcn.com:
 // the stock shadcn parts are registry items too, and
@@ -22,6 +23,7 @@ const CLIENT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DS = path.resolve(CLIENT, "../design-system");
 const SHADCN = path.join(DS, "node_modules/.bin/shadcn");
 const PRETTIER = path.join(CLIENT, "node_modules/.bin/prettier");
+const ESLINT = path.join(CLIENT, "node_modules/.bin/eslint");
 // The port is read from the `@playground` URL in components.json, so the
 // server and shadcn cannot disagree on it.
 const PORT = new URL(
@@ -54,7 +56,9 @@ if (names.length === 0 || unknown.length > 0) {
   process.exit(1);
 }
 if (!existsSync(SHADCN)) fail(`run \`npm ci\` in ${DS} first.`);
-if (!existsSync(PRETTIER)) fail(`run \`yarn install\` in ${CLIENT} first.`);
+if (!existsSync(PRETTIER) || !existsSync(ESLINT)) {
+  fail(`run \`yarn install\` in ${CLIENT} first.`);
+}
 
 const built = run("npm", ["run", "build:registry"], { cwd: DS });
 if (built !== 0) process.exit(built);
@@ -87,16 +91,40 @@ try {
 if (status !== 0 || flags.length > 0) process.exit(status);
 
 const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
+// ESLint fails on a file it cannot parse, such as `src/index.css`.
+const scripts = written.filter((dir) => !path.extname(dir));
+// ESLint runs before prettier: a sorted specifier list can lose a space.
+if (scripts.length > 0) {
+  status = run(
+    ESLINT,
+    [
+      "--fix",
+      "--quiet",
+      "--no-error-on-unmatched-pattern",
+      "--ext",
+      ".ts,.tsx,.mjs,.mts",
+      ...scripts,
+    ],
+    { cwd: CLIENT }
+  );
+  if (status !== 0) {
+    console.error(
+      "ds-add: the components were installed, but ESLint could not fix them. " +
+        "Fix the errors above and run `yarn lint --fix`."
+    );
+  }
+}
 if (written.length > 0) {
-  status = run(PRETTIER, ["--write", "--loglevel=warn", ...written], {
+  const formatted = run(PRETTIER, ["--write", "--loglevel=warn", ...written], {
     cwd: CLIENT,
   });
-  if (status !== 0) {
+  if (formatted !== 0) {
     console.error(
       "ds-add: the components were installed, but formatting them failed. " +
         "Fix the error above and run `yarn format`."
     );
   }
+  status = status || formatted;
 }
 process.exit(status);
 
