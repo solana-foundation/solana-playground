@@ -1,9 +1,11 @@
 // `@types/mocha` also declares a global `it`, without `each`
 import { it } from "vitest";
-import { createTools } from "./tools";
-import { PgAssistant } from "../store";
+
 import { BUILTIN_TOOLS } from "@/entities/agent-tools";
+
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
+import { PgAssistant } from "../store";
+import { createTools } from "./tools";
 
 // A second file for `tools.ts`: these cases need the real skill tools, which
 // `tools.test.ts` mocks away for the whole file

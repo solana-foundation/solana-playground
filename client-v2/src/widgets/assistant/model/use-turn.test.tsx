@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgSession } from "@/features/auth";
 import { PgChatStorage } from "@/features/persistence/model/chat-storage";
+// The class itself, which the slice entry exports as a type only
+import { AiTurnError } from "@/shared/lib/ai/run-turn";
 import {
   initLogger,
   memoryProvider as memoryLog,
@@ -14,38 +16,28 @@ import {
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import * as reportModule from "@/shared/lib/report-button-failure";
-// The class itself, which the slice entry exports as a type only
-import { AiTurnError } from "@/shared/lib/ai/run-turn";
-import { PgSession } from "@/features/auth";
-import {
-  PgAssistant,
-  isConnectionLost,
-} from "../../../views/sidebar/assistant/store";
+
+import { pushThread } from "../../../effects/chat-thread/push-thread";
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgFs } from "../../../utils/explorer/fs";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
 import {
-  TurnFailure,
+  rememberBackend,
+  REMEMBERED_BACKEND_KEY,
+} from "../../../views/sidebar/assistant/model/remembered-backend";
+import {
   type Provider,
+  TurnFailure,
 } from "../../../views/sidebar/assistant/model/types";
 import type {
   BackendParams,
   Connection,
 } from "../../../views/sidebar/assistant/store";
 import {
-  REMEMBERED_BACKEND_KEY,
-  rememberBackend,
-} from "../../../views/sidebar/assistant/model/remembered-backend";
-import { pushThread } from "../../../effects/chat-thread/push-thread";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgFs } from "../../../utils/explorer/fs";
-import { createProvider } from "../../../views/sidebar/assistant/model";
-import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
-import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { TurnFailure } from "../../../views/sidebar/assistant/model/types";
-import type { Connection } from "../../../views/sidebar/assistant/store";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+  isConnectionLost,
+  PgAssistant,
+} from "../../../views/sidebar/assistant/store";
 import { resetDefaultBackendProbe } from "./default-backend";
 import type { ConnectOpener } from "./use-turn";
 import { useTurn } from "./use-turn";

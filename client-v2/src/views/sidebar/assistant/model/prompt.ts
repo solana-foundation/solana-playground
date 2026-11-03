@@ -2,8 +2,6 @@ import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
 import assistantContext from "../content/assistant-context.md";
 import { describeCatalog } from "../grounding";
 import { PgAssistant } from "../store";
-import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
-import assistantContext from "../content/assistant-context.md";
 
 /**
  * How the assistant should behave.

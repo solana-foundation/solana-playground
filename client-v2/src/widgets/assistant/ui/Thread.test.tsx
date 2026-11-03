@@ -3,20 +3,20 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import * as reportModule from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import {
   CONNECTION_LOST,
   PgAssistant,
   THREAD_NOT_SAVED,
 } from "../../../views/sidebar/assistant/store";
-import * as reportModule from "@/shared/lib/report-button-failure";
 import type { Turn } from "../model/use-turn";
-import { TooltipProvider } from "@/shared/ui/tooltip";
 import { Thread } from "./Thread";
 
 /** The open lesson as the thread sees it; no lesson unless a test opens one */

@@ -1,8 +1,9 @@
 // A leaf at runtime: it imports the store by type only, and must stay so.
 // The store imports this slice, so a value import from the store here would
 // close an import cycle the dev build refuses (`CircularDependencyPlugin`).
-import { redactKey } from "@/shared/lib/ai";
 import type { ToolResultEvent } from "@/shared/lib/ai";
+import { redactKey } from "@/shared/lib/ai";
+
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
 /**

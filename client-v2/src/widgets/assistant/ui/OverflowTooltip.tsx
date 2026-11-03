@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
 import type { ComponentProps, ReactElement, Ref } from "react";
+import { useRef, useState } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 

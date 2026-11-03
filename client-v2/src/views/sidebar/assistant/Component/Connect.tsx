@@ -20,15 +20,7 @@ import {
 import Link from "../../../../components/Link";
 import { isSignInFailure, PgSession } from "../../../../features/auth";
 import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
-import { PgAssistant } from "../store";
 import type { BackendParams } from "../model/backend-params";
-import type { ModelProvider } from "@/shared/lib/ai";
-import {
-  isDefaultBackend,
-  PROVIDERS,
-  type Effort,
-  type ProviderInfo,
-} from "../model/types";
 import { displayModelName, EFFORT_LABELS } from "../model/labels";
 import {
   type Effort,

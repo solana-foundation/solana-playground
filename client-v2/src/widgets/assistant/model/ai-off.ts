@@ -1,4 +1,5 @@
 import type { ModelProvider } from "@/shared/lib/ai";
+
 import { isDefaultBackend } from "../../../views/sidebar/assistant/model/types";
 import type { DefaultBackend } from "./default-backend";
 

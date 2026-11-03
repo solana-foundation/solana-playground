@@ -2,16 +2,11 @@
 import type { Mock } from "vitest";
 import { describe, it } from "vitest";
 
-import type { ServerLogEntry } from "@/shared/lib/logger/server.mjs";
-import {
-  initServerLogger,
-  resetServerLogger,
-} from "@/shared/lib/logger/server.mjs";
+import { UPSTREAM_DROPPED } from "@/shared/lib/ai/config.mjs";
 
 import handler from "../../../api/agent.mjs";
 import { jsonBody, makeReq, makeRes, postJson } from "../../test/api-handler";
 import { toMicro, worstCaseCost } from "./server.mjs";
-import { UPSTREAM_DROPPED } from "@/shared/lib/ai/config.mjs";
 
 /** The server logger's entries for one test, in place of the console */
 const serverLog = () => {

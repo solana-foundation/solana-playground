@@ -1,12 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import {
-  expect,
-  LONG,
-  startProject,
-  stubAiStatus,
-  stubSession,
-  test,
-} from "./fixtures";
+
 // The slice's other public entry: Playwright compiles `index.ts` as CommonJS,
 // and the telemetry it re-exports holds `import.meta.vitest` blocks
 import {
@@ -17,9 +10,9 @@ import {
 } from "../src/features/agent/server.mjs";
 import {
   expect,
-  json,
   LONG,
   startProject,
+  stubAiStatus,
   stubSession,
   test,
 } from "./fixtures";

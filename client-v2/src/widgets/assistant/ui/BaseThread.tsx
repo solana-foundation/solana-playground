@@ -5,7 +5,6 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,

@@ -1,17 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { PlaygroundBridge } from "./bridge/playground-bridge";
-import { PgPatchUndo } from "./patch-undo";
-import { PgAssistant } from "./store";
-import {
-  clearFailures,
-  getFailures,
-} from "@/features/persistence/model/diagnostics";
 import {
   decodeItem,
   encodeItem,
 } from "@/features/persistence/model/chat-codec";
+import {
+  clearFailures,
+  getFailures,
+} from "@/features/persistence/model/diagnostics";
+
+import type { PlaygroundBridge } from "./bridge/playground-bridge";
+import { PgPatchUndo } from "./patch-undo";
 import type { ChatItem } from "./store";
+import { PgAssistant } from "./store";
 
 // The real bridge reaches the explorer and the settings, which need the
 // build's globals; every test here hands the module a bridge of its own
@@ -32,8 +33,8 @@ describe("PgPatchUndo", () => {
     const file = { content };
     const bridge = {
       readFile: () => file.content,
-      applyPatch: vi.fn(async ({ content }: { content: string }) => {
-        file.content = content;
+      applyPatch: vi.fn(async ({ content: written }: { content: string }) => {
+        file.content = written;
       }),
       deleteFile: vi.fn(async () => {
         file.content = NO_FILE;

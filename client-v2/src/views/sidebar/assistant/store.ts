@@ -8,11 +8,17 @@ import {
   sameConnection,
 } from "@/features/mcp";
 import type { ModelProvider } from "@/shared/lib/ai";
+import type { ToolResultEvent } from "@/shared/lib/ai";
 import { redactKey } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import { PgSession } from "../../../features/auth";
-import { report } from "../../../features/persistence";
+import {
+  isToolCallRecord,
+  report,
+  type ToolCallRecord,
+  toToolCallRecord,
+} from "../../../features/persistence";
 import {
   mergeThreads,
   versionOf,
@@ -24,17 +30,11 @@ import {
 } from "../../../features/persistence/model/chat-storage";
 import { uuid } from "../../../shared/lib/ids";
 import type { Disposable } from "../../../utils";
-import type { McpServerEntry, McpTool } from "@/features/mcp";
-import type { ModelProvider } from "@/shared/lib/ai";
-import { isDefaultBackend, type Effort } from "./model/types";
-import { paramsOf, type BackendParams } from "./model/backend-params";
-import {
-  isToolCallRecord,
-  report,
-  toToolCallRecord,
-  type ToolCallRecord,
-} from "../../../features/persistence";
-import type { ToolResultEvent } from "@/shared/lib/ai";
+import type { SkillEntry } from "./grounding";
+import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
+import { type BackendParams, paramsOf } from "./model/backend-params";
+import { forgetBackend, rememberBackend } from "./model/remembered-backend";
+import { type Effort, isDefaultBackend } from "./model/types";
 
 export { isToolCallRecord, type ToolCallRecord };
 
@@ -2379,9 +2379,9 @@ if (import.meta.vitest) {
           updatedAt,
         });
         const folded = () => {
-          const reply = PgAssistant.items.find((i) => i.kind === "assistant");
-          if (!reply) throw new Error("the thread holds no reply");
-          return reply;
+          const shown = PgAssistant.items.find((i) => i.kind === "assistant");
+          if (!shown) throw new Error("the thread holds no shown");
+          return shown;
         };
 
         afterEach(() => vi.useRealTimers());

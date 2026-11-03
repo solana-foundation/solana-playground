@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 import { startProject, stubAiStatus } from "./fixtures";
 
 /**

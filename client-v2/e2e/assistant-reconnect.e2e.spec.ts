@@ -1,4 +1,6 @@
 import type { Page, Request } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
 import {
   seedWorkspace,
   startProject,

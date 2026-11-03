@@ -1,10 +1,11 @@
-import { realBridge } from "./bridge/playground-bridge";
-import type { PlaygroundBridge } from "./bridge/playground-bridge";
 import { report } from "@/features/persistence";
 import { createLogger } from "@/shared/lib/logger";
+
+import type { PlaygroundBridge } from "./bridge/playground-bridge";
+import { realBridge } from "./bridge/playground-bridge";
+import type { ChatItem, PatchApproval } from "./store";
 import { PgAssistant } from "./store";
 import { undoStrandedOutcome, wroteOutcome } from "./store";
-import type { ChatItem, PatchApproval } from "./store";
 
 type ApprovalItem = Extract<ChatItem, { kind: "approval" }>;
 

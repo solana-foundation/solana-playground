@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import type { ModelOption, ModelShown } from "../model/choice";
 import { BaseModelMenu } from "./BaseModelMenu";
 

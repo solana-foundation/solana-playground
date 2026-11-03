@@ -1,4 +1,8 @@
+import type { ModelMessage } from "ai";
 import { it, vi } from "vitest";
+
+import type { LogEntry } from "../logger";
+import { initLogger, memoryProvider, resetLogger } from "../logger";
 import {
   anthropicText,
   fakeFetch,
@@ -7,10 +11,8 @@ import {
   openAiToolCall,
   sse,
 } from "./__fixtures__/fake-provider";
-import { initLogger, memoryProvider, resetLogger } from "../logger";
-import type { LogEntry } from "../logger";
-import { createModel } from "./models";
 import { UPSTREAM_DROPPED } from "./config.mjs";
+import { createModel } from "./models";
 import { AiTurnError, runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";
 

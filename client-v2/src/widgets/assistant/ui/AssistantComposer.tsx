@@ -1,7 +1,8 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
+import { PgAssistantContext } from "@/entities/assistant-context";
 import { isSignInFailure, PgSession } from "@/features/auth";
+import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
@@ -11,17 +12,12 @@ import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { PgAssistantContext } from "@/entities/assistant-context";
 import type { Connection } from "../../../views/sidebar/assistant/store";
-import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
-import type { LessonState } from "../../../views/flow/lessons";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgProgramInfo } from "../../../utils/program-info";
-import { aiOff } from "../model/ai-off";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { AiOffInput, AiOffReason } from "../model/ai-off";
-import { modelOptions, modelShown } from "../model/choice";
+import { aiOff } from "../model/ai-off";
 import type { ModelOption } from "../model/choice";
+import { modelOptions, modelShown } from "../model/choice";
 import { connectLabel, DEFAULT_CONNECTION } from "../model/connection";
 import {
   retryDefaultBackend,
@@ -30,11 +26,11 @@ import {
 import { assistantTelemetry } from "../model/telemetry";
 import { withEffort, withModel } from "../model/tune";
 import type { Turn, TurnPhase } from "../model/use-turn";
+import { AI_OFF_SEND_BLOCKED, BaseAiOffRow } from "./BaseAiOffRow";
 import {
   BaseAssistantComposer,
   type ComposerContextChip,
 } from "./BaseAssistantComposer";
-import { AI_OFF_SEND_BLOCKED, BaseAiOffRow } from "./BaseAiOffRow";
 import { BaseEffortMenu } from "./BaseEffortMenu";
 import { BaseModelMenu } from "./BaseModelMenu";
 

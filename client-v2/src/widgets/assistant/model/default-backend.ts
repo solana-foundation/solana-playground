@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { assistantTelemetry } from "./telemetry";
+
 import type { AssistantEvents } from "./telemetry";
 import { assistantTelemetry } from "./telemetry";
 
@@ -145,9 +145,9 @@ export const probeDefaultBackend = (): Promise<DefaultBackend> => {
   // Only the latest request speaks to the readers: one a retry replaced
   // answers its own callers, never over the retry's answer
   const current: Promise<DefaultBackend> = ask().then(
-    ({ backend, failed }) => {
+    ({ backend, failed: askFailed }) => {
       if (probe !== current) return backend;
-      if (failed) probe = undefined;
+      if (askFailed) probe = undefined;
       broadcast(backend);
       return backend;
     },

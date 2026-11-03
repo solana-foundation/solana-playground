@@ -1,5 +1,6 @@
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+
 import type { AiOffReason } from "../model/ai-off";
 
 /** What each reason says, and whether it offers sign-in or a retry */

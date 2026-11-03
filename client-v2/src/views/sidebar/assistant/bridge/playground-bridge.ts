@@ -1,4 +1,10 @@
 import {
+  contextPathsWith,
+  normalizeProjectPath,
+  PgAssistantContext,
+} from "@/entities/assistant-context";
+
+import {
   PgBlockExplorer,
   PgCommand,
   PgConnection,
@@ -8,11 +14,9 @@ import {
   PgWallet,
 } from "../../../../utils";
 import { PgLesson } from "../../../flow/lessons";
-import {
-  contextPathsWith,
-  normalizeProjectPath,
-  PgAssistantContext,
-} from "@/entities/assistant-context";
+import { PgBuildOutput, stripKnownNoise } from "./build-output";
+import type { LessonContext } from "./lesson-context";
+import { describeLesson } from "./lesson-context";
 
 /** A condensed view of the program's interface, cheaper than the whole IDL */
 export interface IdlSummary {

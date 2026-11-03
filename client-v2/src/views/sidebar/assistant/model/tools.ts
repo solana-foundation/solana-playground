@@ -1,14 +1,11 @@
+import { bindTool } from "@/entities/agent-tools";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
-import { PgAssistant } from "../store";
+import { PgPatchUndo } from "../patch-undo";
+import { PgAssistant, wroteOutcome } from "../store";
 import { createMcpTools } from "./mcp-tools";
 import { createSkillTools } from "./skill-tools";
-import { PgAssistant, wroteOutcome } from "../store";
-import { PgPatchUndo } from "../patch-undo";
-import { realBridge, type PlaygroundBridge } from "../bridge/playground-bridge";
-import { bindTool } from "@/entities/agent-tools";
-import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {

@@ -113,10 +113,10 @@ const send = (req, res, status, body) => {
  * The route, with the session reader injected so tests reach every caller
  * state without a database.
  *
- * @param {{ readSession: typeof readSession }} deps
+ * @param {{ readSession: typeof readSession }} deps the session reader, a stub in tests
  */
 export const statusHandler =
-  ({ readSession }) =>
+  (deps) =>
   /**
    * @param {import("node:http").IncomingMessage} req
    * @param {import("node:http").ServerResponse} res
@@ -133,7 +133,12 @@ export const statusHandler =
     const model = hostedModel();
     if (model === undefined) return send(req, res, 200, OWN);
 
-    return send(req, res, 200, hostedStatus(model, await readSession(req)));
+    return send(
+      req,
+      res,
+      200,
+      hostedStatus(model, await deps.readSession(req))
+    );
   };
 
 export default withObservability("ai", statusHandler({ readSession }));

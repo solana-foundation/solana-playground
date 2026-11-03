@@ -3,7 +3,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import { BaseApprovalCard } from "./BaseApprovalCard";
+
 import type { ApprovalItem } from "./BaseApprovalCard";
 import { BaseApprovalCard } from "./BaseApprovalCard";
 

@@ -1,19 +1,19 @@
-import { loadAi } from "@/shared/lib/ai";
-import { createLogger } from "@/shared/lib/logger";
-import { createTools } from "./tools";
-import { describeProject, systemPrompt } from "./prompt";
-import { PgAssistant } from "../store";
-import { MAX_RESUMES, MAX_STEPS } from "../config";
-import { PgSession } from "../../../../features/auth";
-import { agentTelemetry } from "@/features/agent";
-import { MODEL_PROVIDER_PROFILES } from "./model-providers";
-import { ModelBusyError } from "./model-busy";
 import type { LanguageModel, ModelMessage } from "ai";
 
 import { agentTelemetry } from "@/features/agent";
 import type { ModelProvider } from "@/shared/lib/ai";
+import { loadAi } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
+
+import { PgSession } from "../../../../features/auth";
+import { MAX_RESUMES, MAX_STEPS } from "../config";
+import { PgAssistant } from "../store";
+import { ModelBusyError } from "./model-busy";
 import type { ModelProviderInput } from "./model-providers";
-import { TurnFailure, type Provider } from "./types";
+import { MODEL_PROVIDER_PROFILES } from "./model-providers";
+import { describeProject, systemPrompt } from "./prompt";
+import { createTools } from "./tools";
+import { type Provider, TurnFailure } from "./types";
 
 const log = createLogger("assistant:provider");
 
@@ -114,8 +114,8 @@ export const createProvider = (
             replies.close();
           },
           // Stored with the thread, so a provider built for it later replays the call
-          onToolResult: (result) =>
-            PgAssistant.addToolResult(result, connection.apiKey),
+          onToolResult: (toolResult) =>
+            PgAssistant.addToolResult(toolResult, connection.apiKey),
         });
       } catch (e) {
         if (!(e instanceof ai.AiTurnError)) throw e;

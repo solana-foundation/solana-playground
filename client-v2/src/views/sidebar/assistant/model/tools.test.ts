@@ -1,9 +1,7 @@
-import { createTools, notInContext } from "./tools";
-import { PgAssistant } from "../store";
-import { PgPatchUndo } from "../patch-undo";
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
+import { PgPatchUndo } from "../patch-undo";
 import { PgAssistant } from "../store";
-import { createTools } from "./tools";
+import { createTools, notInContext } from "./tools";
 
 vi.mock("./skill-tools", () => ({ createSkillTools: () => [] }));
 vi.mock("./mcp-tools", () => ({ createMcpTools: () => [] }));

@@ -1,11 +1,11 @@
 import { useMemo } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import { CopyButton } from "@/shared/ui/copy-button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   Diff,
   DiffContent,

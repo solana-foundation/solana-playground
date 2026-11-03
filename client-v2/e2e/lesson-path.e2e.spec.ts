@@ -6,7 +6,6 @@ import {
   stubAiStatus,
   test,
 } from "./fixtures";
-
 import { openGallery } from "./fixtures";
 
 /**

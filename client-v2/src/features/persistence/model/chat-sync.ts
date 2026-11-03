@@ -1,3 +1,7 @@
+// TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
+import { PgSession } from "@/features/auth";
+
+import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { batchPush, MAX_BATCH_BYTES } from "./chat-batch.mjs";
 import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
 import { PgChatStorage, withoutTruncationNotice } from "./chat-storage";

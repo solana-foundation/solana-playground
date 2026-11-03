@@ -1,7 +1,8 @@
 // Public API of the slice for the browser. `server.mjs` is the same registry
 // for server code.
-import { BUILTIN_TOOLS } from "./model/registry.mjs";
 import type { ToolDefinition } from "@/shared/lib/ai";
+
+import { BUILTIN_TOOLS } from "./model/registry.mjs";
 
 export { BUILTIN_TOOLS } from "./model/registry.mjs";
 export type { ToolDeclaration } from "./model/registry.mjs";

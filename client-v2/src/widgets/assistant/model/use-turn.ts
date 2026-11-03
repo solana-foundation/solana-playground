@@ -1,13 +1,9 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { isNetworkFailure } from "@/shared/lib/ai";
-import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
-import { createLogger } from "@/shared/lib/logger";
-
-import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgSession } from "@/features/auth";
 import { report, toReplayMessages } from "@/features/persistence";
-import type { ModelProvider } from "@/shared/lib/ai";
+import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
+import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
@@ -23,23 +19,22 @@ import {
   rememberedConnection,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
 import { threadBackend } from "../../../views/sidebar/assistant/model/thread-backend";
+import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
   isDefaultBackend,
   PROVIDERS,
   TurnFailure,
 } from "../../../views/sidebar/assistant/model/types";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
+import type {
+  Connection,
+  PromptRequest,
+} from "../../../views/sidebar/assistant/store";
 import {
   CONNECTION_LOST,
   paramsOf,
   PgAssistant,
   STOPPED_NOTICE,
 } from "../../../views/sidebar/assistant/store";
-import type {
-  Connection,
-  PromptRequest,
-} from "../../../views/sidebar/assistant/store";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
 import type { AssistantEvents } from "./telemetry";
@@ -641,12 +636,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * @param backend the backend the turn was sent to, which giving up reports
    */
   const waitOnBusyWith =
-    (backend: ModelProvider) => (outgoing: Outgoing, busy: ModelBusyError) => {
+    (backend: ModelProvider) =>
+    (outgoing: Outgoing, busyError: ModelBusyError) => {
       const { text, attempt } = outgoing;
-      const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
+      const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
       if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
-        PgAssistant.addError(`${busy.message} ${COME_BACK_LATER}`);
-        trackTurnFailure(backend, busy);
+        PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
+        trackTurnFailure(backend, busyError);
         return;
       }
       const at = Date.now();
@@ -654,7 +650,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       setWaiting({
         text,
         at: at + seconds * 1000,
-        canTryNow: busy.waitSeconds === undefined,
+        canTryNow: busyError.waitSeconds === undefined,
         attempt: attempt + 1,
         threadId: PgAssistant.threadId,
         conversation: PgAssistant.conversation,

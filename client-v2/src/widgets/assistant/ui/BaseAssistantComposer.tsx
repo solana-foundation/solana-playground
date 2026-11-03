@@ -1,6 +1,8 @@
-import type { ReactNode } from "react";
 import { XIcon } from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect, useId, useRef } from "react";
 
+import { Button } from "@/shared/ui/button";
 import {
   Composer,
   ComposerAdd,
@@ -20,10 +22,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
-import { Button } from "@/shared/ui/button";
 import { LogoPlay } from "@/shared/ui/logo";
 import { MenuItemText, MenuNote } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+
 import { usePickedMenu } from "./use-picked-menu";
 
 /** One thing the assistant reads each turn, named in the composer */

@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
 import type { KeyboardEvent } from "react";
+import { useRef, useState } from "react";
 
 /**
  * A menu whose items open something (Sources in place of the chat, Connect a

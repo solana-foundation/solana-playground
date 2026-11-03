@@ -1,15 +1,10 @@
 import { useEffect, useState } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
 import { useRenderOnChange } from "../../../hooks/useRenderOnChange";
 import { PgCommand } from "../../../utils/command";
-import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
-import {
-  isConnectionLost,
-  isStoppedNotice,
-  PgAssistant,
-  turnAppliedApproval,
-  turnProducedApproval,
-} from "../../../views/sidebar/assistant/store";
+import type { LessonState } from "../../../views/flow/lessons";
 import {
   attempted,
   cursorStep,
@@ -18,10 +13,16 @@ import {
   PgLesson,
   verifyingStage,
 } from "../../../views/flow/lessons";
-import type { LessonState } from "../../../views/flow/lessons";
+import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import { backendParamsFrom } from "../../../views/sidebar/assistant/model/backend-params";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { PgPatchUndo } from "../../../views/sidebar/assistant/patch-undo";
+import {
+  isConnectionLost,
+  isStoppedNotice,
+  PgAssistant,
+  turnAppliedApproval,
+  turnProducedApproval,
+} from "../../../views/sidebar/assistant/store";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
 import type { ApprovalAnswer } from "./BaseApprovalCard";

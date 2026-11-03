@@ -1,7 +1,8 @@
 import { createLogger } from "@/shared/lib/logger";
+
 import type { ChatItem } from "../store";
-import { backendParamsFrom } from "./backend-params";
 import type { BackendParams } from "./backend-params";
+import { backendParamsFrom } from "./backend-params";
 
 const log = createLogger("assistant:thread-backend");
 

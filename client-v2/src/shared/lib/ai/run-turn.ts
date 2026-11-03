@@ -9,8 +9,8 @@ import type {
 import { APICallError, isStepCount, streamText } from "ai";
 
 import { createLogger } from "../logger";
-import { FAILURE_MESSAGE, failureKindOf, isReportedFailure } from "./failure";
 import type { AiFailureKind } from "./failure";
+import { FAILURE_MESSAGE, failureKindOf, isReportedFailure } from "./failure";
 import { isNetworkFailure } from "./network-failure";
 import { redactKey } from "./redact";
 

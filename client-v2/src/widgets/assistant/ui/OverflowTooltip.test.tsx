@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { OverflowTooltip } from "./OverflowTooltip";
 
 const LONG = "deepseek/deepseek-chat-v3.1-terminus-instruct:free";

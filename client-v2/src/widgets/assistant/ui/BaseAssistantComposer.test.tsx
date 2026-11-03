@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -7,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
-import { BaseAssistantComposer } from "./BaseAssistantComposer";
 import type { ComposerContextChip } from "./BaseAssistantComposer";
+import { BaseAssistantComposer } from "./BaseAssistantComposer";
 
 interface Setup {
   busy?: boolean;

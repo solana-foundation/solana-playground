@@ -4,8 +4,6 @@ import {
   PanelLeftClose,
   UnfoldHorizontal,
 } from "lucide-react";
-import type { KeyboardEvent } from "react";
-import { useRef, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
 import {
@@ -17,8 +15,9 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
-import { headText } from "../model/head-label";
+
 import type { HeadLabel } from "../model/head-label";
+import { headText } from "../model/head-label";
 import { OverflowTooltip } from "./OverflowTooltip";
 import { usePickedMenu } from "./use-picked-menu";
 

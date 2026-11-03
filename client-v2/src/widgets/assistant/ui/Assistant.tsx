@@ -1,6 +1,5 @@
-import { useEffect, useReducer, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 
 import { useTutorialBeforeStart } from "@/entities/tutorial";
 import { PgSession } from "@/features/auth";
@@ -10,12 +9,10 @@ import { PgExplorer } from "../../../utils/explorer/explorer";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
 import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { PgExplorer } from "../../../utils/explorer/explorer";
 import { modelShown } from "../model/choice";
 import { connectLabel } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { headLabel } from "../model/head-label";
-import { useTurn } from "../model/use-turn";
 import type { ConnectOpener } from "../model/use-turn";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";

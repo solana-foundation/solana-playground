@@ -2,8 +2,8 @@ import type { ModelProvider } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 
 import type { Connection } from "../store";
-import { backendParamsFrom, paramsOf } from "./backend-params";
 import type { BackendParams } from "./backend-params";
+import { backendParamsFrom, paramsOf } from "./backend-params";
 import { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
 import { PROVIDERS } from "./types";
 

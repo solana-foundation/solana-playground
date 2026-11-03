@@ -5,8 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { requireFor } from "@/test-utils/require-for";
 
-import type { ForgetKey } from "./BaseAssistantHead";
 import type { HeadLabel } from "../model/head-label";
+import type { ForgetKey } from "./BaseAssistantHead";
+import { BaseAssistantHead } from "./BaseAssistantHead";
 
 interface HeadChoice {
   wide?: boolean;

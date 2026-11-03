@@ -752,16 +752,14 @@ test("assistant-turn-states: Try again after Stop", async ({ page }) => {
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await page.getByRole("button", { name: "Stop", exact: true }).click(LONG);
 
-  const thread = page.getByRole("log", { name: "Conversation" });
-  await expect(thread.getByText("Stopped.")).toBeVisible(LONG);
-  await thread.getByRole("button", { name: "Try again" }).click(LONG);
+  const log = page.getByRole("log", { name: "Conversation" });
+  await expect(log.getByText("Stopped.")).toBeVisible(LONG);
+  await log.getByRole("button", { name: "Try again" }).click(LONG);
 
-  await expect(thread.getByText("Hello", { exact: true })).toBeVisible(LONG);
+  await expect(log.getByText("Hello", { exact: true })).toBeVisible(LONG);
   expect(bodies).toHaveLength(2);
   expect(bodies[1]).toContain("What does this program do?");
-  await expect(thread.getByRole("button", { name: "Try again" })).toHaveCount(
-    0
-  );
+  await expect(log.getByRole("button", { name: "Try again" })).toHaveCount(0);
 });
 
 test("assistant-composer-context: Connect a model from the + menu", async ({

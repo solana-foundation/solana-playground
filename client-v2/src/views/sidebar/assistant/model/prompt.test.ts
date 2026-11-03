@@ -5,8 +5,8 @@ const store = vi.hoisted(() => ({
 vi.mock("../store", () => store);
 vi.mock("../bridge/playground-bridge", () => ({ realBridge: {} }));
 
-import { describeProjectWith, systemPrompt } from "./prompt";
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
+import { describeProjectWith, systemPrompt } from "./prompt";
 
 // `prompt.ts` imports the assistant context as `.md`: webpack hands it over
 // as text, and so must the test runner (`markdownAsText` in vitest.config.ts)

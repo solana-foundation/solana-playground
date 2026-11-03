@@ -1,7 +1,8 @@
 import type { ModelProvider } from "@/shared/lib/ai";
+
 import type { Connection } from "../store";
-import { PROVIDERS } from "./types";
 import type { Effort } from "./types";
+import { PROVIDERS } from "./types";
 
 /**
  * Which backend a thread was created with, or a reply produced by.

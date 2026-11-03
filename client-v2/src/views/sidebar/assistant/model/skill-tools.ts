@@ -1,3 +1,4 @@
+import { bindTool } from "@/entities/agent-tools";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 import {
@@ -6,8 +7,7 @@ import {
   loadSkill,
   requireSkill,
 } from "../grounding";
-import { bindTool } from "@/entities/agent-tools";
-import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
+import { PgAssistant } from "../store";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {
