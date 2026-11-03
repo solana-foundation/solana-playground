@@ -41,11 +41,12 @@ project sync walks and what tab-sync broadcasts, and a keypair must never be
 one glob away from an upload. A record per account was rejected: the state is
 always read and written whole, and one record keeps the write atomic.
 
-### The keystore has an injectable backend
+### The keystore sits behind an interface
 
-`utils/wallet/keystore.ts` exposes `read`, `write` and `remove` over a backend
-interface `{ get, put, delete }`. The browser backend wraps `indexedDB`; unit
-tests pass an in-memory backend, and one that throws. The migration and merge
+`utils/wallet/keystore.ts` defines `WalletStore` (`read`, `write`) and its
+IndexedDB implementation; `utils/wallet/wallet-storage.ts` takes a
+`WalletStore` and the `localStorage` it migrates from. Unit tests pass an
+in-memory store, and one that throws. The migration and merge
 logic is tested through it, and the real IndexedDB round trip is covered by an
 e2e spec, as the project does for `PgFs`.
 
@@ -60,7 +61,7 @@ e2e spec, as the project does for `PgFs`.
    with its name suffixed (`Wallet 1 (2)`) on a clash; IndexedDB's
    `currentIndex`, `state` and `standardName` win.
 4. Write the result, read it back, compare with `PgCommon.isEqual`.
-5. Equal: remove `localStorage['wallet']` (and the legacy `walletName`).
+5. Equal: remove `localStorage['wallet']`.
    Otherwise: log, leave `localStorage` alone, and mark the keystore
    unavailable for this load so reads and writes use `localStorage`.
 
