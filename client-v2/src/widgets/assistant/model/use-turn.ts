@@ -429,9 +429,12 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
 
     try {
       await instance.send(text, controller.signal);
-      assistantTelemetry.track("assistant_turn_answered", {
-        provider: backend,
-      });
+      // A provider may resolve after Stop, which has already ended the turn
+      if (!controller.signal.aborted) {
+        assistantTelemetry.track("assistant_turn_answered", {
+          provider: backend,
+        });
+      }
     } catch (e) {
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
         // A busy answer sent again ends no turn; the one the panel gives up on does
@@ -580,6 +583,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       // The message stays in the thread; nothing more is sent for it
       setWaiting(null);
       PgAssistant.addNotice("Stopped.");
+      // The waiting message's turn reported its send and ends here
+      assistantTelemetry.track("assistant_turn_stopped", {});
       return;
     }
     if (!turn.current || turn.current.signal.aborted) return;

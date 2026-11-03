@@ -175,6 +175,28 @@ describe("useTurn", () => {
     ]);
   });
 
+  it("reports a stopped turn only as stopped when its provider resolves after Stop", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockImplementation(
+      (_: string, signal?: AbortSignal) =>
+        new Promise<void>((resolve) => {
+          signal?.addEventListener("abort", () => resolve());
+        })
+    );
+    const { result } = renderHook(() => useTestTurn());
+    act(() => {
+      void result.current.send("hi");
+    });
+
+    act(() => result.current.stop());
+    await waitFor(() => expect(result.current.busy).toBe(false));
+
+    expect(turnEvents()).toEqual([
+      SENT_ON_DEFAULT,
+      ["assistant_turn_stopped", {}],
+    ]);
+  });
+
   it("says Stopped once for two Stops before the turn unwinds", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     let unwind!: () => void;
@@ -512,6 +534,10 @@ describe("useTurn", () => {
       expect(userMessages()).toBe(1);
       expect(result.current.input).toBe("");
       expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(turnEvents()).toEqual([
+        SENT_ON_DEFAULT,
+        ["assistant_turn_stopped", {}],
+      ]);
     });
 
     it("starts no other turn while a message waits", async () => {
