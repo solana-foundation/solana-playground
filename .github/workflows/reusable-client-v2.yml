@@ -37,6 +37,9 @@ jobs:
     runs-on: ubuntu-latest
     # A cold build takes about an hour on a laptop.
     timeout-minutes: 150
+    # The e2e shards restore the crates the steps below cache, by this key.
+    outputs:
+      crates-key: ${{ steps.crates-key.outputs.key }}
 
     defaults:
       run:
@@ -107,6 +110,43 @@ jobs:
           path: wasm/*/pkg
           retention-days: 1
           if-no-files-found: error
+
+      # Rust Analyzer's crates in `public/crates`, which `yarn dev` skips (`generate-fast`) and the
+      # real analyzer panics without: the dev server answers a missing crate file with `index.html`.
+      # Generated with the runner's own rustup, outside `vercel-install.sh`'s Rust state.
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version-file: client-v2/.nvmrc
+
+      # The default crates' key covers the Node major and its brotli, hence the pinned Node above.
+      - name: Key the crates
+        id: crates-key
+        run: |
+          set -o pipefail
+          # Each on its own line: set -e ignores a failure inside a command substitution used as an argument.
+          supported=$(node scripts/generate-crates.mjs --key)
+          default=$(node scripts/generate-default-crates.mjs --key)
+          [ -n "$supported" ] && [ -n "$default" ] || { echo "a crate generator printed no key" >&2; exit 1; }
+          hash=$(printf '%s %s' "$supported" "$default" | sha256sum | cut -d' ' -f1)
+          echo "key=crates-$hash" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: crates-cache
+        with:
+          path: client-v2/public/crates
+          key: ${{ steps.crates-key.outputs.key }}
+
+      - name: Generate the crates
+        if: steps.crates-cache.outputs.cache-hit != 'true'
+        run: |
+          node scripts/generate-default-crates.mjs
+          node scripts/generate-crates.mjs
+
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: steps.crates-cache.outputs.cache-hit != 'true'
+        with:
+          path: client-v2/public/crates
+          key: ${{ steps.crates-key.outputs.key }}
 
   checks:
     name: checks
@@ -428,6 +468,14 @@ jobs:
       - name: Install
         if: ${{ !inputs.use-wasm-stubs }}
         run: yarn install --frozen-lockfile
+
+      # The `wasm` job's crates; a miss fails here rather than as a rust-analyzer panic mid-suite.
+      - uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        if: ${{ !inputs.use-wasm-stubs }}
+        with:
+          path: client-v2/public/crates
+          key: ${{ needs.wasm.outputs.crates-key }}
+          fail-on-cache-miss: true
 
       # The browser binary is cached by Playwright version, so only a bump
       # re-downloads it. The runner's system libraries are not cached: on a
