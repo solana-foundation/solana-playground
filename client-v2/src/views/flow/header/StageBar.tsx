@@ -26,7 +26,8 @@ import { useViewport } from "@/shared/lib/hooks/use-viewport";
  * owns the Ctrl+1..4 stage keys and points the stepper at the stage the
  * current lesson step is graded on. A project with no program offers only
  * Write, so the other keys do nothing, and the row labels it "Client
- * project". The
+ * project"; on a phone, where Write is the code's own page, it has no stepper
+ * at all, only the label. The
  * project list and the session footer live in the navigation (`AppNav`),
  * not here.
  */

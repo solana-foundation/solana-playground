@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
+import type { GistShareSource } from "@/features/gist";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgTutorial, PgView } from "@/utils";
 import { PgWorkspace } from "@/utils/explorer/workspace";
@@ -91,7 +92,8 @@ export type ProjectListProps = {
    */
   onShareGist?: (
     name: string,
-    readFiles: () => Promise<Record<string, string>>
+    readFiles: () => Promise<Record<string, string>>,
+    source: Extract<GistShareSource, "project_menu">
   ) => Promise<unknown>;
 };
 
@@ -248,8 +250,10 @@ const ProjectList = ({
           return;
         }
         // The dialog reports and counts its own failures
-        await onShareGist(entry.name, () =>
-          readProjectFiles(entry.name, PgExplorer.fs)
+        await onShareGist(
+          entry.name,
+          () => readProjectFiles(entry.name, PgExplorer.fs),
+          "project_menu"
         );
         return;
       case "delete":

@@ -47,7 +47,7 @@ type Handlers = Pick<
 >;
 
 const draw = (
-  overrides: { renaming?: string; renameError?: string } = {}
+  overrides: { renaming?: string; renameError?: string; current?: string } = {}
 ): Handlers => {
   const handlers: Handlers = {
     onAction: vi.fn(),
@@ -60,7 +60,7 @@ const draw = (
       <SidebarProvider>
         <BaseProjectList
           projects={[beta, alpha, hello]}
-          current="alpha"
+          current={overrides.current ?? "alpha"}
           renaming={overrides.renaming ?? null}
           renameError={overrides.renameError ?? null}
           onAction={handlers.onAction}
@@ -174,15 +174,24 @@ describe("BaseProjectList", () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
-  it("offers Share as gist to a project and a lesson alike", () => {
+  it("offers Share on the open project's row, by click or key", () => {
     const { onAction } = draw();
     fireEvent.click(
-      within(openMenu("alpha")).getByRole("menuitem", {
-        name: "Share alpha as a gist",
-      })
+      within(openMenu("alpha")).getByRole("menuitem", { name: "Share alpha" })
     );
     expect(onAction).toHaveBeenLastCalledWith(alpha, "share-gist", "click");
+  });
 
+  it("offers no Share on a row that is not open, and G does nothing there", () => {
+    const { onAction } = draw();
+    const menu = openMenu("beta");
+    expect(within(menu).queryByRole("menuitem", { name: /share/i })).toBeNull();
+    fireEvent.keyDown(menu, { key: "g" });
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  it("offers Share on an open lesson's row too", () => {
+    const { onAction } = draw({ current: "Hello Anchor" });
     fireEvent.keyDown(openMenu("Hello Anchor"), { key: "g" });
     expect(onAction).toHaveBeenLastCalledWith(hello, "share-gist", "key");
   });

@@ -97,9 +97,11 @@ stepper SHALL show only the Write stage: the Build, Deploy and Interact
 tabs (`flow-stage-tab-build`, `flow-stage-tab-deploy`,
 `flow-stage-tab-interact`) SHALL not be rendered, and their keyboard
 shortcuts SHALL do nothing. The stepper row SHALL stay in place and SHALL
-carry the label "Client project" (`flow-client-project`). The
-check SHALL follow the files, so the stages return as soon as a program
-file is added and leave when the last one is removed.
+carry the label "Client project" (`flow-client-project`). On a phone, where
+the stepper never shows Write, no stepper (`role="tablist"` named
+"Development loop") SHALL be rendered for such a project, and the label
+SHALL still show. The check SHALL follow the files, so the stages return as
+soon as a program file is added and leave when the last one is removed.
 
 #### Scenario: An imported TypeScript project
 - **WHEN** the user opens a project that holds only `client/` and
@@ -107,6 +109,11 @@ file is added and leave when the last one is removed.
 - **THEN** the stepper shows the Write tab and no Build, Deploy or
   Interact tab, the row shows the label "Client project", and Ctrl+2
   leaves the Write stage shown
+
+#### Scenario: A project with no program on a phone
+- **WHEN** a project with no program is open below the phone breakpoint
+- **THEN** no "Development loop" tablist is rendered, and the label "Client
+  project" shows
 
 #### Scenario: A program is added
 - **WHEN** the user creates `src/lib.rs` in a project with no program

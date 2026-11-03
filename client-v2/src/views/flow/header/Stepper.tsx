@@ -88,6 +88,11 @@ const Stepper: FC<StepperProps> = ({
   // the last real width stands.
   const ref = useRef<HTMLDivElement>(null);
   const [room, setRoom] = useState<number | null>(null);
+  const offered = stagesOf(state);
+  const stages = phone ? offered.filter((stage) => stage !== "write") : offered;
+  const empty = !stages.length;
+  // Re-attached when the root comes back: drawn empty first (below), it had
+  // no node to observe
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -99,10 +104,11 @@ const Stepper: FC<StepperProps> = ({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [empty]);
   const compact = !phone && room !== null && room < STEPPER_FULL_WIDTH_PX;
-  const offered = stagesOf(state);
-  const stages = phone ? offered.filter((stage) => stage !== "write") : offered;
+  // A phone leaves Write out, so a project with no program has no tab left,
+  // and an empty "Development loop" would be a list of nothing
+  if (empty) return null;
   return (
     <DsStepper
       ref={ref}

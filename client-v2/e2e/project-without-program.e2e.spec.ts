@@ -234,6 +234,23 @@ test("project-without-program: An imported TypeScript project", async ({
   await expect(page.locator("#flow-stage-panel-build")).toHaveCount(0);
 });
 
+test("project-without-program: A project with no program on a phone", async ({
+  seededPage: page,
+}) => {
+  await stubRepository(page, CLIENT_AND_TESTS);
+  await importAndReturn(page);
+  await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
+  await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+
+  // The phone's stepper leaves Write out, so nothing is left to draw
+  await expect(
+    page.getByRole("tablist", { name: "Development loop" })
+  ).toHaveCount(0);
+  await expect(page.locator("#flow-client-project")).toHaveCount(1);
+});
+
 test("project-without-program: A program is added", async ({
   seededPage: page,
 }) => {

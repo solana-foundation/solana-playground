@@ -206,3 +206,23 @@ it("parts the documentation from the toggles with a rule", () => {
     container.querySelector('[data-slot="stage-bar"] [data-slot="separator"]')
   ).not.toBeNull();
 });
+
+it("draws the page's actions before the toggles", () => {
+  render(
+    <TooltipProvider>
+      <BaseStageBar
+        title="counter"
+        files={{ open: true, onToggle: vi.fn() }}
+        assistant={null}
+        actions={<button type="button">Share counter</button>}
+      />
+    </TooltipProvider>
+  );
+  const names = screen
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label") ?? button.textContent);
+  expect(names.slice(0, 2)).toEqual([
+    "Share counter",
+    "Collapse project panel",
+  ]);
+});

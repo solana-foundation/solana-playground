@@ -16,9 +16,12 @@ export type { GistRef } from "./lib/url";
 export { GistImportError, getGistFiles, importGist } from "./model/import";
 export { gistTelemetry } from "./model/telemetry";
 export type {
+  GistCopiedLink,
   GistExportFailure,
   GistImportFailure,
   GistImportSource,
+  GistShareSource,
+  GistVisibility,
 } from "./model/telemetry";
 export { exportProject } from "./model/export";
 export type { ExportFailure, ExportResult } from "./model/export";
@@ -29,4 +32,5 @@ export type {
   BaseShareGistProps,
   ShareFailure,
   ShareStep,
+  SignInEnding,
 } from "./ui/BaseShareGist";

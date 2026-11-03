@@ -32,6 +32,11 @@ export interface BaseStageBarProps {
    * none, as under Home, where the shell's keys do nothing
    */
   assistantKey?: string | null;
+  /**
+   * The page's own actions for the open project, drawn before the toggles,
+   * as the header's Share
+   */
+  actions?: ReactNode;
 }
 
 /**
@@ -122,8 +127,8 @@ const AssistantToggle = ({
 
 /**
  * The 44 px bar over the files column and the stage (design.md, "Frame chrome
- * (5.25)"): the project's name while the assistant is hidden, then the files
- * and assistant toggles and the documentation. The assistant's toggle is
+ * (5.25)"): the project's name while the assistant is hidden, then the page's
+ * actions, the files and assistant toggles and the documentation. The assistant's toggle is
  * named apart from the head's "Collapse assistant", so each name stays one
  * button.
  */
@@ -132,6 +137,7 @@ const BaseStageBar = ({
   files,
   assistant,
   assistantKey = "Ctrl+R",
+  actions,
 }: BaseStageBarProps) => {
   return (
     <div
@@ -144,6 +150,7 @@ const BaseStageBar = ({
       >
         {title}
       </span>
+      {actions}
       {files && <FilesToggle files={files} />}
       {assistant && (
         <AssistantToggle assistant={assistant} assistantKey={assistantKey} />

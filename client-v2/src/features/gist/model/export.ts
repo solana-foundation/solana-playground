@@ -10,8 +10,13 @@ import {
   measureGist,
   toGistFiles,
 } from "../lib/format";
+import { parseGistRef, parseGistUrl } from "../lib/url";
 import { gistTelemetry } from "./telemetry";
-import type { GistExportFailure } from "./telemetry";
+import type {
+  GistExportFailure,
+  GistShareSource,
+  GistVisibility,
+} from "./telemetry";
 
 const log = createLogger("gist:export");
 
@@ -27,7 +32,7 @@ export type ExportFailure = Extract<
 
 /** What one attempt at an export came to */
 export type ExportResult =
-  | { status: "created"; url: string; files: number }
+  | { status: "created"; url: string; id: string; files: number }
   | { status: "needs-sign-in" }
   | { status: "needs-gist-scope" }
   | { status: "failed"; reason: ExportFailure };
@@ -46,8 +51,17 @@ const reasonOf = async (response: Response) => {
 };
 
 /**
- * Share a project as a public gist once: flatten it, check the limits, post
- * it to `/api/gists`, and say what came of it.
+ * The created gist's id: the route's own, or else read from its URL. One a
+ * Playground link (`/gist/<id>`) could not open counts as none.
+ */
+const idOf = (answer: { id?: unknown }, url: string) => {
+  const id = typeof answer.id === "string" ? answer.id : parseGistUrl(url)?.id;
+  return id && parseGistRef(id) ? id : null;
+};
+
+/**
+ * Share a project as a gist once, secret or public as asked: flatten it,
+ * check the limits, post it to `/api/gists`, and say what came of it.
  *
  * Sends `gist_export_started` and, on success, `gist_export_succeeded`. A
  * failure is the caller's to count: `needs-sign-in` and `needs-gist-scope`
@@ -58,14 +72,23 @@ const reasonOf = async (response: Response) => {
  * caller's `readFiles`, before this.
  *
  * @param project files keyed by path relative to the project root
+ * @param options.visibility whether the gist is listed on the user's profile
+ * @param options.source where the share dialog was opened, for telemetry
  */
-export const exportProject = async (project: {
-  name: string;
-  files: Record<string, string>;
-}): Promise<ExportResult> => {
+export const exportProject = async (
+  project: { name: string; files: Record<string, string> },
+  {
+    visibility,
+    source,
+  }: { visibility: GistVisibility; source: GistShareSource }
+): Promise<ExportResult> => {
   const gist = toGistFiles(project);
   const size = measureGist(gist);
-  gistTelemetry.track("gist_export_started", { files: size.files });
+  gistTelemetry.track("gist_export_started", {
+    files: size.files,
+    visibility,
+    source,
+  });
   if (size.bytes > MAX_GIST_BYTES || size.files > MAX_GIST_FILES) {
     return { status: "failed", reason: "too-large" };
   }
@@ -78,6 +101,7 @@ export const exportProject = async (project: {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         description: project.name.slice(0, MAX_DESCRIPTION),
+        public: visibility === "public",
         files: gist,
       }),
     });
@@ -90,22 +114,34 @@ export const exportProject = async (project: {
   }
 
   if (response.status === 201) {
-    let url: unknown;
+    let answer: { url?: unknown; id?: unknown };
     try {
-      ({ url } = await response.json());
+      answer = (await response.json()) ?? {};
     } catch (e) {
       // The gist may exist, but its address never arrived
       log.error(e, { report: true, context: { step: "read-created" } });
       return { status: "failed", reason: "request-failed" };
     }
+    const { url } = answer;
     if (typeof url !== "string") {
       log.error(new Error("gists answered 201 without a url"), {
         report: true,
       });
       return { status: "failed", reason: "request-failed" };
     }
-    gistTelemetry.track("gist_export_succeeded", { files: size.files });
-    return { status: "created", url, files: size.files };
+    const id = idOf(answer, url);
+    if (!id) {
+      // The gist exists, but no Playground link can open it
+      log.error(new Error("gists answered 201 without a usable id"), {
+        report: true,
+      });
+      return { status: "failed", reason: "request-failed" };
+    }
+    gistTelemetry.track("gist_export_succeeded", {
+      files: size.files,
+      visibility,
+    });
+    return { status: "created", url, id, files: size.files };
   }
 
   const reason = await reasonOf(response);
@@ -169,23 +205,29 @@ if (import.meta.vitest) {
 
     const names = () => sent.events.map((event) => event.name);
 
-    it("posts the flattened project and answers the gist's url", async () => {
+    const SECRET = { visibility: "secret", source: "header" } as const;
+    const share = (project: { name: string; files: Record<string, string> }) =>
+      exportProject(project, SECRET);
+
+    it("posts the flattened project and answers the gist's url and id", async () => {
       const fetch = answer(201, {
-        url: "https://gist.github.com/a/b",
-        id: "b",
+        url: "https://gist.github.com/a/b0",
+        id: "b0",
       });
 
-      const result = await exportProject(PROJECT);
+      const result = await share(PROJECT);
 
       expect(result).toEqual({
         status: "created",
-        url: "https://gist.github.com/a/b",
+        url: "https://gist.github.com/a/b0",
+        id: "b0",
         files: 3,
       });
       const [url, init] = fetch.mock.calls[0];
       expect(url).toBe("/api/gists");
       const body = JSON.parse(init!.body as string);
       expect(body.description).toBe("counter");
+      expect(body.public).toBe(false);
       expect(Object.keys(body.files).sort()).toEqual([
         ".playground.json",
         "README.md",
@@ -193,15 +235,62 @@ if (import.meta.vitest) {
         "src__lib.rs",
       ]);
       expect(sent.events).toEqual([
-        { name: "gist_export_started", params: { files: 3 } },
-        { name: "gist_export_succeeded", params: { files: 3 } },
+        {
+          name: "gist_export_started",
+          params: { files: 3, visibility: "secret", source: "header" },
+        },
+        {
+          name: "gist_export_succeeded",
+          params: { files: 3, visibility: "secret" },
+        },
       ]);
+    });
+
+    it("asks for a public gist when told to, and says where it started", async () => {
+      const fetch = answer(201, {
+        url: "https://gist.github.com/a/b0",
+        id: "b0",
+      });
+
+      await exportProject(PROJECT, {
+        visibility: "public",
+        source: "project_menu",
+      });
+
+      expect(JSON.parse(fetch.mock.calls[0][1]!.body as string).public).toBe(
+        true
+      );
+      expect(sent.events[0]).toEqual({
+        name: "gist_export_started",
+        params: { files: 3, visibility: "public", source: "project_menu" },
+      });
+    });
+
+    it("reads the id from the url when the answer has none", async () => {
+      answer(201, { url: "https://gist.github.com/a/c0ffee" });
+
+      expect(await share(PROJECT)).toEqual({
+        status: "created",
+        url: "https://gist.github.com/a/c0ffee",
+        id: "c0ffee",
+        files: 3,
+      });
+    });
+
+    it("fails a 201 whose gist no Playground link could open", async () => {
+      answer(201, { url: "https://example.com/not-a-gist" });
+
+      expect(await share(PROJECT)).toEqual({
+        status: "failed",
+        reason: "request-failed",
+      });
+      expect(names()).toEqual(["gist_export_started"]);
     });
 
     it("refuses an oversized project without a request", async () => {
       const fetch = vi.spyOn(globalThis, "fetch");
 
-      const result = await exportProject({
+      const result = await share({
         name: "big",
         files: { "a.rs": "é".repeat(MAX_GIST_BYTES / 2 + 1) },
       });
@@ -215,7 +304,7 @@ if (import.meta.vitest) {
       const files: Record<string, string> = {};
       for (let i = 0; i <= MAX_GIST_FILES; i++) files[`f${i}.rs`] = "x";
 
-      const result = await exportProject({ name: "many", files });
+      const result = await share({ name: "many", files });
 
       expect(result).toEqual({ status: "failed", reason: "too-large" });
       expect(fetch).not.toHaveBeenCalled();
@@ -250,14 +339,14 @@ if (import.meta.vitest) {
     ])("maps a %i %j to %j", async (status, body, expected) => {
       answer(status, body);
 
-      expect(await exportProject(PROJECT)).toEqual(expected);
+      expect(await share(PROJECT)).toEqual(expected);
       expect(names()).toEqual(["gist_export_started"]);
     });
 
     it("fails a 201 that names no gist", async () => {
       answer(201, { id: "b" });
 
-      expect(await exportProject(PROJECT)).toEqual({
+      expect(await share(PROJECT)).toEqual({
         status: "failed",
         reason: "request-failed",
       });
@@ -267,7 +356,7 @@ if (import.meta.vitest) {
     it("cuts a long project name to the description's limit", async () => {
       const fetch = answer(201, { url: "https://gist.github.com/a/b" });
 
-      await exportProject({ name: "n".repeat(300), files: PROJECT.files });
+      await share({ name: "n".repeat(300), files: PROJECT.files });
 
       const body = JSON.parse(fetch.mock.calls[0][1]!.body as string);
       expect(body.description).toBe("n".repeat(200));
@@ -281,16 +370,16 @@ if (import.meta.vitest) {
         new TypeError("Failed to fetch")
       );
 
-      expect(await exportProject(PROJECT)).toEqual({
+      expect(await share(PROJECT)).toEqual({
         status: "failed",
         reason: "request-failed",
       });
     });
 
     it("sends no path, content or url in any event", async () => {
-      answer(201, { url: "https://gist.github.com/a/b" });
+      answer(201, { url: "https://gist.github.com/a/b0", id: "b0" });
 
-      await exportProject(PROJECT);
+      await share(PROJECT);
 
       const all = JSON.stringify(sent.events);
       expect(all).not.toContain("lib.rs");

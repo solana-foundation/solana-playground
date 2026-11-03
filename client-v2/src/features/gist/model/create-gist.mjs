@@ -1,6 +1,6 @@
 /**
- * Create a public gist on the user's GitHub account, and say what happened in
- * the terms the browser acts on.
+ * Create a gist, secret or public, on the user's GitHub account, and say what
+ * happened in the terms the browser acts on.
  *
  * Plain ESM: `/api/gists` runs it as written (see `api/health.mjs`).
  */
@@ -66,6 +66,8 @@ const messageOf = async (response) => {
  * @param {string} args.token the user's GitHub access token; never returned
  * @param {string} args.description the gist's description, the project name
  * @param {Record<string, {content: string}>} args.files already flattened
+ * @param {boolean} args.public whether the gist is listed on the user's
+ * profile; a secret one still opens for anyone with its link
  * @param {typeof fetch} [args.fetch]
  * @returns {Promise<{status: number, body: object}>} `201 {url, id}`, or a
  * status with a `reason` (see the `gist-sharing` spec)
@@ -74,6 +76,7 @@ export const createGist = async ({
   token,
   description,
   files,
+  public: visibility,
   fetch: send = fetch,
 }) => {
   let response;
@@ -87,7 +90,7 @@ export const createGist = async ({
         "user-agent": "solana-playground",
         "x-github-api-version": "2022-11-28",
       },
-      body: JSON.stringify({ description, public: true, files }),
+      body: JSON.stringify({ description, public: visibility, files }),
     });
   } catch (e) {
     console.error("gist: GitHub request failed", { message: e?.message });

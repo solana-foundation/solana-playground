@@ -322,9 +322,11 @@ describe("ProjectList", () => {
     expect(deleted.props).toEqual({ name: "Hello Anchor", isLesson: true });
   });
 
-  it("hands Share as gist to the page's opener, with a reader of that project", async () => {
+  it("hands Share to the page's opener, with a reader of that project", async () => {
     const onShareGist = vi.fn().mockResolvedValue(null);
     files.readProjectFiles.mockResolvedValue({ "src/lib.rs": "x" });
+    // Share is on the open project's row only
+    app.state.current = "alpha";
     render(
       <TooltipProvider>
         <SidebarProvider>
@@ -336,8 +338,9 @@ describe("ProjectList", () => {
     fireEvent.keyDown(menuOf("alpha"), { key: "g" });
 
     await waitFor(() => expect(onShareGist).toHaveBeenCalledTimes(1));
-    const [name, readFiles] = onShareGist.mock.calls[0];
+    const [name, readFiles, source] = onShareGist.mock.calls[0];
     expect(name).toBe("alpha");
+    expect(source).toBe("project_menu");
     expect(await readFiles()).toEqual({ "src/lib.rs": "x" });
     expect(files.readProjectFiles).toHaveBeenCalledWith(
       "alpha",

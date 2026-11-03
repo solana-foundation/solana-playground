@@ -74,8 +74,17 @@ const LESSON_ACTIONS: ReadonlySet<ProjectAction> = new Set([
   "delete",
 ]);
 
-const allowed = (entry: ProjectEntry, action: ProjectAction) =>
-  !entry.isLesson || LESSON_ACTIONS.has(action);
+/**
+ * Whether a row offers an action. Share works on the open project's files
+ * (Spec 05), so only the open row offers it.
+ */
+const allowed = (
+  entry: ProjectEntry,
+  action: ProjectAction,
+  isCurrent: boolean
+) =>
+  (!entry.isLesson || LESSON_ACTIONS.has(action)) &&
+  (action !== "share-gist" || isCurrent);
 
 const pinAction = (entry: ProjectEntry): ProjectAction =>
   entry.pinned ? "unpin" : "pin";
@@ -144,7 +153,7 @@ const Row = ({
   const isCurrent = entry.name === list.current;
 
   const run = (action: ProjectAction, via: Via) => {
-    if (!allowed(entry, action)) return;
+    if (!allowed(entry, action, isCurrent)) return;
     keepFocus.current = action === "rename";
     setOpen(false);
     list.onAction(entry, action, via);
@@ -244,14 +253,16 @@ const Row = ({
           >
             Export as zip
           </Item>
-          <Item
-            icon={Share2}
-            hint="G"
-            label={`Share ${entry.name} as a gist`}
-            onSelect={() => run("share-gist", "click")}
-          >
-            Share as gist
-          </Item>
+          {isCurrent && (
+            <Item
+              icon={Share2}
+              hint="G"
+              label={`Share ${entry.name}`}
+              onSelect={() => run("share-gist", "click")}
+            >
+              Share
+            </Item>
+          )}
           <DropdownMenuSeparator />
           <Item
             icon={Trash2}
