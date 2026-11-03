@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PgSession } from "@/features/auth";
 import type { SessionUser } from "@/features/auth";
+import { PgSession } from "@/features/auth";
 import {
   initLogger,
   memoryProvider as memoryLog,
@@ -16,6 +16,7 @@ import {
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
 import { ModalHost } from "@/widgets/overlays";
+
 import { openShareGistDialogFor } from "./ShareGistDialog";
 
 // The barrels reach the build's generated globals; the dialog needs one hook

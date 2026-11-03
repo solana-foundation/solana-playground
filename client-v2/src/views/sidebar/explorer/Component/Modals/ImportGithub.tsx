@@ -2,6 +2,7 @@ import { InfoIcon } from "lucide-react";
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { importGist, isGistUrl } from "@/features/gist";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
@@ -12,10 +13,6 @@ import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
-import { importGist, isGistUrl } from "@/features/gist";
-import { ModalFrame, SubmitCancelled, useModalId } from "@/widgets/overlays";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import { Eye, Github, ImportWorkspace } from "../../../../../components/Icons";
 import {
   Framework,
   ImportCancelledError,

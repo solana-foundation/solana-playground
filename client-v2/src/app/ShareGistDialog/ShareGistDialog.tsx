@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from "react";
 import { TriangleAlert } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { isSignInFailure, PgSession } from "@/features/auth";
-import { useRenderOnChange } from "@/hooks";
-import { ShareGist } from "@/features/gist";
 import type { GistShareSource, SignInEnding } from "@/features/gist";
+import { ShareGist } from "@/features/gist";
+import { useRenderOnChange } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgView } from "@/utils/view";

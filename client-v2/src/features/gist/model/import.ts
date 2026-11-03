@@ -1,11 +1,12 @@
-import { PgExplorer, PgFramework } from "@/utils";
-import type { TupleFiles } from "@/utils";
 import { createLogger } from "@/shared/lib/logger";
+import type { TupleFiles } from "@/utils";
+import { PgExplorer, PgFramework } from "@/utils";
+
 import { fromGistFiles, GistFormatError } from "../lib/format";
-import { parseGistUrl } from "../lib/url";
 import type { GistRef } from "../lib/url";
-import { gistTelemetry } from "./telemetry";
+import { parseGistUrl } from "../lib/url";
 import type { GistImportFailure, GistImportSource } from "./telemetry";
+import { gistTelemetry } from "./telemetry";
 
 const log = createLogger("gist:import");
 

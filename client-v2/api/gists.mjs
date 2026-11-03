@@ -10,16 +10,16 @@
  * of `api/` -- see `api/health.mjs` for why.
  */
 import {
+  readJson,
+  warnAboutMissingObservabilityIds,
+  withObservability,
+} from "../src/features/api/server.mjs";
+import {
   getAuth,
   isAllowedOrigin,
   readSession,
   SIGNED_OUT_REASON,
 } from "../src/features/auth/server.mjs";
-import {
-  readJson,
-  warnAboutMissingObservabilityIds,
-  withObservability,
-} from "../src/features/api/server.mjs";
 import {
   createGist,
   GITHUB_UNAUTHORIZED,

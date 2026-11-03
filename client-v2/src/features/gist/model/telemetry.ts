@@ -1,5 +1,5 @@
-import { createTracker } from "@/shared/lib/telemetry";
 import type { NoParams } from "@/shared/lib/telemetry";
+import { createTracker } from "@/shared/lib/telemetry";
 
 /** Why a share did not end in a gist */
 export type GistExportFailure =

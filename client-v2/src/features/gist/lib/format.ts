@@ -4,7 +4,6 @@
  * here, so the two directions cannot drift. See the `gist-sharing` spec.
  */
 import { PgLanguage } from "../../../utils/language";
-
 import { MANIFEST_NAME, MAX_GIST_BYTES, MAX_GIST_FILES } from "../config.mjs";
 
 export { MANIFEST_NAME, MAX_GIST_BYTES, MAX_GIST_FILES };

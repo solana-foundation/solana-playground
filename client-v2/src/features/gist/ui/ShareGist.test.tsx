@@ -2,10 +2,10 @@
 // visibility it shares with, sign-in first when signed out (and its cancel),
 // gist access asked for only when the token lacks it, the links it copies,
 // and every ending counted once.
-import { StrictMode } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import type { Mock } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
   initTelemetry,
@@ -14,8 +14,9 @@ import {
 } from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
-import ShareGist from "./ShareGist";
+
 import type { ShareGistProps } from "./ShareGist";
+import ShareGist from "./ShareGist";
 
 /** A cancel the user made is a quiet line, never an error callout */
 const expectQuietCancel = () => {

@@ -1,4 +1,5 @@
 import { createLogger } from "@/shared/lib/logger";
+
 import {
   GITHUB_UNAUTHORIZED,
   MAX_DESCRIPTION,
@@ -12,12 +13,12 @@ import {
   toGistFiles,
 } from "../lib/format";
 import { parseGistRef, parseGistUrl } from "../lib/url";
-import { gistTelemetry } from "./telemetry";
 import type {
   GistExportFailure,
   GistShareSource,
   GistVisibility,
 } from "./telemetry";
+import { gistTelemetry } from "./telemetry";
 
 const log = createLogger("gist:export");
 

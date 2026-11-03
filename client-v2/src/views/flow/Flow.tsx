@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
 import { openConnectDialog } from "@/app/ConnectDialog";
+import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import Wallet from "@/components/Wallet";
 import { FeedbackHost } from "@/features/feedback";
 import SyncBanner from "@/features/persistence/Component/SyncBanner";
@@ -18,8 +19,6 @@ import {
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { PgView } from "@/utils";
-import { useViewport } from "@/shared/lib/hooks/use-viewport";
-import { openShareGistDialogFor, ShareButton } from "@/app/ShareGistDialog";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { Assistant } from "@/widgets/assistant";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";

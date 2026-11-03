@@ -2,9 +2,11 @@ import type { FC } from "react";
 import { useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { Badge } from "@/shared/ui/badge";
 
-import Stepper from "./Stepper";
+import { useKeybind } from "../../../hooks";
+import type { LessonState } from "../lessons";
 import {
   cursorStep,
   foldRecord,
@@ -12,10 +14,8 @@ import {
   PgLesson,
   targetStage,
 } from "../lessons";
-import type { LessonState } from "../lessons";
-import { INITIAL_FLOW_STATE, PgFlow, STAGES, stagesOf } from "../state/stage";
 import type { FlowState } from "../state/stage";
-import { INITIAL_FLOW_STATE, PgFlow, STAGES } from "../state/stage";
+import { INITIAL_FLOW_STATE, PgFlow, STAGES, stagesOf } from "../state/stage";
 import Stepper from "./Stepper";
 
 /**

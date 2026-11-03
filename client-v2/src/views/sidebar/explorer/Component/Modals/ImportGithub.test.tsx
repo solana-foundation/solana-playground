@@ -61,7 +61,6 @@ const gist = vi.hoisted(() => ({
 vi.mock("@/features/gist", () => gist);
 
 import { IMPORTED } from "./imported";
-
 import { ImportGithub } from "./ImportGithub";
 
 /** Answers every key: the modal's styles read deep theme keys, none of which matters here */

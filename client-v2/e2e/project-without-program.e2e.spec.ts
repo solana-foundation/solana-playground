@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { LONG, expect, json, test } from "./fixtures";
+import { expect, json, LONG, test } from "./fixtures";
 
 const OWNER = "alice";
 const REPO = "ts-client";

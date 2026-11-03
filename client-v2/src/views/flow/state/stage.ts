@@ -1,12 +1,7 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import { emptyFileOf } from "../../../commands/build/empty-source";
 import type { Disposable } from "../../../utils";
-import { PgCommand, PgExplorer, PgGlobal, PgProgramInfo } from "../../../utils";
-import { isStopped } from "../../../utils/stopped";
-import {
-  PgBuildOutput,
-  stripKnownNoise,
-} from "../../sidebar/assistant/bridge/build-output";
-import { emptyFileOf } from "../../../commands/build/empty-source";
 import {
   PgCommand,
   PgExplorer,
@@ -15,8 +10,10 @@ import {
   PgProgramInfo,
 } from "../../../utils";
 import { isStopped } from "../../../utils/stopped";
-import type { Disposable } from "../../../utils";
-import { createLogger } from "@/shared/lib/logger";
+import {
+  PgBuildOutput,
+  stripKnownNoise,
+} from "../../sidebar/assistant/bridge/build-output";
 
 const log = createLogger("flow:stage");
 

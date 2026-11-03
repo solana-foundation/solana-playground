@@ -11,6 +11,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import { fetchGistFiles, GistImportError, importGist } from "./import";
 
 const utils = vi.hoisted(() => ({

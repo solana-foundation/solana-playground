@@ -2,19 +2,20 @@ import { useEffect, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { PgView } from "@/utils/view";
+
 import { GIST_SCOPE } from "../config.mjs";
 import { playgroundLink } from "../lib/playground-link";
-import { exportProjectWith } from "../model/export";
 import type { ExportResult } from "../model/export";
-import { gistTelemetry } from "../model/telemetry";
+import { exportProjectWith } from "../model/export";
 import type {
   GistCopiedLink,
   GistExportFailure,
   GistShareSource,
   GistVisibility,
 } from "../model/telemetry";
-import BaseShareGist from "./BaseShareGist";
+import { gistTelemetry } from "../model/telemetry";
 import type { ShareStep, SignInEnding } from "./BaseShareGist";
+import BaseShareGist from "./BaseShareGist";
 
 const log = createLogger("gist:share");
 

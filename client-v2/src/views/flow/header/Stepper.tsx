@@ -8,10 +8,8 @@ import {
   StepperList,
 } from "@/shared/ui/stepper";
 
-import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
-import { stagesOf } from "../state/stage";
 import type { FlowState, Stage, StageStatus } from "../state/stage";
-import { STAGES } from "../state/stage";
+import { stagesOf } from "../state/stage";
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
 
 const LABEL: Record<Stage, string> = {
