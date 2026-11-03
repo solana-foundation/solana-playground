@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { requireFor } from "../../test-utils/require-for";
+import { PgCommon } from "../common";
 import { PgWeb3 } from "../web3";
 import { KeypairFileError } from "./keypair-file";
+import { localSignerProviderWith } from "./signer-provider";
+import type { Wallet } from "./types";
 import { PgWallet } from "./wallet";
 
 // The connection module reads build-time globals the unit runner does not
@@ -80,5 +83,48 @@ describe("utils/wallet/wallet", () => {
     });
 
     await expect(result).rejects.toBe(failure);
+  });
+
+  describe("the signer provider", () => {
+    const keypair = PgWeb3.Keypair.generate();
+    const kp = Array.from(keypair.secretKey);
+    /** The current wallet as `derive` builds it, reached through the provider */
+    const connect = () => {
+      const provider = localSignerProviderWith((publicKey) =>
+        publicKey.equals(keypair.publicKey) ? kp : undefined
+      );
+      const secretKeyFor = vi.spyOn(provider, "secretKeyFor");
+      PgWallet.setSignerProvider(provider);
+      const wallet = PgWallet.create({ kp, name: "Wallet 1" });
+      // `derivable` defines `current` only once the wallet initializes
+      Object.defineProperty(PgWallet, "current", {
+        get: (): Wallet => wallet,
+        configurable: true,
+      });
+      return { wallet, secretKeyFor };
+    };
+
+    afterEach(() => {
+      Reflect.deleteProperty(PgWallet, "current");
+    });
+
+    it("create hands the provider's keypair to pg.wallet.keypair", () => {
+      const { wallet } = connect();
+      expect(wallet.isPg && Array.from(wallet.keypair.secretKey)).toEqual(kp);
+    });
+
+    it("getKeypairBytes gives the WASM CLIs the current account's key", () => {
+      const { secretKeyFor } = connect();
+      expect(PgWallet.getKeypairBytes()).toEqual(kp);
+      expect(secretKeyFor).toHaveBeenCalledWith(keypair.publicKey);
+    });
+
+    it("export writes the current account's key file", () => {
+      const { secretKeyFor } = connect();
+      const exported = vi.spyOn(PgCommon, "export").mockReturnValue(undefined);
+      PgWallet.export();
+      expect(exported).toHaveBeenCalledWith("wallet-1-keypair.json", kp);
+      expect(secretKeyFor).toHaveBeenCalledWith(keypair.publicKey);
+    });
   });
 });
