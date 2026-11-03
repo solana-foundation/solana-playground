@@ -173,9 +173,9 @@ const looseTarget = (
   name: string
 ): string | undefined => {
   if (!isSupported(name) || !isExportablePath(name)) return undefined;
-  if (/\.(test|spec)\.[jt]sx?$/.test(name)) return `tests/${name}`;
+  if (/\.(test|spec)\.[jt]s$/.test(name)) return `tests/${name}`;
   if (/\.(rs|py)$/.test(name)) return `src/${name}`;
-  if (/\.[jt]sx?$/.test(name)) return `client/${name}`;
+  if (/\.[jt]s$/.test(name)) return `client/${name}`;
   return name;
 };
 
@@ -532,6 +532,18 @@ if (import.meta.vitest) {
           "config.json": "f",
         },
       });
+    });
+
+    it("drops a hand-made gist's tsx file, which the Playground cannot open", () => {
+      // The languages the Playground registers: no tsx, no jsx
+      const supported = (path: string) => /\.(rs|py|ts|js|json)$/.test(path);
+
+      const back = fromGistFilesWith(supported)({
+        "App.tsx": { content: "a" },
+        "lib.rs": { content: "b" },
+      });
+
+      expect(back.files).toEqual({ "src/lib.rs": "b" });
     });
 
     it("leaves a hand-made gist's root .tutorial.json out", () => {

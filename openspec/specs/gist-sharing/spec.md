@@ -195,12 +195,13 @@ in the gist.
 ### Requirement: Place a hand-made gist's files by kind
 
 A gist with no manifest SHALL be read file by file: Rust and Python files go
-under `src/`, test files (`*.test.*` and `*.spec.*` of `ts`, `tsx`, `js`,
-`jsx`) under `tests/`, other TypeScript and JavaScript files under `client/`, other
+under `src/`, test files (`*.test.*` and `*.spec.*` of `ts` and `js`)
+under `tests/`, other TypeScript and JavaScript files under `client/`, other
 files of a supported language at the root, and files of a language the
 Playground does not support are dropped. The result SHALL say which way the
 files were placed (`manifest` or `loose`). A gist with no file left SHALL fail
-with reason `no-supported-files`.
+with reason `no-supported-files`. Files of `tsx` and `jsx` are dropped like any
+language the Playground does not support.
 
 #### Scenario: A hand-made gist (manual)
 
