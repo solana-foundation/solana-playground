@@ -364,12 +364,17 @@ describe("PgLesson.init -- real PgTutorialStorage default semantics", () => {
     files.set(PATH.tutorial, { lesson: null });
     explorer.currentWorkspaceName = PATH.tutorial;
     const sub = PgLesson.init();
-    await flush();
+    try {
+      await flush();
 
-    expect(PgLesson.state.loadFailed).toBe(false);
-    expect(PgLesson.state.record.events.map((e) => e.type)).toEqual(["enter"]);
-    sub.dispose();
-    files.delete(PATH.tutorial);
+      expect(PgLesson.state.loadFailed).toBe(false);
+      expect(PgLesson.state.record.events.map((e) => e.type)).toEqual([
+        "enter",
+      ]);
+    } finally {
+      sub.dispose();
+      files.delete(PATH.tutorial);
+    }
   });
 
   it("does not leak one lesson's record into the next workspace's load", async () => {
