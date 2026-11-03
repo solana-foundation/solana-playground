@@ -761,15 +761,15 @@ if (import.meta.vitest) {
         });
 
         it("reads JSON paths from the imported folder", async () => {
-          const files = await PgFramework.convertToPlaygroundLayout(
-            [
-              ["token/client/index.ts", "a"],
-              ["token/client/idl/x.json", "{}"],
-              ["token/client/package.json", "{}"],
-              ["token/.config/y.json", "{}"],
-            ],
-            "token/client"
-          );
+          const files = await PgFramework.convertToPlaygroundLayoutWith({
+            root: "token/client",
+            source: undefined,
+          })([
+            ["token/client/index.ts", "a"],
+            ["token/client/idl/x.json", "{}"],
+            ["token/client/package.json", "{}"],
+            ["token/.config/y.json", "{}"],
+          ]);
           expect(files.map(([path]) => path).sort()).toEqual([
             "client/idl/x.json",
             "client/index.ts",
