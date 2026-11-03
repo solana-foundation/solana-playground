@@ -1,6 +1,7 @@
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "./fixtures";
 import { currentProject, projectRow, seedWorkspace } from "./fixtures";
-import type { Page } from "@playwright/test";
 
 /**
  * Workspaces carry a stable id now, and the config they live in was reshaped

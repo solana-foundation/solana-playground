@@ -13,9 +13,9 @@ import type {
 import type { derivable, DerivableState } from "./derivable";
 import type { initable } from "./initable";
 import type {
-  updatable,
   OnDidChangePropertyRecursive,
   Updatable,
+  updatable,
 } from "./updatable";
 
 /**

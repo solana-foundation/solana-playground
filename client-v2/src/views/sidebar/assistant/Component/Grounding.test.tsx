@@ -9,9 +9,10 @@ vi.mock("../../../../hooks", async () => ({
 vi.mock("./ServerConsole", () => ({ __esModule: true, default: () => null }));
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { MODEL_PROVIDER_PROFILES } from "../model/model-providers";
 import { createSkillTools } from "../model/skill-tools";
 import { PgAssistant } from "../store";

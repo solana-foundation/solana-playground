@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { expect, it, vi } from "vitest";
 
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
+
 import type { AccountView } from "../model/account";
 import BaseAccountMenu from "./BaseAccountMenu";
 

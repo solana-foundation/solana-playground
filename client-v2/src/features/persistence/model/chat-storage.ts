@@ -1,8 +1,8 @@
-import { decodeThread, encodeThread } from "./chat-codec";
-import { clearFailures, getLastFailure, report } from "./diagnostics";
-import type { Failure } from "./diagnostics";
 import { PgFs } from "../../../utils/explorer/fs";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
+import { decodeThread, encodeThread } from "./chat-codec";
+import type { Failure } from "./diagnostics";
+import { clearFailures, getLastFailure, report } from "./diagnostics";
 
 /**
  * Whether an error just means "no such file".

@@ -1,15 +1,16 @@
+import { FrownIcon } from "lucide-react";
 import { FC, useCallback, useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import { Button } from "@/shared/ui/button";
-import Link from "../Link";
-import { FrownIcon } from "lucide-react";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import { Clock, Refresh, Error as ErrorIcon } from "../Icons";
-import { SpinnerWithBg } from "../Loading";
-import { PgCommon, PgConnection, PgTheme, PgWallet, PgWeb3 } from "../../utils";
-import { useBlockExplorer, useConnection } from "../../hooks";
 import { createLogger } from "@/shared/lib/logger";
+import { Button } from "@/shared/ui/button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+
+import { useBlockExplorer, useConnection } from "../../hooks";
+import { PgCommon, PgConnection, PgTheme, PgWallet, PgWeb3 } from "../../utils";
+import { Clock, Error as ErrorIcon, Refresh } from "../Icons";
+import Link from "../Link";
+import { SpinnerWithBg } from "../Loading";
 import { describeTxsError } from "./txs-error";
 
 const log = createLogger("wallet:transactions");

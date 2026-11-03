@@ -1,10 +1,11 @@
 import { useState } from "react";
 
 import { PgTutorial } from "@/utils";
+
 import { useCardOpen } from "../model/use-card-open";
 import { useSearchTelemetry } from "../model/use-search-telemetry";
-import { useTutorialList } from "../model/use-tutorial-list";
 import type { TutorialItem } from "../model/use-tutorial-list";
+import { useTutorialList } from "../model/use-tutorial-list";
 import type { CatalogCard, CatalogList } from "./BaseCatalogGrid";
 import BaseCatalogPage from "./BaseCatalogPage";
 

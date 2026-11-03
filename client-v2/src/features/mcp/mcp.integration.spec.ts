@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { it } from "vitest";
+
 import handler from "../../../api/mcp.mjs";
 import { jsonBody, postJson } from "../../test/api-handler";
 

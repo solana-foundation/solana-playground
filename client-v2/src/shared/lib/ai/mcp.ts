@@ -1,5 +1,5 @@
-import { createMCPClient } from "@ai-sdk/mcp";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { createMCPClient } from "@ai-sdk/mcp";
 
 import { createLogger } from "../logger";
 

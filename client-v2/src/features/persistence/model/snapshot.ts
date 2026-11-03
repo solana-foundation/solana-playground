@@ -1,8 +1,8 @@
-import { isMissing } from "./diagnostics";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
 // tests could not load this module.
 import { PgFs } from "../../../utils/explorer/fs";
+import { isMissing } from "./diagnostics";
 
 /**
  * Workspace files that travel with the code.

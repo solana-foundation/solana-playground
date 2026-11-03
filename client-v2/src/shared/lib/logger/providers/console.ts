@@ -1,6 +1,7 @@
 import { observabilityEnv } from "@/shared/config/client-env";
-import { atLeast, isLevel } from "../severity";
+
 import type { Level } from "../severity";
+import { atLeast, isLevel } from "../severity";
 import type { LogEntry, LogProvider } from "../types";
 
 const METHOD: Record<Level, "error" | "warn" | "info" | "debug"> = {

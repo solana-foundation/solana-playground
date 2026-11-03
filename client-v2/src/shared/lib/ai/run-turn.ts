@@ -1,4 +1,3 @@
-import { APICallError, isStepCount, streamText } from "ai";
 import type {
   Instructions,
   JSONValue,
@@ -7,6 +6,7 @@ import type {
   ProviderMetadata,
   ToolSet,
 } from "ai";
+import { APICallError, isStepCount, streamText } from "ai";
 
 import { createLogger } from "../logger";
 import { redactKey } from "./redact";

@@ -1,8 +1,9 @@
 import type { FC } from "react";
 import { useEffect, useRef, useState } from "react";
 
-import Input from "../../../../../components/Input";
 import { ModalFrame } from "@/widgets/overlays";
+
+import Input from "../../../../../components/Input";
 import { PgCommon, PgExplorer, PgView } from "../../../../../utils";
 
 interface RenameWorkspaceProps {

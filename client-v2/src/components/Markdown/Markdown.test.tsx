@@ -23,7 +23,7 @@ vi.mock("../Icons", () => ({ HyperLink: () => null }));
 
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 
 import Markdown from "./Markdown";
 

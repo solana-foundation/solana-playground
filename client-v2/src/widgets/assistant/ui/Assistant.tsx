@@ -1,19 +1,20 @@
-import { useEffect, useRef, useState } from "react";
 import { ArrowLeft } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 
 import { useTutorialBeforeStart } from "@/entities/tutorial";
 import { PgSession } from "@/features/auth";
 import { Button } from "@/shared/ui/button";
+
+import { PgExplorer } from "../../../utils/explorer/explorer";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
 import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { useTurn } from "../model/use-turn";
 import type { ConnectOpener } from "../model/use-turn";
+import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
-import { Thread } from "./Thread";
-import { BaseAssistantHead } from "./BaseAssistantHead";
 import type { ForgetKey } from "./BaseAssistantHead";
+import { BaseAssistantHead } from "./BaseAssistantHead";
+import { Thread } from "./Thread";
 
 /** What the panel shows under its head */
 type View = "chat" | "sources";

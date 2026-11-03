@@ -7,8 +7,9 @@ import { createLogger } from "@/shared/lib/logger";
 import { shortAddress } from "@/shared/lib/short-address";
 import { PgCommand, PgConnection, PgView } from "@/utils";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
-import { SETUP_STEPS } from "../model/steps";
+
 import type { StepView, TodoStep } from "../model/steps";
+import { SETUP_STEPS } from "../model/steps";
 import { setupMarks, useSetupMarks } from "../model/storage";
 import { setupTelemetry } from "../model/telemetry";
 import BaseSetupList from "./BaseSetupList";

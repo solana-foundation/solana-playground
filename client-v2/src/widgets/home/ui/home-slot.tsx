@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import type { Viewport } from "@/shared/lib/hooks/use-viewport";
 import { Spinner } from "@/shared/ui/spinner";
+
 import type { StartView } from "../model/start-view";
 import type { PageTile } from "../model/telemetry";
 import Home from "./Home";

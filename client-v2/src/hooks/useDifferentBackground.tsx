@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useTheme } from "styled-components";
 
-import { PgTheme } from "../utils";
 import { isTransparent } from "../shared/lib/css-color";
+import { PgTheme } from "../utils";
 
 /**
  * Use a different background than the parent node's background.

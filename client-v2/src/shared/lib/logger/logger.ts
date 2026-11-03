@@ -1,6 +1,6 @@
 import { consoleProvider, reportProviderFailure } from "./providers/console";
-import { isReported } from "./severity";
 import type { Level } from "./severity";
+import { isReported } from "./severity";
 import type { LogEntry, LogOptions, LogProvider, Namespace } from "./types";
 
 // Read on every call: module-level loggers exist before `initLogger` runs

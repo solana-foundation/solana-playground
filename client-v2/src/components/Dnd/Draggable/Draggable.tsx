@@ -1,9 +1,9 @@
-import { ForwardRefExoticComponent } from "react";
 import {
   UniqueIdentifier,
   useDraggable,
   UseDraggableArguments,
 } from "@dnd-kit/core";
+import { ForwardRefExoticComponent } from "react";
 
 interface DraggableProps<P> {
   Item: ForwardRefExoticComponent<P>;

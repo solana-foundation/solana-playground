@@ -1,10 +1,10 @@
-import { useRef, useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useRef, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EMPTY_DRAFT } from "../model/use-feedback-form";
 import type { FeedbackDraft, SendStatus } from "../model/use-feedback-form";
+import { EMPTY_DRAFT } from "../model/use-feedback-form";
 import { BaseFeedbackForm } from "./BaseFeedbackForm";
 
 interface HarnessProps {

@@ -1,6 +1,6 @@
+import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
 
-import { createLogger } from "@/shared/lib/logger";
 import Img from "../../../components/Img";
 import LangIcon from "../../../components/LangIcon";
 import { PgFramework, PgLanguage } from "../../../utils";

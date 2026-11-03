@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { BaseStepRail, railStatus } from "./BaseStepRail";
 import type { RailRow } from "./BaseStepRail";
+import { BaseStepRail, railStatus } from "./BaseStepRail";
 
 describe("railStatus", () => {
   it("maps confirmed marks to done", () => {

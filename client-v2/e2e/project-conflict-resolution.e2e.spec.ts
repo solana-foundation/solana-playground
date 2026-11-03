@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
 import { hunkLineClass } from "../src/features/persistence/ui/merge-editor/hunk-class";
 import { applyWrite, json, LONG, makeLocalProject, settled } from "./fixtures";
 

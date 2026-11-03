@@ -1,16 +1,17 @@
 import type { FC } from "react";
 
-import { BaseObjectiveBand } from "./BaseObjectiveBand";
-import type {
-  BaseObjectiveBandProps,
-  StepBandProps,
-} from "./BaseObjectiveBand";
+import { PgAssistant } from "../../sidebar/assistant/store";
 import {
   assistantLabel,
   describeFinish,
   describeStep,
   positionLabel,
 } from "./band-copy";
+import type {
+  BaseObjectiveBandProps,
+  StepBandProps,
+} from "./BaseObjectiveBand";
+import { BaseObjectiveBand } from "./BaseObjectiveBand";
 import {
   attempted,
   foldRecord,
@@ -19,10 +20,9 @@ import {
   prevLegal,
   rung,
 } from "./ledger";
-import { PgLesson } from "./store";
 import type { LessonState } from "./store";
+import { PgLesson } from "./store";
 import { graderClass } from "./verify";
-import { PgAssistant } from "../../sidebar/assistant/store";
 
 export interface ObjectiveBandProps {
   state: LessonState;

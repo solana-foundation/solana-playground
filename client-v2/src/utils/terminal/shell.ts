@@ -1,20 +1,20 @@
+import { PgCommon } from "../common";
 import { PgAutocomplete } from "./autocomplete";
 import { PgHistory } from "./history";
-import { PgTty } from "./tty";
-import {
-  closestLeftBoundary,
-  closestRightBoundary,
-  isIncompleteInput,
-  parse,
-} from "./utils";
 import { PgTerminal } from "./terminal";
-import { PgCommon } from "../common";
+import { PgTty } from "./tty";
 import type {
   ActiveCharPrompt,
   ActivePrompt,
   CommandManager,
   Prefixes,
 } from "./types";
+import {
+  closestLeftBoundary,
+  closestRightBoundary,
+  isIncompleteInput,
+  parse,
+} from "./utils";
 
 /**
  * A shell is the primary interface that is used to start other programs.

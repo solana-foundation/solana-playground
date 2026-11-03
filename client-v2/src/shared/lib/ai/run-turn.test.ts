@@ -1,3 +1,5 @@
+import type { ModelMessage } from "ai";
+
 import {
   anthropicText,
   fakeFetch,
@@ -9,7 +11,6 @@ import {
 import { createModel } from "./models";
 import { AiTurnError, runTurn } from "./run-turn";
 import { toSdkTools } from "./tools";
-import type { ModelMessage } from "ai";
 
 const USER: ModelMessage[] = [{ role: "user", content: "hello" }];
 

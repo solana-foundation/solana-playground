@@ -4,7 +4,6 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { AppProviders } from "./App";
 import { Button } from "@/shared/ui/button";
 import { Field, FieldLabel } from "@/shared/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
@@ -31,6 +30,8 @@ import {
 } from "@/shared/ui/sidebar";
 import { Stepper, StepperItem, StepperList } from "@/shared/ui/stepper";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+
+import { AppProviders } from "./App";
 
 // jsdom has neither, every browser has both. `useIsMobile` reads
 // `window.innerWidth` and only subscribes through `matchMedia`, so the stub

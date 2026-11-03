@@ -8,8 +8,8 @@ import type {
 } from "@coral-xyz/anchor/dist/cjs/idl";
 
 import { PgCommon } from "../common";
-import { PgWeb3 } from "../web3";
 import type { MergeUnion, OrString } from "../types";
+import { PgWeb3 } from "../web3";
 
 export type {
   Idl,

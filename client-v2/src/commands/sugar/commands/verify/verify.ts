@@ -1,8 +1,8 @@
 import { CandyMachineItem } from "@metaplex-foundation/js";
 
-import { CacheItem, getMetaplex, loadCache } from "../../utils";
 import { Emoji } from "../../../../constants";
 import { PgConnection, PgTerminal, PgWeb3 } from "../../../../utils";
+import { CacheItem, getMetaplex, loadCache } from "../../utils";
 
 export const processVerify = async (rpcUrl: string | undefined) => {
   // Load the cache file (this needs to have been created by

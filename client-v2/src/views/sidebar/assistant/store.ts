@@ -1,5 +1,4 @@
-import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
-import type { SkillEntry } from "./grounding";
+import type { McpServerEntry, McpTool } from "@/features/mcp";
 import {
   closeConnection,
   listGatewayServers,
@@ -8,10 +7,12 @@ import {
   mcpTelemetry,
   sameConnection,
 } from "@/features/mcp";
+import type { ModelProvider } from "@/shared/lib/ai";
 import { redactKey } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
-import { forgetBackend, rememberBackend } from "./model/remembered-backend";
+
 import { PgSession } from "../../../features/auth";
+import { report } from "../../../features/persistence";
 import {
   mergeThreads,
   versionOf,
@@ -21,12 +22,12 @@ import {
   MAX_MESSAGES_PER_THREAD,
   PgChatStorage,
 } from "../../../features/persistence/model/chat-storage";
-import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
 import type { Disposable } from "../../../utils";
-import type { McpServerEntry, McpTool } from "@/features/mcp";
-import type { ModelProvider } from "@/shared/lib/ai";
-import { isDefaultBackend, type Effort } from "./model/types";
+import type { SkillEntry } from "./grounding";
+import { isAlwaysOn, listGatewaySkills, skillsTelemetry } from "./grounding";
+import { forgetBackend, rememberBackend } from "./model/remembered-backend";
+import { type Effort, isDefaultBackend } from "./model/types";
 
 const log = createLogger("assistant:store");
 

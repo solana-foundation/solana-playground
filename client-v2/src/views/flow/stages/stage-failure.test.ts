@@ -17,6 +17,7 @@ vi.mock("../state/stage", () => ({
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { PgView } from "@/utils/view";
+
 import { toldByStage } from "./stage-failure";
 
 type Stage = "build" | "deploy";

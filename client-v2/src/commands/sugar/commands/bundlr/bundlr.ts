@@ -1,8 +1,8 @@
 import Bundlr from "@bundlr-network/client";
 
-import { BundlrEnpoints } from "../../constants";
 import { Emoji } from "../../../../constants";
 import { PgConnection, PgTerminal, PgWallet, PgWeb3 } from "../../../../utils";
+import { BundlrEnpoints } from "../../constants";
 
 enum BundlrAction {
   Balance = 0,

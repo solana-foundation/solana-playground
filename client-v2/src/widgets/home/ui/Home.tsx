@@ -3,12 +3,13 @@ import { useState } from "react";
 import { StartFromScratch } from "@/features/new-project";
 import { createLogger } from "@/shared/lib/logger";
 import { PgTutorial } from "@/utils";
+
 import { errorMessage } from "../lib/error-message";
-import { useProgramCount } from "../model/use-program-count";
-import { homeTelemetry } from "../model/telemetry";
 import type { PageTile } from "../model/telemetry";
-import BaseHome from "./BaseHome";
+import { homeTelemetry } from "../model/telemetry";
+import { useProgramCount } from "../model/use-program-count";
 import type { TutorialFailure } from "./BaseHome";
+import BaseHome from "./BaseHome";
 
 export interface HomeProps {
   onAsk: () => void;

@@ -5,14 +5,14 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import {
   afterEach,
   beforeEach,
   expect,
   it,
-  vi,
   type MockInstance,
+  vi,
 } from "vitest";
 
 import {

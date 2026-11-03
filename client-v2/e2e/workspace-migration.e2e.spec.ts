@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import { expect, test } from "./fixtures";
 import {
   currentProject,
@@ -7,7 +9,6 @@ import {
   projectRow,
   seedWorkspace,
 } from "./fixtures";
-import type { Page } from "@playwright/test";
 
 /**
  * The upgrade path: a config written before workspaces had ids.

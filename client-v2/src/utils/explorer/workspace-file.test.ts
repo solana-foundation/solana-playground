@@ -1,9 +1,9 @@
-import { PgCommon } from "../common";
 import {
   initLogger,
   memoryProvider,
   resetLogger,
 } from "../../shared/lib/logger";
+import { PgCommon } from "../common";
 import { PgExplorer } from "./explorer";
 import { writeWorkspaceFile } from "./workspace-file";
 

@@ -1,8 +1,10 @@
-import { FC, useEffect, useMemo, useRef } from "react";
-import styled, { css, useTheme } from "styled-components";
 import "xterm/css/xterm.css";
 
+import { FC, useEffect, useMemo, useRef } from "react";
+import styled, { css, useTheme } from "styled-components";
+
 import { useExposeStatic, useKeybind } from "../../hooks";
+import { resolveColor } from "../../shared/lib/css-color";
 import {
   CommandManager,
   PgCommon,
@@ -10,7 +12,6 @@ import {
   PgTerminal,
   PgTheme,
 } from "../../utils";
-import { resolveColor } from "../../shared/lib/css-color";
 import { xtermTheme } from "./terminal-theme";
 
 interface TerminalProps {

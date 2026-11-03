@@ -11,6 +11,7 @@ import {
   SetupListTrigger,
   SetupListValue,
 } from "@/shared/ui/setup-list";
+
 import type { SetupStep, StepView, TodoStep } from "../model/steps";
 
 const STEP_LABELS: Record<SetupStep, string> = {

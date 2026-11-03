@@ -1,12 +1,12 @@
 import { Metaplex } from "@metaplex-foundation/js";
 
+import { Emoji } from "../../../../constants";
+import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 import {
   getCmCreatorMetadataAccounts,
   getMetaplex,
   loadCache,
 } from "../../utils";
-import { Emoji } from "../../../../constants";
-import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 
 export const processSign = async (
   rpcUrl: string | undefined,

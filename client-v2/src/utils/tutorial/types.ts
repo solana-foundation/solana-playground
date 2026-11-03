@@ -1,11 +1,11 @@
+import type { JSX } from "react";
+
+import type { Nullable, RequiredKey } from "../types";
 import {
   TUTORIAL_CATEGORIES,
   TUTORIAL_LEVELS,
   TUTORIAL_PROGRESS,
 } from "./details";
-import type { Nullable, RequiredKey } from "../types";
-
-import type { JSX } from "react";
 
 type Author = {
   /** Author's name that will be displayed as one of the creators of the tutorial */

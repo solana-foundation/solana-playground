@@ -1,7 +1,7 @@
-import { isMissing, report } from "./diagnostics";
 // Deep imports, not the `utils` barrel, for the reason `snapshot.ts` gives
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgWorkspace } from "../../../utils/explorer/workspace";
+import { isMissing, report } from "./diagnostics";
 
 /**
  * The workspaces the store records, name to id.

@@ -1,24 +1,24 @@
-import { PgFs } from "./fs";
-import { PgWorkspace } from "./workspace";
 import {
   isMissing,
   report,
 } from "../../features/persistence/model/diagnostics";
 import { PgCommon } from "../common";
 import { PgLanguage } from "../language";
-import { PgView } from "../view";
 import type { Disposable } from "../types";
+import { PgView } from "../view";
+import { PgFs } from "./fs";
 import type {
   CreatedWorkspace,
   EditorBuffers,
   Explorer,
-  TupleFiles,
+  ExplorerFiles,
   Folder,
   FullFile,
   ItemMetaFile,
-  ExplorerFiles,
   Position,
+  TupleFiles,
 } from "./types";
+import { PgWorkspace } from "./workspace";
 
 export class PgExplorer {
   /** Internal state */

@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
@@ -12,7 +13,7 @@ import {
   DiffStat,
   DiffTitle,
 } from "@/shared/ui/diff";
-import { cn } from "@/shared/lib/utils";
+
 import {
   diffLines,
   summarizeDiff,

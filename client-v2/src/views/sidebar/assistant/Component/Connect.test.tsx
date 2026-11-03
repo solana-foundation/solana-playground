@@ -8,15 +8,16 @@ vi.mock("../../../../components/Link", () => ({
 
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import Connect from "./Connect";
-import { PgSession } from "../../../../features/auth";
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
-import type { ConnectAction, ConnectProps } from "./Connect";
+
+import { PgSession } from "../../../../features/auth";
 import { PROVIDERS } from "../model/types";
-import { PgAssistant, type Connection } from "../store";
+import { type Connection, PgAssistant } from "../store";
+import type { ConnectAction, ConnectProps } from "./Connect";
+import Connect from "./Connect";
 
 /**
  * A theme that answers every key: the form reads deep theme keys for its

@@ -6,11 +6,11 @@
  */
 import { validate as isUuid } from "uuid";
 
-import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
   withObservability,
 } from "../src/features/api/server.mjs";
+import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import {
   appendMessages,
   DELETED_REASON,

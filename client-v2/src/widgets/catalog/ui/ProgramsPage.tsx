@@ -1,7 +1,7 @@
 import { useState } from "react";
 
-import { useCardOpen } from "../model/use-card-open";
 import { importProgram, isImportCancel } from "../model/program-open";
+import { useCardOpen } from "../model/use-card-open";
 import { useProgramList } from "../model/use-program-list";
 import { useSearchTelemetry } from "../model/use-search-telemetry";
 import BaseCatalogPage from "./BaseCatalogPage";

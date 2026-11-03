@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import BaseSettingRow from "./BaseSettingRow";
-import BaseSettingsPage from "./BaseSettingsPage";
 import type { SettingsSection } from "./BaseSettingsPage";
+import BaseSettingsPage from "./BaseSettingsPage";
 
 const TITLES = [
   "Network",

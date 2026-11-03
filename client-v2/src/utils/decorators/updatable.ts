@@ -1,6 +1,6 @@
 import { PgCommon } from "../common";
-import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
 import type { Disposable, KeyOf, SyncOrAsync } from "../types";
+import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
 
 /** Updatable decorator */
 export type Updatable<T> = {

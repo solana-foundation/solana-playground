@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 
 import { useRenderOnChange } from "../../../hooks/useRenderOnChange";
 import { PgCommand } from "../../../utils/command";
-import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
-import {
-  PgAssistant,
-  turnAppliedApproval,
-  turnProducedApproval,
-} from "../../../views/sidebar/assistant/store";
+import type { LessonState } from "../../../views/flow/lessons";
 import {
   attempted,
   cursorStep,
@@ -16,11 +11,16 @@ import {
   PgLesson,
   verifyingStage,
 } from "../../../views/flow/lessons";
-import type { LessonState } from "../../../views/flow/lessons";
+import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
+import {
+  PgAssistant,
+  turnAppliedApproval,
+  turnProducedApproval,
+} from "../../../views/sidebar/assistant/store";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
-import { BaseThread } from "./BaseThread";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
+import { BaseThread } from "./BaseThread";
 import type { ReplyActions } from "./BaseThreadItem";
 
 /** The empty thread's first questions: the step's inside a lesson, as the

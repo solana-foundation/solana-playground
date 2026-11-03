@@ -1,17 +1,18 @@
+// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { PgSession } from "@/features/auth";
+
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgFs } from "../../../utils/explorer/fs";
+import { clearFailures, getFailures } from "./diagnostics";
 import { reconcile, releaseLocalProjects } from "./project-restore";
+import type { ServerProject } from "./project-sync";
 import { PgProjectSync } from "./project-sync";
+import type { Snapshot } from "./snapshot";
 import { hashFiles } from "./snapshot";
 import { PgSyncClaim } from "./sync-claim";
 import { PgSyncMark } from "./sync-mark";
 import * as tabReload from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
-import { clearFailures, getFailures } from "./diagnostics";
-// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
-import { PgSession } from "@/features/auth";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgFs } from "../../../utils/explorer/fs";
-import type { ServerProject } from "./project-sync";
-import type { Snapshot } from "./snapshot";
 
 // `adopt` re-opens through `reloadCurrentFromDisk`, which switches and then
 // drops Monaco's cached models -- and `monaco-editor` cannot load under

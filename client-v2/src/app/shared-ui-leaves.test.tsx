@@ -20,7 +20,7 @@ import { Label } from "@/shared/ui/label";
 import { Logo } from "@/shared/ui/logo";
 import { StatusDot } from "@/shared/ui/status-dot";
 import { Switch } from "@/shared/ui/switch";
-import { Tag, levelVariant } from "@/shared/ui/tag";
+import { levelVariant, Tag } from "@/shared/ui/tag";
 
 let consoleError: ReturnType<typeof vi.spyOn>;
 

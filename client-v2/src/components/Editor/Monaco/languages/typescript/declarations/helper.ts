@@ -1,11 +1,11 @@
 import * as monaco from "monaco-editor";
 
+import type { TupleFiles } from "../../../../../../utils";
 import {
   Disposable,
   JsRuntimePackageName,
   PgCommon,
 } from "../../../../../../utils";
-import type { TupleFiles } from "../../../../../../utils";
 
 /**
  * Some declaration files need to be declared for them to be referenced by other

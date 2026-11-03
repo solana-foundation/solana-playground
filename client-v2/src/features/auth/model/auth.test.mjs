@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
-
 import { parseAdditionalUserInputFromProviderProfile } from "better-auth/db";
 
 import {

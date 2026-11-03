@@ -1,6 +1,6 @@
+import { FrownIcon } from "lucide-react";
 import { FC } from "react";
 
-import { FrownIcon } from "lucide-react";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 
 interface FallbackProps {

@@ -1,8 +1,15 @@
 import type { Idl } from "@coral-xyz/anchor";
 
-import { EMPTY_STORED, nextSeq } from "./events";
+import { createLogger } from "@/shared/lib/logger";
+
+import type { Disposable } from "../../../utils";
+import { PgExplorer, PgProgramInfo, PgTutorial, PgView } from "../../../utils";
+import type { FlowState } from "../state/stage";
+import { PgFlow } from "../state/stage";
 import type { LessonActor, LessonRecordEvent, StoredLesson } from "./events";
+import { EMPTY_STORED, nextSeq } from "./events";
 import { hintPrompt, RUNG_COUNT } from "./hints";
+import type { LessonView } from "./ledger";
 import {
   admits,
   attempted,
@@ -13,16 +20,10 @@ import {
   rung,
   trimRecord,
 } from "./ledger";
-import type { LessonView } from "./ledger";
 import { isV1, isV2, migrateV1 } from "./migrate";
 import { getLessonPath } from "./registry";
 import type { LessonPath } from "./types";
 import { graderClass, isSatisfied } from "./verify";
-import { PgFlow } from "../state/stage";
-import type { FlowState } from "../state/stage";
-import { PgExplorer, PgProgramInfo, PgTutorial, PgView } from "../../../utils";
-import type { Disposable } from "../../../utils";
-import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("lessons:store");
 

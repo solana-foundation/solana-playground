@@ -1,6 +1,5 @@
-import { Component, useCallback, useSyncExternalStore } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-
+import { Component, useCallback, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import { useSetStatic } from "@/hooks/useSetStatic";
@@ -10,9 +9,10 @@ import { uuid } from "@/shared/lib/ids";
 import { createLogger } from "@/shared/lib/logger";
 import { Toaster } from "@/shared/ui/sonner";
 import type { Elementable } from "@/utils/types";
+import type { ToastId, ToastOptions, ToastRequest } from "@/utils/view";
 import { PgView } from "@/utils/view";
 import { DEFAULT_TOAST_DURATION } from "@/utils/view";
-import type { ToastId, ToastOptions, ToastRequest } from "@/utils/view";
+
 import { overlayTelemetry } from "../model/telemetry";
 
 const log = createLogger("overlays:toast-host");

@@ -1,7 +1,8 @@
 import { act, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -13,9 +14,9 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { PgCommon } from "@/utils/common";
-import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
-import { DEFAULT_TOAST_DURATION, PgView } from "@/utils/view";
 import type { ToastChildProps } from "@/utils/view";
+import { DEFAULT_TOAST_DURATION, PgView } from "@/utils/view";
+
 import { ToastHost } from "./ToastHost";
 
 let sent: ReturnType<typeof memoryProvider>;

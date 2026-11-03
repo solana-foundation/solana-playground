@@ -11,6 +11,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import { LAYOUT_STORAGE_KEY } from "./layout-state";
 import { useLayoutState } from "./use-layout-state";
 

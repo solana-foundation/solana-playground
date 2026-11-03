@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect, useState } from "react";
+
 import { initLogger, memoryProvider, resetLogger } from "./logger";
 import { Outlet, OutletContent, useOutletNode } from "./outlet";
 

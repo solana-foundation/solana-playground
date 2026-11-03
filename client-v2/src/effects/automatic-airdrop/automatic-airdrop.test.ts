@@ -23,8 +23,8 @@ vi.mock("../../features/auth", () => ({
   PgSession: { get: () => ({ user: {} }) },
 }));
 
-import { automaticAirdrop } from "./automatic-airdrop";
 import { PgCommand, PgConnection } from "../../utils";
+import { automaticAirdrop } from "./automatic-airdrop";
 
 const airdrop = vi.mocked(PgCommand.airdrop.execute);
 const pass = automaticAirdrop() as unknown as () => Promise<void>;

@@ -1,9 +1,9 @@
-import { FC, useState } from "react";
 import { InfoIcon } from "lucide-react";
+import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
-import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { ModalFrame } from "@/widgets/overlays";
 
 interface SelectProgramProps {
   /** Program names to select from */

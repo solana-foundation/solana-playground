@@ -1,4 +1,5 @@
 import type { SettingsRequest } from "@/shared/lib/settings-request";
+
 import BaseSessionFooter from "./BaseSessionFooter";
 import { useAccount } from "./use-account";
 

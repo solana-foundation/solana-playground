@@ -1,10 +1,14 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
-
-import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgSession } from "@/features/auth";
 import { report, toReplayMessages } from "@/features/persistence";
+import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
+import { pushThread } from "../../../effects/chat-thread/push-thread";
+// Deep import rather than the `utils` barrel, as `effects/chat-thread` does
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
 import {
@@ -12,19 +16,15 @@ import {
   rememberedConnection,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type {
   Connection,
   PromptRequest,
 } from "../../../views/sidebar/assistant/store";
-import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-// Deep import rather than the `utils` barrel, as `effects/chat-thread` does
-import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
-import { assistantTelemetry } from "./telemetry";
 import type { AssistantEvents } from "./telemetry";
+import { assistantTelemetry } from "./telemetry";
 
 export type { ConnectPreset };
 

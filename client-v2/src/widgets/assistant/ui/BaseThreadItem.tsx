@@ -7,10 +7,11 @@ import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
 import { Message, MessageContent, MessageFooter } from "@/shared/ui/message";
+
 import Markdown from "../../../components/Markdown";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
-import { BaseApprovalCard } from "./BaseApprovalCard";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
+import { BaseApprovalCard } from "./BaseApprovalCard";
 
 /**
  * How "Make this change" is offered: as the reply's next step, or inside a

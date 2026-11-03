@@ -3,30 +3,31 @@ import {
   fireEvent,
   render,
   renderHook,
-  within,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
+import {
+  initLogger,
+  memoryProvider as memoryLog,
+  resetLogger,
+} from "@/shared/lib/logger";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { MODAL_HOST_WAIT, PgView } from "@/utils/view";
-import {
-  initLogger,
-  memoryProvider as memoryLog,
-  resetLogger,
-} from "@/shared/lib/logger";
-import { PgSession } from "@/features/auth";
-import { useTurn } from "@/widgets/assistant";
-import type { DefaultBackend } from "@/widgets/assistant";
-import { ModalFrame, ModalHost } from "@/widgets/overlays";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+import type { DefaultBackend } from "@/widgets/assistant";
+import { useTurn } from "@/widgets/assistant";
+import { ModalFrame, ModalHost } from "@/widgets/overlays";
+
 import { openConnectDialog } from "./ConnectDialog";
 
 // The form's footer link reaches the utils barrel, which needs the build's

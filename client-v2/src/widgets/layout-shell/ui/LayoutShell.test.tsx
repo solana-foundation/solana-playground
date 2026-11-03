@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { ThemeProvider } from "styled-components";
-import type { DefaultTheme } from "styled-components";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
+import type { DefaultTheme } from "styled-components";
+import { ThemeProvider } from "styled-components";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   initLogger,
@@ -86,15 +86,16 @@ vi.mock("react-resizable-panels", async (importOriginal) => {
   };
 });
 
+import { LAYOUT_BREAKPOINTS } from "@/shared/lib/hooks/use-viewport";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
 import { SWIPE_SETTLE_MS } from "./BasePhonePager";
-import { TooltipProvider } from "@/shared/ui/tooltip";
-import { LAYOUT_BREAKPOINTS } from "@/shared/lib/hooks/use-viewport";
-import LayoutShell from "./LayoutShell";
 import type { LayoutShellProps } from "./LayoutShell";
+import LayoutShell from "./LayoutShell";
 
 const listeners = new Set<() => void>();
 let width = 1440;

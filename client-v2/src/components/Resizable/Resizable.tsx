@@ -1,10 +1,10 @@
-import { forwardRef } from "react";
-import styled, { css } from "styled-components";
 import {
+  Enable,
   Resizable as ReResizable,
   ResizableProps as ReResizableProps,
-  Enable,
 } from "re-resizable";
+import { forwardRef } from "react";
+import styled, { css } from "styled-components";
 
 type ResizableProps = Omit<ReResizableProps, "enable"> & {
   enable?: Enable | "top" | "right" | "bottom" | "left";

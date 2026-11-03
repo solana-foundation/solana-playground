@@ -4,7 +4,6 @@ import { COMMANDS } from "../commands";
 import { FRAMEWORKS } from "../frameworks";
 import { LANGUAGES } from "../languages";
 import { ROUTES } from "../routes";
-import { MAIN_SECONDARY, SIDEBAR } from "../views";
 import { SETTINGS } from "../settings";
 import {
   JsRuntimePackageName,
@@ -13,6 +12,7 @@ import {
   Theme,
   TutorialDataParam,
 } from "../utils";
+import { MAIN_SECONDARY, SIDEBAR } from "../views";
 
 // The rule cannot see uses of the globals declared below; the imports above stay checked
 /* eslint-disable @typescript-eslint/no-unused-vars */

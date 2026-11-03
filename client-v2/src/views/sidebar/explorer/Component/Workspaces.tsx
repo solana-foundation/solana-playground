@@ -1,5 +1,5 @@
-import styled from "styled-components";
 import { InfoIcon } from "lucide-react";
+import styled from "styled-components";
 
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
@@ -14,15 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import {
-  CreateWorkspace,
-  RenameWorkspace,
-  DeleteWorkspace,
-  ImportGithub,
-  ImportFs,
-  ImportTemporary,
-  ExportWorkspace,
-} from "./Modals";
+
 import {
   Edit,
   ExportFile,
@@ -32,8 +24,17 @@ import {
   Plus,
   Trash,
 } from "../../../../components/Icons";
-import { PgCommon, PgExplorer, PgTutorial, PgView } from "../../../../utils";
 import { useExplorer } from "../../../../hooks";
+import { PgCommon, PgExplorer, PgTutorial, PgView } from "../../../../utils";
+import {
+  CreateWorkspace,
+  DeleteWorkspace,
+  ExportWorkspace,
+  ImportFs,
+  ImportGithub,
+  ImportTemporary,
+  RenameWorkspace,
+} from "./Modals";
 
 const Workspaces = () => {
   if (PgExplorer.isTemporary) return <TemporaryWarning />;

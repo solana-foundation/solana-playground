@@ -1,6 +1,6 @@
 import { render } from "@testing-library/react";
-import { useRef, type ReactElement } from "react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type ReactElement, useRef } from "react";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgExplorer } from "../../../../utils";

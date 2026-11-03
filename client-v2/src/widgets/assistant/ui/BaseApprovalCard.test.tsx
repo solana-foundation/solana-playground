@@ -2,8 +2,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { BaseApprovalCard } from "./BaseApprovalCard";
 import type { ApprovalItem } from "./BaseApprovalCard";
+import { BaseApprovalCard } from "./BaseApprovalCard";
 
 const CREATED = "2026-10-19T00:00:00.000Z";
 

@@ -1,7 +1,7 @@
+import type { Disposable } from "../../../../../../utils";
 import { declareDisposableTypes } from "./disposable";
 import { declareGlobalTypes } from "./global";
 import { declareImportableTypes } from "./importable";
-import type { Disposable } from "../../../../../../utils";
 
 /**
  * Initialize type declarations.

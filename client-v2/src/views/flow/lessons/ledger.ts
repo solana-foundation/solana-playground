@@ -1,6 +1,6 @@
-import { graderClass } from "./verify";
 import type { LessonMark, LessonRecordEvent, StoredLesson } from "./events";
 import type { LessonPath, LessonStep } from "./types";
+import { graderClass } from "./verify";
 
 /**
  * The two folds over the lesson's event log: a per-step ledger of

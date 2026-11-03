@@ -1,11 +1,11 @@
+import { Emoji } from "../../../../constants";
+import { PgTerminal, PgWeb3 } from "../../../../utils";
 import {
   CandyCache,
   getMetaplex,
   loadCache,
   loadConfigData,
 } from "../../utils";
-import { Emoji } from "../../../../constants";
-import { PgTerminal, PgWeb3 } from "../../../../utils";
 
 export const processGuardAdd = async (
   rpcUrl: string | undefined,

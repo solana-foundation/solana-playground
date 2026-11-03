@@ -1,7 +1,8 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "@/shared/lib/utils";
 import { Slot } from "radix-ui";
+import * as React from "react";
+
+import { cn } from "@/shared/lib/utils";
 
 /* The one call to action a screen has. ring is the brand action: a hairline
    of Solana's two colours that fills with them on hover. Its label takes the

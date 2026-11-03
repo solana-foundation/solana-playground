@@ -1,8 +1,10 @@
-import { declareDecorator, updatable } from "./decorators";
+import type { JSX } from "react";
+
 import {
   fromStoredEndpoints,
   toStoredEndpoints,
 } from "../settings/stored-endpoint";
+import { declareDecorator, updatable } from "./decorators";
 import type {
   Arrayable,
   Disposable,
@@ -10,8 +12,6 @@ import type {
   RequiredKey,
   UnionToTuple,
 } from "./types";
-
-import type { JSX } from "react";
 
 export type Settings = ConvertAll<UnionToTuple<InternalSetting>> & {
   // TODO: Store this in `PgProgramInfo` and remove

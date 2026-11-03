@@ -11,16 +11,16 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-
-import SyncBanner from "./SyncBanner";
 import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { PgProjectSync } from "../model/project-sync";
-import type { FileConflict } from "../model/merge";
+
 import { PgExplorer } from "../../../utils/explorer/explorer";
+import type { FileConflict } from "../model/merge";
+import { PgProjectSync } from "../model/project-sync";
+import SyncBanner from "./SyncBanner";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

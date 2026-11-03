@@ -1,7 +1,7 @@
-import { PgPlaynetRpc } from "./rpc";
 import { PgCommon } from "../common";
 import { PgExplorer } from "../explorer";
 import { PgPackage } from "../package";
+import { PgPlaynetRpc } from "./rpc";
 import type { OverridableConnection } from "./types";
 
 export class PgPlaynet {

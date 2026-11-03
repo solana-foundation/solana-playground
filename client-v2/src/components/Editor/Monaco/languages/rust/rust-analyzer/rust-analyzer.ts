@@ -1,14 +1,14 @@
 // @ts-nocheck
-import * as monaco from "monaco-editor";
 import type { WorldState } from "@solana-playground/rust-analyzer";
+import * as monaco from "monaco-editor";
 
-import { importTypes } from "../../common";
 import {
   AsyncMethods,
   Disposable,
   PgCommon,
   PgExplorer,
 } from "../../../../../../utils";
+import { importTypes } from "../../common";
 
 /** Monaco language id for Rust */
 const LANGUAGE_ID = "rust";

@@ -10,16 +10,18 @@ vi.mock("../../../utils", () => ({
   PgView: { setToast: vi.fn() },
 }));
 
-import { INITIAL_LESSON_STATE, PgLesson, reduceLesson } from "./store";
-import type { LessonState } from "./store";
+import type { Idl } from "@coral-xyz/anchor";
+
+import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+
+import { PgExplorer, PgTutorial, PgView } from "../../../utils";
+import type { FlowState } from "../state/stage";
+import { INITIAL_FLOW_STATE } from "../state/stage";
 import { attempted, cursorStep, foldRecord, rung } from "./ledger";
 import { registerPaths } from "./registry";
-import { INITIAL_FLOW_STATE } from "../state/stage";
-import type { FlowState } from "../state/stage";
+import type { LessonState } from "./store";
+import { INITIAL_LESSON_STATE, PgLesson, reduceLesson } from "./store";
 import type { LessonPath } from "./types";
-import { PgExplorer, PgTutorial, PgView } from "../../../utils";
-import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
-import type { Idl } from "@coral-xyz/anchor";
 
 const hints: [string, string, string] = ["a", "b", "c"];
 

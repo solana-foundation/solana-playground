@@ -1,7 +1,7 @@
 import type { Idl } from "@coral-xyz/anchor";
 
-import type { VerifyCondition } from "./types";
 import type { FlowState, Stage } from "../state/stage";
+import type { VerifyCondition } from "./types";
 
 const sameName = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 

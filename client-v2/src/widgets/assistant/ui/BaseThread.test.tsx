@@ -2,10 +2,10 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { BaseThread } from "./BaseThread";
-import type { BusyRetryView } from "./BaseThread";
-import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
+import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
+import type { BusyRetryView } from "./BaseThread";
+import { BaseThread } from "./BaseThread";
 
 vi.mock("../../../components/Markdown", () => ({
   default: ({ children }: { children: string }) => <p>{children}</p>,

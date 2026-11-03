@@ -4,10 +4,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../utils", () => ({}));
 
+import type { FlowState } from "../state/stage";
+import { INITIAL_FLOW_STATE } from "../state/stage";
 import Stepper from "./Stepper";
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
-import { INITIAL_FLOW_STATE } from "../state/stage";
-import type { FlowState } from "../state/stage";
 
 const failedBuild: FlowState = {
   stage: "build",

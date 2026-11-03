@@ -2,9 +2,9 @@ import { FC, useState } from "react";
 
 import { AppLoading } from "../../components/Loading/App";
 import { GLOBALS } from "../../globals";
-import { initAll } from "../../utils";
 import { useAsyncEffect } from "../../hooks";
 import type { Disposable } from "../../utils";
+import { initAll } from "../../utils";
 
 // Strict mode mounts every effect twice in development, and the first run of
 // an async effect cannot be cancelled. Sharing one in-flight initialization

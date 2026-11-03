@@ -1,5 +1,5 @@
-import * as customTutorials from "./generated";
 import { markdownTutorials } from "./create";
+import * as customTutorials from "./generated";
 
 /** All visible tutorials at `/tutorials` */
 export const TUTORIALS =

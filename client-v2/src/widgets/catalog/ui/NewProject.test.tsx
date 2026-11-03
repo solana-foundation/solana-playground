@@ -70,8 +70,8 @@ vi.mock("@/features/new-project", () => ({
 }));
 
 import { catalogPage } from "../model/catalog-page";
-import { useNewProject } from "../model/use-new-project";
 import type { CatalogPage } from "../model/telemetry";
+import { useNewProject } from "../model/use-new-project";
 import NewProjectView from "./NewProject";
 
 /** The dialog's component: it holds the state, as `NewWorkspaceModal` does */

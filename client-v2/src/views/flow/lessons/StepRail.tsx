@@ -1,10 +1,10 @@
 import type { FC } from "react";
 
-import BaseStepRail, { railStatus } from "./BaseStepRail";
 import type { RailRow } from "./BaseStepRail";
+import BaseStepRail, { railStatus } from "./BaseStepRail";
 import { foldRecord, legal } from "./ledger";
-import { PgLesson } from "./store";
 import type { LessonState } from "./store";
+import { PgLesson } from "./store";
 import { targetStage } from "./verify";
 
 interface StepRailProps {

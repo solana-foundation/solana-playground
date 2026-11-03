@@ -1,14 +1,13 @@
 import { FC, useEffect, useMemo, useRef, useState } from "react";
 
-import FromSeed from "./FromSeed";
-import Label from "../InputLabel";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { CopyButton } from "@/shared/ui/copy-button";
+
 import SearchBar, {
   SearchBarItem,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
 import { PgCommon, PgWallet, PgWeb3 } from "../../../../../utils";
-import { CopyButton } from "@/shared/ui/copy-button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   GeneratableInstruction,
   Idl,
@@ -16,8 +15,10 @@ import {
   InstructionValueGenerator,
   PgProgramInteraction,
 } from "../../../../../utils/program-interaction";
-import { useInstruction } from "./InstructionProvider";
 import { useIdl } from "../IdlProvider";
+import Label from "../InputLabel";
+import FromSeed from "./FromSeed";
+import { useInstruction } from "./InstructionProvider";
 
 type InstructionValues = GeneratableInstruction["values"];
 type InstructionInputAccount = InstructionValues["accounts"][number];

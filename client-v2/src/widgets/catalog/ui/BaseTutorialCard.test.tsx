@@ -2,8 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import type { TutorialProgress } from "@/entities/tutorial";
-import BaseTutorialCard from "./BaseTutorialCard";
+
 import type { BaseTutorialCardProps } from "./BaseTutorialCard";
+import BaseTutorialCard from "./BaseTutorialCard";
 
 /** Hello Anchor's card at `progress`, with this Open and busy state */
 const props = (

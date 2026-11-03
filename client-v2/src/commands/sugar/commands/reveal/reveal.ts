@@ -1,11 +1,11 @@
+import { Emoji } from "../../../../constants";
+import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 import {
   getCmCreatorMetadataAccounts,
   getMetaplex,
   loadCache,
   loadConfigData,
 } from "../../utils";
-import { Emoji } from "../../../../constants";
-import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 
 export const processReveal = async (rpcUrl: string | undefined) => {
   const term = await PgTerminal.get();

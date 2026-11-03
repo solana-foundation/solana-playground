@@ -1,6 +1,6 @@
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
-import { PgAssistant } from "../../views/sidebar/assistant/store";
 import type { ChatItem } from "../../views/sidebar/assistant/store";
+import { PgAssistant } from "../../views/sidebar/assistant/store";
 
 /**
  * Open a workspace's thread: the local copy first, the server's folded in.

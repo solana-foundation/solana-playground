@@ -1,5 +1,5 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
@@ -16,6 +16,7 @@ import { AsyncButton } from "@/shared/ui/async-button";
 import { BrandIcon } from "@/shared/ui/brand-icon";
 import { Button } from "@/shared/ui/button";
 import type { TutorialData } from "@/utils";
+
 import type { PageTile } from "../model/telemetry";
 import HomeComposer from "./HomeComposer";
 

@@ -1,11 +1,11 @@
+import { Emoji } from "../../../../constants";
+import { PgTerminal } from "../../../../utils";
+import { loadConfigData } from "../../utils";
 import { processCreateConfig } from "../create-config";
 import { processDeploy } from "../deploy";
 import { processUpload } from "../upload";
 import { processValidate } from "../validate";
 import { processVerify } from "../verify";
-import { loadConfigData } from "../../utils";
-import { Emoji } from "../../../../constants";
-import { PgTerminal } from "../../../../utils";
 
 export const processLaunch = async (
   rpcUrl: string | undefined,

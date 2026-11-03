@@ -1,8 +1,4 @@
 import { PgCommon } from "../common";
-import { PgExplorer, TupleFiles } from "../explorer";
-import { PgWorkspace } from "../explorer/workspace";
-import { writeWorkspaceFile } from "../explorer/workspace-file";
-import { PgRouter } from "../router";
 import {
   createDerivable,
   declareDecorator,
@@ -10,6 +6,10 @@ import {
   initable,
   updatable,
 } from "../decorators";
+import { PgExplorer, TupleFiles } from "../explorer";
+import { PgWorkspace } from "../explorer/workspace";
+import { writeWorkspaceFile } from "../explorer/workspace-file";
+import { PgRouter } from "../router";
 import type {
   TutorialData,
   TutorialMetadata,

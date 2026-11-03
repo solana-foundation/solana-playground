@@ -1,11 +1,12 @@
-import { report } from "./diagnostics";
-import { isUserFile, sha256 } from "./snapshot";
-import { isMissing } from "./sync-mark";
 // TODO(ui-migration 1.4): a feature importing a feature; bases are stored per signed-in account
 import { PgSession } from "@/features/auth";
+
 import { PgFs } from "../../../utils/explorer/fs";
+import { report } from "./diagnostics";
 import type { BaseContents } from "./merge";
 import type { FileHashes, Snapshot } from "./snapshot";
+import { isUserFile, sha256 } from "./snapshot";
+import { isMissing } from "./sync-mark";
 
 /**
  * Next to the marks, not inside their directory: `PgSyncMark.projectIds()`

@@ -1,15 +1,17 @@
 import { FC, useCallback, useEffect, useReducer, useState } from "react";
 
-import InstructionInput from "./InstructionInput";
-import InstructionProvider from "./InstructionProvider";
-import Interaction from "../Interaction";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Button } from "@/shared/ui/button";
 import {
   Collapsible,
   CollapsibleChevron,
   CollapsibleContent,
   CollapsibleHeading,
 } from "@/shared/ui/collapsible";
+
 import { Emoji } from "../../../../../constants";
+import { useWallet } from "../../../../../hooks";
 import {
   PgCommand,
   PgCommon,
@@ -18,15 +20,14 @@ import {
   PgTerminal,
   PgTx,
 } from "../../../../../utils";
-import { AsyncButton } from "@/shared/ui/async-button";
-import { Button } from "@/shared/ui/button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   IdlInstruction,
   PgProgramInteraction,
 } from "../../.././../../utils/program-interaction";
-import { useWallet } from "../../../../../hooks";
 import { useIdl } from "../IdlProvider";
+import Interaction from "../Interaction";
+import InstructionInput from "./InstructionInput";
+import InstructionProvider from "./InstructionProvider";
 
 interface InstructionProps {
   idlInstruction: IdlInstruction;

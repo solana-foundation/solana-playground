@@ -1,11 +1,12 @@
 import type { FC } from "react";
 import { useState } from "react";
 
-import type { LessonStep } from "./types";
-import { BaseReader } from "./BaseReader";
-import type { ReaderBody } from "./BaseReader";
-import { useAsyncEffect } from "../../../hooks";
 import { createLogger } from "@/shared/lib/logger";
+
+import { useAsyncEffect } from "../../../hooks";
+import type { ReaderBody } from "./BaseReader";
+import { BaseReader } from "./BaseReader";
+import type { LessonStep } from "./types";
 
 const log = createLogger("lessons:reader");
 

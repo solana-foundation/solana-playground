@@ -1,5 +1,8 @@
 import type { JsonMetadata } from "@metaplex-foundation/js";
 
+import { Emoji } from "../../../../constants";
+import { PgCommon, PgTerminal, PgView } from "../../../../utils";
+import { SugarUploadScreen } from "../upload";
 import {
   checkCategory,
   checkCreatorsAddresses,
@@ -9,9 +12,6 @@ import {
   checkSymbol,
   checkUrl,
 } from "./parser";
-import { SugarUploadScreen } from "../upload";
-import { Emoji } from "../../../../constants";
-import { PgCommon, PgView, PgTerminal } from "../../../../utils";
 
 export const processValidate = async (
   strict: boolean,

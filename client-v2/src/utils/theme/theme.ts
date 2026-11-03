@@ -1,21 +1,21 @@
 import type { StandardProperties } from "csstype";
 
-import { PgCommon } from "../common";
-import type {
-  DefaultComponent,
-  ImportableTheme,
-  Font,
-  ThemeInternal,
-  Theme,
-  ThemeColor,
-  Highlight,
-} from "./interface";
-import { alpha } from "./alpha";
-import { applyThemeMode } from "./mode";
-import { removedThemeNotice, resolveSavedTheme } from "./saved-theme";
 import { resolveColor } from "../../shared/lib/css-color";
 import { createLogger } from "../../shared/lib/logger";
+import { PgCommon } from "../common";
 import type { ValueOf } from "../types";
+import { alpha } from "./alpha";
+import type {
+  DefaultComponent,
+  Font,
+  Highlight,
+  ImportableTheme,
+  Theme,
+  ThemeColor,
+  ThemeInternal,
+} from "./interface";
+import { applyThemeMode } from "./mode";
+import { removedThemeNotice, resolveSavedTheme } from "./saved-theme";
 
 const log = createLogger("theme:saved");
 

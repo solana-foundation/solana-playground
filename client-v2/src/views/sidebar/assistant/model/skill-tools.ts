@@ -1,11 +1,12 @@
-import { PgAssistant } from "../store";
+import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
+
 import {
   describeCatalog,
   loadReference,
   loadSkill,
   requireSkill,
 } from "../grounding";
-import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
+import { PgAssistant } from "../store";
 
 /** Read a required string argument the model supplied */
 const str = (input: ToolInput, key: string) => {

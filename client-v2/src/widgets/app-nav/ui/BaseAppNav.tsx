@@ -1,8 +1,8 @@
 import { PanelLeft, X } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { BrandIcon } from "@/shared/ui/brand-icon";
 import type { BrandIconName } from "@/shared/ui/brand-icon";
+import { BrandIcon } from "@/shared/ui/brand-icon";
 import { Button } from "@/shared/ui/button";
 import {
   SidebarContent,
@@ -13,6 +13,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/shared/ui/sidebar";
+
 import type { NavItem } from "../model/nav-item";
 
 /** Keyed by item so a new `NavItem` without an entry does not compile; the

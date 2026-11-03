@@ -1,21 +1,22 @@
 import { FC, useMemo, useRef, useState } from "react";
 
-import InputLabel from "../InputLabel";
-import InstructionInput from "./InstructionInput";
+import { Button } from "@/shared/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+
+import { Edit, Plus, Trash } from "../../../../../components/Icons";
 import SearchBar, {
   SearchBarDropdownProps,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
-import { Edit, Plus, Trash } from "../../../../../components/Icons";
-import { Button } from "@/shared/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+import { useKeybind } from "../../../../../hooks";
 import {
   IdlType,
   PgProgramInteraction,
   Seed as SeedType,
 } from "../../../../../utils/program-interaction";
+import InputLabel from "../InputLabel";
+import InstructionInput from "./InstructionInput";
 import { useInstruction } from "./InstructionProvider";
-import { useKeybind } from "../../../../../hooks";
 
 type FromSeedProps = {
   name: string;

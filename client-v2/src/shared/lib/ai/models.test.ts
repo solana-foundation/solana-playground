@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import type { ModelMessage } from "ai";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   anthropicText,

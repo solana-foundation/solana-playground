@@ -1,9 +1,9 @@
+import type { PlatformEndpoint } from "../connection";
 import {
   buildPlatformEndpoints,
   Endpoint,
   resolveDefaultEndpoint,
 } from "../connection";
-import type { PlatformEndpoint } from "../connection";
 
 describe("buildPlatformEndpoints", () => {
   it("yields no entries when nothing is configured", () => {

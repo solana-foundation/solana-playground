@@ -8,11 +8,11 @@
  * because every route acting for a signed-in user needs it and its reasoning is
  * long.
  */
-import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
   withObservability,
 } from "../src/features/api/server.mjs";
+import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import {
   deleteProject,
   getProject,

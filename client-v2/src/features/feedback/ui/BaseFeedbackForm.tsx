@@ -1,9 +1,9 @@
-import { useRef } from "react";
-import type { CSSProperties, FormEvent, RefObject } from "react";
-import { cn } from "@/shared/lib/utils";
 import { ExternalLink } from "lucide-react";
+import type { CSSProperties, FormEvent, RefObject } from "react";
+import { useRef } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { brandButtonVariants } from "@/shared/ui/brand-button";
 import { Input } from "@/shared/ui/input";
@@ -18,8 +18,9 @@ import {
   ModalTitle,
 } from "@/shared/ui/modal";
 import { Textarea } from "@/shared/ui/textarea";
-import { GITHUB_LINKS } from "../lib/github-links";
+
 import type { GithubLink } from "../lib/github-links";
+import { GITHUB_LINKS } from "../lib/github-links";
 import type { FeedbackDraft, SendStatus } from "../model/use-feedback-form";
 import { BaseStarRating } from "./BaseStarRating";
 

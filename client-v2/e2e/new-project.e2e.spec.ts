@@ -1,12 +1,12 @@
 import type { Page } from "@playwright/test";
 
 import {
-  LONG,
-  PROGRAM,
   currentProject,
   expect,
   home,
+  LONG,
   openGallery,
+  PROGRAM,
   seedWorkspace,
   stubPrograms,
   test,

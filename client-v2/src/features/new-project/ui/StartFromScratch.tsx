@@ -2,9 +2,10 @@ import { useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgFramework } from "@/utils";
+
 import { newProjectTelemetry } from "../model/telemetry";
-import BaseStartFromScratch, { canStart } from "./BaseStartFromScratch";
 import type { Start } from "./BaseStartFromScratch";
+import BaseStartFromScratch, { canStart } from "./BaseStartFromScratch";
 
 const log = createLogger("new-project:start");
 

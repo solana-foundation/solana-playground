@@ -1,3 +1,4 @@
+import type { Disposable } from "../../../utils";
 import {
   PgCommand,
   PgConnection,
@@ -5,7 +6,6 @@ import {
   PgGlobal,
   PgProgramInfo,
 } from "../../../utils";
-import type { Disposable } from "../../../utils";
 
 export interface DeployRecord {
   id: string;

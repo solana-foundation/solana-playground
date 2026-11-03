@@ -1,16 +1,18 @@
+import { ArrowLeft, Search, X } from "lucide-react";
 import {
   Dispatch,
   FC,
+  type JSX,
   ReactNode,
   SetStateAction,
   useEffect,
   useId,
   useRef,
   useState,
-  type JSX,
 } from "react";
-import { ArrowLeft, Search, X } from "lucide-react";
 
+import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Button } from "@/shared/ui/button";
 import {
   Command,
@@ -25,12 +27,11 @@ import {
   InputGroupInput,
 } from "@/shared/ui/input-group";
 import { Popover, PopoverAnchor, PopoverContent } from "@/shared/ui/popover";
-import { createLogger } from "@/shared/lib/logger";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Spinner } from "@/shared/ui/spinner";
-import type { InputProps } from "../Input";
+
 import { useKeybind, useOnClickOutside } from "../../hooks";
 import { Arrayable, Getable, PgCommon } from "../../utils";
+import type { InputProps } from "../Input";
 
 const log = createLogger("components:search-bar");
 

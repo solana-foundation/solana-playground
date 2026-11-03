@@ -18,6 +18,7 @@ vi.mock("@/components/Tooltip", () => ({ default: () => null }));
 vi.mock("@/hooks", () => ({ useRenderOnChange: () => {} }));
 
 import { PgView } from "@/utils";
+
 import { SettingControl, SettingSetterSelect } from "./SettingControl";
 
 // Radix Select calls these while opening; jsdom implements none of them

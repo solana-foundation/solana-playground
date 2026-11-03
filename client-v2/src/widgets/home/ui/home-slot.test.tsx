@@ -1,6 +1,6 @@
-import { isValidElement } from "react";
-import type { ReactElement } from "react";
 import { render, screen } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { isValidElement } from "react";
 import { expect, it, vi } from "vitest";
 
 // The connected Homes pull in the `@/utils` barrel; the slot only picks one

@@ -1,15 +1,15 @@
-import { useEffect } from "react";
 import BN from "bn.js";
+import { useEffect } from "react";
 
-import Account from "./Account";
-import Event from "./Event";
-import Instruction from "./Instruction";
-import IdlProvider from "./IdlProvider";
 import { PgProgramInfo } from "../../../../utils";
 import {
   Idl,
   PgProgramInteraction,
 } from "../../../../utils/program-interaction";
+import Account from "./Account";
+import Event from "./Event";
+import IdlProvider from "./IdlProvider";
+import Instruction from "./Instruction";
 
 /**
  * The form for a deployed program's instructions, accounts and events. The

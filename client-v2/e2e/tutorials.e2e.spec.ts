@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { LONG, expect, test } from "./fixtures";
+import { expect, LONG, test } from "./fixtures";
 
 /** The About page's action; `exact` keeps it off other names holding "Start" */
 const startButton = (page: Page) =>

@@ -1,6 +1,6 @@
 import { PgCommon } from "../common";
-import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
 import type { Disposable } from "../types";
+import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
 
 /** Derivable state properties */
 export type DerivableState<T> = {

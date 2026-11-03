@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
 import { isCatalogLinkPath } from "@/routes/catalog-paths";
+import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgRouter } from "@/utils";
-import { homeTelemetry } from "./telemetry";
+
 import type { HomeLeaveVia, HomeVia } from "./telemetry";
+import { homeTelemetry } from "./telemetry";
 
 export type StartView = "pending" | "home" | "work";
 

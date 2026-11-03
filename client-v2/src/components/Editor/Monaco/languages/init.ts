@@ -1,18 +1,18 @@
 import * as monaco from "monaco-editor";
 import {
-  loadWASM,
   createOnigScanner,
   createOnigString,
+  loadWASM,
 } from "vscode-oniguruma";
 import {
   INITIAL,
-  Registry,
-  parseRawGrammar,
-  StateStack,
   IRawTheme,
+  parseRawGrammar,
+  Registry,
+  StateStack,
 } from "vscode-textmate";
 
-import { RequiredKey, PgExplorer, PgCommon } from "../../../../utils";
+import { PgCommon, PgExplorer, RequiredKey } from "../../../../utils";
 
 // Remove defaults https://github.com/Microsoft/monaco-editor/issues/252#issuecomment-482786867
 monaco.languages.getLanguages().forEach((lang) => {

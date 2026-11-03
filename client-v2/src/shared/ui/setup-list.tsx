@@ -1,7 +1,8 @@
-import * as React from "react";
 import { Check, ChevronDown, X } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
 import { Collapsible as CollapsiblePrimitive } from "radix-ui";
+import * as React from "react";
+
+import { cn } from "@/shared/lib/utils";
 
 /* "Get set up · 2 of 4": the few things a new workspace needs, in the
    sidebar, folded when you want it out of the way and gone once every step

@@ -1,10 +1,11 @@
-import { useState } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgSession } from "@/features/auth";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 
 // The thread, Sources and the composer stand in by name: what is under test
@@ -59,6 +60,7 @@ vi.mock("@/entities/tutorial", () => ({
 }));
 
 import { Modal, ModalContent, ModalTitle } from "@/shared/ui/modal";
+
 import { Assistant } from "./Assistant";
 
 /** Opens or closes `FakeConnect`, once it has mounted */

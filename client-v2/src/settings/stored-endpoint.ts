@@ -1,8 +1,8 @@
 // Loaded by `utils/settings.ts` before everything else, so this file only
 // imports modules whose own imports end at `shared/config/client-env`, which
 // imports nothing.
-import { Endpoint, PLATFORM_ENDPOINTS } from "../constants/connection";
 import type { PlatformEndpoint } from "../constants/connection";
+import { Endpoint, PLATFORM_ENDPOINTS } from "../constants/connection";
 import { SERVER_URL } from "../shared/config/client-env";
 import {
   FOUNDATION_ENDPOINT,

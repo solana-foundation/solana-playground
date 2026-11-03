@@ -27,11 +27,11 @@ vi.mock("./BaseObjectiveBand", () => ({
 
 import { render } from "@testing-library/react";
 
-import ObjectiveBand from "./ObjectiveBand";
-import { PgLesson } from "./store";
 import type { BaseObjectiveBandProps } from "./BaseObjectiveBand";
 import type { LessonRecordEvent, StoredLesson } from "./events";
+import ObjectiveBand from "./ObjectiveBand";
 import type { LessonState } from "./store";
+import { PgLesson } from "./store";
 import type { LessonPath } from "./types";
 
 const hints: [string, string, string] = ["a", "b", "c"];

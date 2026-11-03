@@ -10,6 +10,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import type { PopupReceipt } from "../lib/popup-channel";
 import { PgSession } from "./session";
 

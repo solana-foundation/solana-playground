@@ -4,10 +4,11 @@ vi.mock("../../../utils", () => ({
   PgGlobal: { deployState: "ready" },
 }));
 
-import { isSatisfied } from "./verify";
-import { INITIAL_FLOW_STATE } from "../state/stage";
-import type { FlowState } from "../state/stage";
 import type { Idl } from "@coral-xyz/anchor";
+
+import type { FlowState } from "../state/stage";
+import { INITIAL_FLOW_STATE } from "../state/stage";
+import { isSatisfied } from "./verify";
 
 const flow = (over: Partial<FlowState>): FlowState => ({
   ...INITIAL_FLOW_STATE,

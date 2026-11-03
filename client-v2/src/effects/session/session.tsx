@@ -1,20 +1,20 @@
 import { PgSession } from "../../features/auth";
-import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import type { HandOver } from "../../features/persistence/model/chat-sync";
+import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
-import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import {
   reconcile,
   releaseLocalProjects,
 } from "../../features/persistence/model/project-restore";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
-import { PgAssistant } from "../../views/sidebar/assistant/store";
-import { openThread } from "../chat-thread/open-thread";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
 // tests could not load this module.
 import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
+import { PgAssistant } from "../../views/sidebar/assistant/store";
+import { openThread } from "../chat-thread/open-thread";
 
 /**
  * Restore the signed-in user on load, and reconcile this browser with the

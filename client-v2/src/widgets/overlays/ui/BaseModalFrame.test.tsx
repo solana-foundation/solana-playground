@@ -3,8 +3,9 @@ import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 
 import { Modal } from "@/shared/ui/modal";
-import { BaseModalFrame } from "./BaseModalFrame";
+
 import type { BaseModalFrameProps, SubmitStatus } from "./BaseModalFrame";
+import { BaseModalFrame } from "./BaseModalFrame";
 
 type Submit = NonNullable<BaseModalFrameProps["submit"]>;
 

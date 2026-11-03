@@ -1,9 +1,10 @@
 import { FC, useState } from "react";
 import styled, { css } from "styled-components";
 
+import { ModalFrame } from "@/widgets/overlays";
+
 import Img from "../../../../../components/Img";
 import Input from "../../../../../components/Input";
-import { ModalFrame } from "@/widgets/overlays";
 import {
   Fn,
   Framework as FrameworkType,

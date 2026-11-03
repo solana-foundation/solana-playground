@@ -1,9 +1,10 @@
-import { report } from "./diagnostics";
-import { PgSyncClaim } from "./sync-claim";
 // TODO(ui-migration 1.4): a feature importing a feature; marks are stored per signed-in account
 import { PgSession } from "@/features/auth";
+
 import { PgFs } from "../../../utils/explorer/fs";
+import { report } from "./diagnostics";
 import type { FileHashes } from "./snapshot";
+import { PgSyncClaim } from "./sync-claim";
 
 /**
  * Whether an error just means "no such file".

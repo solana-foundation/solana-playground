@@ -59,6 +59,7 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
 }));
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import Deploy from "./Deploy";
 
 /** The app gives every screen a tooltip provider; the copy button needs one */

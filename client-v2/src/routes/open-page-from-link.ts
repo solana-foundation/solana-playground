@@ -2,8 +2,8 @@ import { createElement } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { PgRouter, PgView } from "@/utils";
-import { catalogPage } from "@/widgets/catalog";
 import type { CatalogPage } from "@/widgets/catalog";
+import { catalogPage } from "@/widgets/catalog";
 
 const log = createLogger("catalog:link");
 

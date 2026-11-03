@@ -2,19 +2,20 @@ import { ITerminalOptions, ITheme, Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 
-import { PgAutocomplete } from "./autocomplete";
-import { PgHistory } from "./history";
-import { PgShell } from "./shell";
-import { PgTty } from "./tty";
-import { PgCommon } from "../common";
-import { isStopped } from "../stopped";
 import { createLogger } from "@/shared/lib/logger";
 import {
   markFailureShown,
   markUnavailableHere,
 } from "@/shared/lib/report-button-failure";
+
+import { PgCommon } from "../common";
+import { isStopped } from "../stopped";
+import type { ClassReturnType, Methods, SyncOrAsync } from "../types";
+import { PgAutocomplete } from "./autocomplete";
+import { PgHistory } from "./history";
+import { PgShell } from "./shell";
+import { PgTty } from "./tty";
 import type { CommandManager, Prefixes, PrintOptions } from "./types";
-import type { Methods, ClassReturnType, SyncOrAsync } from "../types";
 
 const log = createLogger("terminal:static");
 

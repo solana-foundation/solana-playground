@@ -1,16 +1,17 @@
 import * as monaco from "monaco-editor";
 
 import { editorFont } from "@/shared/lib/editor-font";
+import type { MergeBand } from "@/shared/ui/merge";
 import { mergeHunkVariants } from "@/shared/ui/merge";
+
+import type { Disposable } from "../../../../utils/types";
 import { canHideLines, setHiddenLines } from "./hidden-areas";
 import { hunkLineClass } from "./hunk-class";
-import type { MergeBand } from "@/shared/ui/merge";
-import { MergeFile } from "./merge-file";
-import { MergeResult } from "./result-model";
 import type { Fold, HunkSide, MergePane } from "./merge-file";
+import { MergeFile } from "./merge-file";
 import type { HunkAction, ResultChange } from "./result-model";
+import { MergeResult } from "./result-model";
 import { MERGE_SCHEME } from "./scheme";
-import type { Disposable } from "../../../../utils/types";
 
 /** A fold's height, as `MergeFold` draws it */
 const FOLD_PX = 24;

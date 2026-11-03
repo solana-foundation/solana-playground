@@ -1,8 +1,8 @@
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { report } from "../../features/persistence/model/diagnostics";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
-import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { PgExplorer } from "../../utils/explorer/explorer";
+import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { openThread } from "./open-thread";
 
 /**

@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgCommandManager, PgCommon, PgTerminal } from "../../../utils";
 import type { FlowState, StageStatus } from "../state/stage";
-
 import BaseConsoleDrawer, { CONSOLE_BODY_ID } from "./BaseConsoleDrawer";
 import ConsoleDrawer from "./ConsoleDrawer";
 

@@ -11,10 +11,11 @@ import {
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { memoryFeedbackProvider } from "./provider";
+
 import type { FeedbackProvider } from "./provider";
-import { EMPTY_DRAFT, useFeedbackForm } from "./use-feedback-form";
+import { memoryFeedbackProvider } from "./provider";
 import type { FeedbackDraft } from "./use-feedback-form";
+import { EMPTY_DRAFT, useFeedbackForm } from "./use-feedback-form";
 
 let events: ReturnType<typeof memoryTelemetry>;
 let logs: ReturnType<typeof memoryLog>;

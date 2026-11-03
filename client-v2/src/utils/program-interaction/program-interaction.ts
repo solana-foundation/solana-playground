@@ -1,9 +1,13 @@
+import { PgCommon } from "../common";
+import { PgTx } from "../tx";
+import { PgWallet } from "../wallet";
+import { PgWeb3 } from "../web3";
 import { fetchAccount, fetchAllAccounts } from "./account";
 import {
-  GeneratableInstruction,
   createGenerator,
-  generateValue,
+  GeneratableInstruction,
   generateProgramAddressFromSeeds,
+  generateValue,
 } from "./generator";
 import {
   getMintAccounts,
@@ -20,10 +24,6 @@ import {
   saveInstruction,
   syncAllInstructions,
 } from "./storage";
-import { PgCommon } from "../common";
-import { PgTx } from "../tx";
-import { PgWallet } from "../wallet";
-import { PgWeb3 } from "../web3";
 
 export class PgProgramInteraction {
   /**

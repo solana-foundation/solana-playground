@@ -1,12 +1,13 @@
-import { useRef } from "react";
 import type {
   ComponentProps,
   KeyboardEvent,
   ReactNode,
   SyntheticEvent,
 } from "react";
-import { cn } from "@/shared/lib/utils";
+import { useRef } from "react";
 
+import { isInsideToast } from "@/shared/lib/toast-layer";
+import { cn } from "@/shared/lib/utils";
 import { BrandButton } from "@/shared/ui/brand-button";
 import { Button } from "@/shared/ui/button";
 import {
@@ -17,7 +18,6 @@ import {
   ModalTitle,
 } from "@/shared/ui/modal";
 import { Spinner } from "@/shared/ui/spinner";
-import { isInsideToast } from "@/shared/lib/toast-layer";
 
 /**
  * The design system's sizes: `narrow` is for a form of one column (Connect a

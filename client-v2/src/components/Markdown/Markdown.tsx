@@ -1,13 +1,13 @@
 import { FC, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import styled, { css } from "styled-components";
 import remarkGfm from "remark-gfm";
+import styled, { css } from "styled-components";
 
+import { PgCommon, PgRouter, PgTheme } from "../../utils";
 import CodeBlock from "../CodeBlock";
+import { HyperLink } from "../Icons";
 import Img from "../Img";
 import Link, { LinkProps } from "../Link";
-import { HyperLink } from "../Icons";
-import { PgCommon, PgRouter, PgTheme } from "../../utils";
 
 interface MarkdownProps {
   /** Markdown string */

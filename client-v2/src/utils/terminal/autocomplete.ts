@@ -1,6 +1,6 @@
-import { getIsOption, parse } from "./utils";
 import { PgCommon } from "../common";
 import type { Disposable, Getable } from "../types";
+import { getIsOption, parse } from "./utils";
 
 /** Autocomplete handler input type */
 type AutocompleteHandler =

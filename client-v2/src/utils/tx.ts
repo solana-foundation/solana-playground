@@ -1,9 +1,9 @@
 import { PgCommon } from "./common";
 import { PgConnection } from "./connection";
 import { PgSettings } from "./settings";
-import { Wallet, PgWallet, WalletOption } from "./wallet";
-import { PgWeb3 } from "./web3";
 import type { Arrayable } from "./types";
+import { PgWallet, Wallet, WalletOption } from "./wallet";
+import { PgWeb3 } from "./web3";
 
 type TransactionSimulateOptions = TransactionSendOptions;
 

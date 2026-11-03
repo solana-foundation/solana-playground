@@ -1,6 +1,3 @@
-import type { Effort } from "../../../views/sidebar/assistant/model/types";
-import { EFFORT_LABELS } from "../../../views/sidebar/assistant/model/labels";
-import type { EffortChoice } from "../model/choice";
 import { ComposerEffort } from "@/shared/ui/composer";
 import {
   DropdownMenu,
@@ -9,6 +6,10 @@ import {
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+
+import { EFFORT_LABELS } from "../../../views/sidebar/assistant/model/labels";
+import type { Effort } from "../../../views/sidebar/assistant/model/types";
+import type { EffortChoice } from "../model/choice";
 
 /** Picks how hard the model thinks, from the levels its provider offers */
 export function BaseEffortMenu({

@@ -7,6 +7,7 @@ import {
   memoryProvider as logMemory,
   resetLogger,
 } from "@/shared/lib/logger";
+
 import { PgCommand, PgView, PgWallet } from "../../utils";
 import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import Settings from "./Settings";

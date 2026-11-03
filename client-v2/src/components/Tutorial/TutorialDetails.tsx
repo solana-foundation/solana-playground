@@ -1,8 +1,9 @@
 import { FC } from "react";
 
-import Link from "../Link";
 import { DetailTag } from "@/entities/tutorial";
+
 import { Arrayable, TutorialDetailKey } from "../../utils";
+import Link from "../Link";
 
 interface TutorialDetailsProps {
   details: ClickableTutorialDetailProps[];

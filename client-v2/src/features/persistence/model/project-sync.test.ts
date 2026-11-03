@@ -1,17 +1,19 @@
 import type { Mock } from "vitest";
-import { PgProjectSync } from "./project-sync";
+
+// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { PgSession } from "@/features/auth";
+
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgFs } from "../../../utils/explorer/fs";
+import { PgWorkspace } from "../../../utils/explorer/workspace";
 import { clearFailures, getFailures } from "./diagnostics";
+import { PgProjectSync } from "./project-sync";
 import { hashFiles } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClaim } from "./sync-claim";
 import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
-// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
-import { PgSession } from "@/features/auth";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgFs } from "../../../utils/explorer/fs";
-import { PgWorkspace } from "../../../utils/explorer/workspace";
 
 // Reconcile, adopt and merge reload the open workspace from disk through
 // `reloadCurrentFromDisk`, which drops Monaco's cached models -- and

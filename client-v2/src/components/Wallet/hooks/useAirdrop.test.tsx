@@ -14,9 +14,9 @@ vi.mock("../../../features/auth", () => ({
   PgSession: { get: vi.fn(), signIn: vi.fn() },
 }));
 
-import { useAirdrop } from "./useAirdrop";
 import { PgSession } from "../../../features/auth";
 import { PgCommand } from "../../../utils";
+import { useAirdrop } from "./useAirdrop";
 
 describe("useAirdrop", () => {
   beforeEach(() => {

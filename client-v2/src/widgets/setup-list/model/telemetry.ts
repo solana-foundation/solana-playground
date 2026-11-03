@@ -1,4 +1,5 @@
 import { createTracker, type NoParams } from "@/shared/lib/telemetry";
+
 import type { SetupStep } from "./steps";
 
 type SetupEvents = {

@@ -1,12 +1,12 @@
 import { PgSession } from "../../features/auth";
 import { report } from "../../features/persistence/model/diagnostics";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
-import { PgAssistant } from "../../views/sidebar/assistant/store";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
 // tests could not load this module.
 import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
+import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { openThread } from "./open-thread";
 import { pushThread } from "./push-thread";
 

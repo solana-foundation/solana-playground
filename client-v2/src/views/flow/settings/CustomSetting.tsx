@@ -1,12 +1,12 @@
-import { FC, useEffect, useRef, useState } from "react";
 import { InfoIcon } from "lucide-react";
+import { FC, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 
 import Input from "@/components/Input";
 import Markdown from "@/components/Markdown";
-import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Setting } from "@/utils";
+import { ModalFrame } from "@/widgets/overlays";
 
 interface CustomSettingProps {
   setting: Setting;

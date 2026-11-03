@@ -1,8 +1,9 @@
+import type { Page, Route } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { readFileSync } from "fs";
 import { join } from "path";
-import { expect, test } from "@playwright/test";
+
 import { isUuid } from "../src/shared/lib/ids";
-import type { Page, Route } from "@playwright/test";
 import {
   applyWrite,
   currentProject,

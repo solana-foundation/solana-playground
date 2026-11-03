@@ -1,16 +1,15 @@
-import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTheme } from "styled-components";
 
 import { useExplorer, useKeybind, useRenderOnChange } from "@/hooks";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PgCommand, PgCommon, PgExplorer, PgView } from "@/utils";
-import { PgFlow } from "@/views/flow/state/stage";
 import type { StageStatus } from "@/views/flow/state/stage";
+import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
-import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+
 import { CONSOLE_KEY } from "../model/keys";
-import { homeOf, isCovered, screenOf } from "../model/screen";
 import type {
   PageSource,
   PhonePage,
@@ -18,12 +17,14 @@ import type {
   WorkView,
   WorkViewSource,
 } from "../model/phone-pages";
-import { layoutTelemetry } from "../model/telemetry";
+import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import { homeOf, isCovered, screenOf } from "../model/screen";
 import type { ToggleSource } from "../model/telemetry";
+import { layoutTelemetry } from "../model/telemetry";
 import { useLayoutState } from "../model/use-layout-state";
+import type { AssistantWide } from "./BaseLayoutShell";
 import BaseLayoutShell from "./BaseLayoutShell";
 import BaseStageBar from "./BaseStageBar";
-import type { AssistantWide } from "./BaseLayoutShell";
 
 export interface LayoutShellProps {
   /**

@@ -1,7 +1,6 @@
-import * as monaco from "monaco-editor";
 import type { Idl } from "@coral-xyz/anchor";
+import * as monaco from "monaco-editor";
 
-import { declareModule } from "./helper";
 import {
   Disposable,
   JsRuntimePackageName,
@@ -10,6 +9,7 @@ import {
   PgProgramInfo,
   PgWallet,
 } from "../../../../../../utils";
+import { declareModule } from "./helper";
 
 /**
  * Declare types that can change based on outside events.

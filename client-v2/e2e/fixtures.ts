@@ -1,5 +1,6 @@
-import { test as base, expect } from "@playwright/test";
 import type { BrowserContext, Page, Route } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
+
 import { isUuid } from "../src/shared/lib/ids";
 
 /** For a step that waits on the explorer, sync or a reload */

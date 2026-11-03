@@ -12,11 +12,11 @@ import { PgWeb3 } from "../web3";
 import { parseKeypairFile } from "./keypair-file";
 import type {
   AnyTransaction,
-  WalletState,
   SerializedWalletState,
   StandardWallet,
   Wallet,
   WalletAccount,
+  WalletState,
 } from "./types";
 
 const defaultState: WalletState = {

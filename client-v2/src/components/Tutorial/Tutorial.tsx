@@ -1,10 +1,10 @@
 import { FC, useCallback, useEffect } from "react";
 import styled, { css } from "styled-components";
 
-import { About, Main } from "./views";
-import { PgTheme, PgTutorial } from "../../utils";
 import { useRenderOnChange } from "../../hooks";
+import { PgTheme, PgTutorial } from "../../utils";
 import type { TutorialComponentProps } from "./types";
+import { About, Main } from "./views";
 
 export const Tutorial: FC<React.PropsWithChildren<TutorialComponentProps>> = ({
   about,

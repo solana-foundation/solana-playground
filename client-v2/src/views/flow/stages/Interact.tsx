@@ -1,19 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
-import BaseInteract from "./BaseInteract";
-import IdlActions from "./IdlActions";
-import { interactFacts, interactSurface } from "./interact-surface";
-import Test from "../../sidebar/test/Component/Test";
+import { useExplorer, useProgramInfo } from "../../../hooks";
 import {
   PgConnection,
   PgExplorer,
   PgProgramInfo,
   PgWeb3,
 } from "../../../utils";
-import { useExplorer, useProgramInfo } from "../../../hooks";
-import { PgFlow } from "../state/stage";
-import { PgDeployHistory } from "../state/deploy-history";
+import Test from "../../sidebar/test/Component/Test";
 import type { DeployRecord } from "../state/deploy-history";
+import { PgDeployHistory } from "../state/deploy-history";
+import { PgFlow } from "../state/stage";
+import BaseInteract from "./BaseInteract";
+import IdlActions from "./IdlActions";
+import { interactFacts, interactSurface } from "./interact-surface";
 
 /** Point `PgProgramInfo`'s target at the given deployment. Selecting the
  * record that matches the project's own keypair clears the override so the

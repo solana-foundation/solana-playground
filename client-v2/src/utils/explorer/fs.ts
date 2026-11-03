@@ -1,8 +1,8 @@
 import FS from "@isomorphic-git/lightning-fs";
 
-import { PgExplorer } from "./explorer";
 import { PgCommon } from "../common";
 import type { Disposable } from "../types";
+import { PgExplorer } from "./explorer";
 
 /** What `ON_DID_WRITE_FILE` carries */
 export interface WriteEvent {

@@ -1,8 +1,8 @@
-import { useEffect, lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import styled, { css } from "styled-components";
 
-import { SpinnerWithBg } from "../Loading";
 import { PgCommon, PgExplorer, PgTheme, PgView } from "../../utils";
+import { SpinnerWithBg } from "../Loading";
 
 const Home = lazy(() => import("./Home"));
 const Monaco = lazy(() => import("./Monaco"));

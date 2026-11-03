@@ -1,8 +1,8 @@
 vi.mock("../../../utils", () => ({}));
 
-import { statusOf } from "./Stepper";
-import { INITIAL_FLOW_STATE } from "../state/stage";
 import type { FlowState } from "../state/stage";
+import { INITIAL_FLOW_STATE } from "../state/stage";
+import { statusOf } from "./Stepper";
 
 const flow = (over: Partial<FlowState>): FlowState => ({
   ...INITIAL_FLOW_STATE,

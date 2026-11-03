@@ -48,6 +48,7 @@ vi.mock("@/features/new-project", () => ({
 
 import { PgView } from "@/utils/view";
 import { ModalFrame, ModalHost } from "@/widgets/overlays";
+
 import NewWorkspaceModal from "./NewWorkspaceModal";
 
 class NoopResizeObserver {

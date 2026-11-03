@@ -12,9 +12,9 @@ import {
   TupleFiles,
 } from "../../utils";
 import { STOPPED, throwIfStopped } from "../../utils/stopped";
+import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 import { createCmd } from "../create";
 import { emptySourceError, isEmptyProgram, PROGRAM_FILE } from "./empty-source";
-import { PgBuildOutput } from "../../views/sidebar/assistant/bridge/build-output";
 
 export const build = createCmd({
   name: "build",

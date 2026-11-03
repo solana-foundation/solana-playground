@@ -1,6 +1,6 @@
-import { getMetaplex, loadCache } from "../../utils";
 import { Emoji } from "../../../../constants";
 import { PgTerminal, PgWeb3 } from "../../../../utils";
+import { getMetaplex, loadCache } from "../../utils";
 
 export const processGuardRemove = async (
   rpcUrl: string | undefined,

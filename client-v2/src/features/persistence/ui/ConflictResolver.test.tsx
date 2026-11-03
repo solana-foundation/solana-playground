@@ -36,7 +36,6 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { ConflictResolver } from "./ConflictResolver";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -47,10 +46,12 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { merge3 } from "../model/merge";
-import { PgProjectSync } from "../model/project-sync";
+
 import type { FileConflict } from "../model/merge";
+import { merge3 } from "../model/merge";
 import type { Conflict } from "../model/project-sync";
+import { PgProjectSync } from "../model/project-sync";
+import { ConflictResolver } from "./ConflictResolver";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }

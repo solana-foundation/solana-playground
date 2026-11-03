@@ -14,6 +14,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import { SETUP_LIST_KEY, setupMarks } from "../model/storage";
 import SetupList from "./SetupList";
 

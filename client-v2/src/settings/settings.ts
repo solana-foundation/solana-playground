@@ -1,5 +1,5 @@
-import { IS_NODE } from "./node-compatiblity"; // Needs to happen first
 import * as S from "./generated";
+import { IS_NODE } from "./node-compatiblity"; // Needs to happen first
 
 /** All configurable settings */
 export const SETTINGS = Object.values(S).flat();

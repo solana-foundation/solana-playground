@@ -4,6 +4,7 @@ import {
   unavailableHere,
   wasFailureShown,
 } from "@/shared/lib/report-button-failure";
+
 import { StoppedError } from "../stopped";
 import { isTerminalUnmounted, PgTerminal } from "./terminal";
 

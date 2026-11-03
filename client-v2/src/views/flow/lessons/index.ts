@@ -1,6 +1,6 @@
+import { TUTORIALS } from "../../../tutorials";
 import { LESSON_PATHS } from "./paths";
 import { registerPaths } from "./registry";
-import { TUTORIALS } from "../../../tutorials";
 
 registerPaths(
   LESSON_PATHS,

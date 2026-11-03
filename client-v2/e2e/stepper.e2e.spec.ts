@@ -1,5 +1,4 @@
 import { STEPPER_FULL_WIDTH_PX } from "../src/views/flow/header/stepper-width";
-
 import { expect, seedWorkspace, test } from "./fixtures";
 
 /** What a check or dot beside a label adds to the list, in px */

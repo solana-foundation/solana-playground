@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import styled, { css, keyframes } from "styled-components";
 
+import { createLogger } from "@/shared/lib/logger";
+
 import ErrorBoundary, {
   type ErrorBoundaryChildren,
 } from "../../../../components/ErrorBoundary";
 import { SpinnerWithBg } from "../../../../components/Loading";
-import { PgCommon, PgTheme, PgView } from "../../../../utils";
 import { useGetAndSetStatic } from "../../../../hooks";
-import { createLogger } from "@/shared/lib/logger";
+import { PgCommon, PgTheme, PgView } from "../../../../utils";
 
 const log = createLogger("view:main-primary");
 

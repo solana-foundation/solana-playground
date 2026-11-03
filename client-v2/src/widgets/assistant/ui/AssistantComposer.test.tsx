@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
 import {
   initLogger,
   memoryProvider as memoryLog,
@@ -13,9 +14,9 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import { PgSession } from "@/features/auth";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+
 import type { Connection } from "../../../views/sidebar/assistant/store";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { DefaultBackend } from "../model/default-backend";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";

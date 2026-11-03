@@ -1,7 +1,8 @@
 import { MouseEvent, useCallback, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
-import { DeleteItem, RenameItem } from "./Modals";
+
+import { useRenderOnChange } from "../../../../hooks";
 import {
   PgCommand,
   PgCommon,
@@ -10,7 +11,7 @@ import {
   PgLanguage,
   PgView,
 } from "../../../../utils";
-import { useRenderOnChange } from "../../../../hooks";
+import { DeleteItem, RenameItem } from "./Modals";
 
 const log = createLogger("explorer:context-menu");
 

@@ -1,7 +1,8 @@
 import { createElement, FC } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
 import { uuid } from "@/shared/lib/ids";
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "./common";
 import {
   createDerivable,
@@ -10,12 +11,12 @@ import {
   updatable,
 } from "./decorators";
 import type {
-  SetState,
   Disposable,
-  RequiredKey,
-  SyncOrAsync,
   Elementable,
   Promisable,
+  RequiredKey,
+  SetState,
+  SyncOrAsync,
 } from "./types";
 
 /** A dialog `PgView.openModal` opened that nothing has closed yet */

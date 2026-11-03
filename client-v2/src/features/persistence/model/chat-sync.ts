@@ -1,3 +1,7 @@
+// TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
+import { PgSession } from "@/features/auth";
+
+import type { ChatItem } from "../../../views/sidebar/assistant/store";
 import { decodeThread, encodeThread, mergeThreads } from "./chat-codec";
 import { PgChatStorage, withoutTruncationNotice } from "./chat-storage";
 import { DELETED_REASON, isDeletedScope } from "./deleted.mjs";
@@ -5,9 +9,6 @@ import { report } from "./diagnostics";
 import { sha256 } from "./snapshot";
 import { PgSyncClient } from "./sync-client";
 import { PgThreadIndex } from "./thread-index";
-// TODO(ui-migration 1.4): a feature importing a feature; chat sync runs only for a signed-in session
-import { PgSession } from "@/features/auth";
-import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
 /**
  * What a hand-over managed.

@@ -1,9 +1,3 @@
-import {
-  Dispatch,
-  ForwardRefExoticComponent,
-  SetStateAction,
-  useState,
-} from "react";
 import { DragEndEvent, DragStartEvent, UniqueIdentifier } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -15,6 +9,12 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import {
+  Dispatch,
+  ForwardRefExoticComponent,
+  SetStateAction,
+  useState,
+} from "react";
 
 import DndContext from "../Context";
 

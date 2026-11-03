@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
-import Account from "./Account";
 import { PgProgramInteraction } from "../../../../../utils/program-interaction";
+import Account from "./Account";
 
 // The utils barrel reads build-time globals jsdom lacks; Account uses a sliver.
 vi.mock("../../../../../utils", () => ({

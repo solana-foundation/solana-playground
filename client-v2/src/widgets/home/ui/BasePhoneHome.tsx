@@ -5,6 +5,7 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Logo, LogoMark } from "@/shared/ui/logo";
+
 import type { HomeQuickstart } from "../model/telemetry";
 import HomeComposer from "./HomeComposer";
 

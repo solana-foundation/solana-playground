@@ -1,10 +1,11 @@
 import styled from "styled-components";
 
+import { useTutorialBeforeStart } from "@/entities/tutorial";
+
+import { useExplorer } from "../../../../hooks";
 import Folders from "./Folders";
 import NoWorkspace from "./NoWorkspace";
 import Workspaces from "./Workspaces";
-import { useExplorer } from "../../../../hooks";
-import { useTutorialBeforeStart } from "@/entities/tutorial";
 
 const Explorer = () => {
   const explorer = useExplorer({ checkInitialization: true });

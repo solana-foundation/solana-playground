@@ -1,10 +1,10 @@
-import { isMissing, report } from "./diagnostics";
-import { PgEditorModels } from "./editor-models";
 // Deep imports, not the `utils` barrel, for the reason `snapshot.ts` gives
 import { PgCommon } from "../../../utils/common";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
 import { PgRouter } from "../../../utils/router";
+import { isMissing, report } from "./diagnostics";
+import { PgEditorModels } from "./editor-models";
 
 /**
  * - `deferred`: not now, but the reload is still owed -- a re-open would

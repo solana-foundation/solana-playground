@@ -1,7 +1,7 @@
 import styled, { css } from "styled-components";
 
-import { PgTheme } from "../../utils";
 import { useBalance } from "../../hooks";
+import { PgTheme } from "../../utils";
 
 const Balance = () => {
   const balance = useBalance();

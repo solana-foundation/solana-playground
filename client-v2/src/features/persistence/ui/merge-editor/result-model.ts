@@ -1,12 +1,12 @@
 import type * as monaco from "monaco-editor";
 
-import { pushUndoStep } from "./undo-step";
 import type {
   HunkSide,
   MergeFile,
   MergeSnapshot,
   TextEdit,
 } from "./merge-file";
+import { pushUndoStep } from "./undo-step";
 
 /**
  * A text as a Monaco model holds it: every line break, `\r\n`, `\n` or a

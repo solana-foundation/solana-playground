@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
 import { PgTutorial } from "@/utils";
+
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
+import { toastOpenFailed } from "../ui/open-failed-toast";
 import { importProgram, isImportCancel } from "./program-open";
-import { catalogTelemetry } from "./telemetry";
 import type { CatalogPage } from "./telemetry";
+import { catalogTelemetry } from "./telemetry";
 import { useCardOpen } from "./use-card-open";
 import { useProgramList } from "./use-program-list";
 import { useTutorialList } from "./use-tutorial-list";
-import { toastOpenFailed } from "../ui/open-failed-toast";
 
 /** New project's state, held by its dialog and drawn by `NewProject` */
 export interface NewProjectState {

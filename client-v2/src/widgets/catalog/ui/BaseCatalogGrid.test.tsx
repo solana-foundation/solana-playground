@@ -2,8 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
-import BaseCatalogGrid from "./BaseCatalogGrid";
+
 import type { CatalogCard } from "./BaseCatalogGrid";
+import BaseCatalogGrid from "./BaseCatalogGrid";
 
 afterEach(() => resetLogger());
 

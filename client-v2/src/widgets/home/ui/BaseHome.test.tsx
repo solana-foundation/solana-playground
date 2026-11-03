@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
-import BaseHome from "./BaseHome";
 import type { BaseHomeProps, HomeTutorial } from "./BaseHome";
+import BaseHome from "./BaseHome";
 
 const tutorial = (name: string): HomeTutorial => ({
   name,

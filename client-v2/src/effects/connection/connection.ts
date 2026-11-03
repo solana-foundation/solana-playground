@@ -1,3 +1,5 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import {
   PgCommon,
   PgConnection,
@@ -5,7 +7,6 @@ import {
   PgWallet,
   SyncOrAsync,
 } from "../../utils";
-import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("connection:helper");
 

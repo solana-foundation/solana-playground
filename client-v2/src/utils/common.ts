@@ -1,13 +1,13 @@
 import type {
-  AllPartial,
-  Disposable,
-  Promisable,
-  KeyOf,
-  SyncOrAsync,
-  Arrayable,
-  ValueOf,
-  OrString,
   Accessor,
+  AllPartial,
+  Arrayable,
+  Disposable,
+  KeyOf,
+  OrString,
+  Promisable,
+  SyncOrAsync,
+  ValueOf,
 } from "./types";
 
 /** What `PgCommon.import` rejects with when the user closes the file picker */

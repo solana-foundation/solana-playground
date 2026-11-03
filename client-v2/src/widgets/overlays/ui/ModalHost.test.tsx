@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   act,
   fireEvent,
@@ -6,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -20,6 +20,7 @@ import {
 } from "@/shared/lib/telemetry";
 import { PgCommon } from "@/utils/common";
 import { PgView } from "@/utils/view";
+
 import { ModalFrame } from "./ModalFrame";
 import { ModalHost } from "./ModalHost";
 

@@ -1,3 +1,5 @@
+import type { Page } from "@playwright/test";
+
 import {
   expect,
   home,
@@ -8,7 +10,6 @@ import {
   startProject,
   test,
 } from "./fixtures";
-import type { Page } from "@playwright/test";
 import { lineOf, linesOn } from "./telemetry";
 
 test.describe("on a desktop window", () => {
