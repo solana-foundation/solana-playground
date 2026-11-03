@@ -793,6 +793,23 @@ describe("writes past a project limit", () => {
       });
     });
 
+    it("renames the open workspace whatever its name's length", async () => {
+      // A workspace's name is not part of any path sync carries: a file 250
+      // code points from the root stays 250 under a 20-character name
+      const file = `${"n".repeat(243)}.rs`;
+      await PgExplorer.createWorkspace("alpha", {
+        files: [
+          ["/alpha/src/lib.rs", ""],
+          [`/alpha/src/${file}`, "x"],
+        ],
+      });
+      const renamed = "r".repeat(20);
+
+      await PgExplorer.renameWorkspace(renamed);
+      expect(stored().get(`/${renamed}/src/${file}`)).toBe("x");
+      expect(refusals()).toEqual([]);
+    });
+
     it("renames in a project over another limit", async () => {
       await PgExplorer.createWorkspace("alpha", { files: many("alpha", 1) });
       await PgExplorer.replaceWorkspaceFiles(

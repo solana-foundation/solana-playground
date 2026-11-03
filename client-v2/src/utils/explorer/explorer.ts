@@ -438,11 +438,18 @@ export class PgExplorer {
 
     // A rename moves no bytes and adds no file, so only the path limit
     // applies: a project already over another limit can still be tidied.
-    // Checked on every file path the rename produces.
+    // Checked on every file path the rename produces. Renaming the workspace
+    // itself changes no path sync carries, and `getRelativePath` would strip
+    // the old name from paths that already hold the new one, so it is not
+    // checked; sync's own renames to the account's name come this way too.
+    const renamesWorkspace = PgCommon.isPathsEqual(
+      oldPath,
+      this.getCurrentWorkspacePath() ?? ""
+    );
     const moved: Record<string, string> = {};
     if (itemType.file) {
       moved[this.getRelativePath(newPath)] = "";
-    } else {
+    } else if (!renamesWorkspace) {
       const newPrefix = oldPath.endsWith("/")
         ? PgCommon.appendSlash(newPath)
         : newPath;
