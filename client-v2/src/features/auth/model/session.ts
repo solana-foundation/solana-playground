@@ -1002,10 +1002,7 @@ if (import.meta.vitest) {
 
       it("opens no popup when cancelled while the authorize URL's body is read", async () => {
         let reading = false;
-        vi.spyOn(globalThis, "fetch").mockImplementation((async (
-          _input: unknown,
-          init?: RequestInit
-        ) => ({
+        const request = vi.fn(async (_input: unknown, init?: RequestInit) => ({
           ok: true,
           // The browser's body read rejects once the request's signal aborts
           json: () =>
@@ -1015,7 +1012,10 @@ if (import.meta.vitest) {
                 reject(new DOMException("aborted", "AbortError"))
               );
             }),
-        })) as unknown as typeof fetch);
+        }));
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          request as unknown as typeof fetch
+        );
         const open = vi.fn();
         PgSession.setOpenChannel(open as never);
 

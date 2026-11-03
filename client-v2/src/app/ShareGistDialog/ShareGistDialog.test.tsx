@@ -39,6 +39,7 @@ const expectQuietCancel = () => {
 const USER: SessionUser = {
   id: "u1",
   name: "Ada",
+  // eslint-disable-next-line unicorn/no-null -- `SessionUser.image` is `null` for an account without an avatar
   image: null,
   login: "ada",
 };
@@ -148,9 +149,9 @@ describe("app/ShareGistDialog", () => {
     expect(
       screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Sign in to share" })).toBe(
-      null
-    );
+    expect(
+      screen.queryByRole("heading", { name: "Sign in to share" })
+    ).toBeNull();
   });
 
   it("shows why a sign-in ended, and keeps the prompt", async () => {
@@ -341,7 +342,7 @@ describe("app/ShareGistDialog", () => {
     );
     await press("Sign in with GitHub");
 
-    expect(screen.queryByText("Sign-in cancelled.")).toBe(null);
+    expect(screen.queryByText("Sign-in cancelled.")).toBeNull();
     expect(
       screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
@@ -352,15 +353,16 @@ describe("app/ShareGistDialog", () => {
     await open();
 
     await act(async () => {
+      // eslint-disable-next-line unicorn/no-null -- `refreshWith` takes `null` for "signed out"
       await PgSession.refreshWith(null);
     });
 
     expect(
       screen.getByRole("heading", { name: "Share to GitHub" })
     ).toBeTruthy();
-    expect(screen.queryByRole("heading", { name: "Sign in to share" })).toBe(
-      null
-    );
+    expect(
+      screen.queryByRole("heading", { name: "Sign in to share" })
+    ).toBeNull();
   });
 
   it("moves on to sharing when a sign-in finishes elsewhere", async () => {

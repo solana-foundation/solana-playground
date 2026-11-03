@@ -217,6 +217,7 @@ it("draws the page's actions before the toggles", () => {
       <BaseStageBar
         title="counter"
         files={{ open: true, onToggle: vi.fn() }}
+        // eslint-disable-next-line unicorn/no-null -- `BaseStageBarProps.assistant` takes `null` for "no toggle"
         assistant={null}
         actions={<button type="button">Share counter</button>}
       />
