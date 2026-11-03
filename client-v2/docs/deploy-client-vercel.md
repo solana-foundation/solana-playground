@@ -450,7 +450,7 @@ Failures after the answer are logged as `agent: settling a turn failed`,
 Adjust the caps and budgets together: the sum of per-user caps a pool serves
 can exceed its budget, but the budget is what binds.
 
-**Rotating the keys.** `AGENT_API_KEY` and `AGENT_NEWCOMER_API_KEY` live only
+**Rotating the keys.** `PG_AI_API_KEY` and `PG_AI_NEWCOMER_API_KEY` live only
 in Vercel's encrypted variables and are read only by server code, through
 `agentEnv` in `src/shared/config/server-env.mjs`, on behalf of
 `api/agent.mjs`. No `REACT_APP_*` variable carries them, and the route redacts
