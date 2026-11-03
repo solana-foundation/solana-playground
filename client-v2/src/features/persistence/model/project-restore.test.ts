@@ -799,6 +799,46 @@ describe("releasing local projects at sign-out", () => {
     expect(remove).not.toHaveBeenCalled();
   });
 
+  it("keeps a project whose generated files changed since the last push", async () => {
+    // A build rewrites `program-info.json` with a new keypair. The user files
+    // still match the mark, but the keypair exists only here until a push
+    // takes it, and one the limits refuse never does.
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", {
+      "src/lib.rs": "same",
+      ".workspace/program-info.json": '{"kp":"new"}',
+    });
+    await agreed(
+      "p1",
+      {
+        files: {
+          "src/lib.rs": "same",
+          ".workspace/program-info.json": '{"kp":"old"}',
+        },
+      },
+      "t1"
+    );
+    const remove = stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
+  it("keeps a project with a sync question outstanding", async () => {
+    // A refused push (`too-large`, a divergence) writes no mark, so the mark
+    // says nothing about what the refusal left unsent
+    withLocal({ alpha: "p1" });
+    withFiles("alpha", { "src/lib.rs": "same" });
+    await agreed("p1", { files: { "src/lib.rs": "same" } }, "t1");
+    vi.spyOn(PgProjectSync, "conflictFor").mockImplementation((id) =>
+      id === "p1" ? { projectId: "p1", kind: "too-large" } : null
+    );
+    const remove = stubDelete();
+
+    expect(await releaseLocalProjects()).toEqual([]);
+    expect(remove).not.toHaveBeenCalled();
+  });
+
   it("decides per project rather than for the set", async () => {
     // The mistake this mirrors the fix for, in `PgChatSync.forget`: one
     // project that cannot be handed over is no reason to leave the others on
