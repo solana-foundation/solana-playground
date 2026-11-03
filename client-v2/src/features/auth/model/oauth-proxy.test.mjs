@@ -106,10 +106,10 @@ const returnURL = async (res) => {
       )
     );
   const state = new URL((await res.json()).url).searchParams.get("state");
-  const open = async (purpose, data) =>
+  const openFor = (purpose) => async (data) =>
     JSON.parse(await symmetricDecrypt({ key: keyFor(purpose), data }));
-  const { stateCookie } = await open("oauth-proxy-package", state);
-  return new URL((await open("oauth-proxy-state", stateCookie)).callbackURL);
+  const { stateCookie } = await openFor("oauth-proxy-package")(state);
+  return new URL((await openFor("oauth-proxy-state")(stateCookie)).callbackURL);
 };
 
 describe("oauthProxyPlugins", () => {
