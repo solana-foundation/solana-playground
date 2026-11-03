@@ -33,7 +33,6 @@ import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
 import StageBar from "./header/StageBar";
 import LeftPanel from "./left/LeftPanel";
 import type { LessonState } from "./lessons";
-// The barrel registers every lesson path as a side effect; whichever module imports it first fills the registry.
 import { describeStep, INITIAL_LESSON_STATE, PgLesson } from "./lessons";
 import LessonBar from "./lessons/LessonBar";
 import ObjectiveBand from "./lessons/ObjectiveBand";

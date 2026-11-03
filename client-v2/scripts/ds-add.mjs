@@ -6,9 +6,10 @@
 // components.json maps `@playground` to, runs the shadcn CLI the design
 // system pins with `--overwrite` (the CLI never overwrites silently, and
 // `shared/ui` is installed, never edited), stops the server, applies this
-// package's error-level ESLint fixes (import order among them) to what landed
-// and formats it with this package's prettier, so CI's import-order and
-// format checks pass and a reinstall of an unchanged component leaves no diff.
+// package's error-level ESLint fixes (import order among them) to `src/shared`
+// and formats what landed with this package's prettier, so CI's import-order
+// and format checks pass and a reinstall of an unchanged component leaves no
+// diff.
 //
 // Nothing comes from the design system's public site or from ui.shadcn.com:
 // the stock shadcn parts are registry items too, and
@@ -95,24 +96,22 @@ if (status !== 0 || flags.length > 0) process.exit(status);
 const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
 const scripts = written.filter((dir) => SCRIPT_DIRS.includes(dir));
 // ESLint runs before prettier: its fixes are not prettier-formatted.
-// ESLint 8's `--quiet` also limits `--fix` to errors (`quietFixPredicate` in eslint/lib/cli.js), so no warning's autofix applies.
+// ESLint 8's `--quiet` limits `--fix` to errors (`quietFixPredicate`), so no warning's autofix applies.
 if (scripts.length > 0) {
-  status = run(
-    ESLINT,
-    ["--fix", "--quiet", "--ext", ".ts,.tsx,.mjs,.mts", ...scripts],
-    { cwd: CLIENT }
-  );
-  const linted = scripts.join(", ");
-  // ESLint exits 1 for lint errors it could not fix and 2 when it did not run at all.
+  const eslintArgs = ["--fix", "--quiet", "--ext", ".ts,.tsx,.mjs,.mts"];
+  status = run(ESLINT, [...eslintArgs, ...scripts], { cwd: CLIENT });
+  const rerun = `yarn eslint ${[...eslintArgs, ...scripts].join(" ")}`;
+  const where = scripts.join(", ");
+  // 1 is lint errors ESLint could not fix; anything else means it did not finish (`run` reads a spawn error or a signal as 2).
   if (status === 1) {
     console.error(
-      `ds-add: the components were installed, but ESLint left errors in ${linted}. ` +
-        "Fix the errors above and run `yarn eslint --fix --quiet <files>`."
+      `ds-add: the components were installed, but ESLint left errors in ${where}. ` +
+        `Fix the errors above and run \`${rerun}\`.`
     );
   } else if (status !== 0) {
     console.error(
-      "ds-add: the components were installed, but ESLint did not run on them. " +
-        "Fix the cause above, then run `yarn eslint --fix --quiet <files>`."
+      "ds-add: the components were installed, but ESLint did not finish. " +
+        `Fix the cause above, then run \`${rerun}\`.`
     );
   }
 }
@@ -130,7 +129,10 @@ if (written.length > 0) {
 }
 process.exit(status);
 
-/** Runs a command to completion and says why when it did not run cleanly. */
+/**
+ * Runs a command to completion and says why when it did not run cleanly.
+ * A spawn error or a signal returns 2, so it never reads as ESLint's lint-error status 1.
+ */
 function run(cmd, cmdArgs, opts) {
   const result = spawnSync(cmd, cmdArgs, { stdio: "inherit", ...opts });
   if (result.error) {
@@ -138,7 +140,7 @@ function run(cmd, cmdArgs, opts) {
   } else if (result.signal) {
     console.error(`ds-add: ${cmd} was stopped by ${result.signal}`);
   }
-  return result.status ?? 1;
+  return result.status ?? 2;
 }
 
 /** `run` without blocking the event loop, so the server's exit is seen. */

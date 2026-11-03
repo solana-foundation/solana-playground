@@ -2,6 +2,7 @@ import { TUTORIALS } from "../../../tutorials";
 import { LESSON_PATHS } from "./paths";
 import { registerPaths } from "./registry";
 
+// Runs on the barrel's first import, from whichever module loads it; until then `getLessonPath` returns null for every tutorial
 registerPaths(
   LESSON_PATHS,
   TUTORIALS.map((t) => t.name)

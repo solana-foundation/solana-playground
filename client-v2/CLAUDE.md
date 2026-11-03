@@ -125,8 +125,8 @@ yarn ds-add stepper --dry-run   # what would be written; --diff, --view too
 The script builds the registry in `../design-system` (run `npm ci` there
 once, and again whenever its lockfile changes), serves it on the port
 `components.json` maps `@playground` to for as long as the install runs, and
-applies this package's error-level ESLint fixes to what lands, import order
-among them, then formats it with this package's prettier. Names are the registry's
+applies this package's error-level ESLint fixes to `src/shared`, import order
+among them, then formats what lands with this package's prettier. Names are the registry's
 (`design-system/registry.json`); `components.json` maps `@playground` to that
 server and the aliases to `@/shared/ui`, `@/shared/lib` and
 `@/shared/lib/hooks`. Nothing comes from the design system's public site
