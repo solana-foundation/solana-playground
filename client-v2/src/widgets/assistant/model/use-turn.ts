@@ -82,7 +82,7 @@ interface BusyRetry {
  * refusal, failed otherwise, with the `TurnFailure`'s reason and status, or
  * `other` for any error raised on this side.
  */
-const trackTurnFailure = (backend: ModelProvider, error: unknown) => {
+const trackTurnFailureFor = (backend: ModelProvider) => (error: unknown) => {
   if (!(error instanceof TurnFailure)) {
     assistantTelemetry.track("assistant_turn_failed", {
       provider: backend,
@@ -414,10 +414,13 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * @param attempt which retry this is, 0 for the first send
    */
   const runTurn = async (text: string, attempt: number) => {
+    if (!provider.current) {
+      throw new Error("runTurn has no provider: start builds one first");
+    }
     const {
       instance,
       connection: { id: backend },
-    } = provider.current!;
+    } = provider.current;
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
@@ -438,10 +441,10 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     } catch (e) {
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
         // A busy answer sent again ends no turn; the one the panel gives up on does
-        if (!waitOnBusy(text, attempt, e)) trackTurnFailure(backend, e);
+        if (!waitOnBusy(text, attempt, e)) trackTurnFailureFor(backend)(e);
       } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
-        trackTurnFailure(backend, e);
+        trackTurnFailureFor(backend)(e);
       } else if (isAbort(e)) {
         // Aborted by `stop`, which has already written its notice, or by the
         // store cutting the turn off, when there is nothing to tell the user
