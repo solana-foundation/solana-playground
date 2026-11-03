@@ -154,6 +154,8 @@ const SyncBanner = () => {
   const closeResolver = useCallback(() => setResolving(null), []);
 
   const refresh = useCallback(() => {
+    // TODO(HOO-2418 follow-up): a project refused while not open (reconcile,
+    // `pushNeverSynced`) shows nothing until it is opened
     setConflict(PgProjectSync.conflictFor(PgExplorer.currentWorkspaceId));
   }, []);
 

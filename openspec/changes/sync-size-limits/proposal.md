@@ -2,12 +2,13 @@
 
 ## Why
 
-Project sync has no limit on a file, a project or a file count. `PUT /api/projects`
-caps only the request body, at 8 MB. A patch carries only the changed files, so a
-project of any size syncs until a full upload goes over that cap. The comment on
-`MAX_BODY_BYTES` in `client-v2/api/projects.mjs` says Vercel accepts 100 MB, but
+Project sync had no limit on a file, a project or a file count. `PUT /api/projects`
+capped only the request body, at 8 MB when this change was proposed and at 4 MB
+since HOO-1729. A patch carries only the changed files, so a project of any size
+syncs until a full upload goes over that cap. The 8 MB comment said Vercel
+accepts 100 MB, but
 [Vercel's limits page](https://vercel.com/docs/functions/limitations#request-body-size)
-says 4.5 MB. HOO-2418.
+says 4.5 MB, which HOO-1729 then followed. HOO-2418.
 
 The largest file in the bundled tutorials is 7.8 KB (`battle-coins` `src/lib.rs`,
 about 210 lines). The largest tutorial holds 12.5 KB of code in 3 files.
@@ -67,8 +68,9 @@ resolve view; the "too large" refusal is not specified there.
 
 ## Impact
 
-- `client-v2/api/projects.mjs`: the body cap, the per-file and path checks in
-  `describeWrite`, and the 413 reasons.
+- `client-v2/api/projects.mjs`: the per-file and path checks in
+  `describeWrite`, and the 413 reasons. The body cap is
+  `MAX_PROJECT_BODY_BYTES` in `features/persistence/model/project-write.mjs`.
 - `client-v2/src/entities/project`: a new entity holding the limits, the
   generated workspace file list and the check, read by the server, the sync
   client and the explorer.
@@ -80,8 +82,9 @@ resolve view; the "too large" refusal is not specified there.
   `model/projects.mjs`; the pre-upload check in
   `model/project-sync.ts`; the banner copy in `Component/SyncBanner.tsx`; the
   events in `model/telemetry.ts`.
-- `.claude/rules/project-sync.md` and `docs/persistent-conversations-spec.md` cite the 8 MB limit;
-  both are updated.
+- `.claude/rules/project-sync.md`, `docs/persistent-conversations-spec.md` and
+  `client-v2/docs/deploy-client-vercel.md` cite the body cap; all three are
+  updated.
 - Users are told at the moment they create, rename or import something over a
   limit, and see a banner naming what to shrink when a project grows past one
   in the editor, instead of a project that uploads until it suddenly does not.

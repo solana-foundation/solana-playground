@@ -679,10 +679,11 @@ export class PgProjectSync {
       baseUpdatedAt: mark?.updatedAt,
     });
 
-    // Refused here, not sent to be refused: past the platform's own cap the
-    // handler never runs, and the platform's 413 is all the user would get.
-    // The same refusal the handler gives, so the banner cannot tell them
-    // apart -- and, like it, nothing is recorded.
+    // Refused here, not sent to be refused: the handler would refuse it the
+    // same way, so this saves the round trip and raises the same banner --
+    // and, like the handler's refusal, nothing is recorded. Reached only by
+    // a body JSON escaping pushed past the cap, since the limits above
+    // already hold a project to half of it.
     const bytes = new TextEncoder().encode(body).length;
     if (bytes > MAX_PROJECT_BODY_BYTES) {
       report(`push project ${projectId}: ${bytes} bytes, over the limit`, null);

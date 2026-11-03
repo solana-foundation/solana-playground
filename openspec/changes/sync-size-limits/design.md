@@ -3,10 +3,12 @@
 ## Context
 
 See proposal.md, "Why". The parts of the code this design rests on, read at
-`dc22a4740`:
+`dc22a4740` and checked again after merging `scope/users-work-2` (HOO-1729,
+HOO-2326):
 
 - `PUT /api/projects` (`client-v2/api/projects.mjs`) reads the body under
-  `MAX_BODY_BYTES`, validates its shape in `describeWrite`, and calls
+  `MAX_PROJECT_BODY_BYTES` (`features/persistence/model/project-write.mjs`),
+  validates its shape in `describeWrite`, and calls
   `saveProject` (`src/features/persistence/model/projects.mjs`). `writeProject`
   runs inside one transaction: a compare-and-swap or create on `projects`, then
   `DELETE_OTHERS` / `DELETE_NAMED` and one `UPSERT_FILES` on `project_files`.
@@ -113,14 +115,18 @@ database. The count and the total size depend on rows already stored, so
 `writeProject` runs one more statement after its writes:
 
 ```sql
-select count(*) filter (where path <> all($3)) as files,
-       coalesce(sum(octet_length(content)), 0) as bytes
-  from project_files where user_id = $1 and project_id = $2
+select count(*) filter (where not (path = any($3::text[])))::int as files,
+       coalesce(sum(octet_length(content)), 0)::bigint as bytes
+  from project_files
+ where user_id = $1 and project_id = $2
+   and (path = any($3::text[]) or not starts_with(path, '.workspace/'))
 ```
 
-`$3` is `SYNCED_WORKSPACE_FILES`. Over a limit, `writeProject` throws a
-`LimitRefused` carrying the body, and `saveProject` turns it into an outcome the
-same way it turns `AdoptionRefused` into one, so the transaction rolls back and
+`$3` is `SYNCED_WORKSPACE_FILES`. Only paths sync carries are measured, as on
+the client, so a `.workspace/` row stored before the route refused them weighs
+nothing the client cannot see. Over a limit, `writeProject` throws the
+existing `WriteRefused` with `{limit}`, and `saveProject` returns that outcome
+as it returns HOO-2326's no-files refusal, so the transaction rolls back and
 nothing is written.
 
 Alternative: compute the result before writing, by reading every stored row's
@@ -144,11 +150,10 @@ refusal.
 ### `Conflict` carries the limit, and `ConflictKind` does not grow
 
 `too-large` stays the one kind for "the server will not take this project".
-`Conflict` gains an optional `limit` field: `{ reason, limit, paths?, count?,
-size? }`, the shape of the 413 body. A `too-large` without `limit` is the body
-cap refusal, which keeps the existing banner copy. `refusalKind` maps each of
-the four new reasons to `too-large` and reads the rest of the body into
-`limit`.
+Its `too-large` member gains an optional `limit`, a `LimitExceeded`: the
+shape of the 413 body. A `too-large` without `limit` is the body cap refusal,
+whose banner names the cap. `refusalOf` maps each of the four new reasons to
+`too-large` and reads the rest of the body into `limit`.
 
 Alternative: four new `ConflictKind`s. Every switch over `ConflictKind`
 (`SyncBanner`'s copy table, the resolution handlers) would gain four entries
@@ -165,8 +170,8 @@ limit. This is the existing `retry` path; it needs no new branch.
 The event fires where a `too-large` conflict with a `limit` is raised, which is
 the one place both the client check and a 413 reach. `by` comes from the
 caller. `_raise` already returns early for a conflict identical to the one
-outstanding, which gives "a banner already up sends nothing more"; its
-identity key gains `limit`, so a retry that finds a different limit replaces
+outstanding, which gives "a banner already up sends nothing more";
+`sameQuestion` compares `limit` too, so a retry that finds a different limit replaces
 the banner and fires that limit's event.
 
 ### No database constraint

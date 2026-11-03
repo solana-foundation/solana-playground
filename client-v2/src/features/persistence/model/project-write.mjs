@@ -14,7 +14,8 @@
  * produces, short of content made mostly of characters JSON escapes. It sits
  * below Vercel's own cap: a Function refuses a request body over 4.5 MB with
  * its own 413 before the handler runs (https://vercel.com/docs/functions/limitations),
- * so whatever the user is refused by is this limit and this message.
+ * so a refusal for size is always this route's, never the platform's. Kept
+ * in step with `PROJECT_LIMITS.projectBytes` by hand.
  *
  * The browser checks it before sending, the handler again on the way in; the
  * banner's `too-large` text names it.

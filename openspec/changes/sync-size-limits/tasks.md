@@ -25,11 +25,11 @@ the same time once 2.1 has merged.
   `yarn lint` and `yarn test-unit` passing with `snapshot.ts` re-exporting the
   list.
 - [x] 2.2 Enforce the limits in `PUT /api/projects` (HOO-2418, depends on 2.1):
-  `MAX_BODY_BYTES` becomes 1 MiB, `describeWrite` refuses a file or
+  `MAX_PROJECT_BODY_BYTES` becomes 1 MiB, `describeWrite` refuses a file or
   path over its limit, and `writeProject` measures the resulting project and
   rolls back over the count or size limit, answering 413 with the body the
-  spec's "The refusal body says what is over" requires. Update the 8 MB figure
-  in the `MAX_BODY_BYTES` comment, `.claude/rules/project-sync.md` and
+  spec's "The refusal body says what is over" requires. Update the body cap figure
+  in the `MAX_PROJECT_BODY_BYTES` comment, `.claude/rules/project-sync.md` and
   `docs/persistent-conversations-spec.md`. Verified by `api/projects.test.mjs`
   and `model/projects.test.mjs` under `yarn test-api` with `DATABASE_URL` set:
   each scenario of "The server refuses a write that leaves a project over a
@@ -40,8 +40,8 @@ the same time once 2.1 has merged.
 
 - [x] 3.1 Check the limits before every upload and name them on the banner
   (HOO-2418, depends on 2.1). `push` checks the full snapshot and raises
-  `too-large` with `limit`; `refusalKind` reads the four reasons; `_raise`'s
-  identity key includes `limit`; `SyncBanner` gets `data-testid="sync-banner"`
+  `too-large` with `limit`; `refusalOf` reads the four reasons; `sameQuestion`
+  compares `limit`; `SyncBanner` gets `data-testid="sync-banner"`
   and the copy in "The banner names the limit and what is over it". Declare
   `sync_file_limit_exceeded`, `sync_project_limit_exceeded` and
   `sync_files_count_limit_exceeded` in `model/telemetry.ts` with doc comments,

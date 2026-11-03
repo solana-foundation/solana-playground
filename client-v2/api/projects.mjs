@@ -360,6 +360,8 @@ async function handler(req, res) {
       if (write.error) {
         return sendJson(res, write.status, { error: write.error });
       }
+      // TODO(HOO-2418 follow-up): untested past the auth gate, and the only
+      // server check of the per-file and path limits; `answerWrite` is tested
       if (write.limit) {
         const answer = answerWrite(write);
         return sendJson(res, answer.status, answer.body);

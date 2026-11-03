@@ -1154,8 +1154,8 @@ export class PgExplorer {
    * that call this, so the New File dialog, the assistant's file writes, the
    * terminal commands and the import flows all get the same refusal. The
    * editor's saves and sync's restores do not: a refused autosave would lose
-   * typing, and a refused restore would strand a project stored before the
-   * limits; the sync banner reports both.
+   * typing, and a refused restore would strand a project stored over a limit
+   * after a later change to one; the sync banner reports both.
    *
    * The message is the limit's rule, or for an import, what is over it and
    * the rule, since the files were not the user's last keystroke.

@@ -177,6 +177,11 @@ const UPSERT_FILES = `
  * writer the adopting statement's snapshot did not -- see `CREATE`. After a
  * patch that adds nothing, the only `saveProject` write that can empty a row,
  * so it sees that patch's own `DELETE_NAMED`.
+ *
+ * TODO(HOO-2418 follow-up): counts every row, where `MEASURE` counts only the
+ * paths sync carries, so a stored `.workspace/` row sync does not carry would
+ * let a patch remove every synced file. No such row is stored today: the
+ * client never sent one and `describeWrite` refuses one.
  */
 const HAS_FILES = `
   select exists(

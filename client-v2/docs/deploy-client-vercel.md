@@ -442,10 +442,12 @@ It is twice the 512 KiB project limit (`PROJECT_LIMITS` in
 `src/entities/project`), and below Vercel's own cap: Vercel refuses a Function
 request body over 4.5 MB with its own `413`
 ([Functions limits](https://vercel.com/docs/functions/limitations)) on every
-plan, before the handler runs. The browser refuses a larger body before
-sending it and `PUT /api/projects` refuses it again, both as `too-large`, so the
-user reads the banner's "This project is over 1 MiB. Remove or shrink its
-largest files, then try again." and never the platform's error.
+plan, before the handler runs. The project limits refuse a project first and
+the banner names the limit; a body over the cap with every limit met (content
+JSON escapes heavily) is refused by the browser before sending and by
+`PUT /api/projects` again, both as `too-large`, with the banner's "This
+project is over 1 MiB. Remove or shrink its largest files, then try again."
+The user never sees the platform's error.
 
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A
