@@ -98,7 +98,7 @@ const trackTurnFailureFor = (backend: ModelProvider) => (error: unknown) => {
     provider: backend,
     reason: error.reason,
   };
-  // Left out, not `undefined`: a report reads an absent status as "no answer"
+  // Omitted, not `undefined`, so the event carries no `status` key at all
   if (error.status !== undefined) params.status = error.status;
   assistantTelemetry.track("assistant_turn_failed", params);
 };
@@ -540,6 +540,12 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     const current = usableConnection();
     if (!current || provider.current?.connection !== current) {
       PgAssistant.addError(NOT_RESENT);
+      // `provider.current` still holds the connection the turn was sent on
+      if (provider.current) {
+        trackTurnFailureFor(provider.current.connection.id)(
+          new Error(NOT_RESENT)
+        );
+      }
       return;
     }
     await runTurn(held.text, held.attempt);

@@ -20,7 +20,12 @@ handed to the backend, and exactly one of `assistant_turn_answered`,
 `assistant_turn_failed`, `assistant_turn_capped` or `assistant_turn_stopped`
 when that turn ends. `provider` is `default`, `anthropic`, `openai`,
 `openrouter` or `gemini`. A send that finds no backend, or is refused
-because another turn runs, sends nothing.
+because another turn runs, sends nothing. A turn the conversation leaves
+before it ends, because another thread opens or the user signs out while it
+runs or while its busy message waits, sends no ending event: it is the
+store's cut-off, not the user's action. A busy message that waits and is not
+sent again because the model changed ends as `assistant_turn_failed` with
+reason `other`.
 
 #### Scenario: An answered turn (manual)
 
@@ -44,6 +49,17 @@ because another turn runs, sends nothing.
 - **WHEN** a user presses Stop while the answer streams
 - **THEN** `assistant_turn_sent` and `assistant_turn_stopped` are sent, and
   neither `assistant_turn_answered` nor `assistant_turn_failed` is
+
+#### Scenario: A waiting busy message the conversation leaves (manual)
+
+- **WHEN** a busy message waits to be sent again and the user opens another
+  thread
+- **THEN** `assistant_turn_sent` is the turn's only event
+
+#### Scenario: A waiting busy message not sent again for a changed model (manual)
+
+- **WHEN** a busy message waits, the user changes the model, and the wait ends
+- **THEN** `assistant_turn_failed` is sent with reason `other` and no status
 
 ### Requirement: A failed turn names its reason
 

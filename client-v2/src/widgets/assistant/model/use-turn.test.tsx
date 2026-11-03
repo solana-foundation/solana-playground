@@ -588,6 +588,34 @@ describe("useTurn", () => {
 
       expect(result.current.retry).toBeNull();
       expect(provider.send).toHaveBeenCalledTimes(1);
+      // The conversation left the turn, as the store's cut-off does: no outcome
+      expect(turnEvents()).toEqual([SENT_ON_DEFAULT]);
+    });
+
+    it("reports a waiting message not sent again for a changed model as failed", async () => {
+      PgAssistant.connect({
+        id: "anthropic",
+        apiKey: "k",
+        settings: { model: "claude-sonnet-5-5", effort: "high" },
+      });
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      act(() =>
+        PgAssistant.tune({
+          id: "anthropic",
+          apiKey: "k",
+          settings: { model: "claude-sonnet-5-5", effort: "low" },
+        })
+      );
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(turnEvents()).toStrictEqual([
+        ["assistant_turn_sent", { provider: "anthropic" }],
+        ["assistant_turn_failed", { provider: "anthropic", reason: "other" }],
+      ]);
     });
 
     it("gives up with one line after three busy answers in a row", async () => {
