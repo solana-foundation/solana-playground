@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 import { isUuid } from "../src/shared/lib/ids";
+import { requireFor } from "../src/test-utils/require-for";
 import {
   applyWrite,
   currentProject,
@@ -351,6 +352,8 @@ test("the other device's rename arrives, and the next edit keeps it", async ({
     snapshot?: { files: Record<string, string> };
     updatedAt: string;
   } | null = null;
+  /** The row the account holds, read where the routes have written it */
+  const storedRow = () => requireFor("the stored row")(stored);
 
   await page.route("**/api/auth/get-session", (r) =>
     json(r, { user: { id: "u1", name: "T", image: null, login: "t" } })
@@ -398,7 +401,7 @@ test("the other device's rename arrives, and the next edit keeps it", async ({
   // The other device renames it, and changes nothing else
   name = "Renamed elsewhere";
   stored = {
-    snapshot: stored!.snapshot,
+    snapshot: storedRow().snapshot,
     updatedAt: "2026-05-01T00:00:00.000Z",
   };
 
@@ -703,7 +706,7 @@ test("a divergent project asks about the overlap, and keeping this version uploa
   await page.getByRole("button", { name: "Keep this version" }).click();
 
   await expect.poll(() => ours().length, LONG).toBeGreaterThan(beforeAnswer);
-  const answer = ours().at(-1)!;
+  const answer = requireFor("our last answer")(ours().at(-1));
   expect(answer.force).toBeUndefined();
   expect(answer.baseUpdatedAt).toBe("2026-03-01T00:00:00.000Z");
   // This browser's own copy went up: the default framework file the project
@@ -718,7 +721,7 @@ test("a divergent project asks about the overlap, and keeping this version uploa
   );
   // ...and the server took it, rather than refusing it like the earlier ones
   await expect
-    .poll(() => rows.get(localId)!.updatedAt, LONG)
+    .poll(() => requireFor("the local row")(rows.get(localId)).updatedAt, LONG)
     .toBe("2026-04-01T00:00:00.000Z");
   // Answered, so the banner goes -- it used to stay up for the rest of the
   // session, over unrelated projects included
@@ -888,7 +891,9 @@ test("typing folded into the other device's copy still merges with its next chan
   let row: { snapshot?: { files: Record<string, string> }; updatedAt: string } =
     { updatedAt: stamp() };
   const edit = (from: string, to: string) => {
-    const files = { ...row.snapshot!.files };
+    const files = structuredClone(
+      requireFor("the row's snapshot")(row.snapshot).files
+    );
     expect(files["src/lib.rs"]).toContain(from);
     files["src/lib.rs"] = files["src/lib.rs"].replace(from, to);
     row = { snapshot: { files }, updatedAt: stamp() };
@@ -974,13 +979,16 @@ test("typing folded into the other device's copy still merges with its next chan
   await expect
     .poll(
       async () =>
-        row.snapshot!.files["src/lib.rs"].includes("// typed here") ||
-        (await banner.count()) > 0,
+        requireFor("the row's snapshot")(row.snapshot).files[
+          "src/lib.rs"
+        ].includes("// typed here") || (await banner.count()) > 0,
       LONG
     )
     .toBe(true);
   await expect(banner).toHaveCount(0);
-  const merged = row.snapshot!.files["src/lib.rs"];
+  const merged = requireFor("the row's snapshot")(row.snapshot).files[
+    "src/lib.rs"
+  ];
   expect(merged).toContain("// A1");
   expect(merged).toContain("// A2");
   expect(merged).toContain("// typed here");

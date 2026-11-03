@@ -29,6 +29,7 @@ vi.mock("./BaseStepRail", async (importOriginal) => {
 
 import { render } from "@testing-library/react";
 
+import { requireFor } from "../../../test-utils/require-for";
 import type { LessonRecordEvent } from "./events";
 import StepRail from "./StepRail";
 import type { LessonPath } from "./types";
@@ -90,7 +91,7 @@ const metaOf = (events: LessonRecordEvent[]) => {
       state={{ path: PATH, record: { v: 2, events }, loadFailed: false }}
     />
   );
-  return drawn.at(-1)!.map((row) => row.meta);
+  return requireFor("a drawn rail")(drawn.at(-1)).map((row) => row.meta);
 };
 
 describe("StepRail", () => {

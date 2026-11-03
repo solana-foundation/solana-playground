@@ -1,6 +1,7 @@
 import type { Page, Request } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import { json, seedWorkspace, startProject, stubSession } from "./fixtures";
 
 /**
@@ -96,11 +97,15 @@ test("disconnecting is not undone by the next reload", async ({ page }) => {
 
   // Disconnecting says "stop using this backend", and a reload that quietly
   // reconnected would be the app overruling that
-  await page.evaluate(() =>
-    (
+  await page.evaluate(() => {
+    const assistant = (
       window as Window & { __pgAssistant?: { disconnect: () => void } }
-    ).__pgAssistant!.disconnect()
-  );
+    ).__pgAssistant;
+    if (!assistant) {
+      throw new Error("Expected the assistant's test handle on window");
+    }
+    assistant.disconnect();
+  });
   await page.reload();
 
   // The composer is back with the default named, and nothing is connected
@@ -138,10 +143,13 @@ type OwnWindow = Window & {
 };
 
 const connectOwn = (page: Page, connection: unknown = OWN) =>
-  page.evaluate(
-    (c) => (window as OwnWindow).__pgAssistant!.connect(c),
-    connection
-  );
+  page.evaluate((c) => {
+    const assistant = (window as OwnWindow).__pgAssistant;
+    if (!assistant) {
+      throw new Error("Expected the assistant's test handle on window");
+    }
+    return assistant.connect(c);
+  }, connection);
 
 const connected = (page: Page) =>
   page.evaluate(() => (window as OwnWindow).__pgAssistant?.connection ?? null);
@@ -343,9 +351,13 @@ test.describe("assistant-own-key", () => {
 
     expect(await connected(page)).toBeNull();
     expect(
-      await page.evaluate(
-        () => (window as OwnWindow).__pgAssistant!.isPickingBackend
-      )
+      await page.evaluate(() => {
+        const assistant = (window as OwnWindow).__pgAssistant;
+        if (!assistant) {
+          throw new Error("Expected the assistant's test handle on window");
+        }
+        return assistant.isPickingBackend;
+      })
     ).toBe(true);
     await expect(dialog.locator("#assistant-api-key")).toBeVisible();
   });
@@ -422,8 +434,10 @@ test.describe("assistant-own-key", () => {
     // against a regression that would send the key to our own origin on load
     // or reconnect
     const leaks: string[] = [];
+    // Resolved here: a throw inside the listener would not fail the test
+    const origin = new URL(requireFor("the base URL")(baseURL)).origin;
     page.on("request", (req) => {
-      if (new URL(req.url()).origin !== new URL(baseURL!).origin) return;
+      if (new URL(req.url()).origin !== origin) return;
       if (carriesKey(req)) leaks.push(req.url());
     });
 
@@ -456,8 +470,10 @@ test.describe("assistant-own-key", () => {
       });
     });
     const leaks: string[] = [];
+    // Resolved here: a throw inside the listener would not fail the test
+    const origin = new URL(requireFor("the base URL")(baseURL)).origin;
     page.on("request", (req) => {
-      if (new URL(req.url()).origin !== new URL(baseURL!).origin) return;
+      if (new URL(req.url()).origin !== origin) return;
       if (carriesKey(req)) leaks.push(req.url());
     });
 

@@ -120,7 +120,8 @@ test.describe("client-v2-buttons", () => {
       () => !!(window as AssistantWindow).__pgAssistant
     );
     await page.evaluate(() => {
-      const store = (window as AssistantWindow).__pgAssistant!;
+      const store = (window as AssistantWindow).__pgAssistant;
+      if (!store) throw new Error("Expected the assistant store on window");
       const id = store.startAssistantMessage();
       store.appendToAssistantMessage(id, "Run:\n\n```sh\nanchor build\n```\n");
     });

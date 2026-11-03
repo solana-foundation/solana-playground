@@ -8,6 +8,7 @@ import * as restore from "../../features/persistence/model/project-restore";
 import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgSyncClient } from "../../features/persistence/model/sync-client";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
+import { requireFor } from "../../test-utils/require-for";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import { PgFs } from "../../utils/explorer/fs";
 import type { ChatItem } from "../../views/sidebar/assistant/store";
@@ -244,7 +245,10 @@ describe("the session effect", () => {
       expect(card).toMatchObject({ status: "pending" });
 
       // And it still answers: the promise holding the turn open is intact
-      PgAssistant.resolveApproval(card!.id, true);
+      PgAssistant.resolveApproval(
+        requireFor("the approval card")(card).id,
+        true
+      );
       await expect(approval).resolves.toMatchObject({ allowed: true });
       effect.dispose();
     });
@@ -277,9 +281,9 @@ describe("the session effect", () => {
 
       // And storage ends up holding all of it, not a copy from mid-pull
       await PgAssistant.whenPersisted();
-      const stored = (await PgChatStorage.read("t1"))!.map((i) =>
-        "text" in i ? i.text : i.kind
-      );
+      const stored = requireFor("the stored thread")(
+        await PgChatStorage.read("t1")
+      ).map((i) => ("text" in i ? i.text : i.kind));
       expect(stored).toEqual(
         expect.arrayContaining([
           "It logs a message",

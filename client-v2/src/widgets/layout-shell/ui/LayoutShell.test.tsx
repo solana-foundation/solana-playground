@@ -15,6 +15,8 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { requireFor } from "@/test-utils/require-for";
+
 // The `@/utils` barrel reaches generated globals (`GLOBAL_SETTINGS`) that
 // exist only in a booted app, so the test builds it from the pieces the shell
 // uses: the real keybinds, editor events and view (so a modal opens through
@@ -97,6 +99,15 @@ import { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import type { LayoutShellProps } from "./LayoutShell";
 import LayoutShell from "./LayoutShell";
 
+/** The element a `data-slot` names, which the test needs on the page */
+const slot = <E extends Element = Element>(name: string) =>
+  requireFor(`the ${name} element`)(
+    document.querySelector<E>(`[data-slot="${name}"]`)
+  );
+/** The layout the shell saved */
+const storedLayout = () =>
+  requireFor("the stored layout")(localStorage.getItem(LAYOUT_STORAGE_KEY));
+
 const listeners = new Set<() => void>();
 let width = 1440;
 /** Answers `max-width` and `width <` queries against `width` */
@@ -173,8 +184,7 @@ const tap = (element: Element) => {
   fireEvent.click(element);
 };
 
-const sheetOverlay = () =>
-  document.querySelector('[data-slot="sheet-overlay"]')!;
+const sheetOverlay = () => slot("sheet-overlay");
 
 // Only what the shell reads: the font a portaled Sheet is set in
 const theme = {
@@ -338,9 +348,7 @@ it("should fold the files column by Cmd+E between 768 and 1023 px, and save it",
   shell();
   press({ key: "e", metaKey: true });
   expect(toggled()).toEqual([{ panel: "files", open: false, via: "key" }]);
-  expect(JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)!).open.files).toBe(
-    false
-  );
+  expect(JSON.parse(storedLayout()).open.files).toBe(false);
 });
 
 it("should go back to the saved navigation on a wide screen", () => {
@@ -445,7 +453,7 @@ it("should drop the dragged assistant sizes when the assistant is folded", () =>
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
   shell();
   press({ key: "r", ctrlKey: true });
-  const folded = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)!);
+  const folded = JSON.parse(storedLayout());
   expect(folded.open.assistant).toBe(false);
   expect(folded.h).toBeUndefined();
   // The other groups' drags stay
@@ -457,7 +465,9 @@ it("should widen the assistant panel to its maximum, and save nothing", () => {
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
   shell();
   const saved = localStorage.getItem(LAYOUT_STORAGE_KEY);
-  const assistantPanel = panelRefs[0].current!;
+  const assistantPanel = requireFor("the assistant panel")(
+    panelRefs[0].current
+  );
   const resize = vi.spyOn(assistantPanel, "resize");
   fireEvent.click(screen.getByRole("button", { name: "Widen the assistant" }));
   expect(resize).toHaveBeenCalledWith(560);
@@ -482,7 +492,7 @@ it("should drop the dragged console sizes when the console is folded", () => {
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
   shell();
   press({ key: "j", ctrlKey: true });
-  const folded = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)!);
+  const folded = JSON.parse(storedLayout());
   expect(folded.open.console).toBe(false);
   expect(folded.vert).toBeUndefined();
   expect(folded.h).toEqual({ assistant: 40, work: 60 });
@@ -492,7 +502,7 @@ it("should drop the dragged work sizes when the files column is folded by Cmd+E"
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
   shell();
   press({ key: "e", metaKey: true });
-  const folded = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)!);
+  const folded = JSON.parse(storedLayout());
   expect(folded.open.files).toBe(false);
   expect(folded.w).toBeUndefined();
   expect(folded.h).toEqual({ assistant: 40, work: 60 });
@@ -552,7 +562,7 @@ it("should keep the dragged sizes when the navigation is folded", () => {
   localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(DRAGGED));
   shell();
   press({ key: "b", ctrlKey: true });
-  expect(JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)!)).toMatchObject({
+  expect(JSON.parse(storedLayout())).toMatchObject({
     open: { nav: false },
     h: { assistant: 40, work: 60 },
     w: { files: 25, center: 75 },
@@ -582,7 +592,7 @@ it("should report the assistant Sheet opening and closing, and save nothing", ()
   resizeTo(800);
   shell();
   fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
-  fireEvent.keyDown(document.querySelector('[data-slot="sheet-content"]')!, {
+  fireEvent.keyDown(slot("sheet-content"), {
     key: "Escape",
   });
   expect(toggled()).toEqual([
@@ -627,9 +637,7 @@ it("should set the assistant Sheet in the theme's text font, not its code font, 
   resizeTo(800);
   shell();
   fireEvent.click(screen.getByRole("button", { name: "Expand assistant" }));
-  const sheet = document.querySelector<HTMLElement>(
-    '[data-slot="sheet-content"]'
-  )!;
+  const sheet = slot<HTMLElement>("sheet-content");
   // The code face leaked into every button of a Sheet, which inherit it
   expect(sheet.style.fontFamily).toBe("sans-serif");
   expect(sheet.querySelector('[data-slot="sheet-close"]')).toBeNull();
@@ -642,7 +650,7 @@ it("should save the open state and read it back", () => {
   press({ key: "e", metaKey: true });
   press({ key: "r", ctrlKey: true });
   first.unmount();
-  expect(JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY)!)).toEqual({
+  expect(JSON.parse(storedLayout())).toEqual({
     v: 2,
     open: { nav: false, files: false, assistant: false, console: true },
   });
@@ -891,7 +899,7 @@ describe("on a phone", () => {
   const isChecked = (name: string) =>
     screen.getByRole("radio", { name }).getAttribute("aria-checked");
   const escapeSheet = () =>
-    fireEvent.keyDown(document.querySelector('[data-slot="sheet-content"]')!, {
+    fireEvent.keyDown(slot("sheet-content"), {
       key: "Escape",
     });
   const savedBefore = () => {
@@ -899,9 +907,12 @@ describe("on a phone", () => {
     return localStorage.getItem(LAYOUT_STORAGE_KEY);
   };
   /** The outlet's box, which carries the page's sizing classes */
-  const boxOf = (el: Element) => el.closest("div[class*='flex']")!;
+  const boxOf = (el: Element) =>
+    requireFor("the outlet's box")(el.closest("div[class*='flex']"));
   const consoleBox = () =>
-    consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']")!;
+    requireFor("the console's box")(
+      consoleButton().closest("[class~='h-2/5'], [class~='overflow-hidden']")
+    );
 
   it("hands the navigation the menu page, whose toggle brings the work back", () => {
     phoneShell();
@@ -961,7 +972,10 @@ describe("on a phone", () => {
 
   it("puts the stage on the page that shows it", () => {
     phoneShell();
-    const stageOf = () => screen.getByText("stage").closest("section")!;
+    const stageOf = () =>
+      requireFor("the stage section")(
+        screen.getByText("stage").closest("section")
+      );
     expect(stageOf().getAttribute("aria-label")).toBe("Work");
     act(() => PgFlow.setStage("build"));
     expect(stageOf().getAttribute("aria-label")).toBe("Preview");
@@ -1119,7 +1133,10 @@ describe("on a phone", () => {
     act(() => resizeTo(1280));
     act(() => PgFlow.setStage("write"));
     act(() => resizeTo(390));
-    const stageOf = () => screen.getByText("stage").closest("section")!;
+    const stageOf = () =>
+      requireFor("the stage section")(
+        screen.getByText("stage").closest("section")
+      );
     expect(stageOf().getAttribute("aria-label")).toBe("Work");
     expect(stageOf().getAttribute("inert")).toBeNull();
     expect(
@@ -1236,7 +1253,10 @@ describe("on a phone", () => {
     shell();
     act(() => PgFlow.setStage("build"));
     act(() => resizeTo(390));
-    const stageOf = () => screen.getByText("stage").closest("section")!;
+    const stageOf = () =>
+      requireFor("the stage section")(
+        screen.getByText("stage").closest("section")
+      );
     expect(stageOf().getAttribute("aria-label")).toBe("Preview");
     expect(stageOf().hasAttribute("inert")).toBe(false);
     expect(events("layout_page_shown")).toEqual([
@@ -1282,7 +1302,7 @@ describe("the stage bar", () => {
   it("opens the assistant Sheet from the bar between 768 and 1023 px", () => {
     resizeTo(900);
     shell();
-    const bar = document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    const bar = slot<HTMLElement>("stage-bar");
     fireEvent.click(
       within(bar).getByRole("button", { name: "Expand assistant" })
     );
@@ -1307,8 +1327,7 @@ describe("the stage bar", () => {
     explorer.name = "Counter";
     resizeTo(900);
     shell();
-    const bar = () =>
-      document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    const bar = () => slot<HTMLElement>("stage-bar");
     expect(within(bar()).getByText("Counter")).toBeTruthy();
     fireEvent.click(
       within(bar()).getByRole("button", { name: "Expand assistant" })
@@ -1449,7 +1468,7 @@ describe("with Home", () => {
     expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "ask" }));
     expect(screen.getByRole("dialog", { name: "Assistant" })).toBeTruthy();
-    fireEvent.keyDown(document.querySelector('[data-slot="sheet-content"]')!, {
+    fireEvent.keyDown(slot("sheet-content"), {
       key: "Escape",
     });
     expect(screen.queryByRole("dialog", { name: "Assistant" })).toBeNull();
@@ -1568,7 +1587,7 @@ describe("with Home", () => {
   it("draws the column bar over Home, titled Home, with no files toggle", () => {
     explorer.name = "Counter";
     shell(home);
-    const bar = document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    const bar = slot<HTMLElement>("stage-bar");
     expect(within(bar).getByText("Home")).toBeTruthy();
     expect(within(bar).queryByText("Counter")).toBeNull();
     expect(
@@ -1580,7 +1599,7 @@ describe("with Home", () => {
   it("titles the bar nothing while the start is pending", () => {
     explorer.name = "Counter";
     shell(() => null);
-    const bar = document.querySelector<HTMLElement>('[data-slot="stage-bar"]')!;
+    const bar = slot<HTMLElement>("stage-bar");
     expect(within(bar).queryByText("Home")).toBeNull();
   });
 
@@ -1602,9 +1621,7 @@ describe("with Home", () => {
       const before = saved();
       resizeTo(at);
       shell(home);
-      const bar = document.querySelector<HTMLElement>(
-        '[data-slot="stage-bar"]'
-      )!;
+      const bar = slot<HTMLElement>("stage-bar");
       fireEvent.click(
         within(bar).getByRole("button", { name: "Expand assistant" })
       );

@@ -16,6 +16,7 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 import { BUTTON_FAILED_TOAST } from "@/shared/lib/report-button-failure";
+import { requireFor } from "@/test-utils/require-for";
 
 import type { ToastChildProps } from "../../../utils/view";
 import { PgView } from "../../../utils/view";
@@ -31,7 +32,9 @@ const CREATED = "2026-10-19T00:00:00.000Z";
 
 /** What the failed-click toast says, from the last `setToast` call */
 const toastText = (setToast: ReturnType<typeof vi.spyOn>) => {
-  const [elementable] = setToast.mock.calls.at(-1)!;
+  const [elementable] = requireFor("a call to setToast")(
+    setToast.mock.calls.at(-1)
+  );
   const Toast = elementable as FC<ToastChildProps>;
   return render(createElement(Toast, { id: BUTTON_FAILED_TOAST })).container
     .textContent;

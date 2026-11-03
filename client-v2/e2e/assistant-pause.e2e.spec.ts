@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
   json,
@@ -112,7 +113,11 @@ test("client-v2-ai: A turn that keeps pausing", async ({ page }) => {
   const error = page.getByRole("alert").filter({ hasText: PAUSED });
   await expect(error).toBeVisible(LONG);
 
-  const pauses = Number(PAUSED.exec(await error.innerText())![1]);
+  const pauses = Number(
+    requireFor("the pause count in the error")(
+      PAUSED.exec(await error.innerText())
+    )[1]
+  );
   expect(pauses).toBeGreaterThan(1);
   // A request per pause: one more than the resume limit
   expect(sent).toHaveLength(pauses);

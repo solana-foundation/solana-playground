@@ -5,6 +5,8 @@
 import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
+import { requireFor } from "@/test-utils/require-for";
+
 import { LogoMark, LogoPlay } from "./logo";
 
 /** The subpaths of every path an svg draws, each from its `M` */
@@ -15,8 +17,16 @@ const subpaths = (svg: Element) =>
 
 describe("LogoPlay", () => {
   it("draws the mark's play shape without its ring", () => {
-    const mark = subpaths(render(<LogoMark />).container.firstElementChild!);
-    const play = subpaths(render(<LogoPlay />).container.firstElementChild!);
+    const mark = subpaths(
+      requireFor("the mark's svg")(
+        render(<LogoMark />).container.firstElementChild
+      )
+    );
+    const play = subpaths(
+      requireFor("the play shape's svg")(
+        render(<LogoPlay />).container.firstElementChild
+      )
+    );
     // The ring is the mark's first two subpaths: its outer edge and its hole
     const ring = mark.slice(0, 2);
 

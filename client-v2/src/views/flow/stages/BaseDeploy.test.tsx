@@ -10,6 +10,7 @@ import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { requireFor } from "@/test-utils/require-for";
 
 import type { DeployRecord } from "../state/deploy-history";
 import type {
@@ -228,9 +229,9 @@ describe("BaseDeploy", () => {
     );
 
     expect(screen.queryByRole("region", { name: "History" })).toBeNull();
-    const actions = container.querySelector<HTMLElement>(
-      '[data-slot="stage-empty-actions"]'
-    )!;
+    const actions = requireFor("the stage's actions")(
+      container.querySelector<HTMLElement>('[data-slot="stage-empty-actions"]')
+    );
     const labels = [...actions.querySelectorAll("button")].map(
       (b) => b.textContent
     );
@@ -250,9 +251,9 @@ describe("BaseDeploy", () => {
     );
 
     expect(screen.getByRole("region", { name: "History" })).toBeTruthy();
-    const actions = container.querySelector<HTMLElement>(
-      '[data-slot="stage-empty-actions"]'
-    )!;
+    const actions = requireFor("the stage's actions")(
+      container.querySelector<HTMLElement>('[data-slot="stage-empty-actions"]')
+    );
     expect(
       within(actions).getByRole("button", { name: "Upload IDL" })
     ).toBeTruthy();

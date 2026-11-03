@@ -13,6 +13,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { requireFor } from "@/test-utils/require-for";
 import { PgCommon } from "@/utils/common";
 import type { ToastChildProps } from "@/utils/view";
 import { DEFAULT_TOAST_DURATION, PgView } from "@/utils/view";
@@ -151,9 +152,9 @@ it("should still show a raw event with no options, and warn", () => {
 });
 
 const offsetLeft = () =>
-  document
-    .querySelector<HTMLElement>("[data-sonner-toaster]")!
-    .style.getPropertyValue("--offset-left");
+  requireFor("the toaster")(
+    document.querySelector<HTMLElement>("[data-sonner-toaster]")
+  ).style.getPropertyValue("--offset-left");
 
 it("should keep clear of the rail on a wide window", () => {
   vi.spyOn(window, "innerWidth", "get").mockReturnValue(1280);
@@ -264,9 +265,9 @@ it("should take the default duration for one that is not a positive number, and 
 });
 
 const toasterTheme = () =>
-  document
-    .querySelector("[data-sonner-toaster]")!
-    .getAttribute("data-sonner-theme");
+  requireFor("the toaster")(
+    document.querySelector("[data-sonner-toaster]")
+  ).getAttribute("data-sonner-theme");
 
 describe("the toaster's theme", () => {
   // The host is still mounted here and its observer reports in a microtask
