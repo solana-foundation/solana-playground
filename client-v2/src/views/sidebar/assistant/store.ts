@@ -19,13 +19,21 @@ import {
   MAX_MESSAGES_PER_THREAD,
   PgChatStorage,
 } from "../../../features/persistence/model/chat-storage";
-import { report } from "../../../features/persistence";
 import { uuid } from "../../../shared/lib/ids";
 import type { Disposable } from "../../../utils";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import type { ModelProvider } from "@/shared/lib/ai";
 import { isDefaultBackend, type Effort } from "./model/types";
 import { paramsOf, type BackendParams } from "./model/backend-params";
+import {
+  isToolCallRecord,
+  report,
+  toToolCallRecord,
+  type ToolCallRecord,
+} from "../../../features/persistence";
+import type { ToolResultEvent } from "@/shared/lib/ai";
+
+export { isToolCallRecord, type ToolCallRecord };
 
 const log = createLogger("assistant:store");
 
@@ -104,7 +112,18 @@ export type ChatItem =
        */
       state?: "streaming" | "cut-off";
     })
-  | (ChatItemBase & { kind: "tool"; label: string })
+  | (ChatItemBase & {
+      kind: "tool";
+      label: string;
+      /**
+       * Present on the item `addToolResult` writes when a tool returns or
+       * throws: the call as the model made it and what it read back, so a
+       * provider built for this thread later replays it (`toReplayMessages`).
+       * The thread draws nothing for such an item; any marker the tool wrote
+       * (`addToolCall`) is drawn as before.
+       */
+      call?: ToolCallRecord;
+    })
   | (ChatItemBase & {
       kind: "approval";
       request: ApprovalRequest;
@@ -936,6 +955,43 @@ export class PgAssistant {
       id: makeId(),
       createdAt: created(),
       label,
+    });
+    PgAssistant._emit();
+  }
+
+  /**
+   * Store a tool call that finished (returned or threw), so a provider built
+   * for this thread later replays it. Its label is the tool's name, so a tab
+   * still on the code before this record draws it as one more plain marker.
+   * A cut turn stores none, as it writes no marker (`_dropsCut`).
+   *
+   * Never throws: the tool has already run, and a record that cannot be
+   * stored must not fail the turn that ran it. Such a call is reported and
+   * left out of the replay.
+   *
+   * @param apiKey the key of the connection whose turn ran the tool, redacted
+   */
+  static addToolResult(
+    result: Pick<ToolResultEvent, "toolName" | "input" | "output" | "failed">,
+    apiKey = PgAssistant._connection?.apiKey
+  ) {
+    if (PgAssistant._dropsCut("tool", result.toolName)) return;
+    let call: ToolCallRecord;
+    try {
+      call = toToolCallRecord(result, apiKey);
+    } catch (error) {
+      log.error(error, {
+        report: true,
+        context: { what: "store a tool call", tool: result.toolName },
+      });
+      return;
+    }
+    PgAssistant._items.push({
+      kind: "tool",
+      id: makeId(),
+      createdAt: created(),
+      label: result.toolName,
+      call,
     });
     PgAssistant._emit();
   }
@@ -3376,6 +3432,165 @@ if (import.meta.vitest) {
         await expect(approval).resolves.toMatchObject({ allowed: false });
         expect(PgAssistant.items.map((i) => i.kind)).toEqual(["approval"]);
         expect(PgAssistant.endTurn(turn)).toBe(false);
+      });
+    });
+
+    describe("PgAssistant.addToolResult", () => {
+      const KEY = "sk-test-record-0123456789";
+
+      beforeEach(async () => {
+        (PgFs as unknown as { __files: Map<string, string> }).__files.clear();
+        PgAssistant.disconnect();
+        PgAssistant.closeThread();
+        PgAssistant.clear();
+        await PgAssistant.loadThread("records");
+      });
+
+      afterEach(async () => {
+        await settled();
+        PgAssistant.disconnect();
+        PgAssistant.closeThread();
+      });
+
+      const records = () =>
+        PgAssistant.items.flatMap((item) =>
+          isToolCallRecord(item) ? [item.call] : []
+        );
+
+      it("stores a tool's result as a record on a tool item", () => {
+        PgAssistant.addToolResult({
+          toolName: "read_file",
+          input: { path: "src/lib.rs" },
+          output: "fn main() {}",
+          failed: false,
+        });
+
+        const [item] = PgAssistant.items;
+        expect(item.kind).toBe("tool");
+        expect((item as { label: string }).label).toBe("read_file");
+        expect(records()).toEqual([
+          {
+            name: "read_file",
+            input: { path: "src/lib.rs" },
+            output: "fn main() {}",
+          },
+        ]);
+      });
+
+      it("marks a failed call", () => {
+        PgAssistant.addToolResult({
+          toolName: "read_file",
+          input: { path: "nope" },
+          output: "Not found",
+          failed: true,
+        });
+
+        expect(records()).toEqual([
+          {
+            name: "read_file",
+            input: { path: "nope" },
+            output: "Not found",
+            failed: true,
+          },
+        ]);
+      });
+
+      it("cuts a 10,000-character result to 4,000 and says 6,000 were cut", () => {
+        PgAssistant.addToolResult({
+          toolName: "read_file",
+          input: {},
+          output: "x".repeat(10_000),
+          failed: false,
+        });
+
+        expect(records()[0].output).toBe(
+          `${"x".repeat(4_000)} … [6000 characters cut]`
+        );
+      });
+
+      it("cuts a long input value and keeps the other fields whole", () => {
+        PgAssistant.addToolResult({
+          toolName: "write_file",
+          input: { path: "src/lib.rs", content: "y".repeat(3_000) },
+          output: "wrote src/lib.rs",
+          failed: false,
+        });
+
+        expect(records()[0].input).toEqual({
+          path: "src/lib.rs",
+          content: `${"y".repeat(1_000)} … [2000 characters cut]`,
+        });
+      });
+
+      it("replaces an input still over 2,000 characters with a note of its size", () => {
+        const input = { lines: Array.from({ length: 1_000 }, () => "abcdef") };
+
+        PgAssistant.addToolResult({
+          toolName: "probe",
+          input,
+          output: "ok",
+          failed: false,
+        });
+
+        expect(records()[0].input).toEqual({
+          omitted: `${JSON.stringify(input).length} characters of input`,
+        });
+      });
+
+      it("redacts the connection's key from a stored call", () => {
+        PgAssistant.connect({ id: "anthropic", apiKey: KEY });
+
+        PgAssistant.addToolResult({
+          toolName: "probe",
+          input: { token: KEY },
+          output: `echoed ${KEY}`,
+          failed: false,
+        });
+
+        expect(JSON.stringify(PgAssistant.items)).not.toContain(KEY);
+        expect(records()[0].output).toBe(`echoed ${REDACTED_KEY}`);
+      });
+
+      it("reports a call it cannot store and lets the turn go on", async () => {
+        const logger = await import("../../../shared/lib/logger");
+        const logged = logger.memoryProvider();
+        logger.initLogger({ providers: [logged] });
+
+        expect(() =>
+          PgAssistant.addToolResult({
+            toolName: "probe",
+            input: {},
+            // What a broken tool event could carry, against its type
+            output: undefined as unknown as string,
+            failed: false,
+          })
+        ).not.toThrow();
+
+        expect(records()).toEqual([]);
+        expect(logged.entries).toEqual([
+          expect.objectContaining({
+            ns: "assistant:store",
+            level: "error",
+            report: true,
+          }),
+        ]);
+        logger.resetLogger();
+      });
+
+      it("writes no record while a cut turn unwinds", () => {
+        const turn = new AbortController();
+        PgAssistant.beginTurn(turn);
+        PgAssistant.stopTurn();
+
+        PgAssistant.addToolResult({
+          toolName: "probe",
+          input: {},
+          output: "late",
+          failed: false,
+        });
+
+        expect(records()).toEqual([]);
+        PgAssistant.endTurn(turn);
       });
     });
 

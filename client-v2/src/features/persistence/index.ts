@@ -2,3 +2,8 @@
 // legacy roots still import its modules by path until they move.
 export { report } from "./model/diagnostics";
 export { toReplayMessages } from "./model/replay";
+export {
+  isToolCallRecord,
+  toToolCallRecord,
+  type ToolCallRecord,
+} from "./model/tool-call";
