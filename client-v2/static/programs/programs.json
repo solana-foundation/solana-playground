@@ -1,5 +1,29 @@
 [
   {
+    "name": "spl-binary-option",
+    "description": "A primitive binary option: two parties take the long and the short side of an event, each depositing collateral, and trade positions as minted long and short tokens.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/binary-option/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["DeFi", "SPL", "Trading"]
+  },
+  {
+    "name": "spl-binary-oracle-pair",
+    "description": "Mints a pass token and a fail token for every deposit; after the decision window, an oracle picks the outcome and only the winning token redeems.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/binary-oracle-pair/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["DeFi", "SPL"]
+  },
+  {
+    "name": "spl-feature-proposal",
+    "description": "Proposes a new cluster feature and mints tokens for the participants; once enough of them are sent to the proposal's acceptance account before the deadline, a tally activates the feature.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/feature-proposal/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["Governance", "SPL"]
+  },
+  {
     "name": "spl-memo",
     "description": "A simple program that validates a string of UTF-8 encoded characters and logs it in the transaction log.",
     "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/memo/program",
@@ -24,11 +48,43 @@
     "categories": ["SPL"]
   },
   {
+    "name": "spl-record",
+    "description": "Stores arbitrary data in an account that only its authority can write, update or close.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/record/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL"]
+  },
+  {
+    "name": "spl-shared-memory",
+    "description": "Lets a program called through a cross-program invocation hand data back to its caller, by copying instruction data into a shared account.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/shared-memory/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL"]
+  },
+  {
     "name": "spl-stake-pool",
     "description": "A program for pooling together SOL to be staked by an off-chain agent running a Delegation Bot which redistributes the stakes across the network and tries to maximize censorship resistance and rewards.",
     "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/stake-pool/program",
     "icon": "https://avatars.githubusercontent.com/u/35608259",
     "framework": "Native",
     "categories": ["SPL", "Staking"]
+  },
+  {
+    "name": "spl-stateless-asks",
+    "description": "Swaps one token for another with no escrow account: the maker approves a program-derived authority and any taker fills the offer in one transaction.",
+    "repo": "https://github.com/solana-labs/solana-program-library/tree/token-v4.0.0/stateless-asks/program",
+    "icon": "https://avatars.githubusercontent.com/u/35608259",
+    "framework": "Native",
+    "categories": ["SPL", "Token", "Trading"]
+  },
+  {
+    "name": "token-vesting",
+    "description": "Bonfida's token vesting: locks tokens under a schedule and releases each portion to the recipient once its unlock time passes.",
+    "repo": "https://github.com/Bonfida/token-vesting/tree/6234f98229196d1c785dfd2198bb58afc60bca10/program",
+    "icon": "https://avatars.githubusercontent.com/u/76649234",
+    "framework": "Native",
+    "categories": ["Token"]
   }
 ]
