@@ -1,4 +1,4 @@
-import { createTools } from "./tools";
+import { createTools, notInContext } from "./tools";
 import { PgAssistant } from "../store";
 import { PgPatchUndo } from "../patch-undo";
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
@@ -11,10 +11,20 @@ vi.mock("./mcp-tools", () => ({ createMcpTools: () => [] }));
 // utils barrel, which wants webpack-injected globals
 vi.mock("../bridge/playground-bridge", () => ({ realBridge: {} }));
 
-const bridge = (content: string | null): PlaygroundBridge =>
+/** The files the write_file cases treat as in the conversation's context */
+const IN_CONTEXT = ["src/lib.rs", "src/a.rs", "src/b.rs"];
+/** The real normaliser is the entity's; a leading `/` is all these cases use */
+const toProjectPath = (path: string) => path.replace(/^\/+/, "");
+
+const bridge = (
+  content: string | null,
+  context: readonly string[] = IN_CONTEXT
+): PlaygroundBridge =>
   ({
     readFile: () => content,
     applyPatch: vi.fn(async () => {}),
+    listContextFiles: () => context,
+    toProjectPath,
   } as unknown as PlaygroundBridge);
 
 const writeFile = (b: PlaygroundBridge) =>
@@ -85,6 +95,8 @@ describe("write_file", () => {
       applyPatch: vi.fn(async ({ content }: { content: string }) => {
         file.content = content;
       }),
+      listContextFiles: () => IN_CONTEXT,
+      toProjectPath,
     } as unknown as PlaygroundBridge;
 
     const applied = writeFile(b).run({ path: "src/lib.rs", content: "new" });
@@ -110,5 +122,93 @@ describe("write_file", () => {
     expect(
       failedItem?.kind === "approval" && PgPatchUndo.canWith(b)(failedItem)
     ).toBe(false);
+  });
+});
+
+describe("write_file outside the context", () => {
+  it("does not tell the model a guess matches a file it may not read", async () => {
+    const pending = writeFile(bridge("secret", [])).run({
+      path: "secret/other.rs",
+      content: "secret",
+    });
+
+    await Promise.resolve();
+    // The approval card, not the "already contains" answer: that answer would
+    // confirm the guessed content of a file outside the context
+    expect(PgAssistant.status).toBe("awaiting");
+    PgAssistant.resolveApproval(latestCard(), false);
+    expect(await pending).not.toContain("already contains");
+  });
+
+  it("writes the path the model spelt with a leading slash as the project's", async () => {
+    const pending = writeFile(bridge("old")).run({
+      path: "/src/lib.rs",
+      content: "new",
+    });
+    await Promise.resolve();
+
+    const card = PgAssistant.items.find((i) => i.kind === "approval");
+    expect(card?.kind === "approval" && card.request).toEqual(
+      expect.objectContaining({ path: "src/lib.rs" })
+    );
+    PgAssistant.resolveApproval(latestCard(), false);
+    await pending;
+  });
+
+  it("refuses a path that leaves the project", async () => {
+    const b = {
+      readFile: () => null,
+      applyPatch: vi.fn(async () => {}),
+      listContextFiles: () => IN_CONTEXT,
+      toProjectPath: () => null,
+    } as unknown as PlaygroundBridge;
+
+    expect(
+      await writeFile(b).run({ path: "../outside.rs", content: "x" })
+    ).toContain("outside the project");
+    expect(b.applyPatch).not.toHaveBeenCalled();
+  });
+});
+
+describe("read_file", () => {
+  const files: Record<string, string> = {
+    "src/lib.rs": "pub fn in_context() {}",
+    "secret/other.rs": "pub fn secret() {}",
+  };
+  const contextBridge = {
+    readFile: (path: string) => files[path] ?? null,
+    listContextFiles: () => ["src/lib.rs"],
+    toProjectPath: (path: string) =>
+      path.startsWith("..") ? null : path.replace(/^\.?\/+/, ""),
+  } as unknown as PlaygroundBridge;
+  const readFile = (path: string) =>
+    createTools(contextBridge)
+      .find((tool) => tool.name === "read_file")!
+      .run({ path });
+
+  it("reads a file in the context", async () => {
+    expect(await readFile("src/lib.rs")).toBe("pub fn in_context() {}");
+  });
+
+  it("reads a file in the context however the model spells its path", async () => {
+    expect(await readFile("/src/lib.rs")).toBe("pub fn in_context() {}");
+    expect(await readFile("./src/lib.rs")).toBe("pub fn in_context() {}");
+  });
+
+  it("refuses a file outside the context without its content", async () => {
+    const result = await readFile("secret/other.rs");
+    expect(result).toBe(notInContext("secret/other.rs"));
+    expect(result).not.toContain("pub fn secret");
+    expect(result).toContain("+ in the composer");
+  });
+
+  it("refuses a path that leaves the project, naming what was asked", async () => {
+    expect(await readFile("../etc/passwd")).toBe(notInContext("../etc/passwd"));
+  });
+
+  it("offers no tool that lists the project", () => {
+    expect(createTools(contextBridge).map((tool) => tool.name)).not.toContain(
+      "list_files"
+    );
   });
 });

@@ -17,6 +17,16 @@ const str = (input: ToolInput, key: string) => {
 };
 
 /**
+ * What `read_file` answers for a file outside the conversation's context.
+ *
+ * @param path the relative path the model asked for
+ * @returns the refusal, with no content of the file
+ */
+export const notInContext = (path: string) =>
+  `${path} is not in this conversation's context, so you cannot read it. ` +
+  `Ask the user to add it with + in the composer (Add a file), then read it.`;
+
+/**
  * What the assistant can do to the project.
  *
  * Reads run unattended. Everything that changes state — writing a file,
@@ -41,14 +51,15 @@ export const createTools = (
   ...createSkillTools(),
   ...createMcpTools(),
 
-  bindTool("list_files", () => {
-    PgAssistant.addToolCall("listed the project");
-    const paths = bridge.listFiles();
-    return paths.length ? paths.join("\n") : "The project has no files.";
-  }),
-
   bindTool("read_file", (input) => {
-    const path = str(input, "path");
+    const asked = str(input, "path");
+    const path = bridge.toProjectPath(asked);
+    // The context is the user's decision (HOO-2424): a file they did not open
+    // or add stays on this side, whatever the model asks
+    if (path === null || !bridge.listContextFiles().includes(path)) {
+      PgAssistant.addToolCall(`was refused ${path ?? asked}: not in context`);
+      return notInContext(path ?? asked);
+    }
     PgAssistant.addToolCall(`read ${path}`);
     const content = bridge.readFile(path);
     return content === null ? `There is no file at ${path}.` : content;
@@ -64,14 +75,21 @@ export const createTools = (
   }),
 
   bindTool("write_file", async (input) => {
-    const path = str(input, "path");
+    const asked = str(input, "path");
+    const path = bridge.toProjectPath(asked);
+    if (path === null) {
+      return `Could not write ${asked}: it is outside the project.`;
+    }
     const content = str(input, "content");
     const before = bridge.readFile(path);
 
     // Rewriting a file with what it already holds is not a change. Showing it
     // as one lets a lesson step look confirmed by an approval card that did
     // nothing — the assertion the toolchain is supposed to be grading.
-    if (before === content) {
+    // Only for a file in the context: for any other, "nothing to change"
+    // would confirm the model's guess at a file it may not read, so that
+    // write goes to the user's approval like any other
+    if (before === content && bridge.listContextFiles().includes(path)) {
       return (
         `${path} already contains exactly that content, so there is nothing ` +
         `to change. Do not propose it again — tell the user what still has ` +

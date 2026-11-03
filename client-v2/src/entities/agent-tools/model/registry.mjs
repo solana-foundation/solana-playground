@@ -91,18 +91,12 @@ export const BUILTIN_TOOLS = [
     approval: false,
   },
   {
-    name: "list_files",
-    description:
-      "List every file in the user's project, as paths relative to the " +
-      "project root. Use this to find out what exists before reading.",
-    schema: NO_ARGUMENTS,
-    approval: false,
-  },
-  {
     name: "read_file",
     description:
-      "Read one file from the user's project. Always read a file before " +
-      "proposing a change to it, so the change matches what is actually there.",
+      "Read one file in the conversation's context: the user's open tabs " +
+      "and the files they added. Any other file is refused; ask the user to " +
+      "add it with + in the composer. Always read a file before proposing a " +
+      "change to it, so the change matches what is actually there.",
     schema: {
       type: "object",
       properties: {

@@ -28,10 +28,7 @@ import {
   PROVIDERS,
   TurnFailure,
 } from "../../../views/sidebar/assistant/model/types";
-import type {
-  Provider,
-  TurnContext,
-} from "../../../views/sidebar/assistant/model/types";
+import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
   CONNECTION_LOST,
   paramsOf,
@@ -82,16 +79,14 @@ const COME_BACK_LATER = "Send your message again in a minute.";
 const NOT_RESENT =
   "The model changed while your message waited, so it was not sent again. Send it again.";
 
-/** A message the model turned away for load, waiting to be sent again */
 /** A message on its way to the model */
 interface Outgoing {
   text: string;
   /** Which retry this is, 0 for the first send */
   attempt: number;
-  /** What the user chose to send with it */
-  context: TurnContext;
 }
 
+/** A message the model turned away for load, waiting to be sent again */
 interface BusyRetry {
   text: string;
   /** When it is sent again, in `Date.now()` time */
@@ -104,8 +99,6 @@ interface BusyRetry {
   threadId: string | null;
   /** `PgAssistant.conversation` when it waited: a sign-out drops it too */
   conversation: number;
-  /** What went with the message the first time, sent with it again */
-  context: TurnContext;
   /** The backend the turn was sent to, which its outcome is reported under */
   provider: ModelProvider;
 }
@@ -222,14 +215,6 @@ export interface Turn {
   promptWaiting: boolean;
   /** Bumped whenever the composer's input should take focus */
   focusRequest: number;
-  /** The file whose content the next message leaves out, or `undefined` */
-  openFileLeftOut: string | undefined;
-  /**
-   * Leaves `path`'s content out of the next message, whoever sends it, as
-   * long as it is still the open file then: another file the user switched
-   * to goes in full, as its chip says
-   */
-  leaveOutOpenFile(path: string): void;
 }
 
 /**
@@ -320,13 +305,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
   // the panel's job, not the conversation's: a notice item would outlive the
   // connect and be stored with the thread
   const [promptWaiting, setPromptWaiting] = useState(false);
-  const [openFileLeftOut, setOpenFileLeftOut] = useState<string>();
-  // Read by `start`, which a requested prompt runs from an older render
-  const leftOut = useRef<string | undefined>(undefined);
-  const leaveOutOpenFile = (path: string) => {
-    leftOut.current = path;
-    setOpenFileLeftOut(path);
-  };
 
   const provider = useRef<{
     connection: Connection;
@@ -538,15 +516,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // Cleared only once the message is in: a store that throws leaves the
     // typed text where the user can send it again
     setInput("");
-    // For this message only: the file goes with the next one again
-    const context = {
-      openFile:
-        leftOut.current === undefined ||
-        leftOut.current !== PgExplorer.currentFilePath,
-    };
-    leftOut.current = undefined;
-    setOpenFileLeftOut(undefined);
-    await runTurn({ text: trimmed, attempt: 0, context });
+    await runTurn({ text: trimmed, attempt: 0 });
     return true;
   };
   /**
@@ -554,7 +524,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * chose: the first send, or a busy message sent again.
    */
   const runTurn = async (outgoing: Outgoing) => {
-    const { text, attempt, context } = outgoing;
+    const { text, attempt } = outgoing;
     if (!provider.current) throw new Error("a turn ran with no provider");
     const { instance, connection: current } = provider.current;
     const controller = new AbortController();
@@ -567,7 +537,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     }
 
     try {
-      await instance.send(text, { signal: controller.signal, context });
+      await instance.send(text, { signal: controller.signal });
       // A provider can still resolve after an abort; the turn's outcome is then the stop's, or none for a cut-off
       if (!controller.signal.aborted) {
         assistantTelemetry.track("assistant_turn_answered", {
@@ -661,7 +631,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    */
   const waitOnBusyWith =
     (backend: ModelProvider) => (outgoing: Outgoing, busy: ModelBusyError) => {
-      const { text, attempt, context } = outgoing;
+      const { text, attempt } = outgoing;
       const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
       if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
         PgAssistant.addError(`${busy.message} ${COME_BACK_LATER}`);
@@ -677,7 +647,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         attempt: attempt + 1,
         threadId: PgAssistant.threadId,
         conversation: PgAssistant.conversation,
-        context,
         provider: backend,
       });
     };
@@ -725,11 +694,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       });
       return;
     }
-    await runTurn({
-      text: held.text,
-      attempt: held.attempt,
-      context: held.context,
-    });
+    await runTurn({ text: held.text, attempt: held.attempt });
   };
   const resendRef = useRef(resend);
   resendRef.current = resend;
@@ -902,7 +867,5 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     openConnect,
     promptWaiting,
     focusRequest,
-    openFileLeftOut,
-    leaveOutOpenFile,
   };
 };

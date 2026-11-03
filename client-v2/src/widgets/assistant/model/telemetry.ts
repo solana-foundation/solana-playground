@@ -55,8 +55,10 @@ export type AssistantEvents = {
   assistant_reply_failed: { reason: "interrupted" | "connection-lost" };
   /** The user pressed Try again under the last reply; `after` says whether it had been stopped or cut off. */
   assistant_reply_retried: { after: "stopped" | "interrupted" };
-  /** The user removed the open-file chip, so the next message goes without that file's content. */
+  /** The user removed a file's chip, so that file stays out of every message until it is added back. */
   assistant_file_chip_removed: NoParams;
+  /** The user added a file to the assistant's context; `via` says from where (only the composer's + › Add a file so far). */
+  assistant_context_file_added: { via: "menu" };
   /** An applied patch was taken back and its file written back; `via` says from where (only the card's Undo patch so far). */
   assistant_patch_undone: { via: "card" };
 };

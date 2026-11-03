@@ -235,59 +235,15 @@ describe("useTurn", () => {
     ]);
   });
 
-  it("sends the next message without the open file once it is left out, then with it again", async () => {
+  it("sends the text and the signal only: the context is the store's, not the turn's", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
-    vi.spyOn(PgExplorer, "currentFilePath", "get").mockReturnValue(
-      "/src/lib.rs"
-    );
-    const { result } = renderHook(() => useTestTurn());
-
-    act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
-    expect(result.current.openFileLeftOut).toBe("/src/lib.rs");
-    await act(() => result.current.send("first"));
-    expect(provider.send.mock.calls[0][1]?.context).toEqual({
-      openFile: false,
-    });
-    expect(result.current.openFileLeftOut).toBeUndefined();
-
-    await act(() => result.current.send("second"));
-    expect(provider.send.mock.calls[1][1]?.context).toEqual({ openFile: true });
-  });
-
-  it("leaves nothing out with no file open and nothing left out", async () => {
-    PgAssistant.connect({ id: "default", apiKey: "" });
-    // eslint-disable-next-line unicorn/no-null -- `PgExplorer.currentFilePath` is `null` with no file open
-    vi.spyOn(PgExplorer, "currentFilePath", "get").mockReturnValue(null);
     const { result } = renderHook(() => useTestTurn());
 
     await act(() => result.current.send("hi"));
 
-    expect(provider.send.mock.calls[0][1]?.context).toEqual({ openFile: true });
-  });
-
-  it("sends a file the user switched to in full, though another was left out", async () => {
-    PgAssistant.connect({ id: "default", apiKey: "" });
-    const current = vi
-      .spyOn(PgExplorer, "currentFilePath", "get")
-      .mockReturnValue("/src/lib.rs");
-    const { result } = renderHook(() => useTestTurn());
-
-    act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
-    current.mockReturnValue("/src/other.rs");
-    await act(() => result.current.send("first"));
-
-    expect(provider.send.mock.calls[0][1]?.context).toEqual({ openFile: true });
-  });
-
-  it("keeps the open file left out when a send opens Connect instead of starting a turn", async () => {
-    const { result } = renderHook(() => useTestTurn());
-
-    act(() => result.current.leaveOutOpenFile("/src/lib.rs"));
-    await act(() => result.current.send("hi"));
-
-    expect(open).toHaveBeenCalled();
-    expect(provider.send).not.toHaveBeenCalled();
-    expect(result.current.openFileLeftOut).toBe("/src/lib.rs");
+    const [text, turn] = provider.send.mock.calls[0];
+    expect(text).toBe("hi");
+    expect(turn).toEqual({ signal: expect.any(AbortSignal) });
   });
 
   it("says Stopped once for two Stops before the turn unwinds", async () => {

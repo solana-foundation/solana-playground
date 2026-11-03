@@ -784,3 +784,101 @@ test("assistant-composer-context: Connect a model from the + menu", async ({
     .poll(() => lineOf(lines, "assistant_connect_opened"))
     .toMatch(/via\W+add/);
 });
+
+/** The bodies of the turns sent to `/api/agent`, on the hosted default */
+const captureTurns = async (page: Page) => {
+  const bodies: string[] = [];
+  await stubSession(page);
+  await stubAgent(page, { configured: true, model: DEFAULT_MODEL }, (route) => {
+    bodies.push(route.request().postData() ?? "");
+    return answer(route);
+  });
+  return bodies;
+};
+
+const send = async (page: Page, text: string) => {
+  await input(page).fill(text);
+  await page.getByRole("button", { name: "Send", exact: true }).click();
+  await expect(
+    page.getByRole("log", { name: "Conversation" }).getByText(text)
+  ).toBeVisible(LONG);
+};
+
+/** + › Add a file › `path` */
+const addFile = async (page: Page, path: string) => {
+  await page.getByRole("button", { name: "Add context" }).click();
+  await page.getByRole("menuitem", { name: "Add a file" }).click();
+  await page.getByRole("menuitem", { name: path }).click();
+};
+
+// Text only each template file holds: the tool declarations sent with every
+// turn name `src/lib.rs` as an example, so a path is no proof
+const LIB_RS = "hello_anchor";
+const CLIENT_TS = "My address:";
+const TEST_TS = "newAccountKp";
+
+const chip = (page: Page, name: string) =>
+  page.getByText(`Sent with this message: ${name}, in full`);
+
+test("assistant-composer-context: Only the context reaches the model", async ({
+  page,
+}) => {
+  const bodies = await captureTurns(page);
+  await openProject(page, "context-only");
+  // A new Anchor project opens src/lib.rs alone
+  await expect(chip(page, "lib.rs")).toBeAttached(LONG);
+  await expect(chip(page, "anchor.test.ts")).toHaveCount(0);
+
+  await addFile(page, "client/client.ts");
+  await expect(chip(page, "client.ts")).toBeAttached();
+  await send(page, "What is in context?");
+
+  await expect.poll(() => bodies.length, LONG).toBe(1);
+  expect(bodies[0]).toContain(LIB_RS);
+  expect(bodies[0]).toContain(CLIENT_TS);
+  expect(bodies[0]).toContain("client/client.ts");
+  expect(bodies[0]).not.toContain(TEST_TS);
+  expect(bodies[0]).not.toContain("tests/anchor.test.ts");
+});
+
+test("assistant-composer-context: Remove an open tab from the context", async ({
+  page,
+}) => {
+  const bodies = await captureTurns(page);
+  const lines = linesOn(page);
+  await openProject(page, "context-remove");
+  await expect(chip(page, "lib.rs")).toBeAttached(LONG);
+
+  await page
+    .getByRole("button", { name: "Remove lib.rs from the context" })
+    .click();
+  await send(page, "First");
+  await send(page, "Second");
+
+  await expect.poll(() => bodies.length, LONG).toBe(2);
+  for (const body of bodies) {
+    expect(body).not.toContain(LIB_RS);
+  }
+  await expect(chip(page, "lib.rs")).toHaveCount(0);
+  expect(
+    lines.filter((line) => line.includes("assistant_file_chip_removed"))
+  ).toHaveLength(1);
+});
+
+test("assistant-composer-context: Add a file that is not open", async ({
+  page,
+}) => {
+  const bodies = await captureTurns(page);
+  const lines = linesOn(page);
+  await openProject(page, "context-add");
+
+  await addFile(page, "tests/anchor.test.ts");
+  await expect(chip(page, "anchor.test.ts")).toBeAttached();
+  await expect
+    .poll(() => lineOf(lines, "assistant_context_file_added"))
+    .toMatch(/via\W+menu/);
+
+  await send(page, "Read the test");
+  await expect.poll(() => bodies.length, LONG).toBe(1);
+  expect(bodies[0]).toContain(TEST_TS);
+});

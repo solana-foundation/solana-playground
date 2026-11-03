@@ -11,6 +11,8 @@ import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import { PgAssistantContext } from "@/entities/assistant-context";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { ModelOption } from "../model/choice";
@@ -31,29 +33,40 @@ const log = createLogger("assistant:composer");
 /** How a chip names what it sends, for a screen reader */
 const sent = (what: string) => `Sent with this message: ${what}`;
 
+/** The workspace a context choice belongs to, by its stable id */
+const workspace = () => PgExplorer.currentWorkspaceId ?? null;
+
 /**
- * What the assistant reads each turn, as chips over the input. The open
- * file's chip can be removed for the next message (`leaveOut`); gone while it
- * is left out.
+ * What the assistant reads each turn, as chips over the input: the lesson
+ * step, one chip per file in the context (each removable until it is added
+ * back), the build error and the IDL.
+ *
+ * Mirrors what `describeProject()` sends, so the row cannot claim less than
+ * the model gets. Paths only, never file content: this runs on every render,
+ * including every streamed token.
  */
 const contextChips = (
   lessonState: LessonState,
-  openFile: { leftOut: string | undefined; leaveOut(path: string): void }
+  contextFiles: readonly string[]
 ): ComposerContextChip[] => {
-  // Mirror what `describeProject()` actually sends, so the row cannot claim
-  // less than the model gets. Paths only — never file content, since this runs
-  // on every render, including every streamed token.
-  const currentFilePath = PgExplorer.currentFilePath;
-  const filePaths = realBridge.listFiles();
-  const openPaths = realBridge.listOpenFiles();
   const lesson = describeLesson(lessonState);
-  const files = `${filePaths.length} ${
-    filePaths.length === 1 ? "file" : "files"
-  }`;
-  const openName =
-    currentFilePath && PgExplorer.getItemNameFromPath(currentFilePath);
-  // The prototype's order: where you are, what you are looking at, then
-  // what else is sent
+  const files = contextFiles.map((path): ComposerContextChip => {
+    const name = PgExplorer.getItemNameFromPath(path);
+    return {
+      label: name,
+      title: `${path}\nSent in full with every message`,
+      spoken: sent(`${name}, in full`),
+      remove: {
+        label: `Remove ${name} from the context`,
+        run: () => {
+          PgAssistantContext.remove(workspace(), path);
+          assistantTelemetry.track("assistant_file_chip_removed", {});
+        },
+      },
+    };
+  });
+  // Where you are, the files (tabs in tab order, then the added ones),
+  // then what else is sent
   return [
     lesson
       ? {
@@ -64,37 +77,7 @@ const contextChips = (
           ),
         }
       : null,
-    currentFilePath && openName && openFile.leftOut !== currentFilePath
-      ? {
-          label: openName,
-          title: "The tab you are looking at, sent in full every turn",
-          spoken: sent(`${openName}, the open file, in full`),
-          remove: {
-            label: `Leave ${openName} out of the next message`,
-            run: () => openFile.leaveOut(currentFilePath),
-          },
-        }
-      : null,
-    {
-      label: files,
-      title: `Every path is sent each turn, and the assistant can read any of them:\n\n${filePaths.join(
-        "\n"
-      )}`,
-      spoken: sent(
-        filePaths.length === 1
-          ? `the path of ${files}`
-          : `the paths of all ${files}`
-      ),
-    },
-    openPaths.length > 1
-      ? {
-          label: `${openPaths.length} open`,
-          title: `Your open tabs are named each turn; only the active one is sent in full:\n\n${openPaths.join(
-            "\n"
-          )}`,
-          spoken: sent(`the names of your ${openPaths.length} open tabs`),
-        }
-      : null,
+    ...files,
     PgBuildOutput.latest?.failed
       ? {
           label: "build error",
@@ -110,6 +93,23 @@ const contextChips = (
         }
       : null,
   ].filter((chip): chip is ComposerContextChip => !!chip);
+};
+
+/** The project files not in the context, for + › Add a file */
+const addableFiles = (contextFiles: readonly string[]) => {
+  const inContext = new Set(contextFiles);
+  return realBridge
+    .listFiles()
+    .filter((path) => !inContext.has(path))
+    .map((path) => ({
+      path,
+      add: () => {
+        PgAssistantContext.add(workspace(), path);
+        assistantTelemetry.track("assistant_context_file_added", {
+          via: "menu",
+        });
+      },
+    }));
 };
 
 /** The input's placeholder, by where the turn is */
@@ -138,6 +138,20 @@ export function AssistantComposer({
 }) {
   const [, render] = useReducer((n: number) => n + 1, 0);
   useEffect(() => PgAssistant.onDidChange(render).dispose, []);
+  // The chips follow the context: a pick, a tab opened or closed, a file
+  // created or deleted, another project
+  useEffect(() => PgAssistantContext.onDidChange(render).dispose, []);
+  useEffect(() => {
+    const subs = [
+      PgExplorer.onDidSetTabs(render),
+      PgExplorer.onDidCreateItem(render),
+      PgExplorer.onDidDeleteItem(render),
+      PgExplorer.onDidRenameItem(render),
+      PgExplorer.onDidSwitchWorkspace(render),
+    ];
+    return () => subs.forEach((sub) => sub.dispose());
+  }, []);
+  const contextFiles = realBridge.listContextFiles();
 
   const [lessonState, setLessonState] =
     useState<LessonState>(INITIAL_LESSON_STATE);
@@ -237,13 +251,8 @@ export function AssistantComposer({
         </Callout>
       )}
       <BaseAssistantComposer
-        chips={contextChips(lessonState, {
-          leftOut: turn.openFileLeftOut,
-          leaveOut: (path) => {
-            turn.leaveOutOpenFile(path);
-            assistantTelemetry.track("assistant_file_chip_removed", {});
-          },
-        })}
+        chips={contextChips(lessonState, contextFiles)}
+        addable={addableFiles(contextFiles)}
         value={turn.input}
         onValueChange={turn.setInput}
         onSend={(text) => {

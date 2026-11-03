@@ -18,6 +18,7 @@ interface Setup {
   connectLabel?: string;
   focusRequest?: number;
   sendBlocked?: string | null;
+  addable?: { path: string; add(): void }[];
 }
 
 /** The Base with its value held the way the connected composer holds it */
@@ -29,6 +30,7 @@ const setup = ({
   focusRequest = 0,
   sendBlocked = null,
   connectLabel = "Connect a model…",
+  addable = [],
 }: Setup = {}) => {
   const onSend = vi.fn();
   const onStop = vi.fn();
@@ -53,6 +55,7 @@ const setup = ({
           onSources={onSources}
           onConnect={onConnect}
           connectLabel={connectLabel}
+          addable={addable}
           focusPicked={() => false}
         />
       </TooltipProvider>
@@ -79,6 +82,25 @@ const chipOf = (label: string) => {
 
 const input = () =>
   screen.getByRole("textbox", { name: "Message the assistant" });
+
+/**
+ * Opens + › Add a file from the keyboard, as the submenu's own focus: jsdom
+ * has no pointer geometry for Radix's grace area, so a click into the
+ * submenu closes it first
+ */
+const openAddFile = async (user: ReturnType<typeof userEvent.setup>) => {
+  screen.getByRole("menuitem", { name: "Add a file" }).focus();
+  await user.keyboard("{ArrowRight}");
+};
+
+/** Picks a file in the open Add a file submenu */
+const pickFile = async (
+  user: ReturnType<typeof userEvent.setup>,
+  path: string
+) => {
+  screen.getByRole("menuitem", { name: path }).focus();
+  await user.keyboard("{Enter}");
+};
 
 describe("BaseAssistantComposer", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -288,19 +310,19 @@ describe("BaseAssistantComposer", () => {
           label: "lib.rs active",
           title: "The tab you are looking at",
           spoken: "Sent with this message: lib.rs, the open file, in full",
-          remove: { label: "Leave lib.rs out of the next message", run },
+          remove: { label: "Remove lib.rs from the context", run },
         },
         { label: "3 files", title: "Every path", spoken: "Sent: all 3 paths" },
       ],
     });
     const remove = screen.getByRole("button", {
-      name: "Leave lib.rs out of the next message",
+      name: "Remove lib.rs from the context",
     });
     expect(remove.className).toContain("before:-inset-y-3.5");
     expect(chipOf("lib.rs active").className).toContain(
       "before:-inset-y-[11px]"
     );
-    expect(screen.getAllByRole("button", { name: /^Leave / })).toHaveLength(1);
+    expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(1);
     await user.click(remove);
     expect(run).toHaveBeenCalledTimes(1);
     // The button goes with its chip; the keyboard lands in the input
@@ -329,7 +351,7 @@ describe("BaseAssistantComposer", () => {
                       title: "The tab you are looking at",
                       spoken: "Sent with this message: lib.rs",
                       remove: {
-                        label: "Leave lib.rs out of the next message",
+                        label: "Remove lib.rs from the context",
                         run: () => setKept(false),
                       },
                     },
@@ -347,6 +369,7 @@ describe("BaseAssistantComposer", () => {
             onSources={vi.fn()}
             onConnect={vi.fn()}
             connectLabel="Connect a model…"
+            addable={[]}
             focusPicked={() => false}
           />
         </TooltipProvider>
@@ -357,7 +380,7 @@ describe("BaseAssistantComposer", () => {
 
     await user.click(
       screen.getByRole("button", {
-        name: "Leave lib.rs out of the next message",
+        name: "Remove lib.rs from the context",
       })
     );
 
@@ -366,11 +389,15 @@ describe("BaseAssistantComposer", () => {
   });
 
   describe("the + menu", () => {
-    it("offers Sources and tools and Connect a model…", async () => {
+    it("offers Add a file, Sources and tools and Connect a model…", async () => {
       const { user, onSources } = setup();
       await user.click(screen.getByRole("button", { name: "Add context" }));
       const items = screen.getAllByRole("menuitem").map((i) => i.textContent);
-      expect(items).toEqual(["Sources and toolsS", "Connect a model…K"]);
+      expect(items).toEqual([
+        "Add a file",
+        "Sources and toolsS",
+        "Connect a model…K",
+      ]);
       await user.click(
         screen.getByRole("menuitem", { name: /Sources and tools/ })
       );
@@ -412,6 +439,46 @@ describe("BaseAssistantComposer", () => {
     expect(screen.getByRole("button", { name: "Add context" })).toBeTruthy();
   });
 
+  it("lists the files outside the context under Add a file, and adds the one picked", async () => {
+    const add = vi.fn();
+    const { user } = setup({
+      addable: [
+        { path: "tests/anchor.test.ts", add },
+        { path: "client/client.ts", add: vi.fn() },
+      ],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add context" }));
+    await openAddFile(user);
+    expect(
+      screen.getByRole("menuitem", { name: "client/client.ts" })
+    ).toBeTruthy();
+    await pickFile(user, "tests/anchor.test.ts");
+
+    expect(add).toHaveBeenCalledTimes(1);
+  });
+
+  it("says every file is in the context when none is left to add", async () => {
+    const { user } = setup({ addable: [] });
+
+    await user.click(screen.getByRole("button", { name: "Add context" }));
+    await openAddFile(user);
+
+    expect(screen.getByText("Every file is in the context")).toBeTruthy();
+  });
+
+  it("keeps a typed letter in the file list from picking Sources", async () => {
+    const { user, onSources } = setup({
+      addable: [{ path: "src/lib.rs", add: vi.fn() }],
+    });
+
+    await user.click(screen.getByRole("button", { name: "Add context" }));
+    await openAddFile(user);
+    await user.keyboard("s");
+
+    expect(onSources).not.toHaveBeenCalled();
+  });
+
   it("focuses the input when asked, and not on mount", () => {
     const composer = (focusRequest: number) => (
       <BaseAssistantComposer
@@ -428,6 +495,7 @@ describe("BaseAssistantComposer", () => {
         onSources={vi.fn()}
         onConnect={vi.fn()}
         connectLabel="Connect a model…"
+        addable={[]}
         focusPicked={() => false}
       />
     );

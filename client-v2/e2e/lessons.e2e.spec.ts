@@ -301,7 +301,7 @@ test.describe("client-v2-lessons", () => {
     const chips = page.locator(
       '[data-slot="composer-context"] > * > [aria-hidden="true"]'
     );
-    await expect(chips).toHaveText(["Step 1 of 4", "lib.rs", "1 file"]);
+    await expect(chips).toHaveText(["Step 1 of 4", "lib.rs"]);
   });
 
   test("client-v2-lessons: The band and the bar on a phone", async ({

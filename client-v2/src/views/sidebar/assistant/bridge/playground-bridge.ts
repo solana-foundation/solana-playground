@@ -8,9 +8,11 @@ import {
   PgWallet,
 } from "../../../../utils";
 import { PgLesson } from "../../../flow/lessons";
-import { PgBuildOutput, stripKnownNoise } from "./build-output";
-import type { LessonContext } from "./lesson-context";
-import { describeLesson } from "./lesson-context";
+import {
+  contextPaths,
+  normalizeProjectPath,
+  PgAssistantContext,
+} from "@/entities/assistant-context";
 
 /** A condensed view of the program's interface, cheaper than the whole IDL */
 export interface IdlSummary {
@@ -24,12 +26,12 @@ export interface ProjectContext {
   workspaceName: string | null;
   /** Relative path of the file the user is looking at */
   currentFilePath: string | null;
-  /** Content of that file */
-  currentFileContent: string | null;
-  /** Relative paths of every open editor tab, the current one included */
-  openFilePaths: string[];
-  /** Relative paths of every file in the project */
-  filePaths: string[];
+  /**
+   * The files in the conversation's context, in full: the open tabs and the
+   * files the user added, minus the ones they removed. No other file of the
+   * project is named here, so the user decides what reaches the model (HOO-2424)
+   */
+  contextFiles: { path: string; content: string }[];
   /** Compiler output from the last failed build, noise removed */
   buildError: string | null;
   /** Program interface, available only after a successful Anchor build */
@@ -57,15 +59,30 @@ export interface Patch {
  * real implementation is the default because most of it is genuinely real —
  * only the model call is simulated when there is no key.
  *
- * Reading is free. Everything that writes, builds or deploys is called only
- * after the user has approved it in the UI — the bridge does not gate, the
- * caller does.
+ * Reading is free on this side; what reaches the model is limited to the
+ * conversation's context by the tools and the prompt. Everything that
+ * writes, builds or deploys is called only after the user has approved it in
+ * the UI — the bridge does not gate, the caller does.
  */
 export interface PlaygroundBridge {
   getProjectContext(): ProjectContext;
+  /** Every file of the project; for the + menu, never sent to the model */
   listFiles(): string[];
   /** Relative paths of the editor's open tabs, in tab order */
   listOpenFiles(): string[];
+  /** Relative paths of the files in the conversation's context */
+  listContextFiles(): string[];
+  /**
+   * A path the model wrote (`/src/lib.rs`, `./src/lib.rs`) as `src/lib.rs`,
+   * or `null` when it names nothing in the project
+   */
+  toProjectPath(path: string): string | null;
+  /**
+   * Any file of the project, context or not: for the approval card and the
+   * tools' own checks. What the model may read goes through `read_file`,
+   * which checks `listContextFiles()` first; a new reader for the model must
+   * do the same
+   */
   readFile(path: string): string | null;
   applyPatch(patch: Patch): Promise<void>;
   /** Removes a file; what Undo patch does to a file the patch created */
@@ -103,11 +120,13 @@ export const realBridge: PlaygroundBridge = {
     return {
       workspaceName: PgExplorer.currentWorkspaceName ?? null,
       currentFilePath: currentFullPath ? toRelative(currentFullPath) : null,
-      currentFileContent: currentFullPath
-        ? PgExplorer.getFileContent(currentFullPath) ?? null
-        : null,
-      openFilePaths: this.listOpenFiles(),
-      filePaths: this.listFiles(),
+      // A file that cannot be read now (deleted between the listing and the
+      // read) is left out rather than sent as empty, which the model would
+      // take for the file's content
+      contextFiles: this.listContextFiles().flatMap((path) => {
+        const content = this.readFile(path);
+        return content === null ? [] : [{ path, content }];
+      }),
       buildError: build && build.failed ? stripKnownNoise(build.stderr) : null,
       idl: summarizeIdl(),
       programId: PgProgramInfo.getPkStr() ?? null,
@@ -129,6 +148,29 @@ export const realBridge: PlaygroundBridge = {
 
   listOpenFiles() {
     return PgExplorer.tabs.map(toRelative);
+  },
+
+  listContextFiles() {
+    const files = new Set(this.listFiles());
+    return contextPaths(
+      this.listOpenFiles(),
+      PgAssistantContext.choice(PgExplorer.currentWorkspaceId ?? null),
+      (path) => files.has(path)
+    );
+  },
+
+  toProjectPath(path) {
+    // The full path the explorer itself uses, `/<workspace>/src/lib.rs`, is
+    // relative once its workspace prefix goes; anything else is read as
+    // relative to the project root
+    const name = PgExplorer.currentWorkspaceName;
+    const prefix = name ? `/${name}/` : null;
+    const trimmed = path.trim();
+    return normalizeProjectPath(
+      prefix && trimmed.startsWith(prefix)
+        ? trimmed.slice(prefix.length)
+        : trimmed
+    );
   },
 
   readFile(path) {
@@ -185,3 +227,13 @@ export const realBridge: PlaygroundBridge = {
     };
   },
 };
+
+// A deleted file's choices go with it, so a new file made at its path is not
+// in the context until the user adds it. Here, not in the composer: the
+// store outlives the panel, and a delete while it is closed counts too
+PgExplorer.onDidDeleteItem((fullPath) => {
+  const path = realBridge.toProjectPath(fullPath);
+  if (path) {
+    PgAssistantContext.forget(PgExplorer.currentWorkspaceId ?? null, path);
+  }
+});

@@ -44,21 +44,48 @@ vi.mock("../../../effects/chat-thread/push-thread", () => ({
 
 // What the chips read: the workspace, the bridge and the lesson. The real ones
 // reach the utils barrel, which needs the build's globals
+const { noEvent } = vi.hoisted(() => ({
+  noEvent: () => ({ dispose: () => {} }),
+}));
 vi.mock("../../../utils/explorer/explorer", () => ({
   PgExplorer: {
     currentFilePath: "src/lib.rs",
+    // Each test gets its own, so one test's context choice is not another's
+    currentWorkspaceId: "w0",
     getItemNameFromPath: (path: string) => path.split("/").pop(),
+    onDidSetTabs: noEvent,
+    onDidCreateItem: noEvent,
+    onDidDeleteItem: noEvent,
+    onDidRenameItem: noEvent,
+    onDidSwitchWorkspace: noEvent,
   },
 }));
 vi.mock("../../../utils/program-info", () => ({
   PgProgramInfo: { idl: null },
 }));
-vi.mock("../../../views/sidebar/assistant/bridge/playground-bridge", () => ({
-  realBridge: {
-    listFiles: () => ["src/lib.rs"],
-    listOpenFiles: () => ["src/lib.rs"],
-  },
-}));
+// The bridge's context from the real store, over a fixed project
+const FILES = ["src/lib.rs", "tests/anchor.test.ts", "secret/other.rs"];
+vi.mock(
+  "../../../views/sidebar/assistant/bridge/playground-bridge",
+  async () => {
+    const { contextPaths, PgAssistantContext } = await import(
+      "@/entities/assistant-context"
+    );
+    const { PgExplorer } = await import("../../../utils/explorer/explorer");
+    return {
+      realBridge: {
+        listFiles: () => FILES,
+        listOpenFiles: () => ["src/lib.rs"],
+        listContextFiles: () =>
+          contextPaths(
+            ["src/lib.rs"],
+            PgAssistantContext.choice(PgExplorer.currentWorkspaceId ?? null),
+            (path) => FILES.includes(path)
+          ),
+      },
+    };
+  }
+);
 vi.mock("../../../views/sidebar/assistant/bridge/build-output", () => ({
   PgBuildOutput: { latest: null },
 }));
@@ -132,6 +159,34 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/**
+ * Opens + › Add a file from the keyboard, as the submenu's own focus: jsdom
+ * has no pointer geometry for Radix's grace area, so a click into the
+ * submenu closes it first
+ */
+const openAddFile = async (user: ReturnType<typeof userEvent.setup>) => {
+  screen.getByRole("menuitem", { name: "Add a file" }).focus();
+  await user.keyboard("{ArrowRight}");
+};
+
+/** Picks a file in the open Add a file submenu */
+const pickFile = async (
+  user: ReturnType<typeof userEvent.setup>,
+  path: string
+) => {
+  screen.getByRole("menuitem", { name: path }).focus();
+  await user.keyboard("{Enter}");
+};
+
+// A fresh workspace per test: the context store outlives a render
+let workspaces = 0;
+beforeEach(async () => {
+  const { PgExplorer } = await import("../../../utils/explorer/explorer");
+  (
+    PgExplorer as { currentWorkspaceId: string }
+  ).currentWorkspaceId = `w${++workspaces}`;
+});
+
 describe("AssistantComposer, context chips", () => {
   // Removing a chip focuses it first, and its tooltip watches its size
   beforeEach(() => {
@@ -145,17 +200,16 @@ describe("AssistantComposer, context chips", () => {
     );
   });
 
-  it("names each chip by what it sends", () => {
+  it("names a chip per file in the context, and none for the rest of the project", () => {
     render(<Harness />);
     expect(
-      screen.getByText("Sent with this message: lib.rs, the open file, in full")
+      screen.getByText("Sent with this message: lib.rs, in full")
     ).toBeTruthy();
-    expect(
-      screen.getByText("Sent with this message: the path of 1 file")
-    ).toBeTruthy();
+    expect(screen.queryByText(/the paths? of/)).toBeNull();
+    expect(screen.queryByText("other.rs")).toBeNull();
   });
 
-  it("leaves the open file out of the next message only, and reports it", async () => {
+  it("keeps a removed file out until it is added back, and reports it", async () => {
     const send = vi.fn(() => Promise.resolve());
     vi.spyOn(
       await import("../../../views/sidebar/assistant/model"),
@@ -165,11 +219,8 @@ describe("AssistantComposer, context chips", () => {
     const user = userEvent.setup();
 
     await user.click(
-      screen.getByRole("button", {
-        name: "Leave lib.rs out of the next message",
-      })
+      screen.getByRole("button", { name: "Remove lib.rs from the context" })
     );
-
     expect(screen.queryByText("lib.rs")).toBeNull();
     expect(tracked()).toContainEqual(["assistant_file_chip_removed", {}]);
 
@@ -177,56 +228,42 @@ describe("AssistantComposer, context chips", () => {
       screen.getByRole("textbox", { name: "Message the assistant" }),
       "hi{Enter}"
     );
-
     // The send starts after the default backend's probe; slow under load
-    await waitFor(
-      () =>
-        expect(send).toHaveBeenCalledWith(
-          "hi",
-          expect.objectContaining({ context: { openFile: false } })
-        ),
-      { timeout: 5_000 }
-    );
+    await waitFor(() => expect(send).toHaveBeenCalled(), { timeout: 5_000 });
+    // Not "the next message only": the chip stays gone after the send
+    expect(screen.queryByText("lib.rs")).toBeNull();
+  });
+
+  it("adds a file from + › Add a file, and reports it", async () => {
+    render(<Harness />);
+    const user = await openMenu(/Add context/);
+
+    await openAddFile(user);
+    await pickFile(user, "tests/anchor.test.ts");
+
     expect(
-      await screen.findByText("lib.rs", {}, { timeout: 5_000 })
+      await screen.findByText("Sent with this message: anchor.test.ts, in full")
     ).toBeTruthy();
-  });
-});
-
-describe("AssistantComposer, a left-out file", () => {
-  // Removing a chip focuses it first, and its tooltip watches its size
-  beforeEach(() => {
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        observe() {}
-        unobserve() {}
-        disconnect() {}
-      }
-    );
+    expect(tracked()).toContainEqual([
+      "assistant_context_file_added",
+      { via: "menu" },
+    ]);
   });
 
-  it("shows the chip of a file the user switches to, and that file's goes back", async () => {
-    const { PgExplorer } = await import("../../../utils/explorer/explorer");
-    const explorer = PgExplorer as { currentFilePath: string };
+  it("offers a removed tab under Add a file, and brings its chip back", async () => {
     render(<Harness />);
     const user = userEvent.setup();
-
     await user.click(
-      screen.getByRole("button", {
-        name: "Leave lib.rs out of the next message",
-      })
+      screen.getByRole("button", { name: "Remove lib.rs from the context" })
     );
-    expect(screen.queryByText("lib.rs")).toBeNull();
 
-    try {
-      explorer.currentFilePath = "src/other.rs";
-      // Any change in the store redraws the composer
-      act(() => PgAssistant.setStatus("idle"));
-      expect(screen.getByText("other.rs")).toBeTruthy();
-    } finally {
-      explorer.currentFilePath = "src/lib.rs";
-    }
+    await user.click(screen.getByRole("button", { name: /Add context/ }));
+    await openAddFile(user);
+    await pickFile(user, "src/lib.rs");
+
+    expect(
+      await screen.findByText("Sent with this message: lib.rs, in full")
+    ).toBeTruthy();
   });
 });
 
@@ -260,8 +297,11 @@ describe("AssistantComposer, the + menu", () => {
 });
 
 describe("AssistantComposer, chip order", () => {
-  it("names the active file before the file count, as the prototype orders them", () => {
+  it("names the files in tab order, then the added ones", async () => {
     render(<Harness />);
+    const user = await openMenu(/Add context/);
+    await openAddFile(user);
+    await pickFile(user, "tests/anchor.test.ts");
     // Each chip is its tooltip's trigger, which takes over its data-slot
     const chips = Array.from(
       document.querySelectorAll('[data-slot="composer-context"] > *')
@@ -269,7 +309,7 @@ describe("AssistantComposer, chip order", () => {
       // The short label; the chip also carries its spoken name for a reader
       (chip) => chip.querySelector('[aria-hidden="true"]')?.textContent
     );
-    expect(chips).toEqual(["lib.rs", "1 file"]);
+    expect(chips).toEqual(["lib.rs", "anchor.test.ts"]);
   });
 });
 

@@ -15,11 +15,14 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuShortcut,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { Button } from "@/shared/ui/button";
 import { LogoPlay } from "@/shared/ui/logo";
-import { MenuItemText } from "@/shared/ui/menu-extras";
+import { MenuItemText, MenuNote } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 import { usePickedMenu } from "./use-picked-menu";
 
@@ -30,8 +33,15 @@ export interface ComposerContextChip {
   title: string;
   /** The chip's name for a screen reader: what goes with the message, in full */
   spoken: string;
-  /** Leaves this item out of the next message; only the open file offers it */
+  /** Takes this file out of the context until it is added back; files only */
   remove?: { label: string; run(): void };
+}
+
+/** A project file outside the context, offered under + › Add a file */
+export interface ComposerAddableFile {
+  /** Relative to the project root, as the menu shows it */
+  path: string;
+  add(): void;
 }
 
 // A phone's 44 px target around a chip drawn 22 px high, and around its
@@ -48,8 +58,9 @@ const REMOVE_TARGET =
  *
  * The input stays editable during a turn; the design system's `Composer`
  * refuses to submit while `busy`, so typing ahead cannot start a second turn.
- * The + (`ComposerAdd`) opens Sources and tools or Connect a model: the
- * same Sources and Connect entries as the head's More, with the same keys.
+ * The + (`ComposerAdd`) adds a file to the context (`addable`), or opens
+ * Sources and tools or Connect a model: the same Sources and Connect entries
+ * as the head's More, with the same keys.
  */
 export function BaseAssistantComposer({
   chips,
@@ -66,6 +77,7 @@ export function BaseAssistantComposer({
   onSources,
   onConnect,
   connectLabel,
+  addable,
   focusPicked,
 }: {
   chips: ComposerContextChip[];
@@ -94,6 +106,8 @@ export function BaseAssistantComposer({
   onConnect(): void;
   /** "Connect a model…" with nothing connected, "Connection and key…" once connected */
   connectLabel: string;
+  /** The project files outside the context, for + › Add a file */
+  addable: ComposerAddableFile[];
   /** Gives focus to what a pick from + opened; `false` when nothing took it */
   focusPicked(): boolean;
 }) {
@@ -122,7 +136,7 @@ export function BaseAssistantComposer({
         {chips.length > 0 && (
           <ComposerContextList>
             {chips.map((chip) => (
-              <Tooltip key={chip.label}>
+              <Tooltip key={`${chip.label}\n${chip.title}`}>
                 {/* Focusable, so the explanation reaches keyboard users too */}
                 <TooltipTrigger asChild>
                   <ComposerChip tabIndex={0} className={CHIP_TARGET}>
@@ -185,6 +199,30 @@ export function BaseAssistantComposer({
               onKeyDown={add.onKeyDown}
               onCloseAutoFocus={add.onCloseAutoFocus}
             >
+              <DropdownMenuSub>
+                <DropdownMenuSubTrigger>
+                  <MenuItemText>Add a file</MenuItemText>
+                </DropdownMenuSubTrigger>
+                <DropdownMenuSubContent
+                  className="max-h-80 overflow-y-auto"
+                  // A letter typed here is the list's typeahead; it must not
+                  // reach the + menu's S and K through the portal
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  {addable.length === 0 ? (
+                    <MenuNote>Every file is in the context</MenuNote>
+                  ) : (
+                    addable.map((file) => (
+                      <DropdownMenuItem
+                        key={file.path}
+                        onSelect={() => file.add()}
+                      >
+                        <MenuItemText>{file.path}</MenuItemText>
+                      </DropdownMenuItem>
+                    ))
+                  )}
+                </DropdownMenuSubContent>
+              </DropdownMenuSub>
               <DropdownMenuItem onSelect={() => add.pick(onSources)}>
                 <MenuItemText>Sources and tools</MenuItemText>
                 <DropdownMenuShortcut>S</DropdownMenuShortcut>

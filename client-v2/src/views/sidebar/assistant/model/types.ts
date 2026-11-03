@@ -18,28 +18,13 @@ export interface Provider {
    * Take one turn.
    *
    * @param input what the user typed
-   * @param turn `signal` aborts the turn, which rejects with the abort
-   * reason; `context` is what goes with this message, everything when absent.
-   * A provider must pass `context` to `describeProject`: `openFile: false` is
-   * the user leaving that file's content out, and sending it anyway breaks that
+   * @param turn `signal` aborts the turn, which rejects with the abort reason
    * @throws {TurnFailure} when the backend, the model or the backend's cost
    *   gate ended the turn without an answer; any other rejection is the abort
    *   reason or a failure raised on this side
    */
-  send(
-    input: string,
-    turn?: { signal?: AbortSignal; context?: TurnContext }
-  ): Promise<void>;
+  send(input: string, turn?: { signal?: AbortSignal }): Promise<void>;
 }
-
-/** What the user chose to send with one message */
-export interface TurnContext {
-  /** `false` when the user left the open file's content out of it */
-  openFile: boolean;
-}
-
-/** A message sent with everything, the open file in full */
-export const EVERYTHING: TurnContext = { openFile: true };
 
 /**
  * Why a turn ended without an answer: the backend answered with an error or

@@ -14,7 +14,6 @@ describe("BUILTIN_TOOLS", () => {
         "list_skills",
         "load_skill",
         "read_skill_reference",
-        "list_files",
         "read_file",
         "get_build_error",
         "write_file",
