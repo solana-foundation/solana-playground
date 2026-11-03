@@ -208,8 +208,10 @@ export const checkProjectLimits = (files) => {
     .filter((path) => pathLength(path) > PROJECT_LIMITS.pathChars);
   if (longPaths.length) return limitExceeded.pathTooLong(longPaths);
 
+  // No prototype: a body can name a file `__proto__`, which a plain object's
+  // inherited setter would take instead of keeping it as an entry
   /** @type {Record<string, number>} */
-  const sizes = {};
+  const sizes = Object.create(null);
   let size = 0;
   for (const [path, content] of entries) {
     sizes[path] = byteLength(content);
@@ -274,7 +276,9 @@ export const checkFileWrite = (files, path, content) => {
   if (own || !isSyncedPath(path)) return own;
 
   const before = measure(files);
-  const after = measure(Object.assign({}, files, { [path]: content }));
+  const after = measure(
+    Object.assign(Object.create(null), files, { [path]: content })
+  );
   if (after.count > before.count && after.count > PROJECT_LIMITS.files) {
     return limitExceeded.tooManyFiles(after.count);
   }

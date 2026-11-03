@@ -60,6 +60,15 @@ describe("entities/project/limits", () => {
         ["src/a.rs", "src/b.rs"]
       );
     });
+
+    it("stops a file named __proto__", () => {
+      // A request body parses `__proto__` as an own key, which a plain
+      // object's setter would swallow
+      const files = JSON.parse(
+        JSON.stringify({ x: "a".repeat(131_073) }).replace('"x"', '"__proto__"')
+      );
+      assert.deepEqual(checkProjectLimits(files)?.paths, ["__proto__"]);
+    });
   });
 
   describe("path length", () => {
