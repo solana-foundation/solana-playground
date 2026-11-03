@@ -17,6 +17,13 @@ export interface WalletStore {
 }
 
 const STORE_NAME = "state";
+
+/**
+ * How long an open may take before the wallet gives up on IndexedDB for the
+ * page. An open that never answers (some private modes, a stalled browser)
+ * would otherwise hold the lock and the app's start forever.
+ */
+const OPEN_TIMEOUT_MS = 5000;
 const RECORD_KEY = "wallet";
 
 /** Run one request in its own transaction and resolve with its result */
@@ -52,12 +59,25 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         reject(new Error("indexedDB is not available"));
         return;
       }
+      let isSettled = false;
+      const fail = (error: unknown) => {
+        isSettled = true;
+        reject(error);
+      };
+      const timeout = setTimeout(
+        () => fail(new Error("indexedDB open timed out")),
+        OPEN_TIMEOUT_MS
+      );
       const request = indexedDB.open(name, 1);
       request.onupgradeneeded = () => {
         request.result.createObjectStore(STORE_NAME);
       };
       request.onsuccess = () => {
+        clearTimeout(timeout);
         const db = request.result;
+        // Opened after a timeout or a block was already reported: close it, so
+        // it cannot hold up a later upgrade
+        if (isSettled) return db.close();
         // A closed connection (eviction, another tab's upgrade) is dropped so
         // the next call opens a fresh one instead of failing forever
         db.onversionchange = () => {
@@ -65,10 +85,17 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
           opened = undefined;
         };
         db.onclose = () => (opened = undefined);
+        isSettled = true;
         resolve(db);
       };
-      request.onerror = () => reject(request.error);
-      request.onblocked = () => reject(new Error("indexedDB open is blocked"));
+      request.onerror = () => {
+        clearTimeout(timeout);
+        fail(request.error);
+      };
+      request.onblocked = () => {
+        clearTimeout(timeout);
+        fail(new Error("indexedDB open is blocked"));
+      };
     });
     // A failed open is retried on the next call rather than cached
     opened.catch(() => (opened = undefined));
@@ -78,11 +105,22 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
   const lockName = `${name}:state`;
 
   return {
-    exclusive(task) {
+    async exclusive(task) {
       // Without Web Locks (old browsers, some test environments) the task runs
-      // unguarded, as every write already does
+      // unguarded, as every write did before the keystore
       if (typeof navigator === "undefined" || !navigator.locks) return task();
-      return navigator.locks.request(lockName, task);
+      let hasStarted = false;
+      try {
+        return await navigator.locks.request(lockName, () => {
+          hasStarted = true;
+          return task();
+        });
+      } catch (error) {
+        // The task's own failure is the caller's; a lock that cannot be taken
+        // (a sandboxed origin's SecurityError) must not cost the save
+        if (hasStarted) throw error;
+        return task();
+      }
     },
     async read() {
       const db = await open();
