@@ -498,7 +498,7 @@ test.describe("The thread", () => {
     const card = page.locator("[data-slot=diff][data-status=pending]");
     await expect(card).toBeVisible(LONG);
     await expect(card.getByText("src/lib.rs")).toBeInViewport({ ratio: 1 });
-    for (const name of ["Apply", "Reject"]) {
+    for (const name of ["Apply", "Discard"]) {
       const button = card.getByRole("button", { name });
       await expect(button).toBeInViewport({ ratio: 1 });
       // A thumb's target, 44 px high
@@ -626,12 +626,12 @@ test.describe("The thread", () => {
 
     const card = page.locator("[data-slot=diff][data-status=unanswered]");
     await expect(card).toBeVisible(LONG);
-    await expect(card.getByText("Not answered")).toBeVisible();
+    await expect(card.getByText("Not applied", { exact: true })).toBeVisible();
     await expect(
       card.getByText("not applied -- the session ended before you answered")
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Reject" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Discard" })).toHaveCount(0);
   });
 
   test("client-v2-assistant: Answering an approval is reported once", async ({

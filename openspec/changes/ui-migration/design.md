@@ -1149,7 +1149,7 @@ widgets/assistant
 │  └─ BaseApprovalCard   Diff parts: header (path and DiffStat, or "wants to
 │                        run <name>"; a status Badge), content (the diff's
 │                        lines, or `$ <name>` and its effect), footer
-│                        (Apply/Reject, Allow/Deny, or the outcome)
+│                        (Apply/Discard, Allow/Deny, or the outcome)
 └─ (AssistantComposer, 5.17)
 ```
 
@@ -1182,9 +1182,11 @@ widgets/assistant
   touch or keys it stays put and offers "Scroll to end". There is no scroll
   anchor, so a send made while scrolled up does not move the thread.
 - **What survives.** The log "Conversation", "Assistant is working", "Make
-  this change", "Write it for me", "Skip this step", Apply, Reject, Allow,
-  Deny, and the status words, now in sentence case (Proposed, Applied,
-  Declined, Not answered).
+  this change", "Write it for me", "Skip this step", Apply, Allow, Deny, and
+  the status words, now in sentence case (Proposed, Applied, Declined, Not
+  answered). A patch card says Discard, Discarded and Not applied instead
+  (Nikita's Spec 04, HOO-2434); a command card keeps Deny, Declined and Not
+  answered.
 - **What changes.** The "YOU" and "ASSISTANT" headers become the bubbles'
   sides, with the speaker kept for a screen reader; the diff loses its
   line-number gutter, which the design system's `DiffLine` does not draw; the

@@ -57,15 +57,15 @@ export const failureKindOf = (
 /**
  * Spec 08's words for a failed model request (AI-03, AI-05, and the
  * assistant's "Could not …" fallback): no status, JSON or server text.
- * `forbidden`, `no-model`, `too-long` and `invalid` have no Spec 08 state yet;
- * their words are Lead's (30 Oct), raised to the designers as a Spec 08 gap.
+ * `forbidden` is Spec 08's "Model not available" (no model id reaches it).
+ * `no-model`, `too-long` and `invalid` have no Spec 08 state yet; their words
+ * are Lead's (30 Oct), raised to the designers as a Spec 08 gap.
  */
 export const FAILURE_MESSAGE: Record<AiFailureKind, string> = {
   busy: "The model is busy.",
   "key-refused":
     "The model's provider did not accept this key. Check it in Settings, or use the hosted model.",
-  forbidden:
-    "The provider refused this request for this key. It may not have access to this model. Check the key in Settings, or pick another model.",
+  forbidden: "Model not available. This key can't use this model.",
   "no-model": "The provider has no model by this name. Pick another model.",
   "too-long":
     "This conversation is too long for the model. Start a new conversation, or pick a model that takes more.",
@@ -140,6 +140,12 @@ if (import.meta.vitest) {
       const body =
         '{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","details":[{"reason":"API_KEY_INVALID"}]}}';
       expect(failureKindOf(400, body)).toBe("key-refused");
+    });
+
+    it("a key without access to the model says so (Spec 08)", () => {
+      expect(FAILURE_MESSAGE.forbidden).toBe(
+        "Model not available. This key can't use this model."
+      );
     });
 
     it("never tells the user to resend a request that fails the same way again", () => {
