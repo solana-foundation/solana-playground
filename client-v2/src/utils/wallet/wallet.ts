@@ -56,8 +56,27 @@ let walletStorageInstance: ReturnType<typeof walletStorageWith> | undefined;
 const walletStorage = () =>
   (walletStorageInstance ??= walletStorageWith(
     indexedDbStoreFor("pg-wallet"),
-    localStorage
+    localStorageOrRefusal()
   ));
+
+/**
+ * `localStorage`, or, where reading the global itself throws (a sandboxed or
+ * storage-blocked origin), a stand-in that throws the same error on every
+ * call, so `wallet-storage.ts` handles the refusal and reads IndexedDB.
+ */
+const localStorageOrRefusal = (): Pick<
+  Storage,
+  "getItem" | "setItem" | "removeItem"
+> => {
+  try {
+    return localStorage;
+  } catch (error) {
+    const refuse = () => {
+      throw error;
+    };
+    return { getItem: refuse, setItem: refuse, removeItem: refuse };
+  }
+};
 
 const storage = {
   /** Read from storage and deserialize the data. */
@@ -208,7 +227,14 @@ const derive = () => ({
  * set aside as unreadable.
  */
 const migrate = () => {
-  const walletStr = localStorage.getItem(WALLET_LOCAL_KEY);
+  let walletStr: string | null;
+  try {
+    walletStr = localStorage.getItem(WALLET_LOCAL_KEY);
+  } catch {
+    // Nothing to upgrade where storage is refused: `walletStorage().read`
+    // meets the same refusal, reports it and reads IndexedDB
+    return;
+  }
   if (!walletStr) return;
 
   interface OldWalletState {

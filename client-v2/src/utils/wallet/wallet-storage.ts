@@ -782,7 +782,8 @@ if (import.meta.vitest) {
         memoryLocal(truncated)
       ).read();
 
-      expect(logged.entries.length).toBeGreaterThan(2);
+      // One per failure above: the save, the open, the non-Error, the parse
+      expect(logged.entries).toHaveLength(4);
       const text = JSON.stringify(
         logged.entries.map((entry) => ({
           ns: entry.ns,

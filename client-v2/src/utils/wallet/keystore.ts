@@ -108,6 +108,8 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
   };
 
   const lockName = `${name}:state`;
+  /** Whether a refused lock was reported: once a page, not once a save */
+  let hasReportedRefusal = false;
 
   return {
     async exclusive(task) {
@@ -126,12 +128,13 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         if (hasStarted) throw error;
         // The name only: nothing the lock refused with is worth the risk
         const refusal = error instanceof Error ? error.name : typeof error;
-        log.error(
-          new Error(`Wallet lock unavailable, saving unguarded: ${refusal}`),
-          {
-            report: true,
-          }
-        );
+        if (!hasReportedRefusal) {
+          hasReportedRefusal = true;
+          log.error(
+            new Error(`Wallet lock unavailable, running unguarded: ${refusal}`),
+            { report: true }
+          );
+        }
         return task();
       }
     },
