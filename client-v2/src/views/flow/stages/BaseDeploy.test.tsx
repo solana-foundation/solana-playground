@@ -87,6 +87,7 @@ const props = (state: {
   onStaleBuildAnswer: vi.fn(),
   onInteract: vi.fn(),
   idlUpload: <button>Upload IDL</button>,
+  programKeypair: <section aria-label="Program id" />,
   onOpenCliGuide: state.onOpenCliGuide ?? vi.fn(),
 });
 
@@ -114,6 +115,37 @@ const mainnetWarning = () =>
   screen.queryByRole("alert", { name: "Mainnet deploy warning" });
 
 describe("BaseDeploy", () => {
+  it("places the Program id block under the payer line before a deploy", () => {
+    render(
+      <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
+    );
+
+    const payer = screen.getByLabelText("Who pays");
+    const block = screen.getByRole("region", { name: "Program id" });
+    expect(
+      payer.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("places the Program id block under the history after a deploy", () => {
+    render(
+      <BaseDeploy
+        {...props({
+          built: true,
+          deploy: "idle",
+          history: [record("r1", "sig1")],
+        })}
+      />
+    );
+
+    const history = screen.getByRole("region", { name: "History" });
+    const block = screen.getByRole("region", { name: "Program id" });
+    expect(
+      history.compareDocumentPosition(block) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(history.contains(block)).toBe(false);
+  });
+
   it("warns on mainnet without holding Deploy", () => {
     const { container } = render(
       <BaseDeploy

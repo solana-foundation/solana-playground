@@ -107,6 +107,11 @@ export interface BaseDeployProps {
   onInteract: () => void;
   /** The secondary "Upload IDL" action (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
+  /**
+   * The folded "Program id" block (`ProgramKeypair`): under the payer line
+   * before the first deploy, under the history after one
+   */
+  programKeypair: ReactNode;
   /** Opens the CLI deploy guide; `from` is the control pressed */
   onOpenCliGuide: (from: GuideFrom) => void;
 }
@@ -379,6 +384,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
             {payerLine(p.payer)}
           </p>
         )}
+        {!latest && p.programKeypair}
         {p.funding && (
           <BaseNotEnoughSol
             cluster={p.cluster}
@@ -409,6 +415,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
         )}
         {latest && <DeployResult latest={latest} p={p} />}
         {latest && <History p={p} />}
+        {latest && p.programKeypair}
         <BaseStaleBuildDialog
           open={p.staleBuild}
           onAnswer={p.onStaleBuildAnswer}

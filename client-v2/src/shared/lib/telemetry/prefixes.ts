@@ -16,6 +16,7 @@ export const EVENT_PREFIXES = {
   observability: "obs",
   overlays: "overlay",
   persistence: "sync",
+  "program-keypair": "keypair",
   "session-footer": "session",
   "settings-page": "settings",
   "setup-list": "setup",
