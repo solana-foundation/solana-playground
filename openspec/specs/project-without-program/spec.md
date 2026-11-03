@@ -48,11 +48,20 @@ In a repository imported with no program, paths SHALL be read from the
 imported folder. A test file (`*.test.*` or `*.spec.*` of `ts`, `tsx`, `js`,
 `jsx`) or any TypeScript or JavaScript file in a leading `tests/` or `test/`
 folder SHALL go under `tests/`; every other TypeScript or JavaScript file
-under `client/`. Each keeps its path with that leading folder (or
+under `client/`. A JSON file (`.json`) SHALL be placed by the same rule,
+under `tests/` when it sits in a leading `tests/` or `test/` folder and
+under `client/` otherwise, so a script's relative import of an IDL or a
+fixture within the same folder still resolves. Each keeps its path with that leading folder (or
 `client/`) dropped. When two files want one place, a top-level file takes
 it before one from `client/` or `tests/`, which takes it before one from
-`test/`, whatever their order; the other keeps its whole path. Files of
-other kinds SHALL be left out.
+`test/`, whatever their order; the other keeps its whole path. A JSON
+file that is tool configuration (`package.json`, `package-lock.json`,
+`npm-shrinkwrap.json`,
+`tsconfig*.json`, `jsconfig*.json`, or one whose name or folder starts with
+a dot) and files of other kinds SHALL be left out. JSON alone SHALL count
+as nothing to open. A relative import that crosses from `client/` to
+`tests/` (including a loose test file's import of JSON beside it), or out
+of a leading folder the placement drops, is not rewritten.
 
 #### Scenario: Folders are kept
 - **WHEN** a repository with no program holds `src/app/main.ts`,
@@ -68,6 +77,13 @@ other kinds SHALL be left out.
 #### Scenario: Two files for one place
 - **WHEN** a repository with no program holds `a.ts` and `client/a.ts`
 - **THEN** the project holds both, as `client/a.ts` and `client/client/a.ts`
+
+#### Scenario: An IDL and a fixture are kept
+- **WHEN** a repository with no program holds `src/index.ts` importing
+  `../idl/x.json`, `idl/x.json`, `tests/a.test.ts` importing
+  `./fixtures/a.json`, `tests/fixtures/a.json` and `tsconfig.json`
+- **THEN** the project holds `client/src/index.ts`, `client/idl/x.json`,
+  `tests/a.test.ts` and `tests/fixtures/a.json`, and no `tsconfig.json`
 
 #### Scenario: A test file outside a tests folder
 - **WHEN** a repository with no program holds `lib/math.spec.ts`
