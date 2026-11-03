@@ -1,28 +1,38 @@
 // Common command validation checks
 
-import { PgCommand, PgTerminal, PgWallet } from "../utils";
+import { PgCommand, PgTerminal, PgWallet, TerminalLineError } from "../utils";
 
 /** Check whether Playground Wallet is connected and ask to connect if not. */
 export const checkPgWallet = async () => {
-  if (!PgWallet.current?.isPg) await connect("Playground Wallet");
+  if (!PgWallet.current?.isPg) {
+    await connect("Playground Wallet is not connected. Connect it?");
+  }
 };
 
 /** Check whether any wallet is connected and ask to connect if not. */
 export const checkWallet = async () => {
-  if (!PgWallet.current) await connect("Wallet");
+  // `connect` with no argument connects the Playground Wallet, so the
+  // question names what a yes does
+  if (!PgWallet.current) {
+    await connect("No wallet is connected. Connect the Playground Wallet?");
+  }
 };
 
-const connect = async (name: "Playground Wallet" | "Wallet") => {
+/**
+ * Ask Spec 13's wallet question; a yes connects, a no ends the command.
+ *
+ * @param question the question, without its `[Y/n]`
+ * @throws {TerminalLineError} when the person answers no
+ */
+const connect = async (question: string) => {
   const term = await PgTerminal.get();
-  const shouldConnect = await term.waitForInput(
-    `${name} is not connected. Would you like to connect?`,
-    { confirm: true, default: "yes" }
-  );
+  const shouldConnect = await term.waitForInput(question, {
+    confirm: true,
+    default: "yes",
+  });
   if (!shouldConnect) {
-    throw new Error(
-      `${name} must be connected to run this command. Run \`${PgTerminal.bold(
-        PgCommand.connect.name
-      )}\` to connect.`
+    throw new TerminalLineError(
+      `Run \`${PgCommand.connect.name}\` to connect a wallet, then try again.`
     );
   }
 

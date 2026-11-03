@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 import { WalletName } from "./Wallet";
@@ -10,13 +10,8 @@ const wallets = vi.hoisted(() => ({
   switch: vi.fn(),
   update: vi.fn(),
   standard: [] as { name: string; icon: string }[],
-}));
-const makeWallet = (name: string, address: string) => ({
-  name,
   isPg: true,
-  icon: "",
-  publicKey: { toBase58: () => address },
-});
+}));
 vi.mock("../../utils", () => ({
   PgCommon: {
     withMaxLength: (text: string) => text,
@@ -45,7 +40,12 @@ vi.mock("../../utils", () => ({
   },
 }));
 vi.mock("../../hooks", () => ({
-  useWallet: () => makeWallet("first", "key-first"),
+  useWallet: () => ({
+    name: "first",
+    isPg: wallets.isPg,
+    icon: "",
+    publicKey: { toBase58: () => "key-first" },
+  }),
   useKeybind: vi.fn(),
   useOnClickOutside: vi.fn(),
   useRenderOnChange: vi.fn(),
@@ -76,9 +76,10 @@ const theme: DefaultTheme = new Proxy({} as DefaultTheme, { get: () => theme });
 beforeEach(() => {
   vi.clearAllMocks();
   wallets.standard = [];
+  wallets.isPg = true;
 });
 
-const openAccounts = async () => {
+const renderName = () =>
   render(
     <ThemeProvider theme={theme}>
       <TooltipProvider>
@@ -86,6 +87,9 @@ const openAccounts = async () => {
       </TooltipProvider>
     </ThemeProvider>
   );
+
+const openAccounts = async () => {
+  renderName();
   // The trigger takes the ref through the tooltip and the dropdown, two `asChild` slots
   const trigger = screen.getByText("first - (key-first)");
   trigger.focus();
@@ -119,5 +123,41 @@ describe("WalletName accounts menu", () => {
       standardName: "Phantom",
     });
     expect(wallets.switch).not.toHaveBeenCalled();
+  });
+});
+
+/** The tooltip's popper measures itself; jsdom has no `ResizeObserver` */
+class NoopResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+describe("WalletName help", () => {
+  beforeEach(() => vi.stubGlobal("ResizeObserver", NoopResizeObserver));
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("explains the Playground wallet beside its name (Spec 12)", async () => {
+    renderName();
+
+    const mark = screen.getByRole("button", {
+      name: "About the Playground wallet",
+    });
+    fireEvent.focus(mark);
+
+    expect(
+      await screen.findByRole("tooltip", {
+        name: "A wallet kept in this browser. Playground uses it to sign your calls without asking. Use it for devnet, testnet and local clusters only.",
+      })
+    ).toBeTruthy();
+  });
+
+  it("has no help mark on an extension wallet", () => {
+    wallets.isPg = false;
+    renderName();
+
+    expect(
+      screen.queryByRole("button", { name: "About the Playground wallet" })
+    ).toBeNull();
   });
 });

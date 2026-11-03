@@ -9,7 +9,7 @@ import { isTerminalUnmounted, PgTerminal } from "./terminal";
 
 beforeEach(() => {
   PgTerminal.setConsoleOpen(true);
-  // The instance prints `Process error: …` and rethrows; the stub keeps the
+  // The instance prints the failure's line and rethrows; the stub keeps the
   // rethrow, which is all the static method sees
   vi.spyOn(PgTerminal, "get").mockResolvedValue({
     process: (cb: () => unknown) => Promise.resolve().then(cb),

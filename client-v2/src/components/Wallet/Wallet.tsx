@@ -7,6 +7,7 @@ import Send from "./Send";
 import Settings from "./Settings";
 import Transactions from "./Transactions";
 import { Button } from "@/shared/ui/button";
+import { HelpTip } from "@/shared/ui/help-tip";
 import FadeIn from "../FadeIn";
 import ErrorBoundary from "../ErrorBoundary";
 import Img from "../Img";
@@ -141,51 +142,69 @@ export const WalletName = () => {
   if (!wallet) return null;
 
   return (
-    <DropdownMenu onOpenChange={(open) => (open ? darken() : lighten())}>
-      {/* One element carries both triggers: each `asChild` passes its props
+    <span className="inline-flex items-center gap-1.5">
+      <DropdownMenu onOpenChange={(open) => (open ? darken() : lighten())}>
+        {/* One element carries both triggers: each `asChild` passes its props
           and ref on to `WalletTitleWrapper` */}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DropdownMenuTrigger asChild>
-            <WalletTitleWrapper>
-              {!wallet.isPg && (
-                <WalletTitleIcon src={wallet.icon} alt={wallet.name} />
-              )}
-              <WalletTitleText>{getAccountDisplayName(wallet)}</WalletTitleText>
-              <ShortArrow rotate="90deg" />
-            </WalletTitleWrapper>
-          </DropdownMenuTrigger>
-        </TooltipTrigger>
-        <TooltipContent>Accounts</TooltipContent>
-      </Tooltip>
-      <DropdownMenuContent>
-        {/* All of the Playground Wallet accounts */}
-        {PgWallet.accounts.map((acc, i) => (
-          <DropdownMenuItem key={"pg-" + i} onSelect={() => PgWallet.switch(i)}>
-            <MenuItemText>
-              {getAccountDisplayName(PgWallet.create(acc))}
-            </MenuItemText>
-          </DropdownMenuItem>
-        ))}
-        {/* All of the connected Wallet Standard accounts */}
-        {PgWallet.getConnectedStandardWallets().map((standardWallet) => (
-          <DropdownMenuItem
-            key={"standard-" + standardWallet.name}
-            onSelect={() => {
-              PgWallet.update({
-                state: "sol",
-                standardName: standardWallet.name,
-              });
-            }}
-          >
-            <Img src={standardWallet.icon} alt={standardWallet.name} />
-            <MenuItemText>{getAccountDisplayName(standardWallet)}</MenuItemText>
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DropdownMenuTrigger asChild>
+              <WalletTitleWrapper>
+                {!wallet.isPg && (
+                  <WalletTitleIcon src={wallet.icon} alt={wallet.name} />
+                )}
+                <WalletTitleText>
+                  {getAccountDisplayName(wallet)}
+                </WalletTitleText>
+                <ShortArrow rotate="90deg" />
+              </WalletTitleWrapper>
+            </DropdownMenuTrigger>
+          </TooltipTrigger>
+          <TooltipContent>Accounts</TooltipContent>
+        </Tooltip>
+        <DropdownMenuContent>
+          {/* All of the Playground Wallet accounts */}
+          {PgWallet.accounts.map((acc, i) => (
+            <DropdownMenuItem
+              key={"pg-" + i}
+              onSelect={() => PgWallet.switch(i)}
+            >
+              <MenuItemText>
+                {getAccountDisplayName(PgWallet.create(acc))}
+              </MenuItemText>
+            </DropdownMenuItem>
+          ))}
+          {/* All of the connected Wallet Standard accounts */}
+          {PgWallet.getConnectedStandardWallets().map((standardWallet) => (
+            <DropdownMenuItem
+              key={"standard-" + standardWallet.name}
+              onSelect={() => {
+                PgWallet.update({
+                  state: "sol",
+                  standardName: standardWallet.name,
+                });
+              }}
+            >
+              <Img src={standardWallet.icon} alt={standardWallet.name} />
+              <MenuItemText>
+                {getAccountDisplayName(standardWallet)}
+              </MenuItemText>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {/* Beside the trigger, not in it: a button inside a button. Only a
+          Playground wallet is kept here and signs without asking */}
+      {wallet.isPg && (
+        <HelpTip label="About the Playground wallet">{PG_WALLET_HELP}</HelpTip>
+      )}
+    </span>
   );
 };
+
+/** Spec 12's "Wallet panel help" */
+const PG_WALLET_HELP =
+  "A wallet kept in this browser. Playground uses it to sign your calls without asking. Use it for devnet, testnet and local clusters only.";
 
 const WalletTitleWrapper = styled.div`
   ${({ theme }) => css`

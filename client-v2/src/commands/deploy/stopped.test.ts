@@ -21,7 +21,7 @@ describe("commands/deploy/stopped", () => {
   it("names a buffer it could not close and how to reclaim its SOL", () => {
     expect(deployStoppedLine({ state: "kept", address: "Buf1111" })).toBe(
       "Stopped. The program was not deployed. The buffer account Buf1111 " +
-        "still holds its SOL; run `solana program close --buffers` to reclaim it."
+        "still holds its SOL. Run `solana program close --buffers` to reclaim it."
     );
   });
 });

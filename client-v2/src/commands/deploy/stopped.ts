@@ -24,8 +24,8 @@ export const deployStoppedLine = (buffer: StoppedBuffer) => {
     case "kept":
       return [
         line,
-        `The buffer account ${buffer.address} still holds its SOL;`,
-        "run `solana program close --buffers` to reclaim it.",
+        `The buffer account ${buffer.address} still holds its SOL.`,
+        "Run `solana program close --buffers` to reclaim it.",
       ].join(" ");
   }
 };
