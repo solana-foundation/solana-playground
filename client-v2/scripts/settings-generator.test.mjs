@@ -14,7 +14,6 @@ describe("src/settings under Node", () => {
   it("prints the default settings the build reads into GLOBAL_SETTINGS", () => {
     const out = execFileSync(TSX, [path.join("src", "settings")], {
       cwd: CLIENT,
-      env: { ...process.env, NODE_NO_WARNINGS: "1" },
       encoding: "utf8",
       timeout: 60_000,
     });
