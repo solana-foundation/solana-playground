@@ -1,5 +1,5 @@
 # Overrides for an arm64 host (Apple Silicon), applied on the command line after .actrc:
-#   act $(grep '^-' .arm64.actrc) workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j checks --input use-wasm-stubs=true
+#   act --trust-project-actrc $(grep '^-' .arm64.actrc) workflow_call -C .. -W .github/workflows/reusable-client-v2.yml -j checks --input use-wasm-stubs=true
 # Only key=value lines: a value with a space would split on the command line.
 
 # Native arm64: the catthehacker images are multi-arch and emulation is several times slower.
