@@ -86,18 +86,25 @@ const NO_GRANT_CODES = new Set([
 /**
  * The user's GitHub access token, refreshed by Better Auth if it must be.
  *
+ * Better Auth 1.7 selects the account by its row id (`accountId`), not by
+ * provider: a `providerId` body fails its schema and throws before any token
+ * is read. So the GitHub row is found first.
+ *
+ * @param {{$context: Promise<any>, api: {getAccessToken: Function}}} auth
  * @param {string} userId
  * @returns {Promise<string>} throws {@link NoGithubGrant} when the user has
  * no usable GitHub account; anything else it throws is ours (the database,
  * the configuration), not the user's to mend by signing in
  */
-const getAccessToken = async (userId) => {
-  const auth = getAuth();
-  if (!auth) throw new Error("Sign-in is not configured");
+export const readGithubToken = async (auth, userId) => {
+  const { internalAdapter } = await auth.$context;
+  const accounts = await internalAdapter.findAccounts(userId);
+  const github = accounts.find((a) => a.providerId === "github");
+  if (!github) throw new NoGithubGrant("ACCOUNT_NOT_FOUND");
   let accessToken;
   try {
     ({ accessToken } = await auth.api.getAccessToken({
-      body: { providerId: "github", userId },
+      body: { accountId: github.id, userId },
     }));
   } catch (e) {
     if (NO_GRANT_CODES.has(e?.body?.code)) throw new NoGithubGrant(e.body.code);
@@ -105,6 +112,12 @@ const getAccessToken = async (userId) => {
   }
   if (!accessToken) throw new NoGithubGrant("No GitHub access token stored");
   return accessToken;
+};
+
+const getAccessToken = async (userId) => {
+  const auth = getAuth();
+  if (!auth) throw new Error("Sign-in is not configured");
+  return readGithubToken(auth, userId);
 };
 
 /**

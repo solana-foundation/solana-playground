@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { createHandler, NoGithubGrant } from "./gists.mjs";
+import { createHandler, NoGithubGrant, readGithubToken } from "./gists.mjs";
 
 const TOKEN = "gho_secret";
 const FILES = { "src__lib.rs": { content: "x" } };
@@ -233,5 +233,101 @@ describe("/api/gists", () => {
       assert.equal(answer.status, status);
       assert.equal(answer.body.reason, reason);
     }
+  });
+});
+
+/**
+ * Better Auth 1.7's `/get-access-token` takes `{accountId, userId?}` or
+ * `{useAccountCookie: true, userId?}` and nothing else (`accountSelectionSchema`,
+ * a strict union); this stand-in refuses any other body the same way.
+ */
+const fakeAuth = ({ accounts = [], token = TOKEN, fail } = {}) => {
+  const calls = [];
+  return {
+    calls,
+    $context: Promise.resolve({
+      internalAdapter: { findAccounts: async () => accounts },
+    }),
+    api: {
+      getAccessToken: async ({ body }) => {
+        calls.push(body);
+        const keys = Object.keys(body).sort().join(",");
+        if (keys !== "accountId,userId" && keys !== "accountId") {
+          throw Object.assign(new Error("[body] Invalid input"), {
+            body: { code: "VALIDATION_ERROR" },
+          });
+        }
+        if (fail)
+          throw Object.assign(new Error(fail), { body: { code: fail } });
+        return { accessToken: token };
+      },
+    },
+  };
+};
+
+describe("readGithubToken", () => {
+  it("selects the user's GitHub account by its row id", async () => {
+    const auth = fakeAuth({
+      accounts: [
+        { id: "a0", providerId: "credential" },
+        { id: "a1", providerId: "github" },
+      ],
+    });
+    assert.equal(await readGithubToken(auth, "u1"), TOKEN);
+    assert.deepEqual(auth.calls, [{ accountId: "a1", userId: "u1" }]);
+  });
+
+  it("throws NoGithubGrant when the user has no GitHub account", async () => {
+    const auth = fakeAuth({
+      accounts: [{ id: "a0", providerId: "credential" }],
+    });
+    await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
+    assert.deepEqual(auth.calls, []);
+  });
+
+  it("throws NoGithubGrant when Better Auth cannot produce a token", async () => {
+    const auth = fakeAuth({
+      accounts: [{ id: "a1", providerId: "github" }],
+      fail: "FAILED_TO_GET_ACCESS_TOKEN",
+    });
+    await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
+  });
+
+  it("throws NoGithubGrant when the stored token is empty", async () => {
+    const auth = fakeAuth({
+      accounts: [{ id: "a1", providerId: "github" }],
+      token: "",
+    });
+    await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
+  });
+});
+
+describe("readGithubToken against Better Auth itself", () => {
+  // The fakes above mirror Better Auth's schema; this runs the real endpoint,
+  // so a future change to how it selects an account fails here, not in Share
+  it("reads the token stored for the user's GitHub account", async () => {
+    const { betterAuth } = await import("better-auth");
+    const { memoryAdapter } = await import("better-auth/adapters/memory");
+    const db = { user: [], session: [], account: [], verification: [] };
+    const auth = betterAuth({
+      secret: "test-secret-".repeat(4),
+      baseURL: "http://localhost:3000",
+      database: memoryAdapter(db),
+      socialProviders: { github: { clientId: "c", clientSecret: "s" } },
+      logger: { disabled: true },
+    });
+    const ctx = await auth.$context;
+    const user = await ctx.internalAdapter.createUser({
+      email: "a@example.com",
+      name: "a",
+      emailVerified: true,
+    });
+    await ctx.internalAdapter.createAccount({
+      userId: user.id,
+      providerId: "github",
+      accountId: "123",
+      accessToken: TOKEN,
+    });
+    assert.equal(await readGithubToken(auth, user.id), TOKEN);
   });
 });
