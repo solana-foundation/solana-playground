@@ -7,7 +7,7 @@ vi.mock("./explorer", () => ({ PgExplorer: {} }));
 vi.mock("./framework", () => ({
   noProgramCode: (source: string) => `No program code found in ${source}.`,
   PgFramework: {
-    convertToPlaygroundLayout: vi.fn((files: unknown) => files),
+    convertToPlaygroundLayoutWith: vi.fn(() => (files: unknown) => files),
   },
 }));
 
@@ -146,11 +146,10 @@ describe("PgGithub.getFiles", () => {
       "https://github.com/solana-labs/example/tree/master/program"
     );
 
-    expect(PgFramework.convertToPlaygroundLayout).toHaveBeenLastCalledWith(
-      [["program/client.ts", "x"]],
-      "program",
-      { source: "program in solana-labs/example" }
-    );
+    expect(PgFramework.convertToPlaygroundLayoutWith).toHaveBeenLastCalledWith({
+      root: "program",
+      source: "program in solana-labs/example",
+    });
   });
 
   it("reports progress from the layout request to the last file", async () => {

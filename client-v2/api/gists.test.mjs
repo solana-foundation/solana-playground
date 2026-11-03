@@ -20,18 +20,18 @@ const makeRes = () => ({
 });
 
 /** A request whose body the platform already parsed, as Vercel's is */
-const makeReq = ({
-  method = "POST",
-  body = { description: "p", files: FILES },
-} = {}) => ({
+const requestWith = (method) => (body) => ({
   method,
   url: "/api/gists",
   headers: {},
   body,
 });
 
+const post = requestWith("POST");
+const validBody = { description: "p", files: FILES };
+
 /** Every dependency answering as for a signed-in user whose token works */
-const deps = (over = {}) => {
+const deps = (over) => {
   const calls = { createGist: [], getAccessToken: [] };
   const all = {
     isAllowedOrigin: () => true,
@@ -60,9 +60,9 @@ const call = async (req, d) => {
 
 describe("/api/gists", () => {
   it("creates the gist with the user's token and answers 201", async () => {
-    const { deps: d, calls } = deps();
+    const { deps: d, calls } = deps({});
 
-    const { status, body, res } = await call(makeReq(), d);
+    const { status, body, res } = await call(post(validBody), d);
 
     assert.equal(status, 201);
     assert.deepEqual(body, { url: "https://gist.github.com/a/b", id: "b" });
@@ -75,8 +75,8 @@ describe("/api/gists", () => {
   });
 
   it("405s anything but a POST", async () => {
-    const { deps: d } = deps();
-    assert.equal((await call(makeReq({ method: "GET" }), d)).status, 405);
+    const { deps: d } = deps({});
+    assert.equal((await call(requestWith("GET")(validBody), d)).status, 405);
   });
 
   it("403s another origin before reading the session", async () => {
@@ -89,7 +89,7 @@ describe("/api/gists", () => {
       },
     });
 
-    assert.equal((await call(makeReq(), d)).status, 403);
+    assert.equal((await call(post(validBody), d)).status, 403);
     assert.equal(read, false);
   });
 
@@ -98,7 +98,7 @@ describe("/api/gists", () => {
       readSession: async () => ({ status: "signed-out" }),
     });
 
-    const { status, body } = await call(makeReq(), d);
+    const { status, body } = await call(post(validBody), d);
 
     assert.equal(status, 401);
     assert.equal(body.reason, "signed-out");
@@ -110,12 +110,12 @@ describe("/api/gists", () => {
       const { deps: d } = deps({
         readSession: async () => ({ status: session }),
       });
-      assert.equal((await call(makeReq(), d)).status, 503, session);
+      assert.equal((await call(post(validBody), d)).status, 503, session);
     }
   });
 
   it("400s a malformed body", async () => {
-    const { deps: d, calls } = deps();
+    const { deps: d, calls } = deps({});
     const bodies = [
       "not json",
       { files: FILES },
@@ -127,23 +127,20 @@ describe("/api/gists", () => {
       { description: 3, files: FILES },
     ];
     for (const body of bodies) {
-      const { status } = await call(makeReq({ body }), d);
+      const { status } = await call(post(body), d);
       assert.equal(status, 400, JSON.stringify(body));
     }
     assert.equal(calls.createGist.length, 0);
   });
 
   it("413s a gist over the size or file limit", async () => {
-    const { deps: d, calls } = deps();
+    const { deps: d, calls } = deps({});
     const big = { "a.rs": { content: "x".repeat(4 * 1024 * 1024 + 1) } };
     const many = {};
     for (let i = 0; i < 302; i++) many[`f${i}.rs`] = { content: "x" };
 
     for (const files of [big, many]) {
-      const { status } = await call(
-        makeReq({ body: { description: "p", files } }),
-        d
-      );
+      const { status } = await call(post({ description: "p", files }), d);
       assert.equal(status, 413);
     }
     assert.equal(calls.createGist.length, 0);
@@ -156,7 +153,7 @@ describe("/api/gists", () => {
       },
     });
 
-    const { status, body } = await call(makeReq(), d);
+    const { status, body } = await call(post(validBody), d);
 
     assert.equal(status, 401);
     assert.equal(body.reason, "github-unauthorized");
@@ -170,7 +167,7 @@ describe("/api/gists", () => {
       },
     });
 
-    const { status, body } = await call(makeReq(), d);
+    const { status, body } = await call(post(validBody), d);
 
     assert.equal(status, 503);
     assert.equal(body.reason, undefined);
@@ -178,7 +175,7 @@ describe("/api/gists", () => {
   });
 
   it("takes a gist at the limits: 300 files with the manifest, 4 MB of multibyte text", async () => {
-    const { deps: d, calls } = deps();
+    const { deps: d, calls } = deps({});
     const many = { ".playground.json": { content: "{}" } };
     for (let i = 0; i < 299; i++) many[`f${i}.rs`] = { content: "x" };
     // 2 bytes each: 2 MB of characters is the whole 4 MB
@@ -187,10 +184,7 @@ describe("/api/gists", () => {
     };
 
     for (const files of [many, wide]) {
-      const { status } = await call(
-        makeReq({ body: { description: "p", files } }),
-        d
-      );
+      const { status } = await call(post({ description: "p", files }), d);
       assert.equal(status, 201);
     }
     const over = {
@@ -200,19 +194,16 @@ describe("/api/gists", () => {
     const crowded = { ".playground.json": { content: "{}" } };
     for (let i = 0; i < 300; i++) crowded[`f${i}.rs`] = { content: "x" };
     for (const files of [over, crowded]) {
-      const { status } = await call(
-        makeReq({ body: { description: "p", files } }),
-        d
-      );
+      const { status } = await call(post({ description: "p", files }), d);
       assert.equal(status, 413);
     }
     assert.equal(calls.createGist.length, 2);
   });
 
   it("400s a description over 200 characters", async () => {
-    const { deps: d } = deps();
+    const { deps: d } = deps({});
     const { status } = await call(
-      makeReq({ body: { description: "x".repeat(201), files: FILES } }),
+      post({ description: "x".repeat(201), files: FILES }),
       d
     );
     assert.equal(status, 400);
@@ -229,7 +220,7 @@ describe("/api/gists", () => {
       const { deps: d } = deps({
         createGist: async () => ({ status, body: { reason } }),
       });
-      const answer = await call(makeReq(), d);
+      const answer = await call(post(validBody), d);
       assert.equal(answer.status, status);
       assert.equal(answer.body.reason, reason);
     }
@@ -241,7 +232,7 @@ describe("/api/gists", () => {
  * `{useAccountCookie: true, userId?}` and nothing else (`accountSelectionSchema`,
  * a strict union); this stand-in refuses any other body the same way.
  */
-const fakeAuth = ({ accounts = [], token = TOKEN, fail } = {}) => {
+const fakeAuth = ({ accounts, token, fail }) => {
   const calls = [];
   return {
     calls,
@@ -272,6 +263,7 @@ describe("readGithubToken", () => {
         { id: "a0", providerId: "credential" },
         { id: "a1", providerId: "github" },
       ],
+      token: TOKEN,
     });
     assert.equal(await readGithubToken(auth, "u1"), TOKEN);
     assert.deepEqual(auth.calls, [{ accountId: "a1", userId: "u1" }]);
@@ -280,6 +272,7 @@ describe("readGithubToken", () => {
   it("throws NoGithubGrant when the user has no GitHub account", async () => {
     const auth = fakeAuth({
       accounts: [{ id: "a0", providerId: "credential" }],
+      token: TOKEN,
     });
     await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);
     assert.deepEqual(auth.calls, []);
@@ -288,6 +281,7 @@ describe("readGithubToken", () => {
   it("throws NoGithubGrant when Better Auth cannot produce a token", async () => {
     const auth = fakeAuth({
       accounts: [{ id: "a1", providerId: "github" }],
+      token: TOKEN,
       fail: "FAILED_TO_GET_ACCESS_TOKEN",
     });
     await assert.rejects(readGithubToken(auth, "u1"), NoGithubGrant);

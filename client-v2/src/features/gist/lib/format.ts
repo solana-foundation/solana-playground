@@ -117,6 +117,7 @@ export const toGistFiles = (project: {
     files: Object.fromEntries(named),
     empty,
   };
+  // eslint-disable-next-line unicorn/no-null -- `JSON.stringify` takes `null` for "no replacer"
   gist.set(MANIFEST_NAME, { content: JSON.stringify(manifest, null, 2) });
   return Object.fromEntries(gist);
 };
@@ -166,12 +167,12 @@ const parseManifest = (content: string): Manifest => {
   return { version, name, files, empty };
 };
 
-/** Where a file of a hand-made gist goes, or `null` to leave it out */
+/** Where a file of a hand-made gist goes, or `undefined` to leave it out */
 const looseTarget = (
-  name: string,
-  isSupported: (path: string) => boolean
-): string | null => {
-  if (!isSupported(name) || !isExportablePath(name)) return null;
+  isSupported: (path: string) => boolean,
+  name: string
+): string | undefined => {
+  if (!isSupported(name) || !isExportablePath(name)) return undefined;
   if (/\.(test|spec)\.[jt]sx?$/.test(name)) return `tests/${name}`;
   if (/\.(rs|py)$/.test(name)) return `src/${name}`;
   if (/\.[jt]sx?$/.test(name)) return `client/${name}`;
@@ -188,68 +189,75 @@ const looseTarget = (
  * be written.
  *
  * @param files the gist's files, with truncated contents already fetched
- * @param options.isSupported whether the Playground can open a file; the
- * default asks `PgLanguage`, which the app registers at startup
+ * @param isSupported whether the Playground can open a file
  */
-export const fromGistFiles = (
-  files: GistFiles,
-  options: { isSupported?: (path: string) => boolean } = {}
-): {
-  name: string | null;
-  files: Record<string, string>;
-  layout: "manifest" | "loose";
-} => {
-  const manifestFile = files[MANIFEST_NAME];
-  if (!manifestFile) {
-    const isSupported =
-      options.isSupported ?? ((path) => !!PgLanguage.getFromPath(path));
-    const placed = new Map<string, string>();
-    for (const [name, { content }] of Object.entries(files)) {
-      const target = looseTarget(name, isSupported);
-      if (target) placed.set(target, content);
+export const fromGistFilesWith =
+  (isSupported: (path: string) => boolean) =>
+  (
+    files: GistFiles
+  ): {
+    name: string | undefined;
+    files: Record<string, string>;
+    layout: "manifest" | "loose";
+  } => {
+    const manifestFile = files[MANIFEST_NAME];
+    if (!manifestFile) {
+      const placed = new Map<string, string>();
+      for (const [name, { content }] of Object.entries(files)) {
+        const target = looseTarget(isSupported, name);
+        if (target) placed.set(target, content);
+      }
+      if (!placed.size) {
+        throw new GistFormatError(
+          "no-supported-files",
+          "This gist holds no file the Playground can open."
+        );
+      }
+      return {
+        name: undefined,
+        files: Object.fromEntries(placed),
+        layout: "loose",
+      };
     }
-    if (!placed.size) {
-      throw new GistFormatError(
-        "no-supported-files",
-        "This gist holds no file the Playground can open."
-      );
-    }
-    return { name: null, files: Object.fromEntries(placed), layout: "loose" };
-  }
 
-  const manifest = parseManifest(manifestFile.content);
-  const placed = new Map<string, string>();
-  const place = (path: string, content: string) => {
-    if (!isSafePath(path)) {
-      throw new GistFormatError("unsafe-path", `Refusing to write ${path}.`);
+    const manifest = parseManifest(manifestFile.content);
+    const placed = new Map<string, string>();
+    const place = (path: string, content: string) => {
+      if (!isSafePath(path)) {
+        throw new GistFormatError("unsafe-path", `Refusing to write ${path}.`);
+      }
+      // A second entry for one path would overwrite the first, silently
+      if (placed.has(path)) {
+        throw new GistFormatError(
+          "invalid-manifest",
+          `${MANIFEST_NAME} lists ${path} twice.`
+        );
+      }
+      placed.set(path, content);
+    };
+    for (const [name, path] of Object.entries(manifest.files)) {
+      // Own files only: `files.toString` is not a file of the gist
+      const file = Object.hasOwn(files, name) ? files[name] : undefined;
+      if (typeof file?.content !== "string") {
+        throw new GistFormatError(
+          "missing-file",
+          `The gist has no file ${name}, which its manifest lists.`
+        );
+      }
+      place(path, file.content);
     }
-    // A second entry for one path would overwrite the first, silently
-    if (placed.has(path)) {
-      throw new GistFormatError(
-        "invalid-manifest",
-        `${MANIFEST_NAME} lists ${path} twice.`
-      );
-    }
-    placed.set(path, content);
+    for (const path of manifest.empty) place(path, "");
+    return {
+      name: manifest.name,
+      files: Object.fromEntries(placed),
+      layout: "manifest",
+    };
   };
-  for (const [name, path] of Object.entries(manifest.files)) {
-    // Own files only: `files.toString` is not a file of the gist
-    const file = Object.hasOwn(files, name) ? files[name] : undefined;
-    if (typeof file?.content !== "string") {
-      throw new GistFormatError(
-        "missing-file",
-        `The gist has no file ${name}, which its manifest lists.`
-      );
-    }
-    place(path, file.content);
-  }
-  for (const path of manifest.empty) place(path, "");
-  return {
-    name: manifest.name,
-    files: Object.fromEntries(placed),
-    layout: "manifest",
-  };
-};
+
+/** {@link fromGistFilesWith} for what `PgLanguage`, registered at startup, can open */
+export const fromGistFiles = fromGistFilesWith(
+  (path) => !!PgLanguage.getFromPath(path)
+);
 
 /**
  * What a gist costs against {@link MAX_GIST_BYTES} and {@link MAX_GIST_FILES}:
@@ -283,13 +291,14 @@ if (import.meta.vitest) {
       return "no error";
     };
 
-    const withManifest = (manifest: unknown, files: GistFiles = {}) => {
+    const withFiles = (files: GistFiles) => (manifest: unknown) => {
       const gist: GistFiles = {
         [MANIFEST_NAME]: { content: JSON.stringify(manifest) },
       };
       for (const [name, file] of Object.entries(files)) gist[name] = file;
       return gist;
     };
+    const withManifest = withFiles({});
 
     it("round trip keeps paths, contents and name", () => {
       const files = {
@@ -418,10 +427,12 @@ if (import.meta.vitest) {
       ".workspace/program-info.json",
       ".tutorial.json",
     ])("rejects the unsafe path %s", (path) => {
-      const gist = withManifest(
-        { version: 1, name: "p", files: { "x.rs": path }, empty: [] },
-        { "x.rs": { content: "x" } }
-      );
+      const gist = withFiles({ "x.rs": { content: "x" } })({
+        version: 1,
+        name: "p",
+        files: { "x.rs": path },
+        empty: [],
+      });
 
       expect(reasonOf(() => fromGistFiles(gist))).toBe("unsafe-path");
     });
@@ -449,24 +460,21 @@ if (import.meta.vitest) {
     });
 
     it("rejects a manifest that writes one path twice", () => {
-      const twice = withManifest(
-        {
-          version: 1,
-          name: "p",
-          files: { "a.rs": "src/lib.rs", "b.rs": "src/lib.rs" },
-          empty: [],
-        },
-        { "a.rs": { content: "a" }, "b.rs": { content: "b" } }
-      );
-      const emptied = withManifest(
-        {
-          version: 1,
-          name: "p",
-          files: { "a.rs": "src/lib.rs" },
-          empty: ["src/lib.rs"],
-        },
-        { "a.rs": { content: "a" } }
-      );
+      const twice = withFiles({
+        "a.rs": { content: "a" },
+        "b.rs": { content: "b" },
+      })({
+        version: 1,
+        name: "p",
+        files: { "a.rs": "src/lib.rs", "b.rs": "src/lib.rs" },
+        empty: [],
+      });
+      const emptied = withFiles({ "a.rs": { content: "a" } })({
+        version: 1,
+        name: "p",
+        files: { "a.rs": "src/lib.rs" },
+        empty: ["src/lib.rs"],
+      });
 
       expect(reasonOf(() => fromGistFiles(twice))).toBe("invalid-manifest");
       expect(reasonOf(() => fromGistFiles(emptied))).toBe("invalid-manifest");
@@ -502,21 +510,18 @@ if (import.meta.vitest) {
     it("places a hand-made gist's files by kind", () => {
       const supported = (path: string) => /\.(rs|py|ts|js|json)$/.test(path);
 
-      const back = fromGistFiles(
-        {
-          "lib.rs": { content: "a" },
-          "seahorse.py": { content: "b" },
-          "app.test.ts": { content: "c" },
-          "app.spec.js": { content: "d" },
-          "client.ts": { content: "e" },
-          "config.json": { content: "f" },
-          "notes.docx": { content: "g" },
-        },
-        { isSupported: supported }
-      );
+      const back = fromGistFilesWith(supported)({
+        "lib.rs": { content: "a" },
+        "seahorse.py": { content: "b" },
+        "app.test.ts": { content: "c" },
+        "app.spec.js": { content: "d" },
+        "client.ts": { content: "e" },
+        "config.json": { content: "f" },
+        "notes.docx": { content: "g" },
+      });
 
       expect(back).toEqual({
-        name: null,
+        name: undefined,
         layout: "loose",
         files: {
           "src/lib.rs": "a",
@@ -530,13 +535,10 @@ if (import.meta.vitest) {
     });
 
     it("leaves a hand-made gist's root .tutorial.json out", () => {
-      const back = fromGistFiles(
-        {
-          ".tutorial.json": { content: "{}" },
-          "client.ts": { content: "e" },
-        },
-        { isSupported: () => true }
-      );
+      const back = fromGistFilesWith(() => true)({
+        ".tutorial.json": { content: "{}" },
+        "client.ts": { content: "e" },
+      });
 
       expect(back.files).toEqual({ "client/client.ts": "e" });
     });
@@ -544,10 +546,7 @@ if (import.meta.vitest) {
     it("fails a hand-made gist with nothing supported", () => {
       expect(
         reasonOf(() =>
-          fromGistFiles(
-            { "notes.docx": { content: "g" } },
-            { isSupported: () => false }
-          )
+          fromGistFilesWith(() => false)({ "notes.docx": { content: "g" } })
         )
       ).toBe("no-supported-files");
     });

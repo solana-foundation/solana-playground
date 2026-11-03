@@ -35,13 +35,15 @@ type GistApiResponse = {
 
 /** An import that stopped, with the reason the user was told */
 export class GistImportError extends Error {
-  constructor(
-    readonly reason: GistImportFailure,
-    message: string,
-    options?: { cause?: unknown }
-  ) {
-    super(message, options);
+  constructor(readonly reason: GistImportFailure, message: string) {
+    super(message);
     this.name = "GistImportError";
+  }
+
+  /** Keep the error that led here, as `Error`'s `cause` does */
+  causedBy(cause: unknown) {
+    this.cause = cause;
+    return this;
   }
 }
 
@@ -104,9 +106,8 @@ const request = async (url: string, subject: string) => {
     throw new GistImportError(
       "request-failed",
       `Could not reach GitHub to read ${subject}. Check the connection and ` +
-        "try again.",
-      { cause: error }
-    );
+        "try again."
+    ).causedBy(error);
   }
   if (!response.ok) throw responseError(response, subject);
   return response;
@@ -121,13 +122,12 @@ const request = async (url: string, subject: string) => {
  * @returns the gist
  */
 const readAnswer = async (response: Response, subject: string) => {
-  const unexpected = (cause?: unknown) =>
+  const unexpected = (cause: unknown) =>
     new GistImportError(
       "request-failed",
       `GitHub answered the request for ${subject} with something that is ` +
-        "not a gist. Please try again.",
-      { cause }
-    );
+        "not a gist. Please try again."
+    ).causedBy(cause);
 
   let body: unknown;
   try {
@@ -138,7 +138,7 @@ const readAnswer = async (response: Response, subject: string) => {
   }
 
   const files = (body as Partial<GistApiResponse> | null)?.files;
-  if (typeof files !== "object" || files === null) throw unexpected();
+  if (typeof files !== "object" || files === null) throw unexpected(undefined);
   return body as GistApiResponse;
 };
 
@@ -159,19 +159,20 @@ const isGistDownload = (url: unknown): url is string => {
  * The URL comes from the answer's body, so only a download from GitHub's gist
  * host is followed, never a relative or foreign one.
  */
-const downloadWhole = async (url: unknown, name: string, subject: string) => {
-  if (!isGistDownload(url)) {
-    log.warn(`${subject} gave "${name}" no GitHub download`, {
-      context: { url },
-    });
-    throw new GistImportError(
-      "request-failed",
-      `GitHub answered the request for ${subject} with something that is ` +
-        "not a gist. Please try again."
-    );
-  }
-  return (await request(url, `"${name}"`)).text();
-};
+const downloadWholeFor =
+  (subject: string) => async (url: unknown, name: string) => {
+    if (!isGistDownload(url)) {
+      log.warn(`${subject} gave "${name}" no GitHub download`, {
+        context: { url },
+      });
+      throw new GistImportError(
+        "request-failed",
+        `GitHub answered the request for ${subject} with something that is ` +
+          "not a gist. Please try again."
+      );
+    }
+    return (await request(url, `"${name}"`)).text();
+  };
 
 /**
  * Read a gist's files, downloading whole any file the API cut short.
@@ -198,13 +199,14 @@ const readGist = async (ref: GistRef) => {
   // A Map, turned into an object at the end: an assignment to `__proto__`
   // would set the prototype and lose a file of that name
   const files = new Map<string, { content: string }>();
+  const downloadWhole = downloadWholeFor(subject);
   for (const [name, file] of Object.entries(gist.files)) {
     // The API answers `null` for a file it cannot show; there is nothing to
     // import from it
     if (!file) continue;
     const content =
       file.truncated || file.content === undefined
-        ? await downloadWhole(file.raw_url, name, subject)
+        ? await downloadWhole(file.raw_url, name)
         : file.content;
     files.set(name, { content });
   }
@@ -230,20 +232,17 @@ const layOut = async (files: Record<string, { content: string }>) => {
     switch (error.reason) {
       // No file of a supported language at all: nothing to open
       case "no-supported-files":
-        throw new GistImportError("no-program", error.message, {
-          cause: error,
-        });
+        throw new GistImportError("no-program", error.message).causedBy(error);
       // Not broken, only newer: the message says so on its own
       case "unsupported-version":
-        throw new GistImportError("invalid", error.message, { cause: error });
+        throw new GistImportError("invalid", error.message).causedBy(error);
       case "invalid-manifest":
       case "unsafe-path":
       case "missing-file":
         throw new GistImportError(
           "invalid",
-          `This gist's Playground manifest is invalid: ${error.message}`,
-          { cause: error }
-        );
+          `This gist's Playground manifest is invalid: ${error.message}`
+        ).causedBy(error);
     }
   }
 
@@ -292,9 +291,8 @@ export const getGistFiles = async (ref: GistRef, from: GistImportSource) => {
         ? error
         : new GistImportError(
             "request-failed",
-            `Could not import gist "${ref.id}".`,
-            { cause: error }
-          );
+            `Could not import gist "${ref.id}".`
+          ).causedBy(error);
     if (failure !== error) {
       log.error(error as Error, { report: true, context: { id: ref.id } });
     }

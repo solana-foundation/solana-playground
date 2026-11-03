@@ -105,7 +105,7 @@ test("gist-sharing: A missing gist", async ({ page }) => {
 });
 
 /** A gist API answer holding one file */
-const oneFile = (content: string, truncated = false) => ({
+const oneFile = (content: string, truncated: boolean) => ({
   truncated: false,
   owner: { login: "alice" },
   files: {
@@ -121,7 +121,7 @@ test("gist-sharing: Owner, id and revision are read from the URL", async ({
   page,
 }) => {
   await page.route(`https://api.github.com/gists/${ID}/9f8e7d`, (r) =>
-    json(r, oneFile(PROGRAM))
+    json(r, oneFile(PROGRAM, false))
   );
 
   await page.goto(`/https://gist.github.com/alice/${ID}/9f8e7d`);
@@ -155,7 +155,7 @@ test("gist-sharing: Importing the same gist twice", async ({
   let requests = 0;
   await page.route(`https://api.github.com/gists/${ID}`, (r) => {
     requests++;
-    return json(r, oneFile(PROGRAM));
+    return json(r, oneFile(PROGRAM, false));
   });
   const url = `https://gist.github.com/alice/${ID}`;
   await importFromDialog(page, url);

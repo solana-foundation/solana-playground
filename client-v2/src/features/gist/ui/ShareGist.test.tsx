@@ -42,13 +42,16 @@ const answers = (...replies: Array<[number, unknown]>) => {
   return fetch;
 };
 
-const renderShare = ({
-  signedIn = true,
-  signIn = vi.fn<ShareGistProps["signIn"]>().mockResolvedValue(undefined),
+const resolvingSignIn = () =>
+  vi.fn<ShareGistProps["signIn"]>().mockResolvedValue(undefined);
+
+const renderShareWith = ({
+  signedIn,
+  signIn,
 }: {
-  signedIn?: boolean;
-  signIn?: Mock<ShareGistProps["signIn"]>;
-} = {}) => {
+  signedIn: boolean;
+  signIn: Mock<ShareGistProps["signIn"]>;
+}) => {
   // The app's root provides the tooltips Copy needs, and runs under
   // StrictMode in development, which mounts every effect twice
   render(
@@ -65,6 +68,9 @@ const renderShare = ({
   );
   return { signIn };
 };
+
+const renderShare = () =>
+  renderShareWith({ signedIn: true, signIn: resolvingSignIn() });
 
 const press = (name: RegExp) =>
   act(async () => fireEvent.click(screen.getByRole("button", { name })));
@@ -101,7 +107,10 @@ it("creates the gist and shows its url, Copy and Open on GitHub", async () => {
 
 it("signs a signed-out user in, then creates the gist without a second press", async () => {
   answers([201, { url: URL, id: "abc" }]);
-  const { signIn } = renderShare({ signedIn: false });
+  const { signIn } = renderShareWith({
+    signedIn: false,
+    signIn: resolvingSignIn(),
+  });
 
   await press(/Sign in with GitHub to share/);
 
@@ -111,7 +120,7 @@ it("signs a signed-out user in, then creates the gist without a second press", a
 
 it("keeps the dialog on sign-in when the user cancels it", async () => {
   const fetch = vi.spyOn(globalThis, "fetch");
-  renderShare({
+  renderShareWith({
     signedIn: false,
     signIn: vi.fn().mockRejectedValue(new Error("Sign-in cancelled.")),
   });
@@ -179,7 +188,7 @@ it("stays on create when the project cannot be read, and tells the user", async 
 });
 
 it("says so when the browser blocks the sign-in popup", async () => {
-  renderShare({
+  renderShareWith({
     signedIn: false,
     signIn: vi
       .fn()
@@ -280,6 +289,7 @@ it.each([
   ],
 ])(
   "tells a %i apart and offers to try again",
+  // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
   async (status, body, message, reason) => {
     answers([status, body]);
     renderShare();

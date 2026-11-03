@@ -27,6 +27,7 @@ const dialog = (page: Page) =>
  * once, signing in. Returns the bodies sign-in was asked with.
  */
 const stubAuth = async (page: Page, { signedIn }: { signedIn: boolean }) => {
+  // eslint-disable-next-line unicorn/no-null -- the session answer carries `user: null` when signed out
   let user: typeof TEST_USER | null = signedIn ? TEST_USER : null;
   const signIns: Array<Record<string, unknown>> = [];
   await page.route("**/api/auth/get-session", (r) => json(r, { user }));

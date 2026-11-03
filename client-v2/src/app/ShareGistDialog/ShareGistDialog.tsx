@@ -23,7 +23,7 @@ const ShareGistDialog = ({ name, readFiles }: ShareGistDialogProps) => {
         name={name}
         readFiles={readFiles}
         signedIn={!!PgSession.get()}
-        signIn={(options) => PgSession.signIn(options)}
+        signIn={(options) => PgSession.signInWith({ scopes: options?.scopes })}
       />
     </ModalFrame>
   );
@@ -31,8 +31,8 @@ const ShareGistDialog = ({ name, readFiles }: ShareGistDialogProps) => {
 
 /** Open the share dialog; settles when it closes */
 export const openShareGistDialog = (
-  name: string,
-  readFiles: () => Promise<Record<string, string>>
+  readFiles: () => Promise<Record<string, string>>,
+  name: string
 ) =>
   PgView.setModal<unknown, ShareGistDialogProps>(ShareGistDialog, {
     name,

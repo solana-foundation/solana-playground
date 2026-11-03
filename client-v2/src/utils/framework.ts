@@ -105,7 +105,7 @@ const NOT_A_PROGRAM =
  *
  * @param source where the files came from, such as `owner/repo`
  */
-export const noProgramCode = (source?: string) =>
+export const noProgramCode = (source: string | undefined) =>
   source ? `No program code found in ${source}.` : "No program code found.";
 
 /** What Build compiles: a Rust or Python file anywhere under `src/` */
@@ -210,7 +210,11 @@ const toNoProgramLayout = (files: TupleFiles, root: string): TupleFiles => {
       placed.set(file, path);
     });
 
-  return wanted.map((file) => [placed.get(file)!, file.content]);
+  return wanted.map((file) => {
+    const path = placed.get(file);
+    if (path === undefined) throw new Error(`"${file.path}" was not placed.`);
+    return [path, file.content];
+  });
 };
 
 export class PgFramework {
@@ -284,34 +288,53 @@ export class PgFramework {
    * Other files of such a project are left out.
    *
    * @param files framework files
-   * @param root the imported folder, which a project with no program drops
-   * from its paths; frameworks find their own layout wherever it sits
-   * @param opts.source where the files came from, named in the refusal
    * @returns the playground layout converted files
+   * @throws see {@link PgFramework.convertToPlaygroundLayoutWith}
+   */
+  static convertToPlaygroundLayout(files: TupleFiles) {
+    return PgFramework.convertToPlaygroundLayoutWith({
+      root: "",
+      source: undefined,
+    })(files);
+  }
+
+  /**
+   * {@link PgFramework.convertToPlaygroundLayout} for an import that has a
+   * folder and a name.
+   *
+   * @param config
+   * - `root`: the imported folder, which a project with no program drops from
+   * its paths; frameworks find their own layout wherever it sits
+   * - `source`: where the files came from, named in the refusal
+   * @returns a function taking the framework files
    * @throws `NOT_A_PROGRAM` when no framework recognises program source;
    * `noProgramCode` when there is no program and no script; "Could not
    * convert files" when a framework's conversion returns nothing
    */
-  static async convertToPlaygroundLayout(
-    files: TupleFiles,
-    root = "",
-    opts?: { source?: string }
-  ) {
-    const framework = await this.getFromFiles(files);
-    if (!framework) {
-      if (files.some(([path]) => PROGRAM_SOURCE_REGEX.test(path))) {
-        throw new Error(NOT_A_PROGRAM);
+  static convertToPlaygroundLayoutWith({
+    root,
+    source,
+  }: {
+    root: string;
+    source: string | undefined;
+  }) {
+    return async (files: TupleFiles) => {
+      const framework = await PgFramework.getFromFiles(files);
+      if (!framework) {
+        if (files.some(([path]) => PROGRAM_SOURCE_REGEX.test(path))) {
+          throw new Error(NOT_A_PROGRAM);
+        }
+        const noProgramFiles = toNoProgramLayout(files, root);
+        if (!noProgramFiles.length) throw new Error(noProgramCode(source));
+        return noProgramFiles;
       }
-      const noProgramFiles = toNoProgramLayout(files, root);
-      if (!noProgramFiles.length) throw new Error(noProgramCode(opts?.source));
-      return noProgramFiles;
-    }
 
-    const { convertToPlayground } = await framework.import();
-    const convertedFiles = await convertToPlayground(files);
-    if (!convertedFiles.length) throw new Error("Could not convert files");
+      const { convertToPlayground } = await framework.import();
+      const convertedFiles = await convertToPlayground(files);
+      if (!convertedFiles.length) throw new Error("Could not convert files");
 
-    return convertedFiles;
+      return convertedFiles;
+    };
   }
 
   /**
@@ -561,7 +584,10 @@ if (import.meta.vitest) {
           ["token/client/tests/a.ts", "b"],
         ];
         const paths = (
-          await PgFramework.convertToPlaygroundLayout(files, "token/client")
+          await PgFramework.convertToPlaygroundLayoutWith({
+            root: "token/client",
+            source: undefined,
+          })(files)
         )
           .map(([path]) => path)
           .sort();
@@ -610,9 +636,10 @@ if (import.meta.vitest) {
           "No program code found."
         );
         await expect(
-          PgFramework.convertToPlaygroundLayout([["README.md", "x"]], "", {
+          PgFramework.convertToPlaygroundLayoutWith({
+            root: "",
             source: "alice/docs",
-          })
+          })([["README.md", "x"]])
         ).rejects.toThrow("No program code found in alice/docs.");
       });
 

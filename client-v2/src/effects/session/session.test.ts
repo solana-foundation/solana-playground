@@ -335,7 +335,7 @@ describe("the session effect", () => {
     it("keeps the open project when the sign-in started in the assistant panel", async () => {
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signIn({ from: "assistant" });
+      await PgSession.signInWith({ from: "assistant" });
       await settle();
 
       // The composer still holds a prompt written for this project
@@ -359,7 +359,7 @@ describe("the session effect", () => {
       );
       const effect = await signedOutAfterLoad();
 
-      await PgSession.signIn({ from: "assistant" });
+      await PgSession.signInWith({ from: "assistant" });
       await settle();
 
       // Nothing to keep, so a panel sign-in must not skip the switch outright

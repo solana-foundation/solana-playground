@@ -38,28 +38,30 @@ vi.mock("../lib/format", () => format);
 const ID = "0123abcd";
 
 /** A gist API answer */
-const gist = (
-  files: Record<string, { content?: string; truncated?: boolean }>,
-  opts: { owner?: string | null; truncated?: boolean } = {}
-) => ({
-  files: Object.fromEntries(
-    Object.entries(files).map(([name, file]) => [
-      name,
-      {
-        content: file.content,
-        truncated: file.truncated,
-        raw_url: `https://gist.githubusercontent.com/raw/${name}`,
-      },
-    ])
-  ),
-  truncated: opts.truncated ?? false,
-  owner: opts.owner === null ? null : { login: opts.owner ?? "alice" },
-});
+const gistWith =
+  (opts: { owner?: string | null; truncated?: boolean }) =>
+  (files: Record<string, { content?: string; truncated?: boolean }>) => ({
+    files: Object.fromEntries(
+      Object.entries(files).map(([name, file]) => [
+        name,
+        {
+          content: file.content,
+          truncated: file.truncated,
+          raw_url: `https://gist.githubusercontent.com/raw/${name}`,
+        },
+      ])
+    ),
+    truncated: opts.truncated ?? false,
+    // eslint-disable-next-line unicorn/no-null -- GitHub answers `owner: null` for an anonymous gist
+    owner: opts.owner === null ? null : { login: opts.owner ?? "alice" },
+  });
+
+const gist = gistWith({});
 
 const ok = (body: unknown) =>
   new Response(typeof body === "string" ? body : JSON.stringify(body));
 
-const status = (code: number, headers: Record<string, string> = {}) =>
+const status = (code: number, headers: Record<string, string>) =>
   new Response("", { status: code, headers });
 
 /** `fetch` answers each URL from the map, in calls made */
@@ -202,7 +204,8 @@ describe("importGist", () => {
 
   it("names an anonymous gist's project gist-anonymous/<id>", async () => {
     answers({
-      [API]: ok(gist({ "lib.rs": { content: LIB } }, { owner: null })),
+      // eslint-disable-next-line unicorn/no-null -- GitHub answers `owner: null` for an anonymous gist
+      [API]: ok(gistWith({ owner: null })({ "lib.rs": { content: LIB } })),
     });
 
     await importGist(`https://gist.github.com/${ID}`, "dialog");
@@ -245,7 +248,7 @@ describe("getGistFiles", () => {
   }>([
     {
       title: "a missing gist",
-      answer: status(404),
+      answer: status(404, {}),
       reason: "not-found",
       message: /not found.*link may be out of date/,
     },
@@ -263,7 +266,7 @@ describe("getGistFiles", () => {
     },
     {
       title: "a refusal with no limit header",
-      answer: status(403),
+      answer: status(403, {}),
       reason: "request-failed",
       message: /refused/,
     },
@@ -287,7 +290,7 @@ describe("getGistFiles", () => {
     },
     {
       title: "a server error",
-      answer: status(500),
+      answer: status(500, {}),
       reason: "request-failed",
       message: /status 500/,
     },
@@ -346,6 +349,7 @@ describe("getGistFiles", () => {
       [API]: ok({
         truncated: answer.truncated,
         owner: answer.owner,
+        // eslint-disable-next-line unicorn/no-null -- the API answers a file it cannot show as `null`
         files: { "lib.rs": answer.files["lib.rs"], "gone.rs": null },
       }),
     });
@@ -360,7 +364,7 @@ describe("getGistFiles", () => {
   it("names the file whose whole download failed", async () => {
     answers({
       [API]: ok(gist({ "lib.rs": { content: "use anc", truncated: true } })),
-      "https://gist.githubusercontent.com/raw/lib.rs": status(404),
+      "https://gist.githubusercontent.com/raw/lib.rs": status(404, {}),
     });
 
     const error = await failure(getGistFiles({ id: ID }, "link"));
@@ -387,7 +391,7 @@ describe("getGistFiles", () => {
   });
 
   it("refuses a gist GitHub lists only part of", async () => {
-    answers({ [API]: ok(gist({}, { truncated: true })) });
+    answers({ [API]: ok(gistWith({ truncated: true })({})) });
 
     const error = await failure(getGistFiles({ id: ID }, "link"));
 

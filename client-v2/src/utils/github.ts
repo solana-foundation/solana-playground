@@ -88,8 +88,8 @@ export const filterRepoFiles = (tree: GithubTreeItem[], path: string) => {
 };
 
 /** How a refusal names an imported repository, and the folder in it if any */
-const sourceOf = (owner: string, repo: string, path: string) =>
-  path ? `${path} in ${owner}/${repo}` : `${owner}/${repo}`;
+const sourceOf = (repository: string, path: string) =>
+  path ? `${path} in ${repository}` : repository;
 
 export class PgGithub {
   /**
@@ -160,11 +160,10 @@ export class PgGithub {
       url,
       onProgress
     );
-    const convertedFiles = await PgFramework.convertToPlaygroundLayout(
-      files,
-      path,
-      { source: sourceOf(owner, repo, path) }
-    );
+    const convertedFiles = await PgFramework.convertToPlaygroundLayoutWith({
+      root: path,
+      source: sourceOf(`${owner}/${repo}`, path),
+    })(files);
     return convertedFiles;
   }
 
@@ -195,7 +194,7 @@ export class PgGithub {
 
     const items = filterRepoFiles(tree.tree, path);
     if (!items.length)
-      throw new Error(noProgramCode(sourceOf(owner, repo, path)));
+      throw new Error(noProgramCode(sourceOf(`${owner}/${repo}`, path)));
 
     const files = await this._getFileContents(
       owner,

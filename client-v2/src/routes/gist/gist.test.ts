@@ -23,7 +23,7 @@ const FILES = [["src/lib.rs", "entrypoint!(x);"]];
 
 /** The explorer files the route's handler hands to `handleRoute` */
 const filesOpened = async () => {
-  const [{ getExplorerInitArg }] = common.handleRoute.mock.calls.at(-1)!;
+  const [{ getExplorerInitArg }] = common.handleRoute.mock.calls.at(-1) ?? [];
   return (await getExplorerInitArg()).files;
 };
 
@@ -42,7 +42,7 @@ describe("/gist/{ref}", () => {
     ["not-a-gist", false],
     ["0123abcd/9f8e7d/x", false],
   ])("validate(%s) is %s", (ref, valid) => {
-    expect(gistRoute.validate!({ ref })).toBe(valid);
+    expect(gistRoute.validate?.({ ref })).toBe(valid);
   });
 
   it("opens the gist's files from a link, revision included", async () => {
@@ -62,7 +62,7 @@ describe("/{gistUrl}", () => {
     ["https://github.com/alice/repo", false],
     ["tutorials", false],
   ])("validate(%s) is %s", (gistUrl, valid) => {
-    expect(gistDefault.validate!({ gistUrl })).toBe(valid);
+    expect(gistDefault.validate?.({ gistUrl })).toBe(valid);
   });
 
   it("opens the gist the URL names", async () => {

@@ -7,7 +7,7 @@ const TOKEN = "gho_secret";
 const FILES = { "src__lib.rs": { content: "x" } };
 
 /** A `fetch` that answers once with the given status, headers and body */
-const answering = (status, { headers = {}, body = {} } = {}) => {
+const answering = (status, { headers, body }) => {
   const calls = [];
   const fetch = async (url, init) => {
     calls.push({ url, init });
@@ -22,6 +22,7 @@ const run = (fetch) =>
 describe("features/gist/model/create-gist", () => {
   it("creates a public gist and answers its url and id", async () => {
     const github = answering(201, {
+      headers: {},
       body: { id: "abc", html_url: "https://gist.github.com/ada/abc" },
     });
 
@@ -45,6 +46,7 @@ describe("features/gist/model/create-gist", () => {
   it("reads a 404 from a token without the gist scope as needs-gist-scope", async () => {
     const github = answering(404, {
       headers: { "x-oauth-scopes": "read:user, user:email" },
+      body: {},
     });
 
     assert.deepEqual(await run(github.fetch), {
@@ -56,6 +58,7 @@ describe("features/gist/model/create-gist", () => {
   it("reads a 403 without the gist scope the same way", async () => {
     const github = answering(403, {
       headers: { "x-oauth-scopes": "read:user", "x-ratelimit-remaining": "40" },
+      body: {},
     });
 
     assert.equal((await run(github.fetch)).body.reason, "needs-gist-scope");
@@ -64,6 +67,7 @@ describe("features/gist/model/create-gist", () => {
   it("does not blame the scope for a 404 when the token has it", async () => {
     const github = answering(404, {
       headers: { "x-oauth-scopes": "gist, read:user" },
+      body: {},
     });
 
     assert.deepEqual(await run(github.fetch), {
@@ -75,6 +79,7 @@ describe("features/gist/model/create-gist", () => {
   it("answers 429 for a 403 with no requests left, not needs-gist-scope", async () => {
     const github = answering(403, {
       headers: { "x-oauth-scopes": "read:user", "x-ratelimit-remaining": "0" },
+      body: {},
     });
 
     assert.deepEqual(await run(github.fetch), {
@@ -93,18 +98,27 @@ describe("features/gist/model/create-gist", () => {
   });
 
   it("answers 429 for a 429", async () => {
-    assert.equal((await run(answering(429).fetch)).status, 429);
+    assert.equal(
+      (await run(answering(429, { headers: {}, body: {} }).fetch)).status,
+      429
+    );
   });
 
   it("answers github-unauthorized for a revoked token", async () => {
-    assert.deepEqual(await run(answering(401).fetch), {
-      status: 401,
-      body: { reason: "github-unauthorized" },
-    });
+    assert.deepEqual(
+      await run(answering(401, { headers: {}, body: {} }).fetch),
+      {
+        status: 401,
+        body: { reason: "github-unauthorized" },
+      }
+    );
   });
 
   it("answers 422 when GitHub rejects the gist", async () => {
-    const github = answering(422, { body: { message: "Validation Failed" } });
+    const github = answering(422, {
+      headers: {},
+      body: { message: "Validation Failed" },
+    });
 
     assert.deepEqual(await run(github.fetch), {
       status: 422,
@@ -113,7 +127,10 @@ describe("features/gist/model/create-gist", () => {
   });
 
   it("answers 502 for a GitHub failure or a network error", async () => {
-    assert.equal((await run(answering(500).fetch)).status, 502);
+    assert.equal(
+      (await run(answering(500, { headers: {}, body: {} }).fetch)).status,
+      502
+    );
 
     const result = await run(async () => {
       throw new TypeError("fetch failed");
@@ -125,13 +142,16 @@ describe("features/gist/model/create-gist", () => {
   });
 
   it("answers 502 when a 201 carries no gist url", async () => {
-    assert.equal((await run(answering(201, { body: {} }).fetch)).status, 502);
+    assert.equal(
+      (await run(answering(201, { headers: {}, body: {} }).fetch)).status,
+      502
+    );
   });
 
   it("never puts the token in an answer", async () => {
     for (const status of [201, 401, 403, 404, 422, 429, 500]) {
       const result = await run(
-        answering(status, { body: { token: TOKEN } }).fetch
+        answering(status, { headers: {}, body: { token: TOKEN } }).fetch
       );
       assert.ok(!JSON.stringify(result).includes(TOKEN), `status ${status}`);
     }

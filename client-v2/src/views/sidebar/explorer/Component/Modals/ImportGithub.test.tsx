@@ -162,7 +162,8 @@ const submitUrl = (url: string) => {
   fireEvent.change(field, { target: { value: url } });
   const submit = screen
     .getAllByRole("button", { name: /^import$/i })
-    .find((button) => button.getAttribute("type") === "submit")!;
+    .find((button) => button.getAttribute("type") === "submit");
+  if (!submit) throw new Error("The dialog has no submit button.");
   fireEvent.click(submit);
 };
 

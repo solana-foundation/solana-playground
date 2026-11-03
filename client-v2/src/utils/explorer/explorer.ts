@@ -142,7 +142,8 @@ export class PgExplorer {
    */
   static async getAllWorkspaceNames() {
     if (!this._workspace) await this._initWorkspaces();
-    return this._workspace!.allNames;
+    if (!this._workspace) throw new Error("The workspaces were not read.");
+    return this._workspace.allNames;
   }
 
   /* ---------------------------- Public methods ---------------------------- */

@@ -36,7 +36,7 @@ const stubRepository = async (page: Page, files: Record<string, string>) => {
 };
 
 /** Opens Settings, then its "From GitHub" import, and imports the repository */
-const importRepository = async (page: Page, folder = "") => {
+const importRepository = async (page: Page, folder: string) => {
   await page.locator("[data-settings-trigger]").first().click();
   await page
     .getByRole("region", { name: "Settings" })
@@ -65,7 +65,7 @@ const item = (page: Page, path: string) =>
 
 /** Imports the repository from Settings, which closes once the project opens */
 const importAndReturn = async (page: Page) => {
-  await importRepository(page);
+  await importRepository(page, "");
   await expect(page.getByRole("dialog")).toHaveCount(0, LONG);
   await expect(page.getByRole("region", { name: "Settings" })).toHaveCount(0);
 };
@@ -80,7 +80,7 @@ test("project-without-program: A client and its tests", async ({
   seededPage: page,
 }) => {
   await stubRepository(page, CLIENT_AND_TESTS);
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(item(page, "client/index.ts")).toHaveCount(1, LONG);
   await expect(item(page, "client/lib/rpc.ts")).toHaveCount(1);
@@ -96,7 +96,7 @@ test("project-without-program: A repository with an Anchor program", async ({
     "client/index.ts": "export {};",
     "tests/counter.ts": "export {};",
   });
-  await importRepository(page);
+  await importRepository(page, "");
 
   // The Anchor layout: the program's `src/`, the client, and each test as
   // `<name>.test.ts`. None of it is read as a project with no program.
@@ -113,7 +113,7 @@ test("project-without-program: Two files for one place", async ({
     "a.ts": "export const top = 1;",
     "client/a.ts": "export const nested = 2;",
   });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(item(page, "client/a.ts")).toHaveCount(1, LONG);
   await expect(item(page, "client/client/a.ts")).toHaveCount(1);
@@ -129,7 +129,7 @@ test("project-without-program: Folders are kept", async ({
     "README.md": "# readme",
     "package.json": "{}",
   });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(item(page, "client/run.ts")).toHaveCount(1, LONG);
   await expect(item(page, "client/src/app/main.ts")).toHaveCount(1);
@@ -142,7 +142,7 @@ test("project-without-program: A test file outside a tests folder", async ({
   seededPage: page,
 }) => {
   await stubRepository(page, { "lib/math.spec.ts": "export {};" });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(item(page, "tests/lib/math.spec.ts")).toHaveCount(1, LONG);
   await expect(item(page, "client/")).toHaveCount(0);
@@ -155,7 +155,7 @@ test("project-without-program: A program no framework recognises", async ({
     "onchain/src/lib.rs": "fn main() {}",
     "client.ts": "export {};",
   });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(
     page
@@ -190,7 +190,7 @@ test("project-without-program: A repository with neither", async ({
   // The message repository import gave before this change: a Markdown file
   // is not a source file, so nothing reaches the layout
   await stubRepository(page, { "notes.md": "# notes" });
-  await importRepository(page);
+  await importRepository(page, "");
 
   await expect(
     page

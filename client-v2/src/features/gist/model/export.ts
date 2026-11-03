@@ -37,12 +37,12 @@ export type ExportResult =
 const reasonOf = async (response: Response) => {
   try {
     const body = await response.json();
-    return typeof body?.reason === "string" ? body.reason : null;
+    return typeof body?.reason === "string" ? body.reason : undefined;
   } catch (e) {
     log.warn("gists answered no JSON", {
       context: { status: response.status, error: String(e) },
     });
-    return null;
+    return undefined;
   }
 };
 
@@ -190,7 +190,7 @@ if (import.meta.vitest) {
       });
       const [url, init] = fetch.mock.calls[0];
       expect(url).toBe("/api/gists");
-      const body = JSON.parse(init!.body as string);
+      const body = JSON.parse(init?.body as string);
       expect(body.description).toBe("counter");
       expect(Object.keys(body.files).sort()).toEqual([
         ".playground.json",
@@ -267,6 +267,7 @@ if (import.meta.vitest) {
         { status: "failed", reason: "request-failed" },
       ],
       [503, {}, { status: "failed", reason: "request-failed" }],
+      // eslint-disable-next-line max-params -- `it.each` spreads each row of the table into the callback
     ])("maps a %i %j to %j", async (status, body, expected) => {
       answer(status, body);
 
@@ -289,7 +290,7 @@ if (import.meta.vitest) {
 
       await exportProject({ name: "n".repeat(300), files: PROJECT.files });
 
-      const body = JSON.parse(fetch.mock.calls[0][1]!.body as string);
+      const body = JSON.parse(fetch.mock.calls[0][1]?.body as string);
       expect(body.description).toBe("n".repeat(200));
       expect(JSON.parse(body.files[".playground.json"].content).name).toBe(
         "n".repeat(300)

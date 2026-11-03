@@ -86,8 +86,8 @@ const ShareGist = ({ name, readFiles, signedIn, signIn }: ShareGistProps) => {
   };
 
   const signInThen = async (
-    scopes: string[] | undefined,
-    retry: (error: string) => ShareStep
+    retry: (error: string) => ShareStep,
+    scopes: string[] | undefined
   ) => {
     try {
       await signIn(scopes ? { scopes } : undefined);
@@ -114,10 +114,10 @@ const ShareGist = ({ name, readFiles, signedIn, signIn }: ShareGistProps) => {
       state={shown}
       onCreate={() => share({ afterGrant: false })}
       onSignIn={() =>
-        signInThen(undefined, (error) => ({ step: "sign-in", error }))
+        signInThen((error) => ({ step: "sign-in", error }), undefined)
       }
       onGrant={() =>
-        signInThen([GIST_SCOPE], (error) => ({ step: "grant", error }))
+        signInThen((error) => ({ step: "grant", error }), [GIST_SCOPE])
       }
     />
   );

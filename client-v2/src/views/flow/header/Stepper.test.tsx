@@ -102,12 +102,14 @@ describe("Stepper", () => {
       deploy: "upcoming",
       interact: "upcoming",
       buildErrorCount: 0,
+      /* eslint-disable unicorn/no-null -- `FlowState` types these fields `| null` */
       buildMs: null,
       buildStartedAt: null,
       buildStartedBefore: null,
       buildFailure: null,
       deployBeforeRun: null,
       stopped: null,
+      /* eslint-enable unicorn/no-null */
       hasProgram: false,
     };
     render(<Stepper state={noProgram} onSelect={vi.fn()} />);

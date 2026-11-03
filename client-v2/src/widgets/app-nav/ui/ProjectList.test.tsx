@@ -329,7 +329,7 @@ describe("ProjectList", () => {
   });
 
   it("hands Share as gist to the page's opener, with a reader of that project", async () => {
-    const onShareGist = vi.fn().mockResolvedValue(null);
+    const onShareGist = vi.fn().mockResolvedValue(undefined);
     files.readProjectFiles.mockResolvedValue({ "src/lib.rs": "x" });
     render(
       <TooltipProvider>
@@ -342,7 +342,7 @@ describe("ProjectList", () => {
     fireEvent.keyDown(menuOf("alpha"), { key: "g" });
 
     await waitFor(() => expect(onShareGist).toHaveBeenCalledTimes(1));
-    const [name, readFiles] = onShareGist.mock.calls[0];
+    const [readFiles, name] = onShareGist.mock.calls[0];
     expect(name).toBe("alpha");
     expect(await readFiles()).toEqual({ "src/lib.rs": "x" });
     expect(files.readProjectFiles).toHaveBeenCalledWith(
