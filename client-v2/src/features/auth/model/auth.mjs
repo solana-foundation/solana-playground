@@ -218,7 +218,7 @@ export const missingConfig = () => {
  * own `name`, `email` and `image`.
  *
  * `githubCreatedAt` decides the user's tier on `/api/agent`: an account
- * younger than `AGENT_NEWCOMER_AGE_DAYS` is a `newcomer`. A date GitHub sends
+ * younger than `PG_AI_NEWCOMER_AGE_DAYS` is a `newcomer`. A date GitHub sends
  * malformed is left out rather than stored as an invalid one, and
  * `/api/agent` looks it up after the user's next turn.
  *

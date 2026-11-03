@@ -27,10 +27,10 @@ as soon as the Root Directory points at `client-v2`.
      and branch alias, and the production domain is neither: sign-in there
      is refused, and the origin checks (`isAllowedOrigin`) in
      `api/agent.mjs`, `api/mcp.mjs`, `api/projects.mjs` and
-     `api/conversations.mjs` answer its writes with `403`. A production build with `AGENT_API_KEY` fails
+     `api/conversations.mjs` answer its writes with `403`. A production build with `PG_AI_API_KEY` fails
      without it (`scripts/check-agent-env.mjs`).
    - `GITHUB_CLIENT_ID` / `GITHUB_CLIENT_SECRET` — see step 3.
-   - `AGENT_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
+   - `PG_AI_*`: set only after sign-in (`AUTH_SECRET`, `GITHUB_CLIENT_ID`,
      `GITHUB_CLIENT_SECRET`, `DATABASE_URL`) and the [firewall](firewall.md)
      rules. `/api/agent` answers only signed-in users, and a production build
      fails when the key is set without sign-in or `AUTH_BASE_URL`
@@ -249,13 +249,31 @@ deployment reads the real value at runtime:
 
 | Variable | Meaning |
 | --- | --- |
-| `AGENT_API_KEY` | Bearer token for the upstream. Required on Vercel |
-| `AGENT_BASE_URL` | Optional, defaults to `https://inference-api.nousresearch.com/v1`. OpenAI-compatible base URL, used as given: no trailing slash and no `/chat/completions`, which the server appends |
-| `AGENT_MODEL` | Optional, defaults to `z-ai/glm-5.3-flash:US`. Model id the upstream runs. The client never picks one. Ids: [Nous catalogue](https://inference-api.nousresearch.com/v1/models) |
-| `AGENT_REASONING_EFFORT` | Optional, defaults to `low`. Sent as `reasoning_effort`; accepted values are the model's `reasoning.supported_efforts` in the [Nous catalogue](https://inference-api.nousresearch.com/v1/models). The panel shows no reasoning, so a high effort looks like a stalled answer |
+| `PG_AI_API_KEY` | Bearer token for the upstream. Required on Vercel |
+| `PG_AI_BASE_URL` | Optional, defaults to `https://inference-api.nousresearch.com/v1`. OpenAI-compatible base URL, used as given: no trailing slash and no `/chat/completions`, which the server appends |
+| `PG_AI_MODEL` | Optional, defaults to `z-ai/glm-5.3-flash:US`. Model id the upstream runs. The client never picks one. Ids: [Nous catalogue](https://inference-api.nousresearch.com/v1/models) |
+| `PG_AI_REASONING_EFFORT` | Optional, defaults to `low`. Sent as `reasoning_effort`; accepted values are the model's `reasoning.supported_efforts` in the [Nous catalogue](https://inference-api.nousresearch.com/v1/models). The panel shows no reasoning, so a high effort looks like a stalled answer |
 
-The defaults for model and effort are Nous-specific: pointing `AGENT_BASE_URL`
+The defaults for model and effort are Nous-specific: pointing `PG_AI_BASE_URL`
 elsewhere usually means setting both as well.
+
+### Renaming from `AGENT_*`
+
+`AGENT_*` (`AGENT_API_KEY`, `AGENT_MODEL` and so on, the same suffixes) is the
+deprecated spelling of these variables. When a `PG_AI_*` variable is not set at
+all, the server reads its `AGENT_*` twin and logs
+`server-env: AGENT_<NAME> is deprecated; rename it PG_AI_<NAME>` once per name
+per instance, on the first request that reads it; the build check accepts
+`AGENT_API_KEY` the same way. A `PG_AI_*` set to an empty value does not fall
+back, and an `AGENT_*` that differs from its set `PG_AI_*` twin is ignored, with
+`server-env: AGENT_<NAME> is ignored` in the log.
+
+To rename a project: add each `PG_AI_*` with the old value, for Production and
+Preview, and redeploy. Every build logs
+`check-agent-env: deprecated AGENT_* names still set: …`; delete the names it
+lists, redeploy, and the line is gone. Until then, any step below that sets,
+rotates or unsets a `PG_AI_*` variable applies to its `AGENT_*` twin too. The
+fallback is removed once no deployment sets them.
 
 Only a signed-in user spends the key. `POST /api/agent` refuses before it reads
 the body or calls the upstream:
@@ -300,16 +318,16 @@ The upstream is Vercel AI Gateway (HOO-1751, OpenSpec change
   even when the ledger below is wrong. A budget is soft: the request that
   crosses it completes, at most one worst-case turn (about $0.023).
 - **A per-user daily cap, by tier.** A signed-in user is `newcomer` while their
-  GitHub account is younger than `AGENT_NEWCOMER_AGE_DAYS`, or its creation
+  GitHub account is younger than `PG_AI_NEWCOMER_AGE_DAYS`, or its creation
   date is not stored yet, and `established` after. `/api/agent` keeps a ledger
   in Postgres (`agent_spend`): a turn reserves its worst-case cost before the
   upstream call and settles to the reported usage once the response has ended.
   The date is stored at sign-in, or looked up from GitHub after the user's
   first turn when sign-in did not store it.
-- **Bounds on one request.** A body over `AGENT_MAX_BODY_BYTES` is refused, and
+- **Bounds on one request.** A body over `PG_AI_MAX_BODY_BYTES` is refused, and
   every upstream request carries `max_completion_tokens`, so a turn's worst case is known
   before the call. Every request also restricts the Gateway to
-  `AGENT_PROVIDERS`.
+  `PG_AI_PROVIDERS`.
 
 Every day boundary is 00:00 UTC, where the Gateway's daily budgets reset too.
 
@@ -334,30 +352,30 @@ Every day boundary is 00:00 UTC, where the Gateway's daily budgets reset too.
 
 | Variable | Value on the Gateway |
 | --- | --- |
-| `AGENT_BASE_URL` | `https://ai-gateway.vercel.sh/v1` |
-| `AGENT_MODEL` | `zai/glm-5.3-flash` |
-| `AGENT_API_KEY` | The `established` key. Secret |
-| `AGENT_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `AGENT_API_KEY`, still held to the newcomer cap, and the pools are shared |
+| `PG_AI_BASE_URL` | `https://ai-gateway.vercel.sh/v1` |
+| `PG_AI_MODEL` | `zai/glm-5.3-flash` |
+| `PG_AI_API_KEY` | The `established` key. Secret |
+| `PG_AI_NEWCOMER_API_KEY` | The `newcomer` key. Secret. Optional: without it newcomers spend through `PG_AI_API_KEY`, still held to the newcomer cap, and the pools are shared |
 
 The limits are optional and default to the starting values in the change's
 `design.md`; each is read by `agentEnv` (`src/shared/config/server-env.mjs`):
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `AGENT_PROVIDERS` | `baseten,fireworks` when `AGENT_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
-| `AGENT_PRICE_INPUT` / `AGENT_PRICE_OUTPUT` | `0.15` / `0.50` | USD per million tokens, the Gateway's list price. The ledger charges reported usage at these prices: the cost in the Gateway's streamed usage is undocumented, so it is not used |
-| `AGENT_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
-| `AGENT_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
-| `AGENT_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
-| `AGENT_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
-| `AGENT_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |
+| `PG_AI_PROVIDERS` | `baseten,fireworks` when `PG_AI_BASE_URL` is the Gateway, none otherwise | Gateway provider slugs a turn may be served by: the US-region endpoints for the model with zero data retention and no training. Any other upstream refuses the field (Nous: `400 unknown_parameter`), so it gets none by default. Set but empty, it sends no restriction even to the Gateway. Check `/v1/models/<model>/endpoints` before changing it |
+| `PG_AI_PRICE_INPUT` / `PG_AI_PRICE_OUTPUT` | `0.15` / `0.50` | USD per million tokens, the Gateway's list price. The ledger charges reported usage at these prices: the cost in the Gateway's streamed usage is undocumented, so it is not used |
+| `PG_AI_MAX_BODY_BYTES` | `524288` | A larger body is refused with `413` |
+| `PG_AI_MAX_OUTPUT_TOKENS` | `8192` | Sent as `max_completion_tokens` |
+| `PG_AI_NEWCOMER_AGE_DAYS` | `30` | Younger GitHub accounts are `newcomer` |
+| `PG_AI_NEWCOMER_DAILY_CAP` | `0.10` | USD per user per UTC day |
+| `PG_AI_ESTABLISHED_DAILY_CAP` | `0.50` | USD per user per UTC day |
 
 A malformed number falls back to its default and logs `server-env: ...`.
 
 **Order.** The change adds a migration (`agent_spend` and
 `"user"."githubCreatedAt"`): run `migrate-production-db` first, then merge to
 `master` ([Conversation and project sync](#conversation-and-project-sync)). The
-merge alone moves nothing: with `AGENT_BASE_URL` unset, turns still go to the
+merge alone moves nothing: with `PG_AI_BASE_URL` unset, turns still go to the
 Nous Research default, with no provider restriction, and the ledger and caps
 apply to them already.
 
@@ -365,12 +383,12 @@ apply to them already.
 come before or after the merge. In Vercel, for Production (and Preview, to try
 it there first):
 
-1. **Set** `AGENT_BASE_URL` to `https://ai-gateway.vercel.sh/v1` and
-   `AGENT_MODEL` to `zai/glm-5.3-flash`. Setting the base URL is the switch:
+1. **Set** `PG_AI_BASE_URL` to `https://ai-gateway.vercel.sh/v1` and
+   `PG_AI_MODEL` to `zai/glm-5.3-flash`. Setting the base URL is the switch:
    unset, it falls back to Nous. It is also what turns on the default
-   `AGENT_PROVIDERS` restriction, which only the Gateway accepts.
-2. **Replace** `AGENT_API_KEY` with the Gateway's `established` key, and set
-   `AGENT_NEWCOMER_API_KEY` to its `newcomer` key. A Nous key sent to the
+   `PG_AI_PROVIDERS` restriction, which only the Gateway accepts.
+2. **Replace** `PG_AI_API_KEY` with the Gateway's `established` key, and set
+   `PG_AI_NEWCOMER_API_KEY` to its `newcomer` key. A Nous key sent to the
    Gateway, or a Gateway key sent to Nous, is answered `502` (`agent: upstream
    refused the default backend`), so change the base URL and the key together.
 3. Redeploy: a function reads its variables when the deployment is built.
@@ -378,11 +396,13 @@ it there first):
 A day after production traffic moves to the Gateway, revoke the Nous Research
 key, so nothing can spend outside the budgets.
 
-**Rollback**, before the Nous key is revoked: restore the previous
-`AGENT_API_KEY`, unset `AGENT_NEWCOMER_API_KEY` (left set, newcomers' turns
-send its Gateway key to Nous and get `502`), and unset `AGENT_BASE_URL` and
-`AGENT_MODEL` (or set them back to the Nous values), then redeploy. Unset,
-`AGENT_PROVIDERS` follows the base URL and sends no restriction to Nous; if it
+**Rollback**, before the Nous key is revoked (on a project that still sets any
+`AGENT_*` twin, change or delete it alongside: an unset `PG_AI_*` falls back to
+it): restore the previous
+`PG_AI_API_KEY`, unset `PG_AI_NEWCOMER_API_KEY` (left set, newcomers' turns
+send its Gateway key to Nous and get `502`), and unset `PG_AI_BASE_URL` and
+`PG_AI_MODEL` (or set them back to the Nous values), then redeploy. Unset,
+`PG_AI_PROVIDERS` follows the base URL and sends no restriction to Nous; if it
 was set by hand, unset it too, since Nous refuses the restriction. The ledger works against any
 upstream that reports usage on the stream. After the Nous key is revoked, a
 rollback needs a new one.
@@ -391,7 +411,7 @@ What `POST /api/agent` answers past sign-in:
 
 | Answer | When |
 | --- | --- |
-| `413` | The body is larger than `AGENT_MAX_BODY_BYTES`. No charge |
+| `413` | The body is larger than `PG_AI_MAX_BODY_BYTES`. No charge |
 | `429`, `reason: "daily-cap"` | The turn's worst case would pass the user's cap today. Carries `tier` and `Retry-After` (seconds to 00:00 UTC). The upstream is not called |
 | `503`, `reason: "pool-exhausted"` | The Gateway answered `402` `quota_for_entity_exceeded` (the tier's key or the team is out of budget) or `insufficient_funds`. Carries `tier` and `Retry-After`; logged as `agent: tier pool exhausted`. No charge |
 | `503`, no `reason` | The ledger could not be read; logged as `agent: spend ledger unavailable`. The upstream is not called |

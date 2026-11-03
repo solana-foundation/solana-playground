@@ -15,7 +15,7 @@
  * serves no turns at all.
  *
  * **How much they spend is bounded three ways** (HOO-1751). A body over
- * `AGENT_MAX_BODY_BYTES` is refused, and every upstream request carries
+ * `PG_AI_MAX_BODY_BYTES` is refused, and every upstream request carries
  * an output limit, so a turn's worst-case cost is known before the call. The
  * ledger in `features/agent` reserves that cost against the user's daily cap
  * for their tier before the upstream is dialled, and settles it to the
@@ -92,7 +92,7 @@ const POOL_EXHAUSTED_TYPES = [
  * with no key of its own gets the panel reporting the default backend as
  * unavailable.
  *
- * `AGENT_BASE_URL` is used as given: a base with no trailing slash and no
+ * `PG_AI_BASE_URL` is used as given: a base with no trailing slash and no
  * `/chat/completions`, the path this appends.
  */
 const upstream = () => {
