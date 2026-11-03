@@ -84,7 +84,8 @@
     "elliptic": "^6.6.1",
     "crypto-js": "^4.2.0",
     "axios": "^0.34.0",
-    "toml": "^5.0.1"
+    "toml": "^5.0.1",
+    "follow-redirects": "^1.16.2"
   },
   "engines": {
     "node": "^22.23.4"
