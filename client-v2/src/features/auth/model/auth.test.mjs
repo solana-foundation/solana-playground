@@ -67,7 +67,7 @@ describe("readSession", () => {
       { status: "unavailable" },
     ],
   ]) {
-    test(label, async () => {
+    test(`${label}`, async () => {
       mock.method(getAuth().api, "getSession", getSession);
       mock.method(console, "error", () => {});
       assert.deepEqual(await readSession(req()), expected);
@@ -91,7 +91,7 @@ describe("isAllowedOrigin", () => {
     // A sandboxed frame or a `file:` page sends the literal string "null"
     ["refuses an opaque origin", "null", false],
   ]) {
-    test(label, () => {
+    test(`${label}`, () => {
       assert.equal(isAllowedOrigin(req({ origin })), expected);
     });
   }

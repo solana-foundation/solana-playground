@@ -1,3 +1,5 @@
+import { expect, it, vi } from "vitest";
+
 // The utils and hooks barrels read build-time globals jsdom lacks, and the
 // inputs need a connected program; the folds under test need none of it.
 vi.mock("../../../../../utils", () => ({
@@ -25,7 +27,6 @@ vi.mock("./InstructionInput", () => ({ default: () => null }));
 vi.mock("../IdlProvider", () => ({ useIdl: () => ({ idl: {} }) }));
 
 import { fireEvent, render, screen } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
 
 import Instruction from "./Instruction";
 

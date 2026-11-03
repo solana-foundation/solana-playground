@@ -40,7 +40,7 @@ describe("tracesSampleRate", () => {
   });
 
   for (const [label, value, rate] of cases) {
-    it(label, async () => {
+    it(`${label}`, async () => {
       const { tracesSampleRate } = await load();
       expect(tracesSampleRate(value)).toBe(rate);
     });
