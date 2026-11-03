@@ -19,7 +19,7 @@ import type {
   WalletAccount,
   WalletState,
 } from "./types";
-import { walletStorageWith } from "./wallet-storage";
+import { WALLET_LOCAL_KEY, walletStorageWith } from "./wallet-storage";
 
 const defaultState: WalletState = {
   state: "setup",
@@ -184,15 +184,12 @@ const derive = () => ({
   }),
 });
 
-/** Where the wallet lived before the keystore; `walletStorage` moves it out */
-const LEGACY_KEY = "wallet";
-
 /**
  * Upgrade the pre-accounts format (`sk`) in place in `localStorage`, before
  * `walletStorage().read` moves the result to IndexedDB.
  */
 const migrate = () => {
-  const walletStr = localStorage.getItem(LEGACY_KEY);
+  const walletStr = localStorage.getItem(WALLET_LOCAL_KEY);
   if (!walletStr) return;
 
   interface OldWalletState {
@@ -201,7 +198,15 @@ const migrate = () => {
     sk: Array<number>;
   }
 
-  const oldOrNewWallet: OldWalletState | WalletState = JSON.parse(walletStr);
+  let oldOrNewWallet: OldWalletState | WalletState;
+  try {
+    oldOrNewWallet = JSON.parse(walletStr);
+  } catch {
+    // Not logged here: `walletStorage().read` reports it, without the
+    // `SyntaxError`'s message, which quotes the text and so key bytes
+    return;
+  }
+  if (typeof oldOrNewWallet !== "object" || oldOrNewWallet === null) return;
   if ((oldOrNewWallet as WalletState).accounts) return;
 
   const oldWallet = oldOrNewWallet as OldWalletState;
@@ -216,7 +221,7 @@ const migrate = () => {
   };
 
   // Set the new wallet format
-  localStorage.setItem(LEGACY_KEY, JSON.stringify(newWallet));
+  localStorage.setItem(WALLET_LOCAL_KEY, JSON.stringify(newWallet));
 
   // Remove wallet adapter key
   localStorage.removeItem("walletName");

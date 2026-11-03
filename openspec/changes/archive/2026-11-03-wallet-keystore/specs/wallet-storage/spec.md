@@ -36,6 +36,19 @@ SHALL stay and the wallet SHALL load from it.
 - **AND** `localStorage['wallet']` is gone
 - **AND** the current account is the one that was current before
 
+#### Scenario: Two tabs load at once
+
+- **WHEN** two tabs load while `localStorage['wallet']` still holds a wallet
+- **THEN** one tab moves it at a time, and no account either tab saves is
+  overwritten by the other's move
+
+#### Scenario: A localStorage wallet cannot be read
+
+- **WHEN** `localStorage['wallet']` is not valid JSON or not a wallet's shape
+- **THEN** it is left in place and copied once to `localStorage['wallet.unreadable']`,
+  which no later write replaces
+- **AND** the wallet loads from IndexedDB
+
 #### Scenario: The copy fails
 
 - **WHEN** writing the wallet to IndexedDB fails, or reading it back differs
@@ -49,8 +62,9 @@ SHALL stay and the wallet SHALL load from it.
   holds one (for example, written by a tab still running the previous
   version)
 - **THEN** the stored wallet holds every account from both, one per public
-  key, IndexedDB's accounts first
-- **AND** an account only `localStorage` held keeps its name, renamed with a
+  key, `localStorage`'s accounts first, since a copy there is the newer one
+- **AND** `localStorage`'s current account and connection state win
+- **AND** an account only IndexedDB held keeps its name, renamed with a
   numeric suffix if the name is taken
 
 ### Requirement: The wallet works when IndexedDB is unavailable
@@ -76,9 +90,17 @@ through the logger with `report: true`.
 
 No log entry, error report or network request made by wallet storage or its
 migration SHALL contain a secret key, in any encoding. Logged failures carry
-only an error's name and message and counts of accounts.
+only an error's name, its message where the browser fixes it (a
+`DOMException`) or this module wrote it, and counts of accounts.
 
 #### Scenario: A failing migration is logged
 
 - **WHEN** the migration fails and logs the failure
 - **THEN** the log entry's message and context contain no keypair bytes
+
+#### Scenario: A truncated localStorage wallet is logged
+
+- **WHEN** `localStorage['wallet']` is cut off inside a keypair and the
+  `JSON.parse` error is logged
+- **THEN** the entry carries the error's name only, not the message that
+  quotes the text
