@@ -43,6 +43,14 @@ SHALL stay and the wallet SHALL load from it.
 - **AND** `localStorage['wallet']` is gone
 - **AND** the current account is the one that was current before
 
+#### Scenario: A legacy single-key wallet moves to IndexedDB
+
+- **WHEN** `localStorage['wallet']` holds the pre-accounts format (`sk`,
+  `setupCompleted`, `connected`)
+- **THEN** IndexedDB holds it as one account named `Wallet 1` with the same
+  keypair
+- **AND** `localStorage['wallet']` is gone
+
 #### Scenario: Two tabs load at once
 
 - **WHEN** two tabs load while `localStorage['wallet']` still holds a wallet
