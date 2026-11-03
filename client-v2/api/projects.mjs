@@ -11,6 +11,7 @@
 import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
+  captureServerError,
   withObservability,
 } from "../src/features/api/server.mjs";
 import {
@@ -286,6 +287,7 @@ async function handler(req, res) {
     // code. Same shape as `api/conversations.mjs`, duplicated for the reason
     // the note at the top of this file gives.
     if (status === 500) {
+      captureServerError(e);
       console.error("api/projects:", {
         message: e.message,
         code: e.code,

@@ -22,6 +22,7 @@ const res = { statusCode: 200 };
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.clearAllMocks();
 });
 
 describe("tracesSampleRate", () => {
@@ -47,7 +48,90 @@ describe("tracesSampleRate", () => {
   }
 });
 
+describe("scrubEvent", () => {
+  it("drops the body, cookies, query string, user and every header but a safe few", async () => {
+    const { scrubEvent } = await load();
+    const event = scrubEvent({
+      user: { id: "u1", ip_address: "1.2.3.4" },
+      request: {
+        url: "https://x.test/api/auth/callback?code=secret#frag",
+        query_string: "code=secret",
+        cookies: { session: "s" },
+        data: { apiKey: "sk-secret" },
+        headers: {
+          Authorization: "Bearer sk-secret",
+          Cookie: "session=s",
+          "x-api-key": "sk-secret",
+          "User-Agent": "jest",
+          "content-type": "application/json",
+        },
+      },
+    } as never) as never as {
+      user?: unknown;
+      request: Record<string, unknown>;
+    };
+
+    expect(event.user).toBeUndefined();
+    expect(event.request).toEqual({
+      url: "https://x.test/api/auth/callback",
+      headers: { "User-Agent": "jest", "content-type": "application/json" },
+    });
+  });
+
+  it("passes an event with no request through", async () => {
+    const { scrubEvent } = await load();
+    expect(scrubEvent({ message: "m" } as never)).toEqual({ message: "m" });
+  });
+});
+
 describe("withObservability", () => {
+  it("leaves the response alone and loads nothing without a DSN", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { withObservability, captureServerError } = await load();
+    const handler = vi.fn(async (_req, response) => {
+      response.statusCode = 500;
+      return "failed";
+    });
+    const response = { statusCode: 200 };
+
+    await expect(
+      withObservability("agent", handler)(req, response as never)
+    ).resolves.toBe("failed");
+    expect(response.statusCode).toBe(500);
+    captureServerError(new Error("ignored"));
+    expect(sentry.init).not.toHaveBeenCalled();
+    expect(sentry.captureException).not.toHaveBeenCalled();
+    expect(sentry.flush).not.toHaveBeenCalled();
+  });
+
+  it("scrubs error events, and sends no PII by default", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { withObservability, scrubEvent } = await load();
+
+    await withObservability("agent", async () => "done")(req, res);
+
+    const options = sentry.init.mock.calls[0][0];
+    expect(options.beforeSend).toBe(scrubEvent);
+    expect(options.sendDefaultPii).toBe(false);
+  });
+
+  it("reports an answered 500 through captureServerError, once", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { withObservability, captureServerError } = await load();
+    const error = new Error("driver");
+
+    await withObservability("projects", async (_req, response) => {
+      captureServerError(error);
+      response.statusCode = 500;
+    })(req, { statusCode: 200 } as never);
+
+    expect(sentry.captureException).toHaveBeenCalledTimes(1);
+    expect(sentry.captureException).toHaveBeenCalledWith(error);
+  });
+
   it("hands the request straight to the handler where Sentry is off", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
     vi.stubEnv("VERCEL_ENV", "preview");

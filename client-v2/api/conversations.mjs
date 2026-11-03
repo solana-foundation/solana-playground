@@ -9,6 +9,7 @@ import { validate as isUuid } from "uuid";
 import { isAllowedOrigin, requireUser } from "../src/features/auth/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
+  captureServerError,
   withObservability,
 } from "../src/features/api/server.mjs";
 import {
@@ -268,6 +269,7 @@ async function handler(req, res) {
     // against a schema-shaped failure it is the only way to tell code that is
     // behind the database from a database that is behind the code.
     if (status === 500) {
+      captureServerError(e);
       console.error("api/conversations:", {
         message: e.message,
         code: e.code,

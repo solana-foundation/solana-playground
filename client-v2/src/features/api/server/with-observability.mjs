@@ -22,8 +22,63 @@ export const tracesSampleRate = (value) => {
   return 1;
 };
 
+/** Request headers worth keeping on an event; every other one is dropped */
+const KEPT_HEADERS = new Set([
+  "accept",
+  "content-length",
+  "content-type",
+  "host",
+  "user-agent",
+  "x-vercel-id",
+]);
+
+/**
+ * What leaves the function on an event: never a body, a cookie, the query
+ * string (an OAuth callback carries its `code` there), a header outside
+ * `KEPT_HEADERS` (`authorization`, and the key headers a client may send), or
+ * the user. Applies to error events: the SDK's default trace lifecycle sends
+ * spans one by one, which carry only the route, method and status that
+ * `withObservability` sets, and ignores `beforeSendTransaction`.
+ *
+ * @template {import("@sentry/node").ErrorEvent} E
+ * @param {E} event
+ * @returns {E}
+ */
+export const scrubEvent = (event) => {
+  delete event.user;
+  const request = event.request;
+  if (!request) return event;
+  delete request.data;
+  delete request.cookies;
+  delete request.query_string;
+  if (request.url) request.url = request.url.split(/[?#]/)[0];
+  if (request.headers) {
+    request.headers = Object.fromEntries(
+      Object.entries(request.headers).filter(([name]) =>
+        KEPT_HEADERS.has(name.toLowerCase())
+      )
+    );
+  }
+  return event;
+};
+
 /** The initialised SDK, `null` where Sentry is off; one per function instance */
 let sdk;
+
+/** The same SDK once it has loaded, for code that cannot wait on `sdk` */
+let loaded;
+
+/**
+ * Reports an error a handler has already answered, as the routes that turn a
+ * driver failure into a generic 500 do. An error that escapes the handler is
+ * captured by `withObservability` itself; do not report it twice. Does nothing
+ * where Sentry is off.
+ *
+ * @param {unknown} error
+ */
+export const captureServerError = (error) => {
+  loaded?.captureException(error);
+};
 
 const loadSentry = () => {
   if (sdk !== undefined) return sdk;
@@ -36,6 +91,8 @@ const loadSentry = () => {
       dsn: env.REACT_APP_SENTRY_DSN,
       environment: env.VERCEL_ENV,
       release: env.VERCEL_GIT_COMMIT_SHA,
+      sendDefaultPii: false,
+      beforeSend: scrubEvent,
       // A request the browser already traces keeps the browser's decision
       tracesSampler: ({ inheritOrSampleWith }) => inheritOrSampleWith(rate),
       // `withObservability` names each request's span by route; the SDK's own
@@ -44,7 +101,7 @@ const loadSentry = () => {
         Sentry.httpIntegration({ disableIncomingRequestSpans: true }),
       ],
     });
-    return Sentry;
+    return (loaded = Sentry);
   });
   return sdk;
 };

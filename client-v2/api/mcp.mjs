@@ -24,6 +24,7 @@
 import {
   readJson,
   warnAboutMissingObservabilityIds,
+  captureServerError,
   withObservability,
 } from "../src/features/api/server.mjs";
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
@@ -294,6 +295,7 @@ async function handler(req, res) {
     configured = await upstreams(req);
   } catch (e) {
     // A broken catalogue fails every request, with the entry at fault named, rather than serving part of it
+    captureServerError(e);
     console.error("mcp: the sources catalogue is invalid", e);
     return sendJson(res, 500, { error: /** @type {Error} */ (e).message });
   }

@@ -12,4 +12,7 @@ export {
   warnAboutMissingObservabilityIds,
 } from "./server/observability.mjs";
 
-export { withObservability } from "./server/with-observability.mjs";
+export {
+  captureServerError,
+  withObservability,
+} from "./server/with-observability.mjs";

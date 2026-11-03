@@ -477,6 +477,23 @@ before this existed.
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
+### Sentry on the API functions
+
+The functions report to the same Sentry project as the browser, through
+`withObservability` (`src/features/api/server/with-observability.mjs`), and
+need no variable of their own: `REACT_APP_SENTRY_DSN`, `SENTRY_PREVIEW_ENABLED`
+and `SENTRY_TRACES_SAMPLE_RATE` are described in `.env.example`. Without a DSN,
+or outside Production (and Preview with `SENTRY_PREVIEW_ENABLED=true`), a
+function never loads `@sentry/node` and makes no request. An error that
+escapes a handler is captured and rethrown, so the 500 is unchanged; a handler
+that answers a generic 500 itself calls `captureServerError`. Each function
+flushes before it returns.
+
+Events carry the route, method, status, release and environment, and the stack.
+`scrubEvent` removes the request body, cookies, query string, the user and every
+header but `accept`, `content-length`, `content-type`, `host`, `user-agent` and
+`x-vercel-id`, so `authorization` and the AI keys never leave the function.
+
 **Migrations are never applied by a function.** A preview from `preview.yml` or
 the Makefile gets its own Neon branch, so its schema is its own problem. A
 Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which nothing
