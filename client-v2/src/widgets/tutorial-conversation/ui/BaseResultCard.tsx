@@ -50,7 +50,8 @@ const headOf = (r: RunResult): { title: string; meta: string } => {
     if (r.ok) {
       return {
         title: r.upgraded ? `Upgraded ${r.programId}` : "Deployed",
-        meta: sol(r.lamports),
+        // A deploy recognised after a reload has no known cost
+        meta: r.lamports === null ? "" : sol(r.lamports),
       };
     }
     const titles = {

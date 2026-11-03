@@ -174,15 +174,33 @@ export type RunResult =
       programId: string;
       signature: string;
       upgraded: boolean;
-      lamports: number;
+      /**
+       * Lamports the deploy took from the wallet; null for a deploy
+       * recognised from the chain after a reload, whose cost is not known
+       */
+      lamports: number | null;
       instructions: string[];
     }
   | {
       act: "deploy" | "buildDeploy";
       ok: false;
       seconds: number;
-      reason: "failed" | "no_wallet" | "no_funds";
+      reason: "failed" | "no_wallet";
       message: string;
+    }
+  | {
+      act: "deploy" | "buildDeploy";
+      ok: false;
+      seconds: number;
+      /** The airdrop was refused or rate limited and the wallet is short */
+      reason: "no_funds";
+      message: string;
+      /** Lamports the wallet holds, the line's "{balance} SOL" */
+      balance: number;
+      /** Lamports the deploy needs, the line's "about {cost}" */
+      cost: number;
+      /** The wallet's address, for the card's address row */
+      address: string;
     }
   | {
       act: "run" | "call";

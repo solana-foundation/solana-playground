@@ -326,13 +326,35 @@ describe("Hello Anchor through the engine", () => {
       "greet-by-name",
     ]);
     expect(saved.finishedAt).not.toBeNull();
+    // Every act that ended is measured, the planned failure included
     expect(events.events.map((e) => e.name)).toEqual([
       "tutorial_started",
+      "tutorial_action_run",
       "tutorial_step_passed",
+      "tutorial_action_run",
       "tutorial_step_passed",
+      "tutorial_action_run",
       "tutorial_step_passed",
+      "tutorial_action_run",
+      "tutorial_action_run",
       "tutorial_step_passed",
+      "tutorial_action_run",
       "tutorial_finished",
+    ]);
+    expect(
+      events.events
+        .filter((e) => e.name === "tutorial_action_run")
+        .map((e) => {
+          const p = e.params as { action: string; outcome: string };
+          return `${p.action} ${p.outcome}`;
+        })
+    ).toEqual([
+      "build failed",
+      "build ok",
+      "deploy ok",
+      "run ok",
+      "build_deploy ok",
+      "call ok",
     ]);
     // Every step passed on the real result of its own act; step 3's act is a
     // client run, so its `via` is `client`

@@ -414,6 +414,34 @@ describe("BaseResultCard", () => {
     expect(screen.getByText("IDL: 1 instruction · hello · 1.6 s")).toBeTruthy();
   });
 
+  it("heads a deploy with its cost, and one recognised after a reload without one", () => {
+    const deployed = (lamports: number | null) => (
+      <BaseResultCard
+        result={{
+          act: "deploy",
+          ok: true,
+          seconds: 9,
+          programId: "Prog1111",
+          signature: "sig",
+          upgraded: false,
+          lamports,
+          instructions: ["hello"],
+        }}
+        planned={null}
+        open={false}
+        onExplain={vi.fn()}
+        onFixMyself={vi.fn()}
+        onShowLine={vi.fn()}
+      />
+    );
+    const { unmount } = render(deployed(1_250_000_000));
+    expect(screen.getByText("1.25 devnet SOL from your wallet")).toBeTruthy();
+    unmount();
+    render(deployed(null));
+    expect(screen.getByText("Deployed")).toBeTruthy();
+    expect(screen.queryByText(/devnet SOL from your wallet/)).toBeNull();
+  });
+
   it("opens a failed build with its line, its location and Explain", async () => {
     const onExplain = vi.fn();
     const onFixMyself = vi.fn();

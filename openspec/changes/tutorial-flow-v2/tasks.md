@@ -106,7 +106,8 @@ for; tasks with "after nothing" start at once.
       a deploy recognised after a reload, `tutorial_action_run` for deploys.
       Verify: unit tests with a stubbed connection for funding and
       recognition, and `outcome: "no_funds"` on a refused airdrop; one devnet deploy and upgrade
-      by hand (HOO-2356; fleet; L 2.5; after 3.1, 3.2)
+      by hand (HOO-2356; fleet; L 2.5; after 3.1, 3.2;
+      [plan](plans/4.2-deploy-from-wallet.md))
 - [ ] 4.3 Client run and the call act: the run bound to the program and
       wallet, the signatures it sent captured, logs fetched and the
       definition's line picked, the signature linked on the meta line and

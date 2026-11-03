@@ -236,6 +236,9 @@ if (import.meta.vitest) {
             seconds: 1,
             reason: "no_funds",
             message: "Not enough devnet SOL",
+            balance: 0,
+            cost: 1_500_000_000,
+            address: "11111111111111111111111111111111",
           })
         ).toBe(false);
         expect(judgeGoal(DEPLOY, built(["hello"]))).toBe(false);

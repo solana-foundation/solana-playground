@@ -34,12 +34,13 @@ line SHALL show the log, with no line link.
 
 A deploy act SHALL deploy the last successful build to devnet through the BPF
 upgradeable loader, paid by the learner's Playground wallet. Its stages are
-"Writing buffer", "Deploying", "Uploading IDL" ("Upgrading IDL" on a later
-deploy) and "Confirming". "Building" comes before them when the program
-changed since the last build, and "Funding your wallet" first of all when the
-balance is short; "n of m" counts every stage shown, four to six. The IDL goes on
-chain with the program, so any client finds the interface from the program
-id. The first deploy SHALL write the program id into `declare_id!` and light
+"Writing buffer", "Deploying" and "Confirming". "Building" comes before them
+when the program changed since the last build, and "Funding your wallet" first
+of all when the balance is short; "n of m" counts every stage shown, three to
+five. The IDL does not go on chain yet: Anchor 1.x publishes it through the
+Program Metadata Program, which Playground does not call, and nothing in a
+tutorial reads it from the chain (Slava, 3 Nov; a follow-up ticket brings the
+stage back). The first deploy SHALL write the program id into `declare_id!` and light
 that line. Before the first deploy:
 
 - **No wallet:** the act card SHALL offer to create or connect one in place,
@@ -47,7 +48,9 @@ that line. Before the first deploy:
 - **Too little balance:** the deploy SHALL top up the wallet by airdrop, the
   way the editor's deploy does, as an extra first stage on the act card,
   "Funding your wallet". The stage shows only when the balance is short, and
-  the terminal prints the airdrop line. There is no separate card.
+  the terminal prints the airdrop line. There is no separate card. The top-up
+  needs no sign-in: the editor's `airdrop` command keeps its GitHub gate, but
+  a tutorial promises a wallet with free test SOL (Slava, 3 Nov).
 - **Airdrop refused or rate limited:** a failed result card SHALL post, red
   like a failed build, titled "Not enough devnet SOL", with the line "Your
   wallet has {balance} SOL, this deploy needs about {cost}. The devnet faucet
@@ -61,7 +64,8 @@ keeps its address. Every later deploy of that tutorial's program SHALL upgrade
 it in place. The result card SHALL read "Deployed" (or "Upgraded <short id>"),
 with "Show log" opening the terminal, and:
 
-- the devnet SOL the deploy spent;
+- the devnet SOL the deploy spent (left out for a deploy recognised from the
+  chain after a reload, whose cost is not known);
 - on its meta line, the program id and the deploy signature, each a short key
   with ↗ that is itself the Explorer link, with no separate Explorer button;
 - the IDL's instructions and their arguments.
@@ -74,8 +78,8 @@ Explorer on the devnet cluster in a new tab.
 
 - **WHEN** a learner with a new wallet and 0 SOL presses Deploy on Hello
   Anchor's step 2
-- **THEN** the card shows "Funding your wallet" (1 of 5), then the four
-  deploy stages to "5 of 5"
+- **THEN** the card shows "Funding your wallet" (1 of 4), then the three
+  deploy stages to "4 of 4"
 - **AND** the result's meta line shows the program id and the deploy
   signature as links to `https://explorer.solana.com/...?cluster=devnet`
 
@@ -206,7 +210,9 @@ for the same tutorial.
 ### Requirement: Runs are measured
 
 The tutorial slice SHALL emit `tutorial_action_run` when an act or a Call panel call
-ends. Its parameters:
+ends, and once for each run a reload interrupted (`outcome: "interrupted"`,
+`seconds: 0`); a deploy recognised from the chain instead counts as `ok`. Its
+parameters:
 
 - `tutorial`: the slug;
 - `step`: 1 to 6;

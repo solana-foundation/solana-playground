@@ -6,6 +6,7 @@ import type {
   CallArg,
   Step,
   TutorialDefinition,
+  TutorialEvents,
 } from "@/entities/tutorial";
 
 import { TICK_MS } from "./clock";
@@ -101,6 +102,17 @@ export type Action =
       result: RunResult;
       at: number;
     }
+  /**
+   * A load found these acts' runs in flight in the save: a reload
+   * interrupted them (`parseProgress`). Only measured; the cards read the
+   * interrupted records themselves
+   */
+  | { type: "interrupted"; beatIds: string[]; at: number }
+  /**
+   * A run a reload interrupted, found landed on the chain after the load:
+   * its result posts as if the run had ended, rather than the interrupted card
+   */
+  | { type: "recognised"; beatId: string; result: RunResult; at: number }
   /** A step's goal met outside the feed: a Call panel call or a client run */
   | {
       type: "passed";
@@ -157,6 +169,11 @@ export type Effect =
         seconds: number;
       };
     }
+  | {
+      kind: "event";
+      name: "tutorial_action_run";
+      params: ActionRunParams;
+    }
   /** Put the caret where the answer lands, or on the error's line */
   | { kind: "focus"; file: string; line: number | "landing" }
   /** An unplanned failure to explain through the live assistant (task 4.1) */
@@ -172,6 +189,52 @@ export interface Reduced {
 }
 
 const same = (state: EngineState): Reduced => ({ state, effects: [] });
+
+/** `tutorial_action_run`'s parameters, declared once on the tutorial tracker */
+export type ActionRunParams = TutorialEvents["tutorial_action_run"];
+
+const ACTION_OF: Record<Act, ActionRunParams["action"]> = {
+  build: "build",
+  deploy: "deploy",
+  buildDeploy: "build_deploy",
+  run: "run",
+  call: "call",
+};
+
+/** A run's outcome as `tutorial_action_run` names it */
+const outcomeOf = (result: RunResult): ActionRunParams["outcome"] => {
+  if (result.ok) return "ok";
+  if (
+    (result.act === "deploy" || result.act === "buildDeploy") &&
+    result.reason !== "failed"
+  ) {
+    return result.reason;
+  }
+  return "failed";
+};
+
+/** The `tutorial_action_run` event of one run */
+const actionRunOf = (
+  run: { slug: string; step: number; act: Act; took: number },
+  outcome: ActionRunParams["outcome"]
+): Effect => ({
+  kind: "event",
+  name: "tutorial_action_run",
+  params: {
+    tutorial: run.slug,
+    step: run.step,
+    action: ACTION_OF[run.act],
+    outcome,
+    // Two devices' clocks can disagree; a run never takes negative time
+    seconds: Math.max(0, Math.round(run.took / 1000)),
+  },
+});
+
+/** The reduction with one more effect after its own */
+const withEffect = (reduced: Reduced, effect: Effect): Reduced => ({
+  state: reduced.state,
+  effects: [...reduced.effects, effect],
+});
 
 /** Where a beat sits: its step, and whether in the step's planned failure */
 interface Located {
@@ -201,6 +264,15 @@ export const stepOfBeat = (
   definition: TutorialDefinition,
   beatId: string
 ): Step | null => locate(definition, beatId)?.step ?? null;
+
+/** The act a beat runs, or null when the beat is not an act */
+export const actOf = (
+  definition: TutorialDefinition,
+  beatId: string
+): Act | null => {
+  const found = locate(definition, beatId);
+  return found && isAct(found.beat) ? found.beat.act : null;
+};
 
 const stepAt = (definition: TutorialDefinition, cursor: Cursor): Step | null =>
   cursor.kind === "step"
@@ -732,6 +804,15 @@ export const reduce = (
         step.goal.kind === "refused" &&
         !passed(p, step) &&
         ctx.judge(step.goal, result);
+      const measured = actionRunOf(
+        {
+          slug: ctx.slug,
+          step: definition.steps.indexOf(step) + 1,
+          act: beat.act,
+          took,
+        },
+        outcomeOf(result)
+      );
       let record: RunRecord;
       if (result.ok) {
         record = { status: "ok", at: run.at, took, result };
@@ -750,13 +831,16 @@ export const reduce = (
         },
       };
       const cleared: EngineState = { progress: recorded, stage: null };
-      if (!result.ok && !refused) return same(cleared);
+      if (!result.ok && !refused) return withEffect(same(cleared), measured);
       if (
         refused ||
         (!passed(recorded, step) && ctx.judge(step.goal, result))
       ) {
         const via: PassedVia = beat.act === "run" ? "client" : "chat";
-        return passStep(ctx, cleared, recorded, step, action.at, via);
+        return withEffect(
+          passStep(ctx, cleared, recorded, step, action.at, via),
+          measured
+        );
       }
       // Only the act the cursor just passed moves the lesson on: a run that
       // outlived its step, or a run again of an act the flow already went
@@ -771,10 +855,67 @@ export const reduce = (
         p.cursor.fail !== found.fail ||
         p.cursor.beat !== index + 1
       ) {
-        return same(cleared);
+        return withEffect(same(cleared), measured);
       }
       const flowed = flow(ctx, recorded, action.at + TICK_MS);
-      return withProgress(cleared, flowed.progress, flowed.effects);
+      return withEffect(
+        withProgress(cleared, flowed.progress, flowed.effects),
+        measured
+      );
+    }
+
+    case "interrupted": {
+      const effects = action.beatIds.flatMap((beatId): Effect[] => {
+        const found = locate(definition, beatId);
+        if (!found || !isAct(found.beat)) return [];
+        return [
+          actionRunOf(
+            {
+              slug: ctx.slug,
+              step: definition.steps.indexOf(found.step) + 1,
+              act: found.beat.act,
+              took: 0,
+            },
+            "interrupted"
+          ),
+        ];
+      });
+      return { state, effects };
+    }
+
+    case "recognised": {
+      const run = lastRun(p, action.beatId);
+      if (!run || run.status !== "interrupted") return same(state);
+      // A result of another act cannot stand for this beat's run
+      if (actOf(definition, action.beatId) !== action.result.act) {
+        return same(state);
+      }
+      // Back to in flight, so the result goes through `ended`'s one path:
+      // the record, the judge, the flow and the measure
+      const resumed: EngineState = {
+        progress: {
+          ...p,
+          runs: {
+            ...p.runs,
+            [action.beatId]: [
+              ...p.runs[action.beatId].slice(0, -1),
+              { status: "started", at: run.at },
+            ],
+          },
+        },
+        stage: null,
+      };
+      const ended = reduce(ctx, resumed, {
+        type: "ended",
+        beatId: action.beatId,
+        startedAt: run.at,
+        result: action.result,
+        // The run ended when the chain says, not when the reload found it:
+        // its record and its measure take the run's own time, not the gap
+        at: run.at + Math.round(action.result.seconds * 1000),
+      });
+      // `ended` refused it (not an act, or gone from the definition)
+      return ended.state === resumed ? same(state) : ended;
     }
 
     case "passed": {
@@ -1397,6 +1538,101 @@ if (import.meta.vitest) {
         });
       });
 
+      it("emits tutorial_action_run when a run ends, its outcome from the result", () => {
+        const actionRun = (effects: Effect[]) =>
+          effects.filter(
+            (e) => e.kind === "event" && e.name === "tutorial_action_run"
+          );
+        const FAILED_BUILD: RunResult = {
+          act: "build",
+          ok: false,
+          seconds: 1,
+          error: null,
+          log: "down",
+        };
+        const { effects } = play([
+          start,
+          rightPick,
+          build(7000),
+          { type: "ended", beatId: "s1.build", result: FAILED_BUILD, at: 8000 },
+          build(9000),
+          { type: "ended", beatId: "s1.build", result: OK_BUILD, at: 10600 },
+          // A stale answer for a run no longer in flight records nothing
+          { type: "ended", beatId: "s1.build", result: OK_BUILD, at: 11000 },
+        ]);
+        expect(actionRun(effects)).toEqual([
+          {
+            kind: "event",
+            name: "tutorial_action_run",
+            params: {
+              tutorial: "hello-anchor",
+              step: 1,
+              action: "build",
+              outcome: "failed",
+              seconds: 1,
+            },
+          },
+          {
+            kind: "event",
+            name: "tutorial_action_run",
+            params: {
+              tutorial: "hello-anchor",
+              step: 1,
+              action: "build",
+              outcome: "ok",
+              seconds: 2,
+            },
+          },
+        ]);
+      });
+
+      it("names a deploy's outcome by its reason", () => {
+        expect(
+          outcomeOf({
+            act: "buildDeploy",
+            ok: false,
+            seconds: 4,
+            reason: "no_funds",
+            message: "429",
+            balance: 0,
+            cost: 1,
+            address: "w",
+          })
+        ).toBe("no_funds");
+        expect(
+          outcomeOf({
+            act: "deploy",
+            ok: false,
+            seconds: 0,
+            reason: "no_wallet",
+            message: "No wallet",
+          })
+        ).toBe("no_wallet");
+        expect(outcomeOf(DEPLOYED)).toBe("ok");
+      });
+
+      it("measures acts a reload interrupted, and nothing else", () => {
+        const r = reduce(ctx(), INITIAL_ENGINE_STATE, {
+          type: "interrupted",
+          beatIds: ["s2.deploy", "s1.q1", "gone"],
+          at: 1,
+        });
+        expect(r.state).toBe(INITIAL_ENGINE_STATE);
+        expect(r.effects).toEqual([
+          {
+            kind: "event",
+            name: "tutorial_action_run",
+            params: {
+              tutorial: "hello-anchor",
+              step: 2,
+              action: "deploy",
+              outcome: "interrupted",
+              seconds: 0,
+            },
+          },
+        ]);
+      });
+
       it("emits tutorial_step_passed once per step, with how and how long", () => {
         const stepPassed = (effects: Effect[]) =>
           effects.filter(
@@ -1522,7 +1758,89 @@ if (import.meta.vitest) {
         ]);
         expect(r.state.progress.beats["s3.q3"]).toMatchObject({ kind: "open" });
         expect(r.state.progress.beats["s3.run"]).toBeUndefined();
-        expect(r.effects).toEqual([]);
+        // Measured, and nothing else: no turn posts
+        expect(r.effects).toEqual([
+          expect.objectContaining({ name: "tutorial_action_run" }),
+        ]);
+      });
+
+      describe("recognised", () => {
+        /** Step 2's deploy pressed, then a reload: the run reads interrupted */
+        const interrupted = (): EngineState => {
+          const running = play([
+            start,
+            rightPick,
+            build(7000),
+            { type: "ended", beatId: "s1.build", result: OK_BUILD, at: 8600 },
+            { type: "next", at: 9000 },
+            { type: "skip", beatId: "s2.q2", at: 9500 },
+            { type: "act", beatId: "s2.deploy", at: 10000 },
+          ]).state;
+          return {
+            progress: {
+              version: running.progress.version,
+              passed: running.progress.passed,
+              finishedAt: running.progress.finishedAt,
+              startedAt: running.progress.startedAt,
+              restartedAt: running.progress.restartedAt,
+              cursor: running.progress.cursor,
+              beats: running.progress.beats,
+              times: running.progress.times,
+              runs: Object.fromEntries(
+                Object.entries(running.progress.runs).map(([id, rs]) => [
+                  id,
+                  rs.map((r) =>
+                    r.status === "started"
+                      ? { status: "interrupted" as const, at: r.at }
+                      : r
+                  ),
+                ])
+              ),
+            },
+            stage: null,
+          };
+        };
+
+        it("posts a deploy found on the chain as if it had ended", () => {
+          const r = reduce(ctx(), interrupted(), {
+            type: "recognised",
+            beatId: "s2.deploy",
+            result: DEPLOYED,
+            at: 30000,
+          });
+          expect(r.state.progress.runs["s2.deploy"]).toMatchObject([
+            { status: "ok", at: 10000, result: DEPLOYED },
+          ]);
+          expect(r.state.progress.passed).toContain("deploy");
+          expect(r.effects).toContainEqual(
+            expect.objectContaining({
+              name: "tutorial_action_run",
+              params: expect.objectContaining({
+                action: "deploy",
+                outcome: "ok",
+                step: 2,
+              }),
+            })
+          );
+        });
+
+        it("leaves a run that is not interrupted alone", () => {
+          const state = interrupted();
+          const once = reduce(ctx(), state, {
+            type: "recognised",
+            beatId: "s2.deploy",
+            result: DEPLOYED,
+            at: 30000,
+          }).state;
+          const twice = reduce(ctx(), once, {
+            type: "recognised",
+            beatId: "s2.deploy",
+            result: DEPLOYED,
+            at: 31000,
+          });
+          expect(twice.state).toBe(once);
+          expect(twice.effects).toEqual([]);
+        });
       });
 
       it("an ok result the judge refuses leaves the act to run again", () => {
@@ -1604,7 +1922,10 @@ if (import.meta.vitest) {
         });
         expect(r.state.progress.cursor).toEqual(cursorBefore);
         expect(r.state.progress.beats["s1.q1"]).toMatchObject({ kind: "open" });
-        expect(r.effects).toEqual([]);
+        // Measured, and nothing else: no turn posts
+        expect(r.effects).toEqual([
+          expect.objectContaining({ name: "tutorial_action_run" }),
+        ]);
       });
 
       it("drops a result for a run that is not in flight", () => {
@@ -1738,7 +2059,10 @@ if (import.meta.vitest) {
         };
         const early = call(flowed.state, 20000, {});
         expect(early.state.progress.passed).not.toContain("greet-by-name");
-        expect(early.effects).toEqual([]);
+        // Measured, and nothing else: no turn posts
+        expect(early.effects).toEqual([
+          expect.objectContaining({ name: "tutorial_action_run" }),
+        ]);
 
         const named = call(early.state, 22000, { name: "Alex" });
         expect(named.state.progress.passed).toContain("greet-by-name");

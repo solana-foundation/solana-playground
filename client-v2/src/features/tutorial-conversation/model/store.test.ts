@@ -737,6 +737,138 @@ describe("PgConversation", () => {
     );
   });
 
+  /** A save with step 2's deploy in flight at 4000, as a reload finds it */
+  const deployInFlight = () => {
+    const saved = freshProgress();
+    saved.startedAt = 1000;
+    saved.passed = ["write-program"];
+    saved.cursor = { kind: "step", stepId: "deploy", beat: 3, fail: false };
+    saved.beats = {
+      "s2.why": { kind: "said", at: 2000 },
+      "s2.q2": {
+        kind: "skipped",
+        at: 2800,
+        openedAt: 2700,
+        via: "button",
+        wrong: [],
+      },
+      "s2.deploy": { kind: "said", at: 3500 },
+    };
+    saved.runs = { "s2.deploy": [{ status: "started", at: 4000 }] };
+    saved.times = {
+      "write-program": { from: 1000, to: 1900, via: "chat" },
+      deploy: { from: 2000, to: null },
+    };
+    return saved;
+  };
+  const actionRuns = () =>
+    events.events.filter((e) => e.name === "tutorial_action_run");
+
+  it("posts a deploy the chain shows landed before the reload", async () => {
+    exists = true;
+    file = { [STORAGE_KEY]: deployInFlight() };
+    const recognise = vi.fn<NonNullable<Runner["recognise"]>>(async () => ({
+      act: "deploy",
+      ok: true,
+      seconds: 9,
+      programId: "p",
+      signature: "landedSig",
+      upgraded: false,
+      lamports: null,
+      instructions: ["hello"],
+    }));
+    const runner: Runner = { run: stubRunner([]).run, recognise };
+    open(NAME, { runner });
+    await settle();
+    expect(recognise).toHaveBeenCalledWith("deploy", 4000);
+    expect(
+      PgConversation.state.engine.progress.runs["s2.deploy"]
+    ).toMatchObject([
+      { status: "ok", at: 4000, result: { signature: "landedSig" } },
+    ]);
+    expect(PgConversation.state.engine.progress.passed).toEqual([
+      "write-program",
+      "deploy",
+    ]);
+    expect(actionRuns().map((e) => e.params)).toEqual([
+      expect.objectContaining({ action: "deploy", outcome: "ok" }),
+    ]);
+  });
+
+  it("measures a deploy as interrupted when the chain cannot be read", async () => {
+    exists = true;
+    file = { [STORAGE_KEY]: deployInFlight() };
+    const runner: Runner = {
+      run: stubRunner([]).run,
+      recognise: async () => {
+        throw new Error("fetch failed");
+      },
+    };
+    open(NAME, { runner });
+    await settle();
+    expect(PgConversation.state.engine.progress.runs["s2.deploy"]).toEqual([
+      { status: "interrupted", at: 4000 },
+    ]);
+    expect(actionRuns().map((e) => e.params)).toEqual([
+      expect.objectContaining({ action: "deploy", outcome: "interrupted" }),
+    ]);
+  });
+
+  it("posts nothing into another workspace when the learner leaves mid-lookup", async () => {
+    exists = true;
+    file = { [STORAGE_KEY]: deployInFlight() };
+    let answer: (r: RunResult | null) => void = () => {};
+    const runner: Runner = {
+      run: stubRunner([]).run,
+      recognise: () => new Promise((r) => (answer = r)),
+    };
+    open(NAME, { runner });
+    await settle();
+    switchWorkspace(null);
+    await settle();
+    answer({
+      act: "deploy",
+      ok: true,
+      seconds: 9,
+      programId: "p",
+      signature: "late",
+      upgraded: false,
+      lamports: null,
+      instructions: ["hello"],
+    });
+    await settle();
+    expect(PgConversation.state.context).toBeNull();
+    expect(actionRuns()).toEqual([]);
+  });
+
+  it("measures a run the reload interrupted once, and writes it back interrupted", async () => {
+    exists = true;
+    file = { [STORAGE_KEY]: deployInFlight() };
+    const runner: Runner = {
+      run: stubRunner([]).run,
+      recognise: async () => null,
+    };
+    open(NAME, { runner });
+    await settle();
+    expect(actionRuns().map((e) => e.params)).toEqual([
+      {
+        tutorial: "hello-anchor",
+        step: 2,
+        action: "deploy",
+        outcome: "interrupted",
+        seconds: 0,
+      },
+    ]);
+    const written = file[STORAGE_KEY] as { runs: Record<string, unknown> };
+    expect(written.runs["s2.deploy"]).toEqual([
+      { status: "interrupted", at: 4000 },
+    ]);
+    // The next load reads it interrupted already: nothing more is measured
+    switchWorkspace(NAME);
+    await settle();
+    expect(actionRuns()).toHaveLength(1);
+  });
+
   it("a load that lands after a workspace switch is dropped", async () => {
     let release: (value: unknown) => void = () => {};
     exists = true;

@@ -27,6 +27,9 @@ export type {
   Workspace,
 } from "./model/ports";
 export { judgeGoal } from "./model/goals";
+export { actRunner } from "./model/runners/act-runner";
+export { DEPLOY_STAGES } from "./model/runners/deploy";
+export { tutorialRunner } from "./model/runners/real-deploy";
 export { WorkspaceMovedError, realWorkspace } from "./model/real-workspace";
 export { openOnIntro } from "./model/open";
 export {
