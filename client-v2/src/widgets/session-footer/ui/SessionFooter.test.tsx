@@ -180,7 +180,12 @@ it("starts a sign-in from the menu", async () => {
 });
 
 const signInAsTester = () =>
-  PgSession.refreshWith({ id: "u1", name: "Tester", image: null, login: "t" });
+  PgSession.refreshWith({
+    id: "u1",
+    name: "Tester",
+    image: undefined,
+    login: "t",
+  });
 
 const question = () => screen.findByText("Sign out of Playground?");
 

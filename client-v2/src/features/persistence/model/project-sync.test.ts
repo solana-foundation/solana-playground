@@ -51,7 +51,12 @@ const okProbe: StubResponse = {
 };
 
 const signedIn = () =>
-  PgSession.refreshWith({ id: "u1", name: null, image: null, login: null });
+  PgSession.refreshWith({
+    id: "u1",
+    name: undefined,
+    image: undefined,
+    login: undefined,
+  });
 
 /** The in-memory stand-in from `setupTests`, where marks land */
 const storedFiles = () =>
@@ -243,9 +248,9 @@ describe("PgProjectSync", () => {
 
     await PgSession.refreshWith({
       id: "u2",
-      name: null,
-      image: null,
-      login: null,
+      name: undefined,
+      image: undefined,
+      login: undefined,
     });
     expect(await PgSyncMark.read("tut:hello")).toBeNull();
   });
@@ -1371,9 +1376,9 @@ describe("a project another account left in this browser", () => {
   const syncedBy = async (userId: string, projectId: string) => {
     await PgSession.refreshWith({
       id: userId,
-      name: null,
-      image: null,
-      login: null,
+      name: undefined,
+      image: undefined,
+      login: undefined,
     });
     await agreedOn(projectId, "Alpha", files);
   };

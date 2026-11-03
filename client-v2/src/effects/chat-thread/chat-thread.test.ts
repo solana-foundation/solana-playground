@@ -201,16 +201,16 @@ describe("the chat-thread effect", () => {
     // nothing reopened it: what the user typed next lived in memory only
     await PgSession.refreshWith({
       id: "u1",
-      name: null,
-      image: null,
-      login: null,
+      name: undefined,
+      image: undefined,
+      login: undefined,
     });
     effect = chatThread();
     await settle();
     const load = vi.mocked(PgAssistant.loadThread);
     load.mockClear();
 
-    await PgSession.refreshWith(null);
+    await PgSession.refreshWith(undefined);
     await settle();
 
     expect(load).toHaveBeenCalled();

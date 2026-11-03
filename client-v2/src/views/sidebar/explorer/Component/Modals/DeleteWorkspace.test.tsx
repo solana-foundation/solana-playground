@@ -24,7 +24,7 @@ const utils = vi.hoisted(() => ({
 }));
 vi.mock("../../../../../utils", () => utils);
 const session = vi.hoisted(() => ({
-  user: null as { id: string } | null,
+  user: undefined as { id: string } | undefined,
   listeners: new Set<() => void>(),
 }));
 vi.mock("@/features/auth", () => ({
@@ -41,7 +41,7 @@ import { DeleteWorkspace } from "./DeleteWorkspace";
 
 beforeEach(() => {
   utils.PgExplorer.deleteWorkspace.mockReset().mockResolvedValue(undefined);
-  session.user = null;
+  session.user = undefined;
   session.listeners.clear();
 });
 

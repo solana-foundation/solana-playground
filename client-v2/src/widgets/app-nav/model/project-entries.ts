@@ -2,12 +2,12 @@ import type { SyncMarker } from "@/features/persistence";
 
 export interface ProjectEntry {
   name: string;
-  /** The stable workspace id pins key on; `null` while the explorer has none */
-  id: string | null;
+  /** The stable workspace id pins key on; `undefined` while the explorer has none */
+  id: string | undefined;
   isLesson: boolean;
   pinned: boolean;
   /** Where its work lives, when not in the account (`syncMarkerOf`) */
-  marker: SyncMarker | null;
+  marker: SyncMarker | undefined;
 }
 
 /**
@@ -24,17 +24,17 @@ export const listProjects = (
     idOf: (name: string) => string | undefined;
     isLesson: (name: string) => boolean;
     /** The last marker read for the workspace, by name */
-    markerOf: (name: string) => SyncMarker | null;
+    markerOf: (name: string) => SyncMarker | undefined;
   },
   pins: readonly string[]
 ) => {
   const projects = names.map((name): ProjectEntry => {
-    const id = deps.idOf(name) ?? null;
+    const id = deps.idOf(name);
     return {
       name,
       id,
       isLesson: deps.isLesson(name),
-      pinned: id !== null && pins.includes(id),
+      pinned: id !== undefined && pins.includes(id),
       marker: deps.markerOf(name),
     };
   });
@@ -58,8 +58,8 @@ if (import.meta.vitest) {
     const deps = {
       idOf: (name: string) => ids[name],
       isLesson: (name: string) => name.startsWith("Hello "),
-      markerOf: (name: string): SyncMarker | null =>
-        name === "beta" ? "this-browser" : null,
+      markerOf: (name: string): SyncMarker | undefined =>
+        name === "beta" ? "this-browser" : undefined,
     };
 
     describe("listProjects", () => {
@@ -88,10 +88,10 @@ if (import.meta.vitest) {
         const projects = listProjects(["ghost"], deps, ["undefined"]);
         expect(projects[0]).toEqual({
           name: "ghost",
-          id: null,
+          id: undefined,
           isLesson: false,
           pinned: false,
-          marker: null,
+          marker: undefined,
         });
       });
 
@@ -99,7 +99,7 @@ if (import.meta.vitest) {
         const projects = listProjects(["beta", "alpha"], deps, []);
         expect(projects.map((p) => [p.name, p.marker])).toEqual([
           ["beta", "this-browser"],
-          ["alpha", null],
+          ["alpha", undefined],
         ]);
       });
 

@@ -23,6 +23,7 @@ const countBuilds = async (page: Page) => {
     builds.push(route.request().url());
     return route.fulfill({
       contentType: "application/json",
+      // eslint-disable-next-line unicorn/no-null -- the stubbed build response is wire JSON, where `null` means no IDL
       body: JSON.stringify({ stderr: "", uuid: "e2e-build", idl: null }),
     });
   });
@@ -139,6 +140,7 @@ test.describe("when the account check fails", () => {
         ? route.fulfill({ status: 502, body: "bad gateway" })
         : route.fulfill({
             contentType: "application/json",
+            // eslint-disable-next-line unicorn/no-null -- the stubbed auth route answers JSON `null`: nobody signed in
             body: JSON.stringify({ user: null }),
           })
     );

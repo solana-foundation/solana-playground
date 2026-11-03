@@ -24,7 +24,7 @@ export const DeleteWorkspace: FC<
   // Read here, not passed in: the session may still be loading when the
   // dialog opens, and the account line must appear once it is read
   useRenderOnChange(PgSession.onDidChange);
-  const signedIn = PgSession.get() !== null;
+  const signedIn = PgSession.get() !== undefined;
 
   return (
     <ModalFrame

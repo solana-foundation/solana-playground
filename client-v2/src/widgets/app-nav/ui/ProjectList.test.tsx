@@ -44,7 +44,7 @@ const app = vi.hoisted(() => {
   const state = {
     names: [] as string[] | undefined,
     ids: {} as Record<string, string>,
-    current: null as string | null,
+    current: undefined as string | undefined,
     lessons: [] as string[],
     temporary: false,
   };

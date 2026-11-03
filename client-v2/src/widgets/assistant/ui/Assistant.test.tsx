@@ -228,7 +228,12 @@ describe("Assistant", () => {
   it("asks the gateway again when the account changes", async () => {
     setup();
     await act(() =>
-      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+      PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      })
     );
     expect(PgAssistant.initMcp).toHaveBeenCalledTimes(2);
   });

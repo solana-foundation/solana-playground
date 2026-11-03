@@ -25,30 +25,29 @@ afterAll(() => {
   vi.unstubAllGlobals();
 });
 
-const project = (
-  name: string,
-  pinned = false,
-  marker: ProjectEntry["marker"] = null
-): ProjectEntry => ({
-  name,
-  id: `id-${name}`,
-  isLesson: false,
-  pinned,
-  marker,
-});
+const projectWith =
+  (pinned: boolean, marker: ProjectEntry["marker"]) =>
+  (name: string): ProjectEntry => ({
+    name,
+    id: `id-${name}`,
+    isLesson: false,
+    pinned,
+    marker,
+  });
+const project = projectWith(false, undefined);
 const lesson = (name: string): ProjectEntry => ({
   name,
   id: `id-${name}`,
   isLesson: true,
   pinned: false,
-  marker: null,
+  marker: undefined,
 });
 
 const alpha = project("alpha");
-const beta = project("beta", true);
+const beta = projectWith(true, undefined)("beta");
 const hello = lesson("Hello Anchor");
-const local = project("local", false, "this-browser");
-const behind = project("behind", true, "not-synced");
+const local = projectWith(false, "this-browser")("local");
+const behind = projectWith(true, "not-synced")("behind");
 
 type Handlers = Pick<
   BaseProjectListProps,
@@ -77,8 +76,8 @@ const draw = (
           projects={overrides.projects ?? [beta, alpha, hello]}
           loading={overrides.loading ?? false}
           current={overrides.current ?? "alpha"}
-          renaming={overrides.renaming ?? null}
-          renameError={overrides.renameError ?? null}
+          renaming={overrides.renaming}
+          renameError={overrides.renameError}
           onAction={handlers.onAction}
           onRenameChange={handlers.onRenameChange}
           onRenameCommit={handlers.onRenameCommit}
@@ -157,11 +156,11 @@ describe("BaseProjectList", () => {
       const id = within(projects)
         .getByRole("button", { name })
         .getAttribute("aria-describedby");
-      return id ? document.getElementById(id)?.textContent : null;
+      return id ? document.getElementById(id)?.textContent : undefined;
     };
     expect(description("local")).toBe("This browser");
     expect(description("behind")).toBe("Not synced");
-    expect(description("alpha")).toBeNull();
+    expect(description("alpha")).toBeUndefined();
   });
 
   it("draws Not synced with a warning dot, beside the pin", () => {

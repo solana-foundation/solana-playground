@@ -103,7 +103,7 @@ const BaseSessionFooter = ({
               aria-busy={account.sending || undefined}
             >
               <AccountAvatar
-                image={accountUser(account)?.image ?? null}
+                image={accountUser(account)?.image}
                 sending={account.sending}
               />
               <span className="flex min-w-0 flex-col leading-tight">

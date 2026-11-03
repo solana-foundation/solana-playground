@@ -69,9 +69,9 @@ describe("Connect", () => {
     // The default backend answers only a signed-in user
     void PgSession.refreshWith({
       id: "u1",
-      name: null,
-      image: null,
-      login: null,
+      name: undefined,
+      image: undefined,
+      login: undefined,
     });
   });
   afterEach(() => {
@@ -113,7 +113,7 @@ describe("Connect", () => {
   });
 
   describe("signed out", () => {
-    beforeEach(() => PgSession.refreshWith(null));
+    beforeEach(() => PgSession.refreshWith(undefined));
 
     it("offers sign-in for the default instead of Start", () => {
       renderConnect({ defaultBackend: "present" });
@@ -204,9 +204,9 @@ describe("Connect", () => {
       await act(() =>
         PgSession.refreshWith({
           id: "u1",
-          name: null,
-          image: null,
-          login: null,
+          name: undefined,
+          image: undefined,
+          login: undefined,
         })
       );
 

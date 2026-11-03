@@ -28,8 +28,8 @@ interface MarkerFacts {
   conflict: boolean;
   /** This account has a mark for it, readable or not (`PgSyncMark.existsOrThrow`) */
   hasMark: boolean;
-  /** The mark, or `null` when it cannot be read (`PgSyncMark.read` swallows why) */
-  mark: SyncMark | null;
+  /** The mark, or `undefined` when it cannot be read (`PgSyncMark.read` swallows why) */
+  mark: SyncMark | undefined;
 }
 
 /**
@@ -39,26 +39,25 @@ interface MarkerFacts {
  * flagged: every local write flags the mark before its upload is tried
  * (`effects/project-sync`), and a flagged mark is always hashed.
  */
-const decide = async (
-  facts: MarkerFacts,
-  isClean: (mark: SyncMark | null) => Promise<boolean>
-): Promise<SyncMarker | null> => {
-  if (!facts.available) return null;
-  if (facts.conflict) return "not-synced";
-  if (!facts.hasMark) return "this-browser";
-  if (facts.mark && !facts.mark.dirty) return null;
-  // A mark that cannot be read is an agreement nobody can check: the account
-  // has the project, and reconcile merges it against an empty base
-  return (await isClean(facts.mark)) ? null : "not-synced";
-};
+const decideWith =
+  (isClean: (mark: SyncMark | undefined) => Promise<boolean>) =>
+  async (facts: MarkerFacts): Promise<SyncMarker | undefined> => {
+    if (!facts.available) return undefined;
+    if (facts.conflict) return "not-synced";
+    if (!facts.hasMark) return "this-browser";
+    if (facts.mark && !facts.mark.dirty) return undefined;
+    // A mark that cannot be read is an agreement nobody can check: the account
+    // has the project, and reconcile merges it against an empty base
+    return (await isClean(facts.mark)) ? undefined : "not-synced";
+  };
 
 /**
  * The marker for one project, read from the sync mark and the open conflicts,
- * never from state of its own. `null` while signed out or where sync is off:
+ * never from state of its own. `undefined` while signed out or where sync is off:
  * the account row says that once, so the rows stay clean.
  *
  * Rejects when it cannot tell whether a mark exists (`existsOrThrow`): "This
- * browser" or `null` would both be guesses, so the caller keeps whatever the
+ * browser" or `undefined` would both be guesses, so the caller keeps whatever the
  * row showed before. A mark that exists but cannot be read, for any reason,
  * reads "Not synced": the account holds the project, and the agreement this
  * browser holds with it is unknown.
@@ -68,26 +67,25 @@ const decide = async (
 export const syncMarkerOf = async (
   projectId: string,
   localName: string
-): Promise<SyncMarker | null> => {
+): Promise<SyncMarker | undefined> => {
   const { PgProjectSync, isCleanAgainst } = await sync();
   const available = await PgProjectSync.isAvailable();
   const hasMark = available && (await PgSyncMark.existsOrThrow(projectId));
-  return await decide(
-    {
-      available,
-      conflict: !!PgProjectSync.conflictFor(projectId),
-      hasMark,
-      mark: hasMark ? await PgSyncMark.read(projectId) : null,
-    },
-    async (mark) => {
-      const { snapshotOf } = await snapshot();
-      return isCleanAgainst(
-        mark,
-        localName,
-        (await snapshotOf(localName)).files
-      );
-    }
-  );
+  const isClean = async (mark: SyncMark | undefined) => {
+    const { snapshotOf } = await snapshot();
+    return isCleanAgainst(
+      // eslint-disable-next-line unicorn/no-null -- `isCleanAgainst` takes `PgSyncMark.read`'s `null`
+      mark ?? null,
+      localName,
+      (await snapshotOf(localName)).files
+    );
+  };
+  return await decideWith(isClean)({
+    available,
+    conflict: !!PgProjectSync.conflictFor(projectId),
+    hasMark,
+    mark: hasMark ? (await PgSyncMark.read(projectId)) ?? undefined : undefined,
+  });
 };
 
 /**
@@ -109,7 +107,7 @@ const PENDING_GRACE_MS = 10_000;
  */
 export const onDidChangeSyncMarkers = (cb: () => void): Disposable => {
   let disposed = false;
-  let conflicts: Disposable | null = null;
+  let conflicts: Disposable | undefined;
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const later = () => {
     const timer = setTimeout(() => {
@@ -157,7 +155,7 @@ if (import.meta.vitest) {
       available: fields.available ?? true,
       conflict: fields.conflict ?? false,
       hasMark: fields.hasMark ?? true,
-      mark: fields.mark === undefined ? MARK : fields.mark,
+      mark: "mark" in fields ? fields.mark : MARK,
     });
     const MARK: SyncMark = {
       files: { "/src/lib.rs": "h1" },
@@ -173,42 +171,48 @@ if (import.meta.vitest) {
     };
     const clean = (answer: boolean) => vi.fn(async () => answer);
 
-    describe("decide", () => {
+    describe("decideWith", () => {
       it("marks nothing where sync is off or nobody is signed in", async () => {
         const isClean = clean(false);
         expect(
-          await decide(facts({ available: false, conflict: true }), isClean)
-        ).toBeNull();
+          await decideWith(isClean)(facts({ available: false, conflict: true }))
+        ).toBeUndefined();
         expect(isClean).not.toHaveBeenCalled();
       });
 
       it("says Not synced while a conflict waits, whatever the mark", async () => {
         expect(
-          await decide(facts({ conflict: true, hasMark: false }), clean(true))
+          await decideWith(clean(true))(
+            facts({ conflict: true, hasMark: false })
+          )
         ).toBe("not-synced");
       });
 
       it("says This browser for a project the account has no mark for", async () => {
         expect(
-          await decide(facts({ hasMark: false, mark: null }), clean(true))
+          await decideWith(clean(true))(
+            facts({ hasMark: false, mark: undefined })
+          )
         ).toBe("this-browser");
       });
 
       it("trusts a clean mark without hashing the project", async () => {
         const isClean = clean(false);
-        expect(await decide(facts({}), isClean)).toBeNull();
+        expect(await decideWith(isClean)(facts({}))).toBeUndefined();
         expect(isClean).not.toHaveBeenCalled();
       });
 
       it("hashes a dirty mark's project and lets the hash decide", async () => {
-        expect(await decide(facts({ mark: DIRTY }), clean(true))).toBeNull();
-        expect(await decide(facts({ mark: DIRTY }), clean(false))).toBe(
+        expect(
+          await decideWith(clean(true))(facts({ mark: DIRTY }))
+        ).toBeUndefined();
+        expect(await decideWith(clean(false))(facts({ mark: DIRTY }))).toBe(
           "not-synced"
         );
       });
 
       it("says Not synced for a mark that exists but cannot be read", async () => {
-        expect(await decide(facts({ mark: null }), clean(false))).toBe(
+        expect(await decideWith(clean(false))(facts({ mark: undefined }))).toBe(
           "not-synced"
         );
       });
@@ -250,11 +254,16 @@ if (import.meta.vitest) {
         );
       });
 
+      it("reads no marker where sync is unavailable or nobody is signed in", async () => {
+        vi.spyOn(PgProjectSync, "isAvailable").mockResolvedValue(false);
+        expect(await syncMarkerOf("p1", "counter")).toBeUndefined();
+      });
+
       it("reads a clean mark as no marker", async () => {
         vi.spyOn(PgProjectSync, "isAvailable").mockResolvedValue(true);
         vi.spyOn(PgSyncMark, "existsOrThrow").mockResolvedValue(true);
         vi.spyOn(PgSyncMark, "read").mockResolvedValue(MARK);
-        expect(await syncMarkerOf("p1", "counter")).toBeNull();
+        expect(await syncMarkerOf("p1", "counter")).toBeUndefined();
       });
     });
 

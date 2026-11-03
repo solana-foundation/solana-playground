@@ -170,9 +170,9 @@ export const applyWrite = (
   held: { files: Record<string, string> } | undefined,
   body: WriteBody
 ) => {
-  const files = body.files
-    ? { ...body.files }
-    : { ...(held?.files ?? {}), ...(body.changed ?? {}) };
+  const files: Record<string, string> = {};
+  if (body.files) Object.assign(files, body.files);
+  else Object.assign(files, held?.files, body.changed);
   for (const path of body.removed ?? []) delete files[path];
   return { files };
 };

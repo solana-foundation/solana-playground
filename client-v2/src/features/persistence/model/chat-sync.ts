@@ -549,7 +549,12 @@ if (import.meta.vitest) {
 
     /** Only `id` matters to sync; the rest of the session user is display */
     const signedIn = () =>
-      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null });
+      PgSession.refreshWith({
+        id: "u1",
+        name: undefined,
+        image: undefined,
+        login: undefined,
+      });
 
     /**
      * The spy standing in for `fetch`, reinstalled for each test.

@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { useSyncMarkers } from "./use-sync-markers";
 
-type Marker = "this-browser" | "not-synced" | null;
+type Marker = "this-browser" | "not-synced" | undefined;
 
 /** A subscription the hook takes, which a test fires by hand */
 const channel = vi.hoisted(() => () => {
@@ -19,7 +19,10 @@ const channel = vi.hoisted(() => () => {
 
 const state = vi.hoisted(() => ({
   names: [] as string[],
-  markerOf: (async () => null) as (id: string, name: string) => Promise<Marker>,
+  markerOf: (async () => undefined) as (
+    id: string,
+    name: string
+  ) => Promise<Marker>,
 }));
 /** Persistence diagnostics, where a failed read must land */
 const report = vi.hoisted(() => vi.fn());
@@ -67,7 +70,7 @@ vi.mock("@/utils", () => {
 afterEach(() => {
   report.mockReset();
   state.names = [];
-  state.markerOf = async () => null;
+  state.markerOf = async () => undefined;
 });
 
 /** The hook's map as a plain object, for `toEqual` */
@@ -80,7 +83,7 @@ describe("useSyncMarkers", () => {
   it("reads every workspace's marker, by name, leaving clean ones out", async () => {
     state.names = ["counter", "voting"];
     state.markerOf = async (_, name) =>
-      name === "voting" ? "this-browser" : null;
+      name === "voting" ? "this-browser" : undefined;
     const { result } = renderHook(() => useSyncMarkers());
     await waitFor(() =>
       expect(shown(result.current)).toEqual({ voting: "this-browser" })
@@ -90,7 +93,7 @@ describe("useSyncMarkers", () => {
   it("answers a workspace named after an object's own members with its own marker", async () => {
     state.names = ["constructor", "toString"];
     state.markerOf = async (_, name) =>
-      name === "toString" ? "not-synced" : null;
+      name === "toString" ? "not-synced" : undefined;
     const { result } = renderHook(() => useSyncMarkers());
     await waitFor(() =>
       expect(result.current.get("toString")).toBe("not-synced")
@@ -126,7 +129,7 @@ describe("useSyncMarkers", () => {
       expect(shown(result.current)).toEqual({ counter: "this-browser" })
     );
 
-    state.markerOf = async () => null;
+    state.markerOf = async () => undefined;
     act(() => sources.session.fire());
     await waitFor(() => expect(shown(result.current)).toEqual({}));
   });
@@ -158,7 +161,7 @@ describe("useSyncMarkers", () => {
       overlapped ||= running > 1;
       await new Promise<void>((resolve) => (release = resolve));
       running -= 1;
-      return null;
+      return undefined;
     };
     renderHook(() => useSyncMarkers());
     await waitFor(() => expect(reads).toBe(1));
@@ -210,7 +213,7 @@ describe("useSyncMarkers", () => {
 
   it("stops reading once unmounted", async () => {
     state.names = ["counter"];
-    const read = vi.fn(async () => null);
+    const read = vi.fn(async () => undefined);
     state.markerOf = read;
     const { unmount } = renderHook(() => useSyncMarkers());
     await waitFor(() => expect(read).toHaveBeenCalledOnce());

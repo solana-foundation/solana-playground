@@ -106,7 +106,12 @@ const eventsNamed = (name: string) =>
   sent.events.filter((event) => event.name === name).map((e) => e.params);
 
 const signInAsTester = () =>
-  PgSession.refreshWith({ id: "u1", name: "Tester", image: null, login: "t" });
+  PgSession.refreshWith({
+    id: "u1",
+    name: "Tester",
+    image: undefined,
+    login: "t",
+  });
 
 const doAllFour = async () => {
   assistant.connected = true;

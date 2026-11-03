@@ -40,7 +40,7 @@ if (import.meta.vitest) {
         await PgSession.refreshWith({
           id: "u1",
           name: "Ada",
-          image: null,
+          image: undefined,
           login: "ada",
         });
 

@@ -8,7 +8,7 @@ import type { AccountView, SignOutState } from "../model/account";
 import BaseAccountMenu from "./BaseAccountMenu";
 
 const UP = { name: "devnet", down: false };
-const TESTER = { name: "Tester", login: "t", image: null };
+const TESTER = { name: "Tester", login: "t", image: undefined };
 const WALLET = {
   address: "7Hq5aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaXk2P",
   balance: 2.4,
@@ -83,7 +83,7 @@ it("leaves out the profile link for an account with no login", async () => {
     view({
       session: {
         status: "signed-in",
-        user: { name: "Tester", login: null, image: null },
+        user: { name: "Tester", login: undefined, image: undefined },
       },
     })
   );
@@ -199,7 +199,7 @@ it("names an account with neither a name nor a login", async () => {
     view({
       session: {
         status: "signed-in",
-        user: { name: null, login: null, image: null },
+        user: { name: undefined, login: undefined, image: undefined },
       },
     })
   );

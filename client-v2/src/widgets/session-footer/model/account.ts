@@ -93,9 +93,9 @@ export const SIGN_OUT_QUESTION = "Sign out of Playground?";
 export const SIGN_OUT_CONSEQUENCE =
   "Projects saved to your account leave this browser. Anything not saved stays here.";
 
-/** Spec 02's leftovers line, or `null` when nothing stayed */
+/** Spec 02's leftovers line, or `undefined` when nothing stayed */
 export const leftoversText = (kept: number) => {
-  if (kept <= 0) return null;
+  if (kept <= 0) return undefined;
   if (kept === 1) {
     return "1 project stayed in this browser because it wasn't saved to your account.";
   }
@@ -111,7 +111,7 @@ export const formatBalance = (balance: number | null) =>
   `${balance === null ? "…" : balance.toFixed(2)} SOL`;
 
 export const accountUser = ({ session }: AccountView) =>
-  session.status === "signed-in" ? session.user : null;
+  session.status === "signed-in" ? session.user : undefined;
 
 /** The short name in the account controls' label: the handle first */
 const displayName = (user: AccountUser) => user.login ?? user.name ?? "Account";
@@ -130,11 +130,11 @@ export const accountLabel = (view: AccountView) => {
 const signedInLine = (
   user: AccountUser,
   view: Pick<AccountView, "online">
-): AccountLine | null => {
+): AccountLine | undefined => {
   if (!view.online) return { kind: "offline" };
   // Without a display name the handle is already the name above
   if (user.login && user.name) return { kind: "login", login: user.login };
-  return null;
+  return undefined;
 };
 
 /**
@@ -145,7 +145,7 @@ const signedInLine = (
 export const failureOf = ({ session }: Pick<AccountView, "session">) =>
   session.status === "failed" && session.reason !== "cancelled"
     ? session.message
-    : null;
+    : undefined;
 
 /** Signed out: a sign-in under way or failed, else where work is saved */
 const signedOutLine = (session: AccountSession): AccountLine => {
@@ -161,7 +161,7 @@ const signedOutLine = (session: AccountSession): AccountLine => {
  */
 export const accountLines = (
   view: AccountView
-): { primary: string; line: AccountLine | null } => {
+): { primary: string; line: AccountLine | undefined } => {
   const user = accountUser(view);
   if (user) {
     return {
@@ -234,9 +234,9 @@ if (import.meta.vitest) {
       online: fields.online ?? true,
     });
 
-    const TESTER = { name: "Tester", login: "t", image: null };
-    const NAME_ONLY = { name: "Tester", login: null, image: null };
-    const NAMELESS = { name: null, login: null, image: null };
+    const TESTER = { name: "Tester", login: "t", image: undefined };
+    const NAME_ONLY = { name: "Tester", login: undefined, image: undefined };
+    const NAMELESS = { name: undefined, login: undefined, image: undefined };
     const signedIn = (user: AccountUser): AccountSession => ({
       status: "signed-in",
       user,
@@ -264,14 +264,40 @@ if (import.meta.vitest) {
         expect(accountUser(view({ session: signedIn(TESTER) }))).toBe(TESTER);
         expect(
           accountUser(view({ session: { status: "pending" } }))
-        ).toBeNull();
+        ).toBeUndefined();
+      });
+    });
+
+    describe("failureOf", () => {
+      it("is the reason of a failed sign-in, and nothing for a cancelled or any other state", () => {
+        expect(
+          failureOf({
+            session: {
+              status: "failed",
+              reason: "popup-blocked",
+              message: "Allow popups for this site to sign in.",
+            },
+          })
+        ).toBe("Allow popups for this site to sign in.");
+        expect(
+          failureOf({
+            session: {
+              status: "failed",
+              reason: "cancelled",
+              message: "Sign-in cancelled.",
+            },
+          })
+        ).toBeUndefined();
+        expect(failureOf({ session: { status: "pending" } })).toBeUndefined();
       });
     });
 
     describe("profileName", () => {
       it("prefers the display name, then the login, never an empty label", () => {
         expect(profileName(TESTER)).toBe("Tester");
-        expect(profileName({ name: null, login: "t", image: null })).toBe("t");
+        expect(
+          profileName({ name: undefined, login: "t", image: undefined })
+        ).toBe("t");
         expect(profileName(NAMELESS)).toBe("Account");
       });
     });
@@ -340,7 +366,7 @@ if (import.meta.vitest) {
       it("shows the name alone for an account with no login", () => {
         expect(accountLines(view({ session: signedIn(NAME_ONLY) }))).toEqual({
           primary: "Tester",
-          line: null,
+          line: undefined,
         });
       });
 
@@ -402,15 +428,19 @@ if (import.meta.vitest) {
       expect(
         accountLines(
           view({
-            session: signedIn({ name: null, login: "t", image: null }),
+            session: signedIn({
+              name: undefined,
+              login: "t",
+              image: undefined,
+            }),
           })
         )
-      ).toEqual({ primary: "t", line: null });
+      ).toEqual({ primary: "t", line: undefined });
     });
 
     describe("leftoversText", () => {
       it("counts what stayed, and says nothing when nothing did", () => {
-        expect(leftoversText(0)).toBeNull();
+        expect(leftoversText(0)).toBeUndefined();
         expect(leftoversText(1)).toBe(
           "1 project stayed in this browser because it wasn't saved to your account."
         );

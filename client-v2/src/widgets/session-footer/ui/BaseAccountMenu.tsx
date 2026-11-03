@@ -322,7 +322,7 @@ const BaseAccountMenu = ({
 }: BaseAccountMenuProps) => {
   const { cluster, wallet } = account;
   const leftovers =
-    signOut.status === "done" ? leftoversText(signOut.kept) : null;
+    signOut.status === "done" ? leftoversText(signOut.kept) : undefined;
   // A pick that opens the settings waits for the menu to close: while the
   // menu is mounted its focus trap pulls back the focus the settings take as
   // they open, and as it closes it puts focus back on its trigger

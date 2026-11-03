@@ -47,12 +47,12 @@ export interface BaseProjectListProps {
   projects: ProjectEntry[];
   /** The names are still being read from browser storage: skeleton rows, no entries */
   loading: boolean;
-  /** The open workspace's name, or `null` when none is open */
-  current: string | null;
-  /** The entry whose row is the rename field, or `null` */
-  renaming: string | null;
-  /** What is wrong with the name typed into the rename field, or `null` */
-  renameError: string | null;
+  /** The open workspace's name, or `undefined` when none is open */
+  current: string | undefined;
+  /** The entry whose row is the rename field, or `undefined` */
+  renaming: string | undefined;
+  /** What is wrong with the name typed into the rename field, or `undefined` */
+  renameError: string | undefined;
   onAction: (entry: ProjectEntry, action: ProjectAction, via: Via) => void;
   /** The rename field changed; lets the owner clear a stale error */
   onRenameChange: (value: string) => void;

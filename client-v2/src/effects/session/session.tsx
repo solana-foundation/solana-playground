@@ -308,7 +308,7 @@ export const session = (): Disposable => {
   return {
     dispose: () => {
       onChange.dispose();
-      PgSession.setOnSignOut(null);
+      PgSession.setOnSignOut(undefined);
       // Nothing is left to release the gate once this is gone
       releaseHold();
     },

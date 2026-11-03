@@ -401,9 +401,9 @@ if (import.meta.vitest) {
         storedFiles().clear();
         await PgSession.refreshWith({
           id: "u1",
-          name: null,
-          image: null,
-          login: null,
+          name: undefined,
+          image: undefined,
+          login: undefined,
         });
       });
 

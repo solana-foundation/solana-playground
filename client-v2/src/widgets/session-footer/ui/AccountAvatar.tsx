@@ -4,7 +4,7 @@ import { cn } from "@/shared/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/shared/ui/avatar";
 
 interface AccountAvatarProps {
-  image: string | null;
+  image: string | undefined;
   /** A feedback send is in flight: a halo pulses behind the avatar */
   sending: boolean;
   className?: string;
@@ -21,7 +21,7 @@ const AccountAvatar = ({ image, sending, className }: AccountAvatarProps) => (
       />
     )}
     <Avatar className={cn("size-6", className)}>
-      <AvatarImage src={image ?? undefined} alt="" />
+      <AvatarImage src={image} alt="" />
       {/* The prototype's signed-out avatar: a small glyph on a filled disc */}
       <AvatarFallback className="bg-accent text-muted-foreground [&>svg]:size-3.5">
         <CircleUserRound aria-hidden />
