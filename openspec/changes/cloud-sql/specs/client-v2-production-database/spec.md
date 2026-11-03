@@ -155,6 +155,28 @@ Anything written to `solpg` in between is test data and may be lost.
   redeploying makes it answer `db: "ok"` again from the untouched production
   Neon project
 
+### Requirement: Production is released on an empty database
+
+Before the custom domain is attached to the Production environment, database
+`solpg` SHALL be dropped and created again, empty, owned by the production IAM
+user and with `CONNECT` revoked from `PUBLIC`, and every migration SHALL be
+applied to it. `AUTH_BASE_URL` and the GitHub OAuth app's callback URL SHALL
+name the custom domain before the first sign-in there.
+
+#### Scenario: No test account survives the release (manual)
+
+- **WHEN** `solpg` has been created again and migrated and the custom domain
+  is attached, before anyone signs in on it
+- **THEN** `select count(*) from "user"` answers 0, and `GET /api/sync` on the
+  custom domain answers `{ "enabled": true, "db": "ok" }`
+
+#### Scenario: Sign-in works on the custom domain (manual)
+
+- **WHEN** a person signs in with GitHub on the custom domain after the
+  release
+- **THEN** the callback returns to the custom domain, and a project edit
+  writes a row to `solpg`
+
 ### Requirement: A push to master is checked against production
 
 After a push to `master` deploys `client-v2` to production, a CI job SHALL

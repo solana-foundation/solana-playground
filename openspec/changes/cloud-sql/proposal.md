@@ -39,8 +39,9 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
   sessions, so the PR's migrations run on top of the rows previews have
   written, as a migration runs on production's; the label works only while the repository
   variable `PREVIEW_DB_PROVIDER` is `cloud-sql`, and while it is unset the
-  label still cuts a Neon branch, until a follow-up removes Neon. Every preview
-  then runs the production connection path before production depends on it.
+  label still cuts a Neon branch, until a follow-up removes Neon. Previews move
+  to Cloud SQL after production does, once the Breakpoint launch (11 Nov 2026)
+  has shipped; until then they stay on Neon.
 - **A PR that adds migrations is told so.** The shared database carries only
   the migrations on `master`, so a PR that changes `client-v2/db/migrations`
   gets a comment saying its automatic preview runs against a schema without
@@ -62,7 +63,10 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
 - **Cutover.** Production has no users yet, so no data moves and nothing is
   frozen: `solpg` is migrated from zero, the Production environment switches
   provider, and `/api/sync` reports `db: "ok"`. Rollback is restoring
-  `DATABASE_URL`; the production Neon project is left untouched.
+  `DATABASE_URL`; the production Neon project is left untouched. The cutover
+  runs on the project's Vercel-generated production domain; before the custom
+  domain is attached, `solpg` is dropped, created again and migrated, so the
+  release starts with no test account in it.
 - **Telemetry.** The change touches `features/persistence` and
   `features/auth` on their server side only (`.mjs` modules the functions
   load). It adds, renames, and removes no telemetry event. A provider that
@@ -84,8 +88,9 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
   the sweep.
 - `client-v2-production-database`: production's database on Cloud SQL, the
   identity it connects with, the instance settings that keep Postgres's port
-  closed, who migrates it and where, the cutover and rollback, and the
-  maintainer guide that sets the pipeline up from nothing.
+  closed, who migrates it and where, the cutover and rollback, the release on
+  the custom domain, and the maintainer guide that sets the pipeline up from
+  nothing.
 
 ### Modified Capabilities
 
@@ -133,7 +138,8 @@ how the functions reach Postgres.
   entry on the production database.
 - User-visible: the cutover starts production on an empty `solpg`, so the
   team's test accounts and their synced rows on the production Neon project
-  stay behind. A test account that signs in again gets a new, empty account
+  stay behind, and the reset before the custom domain drops those written to
+  `solpg` on the generated domain. A test account that signs in again gets a new, empty account
   with a new user id. Its browser uploads only local projects it never
   synced. A project it synced before keeps a sync mark under the old user id,
   so `pushNeverSynced` treats it as another account's and leaves it in the

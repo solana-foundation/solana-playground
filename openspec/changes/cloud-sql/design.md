@@ -33,9 +33,12 @@ database `postgres`, one built-in user `postgres`.
 **Goals:**
 
 - Nothing above `db.mjs` knows which provider is behind the pool.
-- Every PR gets a working preview without anyone acting, and the production
-  connection path runs on each one, under the Preview identity, before
-  production depends on it.
+- Production's connection path is proven before any user depends on it: a
+  staged production deployment with sync off (task 3.1), then production on
+  its Vercel-generated domain, before the custom domain is attached.
+- After the launch, every PR gets a working preview without anyone acting,
+  and the production connection path runs on each one, under the Preview
+  identity.
 - A PR whose preview needs a schema of its own can get one by label.
 - Each gate between a preview and the production database is enforced by a
   different party, so one mistake is not enough.
@@ -202,7 +205,7 @@ database `postgres`, one built-in user `postgres`.
   infrastructure, migrated from `master` by `preview-shared-db.yml` or, for
   Neon's `main`, by the preview that branches from it.
 - **The cutover copies no data.** Production has no users yet (confirmed with
-  the team, 2026-10-27), so the production Neon project holds only test rows
+  the team, 2026-10-27, and again 2026-11-03), so the production Neon project holds only test rows
   and nothing is moved from it. `solpg` is migrated from zero through
   `migration-url production` as an operator, under the production user's
   role, while Production still reads Neon; then Production's variables
@@ -237,9 +240,9 @@ database `postgres`, one built-in user `postgres`.
   when Cloud SQL reports exhaustion.
 - [The first connection of a cold instance pays the token exchange and the
   certificate fetch] → the connector caches both per instance; the pool is
-  memoised at module scope so a warm instance pays once. Task 2.7 records the
-  cold and warm latency of `GET /api/sync` so the cost is a number before the
-  cutover.
+  memoised at module scope so a warm instance pays once. Task 3.1's staged
+  deployment records the cold and warm latency of `GET /api/sync` so the cost
+  is a number before the cutover; task 2.7 records it again for previews.
 - [`preview-shared-db.yml` fails, and `solpg_preview` falls behind
   `master`] → the run fails red on `master`; a PR's copy still applies what it
   lacks, and a manual dispatch reruns it.
@@ -255,6 +258,15 @@ database `postgres`, one built-in user `postgres`.
 - [The production Neon project outlives the cutover] → it is the rollback:
   nothing writes to it once Production reads `solpg`, so switching back finds
   it as it was. Deleting it is a later decision, outside this change.
+- [Production is the first deployment on the Cloud SQL path, since previews
+  move to it only after the launch] → the staged deployment of task 3.1
+  proves the identity and the connection with sync off; production then runs
+  on its Vercel-generated domain, where the team exercises sign-in and sync
+  before the custom domain is attached; the production Neon project stays the
+  rollback throughout.
+- [Test accounts and rows from the run on the generated domain are still in
+  `solpg` at release] → task 3.5 drops and recreates `solpg` before the custom
+  domain is attached.
 - [Users arrive before the cutover] → the cutover then copies data it no
   longer specifies; task 3.2 starts by confirming with the team that
   production still has no users, and stops if it has.
@@ -263,17 +275,10 @@ database `postgres`, one built-in user `postgres`.
 
 1. Provider layer merged; every deployment still on `DB_PROVIDER` unset, so
    `url`. No behaviour change.
-2. Google Cloud set up by hand and documented in `client-v2/docs/cloud-sql.md`:
-   `solpg-preview` and its `solpg_preview`, the two federation pools and
-   providers, the three service accounts, the IAM database users, the instance
-   flags on both instances.
-3. `solpg_preview` created and migrated; the Preview environment switched to
-   `DB_PROVIDER=cloud-sql` and `CLOUD_SQL_DATABASE=solpg_preview`; an
-   unlabelled PR's preview answers `db: "ok"` on `GET /api/sync`.
-   `PREVIEW_DB_PROVIDER=cloud-sql` set; a PR labelled `preview` deploys against
-   its own database; sign-in and a two-browser project edit work on both.
-   Recorded in that PR.
-4. `migrate-production-db` rewritten; `vercel-production` granted Cloud SQL
+2. The production identity set up by hand and documented in
+   `client-v2/docs/cloud-sql.md`: the Vercel federation pool and provider,
+   `vercel-production`, the instance flags on `solpg`.
+   `migrate-production-db` rewritten; `vercel-production` granted Cloud SQL
    Client and Instance User on `solpg` and added as its IAM database user;
    empty database `solpg` created on instance `solpg`, owned by that user;
    `CONNECT` revoked from `PUBLIC`; the operators' IAM users added; a staged
@@ -281,7 +286,8 @@ database `postgres`, one built-in user `postgres`.
    `db: "ok"` on `GET /api/sync`, which proves the production identity's whole
    path before any data depends on it; `dbmate status` through the proxy as an
    operator lists every migration pending.
-5. Cutover, in one sitting, with sync on throughout: confirm production still
+3. Cutover on the Vercel-generated production domain, in one sitting, with
+   sync on throughout: confirm production still
    has no users; apply every migration to `solpg` through
    `migration-url production` as an operator; `DB_PROVIDER=cloud-sql` and the
    `CLOUD_SQL_*` and `GCP_*` variables set on Production, `DATABASE_URL` and
@@ -289,10 +295,21 @@ database `postgres`, one built-in user `postgres`.
    `{ "enabled": true, "db": "ok" }`; `migrate-production-db` names `solpg`
    and reports nothing to apply; a sign-in and a project edit on the
    production domain land in `solpg`.
-6. Rollback at any point after the switch: restore `DATABASE_URL` and
+4. Release: `solpg` dropped, created again and migrated; `AUTH_BASE_URL` and
+   the GitHub OAuth callback set to the custom domain; the domain attached and
+   production redeployed; no `user` row exists before the first sign-in.
+5. Rollback at any point after the switch: restore `DATABASE_URL` and
    `DB_PROVIDER=url` on Production and redeploy. The production Neon project
    was not written since the switch, so it is as it was; rows written to
    `solpg` meanwhile are test data.
+6. After the launch, previews: `solpg-preview` and its `solpg_preview`, the
+   GitHub federation pool and provider, `vercel-preview` and `github-ci`;
+   `solpg_preview` created and migrated; the Preview environment switched to
+   `DB_PROVIDER=cloud-sql` and `CLOUD_SQL_DATABASE=solpg_preview`; an
+   unlabelled PR's preview answers `db: "ok"` on `GET /api/sync`.
+   `PREVIEW_DB_PROVIDER=cloud-sql` set; a PR labelled `preview` deploys against
+   its own database; sign-in and a two-browser project edit work on both.
+   Recorded in that PR.
 
 ## Open Questions
 

@@ -1,6 +1,11 @@
 # Tasks
 
-Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
+Production goes first. Group 3 needs group 1 and nothing from group 2: task
+3.1 creates the production identity itself. Group 2 follows the Breakpoint
+launch (11 Nov 2026); until then every preview stays on Neon, with
+`DB_PROVIDER` unset on the Preview environment. Task 3.3 may run before or
+after 3.5; task 3.4 waits for group 2. Tasks 1.1 and 1.3 may run at the same
+time.
 
 ## 1. The provider layer
 
@@ -60,17 +65,16 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       migrations the base lacks, and `\dt` shows every table owned by the
       application's user. Ticket to file.
 
-## 2. Previews on Cloud SQL
+## 2. Previews on Cloud SQL (after the Breakpoint launch)
 
 - [ ] 2.1 Google Cloud, by hand, written up in `client-v2/docs/cloud-sql.md`:
       create the zonal instance `solpg-preview` (Postgres 17, IAM authentication
       on, connector enforcement required, encrypted only, no authorised network);
-      a Workload Identity pool and provider trusting `https://oidc.vercel.com/<team>`
-      with `google.subject` mapped to `assertion.sub`; service accounts
-      `vercel-production`, `vercel-preview`, and `github-ci`, each bound to its one
-      subject (`environment:production`, `environment:preview`, and this
-      repository on GitHub's issuer, with an attribute condition naming the
-      repository); Cloud SQL Client and Instance User for `vercel-preview`,
+      on the Vercel pool and provider that task 3.1 creates, the service account
+      `vercel-preview` bound to `environment:preview`; a pool and provider
+      trusting GitHub's issuer, and the service account `github-ci` bound to
+      this repository there, with an attribute condition naming the
+      repository; Cloud SQL Client and Instance User for `vercel-preview`,
       `github-ci`, and the operators on `solpg-preview` only, and for `github-ci`
       nothing on `solpg`; the IAM database users for `vercel-preview`, `github-ci`,
       and the operators on `solpg-preview`; `github-ci` and the operators granted
@@ -158,7 +162,12 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
 
 ## 3. Production on Cloud SQL
 
-- [ ] 3.1 Instance `solpg`: set `cloudsql.iam_authentication=on`,
+- [ ] 3.1 The production identity, by hand, written up in
+      `client-v2/docs/cloud-sql.md`: a Workload Identity pool and provider
+      trusting the Foundation Vercel team's issuer
+      `https://oidc.vercel.com/<team>`, with `google.subject` mapped to
+      `assertion.sub`, and the service account `vercel-production` bound to
+      `environment:production` alone. Instance `solpg`: set `cloudsql.iam_authentication=on`,
       `connectorEnforcement=REQUIRED`, `ssl_mode=ENCRYPTED_ONLY`; grant
       `vercel-production` Cloud SQL Client and Instance User on `solpg` only,
       conditioned on that instance, and add it as an IAM database user there
@@ -173,7 +182,8 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       session role set to the production user) for `cloud-sql`; print the host,
       the database, and the pending list, and ask once. Record the pool sizing
       (`max_connections`, the pool's `max`, the concurrent instance count from
-      Vercel, the date) in `client-v2/docs/cloud-sql.md`. Verify with
+      Vercel, the date) and the cold and warm latency of the staged
+      deployment's `GET /api/sync` in `client-v2/docs/cloud-sql.md`. Verify with
       `gcloud sql instances describe solpg` showing the three settings,
       `\l solpg` showing `CONNECT` for the production user only, a direct `psql`
       to port 5432 refused, a staged production deployment
@@ -184,9 +194,11 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       application's own identity reaches `solpg` (the operator checks do not), `migrate-production-db` still naming the production
       Neon host and "nothing to apply" while Production is on `url`, and
       `dbmate status` through `migration-url production` as an operator listing
-      every migration pending on `solpg`. Depends on 1.3, 2.1. Ticket to file.
-- [ ] 3.2 Cutover, after 2.7's results are recorded, with sync on throughout:
-      confirm with the team that production still has no users, and stop if it
+      every migration pending on `solpg`. Depends on 1.2, 1.3. Ticket: HOO-2535.
+- [ ] 3.2 Cutover, on the project's Vercel-generated production domain before
+      any custom domain is attached, with sync on throughout: confirm with the
+      team that production still has no users (last confirmed 2026-11-03),
+      and stop if it
       has (a copy behind a freeze is then needed, outside this change); apply
       every migration to `solpg` with
       `scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema up`
@@ -201,14 +213,14 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       gotcha on the production database. Verify by `\dt` showing every table
       owned by the production user before the switch, the `GET /api/sync`
       body after it, and a sign-in and project edit on the production domain
-      writing a row to `solpg`, all recorded in the PR. Depends on 2.7, 3.1.
+      writing a row to `solpg`, all recorded in the PR. Depends on 3.1.
       Ticket to file.
 - [ ] 3.3 Add a `smoke` job to `client-v2.yml` on push to `master` that waits
       for the Vercel deployment of the pushed commit and fails unless its
       `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, naming the URL
       and the body on failure. Verify with one green run after a push and one
       red run against a deployment whose `SYNC_ENABLED` is off. Depends on 3.2.
-      Ticket to file.
+      Ticket: HOO-2536.
 - [ ] 3.4 Finish `client-v2/docs/cloud-sql.md` as the guide for maintainers of
       `solana-foundation/solana-playground`: a design section (identities and
       the instances they reach, the four gates, which workflow creates,
@@ -221,3 +233,14 @@ Tasks 1.1 and 1.3 may run at the same time. Task 2.1 may run beside group 1.
       from nothing" in `client-v2-production-database`, checked on the PR by
       someone who did not run tasks 2.1, 2.5, and 3.1. Depends on 2.6, 3.2. Ticket
       to file.
+- [ ] 3.5 Release on the custom domain, once the run on the Vercel-generated
+      domain is finished: drop database `solpg` and create it again, empty and
+      owned by the production IAM user, with `CONNECT` revoked from `PUBLIC`
+      as in 3.1; apply every migration through `migration-url production` as
+      an operator; set `AUTH_BASE_URL` and the GitHub OAuth app's callback URL
+      to the custom domain; attach the domain to the Production environment
+      and redeploy. The test accounts, sessions, and rows written on the
+      generated domain go with the old database. Verify by
+      `select count(*) from "user"` answering 0 before the first sign-in, and
+      by 3.2's checks passing on the custom domain, all recorded on the
+      ticket. Depends on 3.2. Ticket: HOO-2537.
