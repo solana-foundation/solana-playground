@@ -52,6 +52,14 @@ const boxOf = async (locator: Locator) => {
 const skipStep = (page: Page) =>
   page.getByRole("button", { name: "Skip this step", exact: true });
 
+/**
+ * The stage's code editor. In the tutorial frame the workspace's head stands
+ * in for the editor's own tab row (`#tabs`), which is not drawn there, and
+ * other editors (the intro's preview) may come first in the page
+ */
+const editor = (page: Page) =>
+  page.getByTestId("tutorial-workspace").locator(".monaco-editor").first();
+
 test.describe("client-v2-lessons", () => {
   test.setTimeout(120_000);
 
@@ -87,9 +95,11 @@ test.describe("client-v2-lessons", () => {
       0
     );
 
-    // Above the editor, not beside it
+    // Above the editor, not beside it. Monaco mounts after the band, and
+    // boundingBox does not wait for it
+    await expect(editor(page)).toBeVisible();
     const bandBox = await b.boundingBox();
-    const editorBox = await page.locator("#tabs").boundingBox();
+    const editorBox = await editor(page).boundingBox();
     expect(bandBox).not.toBeNull();
     expect(editorBox).not.toBeNull();
     expect(bandBox!.y + bandBox!.height).toBeLessThanOrEqual(editorBox!.y + 1);
@@ -170,9 +180,10 @@ test.describe("client-v2-lessons", () => {
     await expect(reader).toBeVisible();
 
     // The page sits inside the stage under the band, over the editor
+    await expect(editor(page)).toBeVisible();
     const readerBox = await reader.boundingBox();
     const bandBox = await band(page).boundingBox();
-    const editorBox = await page.locator("#tabs").boundingBox();
+    const editorBox = await editor(page).boundingBox();
     expect(readerBox).not.toBeNull();
     expect(bandBox).not.toBeNull();
     expect(editorBox).not.toBeNull();

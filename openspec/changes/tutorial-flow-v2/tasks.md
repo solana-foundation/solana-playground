@@ -28,12 +28,13 @@ for; tasks with "after nothing" start at once.
       rules and the width clamp; widths at 1440, 1280 and 1152 (HOO-2348;
       fleet; M 1.5; after nothing;
       plan: [plans/2.1-tutorial-frame.md](plans/2.1-tutorial-frame.md))
-- [ ] 2.2 The workspace: head tabs that never close, the Call button slot,
+- [x] 2.2 The workspace: head tabs that never close, the Call button slot,
       Files ⌘E and Terminal ⌘J icons, the tree popover and dock, the terminal
       bar and drawer with its states and auto-open rules, the editor's
       written, arriving, landing, error and busy lines. Verify: unit tests
       for the line states and the tree keys (HOO-2349; fleet; M 1.5;
-      after nothing; mounts in 2.1's slot)
+      after nothing; mounts in 2.1's slot;
+      plan: [plans/2.2-tutorial-workspace.md](plans/2.2-tutorial-workspace.md))
 - [ ] 2.3 Docs as read-only tabs: the definition's docs list and its
       Markdown, the tree's `Docs` folder, the closable doc tab with its link
       to the source page, assistant links that open it, docs in the phone's
@@ -75,7 +76,10 @@ for; tasks with "after nothing" start at once.
 - [ ] 3.5 The question card: picks, keys (1-3, H, S), "Not quite." and
       reasons, two-wrong outline, Hint (no model needed), Skip, Type it
       myself, the key line typed by hand, the right pick's write with its
-      wrote card, the expandable record, `tutorial_question_answered`.
+      wrote card, the written, arriving and landing lines passed to the
+      workspace (`TutorialWorkspace`'s `marks`, from the engine's `Wrote` and
+      `landingFor`; 3.3 landed without them), the expandable
+      record, `tutorial_question_answered`.
       Verify: component tests for the spec's wrong-then-right scenario and
       the typed-by-hand path (HOO-2353; fleet; M 1.5; after 2.2, 3.1)
 - [ ] 3.6 Composer and the live assistant in one thread: action words (and

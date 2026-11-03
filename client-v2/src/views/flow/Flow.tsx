@@ -32,13 +32,13 @@ import { closeOpenLayers } from "@/shared/lib/close-open-layers";
 import { createLogger } from "@/shared/lib/logger";
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
-import { PgView } from "@/utils";
+import { PgCommon, PgView } from "@/utils";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
 import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { Assistant } from "@/widgets/assistant";
 import { homeSlot, useStartView } from "@/widgets/home";
-import { LayoutShell } from "@/widgets/layout-shell";
+import { CONSOLE_KEY, keyLabel, LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
@@ -47,6 +47,10 @@ import {
   useConversationStartOver,
 } from "@/widgets/tutorial-conversation";
 import { useTutorialFrame } from "@/widgets/tutorial-frame";
+import {
+  TutorialWorkspace,
+  useTutorialTerminal,
+} from "@/widgets/tutorial-workspace";
 import { markNetworkChosen, SetupList } from "@/widgets/setup-list";
 
 /**
@@ -246,6 +250,11 @@ const FlowFrame = () => {
     body: <TutorialConversation />,
   });
 
+  // The frame's workspace (2.2): its head and tree over the stage, and its
+  // own terminal line, on a wide window, where the frame shows
+  const inFrame = tutorial.frame !== undefined && viewport === "wide";
+  const terminal = useTutorialTerminal();
+
   const read = () => setReading(true);
 
   // A learner who fixes the code while the page is open should come back
@@ -365,38 +374,51 @@ const FlowFrame = () => {
               startOn={phone ? "files" : undefined}
             />
           )}
-          stage={() => (
-            <Center>
-              <ObjectiveBand
-                state={lesson}
-                onRead={read}
-                onOpenGallery={openGallery}
-                phone={phone}
-              />
-              <Stage>
-                <StageRouter stage={state.stage} />
-                {reading && described && (
-                  <Reader
-                    key={described.step.id}
-                    step={described.step}
-                    onLoaded={() => PgLesson.opened(described.step.id)}
-                    onClose={() => setReading(false)}
-                  />
-                )}
-              </Stage>
-              {/* On a phone the step's controls sit at the foot of the code,
-                  under the thumb; the band above folds to the ask */}
-              {phone && (
-                <LessonBar
+          stage={({ console }) => (
+            <TutorialWorkspace
+              active={inFrame}
+              console={console}
+              keys={{
+                files: keyLabel("Ctrl+E", PgCommon.getOS()),
+                terminal: keyLabel(CONSOLE_KEY, PgCommon.getOS()),
+              }}
+            >
+              <Center>
+                <ObjectiveBand
                   state={lesson}
                   onRead={read}
                   onOpenGallery={openGallery}
+                  phone={phone}
                 />
-              )}
-            </Center>
+                <Stage>
+                  <StageRouter stage={state.stage} />
+                  {reading && described && (
+                    <Reader
+                      key={described.step.id}
+                      step={described.step}
+                      onLoaded={() => PgLesson.opened(described.step.id)}
+                      onClose={() => setReading(false)}
+                    />
+                  )}
+                </Stage>
+                {/* On a phone the step's controls sit at the foot of the code,
+                  under the thumb; the band above folds to the ask */}
+                {phone && (
+                  <LessonBar
+                    state={lesson}
+                    onRead={read}
+                    onOpenGallery={openGallery}
+                  />
+                )}
+              </Center>
+            </TutorialWorkspace>
           )}
           console={({ open, toggle }) => (
-            <ConsoleDrawer open={open} onToggle={toggle} />
+            <ConsoleDrawer
+              open={open}
+              onToggle={toggle}
+              tutorial={inFrame ? terminal : undefined}
+            />
           )}
           assistant={({ open, toggle, ...widen }) => (
             <Right>

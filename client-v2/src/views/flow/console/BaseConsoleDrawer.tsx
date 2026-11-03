@@ -1,5 +1,6 @@
 import type { FC, ReactNode } from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import {
   ConsoleDrawer,
@@ -24,6 +25,13 @@ interface BaseConsoleDrawerProps {
   status: ConsoleStatus;
   /** The toggle's key: "⌘J" on a Mac, "Ctrl+J" elsewhere */
   shortcut: string;
+  /**
+   * A tutorial's bar: the dot and its line only, no "Terminal" label, as
+   * the prototype draws it
+   */
+  bare?: boolean;
+  /** A line over the terminal before anything has run */
+  empty?: string | null;
   children?: ReactNode;
 }
 
@@ -41,6 +49,8 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
   onClear,
   status,
   shortcut,
+  bare = false,
+  empty = null,
   children,
 }) => (
   <ConsoleDrawer
@@ -53,14 +63,23 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
     <ConsoleDrawerBar triggerLabel="Terminal" className="shrink-0">
       <ConsoleDrawerStatus>
         <StatusDot variant={status.tone} />
-        <span
-          data-console-label
-          className="font-semibold tracking-wide text-foreground"
-        >
-          Terminal
-        </span>
+        {!bare && (
+          <span
+            data-console-label
+            className="font-semibold tracking-wide text-foreground"
+          >
+            Terminal
+          </span>
+        )}
         {status.text && (
-          <span className={status.tone === "error" ? "text-error" : undefined}>
+          <span
+            data-console-status
+            className={cn(
+              "truncate",
+              status.tone === "error" && "text-error",
+              status.tone === "warning" && "text-warning"
+            )}
+          >
             {status.text}
           </span>
         )}
@@ -81,6 +100,11 @@ const BaseConsoleDrawer: FC<BaseConsoleDrawerProps> = ({
       {/* The terminal's own root has no height. One grid cell the well's
           size stretches it, whatever element it is, so xterm's fit sees a
           real size and counts the right rows. */}
+      {empty && (
+        <p className="shrink-0 px-4 pt-3 font-mono text-code text-muted-foreground">
+          {empty}
+        </p>
+      )}
       <div className="grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)]">
         {children}
       </div>

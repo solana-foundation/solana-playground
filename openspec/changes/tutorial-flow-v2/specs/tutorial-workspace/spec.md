@@ -147,7 +147,7 @@ resting state with no animation.
 
 ### Requirement: The file tree opens from the active tab and can dock
 
-The tree toggle or ⌘E SHALL open a 240 px popover under the active tab,
+The tree toggle or ⌘E SHALL open a 256 px popover under the active tab,
 showing the tutorial's files in their folders (`src`, `client`), then the
 `Docs` folder. A tutorial's tree SHALL hold no `tests` folder:
 
@@ -171,23 +171,44 @@ the tree as a 220 px column left of the editor. The pin is hidden under
 
 A 28 px terminal bar SHALL stay at the workspace's foot with:
 
-- a status dot: idle, busy, ok or failed;
+- a status dot: idle, busy, ok, failed, or amber for a changed file;
 - the last status text: "Ready", "Build successful · IDL: 1 instruction ·
-  hello", "Deploying · <stage>", or in amber "<file> changed since the last
-  deploy";
+  hello", "Deploying" (with " · <stage>" once the deploy reports its
+  stages), or in amber "<file> changed since the last deploy";
 - ⌘J.
 
 Before anything has run, the drawer SHALL read "Nothing run yet. Builds,
 deploys and calls print here." A click on the bar or ⌘J SHALL open a drawer, 240 px by default, resizable
 from 120 px to 60 % of the workspace. The drawer SHALL open by itself on a
-failed build, the first deploy and the first client run, and otherwise stay as
-the learner left it.
+failed build and the first deploy, and otherwise stay as the learner left it.
+The first client run SHALL open it too, once the run act lands (section 4).
 
 #### Scenario: The first deploy opens the terminal
 
 - **WHEN** the first deploy of a tutorial lands
 - **THEN** the drawer opens with the deploy's log
 - **AND** a later deploy does not open it if the learner closed it
+
+### Requirement: The workspace is measured
+
+The tutorial workspace slice SHALL emit, under the prefix
+`tutorial_workspace`:
+
+- `tutorial_workspace_tree_opened` when the tree opens as a popover, with
+  `via`: `tab` (the active tab's chevron), `button` (Files) or `key` (⌘E);
+- `tutorial_workspace_tree_docked` when the pin docks the tree or the unpin
+  puts it back, with `docked`;
+- `tutorial_workspace_file_opened` when the learner opens a file other than
+  the open one, with `via`: `tab` or `tree`;
+- `tutorial_workspace_terminal_opened` when the drawer opens by itself, with
+  `reason`: `build_failed` or `first_deploy`.
+
+#### Scenario: Opening the tree with ⌘E
+
+- **WHEN** the learner presses ⌘E in a tutorial
+- **THEN** the tree opens under the active tab
+- **AND** `tutorial_workspace_tree_opened` reaches the memory provider with
+  `via: "key"`
 
 ### Requirement: The Call panel is built from the deployed IDL
 
@@ -244,7 +265,7 @@ Call button.
 - ⌥↑ ⌥↓ the previous and next step.
 
 None of them SHALL fire while focus is in a text field, except ⌘B, ⌘E and
-⌘J.
+⌘J. Off a Mac, Ctrl E in the terminal SHALL stay the shell's end of line.
 
 #### Scenario: Typing a digit in the composer
 

@@ -53,6 +53,11 @@ export const PANEL_SIZES = {
   files: FILES,
   stage: STAGE,
   console: { default: 256, min: 120, folded: BOTTOM_BAR_PX },
+  /**
+   * The console in a tutorial's frame: the prototype's terminal drawer,
+   * 240 open and never over 60 % of the workspace's height
+   */
+  tutorialConsole: { default: 240, max: "60%" },
   handle: HANDLE_PX,
   work: { min: FILES.min + HANDLE_PX + STAGE.min },
 } as const;
@@ -158,7 +163,10 @@ export interface TutorialNavState {
 /**
  * A tutorial with a definition (`tutorial-flow-v2`, task 2.1): the work area
  * becomes the chat column, then the files column beside the stage over the
- * console. The stage bar, the stage tabs and the assistant are not drawn;
+ * console. In it the stage holds the tutorial's workspace (task 2.2: its
+ * head, tree and line states) and the console is its drawer, at its own
+ * height and never saved as the split. The stage bar, the stage tabs and the
+ * assistant are not drawn;
  * the stage and the console are the same outlets, so nothing remounts on the
  * way in or out. Only on the work screen of a wide window; narrower windows
  * keep today's layout.
@@ -516,8 +524,9 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
   // assistant's edge reflowed the work area. Opening mounts it at the width it
   // last had.
   // In a tutorial's frame the column is held open whatever was saved: the
-  // frame has no stage bar, so nothing there could open it again (until the
-  // workspace's tree, task 2.2, replaces it). A fold there is not saved.
+  // frame has no stage bar, so nothing there could open it again. It stays
+  // until the feed (task 3.3) carries the steps and Skip it holds; the
+  // workspace's tree (2.2) carries the files only. A fold there is not saved.
   // A fresh object each render; read only by `.open` in the effects below
   const filesState: PanelState = tutorialLayout
     ? { open: true, onOpenChange: () => undefined }
@@ -548,6 +557,13 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
     tutorialSeen.current = tutorialLayout;
     filesSettled.current = false;
     consoleSettled.current = false;
+  }, [tutorialLayout]);
+  // The drawer reopens at its own height in the frame, the console at its
+  // own outside it; a drag inside either keeps its own from then on
+  useEffect(() => {
+    consoleOpenSize.current = tutorialLayout
+      ? PANEL_SIZES.tutorialConsole.default
+      : PANEL_SIZES.console.default;
   }, [tutorialLayout]);
 
   useEffect(() => {
@@ -603,11 +619,15 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
       ? { bar: screen.cover.bar, content: screen.cover.content }
       : { bar: props.stageBar, content: home?.content };
 
+  const consoleDefault = tutorialLayout
+    ? PANEL_SIZES.tutorialConsole.default
+    : PANEL_SIZES.console.default;
   const center = (
     <ResizablePanelGroup
       orientation="vertical"
       id="layout-vertical"
-      defaultLayout={props.vertical}
+      // The frame's drawer has its own height, never the saved split's
+      defaultLayout={tutorialLayout ? undefined : props.vertical}
       onLayoutChanged={(layout, meta) =>
         settle(
           {
@@ -615,7 +635,8 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
             state: props.consoleState,
             openSize: consoleOpenSize.current,
             settledOnce: consoleSettled,
-            save: props.onVerticalLayout,
+            // A drag of the frame's drawer is the visit's, not the saved split
+            save: tutorialLayout ? () => undefined : props.onVerticalLayout,
           },
           layout,
           meta
@@ -632,11 +653,10 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
         collapsible
         collapsedSize={PANEL_SIZES.console.folded}
         defaultSize={
-          props.consoleState.open
-            ? PANEL_SIZES.console.default
-            : PANEL_SIZES.console.folded
+          props.consoleState.open ? consoleDefault : PANEL_SIZES.console.folded
         }
         minSize={PANEL_SIZES.console.min}
+        maxSize={tutorialLayout ? PANEL_SIZES.tutorialConsole.max : undefined}
         groupResizeBehavior="preserve-pixel-size"
         className="flex min-h-0 flex-col"
         onResize={(size) => {
@@ -837,9 +857,8 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                       className="flex min-h-0 min-w-0 flex-1"
                     >
                       {props.tutorial?.chat}
-                      {/* The files column stays until the workspace's own tree
-                      (task 2.2) takes its place: it holds the lesson's steps
-                      and the files a later step opens */}
+                      {/* The files column, held open (`filesState`), until the
+                      feed (task 3.3) carries the lesson's steps and Skip */}
                       <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                         {workGroup}
                       </div>

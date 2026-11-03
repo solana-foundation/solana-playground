@@ -25,6 +25,12 @@ import BaseLayoutShell from "./BaseLayoutShell";
 import BaseStageBar from "./BaseStageBar";
 import type { AssistantWide, TutorialFrameSlot } from "./BaseLayoutShell";
 
+/** The console as the stage sees it (`LayoutShellProps.stage`) */
+export interface StageConsole {
+  open: boolean;
+  setOpen: (open: boolean, via: "button" | "auto") => void;
+}
+
 export interface LayoutShellProps {
   /**
    * The navigation. `collapsed` is never true on a phone's menu page, which
@@ -58,8 +64,12 @@ export interface LayoutShellProps {
     phone: boolean;
     pinned: boolean;
   }) => ReactNode;
-  /** The stage */
-  stage: () => ReactNode;
+  /**
+   * The stage. `console` is the console's state, for a stage that carries
+   * its own Terminal control (a tutorial's workspace head); `setOpen` with
+   * `auto` is the stage opening it by its own rules.
+   */
+  stage: (panel: { console: StageConsole }) => ReactNode;
   console: (panel: { open: boolean; toggle: () => void }) => ReactNode;
   /**
    * The assistant, in its panel or, below `LAYOUT_BREAKPOINTS.compact`, its
@@ -349,10 +359,13 @@ const LayoutShell = ({
   };
   /**
    * The console opening on its own: the visit's on a phone, else saved. Not
-   * under Home or a page, which show no console to open.
+   * under Home or a page, which show no console to open, and not in a
+   * tutorial's frame, whose workspace opens its drawer by its own rules.
    */
   const openConsole = () => {
-    if (isCovered(screenNow.current)) return;
+    // A tutorial's workspace opens its drawer by its own rules (a failed
+    // build, the first deploy), not on every deploy
+    if (isCovered(screenNow.current) || tutorialNow.current) return;
     if (phone) setPhoneConsoleOpen(true, "auto");
     else setOpen("console", { open: true, via: "auto" });
   };
@@ -614,7 +627,15 @@ const LayoutShell = ({
         />
       }
       stageTabs={stageTabs}
-      stage={stage()}
+      stage={stage({
+        console: {
+          open: phone ? phoneConsole : state.open.console,
+          setOpen: (open, via) => {
+            if (phone) setPhoneConsoleOpen(open, via);
+            else setOpen("console", { open, via });
+          },
+        },
+      })}
       console={console({
         open: phone ? phoneConsole : state.open.console,
         toggle: () => {
