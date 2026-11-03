@@ -50,7 +50,7 @@ x-client-v2: &client-v2
       required: false
     - path: client-v2/.env.local
       required: false
-  environment:
+  environment: &client-v2-environment
     DATABASE_URL: postgres://solpg:solpg@postgres:5432/solpg?sslmode=disable
     SYNC_ENABLED: "true"
     # The browser runs on the host, so it reaches both through their published ports
@@ -173,6 +173,10 @@ services:
         condition: service_started
       migrate:
         condition: service_completed_successfully
+    # A merge replaces the anchor's whole `environment`, so its keys come back through their own anchor
+    environment:
+      <<: *client-v2-environment
+      REACT_APP_SERVER_UNSTABLE: "true"
     tty: true
     stdin_open: true
     profiles:

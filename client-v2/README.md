@@ -209,8 +209,11 @@ docker compose -f ../compose.yaml --profile v2-unstable up --build
 - `PG_DOCKER_GID` is the numeric group that owns the Docker socket inside a
   container: `0` on Docker Desktop and OrbStack, and on Linux the output of
   `stat -c %g /var/run/docker.sock`.
-- client-v2 calls the unstable routes only with the setting on. Run this in
-  its terminal:
+- client-v2 sends build and deploy to the unstable routes only with the
+  `experimental.unstable` setting on. The profile sets
+  `REACT_APP_SERVER_UNSTABLE=true`, which turns the setting on by default. A
+  browser profile that already stored the setting keeps its value, as with
+  `REACT_APP_SERVER_URL`; run this in the client's terminal to turn it on:
 
   ```sh
   setting set experimental.unstable true

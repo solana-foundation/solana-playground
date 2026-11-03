@@ -9,6 +9,9 @@
 /** Build server override; unset means the Solana Foundation's server */
 export const SERVER_URL = process.env.REACT_APP_SERVER_URL;
 
+/** Default of `experimental.unstable`; only `"true"` turns it on */
+export const SERVER_UNSTABLE = process.env.REACT_APP_SERVER_UNSTABLE;
+
 /** Platform RPC endpoints, one per cluster; unset adds no endpoint */
 export const PLATFORM_RPC_URLS = {
   devnet: process.env.REACT_APP_DEVNET_RPC_URL,

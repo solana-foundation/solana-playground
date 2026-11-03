@@ -848,15 +848,29 @@ docker compose --profile v2-unstable logs server-unstable | grep 'naming to'
 docker compose --profile v2-unstable exec server-unstable docker version
 ```
 
+client-v2 has no caller for `/unstable/bundle`, so the bundle route is checked with `curl` and a minimal manifest:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' -H 'Content-Type: application/json' \
+  -d '{"manifest":"{\"dependencies\":{\"@coral-xyz/anchor\":\"^0.29.0\"}}"}' \
+  "http://localhost:${PG_PORT:-8080}/unstable/bundle"
+curl -s -f -H 'Content-Type: application/json' \
+  -d '{"manifest":"{\"dependencies\":{\"@coral-xyz/anchor\":\"^0.29.0\"}}"}' \
+  "http://localhost:${PG_PORT:-8080}/unstable/bundle" | jq -c 'keys'
+```
+
 Steps: once the `until` loop ends without a message (the route exists and answers the empty request with `422`), open
-the client, run `setting set experimental.unstable true` in its terminal, build a program, then bundle a package.
+the client and build a program. The profile sets `REACT_APP_SERVER_UNSTABLE=true`, so `experimental.unstable` is on
+in a browser profile that has not stored it; in one that has, run `setting set experimental.unstable true` in the
+client's terminal first.
 
 Expect:
 
 - [ ] the log names `solpg-server-sandbox-bundle` and one `solpg-server-sandbox-program-<template>` image per
       template in `get_all_templates` (`server/src/templates/mod.rs`).
 - [ ] `docker version` prints a `Server` section: the container reaches the host's daemon.
-- [ ] `POST /unstable/build` and `POST /unstable/bundle` return 200.
+- [ ] the build from the client sends `POST /unstable/build`, which returns 200.
+- [ ] the first `curl` prints `200`; the second prints keys that include `bundle` and `types`.
 
 ```sh
 docker compose --profile v2-unstable down
