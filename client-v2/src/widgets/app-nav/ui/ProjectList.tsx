@@ -26,6 +26,7 @@ import {
   rebaseFiles,
 } from "../model/workspace-files";
 import BaseProjectList from "./BaseProjectList";
+import { useSyncMarkers } from "./use-sync-markers";
 
 const log = createLogger("app-nav:projects");
 
@@ -107,6 +108,7 @@ const ProjectList = ({
 }: ProjectListProps) => {
   const [, refresh] = useReducer((n: number) => n + 1, 0);
   const [pins, setPins] = useState(readPins);
+  const markers = useSyncMarkers();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameError, setRenameError] = useState<string | null>(null);
   // How the rename was asked for: it is counted on commit, with that `via`
@@ -179,6 +181,7 @@ const ProjectList = ({
     {
       idOf: (name) => PgExplorer.workspaceIdOf(name),
       isLesson: (name) => PgTutorial.isWorkspaceTutorial(name),
+      markerOf: (name) => markers.get(name) ?? null,
     },
     livePins
   );
@@ -319,6 +322,10 @@ const ProjectList = ({
   return (
     <BaseProjectList
       projects={projects}
+      // A preview has no workspaces at all, rather than none read yet
+      loading={
+        !PgExplorer.isTemporary && PgExplorer.allWorkspaceNames === undefined
+      }
       current={PgExplorer.currentWorkspaceName ?? null}
       renaming={renamingGone ? null : renaming}
       renameError={renameError}

@@ -11,17 +11,6 @@ import type { McpServerEntry } from "@/features/mcp";
 import { PgAssistant } from "../store";
 import ServerConsole from "./ServerConsole";
 
-// A theme that answers every key: the console's styled rules read deep tokens
-const theme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_target, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : theme,
-  }
-) as unknown as DefaultTheme;
-
 const server: McpServerEntry = {
   id: "docs",
   name: "Docs",
@@ -36,11 +25,7 @@ it("flips Show more and Show less and says which state it is in", () => {
     docs: [{ name: "search", description: "x".repeat(300), inputSchema: {} }],
   });
 
-  render(
-    <ThemeProvider theme={theme}>
-      <ServerConsole server={server} providerName="Anthropic" />
-    </ThemeProvider>
-  );
+  render(<ServerConsole server={server} providerName="Anthropic" />);
   fireEvent.change(screen.getByRole("combobox"), {
     target: { value: "search" },
   });

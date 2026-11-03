@@ -17,8 +17,8 @@ vi.mock("@/shared/lib/report-button-failure", () => ({
   reportButtonFailure: vi.fn(() => report),
 }));
 
-// The icons are styled-components that read the app theme; they are not what
-// is under test.
+// The icons read the app theme through `PgTheme`; they are not what is under
+// test.
 vi.mock("../../../../components/Icons", () => {
   const Icon = () => <svg aria-hidden />;
   return {

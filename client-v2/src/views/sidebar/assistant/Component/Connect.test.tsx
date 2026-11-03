@@ -8,7 +8,6 @@ vi.mock("../../../../components/Link", () => ({
 
 import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
@@ -19,21 +18,6 @@ import { PROVIDERS } from "../model/types";
 import { type Connection, PgAssistant } from "../store";
 import type { ConnectAction, ConnectProps } from "./Connect";
 import Connect from "./Connect";
-
-/**
- * A theme that answers every key: the form reads deep theme keys for its
- * styles, none of which matters here, and the real theme needs the utils
- * barrel.
- */
-const anyTheme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : anyTheme,
-  }
-) as unknown as DefaultTheme;
 
 const OWN: Connection = {
   id: "openai",
@@ -50,16 +34,14 @@ const connect = () =>
 
 const renderConnect = (props: Omit<ConnectProps, "frame">) =>
   render(
-    <ThemeProvider theme={anyTheme}>
-      <Connect
-        defaultBackend={props.defaultBackend}
-        preset={props.preset}
-        frame={(parts) => {
-          action = parts.action;
-          return <>{parts.form}</>;
-        }}
-      />
-    </ThemeProvider>
+    <Connect
+      defaultBackend={props.defaultBackend}
+      preset={props.preset}
+      frame={(parts) => {
+        action = parts.action;
+        return <>{parts.form}</>;
+      }}
+    />
   );
 
 /**

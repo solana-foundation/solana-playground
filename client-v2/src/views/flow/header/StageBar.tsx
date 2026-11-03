@@ -1,9 +1,9 @@
 import type { FC } from "react";
 import { useEffect, useState } from "react";
-import styled, { css } from "styled-components";
 
 import { PgClientRun, RunButton } from "@/features/docs-link";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/badge";
 
 import { useKeybind } from "../../../hooks";
@@ -65,7 +65,19 @@ const StageBar: FC = () => {
 
   const row = useViewport() !== "phone";
   return (
-    <Bar $row={row}>
+    <div
+      className={cn(
+        // The stepper's thumb and items stack with z-index; `isolate` keeps
+        // them inside the row, so they never rise over a window opened above
+        // the work area (the wallet, z-index 1), which the full-width row
+        // reaches
+        "isolate flex min-w-0 shrink-0 items-center justify-center gap-2 bg-transparent font-sans",
+        // In the frame, a 38 px row with the columns' bottom line, as the
+        // prototype draws the stage tabs; on a phone, across the preview
+        // page's bar
+        row ? "h-[38px] border-b border-border px-2" : "flex-1"
+      )}
+    >
       <Stepper
         state={state}
         onSelect={PgFlow.setStage}
@@ -81,36 +93,8 @@ const StageBar: FC = () => {
           <RunButton />
         </>
       )}
-    </Bar>
+    </div>
   );
 };
 
 export default StageBar;
-
-// In the frame, a 38 px row with the columns' bottom line, as the prototype
-// draws the stage tabs; on a phone, across the preview page's bar
-const Bar = styled.div<{ $row: boolean }>`
-  ${({ theme, $row }) => css`
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.5rem;
-    min-width: 0;
-    background: transparent;
-    font-family: ${theme.font.other.family};
-    /* The stepper's thumb and items stack with z-index; kept inside the row,
-       so they never rise over a window opened above the work area (the
-       wallet, z-index 1), which the full-width row reaches */
-    isolation: isolate;
-    ${$row
-      ? css`
-          height: 38px;
-          padding: 0 0.5rem;
-          border-bottom: 1px solid ${theme.colors.default.border};
-        `
-      : css`
-          flex: 1;
-        `}
-  `}
-`;

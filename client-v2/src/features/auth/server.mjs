@@ -16,5 +16,6 @@ export {
 export {
   AUTH_CHANNEL_NAME,
   AUTH_MESSAGE_TYPE,
+  AUTH_NOT_CONFIGURED,
   SIGNED_OUT_REASON,
 } from "./config.mjs";

@@ -166,7 +166,9 @@ regression against 5.1 has misread this rule.
 - [ ] 5.23 Details: the wallet (HOO-2074; after the designer's HOO-2057)
 - [ ] 5.24 Global reset on, styled-components out; Monaco and xterm excluded
       from preflight or checked on their own (HOO-2077; after every other
-      task in this section)
+      task in this section; change `global-reset-retire-styled`: part 1,
+      the reset and every module but the wallet and the layout shell, in
+      #209; part 2 after HOO-2074 and HOO-2073)
 - [x] 5.25 Frame chrome: flush columns with 1 px dividers, the 44 px bars
       over the assistant (5.17's head) and the stage, full-width stage tabs;
       a hidden assistant or files column takes no width (HOO-2122; after 5.2,

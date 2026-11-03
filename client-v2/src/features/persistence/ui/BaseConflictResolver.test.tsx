@@ -2,6 +2,11 @@
 // draws nothing but the overlay nodes the hunk controls are portalled into.
 // Everything the component decides -- which controls show, what a take does
 // to the file, when Apply is enabled -- is the real code.
+// The hooks barrel reaches generated globals that exist only in the built app;
+// the resolver reads the theme for the editors' font alone
+vi.mock("@/shared/lib/hooks/use-pg-theme", () => ({
+  usePgTheme: () => undefined,
+}));
 vi.mock("./merge-editor/controller", () => ({
   createMergeEditor: (
     file: import("./merge-editor/merge-file").MergeFile,

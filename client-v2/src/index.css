@@ -6,14 +6,17 @@
 @import url("https://fonts.googleapis.com/css2?family=Stack+Sans+Headline:wght@400..700&family=Stack+Sans+Text:wght@300..700&display=swap");
 
 /*
- * Tailwind 4 without preflight: its reset would fight the styled-components
- * globals until the last of those is gone. `source(none)` plus `@source "./"`
- * pins the class scan to `src/` instead of everything under the build cwd:
- * `public/` alone holds several MB of tutorial, crate and grammar JSON. The
- * path is relative to this file, so moving index.css moves the scan.
+ * Tailwind 4 with its preflight, in `base`: the one reset of the page.
+ * styled-components rules are unlayered and still beat it on the elements
+ * that keep them (the wallet and the layout shell, until they move).
+ * `source(none)` plus `@source "./"` pins the class scan to `src/` instead
+ * of everything under the build cwd: `public/` alone holds several MB of
+ * tutorial, crate and grammar JSON. The path is relative to this file, so
+ * moving index.css moves the scan.
  */
 @layer theme, base, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @source "./";
 
@@ -75,40 +78,20 @@
 }
 
 /*
- * Without preflight, a design-system element would keep the browser's
- * button face and border. This resets those elements only, as the design
- * system's `inject.css` does for pages not built on it; `:where` keeps it
- * at no specificity, so every utility still wins.
+ * The legacy theme provider sets the code font on the app's root, so a
+ * design-system element names the text font itself. Goes with the provider.
  */
 @layer base {
-  :where([data-slot], [data-slot] *, [data-slot] ::before, [data-slot]
-      ::after) {
-    border: 0 solid;
-  }
   :where([data-slot]) {
     font-family: var(--font-text);
-  }
-  :where([data-slot] button, [data-slot]
-      input, button[data-slot], input[data-slot]) {
-    font: inherit;
-    color: inherit;
-    letter-spacing: inherit;
-    background-color: transparent;
-    border-radius: 0;
-  }
-  /* The Sidebar's menus are lists; their bullets showed beside the rail's
-     footer icons, where no `overflow` clips them as it does in the content */
-  :where(ul[data-slot], ol[data-slot]) {
-    list-style: none;
   }
 }
 
 /*
  * A browser gives a button the arrow; the prototype gives buttons and links
  * the hand, and a disabled one (`disabled` or `aria-disabled`) the arrow.
- * Unlike the reset above, this reaches every button and link on the page,
- * the styled-components ones too; anything that sets its own cursor (a
- * utility, a styled component) still wins over this layer.
+ * It reaches every button and link on the page; anything that sets its own
+ * cursor (a utility, the wallet's styled rules) still wins over this layer.
  */
 @layer base {
   :where(button, [role="button"], a[href]) {
@@ -120,23 +103,11 @@
 }
 
 /*
- * This file's own reset sits in `base`, below `utilities`. Unlayered CSS
- * beats every layer, so left outside it the `*` rule would silently cancel
- * `p-*` and `m-*` on every element, and the `a` rule the text colour and
- * `underline` utilities on links.
- * styled-components rules are unlayered and still win over a utility on the
- * same element and property until that component is migrated.
+ * The page's own globals sit in `base`, below `utilities`. Unlayered CSS
+ * beats every layer, so left outside it the `a` rule would silently cancel
+ * the text colour and `underline` utilities on links.
  */
 @layer base {
-  /* Remove default margin and padding */
-  *,
-  ::after,
-  ::before {
-    box-sizing: border-box;
-    margin: 0;
-    padding: 0;
-  }
-
   /* The document never scrolls; only the app's own panes do. With the shell
      at 100dvh, a page taller than the window (Safari's 100vh under its
      toolbar) cannot push the header out of view */
@@ -145,6 +116,20 @@
   #root {
     height: 100%;
     overflow: hidden;
+  }
+
+  /* Preflight sets 1.5; the screens were drawn on the browser's own
+     `normal`, so text keeps it and a component that wants more says so */
+  html {
+    line-height: normal;
+  }
+
+  /* Preflight gives code the theme's mono at 1em; inline code across the
+     app was drawn in the browser's monospace, a step smaller. A utility or
+     the markdown sheet still sets its own */
+  :where(code, kbd, samp, pre) {
+    font-family: revert;
+    font-size: revert;
   }
 
   body {
@@ -169,4 +154,140 @@
   transform: none !important;
   inset: 0 !important;
   min-width: 0 !important;
+}
+
+/*
+ * A user who asked the system for less motion gets none: every animation
+ * and transition ends at once. `!important` in `base` beats the durations
+ * `tw-animate-css` and the utilities set on the element; near zero rather
+ * than `none` keeps `animationend` firing, which Radix's presence waits on
+ * before it unmounts a closing menu or dialog.
+ */
+@layer base {
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      animation-delay: 0ms !important;
+      transition-duration: 0.01ms !important;
+      transition-delay: 0ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/*
+ * The playground's thin scrollbar, what `PgTheme.getScrollbarCSS` gave a
+ * styled component: `pg-scrollbar` on the scrolling element,
+ * `pg-scrollbar-all` for every element inside it.
+ */
+@utility pg-scrollbar {
+  &::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+  &::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border: 0.25rem solid transparent;
+    border-radius: 12px;
+    background-color: color-mix(in srgb, var(--text-primary) 39%, transparent);
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  }
+  & * {
+    scrollbar-color: color-mix(in srgb, var(--text-primary) 39%, transparent);
+  }
+}
+@utility pg-scrollbar-all {
+  & ::-webkit-scrollbar {
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+  & ::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+  & ::-webkit-scrollbar-thumb {
+    border: 0.25rem solid transparent;
+    border-radius: 12px;
+    background-color: color-mix(in srgb, var(--text-primary) 39%, transparent);
+  }
+  & ::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-primary) 9%, transparent);
+  }
+  & * {
+    scrollbar-color: color-mix(in srgb, var(--text-primary) 39%, transparent);
+  }
+}
+
+/* The code font the user picked in Settings; `PgTheme.set` writes the variable */
+@utility font-pg-code {
+  font-family: var(--pg-font-code, var(--font-code));
+}
+
+/*
+ * Monaco's inlay hints. Monaco writes their `dyn-rule-*` classes into an
+ * unlayered stylesheet of its own, so this stays unlayered to beat them.
+ */
+.pg-monaco span[class^="dyn-rule"],
+.pg-monaco span[class*=" dyn-rule"] {
+  font-size: 12px;
+}
+
+/* The main view's fade-in, held invisible for the first 40% so a
+   lazy view never flashes half drawn */
+@keyframes pg-primary-fade-in {
+  0%,
+  40% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+/* The loading components' keyframes (Loading/*) */
+@keyframes pg-spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pg-wormhole {
+  0% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(180deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+@keyframes pg-skeleton {
+  100% {
+    transform: translateX(100%);
+  }
+}
+@keyframes pg-three-dots {
+  0% {
+    background: var(--bg);
+  }
+  100% {
+    background: var(--bg-fade);
+  }
+}
+@keyframes pg-fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }

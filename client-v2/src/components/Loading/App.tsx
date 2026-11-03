@@ -1,22 +1,7 @@
-import styled from "styled-components";
-
 import { ThreeDots } from "./ThreeDots";
 
 export const AppLoading = () => (
-  <Wrapper>
+  <div className="relative h-dvh w-screen [&>:first-child]:absolute [&>:first-child]:bottom-4 [&>:first-child]:left-8">
     <ThreeDots />
-  </Wrapper>
+  </div>
 );
-
-const Wrapper = styled.div`
-  position: relative;
-  height: 100vh;
-  height: 100dvh;
-  width: 100vw;
-
-  & > :first-child {
-    position: absolute;
-    bottom: 1rem;
-    left: 2rem;
-  }
-`;

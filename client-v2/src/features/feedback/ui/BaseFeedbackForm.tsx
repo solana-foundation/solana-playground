@@ -24,9 +24,6 @@ import { GITHUB_LINKS } from "../lib/github-links";
 import type { FeedbackDraft, SendStatus } from "../model/use-feedback-form";
 import { BaseStarRating } from "./BaseStarRating";
 
-// Without preflight a form control keeps the browser's own font, not the modal's
-const INHERIT_FONT = "[font-family:inherit]";
-
 /** Sentry drops an oversized event, and breadcrumbs add to its size */
 export const MESSAGE_MAX_LENGTH = 4096;
 /** An X handle is at most 15 characters, plus an optional @ */
@@ -118,7 +115,7 @@ export const BaseFeedbackForm = ({
                 }}
                 // A send clears the draft when it succeeds, so text typed meanwhile would be lost
                 readOnly={sending}
-                className={cn("resize-none", INHERIT_FONT)}
+                className="resize-none"
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -137,7 +134,6 @@ export const BaseFeedbackForm = ({
                   onDraftChange({ ...draft, contact: event.target.value })
                 }
                 readOnly={sending}
-                className={INHERIT_FONT}
               />
               <p className="text-xs text-muted-foreground">
                 So we can reach you if we have a question

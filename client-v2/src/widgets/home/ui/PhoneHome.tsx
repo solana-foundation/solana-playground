@@ -1,10 +1,14 @@
-import { useRenderOnChange } from "@/hooks";
+import { PgSession } from "@/features/auth";
 import { createLogger } from "@/shared/lib/logger";
 import { PgExplorer, PgFramework, PgTutorial } from "@/utils";
 
+import { runExample } from "../model/example";
+import { useSessionRetry } from "../model/session-retry";
 import type { PageTile } from "../model/telemetry";
 import { homeTelemetry } from "../model/telemetry";
 import { useProgramCount } from "../model/use-program-count";
+import { useVisit } from "../model/use-visit";
+import { needsSessionRetry } from "../model/visit";
 import { toastActionFailed } from "./action-failed-toast";
 import type { PhoneQuickstart, QuickstartTarget } from "./BasePhoneHome";
 import BasePhoneHome from "./BasePhoneHome";
@@ -41,6 +45,12 @@ const openQuickstart = async (
   onContinue: () => void
 ) => {
   switch (target.id) {
+    case "example": {
+      const outcome = await runExample();
+      if (outcome === "current") onContinue();
+      homeTelemetry.track("home_example_run", { outcome });
+      return;
+    }
     case "continue": {
       if (!PgExplorer.allWorkspaceNames?.includes(target.workspace)) {
         throw new Error(`${target.workspace} no longer exists.`);
@@ -75,16 +85,26 @@ const openQuickstart = async (
 };
 
 const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
-  useRenderOnChange(PgExplorer.onDidSwitchWorkspace);
-  useRenderOnChange(PgExplorer.onDidInit);
+  const visit = useVisit();
   const programCount = useProgramCount();
+  // As on desktop: retry a failed account check, never fall back to the example
+  const retry = useSessionRetry(
+    needsSessionRetry(PgExplorer.allWorkspaceNames, PgSession.readState)
+  );
 
   const framework = newFramework();
   const tutorial = PgTutorial.all.find((t) => t.level === "Beginner");
   const current = PgExplorer.currentWorkspaceName;
 
   const quickstarts: PhoneQuickstart[] = [];
-  if (current) {
+  // One lead: the example on a first visit (`visitOf`), else the open project
+  if (visit === "first") {
+    quickstarts.push({
+      id: "example",
+      title: "Try an example",
+      description: "The Anchor starter, built for you",
+    });
+  } else if (current) {
     quickstarts.push({
       id: "continue",
       workspace: current,
@@ -111,6 +131,7 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
 
   return (
     <BasePhoneHome
+      // One lead, New project and one tutorial: three, the spec's most
       quickstarts={quickstarts}
       tutorialCount={PgTutorial.all.length}
       programCount={programCount}
@@ -130,6 +151,14 @@ const PhoneHome = ({ onAsk, onContinue, onOpenPage }: PhoneHomeProps) => {
         homeTelemetry.track("home_quickstart_opened", { id: quickstart.id });
       }}
       onBrowse={() => onOpenPage("tutorials")}
+      onRetrySession={
+        retry.kind === "exhausted"
+          ? async () => {
+              homeTelemetry.track("home_session_retried", {});
+              await retry.retry();
+            }
+          : undefined
+      }
       onAsk={() => {
         homeTelemetry.track("home_composer_opened", {});
         onAsk();

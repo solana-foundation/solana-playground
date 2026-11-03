@@ -9,7 +9,6 @@ vi.mock("../../../../hooks", async () => ({
 vi.mock("./ServerConsole", () => ({ __esModule: true, default: () => null }));
 
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { type DefaultTheme, ThemeProvider } from "styled-components";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
@@ -18,25 +17,11 @@ import { createSkillTools } from "../model/skill-tools";
 import { PgAssistant } from "../store";
 import Grounding from "./Grounding";
 
-// A theme that answers every key: the panel's styled rules read deep tokens
-// and the real theme's module needs the utils barrel
-const theme: DefaultTheme = new Proxy(
-  {},
-  {
-    get: (_target, key) =>
-      key === Symbol.toPrimitive || key === "toString"
-        ? () => "inherit"
-        : theme,
-  }
-) as unknown as DefaultTheme;
-
 function renderGrounding() {
   return render(
-    <ThemeProvider theme={theme}>
-      <TooltipProvider>
-        <Grounding />
-      </TooltipProvider>
-    </ThemeProvider>
+    <TooltipProvider>
+      <Grounding />
+    </TooltipProvider>
   );
 }
 

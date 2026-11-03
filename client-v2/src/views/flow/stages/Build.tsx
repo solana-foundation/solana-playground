@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { useElapsed } from "@/shared/lib/hooks/use-elapsed";
+
 import { PgCommand, PgExplorer, PgFramework, PgSettings } from "../../../utils";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
@@ -44,6 +46,7 @@ const Build = () => {
 
   const building = flow.build === "running";
   const slow = useSlowBuild(building, flow.buildStartedAt);
+  const elapsedMs = useElapsed(building ? flow.buildStartedAt : null);
   const own = ownOutput(out, PgExplorer.currentWorkspaceName ?? null);
   const surface = buildSurface({ flow, own });
 
@@ -66,6 +69,7 @@ const Build = () => {
       host={serverHost()}
       serverUrl={PgSettings.server.endpoint}
       ms={flow.buildMs}
+      elapsedMs={elapsedMs}
       // The stage's catch rethrows; BaseBuild's buttons report what is left
       onBuild={() => PgCommand.build.execute().catch(toldByStage("build"))}
       onContinue={() => PgFlow.setStage("deploy")}

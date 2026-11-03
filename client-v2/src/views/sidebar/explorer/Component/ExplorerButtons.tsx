@@ -1,7 +1,7 @@
 import { FC } from "react";
-import styled from "styled-components";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 
@@ -11,7 +11,15 @@ import { CreateItem } from "./Modals";
 import { useCreateItem } from "./useCreateItem";
 
 const ExplorerButtons = () => (
-  <ButtonsWrapper>
+  <div
+    className={cn(
+      "flex justify-end px-2 py-1 [&_button]:my-2",
+      // The icons are dark glyphs: half-inverted at rest, fully on hover in
+      // the dark theme and plain in the light one
+      "[&_button_img]:[filter:invert(0.5)] [&_button:hover_img]:[filter:invert(0)]",
+      "dark:[&_button:hover_img]:[filter:invert(1)]"
+    )}
+  >
     <NewItemButton
       imageName="new_file.png"
       title="New file"
@@ -25,26 +33,8 @@ const ExplorerButtons = () => (
     <CreateItem />
     <CollapseAllButton />
     {PgExplorer.isTemporary && <GoBackButton />}
-  </ButtonsWrapper>
+  </div>
 );
-
-const ButtonsWrapper = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  padding: 0.25rem 0.5rem;
-
-  & button {
-    margin: 0.5rem 0;
-  }
-
-  & button img {
-    filter: invert(0.5);
-  }
-
-  & button:hover img {
-    filter: invert(${({ theme }) => (theme.isDark ? 1 : 0)});
-  }
-`;
 
 interface ButtonProps {
   imageName: string;

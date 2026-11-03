@@ -37,11 +37,13 @@ const failed = (diagnostics: DiagnosticView[]): BuildSurfaceView => ({
 const props = (
   surface: BuildSurfaceView,
   building = false,
-  slow = false
+  slow = false,
+  elapsedMs: number | null = null
 ): BaseBuildProps => ({
   surface,
   building,
   slow,
+  elapsedMs,
   host: "api.solpg.io",
   serverUrl: "https://api.solpg.io",
   ms: 2900,
@@ -91,6 +93,50 @@ describe("BaseBuild", () => {
     const busy = screen.getByRole("button", { name: /Building/ });
     expect(busy).toHaveProperty("disabled", true);
     expect(busy.getAttribute("aria-busy")).toBe("true");
+  });
+
+  it.each([
+    [59_999, false],
+    [60_000, true],
+  ])("at %i ms the slow line shows: %s", (elapsedMs, shown) => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, false, elapsedMs)} />);
+
+    expect(
+      screen.queryByText("First builds take longer. This one is running.") !==
+        null
+    ).toBe(shown);
+  });
+
+  it("counts the seconds of a first build, under a minute without the slow line", () => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, false, 12_400)} />);
+
+    expect(screen.getByText("12 s")).toBeTruthy();
+    expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
+    expect(
+      screen.queryByText("First builds take longer. This one is running.")
+    ).toBeNull();
+  });
+
+  it("adds that a first build past a minute is still running", () => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, false, 61_000)} />);
+
+    expect(screen.getByRole("heading", { name: "Building…" })).toBeTruthy();
+    expect(screen.getByText("61 s")).toBeTruthy();
+    expect(screen.getByText(/Compiling on api\.solpg\.io/)).toBeTruthy();
+    expect(
+      screen.getByText("First builds take longer. This one is running.")
+    ).toBeTruthy();
+  });
+
+  it("gives a slow first build Spec 06's line only, never Spec 08's too", () => {
+    render(<BaseBuild {...props({ kind: "empty" }, true, true, 61_000)} />);
+
+    expect(
+      screen.getByText("First builds take longer. This one is running.")
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("This build is taking longer than usual.")
+    ).toBeNull();
   });
 
   it("offers Deploy as the one brand button after a build", () => {
@@ -330,19 +376,20 @@ describe("BaseBuild", () => {
     expect(screen.queryByText(/The assistant is answering/)).toBeNull();
   });
 
-  // Spec 08 BUILD-05: a slow build is not a broken one
-  it.each([
-    ["the first build", { kind: "empty" } as BuildSurfaceView],
-    ["a rebuild", { kind: "succeeded" } as BuildSurfaceView],
-  ])("says %s is taking longer than usual once it is slow", (_, surface) => {
-    const { rerender } = render(<BaseBuild {...props(surface, true)} />);
-    expect(screen.queryByText(/taking longer than usual/)).toBeNull();
+  // Spec 08 BUILD-05: a slow build is not a broken one. A first build has
+  // Spec 06's line instead (the test above)
+  it.each([["a rebuild", { kind: "succeeded" } as BuildSurfaceView]])(
+    "says %s is taking longer than usual once it is slow",
+    (_, surface) => {
+      const { rerender } = render(<BaseBuild {...props(surface, true)} />);
+      expect(screen.queryByText(/taking longer than usual/)).toBeNull();
 
-    rerender(<BaseBuild {...props(surface, true, true)} />);
-    expect(
-      screen.getByText("This build is taking longer than usual.")
-    ).toBeTruthy();
-  });
+      rerender(<BaseBuild {...props(surface, true, true)} />);
+      expect(
+        screen.getByText("This build is taking longer than usual.")
+      ).toBeTruthy();
+    }
+  );
 
   it("drops the slow line once the build is over", () => {
     render(<BaseBuild {...props({ kind: "succeeded" }, false, true)} />);

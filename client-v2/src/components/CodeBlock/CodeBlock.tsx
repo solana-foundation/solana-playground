@@ -1,6 +1,6 @@
 import { useState } from "react";
-import styled, { css, useTheme } from "styled-components";
 
+import { usePgTheme } from "@/shared/lib/hooks/use-pg-theme";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { CopyButton } from "@/shared/ui/copy-button";
 
@@ -21,56 +21,27 @@ const CodeBlock = ({ lang, children: code, ...props }: CodeBlockProps) => {
   const copyButtonWrapperRef = useDifferentBackground();
 
   return (
-    <Wrapper ref={wrapperRef} {...props}>
-      <CopyButtonWrapper ref={copyButtonWrapperRef}>
+    <div
+      ref={wrapperRef}
+      className="group relative rounded-[12px] [&_pre]:pg-scrollbar [&_pre]:overflow-auto [&_pre]:rounded-[12px] [&_pre]:font-pg-code [&_pre]:text-[0.8125rem]"
+      {...props}
+    >
+      <div
+        ref={copyButtonWrapperRef}
+        className="absolute top-2 right-4 rounded-[12px] opacity-0 shadow-panel transition-opacity duration-50 ease-linear group-hover:opacity-100"
+      >
         <CopyButton value={code} onError={reportButtonFailure("copy")} />
-      </CopyButtonWrapper>
+      </div>
 
       <Code lang={lang}>{code}</Code>
-    </Wrapper>
+    </div>
   );
 };
-
-const Wrapper = styled.div`
-  ${({ theme }) => css`
-    position: relative;
-    border-radius: ${theme.default.borderRadius};
-
-    & pre {
-      border-radius: ${theme.default.borderRadius};
-      font-family: ${theme.font.code.family};
-      font-size: ${theme.font.code.size.medium};
-      overflow: auto;
-
-      ${PgTheme.getScrollbarCSS()};
-    }
-
-    & > :first-child {
-      opacity: 0;
-      transition: opacity ${theme.default.transition.duration.short}
-        ${theme.default.transition.type};
-    }
-
-    &:hover > :first-child {
-      opacity: 1;
-    }
-  `}
-`;
-
-const CopyButtonWrapper = styled.div`
-  ${({ theme }) => css`
-    position: absolute;
-    top: 0.5rem;
-    right: 1rem;
-    border-radius: ${theme.default.borderRadius};
-    box-shadow: ${theme.default.boxShadow};
-  `}
-`;
 
 const Code = ({ children, lang }: CodeBlockProps) => {
   const [html, setHtml] = useState("");
 
-  const theme = useTheme();
+  const theme = usePgTheme();
 
   useAsyncEffect(async () => {
     if (lang) {

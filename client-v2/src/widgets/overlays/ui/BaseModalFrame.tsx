@@ -29,10 +29,12 @@ export type ModalSize = NonNullable<
 
 /**
  * What has the focus when the dialog opens: the body's first field (or the
- * submit, when there is none), or the dialog itself, for one that should open with no field
- * ringed, as the prototype's New project does
+ * submit, when there is none); the dialog itself, for one that should open
+ * with no field ringed, as the prototype's New project does; or Cancel, for a
+ * destructive dialog, where Enter must not confirm (the dialog itself on a
+ * phone, which has no Cancel; Enter there does nothing)
  */
-export type OpenFocus = "field" | "dialog";
+export type OpenFocus = "field" | "dialog" | "cancel";
 
 /**
  * How the submit is drawn: the stock `Button`'s `default` or `destructive`,
@@ -100,6 +102,11 @@ const FIRST_FIELD = [
 const OWNS_ENTER =
   'button, textarea, select, a[href], [contenteditable="true"], [role="combobox"], [role="listbox"], [role="option"], [role="menu"], [role="menuitem"]';
 
+/** Whether `target` is a field of the body, where Enter means "done typing" */
+const isField = (target: EventTarget | null) =>
+  target instanceof Element &&
+  target.closest('input, textarea, select, [contenteditable="true"]') !== null;
+
 /**
  * A footer button beside the brand submit: its height, size and face, so the
  * two read as one set. TODO(design-system): the kit's footer sizes
@@ -119,7 +126,8 @@ const DESK_BRAND_SUBMIT_WITH_ICON = "pr-5 pl-4";
  * content, and the root the overlay). Enter anywhere in the dialog submits,
  * except on a control that owns Enter (`OWNS_ENTER`); so does the footer's
  * `type="submit"` button, which has the focus on open when the body has no
- * field. With `openFocus` set to `dialog`, the dialog itself has it instead.
+ * field. With `openFocus` set to `dialog`, the dialog itself has it instead;
+ * with `cancel`, the Cancel button has it, and Enter submits only from a field.
  */
 export const BaseModalFrame = ({
   title,
@@ -133,6 +141,7 @@ export const BaseModalFrame = ({
 }: BaseModalFrameProps) => {
   const formRef = useRef<HTMLFormElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const canSubmit = submit?.status === "ready";
   let brandSubmitClass = DESK_BRAND_SUBMIT;
   if (submit?.icon) brandSubmitClass = DESK_BRAND_SUBMIT_WITH_ICON;
@@ -167,6 +176,9 @@ export const BaseModalFrame = ({
     if (ev.key !== "Enter" || ev.defaultPrevented) return;
     if (ev.nativeEvent.isComposing) return;
     if (ev.target instanceof Element && ev.target.closest(OWNS_ENTER)) return;
+    // A destructive dialog confirms only by its button: on a phone, which
+    // has no Cancel to hold the focus, Enter on the dialog must not delete
+    if (openFocus === "cancel" && !isField(ev.target)) return;
     // The browser's own Enter in an input would press the form's first
     // submit button, which can be a bare `<button>` in the body
     ev.preventDefault();
@@ -175,9 +187,14 @@ export const BaseModalFrame = ({
 
   // Radix focuses the header's Close first, where Enter would close the
   // dialog; Enter must submit, so focus the body's first field or the submit,
-  // or the dialog itself when asked
+  // the dialog itself or Cancel when asked
   const handleOpenAutoFocus = (ev: Event) => {
-    if (openFocus === "dialog") {
+    if (openFocus === "cancel" && cancelRef.current) {
+      ev.preventDefault();
+      cancelRef.current.focus();
+      return;
+    }
+    if (openFocus === "dialog" || openFocus === "cancel") {
       // Radix dispatches this on the content, which takes focus at -1; on
       // anything else its own default focus stays
       if (!(ev.currentTarget instanceof HTMLElement)) return;
@@ -215,7 +232,14 @@ export const BaseModalFrame = ({
             in their band. TODO(design-system): move into the kit's
             ModalHeader, then drop this */}
         <ModalHeader className={cn("md:pb-4", title.hidden && "md:border-b-0")}>
-          <ModalTitle className={cn(title.hidden && "sr-only")}>
+          {/* A title can carry a user's name with no spaces: it wraps
+              anywhere rather than widen the dialog past a phone */}
+          <ModalTitle
+            className={cn(
+              "[overflow-wrap:anywhere]",
+              title.hidden && "sr-only"
+            )}
+          >
             {title.text}
           </ModalTitle>
         </ModalHeader>
@@ -233,6 +257,7 @@ export const BaseModalFrame = ({
           <ModalFooter>
             {submit.onCancel && !phone && (
               <Button
+                ref={cancelRef}
                 type="button"
                 variant="ghost"
                 className={FOOTER_BUTTON}

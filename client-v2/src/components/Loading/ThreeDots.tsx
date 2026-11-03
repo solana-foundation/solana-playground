@@ -1,58 +1,47 @@
-import styled, { css, keyframes } from "styled-components";
+import { ComponentPropsWithoutRef, CSSProperties, forwardRef } from "react";
 
-import { alpha } from "../../utils/theme/alpha";
+import { cn } from "@/shared/lib/utils";
 
-interface ThreeDotsProps {
+interface ThreeDotsProps extends ComponentPropsWithoutRef<"div"> {
   width?: string;
   height?: string;
   distance?: string;
 }
 
-export const ThreeDots = styled.div<ThreeDotsProps>`
-  ${({ theme, width = "0.5rem", height = "0.5rem", distance = "1rem" }) => css`
-    --bg: ${theme.colors.default.primary};
-    --bg-fade: ${alpha(theme.colors.default.primary, "low")};
-    --distance: ${distance};
-
-    position: relative;
-    animation: ${animation} 1s infinite linear alternate;
-    animation-delay: 0.5s;
-
-    &,
-    &::before,
-    &::after {
-      width: ${width};
-      height: ${height};
-      border-radius: ${theme.default.borderRadius};
-      background: var(--bg);
-    }
-
-    &::before,
-    &::after {
-      content: "";
-      position: absolute;
-      top: 0;
-      display: inline-block;
-      animation: ${animation} 1s infinite alternate;
-    }
-
-    &::before {
-      left: calc(var(--distance) * -1);
-      animation-delay: 0s;
-    }
-
-    &::after {
-      left: var(--distance);
-      animation-delay: 1s;
-    }
-  `}
-`;
-
-const animation = keyframes`
-  0% {
-    background: var(--bg);
-  }
-  100% {
-    background: var(--bg-fade);
-  }
-`;
+/** Three dots that fade in turn: the middle one is the element, the others its pseudo-elements */
+export const ThreeDots = forwardRef<HTMLDivElement, ThreeDotsProps>(
+  (
+    {
+      width = "0.5rem",
+      height = "0.5rem",
+      distance = "1rem",
+      className,
+      style,
+      ...props
+    },
+    ref
+  ) => (
+    <div
+      ref={ref}
+      className={cn(
+        "relative h-[var(--dot-height)] w-[var(--dot-width)] rounded-[12px] bg-[var(--bg)]",
+        "[--bg-fade:color-mix(in_srgb,var(--primary)_9%,transparent)] [--bg:var(--primary)]",
+        "[animation:pg-three-dots_1s_linear_0.5s_infinite_alternate]",
+        "before:absolute before:top-0 before:inline-block before:h-[var(--dot-height)] before:w-[var(--dot-width)] before:rounded-[12px] before:bg-[var(--bg)] before:content-['']",
+        "before:left-[calc(var(--distance)*-1)] before:[animation:pg-three-dots_1s_ease_0s_infinite_alternate]",
+        "after:absolute after:top-0 after:inline-block after:h-[var(--dot-height)] after:w-[var(--dot-width)] after:rounded-[12px] after:bg-[var(--bg)] after:content-['']",
+        "after:left-[var(--distance)] after:[animation:pg-three-dots_1s_ease_1s_infinite_alternate]",
+        className
+      )}
+      style={
+        {
+          "--dot-width": width,
+          "--dot-height": height,
+          "--distance": distance,
+          ...style,
+        } as CSSProperties
+      }
+      {...props}
+    />
+  )
+);

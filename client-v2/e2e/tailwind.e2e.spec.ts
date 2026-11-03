@@ -3,9 +3,9 @@ import { expect, test } from "@playwright/test";
 /**
  * Tailwind reaches the page only through craco's PostCSS override. If that
  * stops applying (a craco upgrade, a second CSS rule added after craco's
- * style pass), the build stays green and every utility goes inert. The Flow
- * wrapper's three utilities repeat its styled rule, so a screenshot cannot
- * tell either; this reads the rules themselves out of the utilities layer.
+ * style pass), the build stays green and every utility goes inert, which a
+ * screenshot shows only as a broken page after the fact; this reads the
+ * rules themselves out of the utilities layer.
  * The anchor only proves that some element carries the three utilities,
  * since design-system parts use them too; the rule checks below are what
  * guard the build.

@@ -1,10 +1,10 @@
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import styled, { css } from "styled-components";
 
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 import { callTool } from "@/features/mcp";
+import { cn } from "@/shared/lib/utils";
 import { NativeSelect, NativeSelectOption } from "@/shared/ui/native-select";
 
 import { PgConnection } from "../../../../utils";
@@ -16,6 +16,13 @@ interface ServerConsoleProps {
   providerName?: string;
 }
 
+const MUTED = "text-[0.7rem] text-[var(--text-secondary)]";
+
+const FIELD_LABEL = cn(MUTED, "block pt-2 pb-1 tracking-[0.06em]");
+
+const ACTION =
+  "cursor-pointer rounded-panel border border-border bg-transparent px-2.5 py-[0.3125rem] text-[0.7rem] text-[var(--text-secondary)] hover:enabled:bg-surface-hover hover:enabled:text-[var(--text-primary)] disabled:cursor-default disabled:opacity-45";
+
 /** Descriptions past this many characters start collapsed */
 const LONG_DESCRIPTION = 220;
 
@@ -25,6 +32,10 @@ const CAPS_LABEL = /^([A-Z][A-Z0-9 _-]*[A-Z0-9](?: \([^)\n]*\))?:)/gm;
 /** Tool descriptions are Markdown by convention; servers that write `LABEL:` headings get them in bold */
 const emphasiseLabels = (description: string) =>
   description.replace(CAPS_LABEL, "**$1**");
+
+/** The Markdown a tool description renders to, spaced for the card's small type */
+const DESCRIPTION_MARKDOWN =
+  "[overflow-wrap:anywhere] [&_ol]:mb-2 [&_ol]:list-decimal [&_ol]:pl-[1.125rem] [&_p]:mb-2 [&_ul]:mb-2 [&_ul]:list-disc [&_ul]:pl-[1.125rem] [&_li+li]:mt-1 [&_li>p]:mt-1 [&_li>p]:mb-0 [&_li>ul]:mt-1 [&_li>ul]:mb-0 [&>:last-child]:mb-0 [&_strong]:font-semibold [&_strong]:text-[var(--text-primary)] [&_code]:rounded [&_code]:bg-surface-hover [&_code]:px-1 [&_code]:py-px [&_code]:font-pg-code [&_code]:text-[0.95em]";
 
 /** Argument names that mean the Solana cluster, whatever the server calls it */
 const CLUSTER_KEYS = ["cluster", "network"];
@@ -149,22 +160,28 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
   };
 
   return (
-    <Card>
-      <Head>
-        <Name>{server.name || server.id}</Name>
-      </Head>
+    <div className="mb-3 rounded-panel border border-border bg-surface-base p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[0.75rem] text-[var(--text-primary)]">
+          {server.name || server.id}
+        </div>
+      </div>
 
-      <Note>Callable straight from here — no backend, no key, no tokens.</Note>
+      <div className={cn(MUTED, "pt-1.5 leading-[1.55]")}>
+        Callable straight from here — no backend, no key, no tokens.
+      </div>
 
-      <Actions>
-        <Action onClick={discover} disabled={busy}>
+      <div className="flex gap-1.5 pt-2">
+        <button className={ACTION} onClick={discover} disabled={busy}>
           {busy ? "Working…" : tools.length ? "Refresh tools" : "Connect"}
-        </Action>
-      </Actions>
+        </button>
+      </div>
 
       {tools.length > 0 && (
         <>
-          <Label htmlFor={`mcp-tool-${server.id}`}>TOOL</Label>
+          <label htmlFor={`mcp-tool-${server.id}`} className={FIELD_LABEL}>
+            TOOL
+          </label>
           <NativeSelect
             size="sm"
             className="w-full [&_select]:font-mono [&_select]:text-xs"
@@ -182,11 +199,21 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
 
           {selected && (
             <>
-              <Description $clamped={!descriptionOpen && descriptionIsLong}>
+              <div
+                className={cn(
+                  MUTED,
+                  "pt-1.5 leading-[1.55]",
+                  DESCRIPTION_MARKDOWN,
+                  // Cut by height rather than sliced, so the full text stays selectable; the fade marks the cut
+                  !descriptionOpen &&
+                    descriptionIsLong &&
+                    "max-h-[4.75em] overflow-hidden [mask-image:linear-gradient(to_bottom,black_60%,transparent)]"
+                )}
+              >
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {emphasiseLabels(description)}
                 </ReactMarkdown>
-              </Description>
+              </div>
               {descriptionIsLong && (
                 <button
                   type="button"
@@ -198,204 +225,53 @@ const ServerConsole = ({ server, providerName }: ServerConsoleProps) => {
                 </button>
               )}
 
-              <Label htmlFor={`mcp-args-${server.id}`}>ARGUMENTS</Label>
-              <Json
+              <label htmlFor={`mcp-args-${server.id}`} className={FIELD_LABEL}>
+                ARGUMENTS
+              </label>
+              <textarea
                 id={`mcp-args-${server.id}`}
                 value={args}
                 onChange={(ev) => setArgs(ev.target.value)}
                 spellCheck={false}
                 rows={5}
+                className="w-full resize-y rounded-panel border border-border bg-surface-base px-2 py-1.5 font-pg-code text-[0.75rem] leading-normal text-[var(--text-primary)]"
               />
 
-              <Actions>
+              <div className="flex gap-1.5 pt-2">
                 {/* Asking the model is the usual next step after the arguments, so it comes first in tab order; Call ends the form */}
                 {PgAssistant.isConnected && (
-                  <Action onClick={askAssistant} disabled={busy}>
+                  <button
+                    className={ACTION}
+                    onClick={askAssistant}
+                    disabled={busy}
+                  >
                     Ask {providerName ?? "the assistant"}
-                  </Action>
+                  </button>
                 )}
-                <Action onClick={call} disabled={busy}>
+                <button className={ACTION} onClick={call} disabled={busy}>
                   {busy ? "Calling…" : "Call"}
-                </Action>
-              </Actions>
+                </button>
+              </div>
             </>
           )}
         </>
       )}
 
-      {error && <ErrorText role="alert">{error}</ErrorText>}
-      {result !== null && <Result>{result}</Result>}
-    </Card>
+      {error && (
+        <div
+          role="alert"
+          className="pt-2 text-[0.7rem] leading-normal text-error"
+        >
+          {error}
+        </div>
+      )}
+      {result !== null && (
+        <pre className="mt-2 max-h-56 overflow-auto rounded-panel border border-border bg-surface-base p-2 font-pg-code text-[0.7rem] leading-normal [word-break:break-word] whitespace-pre-wrap text-[var(--text-primary)]">
+          {result}
+        </pre>
+      )}
+    </div>
   );
 };
-
-const Card = styled.div`
-  ${({ theme }) => css`
-    margin-bottom: 0.75rem;
-    padding: 0.625rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-  `}
-`;
-
-const Head = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
-
-const Name = styled.div`
-  ${({ theme }) => css`
-    color: ${theme.colors.default.textPrimary};
-    font-size: ${theme.font.code.size.small};
-  `}
-`;
-
-const Note = styled.div`
-  ${({ theme }) => css`
-    padding: 0.375rem 0 0;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.55;
-  `}
-`;
-
-const Label = styled.label`
-  ${({ theme }) => css`
-    display: block;
-    padding: 0.5rem 0 0.25rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    letter-spacing: 0.06em;
-  `}
-`;
-
-const Description = styled.div<{ $clamped: boolean }>`
-  ${({ theme, $clamped }) => css`
-    padding-top: 0.375rem;
-    color: ${theme.colors.default.textSecondary};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.55;
-    overflow-wrap: anywhere;
-
-    & p,
-    & ul,
-    & ol {
-      margin: 0 0 0.5rem;
-    }
-    & > :last-child {
-      margin-bottom: 0;
-    }
-    & ul,
-    & ol {
-      padding-left: 1.125rem;
-    }
-    & ul {
-      list-style: disc;
-    }
-    & ol {
-      list-style: decimal;
-    }
-    & li + li {
-      margin-top: 0.25rem;
-    }
-    & li > ul,
-    & li > p {
-      margin: 0.25rem 0 0;
-    }
-    & strong {
-      color: ${theme.colors.default.textPrimary};
-      font-weight: 600;
-    }
-    & code {
-      padding: 0.0625rem 0.25rem;
-      background: ${theme.colors.state.hover.bg};
-      border-radius: 0.25rem;
-      font-family: ${theme.font.code.family};
-      font-size: 0.95em;
-    }
-
-    ${$clamped &&
-    css`
-      /* Cut by height rather than sliced, so the full text stays selectable; the fade marks the cut */
-      max-height: 4.75em;
-      overflow: hidden;
-      mask-image: linear-gradient(to bottom, black 60%, transparent);
-    `}
-  `}
-`;
-
-const Json = styled.textarea`
-  ${({ theme }) => css`
-    width: 100%;
-    resize: vertical;
-    padding: 0.375rem 0.5rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.small};
-    line-height: 1.5;
-  `}
-`;
-
-const Actions = styled.div`
-  display: flex;
-  gap: 0.375rem;
-  padding-top: 0.5rem;
-`;
-
-const Action = styled.button`
-  ${({ theme }) => css`
-    padding: 0.3125rem 0.625rem;
-    background: transparent;
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textSecondary};
-    font: inherit;
-    font-size: ${theme.font.code.size.xsmall};
-    cursor: pointer;
-
-    &:hover:not(:disabled) {
-      background: ${theme.colors.state.hover.bg};
-      color: ${theme.colors.default.textPrimary};
-    }
-
-    &:disabled {
-      opacity: 0.45;
-      cursor: default;
-    }
-  `}
-`;
-
-const ErrorText = styled.div`
-  ${({ theme }) => css`
-    padding-top: 0.5rem;
-    color: ${theme.colors.state.error.color};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-  `}
-`;
-
-const Result = styled.pre`
-  ${({ theme }) => css`
-    margin: 0.5rem 0 0;
-    max-height: 14rem;
-    overflow: auto;
-    padding: 0.5rem;
-    background: ${theme.colors.default.bgPrimary};
-    border: 1px solid ${theme.colors.default.border};
-    border-radius: ${theme.default.borderRadius};
-    color: ${theme.colors.default.textPrimary};
-    font-family: ${theme.font.code.family};
-    font-size: ${theme.font.code.size.xsmall};
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-break: break-word;
-  `}
-`;
 
 export default ServerConsole;

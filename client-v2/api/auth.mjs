@@ -17,7 +17,11 @@ import {
   warnAboutMissingObservabilityIds,
   withObservability,
 } from "../src/features/api/server.mjs";
-import { getAuth, missingConfig } from "../src/features/auth/server.mjs";
+import {
+  AUTH_NOT_CONFIGURED,
+  getAuth,
+  missingConfig,
+} from "../src/features/auth/server.mjs";
 
 /**
  * Put the requested path back on the request.
@@ -80,7 +84,7 @@ async function handler(req, res) {
     res.setHeader("cache-control", "no-store");
     return res.end(
       JSON.stringify({
-        error: "Authentication is not configured",
+        error: AUTH_NOT_CONFIGURED,
         missing: missingConfig(),
       })
     );
