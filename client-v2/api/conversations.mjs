@@ -230,7 +230,8 @@ async function handler(req, res) {
         return sendJson(res, 400, { error: "items required" });
       }
       if (
-        title != null &&
+        title !== undefined &&
+        title !== null &&
         (typeof title !== "string" || title.length > MAX_TITLE)
       ) {
         return sendJson(res, 400, { error: "Malformed title" });

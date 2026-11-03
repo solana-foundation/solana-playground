@@ -8,7 +8,7 @@ import { useResetCtxSelected } from "./useResetCtxSelected";
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../../../utils", () => ({
   PgExplorer: { removeCtxSelectedEl: vi.fn() },
-  PgCommon: { isNonNullish: (v: unknown) => v != null },
+  PgCommon: { isNonNullish: (v: unknown) => v !== null && v !== undefined },
 }));
 
 const Probe = () => {

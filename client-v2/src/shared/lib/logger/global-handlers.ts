@@ -12,7 +12,8 @@ const RESIZE_OBSERVER_LOOP_NOTICE =
  * thrown `Error` with the same text carries an `error` and is not matched.
  */
 const isResizeObserverLoopNotice = (event: ErrorEvent) =>
-  event.error == null && event.message === RESIZE_OBSERVER_LOOP_NOTICE;
+  (event.error === null || event.error === undefined) &&
+  event.message === RESIZE_OBSERVER_LOOP_NOTICE;
 
 /**
  * Sends uncaught errors and unhandled rejections to `panic`, except the

@@ -13,7 +13,7 @@ const Probe = ({ cb }: { cb: () => void }) => {
 };
 
 describe("useOnClickOutside with an ignore selector", () => {
-  it("does not fire for a press inside the ignored element ", () => {
+  it("does not fire for a press inside the ignored element", () => {
     const cb = vi.fn();
     render(
       <>

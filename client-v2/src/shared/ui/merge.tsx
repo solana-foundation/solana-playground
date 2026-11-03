@@ -152,7 +152,7 @@ function MergeTitle({
       <span className="min-w-0 truncate font-mono text-[0.8125rem] text-foreground">
         {path}
       </span>
-      {index != null && total != null && total > 1 && (
+      {index !== undefined && total !== undefined && total > 1 && (
         <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
           file {index} of {total}
         </span>
