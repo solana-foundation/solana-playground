@@ -1,9 +1,9 @@
-import { PgExplorer } from "./explorer";
-import { PgWorkspace } from "./workspace";
 import {
   clearFailures,
   getFailures,
 } from "../../features/persistence/model/diagnostics";
+import { PgExplorer } from "./explorer";
+import { PgWorkspace } from "./workspace";
 
 /**
  * The two states the explorer could not hold: no current workspace, and a

@@ -5,8 +5,9 @@ import { isSignInFailure, PgSession } from "@/features/auth";
 import { FeedbackMenuItems, useFeedbackSend } from "@/features/feedback";
 import { useBalance, useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
-import { PgCommand, PgCommon, PgView, PgWallet } from "@/utils";
 import type { SettingsRequest } from "@/shared/lib/settings-request";
+import { PgCommand, PgCommon, PgView, PgWallet } from "@/utils";
+
 import type {
   AccountItem,
   AccountSession,

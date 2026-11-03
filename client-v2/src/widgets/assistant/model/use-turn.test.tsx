@@ -1,31 +1,32 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
+import { PgChatStorage } from "@/features/persistence/model/chat-storage";
 import {
   initLogger,
   memoryProvider as memoryLog,
   resetLogger,
 } from "@/shared/lib/logger";
+import * as reportModule from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import * as reportModule from "@/shared/lib/report-button-failure";
-import { PgSession } from "@/features/auth";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
-import { createProvider } from "../../../views/sidebar/assistant/model";
-import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
-import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import type { Connection } from "../../../views/sidebar/assistant/store";
-import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
+
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
-import { PgChatStorage } from "@/features/persistence/model/chat-storage";
+import { createProvider } from "../../../views/sidebar/assistant/model";
+import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
+import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
+import type { Provider } from "../../../views/sidebar/assistant/model/types";
+import type { Connection } from "../../../views/sidebar/assistant/store";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { resetDefaultBackendProbe } from "./default-backend";
-import { useTurn } from "./use-turn";
 import type { ConnectOpener } from "./use-turn";
+import { useTurn } from "./use-turn";
 
 // The real providers stream from the network; a turn here is whatever the
 // stub's `send` does

@@ -8,8 +8,8 @@ import type {
 } from "@coral-xyz/anchor/dist/cjs/idl";
 
 import { PgCommon } from "../common";
-import { PgWeb3 } from "../web3";
 import type { MergeUnion, OrString } from "../types";
+import { PgWeb3 } from "../web3";
 
 export type {
   Idl,
@@ -134,20 +134,24 @@ export const getIdlType: <T extends IdlType>(
             }
 
             return inputFields.reduce((acc, cur) => {
-              const [key, value] = cur.split(":").map((part) => part.trim());
+              const [key, fieldInput] = cur
+                .split(":")
+                .map((part) => part.trim());
               const field = fields.find((f) => f.name === key);
               if (!field) throw new Error(`Field \`${key}\` not found`);
 
-              acc[key] = getIdlType(field.type, idl).parse(value);
+              acc[key] = getIdlType(field.type, idl).parse(fieldInput);
               return acc;
             }, {} as Record<string, unknown>);
           },
           toBuffer: (value) => {
             const buffers = Object.entries(value as object).map(
-              ([key, value]) => {
-                const field = fields.find((field) => field.name === key);
+              ([key, fieldValue]) => {
+                const field = fields.find(
+                  (candidate) => candidate.name === key
+                );
                 if (!field) throw new Error(`Field \`${key}\` not found`);
-                return getIdlType(field.type, idl).toBuffer(value);
+                return getIdlType(field.type, idl).toBuffer(fieldValue);
               }
             );
             return Buffer.concat(buffers);
@@ -251,8 +255,8 @@ export const getIdlType: <T extends IdlType>(
                 if (inputElements.length !== fields.length) {
                   throw new Error("Tuple length doesn't match");
                 }
-                return inputElements.map((value, i) => {
-                  return getIdlType(fields[i], idl).parse(value.trim());
+                return inputElements.map((element, i) => {
+                  return getIdlType(fields[i], idl).parse(element.trim());
                 });
               }
             );

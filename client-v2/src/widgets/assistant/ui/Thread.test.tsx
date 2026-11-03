@@ -8,6 +8,7 @@ import {
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import {
   PgAssistant,
   THREAD_NOT_SAVED,

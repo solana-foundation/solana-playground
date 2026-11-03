@@ -4,10 +4,10 @@
 // every deployment. Temporary, until client-v2 moves to Next.js, whose own
 // server serves the bundle and the API routes.
 
-import express from "express";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import express from "express";
 
 import { serveApiRoute } from "./api-route.mjs";
 

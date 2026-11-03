@@ -1,6 +1,8 @@
 import type { JSONValue } from "ai";
+
 import type { AgentRefusalReason, AgentTierParam } from "@/features/agent";
 import type { AiTurnError, ModelConnection } from "@/shared/lib/ai";
+
 import type { Effort } from "../types";
 
 /** What a model provider's profile reads from the store's `Connection` */

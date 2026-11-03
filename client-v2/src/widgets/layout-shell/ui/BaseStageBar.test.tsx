@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import BaseStageBar, { DOCS_URL } from "./BaseStageBar";
+
 import type { BaseStageBarProps } from "./BaseStageBar";
+import BaseStageBar, { DOCS_URL } from "./BaseStageBar";
 
 // A click hovers first, which opens the button's tooltip; Radix measures it
 // with a ResizeObserver, which jsdom lacks

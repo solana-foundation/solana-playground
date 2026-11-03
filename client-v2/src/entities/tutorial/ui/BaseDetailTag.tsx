@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 
-import { levelVariant, Tag } from "@/shared/ui/tag";
 import { cn } from "@/shared/lib/utils";
+import { levelVariant, Tag } from "@/shared/ui/tag";
 
 type BaseDetailTagProps = {
   /**

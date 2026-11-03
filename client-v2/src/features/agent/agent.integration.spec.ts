@@ -1,6 +1,7 @@
 // @vitest-environment node
-import { describe, it } from "vitest";
 import type { Mock } from "vitest";
+import { describe, it } from "vitest";
+
 import handler from "../../../api/agent.mjs";
 import { jsonBody, makeReq, makeRes, postJson } from "../../test/api-handler";
 import { toMicro, worstCaseCost } from "./server.mjs";

@@ -5,12 +5,13 @@ import {
   SegmentedCount,
   SegmentedItem,
 } from "@/shared/ui/segmented";
+
 import type { ListCount } from "../model/lists";
 import type { CatalogPage } from "../model/telemetry";
-import BaseCatalogGrid from "./BaseCatalogGrid";
 import type { BaseCatalogGridProps } from "./BaseCatalogGrid";
-import BaseTutorialGrid from "./BaseTutorialGrid";
+import BaseCatalogGrid from "./BaseCatalogGrid";
 import type { BaseTutorialGridProps } from "./BaseTutorialGrid";
+import BaseTutorialGrid from "./BaseTutorialGrid";
 import CatalogSearch from "./CatalogSearch";
 
 export interface BaseNewProjectProps {

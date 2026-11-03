@@ -1,20 +1,22 @@
 import type { Mock } from "vitest";
+
+// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
+import { PgSession } from "@/features/auth";
+
+import { projectSync } from "../../../effects/project-sync/project-sync";
+import { PgCommon } from "../../../utils/common";
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgFs } from "../../../utils/explorer/fs";
+import { PgWorkspace } from "../../../utils/explorer/workspace";
 import { PgChatStorage } from "./chat-storage";
 import { clearFailures, getFailures } from "./diagnostics";
+import { reconcile, releaseLocalProjects } from "./project-restore";
 import { PgProjectSync } from "./project-sync";
 import { sha256, snapshotOf, SYNCED_WORKSPACE_FILES } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
 import { PgSyncMark } from "./sync-mark";
 import { PgThreadIndex } from "./thread-index";
-import { reconcile, releaseLocalProjects } from "./project-restore";
-// TODO(ui-migration 1.4): a feature importing a feature; the code under test syncs only for a signed-in session
-import { PgSession } from "@/features/auth";
-import { projectSync } from "../../../effects/project-sync/project-sync";
-import { PgCommon } from "../../../utils/common";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgFs } from "../../../utils/explorer/fs";
-import { PgWorkspace } from "../../../utils/explorer/workspace";
 
 // Reconcile, adopt and merge reload the open workspace from disk through
 // `reloadCurrentFromDisk`, which drops Monaco's cached models -- and
@@ -197,7 +199,7 @@ const asDevice = (
     return Object.fromEntries(
       [...storedFiles()]
         .filter(([path]) => path.startsWith(prefix))
-        .map(([path, content]) => [path, { content }])
+        .map(([path, fileContent]) => [path, { content: fileContent }])
     );
   });
   return vi
@@ -1560,8 +1562,8 @@ describe("the exchange after typing was folded into a rewrite", () => {
     const prefix = `/${HELLO.name}/`;
     vi.spyOn(PgExplorer, "replaceWorkspaceFiles").mockImplementation(
       async (name: string, files: Record<string, string>) => {
-        for (const [path, content] of Object.entries(files)) {
-          await PgFs.writeFile(`/${name}/${path}`, content, {
+        for (const [relativePath, content] of Object.entries(files)) {
+          await PgFs.writeFile(`/${name}/${relativePath}`, content, {
             createParents: true,
           });
         }

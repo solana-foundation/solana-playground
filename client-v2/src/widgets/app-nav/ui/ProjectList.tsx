@@ -7,6 +7,7 @@ import {
   DeleteWorkspace,
   ExportWorkspace,
 } from "@/views/sidebar/explorer/Component/Modals";
+
 import { copyName } from "../model/copy-name";
 import {
   PINS_KEY,
@@ -16,8 +17,8 @@ import {
   writePins,
 } from "../model/pins";
 import type { ProjectAction } from "../model/project-action";
-import { listProjects } from "../model/project-entries";
 import type { ProjectEntry } from "../model/project-entries";
+import { listProjects } from "../model/project-entries";
 import { navTelemetry } from "../model/telemetry";
 import { readWorkspaceFiles, rebaseFiles } from "../model/workspace-files";
 import BaseProjectList from "./BaseProjectList";

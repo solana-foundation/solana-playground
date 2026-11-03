@@ -13,9 +13,9 @@
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
  */
+import { execFileSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
-import { execFileSync } from "child_process";
 
 import { CLIENT_PATH, exists } from "./utils.mjs";
 
@@ -32,7 +32,10 @@ const git = (args, cwd) =>
 // worktree as well as from the primary itself, which is what makes this work.
 const primaryRoot = () =>
   path.dirname(
-    git(["rev-parse", "--path-format=absolute", "--git-common-dir"], CLIENT_PATH).trim()
+    git(
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      CLIENT_PATH
+    ).trim()
   );
 
 // An assets clone of its own, for the Docker image, which has no host git data
@@ -53,7 +56,9 @@ if (!(await exists(path.join(SOURCE_PATH, "index.html")))) {
 }
 
 /** Tracked paths only, so generated `crates`/`packages`/`content.json` never copy */
-const sourceFiles = git(["ls-files", "-z"], SOURCE_PATH).split("\0").filter(Boolean);
+const sourceFiles = git(["ls-files", "-z"], SOURCE_PATH)
+  .split("\0")
+  .filter(Boolean);
 
 for (const file of sourceFiles) {
   const to = path.join(DEST_PATH, file);

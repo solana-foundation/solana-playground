@@ -3,8 +3,9 @@ import { useEffect, useSyncExternalStore } from "react";
 import { isTutorialRoutePath } from "@/routes/catalog-paths";
 import { PgRouter } from "@/utils";
 import type { Disposable } from "@/utils/types";
-import { catalogTelemetry } from "./telemetry";
+
 import type { CatalogPage, CatalogVia } from "./telemetry";
+import { catalogTelemetry } from "./telemetry";
 
 type Listener = (page: CatalogPage | null) => void;
 

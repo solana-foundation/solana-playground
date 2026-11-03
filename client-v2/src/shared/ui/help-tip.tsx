@@ -1,6 +1,6 @@
 import * as React from "react";
-import { cn } from "@/shared/lib/utils";
 
+import { cn } from "@/shared/lib/utils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 /* A small question mark beside a setting, and the answer on hover or tap.

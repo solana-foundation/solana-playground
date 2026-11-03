@@ -1,13 +1,14 @@
-import { useState } from "react";
 import { InfoIcon } from "lucide-react";
+import { useState } from "react";
 import styled, { css } from "styled-components";
 
-import Input from "../../Input";
-import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { ModalFrame } from "@/widgets/overlays";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { ModalFrame } from "@/widgets/overlays";
+
 import { PgWallet, PgWeb3 } from "../../../utils";
+import Input from "../../Input";
 
 export const Add = () => {
   const [keypair] = useState(PgWeb3.Keypair.generate);

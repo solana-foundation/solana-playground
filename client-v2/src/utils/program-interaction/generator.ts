@@ -1,8 +1,8 @@
-import { IdlType, getIdlType } from "./idl-types";
-import { getPrograms, getPythAccounts } from "./generators";
 import { PgProgramInfo } from "../program-info";
 import { PgWallet } from "../wallet";
 import { PgWeb3 } from "../web3";
+import { getPrograms, getPythAccounts } from "./generators";
+import { getIdlType, IdlType } from "./idl-types";
 
 /**
  * Generatable instruction, i.e. the values of the instruction can be derived

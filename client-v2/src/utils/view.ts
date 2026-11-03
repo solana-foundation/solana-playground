@@ -1,7 +1,8 @@
 import { createElement, FC } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
 import { uuid } from "@/shared/lib/ids";
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "./common";
 import {
   createDerivable,
@@ -10,12 +11,12 @@ import {
   updatable,
 } from "./decorators";
 import type {
-  SetState,
   Disposable,
-  RequiredKey,
-  SyncOrAsync,
   Elementable,
   Promisable,
+  RequiredKey,
+  SetState,
+  SyncOrAsync,
 } from "./types";
 
 /** A dialog `PgView.openModal` opened that nothing has closed yet */
@@ -64,7 +65,7 @@ const closeIfNoHost = (id: string) => {
   setTimeout(() => {
     // A host that came meanwhile starts a wait of its own when it goes
     if (modalHosts > 0 || hostAttaches !== attaches) return;
-    const modal = openModals.find((modal) => modal.id === id);
+    const modal = openModals.find((open) => open.id === id);
     if (!modal) return;
     modalLog.error(
       new Error("No ModalHost showed a modal; it closed unanswered"),

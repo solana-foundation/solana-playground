@@ -1,15 +1,16 @@
-import { useCallback, useEffect, useState } from "react";
 import { TriangleAlertIcon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import { ConflictResolver } from "../ui/ConflictResolver";
-import { PgProjectSync } from "../model/project-sync";
-import { persistenceTelemetry } from "../model/telemetry";
+
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import type { Conflict, Resolution } from "../model/project-sync";
+import { PgProjectSync } from "../model/project-sync";
+import { persistenceTelemetry } from "../model/telemetry";
+import { ConflictResolver } from "../ui/ConflictResolver";
 
 /** `src/lib.rs`, or `src/lib.rs and 2 other files` */
 const describePaths = (paths: string[]) =>
@@ -182,15 +183,14 @@ const SyncBanner = () => {
     }
   };
 
-  const renderBanner = (conflict: Conflict) => {
-    const prompt = PROMPTS[conflict.kind];
+  const renderBanner = (shown: Conflict) => {
+    const prompt = PROMPTS[shown.kind];
     // Line by line needs the lines: a divergence the merge never got as far as
     // naming files keeps the two whole-project answers only
-    const resolvable =
-      conflict.kind === "divergent" && !!conflict.files?.length;
-    const message = prompt.message(conflict);
+    const resolvable = shown.kind === "divergent" && !!shown.files?.length;
+    const message = prompt.message(shown);
 
-    const named = namedPath(conflict);
+    const named = namedPath(shown);
     const at = named ? message.indexOf(named) : -1;
 
     return (
@@ -218,7 +218,7 @@ const SyncBanner = () => {
                 variant="outline"
                 size="sm"
                 disabled={busy || !!resolving}
-                onClick={() => setResolving(conflict.projectId)}
+                onClick={() => setResolving(shown.projectId)}
               >
                 Resolve…
               </Button>

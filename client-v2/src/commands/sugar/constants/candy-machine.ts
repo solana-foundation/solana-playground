@@ -1,3 +1,4 @@
+import { PgWeb3 } from "../../../utils";
 import {
   MAX_CREATOR_LEN,
   MAX_CREATOR_LIMIT,
@@ -5,7 +6,6 @@ import {
   MAX_SYMBOL_LENGTH,
   MAX_URI_LENGTH,
 } from "./token-metadata";
-import { PgWeb3 } from "../../../utils";
 
 export const EXPIRE_OFFSET = 10 * 60;
 export const CANDY_MACHINE_PREFIX = "candy_machine";

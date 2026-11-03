@@ -1,7 +1,7 @@
-import { NewProject, useNewProject } from "@/widgets/catalog";
-import type { CatalogPage } from "@/widgets/catalog";
-import { ModalFrame, useModalId } from "@/widgets/overlays";
 import { PgView } from "@/utils/view";
+import type { CatalogPage } from "@/widgets/catalog";
+import { NewProject, useNewProject } from "@/widgets/catalog";
+import { ModalFrame, useModalId } from "@/widgets/overlays";
 
 /** Which of New project's two lists shows first */
 export type GalleryTab = CatalogPage;

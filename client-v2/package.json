@@ -105,6 +105,7 @@
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-boundaries": "7.3.0",
     "eslint-plugin-layers": "link:./eslint-plugin-layers",
+    "eslint-plugin-simple-import-sort": "14.0.0",
     "eslint-plugin-unicorn": "47.0.0",
     "express": "^5.2.1",
     "jsdom": "^29.1.1",
@@ -150,13 +151,13 @@
     "build:bundle": "yarn lint:layers && yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
     "build-fast": "node scripts/wasm-stubs.mjs guard build-fast && yarn lint:layers && yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
     "build-wasm": "bash ../wasm/build.sh",
-    "format": "prettier --write src/ api/",
-    "check-format": "prettier --check src/ api/",
+    "format": "prettier --write src/ api/ e2e/ scripts/ eslint-plugin-layers/",
+    "check-format": "prettier --check src/ api/ e2e/ scripts/ eslint-plugin-layers/",
     "format-md": "markdownlint-cli2 --fix",
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --max-warnings 2901 --ext .ts,.tsx,.mjs,.mts src api e2e",
+    "lint": "eslint --max-warnings 2898 --ext .js,.ts,.tsx,.mjs,.mts src api e2e scripts eslint-plugin-layers",
     "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
@@ -376,9 +377,9 @@
           ],
           "no-unused-vars": "off",
           "@typescript-eslint/no-unused-vars": [
-            "warn",
+            "error",
             {
-              "args": "none",
+              "args": "after-used",
               "ignoreRestSiblings": true
             }
           ]
@@ -412,10 +413,98 @@
       },
       {
         "files": [
+          "src/**",
+          "api/**",
+          "e2e/**",
+          "scripts/**",
+          "eslint-plugin-layers/**"
+        ],
+        "plugins": [
+          "simple-import-sort"
+        ],
+        "rules": {
+          "no-shadow": "error",
+          "no-unused-vars": [
+            "error",
+            {
+              "args": "after-used",
+              "ignoreRestSiblings": true
+            }
+          ],
+          "simple-import-sort/imports": [
+            "error",
+            {
+              "groups": [
+                [
+                  "^\\u0000"
+                ],
+                [
+                  "^node:",
+                  "^@?\\w"
+                ],
+                [
+                  "^@/"
+                ],
+                [
+                  "^\\."
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**/*.{ts,tsx,mts}",
+          "api/**/*.{ts,tsx,mts}",
+          "e2e/**/*.{ts,tsx,mts}"
+        ],
+        "rules": {
+          "no-shadow": "off",
+          "@typescript-eslint/no-shadow": "error",
+          "no-unused-vars": "off",
+          "@typescript-eslint/no-unused-vars": [
+            "error",
+            {
+              "args": "after-used",
+              "ignoreRestSiblings": true
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**",
+          "e2e/**"
+        ],
+        "rules": {
+          "no-console": "error"
+        }
+      },
+      {
+        "files": [
+          "src/**/*.mjs",
+          "src/shared/lib/logger/providers/console.ts"
+        ],
+        "rules": {
+          "no-console": "off"
+        }
+      },
+      {
+        "files": [
           "api/**"
         ],
         "rules": {
           "max-params": "off"
+        }
+      },
+      {
+        "files": [
+          "scripts/**",
+          "eslint-plugin-layers/**"
+        ],
+        "env": {
+          "es2022": true
         }
       },
       {

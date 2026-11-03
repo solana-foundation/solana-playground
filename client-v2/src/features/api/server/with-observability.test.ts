@@ -25,27 +25,27 @@ afterEach(() => {
 });
 
 describe("tracesSampleRate", () => {
-  const cases: Array<[label: string, value: string | undefined, rate: number]> =
-    [
-      ["traces everything when unset", undefined, 1],
-      ["takes a rate inside 0..1", "0.25", 0.25],
-      ["takes 0, which turns tracing off", "0", 0],
-      ["refuses a rate above 1", "1.5", 1],
-      ["refuses a negative rate", "-0.1", 1],
-    ];
+  const cases: Array<{
+    label: string;
+    value: string | undefined;
+    rate: number;
+  }> = [
+    { label: "traces everything when unset", value: undefined, rate: 1 },
+    { label: "takes a rate inside 0..1", value: "0.25", rate: 0.25 },
+    { label: "takes 0, which turns tracing off", value: "0", rate: 0 },
+    { label: "refuses a rate above 1", value: "1.5", rate: 1 },
+    { label: "refuses a negative rate", value: "-0.1", rate: 1 },
+  ];
 
   // A refused rate warns; keep the test output clean
   beforeEach(() => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  for (const [label, value, rate] of cases) {
-    // eslint-disable-next-line jest/valid-title -- a table test, titled by its row
-    it(label, async () => {
-      const { tracesSampleRate } = await load();
-      expect(tracesSampleRate(value)).toBe(rate);
-    });
-  }
+  it.each(cases)("$label", async ({ value, rate }) => {
+    const { tracesSampleRate } = await load();
+    expect(tracesSampleRate(value)).toBe(rate);
+  });
 });
 
 describe("withObservability", () => {

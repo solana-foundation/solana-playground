@@ -1,18 +1,19 @@
-import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
-import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { PROJECT_NAME } from "@/constants";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { createLogger } from "@/shared/lib/logger";
 import { PgView } from "@/utils/view";
+
 import { overlayTelemetry } from "../model/telemetry";
-import { BaseModalFrame } from "./BaseModalFrame";
 import type {
   ModalSize,
   OpenFocus,
   SubmitStatus,
   SubmitVariant,
 } from "./BaseModalFrame";
+import { BaseModalFrame } from "./BaseModalFrame";
 import {
   useBlockDismiss,
   useIsTopModal,

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 
-import { BaseObjectiveBand } from "./BaseObjectiveBand";
 import type { FinishedBandProps, StepBandProps } from "./BaseObjectiveBand";
+import { BaseObjectiveBand } from "./BaseObjectiveBand";
 
 const noop = () => {};
 

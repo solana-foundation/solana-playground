@@ -1,7 +1,17 @@
+// TODO(ui-migration 1.4): a feature importing a feature; project sync runs only for a signed-in session
+import { PgSession } from "@/features/auth";
 import { uuid } from "@/shared/lib/ids";
 import { timeoutSignal } from "@/shared/lib/timeout-signal";
+
+// Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
+// which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
+// tests could not load this module.
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgFs } from "../../../utils/explorer/fs";
+import type { Disposable } from "../../../utils/types";
 import { DELETED_REASON } from "./deleted.mjs";
 import { report } from "./diagnostics";
+import type { FileConflict, MergePlan, ResolvedFiles } from "./merge";
 import {
   baseAfterMerge,
   merge3,
@@ -10,25 +20,16 @@ import {
   settleConflicts,
   withLocalKeypair,
 } from "./merge";
+import type { FileHashes, Snapshot } from "./snapshot";
 import { diffFiles, hashFiles, sameUserFiles, snapshotOf } from "./snapshot";
 import { PgSyncBase } from "./sync-base";
 import { PgSyncClient } from "./sync-client";
 import { LOCKED_REQUEST_MS, withSyncLock } from "./sync-lock";
+import type { SyncMark } from "./sync-mark";
 import { PgSyncMark } from "./sync-mark";
 import { reloadCurrentFromDisk } from "./tab-reload";
 import { PgThreadIndex } from "./thread-index";
 import { PgWorkspaceRegistry } from "./workspace-registry";
-// TODO(ui-migration 1.4): a feature importing a feature; project sync runs only for a signed-in session
-import { PgSession } from "@/features/auth";
-// Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
-// which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
-// tests could not load this module.
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgFs } from "../../../utils/explorer/fs";
-import type { FileConflict, MergePlan, ResolvedFiles } from "./merge";
-import type { FileHashes, Snapshot } from "./snapshot";
-import type { SyncMark } from "./sync-mark";
-import type { Disposable } from "../../../utils/types";
 
 type PushResult = "ok" | "conflict" | "skipped";
 

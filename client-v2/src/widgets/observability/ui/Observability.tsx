@@ -1,10 +1,11 @@
-import { useState } from "react";
 import type { ReactNode } from "react";
+import { useState } from "react";
 
 import { LoggerErrorBoundary } from "@/shared/lib/logger";
 import { GoogleAnalytics } from "@/shared/lib/telemetry";
-import { initObservability } from "../model/init";
+
 import type { ObservabilityConfig } from "../model/init";
+import { initObservability } from "../model/init";
 
 export interface ObservabilityProps extends ObservabilityConfig {
   /** Shown in place of `children` after a render error */

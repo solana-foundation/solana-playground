@@ -1,12 +1,12 @@
 import type { Creator } from "@metaplex-foundation/js";
 
+import { PgCommon } from "../../../../utils";
 import {
   MAX_NAME_LENGTH,
   MAX_SYMBOL_LENGTH,
   MAX_URI_LENGTH,
   VALID_CATEGORIES,
 } from "../../constants";
-import { PgCommon } from "../../../../utils";
 import type { ToPrimitive } from "../../types";
 
 export const checkName = (name: string) => {

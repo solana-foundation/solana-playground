@@ -1,9 +1,10 @@
 import type { VariantProps } from "class-variance-authority";
 
 import type { statusDotVariants } from "@/shared/ui/status-dot";
+
+import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { parseBuildReport } from "../stages/build-report";
 import { msLabel } from "../stages/build-view";
-import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { FlowState, RunKind } from "../state/stage";
 
 type StatusDotVariant = NonNullable<

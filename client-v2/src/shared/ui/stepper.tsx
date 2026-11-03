@@ -1,9 +1,9 @@
-import * as React from "react";
 import { Check } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
 import { Tabs as TabsPrimitive } from "radix-ui";
+import * as React from "react";
 
 import { useIndicator } from "@/shared/lib/hooks/use-indicator";
+import { cn } from "@/shared/lib/utils";
 
 /* The development loop as one switch: Write, Build, Deploy, Interact. A
    thumb in Solana's two colours slides to the current stage. Each stage

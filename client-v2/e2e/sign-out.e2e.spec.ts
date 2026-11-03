@@ -1,5 +1,6 @@
-import { expect, json, LONG, seedWorkspace, test } from "./fixtures";
 import type { Page } from "@playwright/test";
+
+import { expect, json, LONG, seedWorkspace, test } from "./fixtures";
 
 /**
  * Signing out from the account menu.

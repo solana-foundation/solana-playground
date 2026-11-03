@@ -1,5 +1,7 @@
 import { FC, useMemo } from "react";
 
+import { useRenderOnChange } from "@/hooks";
+import { Checkbox } from "@/shared/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -9,8 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
-import { Checkbox } from "@/shared/ui/checkbox";
-import { useRenderOnChange } from "@/hooks";
 import { PgCommon, PgView, RequiredKey, Setting as SettingType } from "@/utils";
 import { CustomSetting } from "@/views/flow/settings/CustomSetting";
 
@@ -43,12 +43,12 @@ export const SettingSetterSelect: FC<
   React.PropsWithChildren<SettingSetterSelectProps>
 > = (setting) => {
   const entries = useMemo(() => {
-    const entries: Entry[] = PgCommon.callIfNeeded(setting.values).map(
+    const options: Entry[] = PgCommon.callIfNeeded(setting.values).map(
       convertValue
     );
-    if (setting.custom) entries.push({ label: "Custom", value: CUSTOM_VALUE });
+    if (setting.custom) options.push({ label: "Custom", value: CUSTOM_VALUE });
 
-    return entries;
+    return options;
   }, [setting.values, setting.custom]);
 
   const value =

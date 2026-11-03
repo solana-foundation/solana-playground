@@ -1,9 +1,10 @@
-import { useTutorialProgress } from "@/entities/tutorial";
 import type { TutorialProgress } from "@/entities/tutorial";
-import { PgTutorial } from "@/utils";
+import { useTutorialProgress } from "@/entities/tutorial";
 import type { TutorialData } from "@/utils";
-import type { CardOpen } from "../ui/BaseCatalogGrid";
+import { PgTutorial } from "@/utils";
+
 import { matchesTutorial } from "../lib/filter";
+import type { CardOpen } from "../ui/BaseCatalogGrid";
 import type { CardList, CardOpenOf } from "./lists";
 
 /** One tutorial as its card draws it */

@@ -28,9 +28,10 @@ const utils = vi.hoisted(() => {
 });
 vi.mock("@/utils", () => utils);
 
+import { PROGRAMS_URL } from "@/entities/program";
+
 import { catalogPage } from "../model/catalog-page";
 import ProgramsPage from "./ProgramsPage";
-import { PROGRAMS_URL } from "@/entities/program";
 
 const program = (name: string, categories: string[]) => ({
   name,

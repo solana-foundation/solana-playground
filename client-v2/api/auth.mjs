@@ -13,11 +13,11 @@
  */
 import { toNodeHandler } from "better-auth/node";
 
-import { getAuth, missingConfig } from "../src/features/auth/server.mjs";
 import {
   warnAboutMissingObservabilityIds,
   withObservability,
 } from "../src/features/api/server.mjs";
+import { getAuth, missingConfig } from "../src/features/auth/server.mjs";
 
 /**
  * Put the requested path back on the request.

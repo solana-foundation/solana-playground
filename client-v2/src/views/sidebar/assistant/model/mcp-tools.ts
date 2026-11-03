@@ -1,7 +1,8 @@
-import { PgAssistant } from "../store";
-import { callTool } from "@/features/mcp";
 import type { McpServerEntry, McpTool } from "@/features/mcp";
+import { callTool } from "@/features/mcp";
 import type { ToolDefinition, ToolSchema } from "@/shared/lib/ai";
+
+import { PgAssistant } from "../store";
 
 /** Separates the server from the tool, and is legal in every provider's names */
 const SEPARATOR = "__";

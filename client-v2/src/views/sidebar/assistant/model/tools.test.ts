@@ -1,6 +1,6 @@
-import { createTools } from "./tools";
-import { PgAssistant } from "../store";
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
+import { PgAssistant } from "../store";
+import { createTools } from "./tools";
 
 vi.mock("./skill-tools", () => ({ createSkillTools: () => [] }));
 vi.mock("./mcp-tools", () => ({ createMcpTools: () => [] }));

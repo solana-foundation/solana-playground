@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
 import type { McpServerEntry, McpTool } from "@/features/mcp";
 
 const mcp = vi.hoisted(() => ({
@@ -33,6 +34,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import { createMcpTools } from "./model/mcp-tools";
 import { createSkillTools } from "./model/skill-tools";
 import { PgAssistant } from "./store";

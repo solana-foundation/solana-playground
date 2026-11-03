@@ -1,6 +1,4 @@
 // One item of the thread, drawn from the design system's message parts.
-import { createElement } from "react";
-import type { FC } from "react";
 import {
   act,
   fireEvent,
@@ -8,6 +6,8 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { FC } from "react";
+import { createElement } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -16,10 +16,11 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 import { BUTTON_FAILED_TOAST } from "@/shared/lib/report-button-failure";
-import { PgView } from "../../../utils/view";
+
 import type { ToastChildProps } from "../../../utils/view";
-import { BaseThreadItem } from "./BaseThreadItem";
+import { PgView } from "../../../utils/view";
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
+import { BaseThreadItem } from "./BaseThreadItem";
 
 // Replies render markdown; the text is enough here
 vi.mock("../../../components/Markdown", () => ({

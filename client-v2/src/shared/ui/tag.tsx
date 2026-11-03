@@ -1,7 +1,8 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "@/shared/lib/utils";
 import { Slot } from "radix-ui";
+import * as React from "react";
+
+import { cn } from "@/shared/lib/utils";
 
 /* A tinted label that sorts a thing: its level, its framework, its language.
    Badge says a state; a tag says a kind. */

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { Turn } from "../model/use-turn";
 

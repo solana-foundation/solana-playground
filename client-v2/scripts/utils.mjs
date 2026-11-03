@@ -1,6 +1,6 @@
+import { spawnSync } from "child_process";
 import fs from "fs/promises";
 import path from "path";
-import { spawnSync } from "child_process";
 
 /** Repository root directory path */
 export const REPO_ROOT_PATH = path.join(process.argv[1], "..", "..", "..");
@@ -28,11 +28,11 @@ export async function resetDir(dirPath) {
 /**
  * Get whether the given path exists.
  *
- * @param {string} path item path
+ * @param {string} itemPath item path
  * @returns whether the path exists
  */
-export async function exists(path) {
-  return !!(await fs.stat(path).catch(() => false));
+export async function exists(itemPath) {
+  return !!(await fs.stat(itemPath).catch(() => false));
 }
 
 /**
@@ -90,7 +90,7 @@ export class MarkdownTable {
   toString() {
     return this.#rows.reduce(
       (acc, row) =>
-        acc + row.reduce((acc, cur) => `${acc} ${cur} |`, "|") + "\n",
+        acc + row.reduce((line, cur) => `${line} ${cur} |`, "|") + "\n",
       ""
     );
   }

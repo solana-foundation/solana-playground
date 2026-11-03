@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from "react";
 
+import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import {
   SidebarMenu,
@@ -8,9 +9,9 @@ import {
 } from "@/shared/ui/sidebar";
 import { Spinner } from "@/shared/ui/spinner";
 import { StatusDot } from "@/shared/ui/status-dot";
-import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
-import { accountLabel, accountUser, clusterLabel } from "../model/account";
+
 import type { AccountView } from "../model/account";
+import { accountLabel, accountUser, clusterLabel } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
 
 export interface BaseRailFooterProps {

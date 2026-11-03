@@ -1,12 +1,5 @@
 import type { Page, Route } from "@playwright/test";
-import {
-  expect,
-  json,
-  LONG,
-  startProject,
-  stubSession,
-  test,
-} from "./fixtures";
+
 // The slice's other public entry: Playwright compiles `index.ts` as CommonJS,
 // and the telemetry it re-exports holds `import.meta.vitest` blocks
 import {
@@ -15,6 +8,14 @@ import {
   REFUSAL_MESSAGES,
   REFUSAL_STATUS,
 } from "../src/features/agent/server.mjs";
+import {
+  expect,
+  json,
+  LONG,
+  startProject,
+  stubSession,
+  test,
+} from "./fixtures";
 
 /**
  * What the panel says when the default backend refuses a turn by a limit,

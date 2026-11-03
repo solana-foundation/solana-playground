@@ -1,5 +1,6 @@
 import type { SessionUser, SignInState } from "@/features/auth";
 import { shortAddress } from "@/shared/lib/short-address";
+
 import type { ClusterStatus } from "./use-cluster-status";
 
 /** What a user can pick in the account menu (and the row's Cancel), for telemetry */

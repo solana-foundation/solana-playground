@@ -1,6 +1,6 @@
-import type { TupleFiles } from "../../utils";
-
 import type { JSX } from "react";
+
+import type { TupleFiles } from "../../utils";
 
 export type TutorialComponentProps = {
   /** About section that will be shown under the description of the tutorial page */

@@ -13,10 +13,11 @@ const lintedPaths = [
   ["client-v2/src/ui/a.tsx", true],
   ["client-v2/api/a.mjs", true],
   ["client-v2/e2e/a.mts", true],
-  ["client-v2/scripts/a.mjs", false],
+  ["client-v2/scripts/a.mjs", true],
+  ["client-v2/eslint-plugin-layers/index.js", true],
+  ["client-v2/craco.config.js", false],
   ["client-v2/src-old/a.ts", false],
   ["src/a.ts", false],
-  ["client-v2/src/a.js", false],
   ["client-v2/src/a.ts.orig", false],
 ];
 

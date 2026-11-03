@@ -30,6 +30,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/shared/ui/sidebar";
+
 import type { ProjectAction } from "../model/project-action";
 import type { ProjectEntry } from "../model/project-entries";
 

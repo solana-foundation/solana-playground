@@ -5,18 +5,18 @@
 // Usage: `generate-default-crates.mjs` generates, or exits early when `KEY_PATH` matches;
 // `generate-default-crates.mjs --key` prints the key and exits.
 
-import path from "path";
-import fs from "fs/promises";
-import zlib from "zlib";
-import crypto from "crypto";
-import { homedir } from "os";
-import { fileURLToPath } from "url";
 import { execFileSync, spawnSync } from "child_process";
+import crypto from "crypto";
+import fs from "fs/promises";
+import { homedir } from "os";
+import path from "path";
+import { fileURLToPath } from "url";
+import zlib from "zlib";
 
 import {
   CLIENT_PATH,
-  REPO_ROOT_PATH,
   exists,
+  REPO_ROOT_PATH,
   skipWithoutTool,
 } from "./utils.mjs";
 

@@ -1,48 +1,47 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import ConsoleDrawer from "./console/ConsoleDrawer";
-import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
-import StageBar from "./header/StageBar";
-import LeftPanel from "./left/LeftPanel";
-import LessonBar from "./lessons/LessonBar";
-import ObjectiveBand from "./lessons/ObjectiveBand";
-import Reader from "./lessons/Reader";
-// The barrel registers every lesson path as a side effect, so importing
-// it here is also what populates the registry for the whole app.
-import { describeStep, INITIAL_LESSON_STATE, PgLesson } from "./lessons";
-import type { LessonState } from "./lessons";
-import StageRouter from "./stages/StageRouter";
-import { PgDeployHistory } from "./state/deploy-history";
-import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
-import type { FlowState } from "./state/stage";
-import { GAP } from "./tokens";
-import { FeedbackHost } from "@/features/feedback";
-import {
-  SETTINGS_TRIGGER_ATTR,
-  type SettingsFocus,
-  type SettingsExit,
-  type SettingsRequest,
-} from "@/shared/lib/settings-request";
-import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import { openConnectDialog } from "@/app/ConnectDialog";
 import Wallet from "@/components/Wallet";
+import { FeedbackHost } from "@/features/feedback";
+import SyncBanner from "@/features/persistence/Component/SyncBanner";
 import { useKeybind } from "@/hooks";
 import { closeOpenLayers } from "@/shared/lib/close-open-layers";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { createLogger } from "@/shared/lib/logger";
+import {
+  SETTINGS_TRIGGER_ATTR,
+  type SettingsExit,
+  type SettingsFocus,
+  type SettingsRequest,
+} from "@/shared/lib/settings-request";
 import { LogoLockup } from "@/shared/ui/logo";
 import { Pattern } from "@/shared/ui/pattern";
 import { PgView } from "@/utils";
-import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { AppNav, ProjectList } from "@/widgets/app-nav";
-import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { Assistant } from "@/widgets/assistant";
+import { catalogPage, catalogSlot, useCatalogPage } from "@/widgets/catalog";
 import { homeSlot, useStartView } from "@/widgets/home";
 import { LayoutShell } from "@/widgets/layout-shell";
 import { ModalHost, ToastHost } from "@/widgets/overlays";
 import { RailFooter, SessionFooter } from "@/widgets/session-footer";
 import { SettingsPage, settingsTelemetry } from "@/widgets/settings-page";
 import { SetupList } from "@/widgets/setup-list";
+
+import ConsoleDrawer from "./console/ConsoleDrawer";
+import NewWorkspaceModal from "./gallery/NewWorkspaceModal";
+import StageBar from "./header/StageBar";
+import LeftPanel from "./left/LeftPanel";
+import type { LessonState } from "./lessons";
+import { describeStep, INITIAL_LESSON_STATE, PgLesson } from "./lessons";
+import LessonBar from "./lessons/LessonBar";
+import ObjectiveBand from "./lessons/ObjectiveBand";
+import Reader from "./lessons/Reader";
+import StageRouter from "./stages/StageRouter";
+import { PgDeployHistory } from "./state/deploy-history";
+import type { FlowState } from "./state/stage";
+import { INITIAL_FLOW_STATE, PgFlow } from "./state/stage";
+import { GAP } from "./tokens";
 
 /**
  * The Flow layout, with no header: `LayoutShell` places four columns, the
@@ -326,11 +325,11 @@ const FlowFrame = () => {
             );
           }}
           stageTabs={<StageBar />}
-          files={({ collapsed, toggle, phone }) => (
+          files={({ collapsed, toggle, phone: isPhone }) => (
             <LeftPanel
               collapsed={collapsed}
-              onHide={phone ? undefined : toggle}
-              startOn={phone ? "files" : undefined}
+              onHide={isPhone ? undefined : toggle}
+              startOn={isPhone ? "files" : undefined}
             />
           )}
           stage={() => (

@@ -1,8 +1,8 @@
-import { createTracker } from "@/shared/lib/telemetry";
 import type {
   SettingsEntry,
   SettingsExit,
 } from "@/shared/lib/settings-request";
+import { createTracker } from "@/shared/lib/telemetry";
 
 type SettingsEvents = {
   /** The settings page opened; `from` is the control or key that opened it. */

@@ -29,8 +29,8 @@ vi.mock("./BaseStepRail", async (importOriginal) => {
 
 import { render } from "@testing-library/react";
 
-import StepRail from "./StepRail";
 import type { LessonRecordEvent } from "./events";
+import StepRail from "./StepRail";
 import type { LessonPath } from "./types";
 
 const hints: [string, string, string] = ["a", "b", "c"];

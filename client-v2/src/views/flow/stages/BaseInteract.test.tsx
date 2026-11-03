@@ -3,8 +3,8 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import BaseInteract from "./BaseInteract";
 import type { BaseInteractProps, DeploymentOption } from "./BaseInteract";
+import BaseInteract from "./BaseInteract";
 import type { InteractSurface } from "./interact-surface";
 
 const SURFACES: InteractSurface[] = [

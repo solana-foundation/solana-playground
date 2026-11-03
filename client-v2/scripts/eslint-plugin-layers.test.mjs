@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
-import path from "node:path";
 import { createRequire } from "node:module";
+import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-
 import { ESLint, Linter, RuleTester } from "eslint";
 
 const require = createRequire(import.meta.url);

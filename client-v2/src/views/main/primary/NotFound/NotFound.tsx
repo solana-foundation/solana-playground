@@ -1,10 +1,11 @@
+import { CircleXIcon } from "lucide-react";
 import type { FC } from "react";
 
-import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { CircleXIcon } from "lucide-react";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { Empty, EmptyContent } from "@/shared/ui/empty";
+
 import { PgRouter } from "../../../../utils";
 
 interface NotFoundProps {

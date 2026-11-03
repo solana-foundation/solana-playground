@@ -88,7 +88,7 @@ const toggleStandardIfNeeded = async (walletName: string | undefined) => {
   if (!walletName) return { changed: false };
 
   const wallet = PgWallet.standardWallets.find(
-    (wallet) => wallet.name.toLowerCase() === walletName
+    (standardWallet) => standardWallet.name.toLowerCase() === walletName
   );
   if (!wallet) {
     throw new Error(`Given wallet '${walletName}' is not detected`);

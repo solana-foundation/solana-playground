@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
+import { PROJECT_NAME } from "@/constants";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -13,13 +14,13 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { Modal } from "@/shared/ui/modal";
-import { PROJECT_NAME } from "@/constants";
 import { PgView } from "@/utils/view";
-import { ModalFrame, SubmitCancelled } from "./ModalFrame";
+
 import { ModalIdContext, ModalLayerContext } from "./modal-layer";
-import { ModalPages, modalPage } from "./ModalPages";
-import type { ModalPageProps } from "./ModalPages";
 import type { ModalFrameProps } from "./ModalFrame";
+import { ModalFrame, SubmitCancelled } from "./ModalFrame";
+import type { ModalPageProps } from "./ModalPages";
+import { modalPage, ModalPages } from "./ModalPages";
 
 let sent: ReturnType<typeof memoryProvider>;
 let logs: ReturnType<typeof logMemory>;

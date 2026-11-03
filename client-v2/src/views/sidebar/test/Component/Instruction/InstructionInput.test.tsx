@@ -5,9 +5,10 @@ import { render } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
+import type { GeneratableInstruction } from "../../../../../utils/program-interaction";
 import InstructionInput from "./InstructionInput";
 import InstructionProvider from "./InstructionProvider";
-import type { GeneratableInstruction } from "../../../../../utils/program-interaction";
 
 // `vi.mock` is hoisted above the imports
 vi.mock("../../../../../utils", () => ({

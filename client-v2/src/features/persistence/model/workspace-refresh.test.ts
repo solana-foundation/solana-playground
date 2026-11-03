@@ -1,10 +1,11 @@
 import type { Mock } from "vitest";
-import { PgEditorModels } from "./editor-models";
-import { reconcile } from "./project-restore";
-import { reloadCurrentFromDisk } from "./tab-reload";
+
 import { tabSync } from "../../../effects/tab-sync/tab-sync";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgWorkspace } from "../../../utils/explorer/workspace";
+import { PgEditorModels } from "./editor-models";
+import { reconcile } from "./project-restore";
+import { reloadCurrentFromDisk } from "./tab-reload";
 
 /**
  * Another tab renames or deletes the workspace this one has open, and this

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { after, describe, it } from "node:test";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { after, describe, it } from "node:test";
+
 import {
   extractScenarios,
   extractTestTitles,

@@ -45,6 +45,9 @@ describe("createServer", () => {
     rmSync(buildDir, { recursive: true, force: true });
   });
 
+  // `origin` is set in `before`, so a test reads it through this function when it runs
+  const urlOf = (pathname) => `${origin}${pathname}`;
+
   for (const [pathname, status, contentType] of [
     ["/api/health", 200, /^application\/json/],
     ["/api/no-such-route", 404, /^application\/json/],
@@ -54,7 +57,7 @@ describe("createServer", () => {
     ["/static/js/gone.js", 404, /^text\/plain/],
   ]) {
     it(`answers ${pathname} with ${status}`, async () => {
-      const res = await fetch(`${origin}${pathname}`);
+      const res = await fetch(urlOf(pathname));
       assert.equal(res.status, status);
       assert.match(res.headers.get("content-type"), contentType);
       assert.equal(

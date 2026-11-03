@@ -1,21 +1,25 @@
 import { FC, useMemo, useRef, useState } from "react";
 
-import InputLabel from "../InputLabel";
-import InstructionInput from "./InstructionInput";
+import { createLogger } from "@/shared/lib/logger";
+import { Button } from "@/shared/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+
+import { Edit, Plus, Trash } from "../../../../../components/Icons";
 import SearchBar, {
   SearchBarDropdownProps,
   SearchBarProps,
 } from "../../../../../components/SearchBar";
-import { Edit, Plus, Trash } from "../../../../../components/Icons";
-import { Button } from "@/shared/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
+import { useKeybind } from "../../../../../hooks";
 import {
   IdlType,
   PgProgramInteraction,
   Seed as SeedType,
 } from "../../../../../utils/program-interaction";
+import InputLabel from "../InputLabel";
+import InstructionInput from "./InstructionInput";
 import { useInstruction } from "./InstructionProvider";
-import { useKeybind } from "../../../../../hooks";
+
+const log = createLogger("test:from-seed");
 
 type FromSeedProps = {
   name: string;
@@ -31,7 +35,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
     >
   >(() => {
     // Restore if seeds are already set
-    const acc = values.accounts.find((acc) => acc.name === name);
+    const acc = values.accounts.find((account) => account.name === name);
     if (acc && acc.generator.type === "From seed") {
       return acc.generator.seeds.map((seed) => ({
         state: "selected",
@@ -78,7 +82,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
         },
       });
     } catch (e: any) {
-      console.log("Failed to generate address from seeds:", e.message);
+      log.warn(`Failed to generate address from seeds: ${e.message}`);
     }
   };
   useKeybind("Enter", () => {
@@ -102,11 +106,11 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                     <TooltipTrigger asChild>
                       <Button
                         onClick={() => {
-                          setSeeds((seeds) =>
-                            seeds.map((seed, i) => {
+                          setSeeds((prevSeeds) =>
+                            prevSeeds.map((entry, i) => {
                               return i === index
-                                ? { ...seed, state: "selecting" }
-                                : seed;
+                                ? { ...entry, state: "selecting" }
+                                : entry;
                             })
                           );
                         }}
@@ -124,8 +128,8 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                   <TooltipTrigger asChild>
                     <Button
                       onClick={() => {
-                        setSeeds((seeds) =>
-                          seeds.filter((_, i) => i !== index)
+                        setSeeds((prevSeeds) =>
+                          prevSeeds.filter((_, i) => i !== index)
                         );
                       }}
                       variant="ghost"
@@ -144,8 +148,8 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
             {seed.state === "selecting" ? (
               <SeedSearchBar
                 select={(value) =>
-                  setSeeds((seeds) => {
-                    return seeds.map((seed, i) => {
+                  setSeeds((prevSeeds) => {
+                    return prevSeeds.map((entry, i) => {
                       if (i === index) {
                         return {
                           state: "selected",
@@ -153,7 +157,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
                           generator: { type: "Custom", value: "" },
                         };
                       }
-                      return seed;
+                      return entry;
                     });
                   })
                 }
@@ -184,7 +188,7 @@ const FromSeed = ({ name, search }: FromSeedProps) => {
         <Button
           variant="outline"
           onClick={() => {
-            setSeeds((seeds) => [...seeds, { state: "selecting" }]);
+            setSeeds((prevSeeds) => [...prevSeeds, { state: "selecting" }]);
           }}
         >
           <Plus data-icon="inline-start" />

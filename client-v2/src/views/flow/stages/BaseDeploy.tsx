@@ -1,5 +1,5 @@
-import type { ReactNode } from "react";
 import { ExternalLink, Rocket } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
@@ -17,6 +17,7 @@ import {
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
 import { StatusDot } from "@/shared/ui/status-dot";
+
 import type { DeployRecord } from "../state/deploy-history";
 import {
   STAGE_BODY,

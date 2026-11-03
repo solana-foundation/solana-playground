@@ -1,10 +1,10 @@
-import { uuid } from "../../shared/lib/ids";
 import { report } from "../../features/persistence/model/diagnostics";
 import { reloadCurrentFromDisk } from "../../features/persistence/model/tab-reload";
-import { PgFs } from "../../utils/explorer/fs";
+import { uuid } from "../../shared/lib/ids";
 // Deep import rather than the `utils` barrel, for the reason
 // `project-sync.tsx` gives
 import { PgExplorer } from "../../utils/explorer/explorer";
+import { PgFs } from "../../utils/explorer/fs";
 import { PgWorkspace } from "../../utils/explorer/workspace";
 import type { Disposable } from "../../utils/types";
 

@@ -5,10 +5,10 @@
 // The Dockerfile is checked as text, not by `node --version` in the built
 // image: the image copies from the wasm image (`additional_contexts` in
 // `compose.yaml`), which takes about an hour to build and no CI job builds.
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const CLIENT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");

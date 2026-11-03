@@ -5,8 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OutletContent, useOutletNode } from "@/shared/lib/outlet";
 
 import { PHONE_PAGES } from "../model/phone-pages";
-import BasePhonePager, { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import type { BasePhonePagerProps } from "./BasePhonePager";
+import BasePhonePager, { SWIPE_SETTLE_MS } from "./BasePhonePager";
 
 class NoopResizeObserver {
   observe() {}

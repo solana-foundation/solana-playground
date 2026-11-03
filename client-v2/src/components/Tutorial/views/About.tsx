@@ -1,17 +1,18 @@
+import { ArrowLeftIcon } from "lucide-react";
 import { FC, Fragment } from "react";
 import { Link as RouterLink } from "react-router-dom";
-import { ArrowLeftIcon } from "lucide-react";
 
 import {
   BaseStartButton,
   type BaseStartButtonProps,
 } from "@/entities/tutorial";
-import { Button } from "@/shared/ui/button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { Button } from "@/shared/ui/button";
+
+import { PgTutorial } from "../../../utils";
 import Link from "../../Link";
 import Markdown from "../../Markdown";
 import TutorialDetails from "../TutorialDetails";
-import { PgTutorial } from "../../../utils";
 import type { TutorialAboutComponentProps } from "../types";
 
 export const About: FC<

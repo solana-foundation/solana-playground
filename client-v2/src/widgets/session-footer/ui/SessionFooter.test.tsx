@@ -10,10 +10,8 @@ import {
   vi,
 } from "vitest";
 
+import { SETUP_REJECTED } from "@/commands/connect/setup-rejected";
 import { PgSession } from "@/features/auth";
-import { PgView } from "@/utils/view";
-import { SidebarProvider } from "@/shared/ui/sidebar";
-import { TooltipProvider } from "@/shared/ui/tooltip";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -24,7 +22,10 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { SETUP_REJECTED } from "@/commands/connect/setup-rejected";
+import { SidebarProvider } from "@/shared/ui/sidebar";
+import { TooltipProvider } from "@/shared/ui/tooltip";
+import { PgView } from "@/utils/view";
+
 import RailFooter from "./RailFooter";
 import SessionFooter from "./SessionFooter";
 

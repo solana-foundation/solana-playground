@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 
-import { catalogTelemetry } from "./telemetry";
 import type { CatalogPage } from "./telemetry";
+import { catalogTelemetry } from "./telemetry";
 
 /** How long typing rests before a query counts as searched */
 export const SEARCH_REST_MS = 500;

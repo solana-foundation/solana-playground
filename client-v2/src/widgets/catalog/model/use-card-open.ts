@@ -1,10 +1,11 @@
 import { useRef, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+
 import type { CardOpen } from "../ui/BaseCatalogGrid";
 import { catalogPage } from "./catalog-page";
-import { catalogTelemetry } from "./telemetry";
 import type { CatalogPage } from "./telemetry";
+import { catalogTelemetry } from "./telemetry";
 
 const log = createLogger("catalog:open");
 

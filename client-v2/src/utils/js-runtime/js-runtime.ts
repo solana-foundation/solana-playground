@@ -1,17 +1,17 @@
-import { ScriptTarget, transpile } from "typescript";
-import * as mocha from "mocha/browser-entry";
-import * as util from "util";
 import * as anchor from "@coral-xyz/anchor";
+import * as mocha from "mocha/browser-entry";
+import { ScriptTarget, transpile } from "typescript";
+import * as util from "util";
 
-import { JsRuntimePackageName, PgJsRuntimePackage } from "./package";
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import { PgProgramInfo } from "../program-info";
 import { PgProgramInteraction } from "../program-interaction";
 import { PgTerminal } from "../terminal";
-import { Wallet, PgWallet } from "../wallet";
 import type { MergeUnion, OrString } from "../types";
+import { PgWallet, Wallet } from "../wallet";
 import type { PgWeb3 } from "../web3";
+import { JsRuntimePackageName, PgJsRuntimePackage } from "./package";
 
 /** Options to use when running a script/test */
 interface ExecuteParams {
@@ -479,9 +479,9 @@ export class PgJsRuntime {
         ];
 
         pkg.workspace = {};
-        for (const name of names) {
-          if (pkg.workspace[name]) continue;
-          Object.defineProperty(pkg.workspace, name, {
+        for (const workspaceName of names) {
+          if (pkg.workspace[workspaceName]) continue;
+          Object.defineProperty(pkg.workspace, workspaceName, {
             get: () => {
               let program = this._getPg().program;
               if (program) {

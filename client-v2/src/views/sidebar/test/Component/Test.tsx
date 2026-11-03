@@ -1,15 +1,15 @@
-import { useEffect } from "react";
 import BN from "bn.js";
+import { useEffect } from "react";
 
-import Account from "./Account";
-import Event from "./Event";
-import Instruction from "./Instruction";
-import IdlProvider from "./IdlProvider";
 import { PgProgramInfo } from "../../../../utils";
 import {
   Idl,
   PgProgramInteraction,
 } from "../../../../utils/program-interaction";
+import Account from "./Account";
+import Event from "./Event";
+import IdlProvider from "./IdlProvider";
+import Instruction from "./Instruction";
 
 /**
  * The form for a deployed program's instructions, accounts and events. The
@@ -31,14 +31,14 @@ const Test = ({ idl }: { idl: Idl }) => {
         </p>
 
         <Section title="Instructions">
-          {idl.instructions.map((ix, i) => (
+          {idl.instructions.map((ix) => (
             <Instruction key={JSON.stringify(ix)} idlInstruction={ix} />
           ))}
         </Section>
 
         {idl.accounts && (
           <Section title="Accounts">
-            {idl.accounts.map((acc, i) => (
+            {idl.accounts.map((acc) => (
               <Account key={acc.name} accountName={acc.name} />
             ))}
           </Section>
@@ -46,7 +46,7 @@ const Test = ({ idl }: { idl: Idl }) => {
 
         {idl.events && (
           <Section title="Events">
-            {idl.events.map((event, i) => (
+            {idl.events.map((event) => (
               <Event key={event.name} eventName={event.name} />
             ))}
           </Section>

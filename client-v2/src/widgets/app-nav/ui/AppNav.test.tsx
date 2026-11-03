@@ -32,6 +32,7 @@ vi.mock("@/views/flow/gallery/NewWorkspaceModal", () => ({
 }));
 
 import NewWorkspaceModal from "@/views/flow/gallery/NewWorkspaceModal";
+
 import AppNav from "./AppNav";
 
 // The stock Sidebar reads the viewport through `matchMedia`, which jsdom lacks

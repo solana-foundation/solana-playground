@@ -1,5 +1,5 @@
-import { expect } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 import { LONG, seedWorkspace, test } from "./fixtures";
 

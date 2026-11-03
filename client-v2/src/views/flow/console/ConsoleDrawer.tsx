@@ -2,8 +2,8 @@ import type { FC } from "react";
 import { useEffect, useReducer, useState } from "react";
 
 import { createLogger } from "../../../shared/lib/logger";
-import { CONSOLE_KEY, keyLabel } from "../../../widgets/layout-shell";
 import { PgCommandManager, PgCommon, PgTerminal } from "../../../utils";
+import { CONSOLE_KEY, keyLabel } from "../../../widgets/layout-shell";
 import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgFlow } from "../state/stage";

@@ -1,16 +1,17 @@
-import { useEffect } from "react";
 import { FrownIcon, InfoIcon } from "lucide-react";
+import { useEffect } from "react";
 import styled, { css } from "styled-components";
 
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import {
   Collapsible,
   CollapsibleChevron,
   CollapsibleContent,
   CollapsibleHeading,
 } from "@/shared/ui/collapsible";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import Markdown from "../../../components/Markdown";
 import { ModalFrame, useModalId } from "@/widgets/overlays";
+
+import Markdown from "../../../components/Markdown";
 import { PgCommon, PgConnection, PgView } from "../../../utils";
 
 export const Local = () => {

@@ -1,10 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { createElement, useContext, useEffect, useRef } from "react";
 import type { ReactNode } from "react";
-
-import { KeybindsActive } from "@/shared/lib/keybinds-active";
+import { createElement, useContext, useEffect, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { KeybindsActive } from "@/shared/lib/keybinds-active";
 import {
   initLogger,
   memoryProvider as logMemory,
@@ -78,8 +77,9 @@ vi.mock("react-resizable-panels", async (importOriginal) => {
 });
 
 import { useSidebar } from "@/shared/ui/sidebar";
-import BaseLayoutShell, { PANEL_SIZES } from "./BaseLayoutShell";
+
 import type { AssistantWide, BaseLayoutShellProps } from "./BaseLayoutShell";
+import BaseLayoutShell, { PANEL_SIZES } from "./BaseLayoutShell";
 
 class NoopResizeObserver {
   observe() {}

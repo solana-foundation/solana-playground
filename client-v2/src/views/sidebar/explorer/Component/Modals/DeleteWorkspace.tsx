@@ -2,6 +2,7 @@ import type { FC } from "react";
 import styled, { css } from "styled-components";
 
 import { ModalFrame } from "@/widgets/overlays";
+
 import { Warning } from "../../../../../components/Icons";
 import { PgExplorer } from "../../../../../utils";
 

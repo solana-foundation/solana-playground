@@ -2,8 +2,8 @@
 import * as Sentry from "@sentry/react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ThemeProvider } from "styled-components";
 import type { DefaultTheme } from "styled-components";
+import { ThemeProvider } from "styled-components";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import {
@@ -16,6 +16,7 @@ import {
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
+
 import {
   FeedbackHost,
   FeedbackMenuItems,

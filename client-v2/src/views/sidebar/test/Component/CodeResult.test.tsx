@@ -3,6 +3,7 @@ import { render } from "@testing-library/react";
 import { expect, it } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import CodeResult from "./CodeResult";
 
 it("the JSON comes with a copy button and its title", () => {

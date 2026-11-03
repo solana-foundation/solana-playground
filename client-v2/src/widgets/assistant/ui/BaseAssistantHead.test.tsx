@@ -3,8 +3,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import { BaseAssistantHead } from "./BaseAssistantHead";
+
 import type { ForgetKey } from "./BaseAssistantHead";
+import { BaseAssistantHead } from "./BaseAssistantHead";
 
 interface HeadChoice {
   wide?: boolean;

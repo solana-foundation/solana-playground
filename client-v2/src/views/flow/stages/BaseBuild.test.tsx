@@ -3,8 +3,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import BaseBuild from "./BaseBuild";
 import type { BaseBuildProps, BuildSurfaceView } from "./BaseBuild";
+import BaseBuild from "./BaseBuild";
 import type { DiagnosticView } from "./build-view";
 
 /** A type error whose Explain and Fix send `explain <name>` and `fix <name>` */

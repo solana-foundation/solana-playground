@@ -78,8 +78,8 @@ export const addInit = (
 
   (sClass as Initable)[PROPS.INIT] = async () => {
     const disposables: Disposable[] = [];
-    for (const init of sClass[PROPS.INITS]) {
-      const maybeDisposable = await init();
+    for (const registeredInit of sClass[PROPS.INITS]) {
+      const maybeDisposable = await registeredInit();
       if (maybeDisposable) disposables.push(maybeDisposable);
     }
 
@@ -166,8 +166,8 @@ export const addOnDidChange = (
         const prev = {};
         addOnDidChangeProp(currentAccessor, prev);
 
-        const value = PgCommon.getValue(state, currentAccessor);
-        if (typeof value === "object" && value !== null) {
+        const propValue = PgCommon.getValue(state, currentAccessor);
+        if (typeof propValue === "object" && propValue !== null) {
           addOnDidChangeProps(currentAccessor);
         }
       }

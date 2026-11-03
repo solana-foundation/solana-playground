@@ -1,9 +1,9 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "@/shared/lib/utils";
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
+import * as React from "react";
 
 import { useIndicator } from "@/shared/lib/hooks/use-indicator";
+import { cn } from "@/shared/lib/utils";
 
 /* One choice out of a few, always one. Four looks, from client-v2:
    thumb    a neutral thumb that slides (the left panel's switch)

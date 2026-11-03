@@ -1,8 +1,8 @@
-import { RUNG_COUNT } from "./hints";
-import { cursorStep, foldRecord, positionNumber } from "./ledger";
-import type { LessonView } from "./ledger";
-import type { LessonState } from "./store";
 import type { LessonMark } from "./events";
+import { RUNG_COUNT } from "./hints";
+import type { LessonView } from "./ledger";
+import { cursorStep, foldRecord, positionNumber } from "./ledger";
+import type { LessonState } from "./store";
 import type { LessonPath } from "./types";
 
 /** "2 of 4" inside the path, "done" past its end -- never "5 of 4" */

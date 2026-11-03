@@ -1,15 +1,15 @@
 import { PgSession } from "../../features/auth";
+import { createLogger } from "../../shared/lib/logger";
 import {
   Cluster,
+  isTerminalUnmounted,
   PgCommand,
   PgCommon,
   PgConnection,
   PgSettings,
   PgTerminal,
   PgWallet,
-  isTerminalUnmounted,
 } from "../../utils";
-import { createLogger } from "../../shared/lib/logger";
 
 const log = createLogger("wallet:automatic-airdrop");
 

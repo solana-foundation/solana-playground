@@ -8,6 +8,7 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import type { AccountView } from "../model/account";
 import BaseSessionFooter from "./BaseSessionFooter";
 

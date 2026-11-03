@@ -2,19 +2,20 @@ import { ITerminalOptions, ITheme, Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 
-import { PgAutocomplete } from "./autocomplete";
-import { PgHistory } from "./history";
-import { PgShell } from "./shell";
-import { PgTty } from "./tty";
-import { PgCommon } from "../common";
-import { isStopped } from "../stopped";
 import { createLogger } from "@/shared/lib/logger";
 import {
   markFailureShown,
   markUnavailableHere,
 } from "@/shared/lib/report-button-failure";
+
+import { PgCommon } from "../common";
+import { isStopped } from "../stopped";
+import type { ClassReturnType, Methods, SyncOrAsync } from "../types";
+import { PgAutocomplete } from "./autocomplete";
+import { PgHistory } from "./history";
+import { PgShell } from "./shell";
+import { PgTty } from "./tty";
 import type { CommandManager, Prefixes, PrintOptions } from "./types";
-import type { Methods, ClassReturnType, SyncOrAsync } from "../types";
 
 const log = createLogger("terminal:static");
 
@@ -233,12 +234,12 @@ export class PgTerminal {
         if (!allowedRegex.test(b[0])) return -1;
         return a[0].localeCompare(b[0]);
       })
-      .reduce((acc, items, _i, list) => {
-        const output = items.reduce((acc, item, i) => {
+      .reduce((formatted, row, _i, rows) => {
+        const output = row.reduce((line, cell, cellIndex) => {
           const MAX_CHARS = 80;
 
           const chunks: string[][] = [];
-          const words = item.split(" ");
+          const words = cell.split(" ");
           let j = 0;
           for (let i = 0; i < words.length; i++) {
             while (
@@ -252,11 +253,12 @@ export class PgTerminal {
           }
 
           if (align === "x") {
-            if (!i) {
+            if (!cellIndex) {
               return (
-                acc +
+                line +
                 chunks.reduce(
-                  (acc, chunk, i) => acc + (i ? "\n\t" : "") + chunk.join(" "),
+                  (joined, chunk, chunkIndex) =>
+                    joined + (chunkIndex ? "\n\t" : "") + chunk.join(" "),
                   ""
                 )
               );
@@ -264,34 +266,36 @@ export class PgTerminal {
 
             const DEFAULT_WHITESPACE_LEN = 24;
             const longestPreviousRowLen = Math.max(
-              ...list.map((items) => items[i - 1].length)
+              ...rows.map((otherRow) => otherRow[cellIndex - 1].length)
             );
-            const previousRowLen = items[i - 1].length;
+            const previousRowLen = row[cellIndex - 1].length;
             const missingWhitespace = longestPreviousRowLen - previousRowLen;
             const whitespaceLen = DEFAULT_WHITESPACE_LEN + missingWhitespace;
             const whitespace = " ".repeat(whitespaceLen);
             const nextIndent = "\n\t" + " ".repeat(previousRowLen) + whitespace;
             return (
-              acc +
+              line +
               whitespace +
               chunks.reduce(
-                (acc, col, i) => acc + (i ? nextIndent : "") + col.join(" "),
+                (joined, col, chunkIndex) =>
+                  joined + (chunkIndex ? nextIndent : "") + col.join(" "),
                 ""
               )
             );
           }
 
           return (
-            acc +
-            (i ? "\n\t" : "") +
+            line +
+            (cellIndex ? "\n\t" : "") +
             chunks.reduce(
-              (acc, row, i) => acc + (i ? "\n\t" : "") + row.join(" "),
+              (joined, chunk, chunkIndex) =>
+                joined + (chunkIndex ? "\n\t" : "") + chunk.join(" "),
               ""
             )
           );
         }, "");
 
-        return acc + "\t" + output + "\n";
+        return formatted + "\t" + output + "\n";
       }, "");
   }
 }

@@ -1,5 +1,6 @@
 import { Button } from "@/shared/ui/button";
 import { Empty, EmptyDescription } from "@/shared/ui/empty";
+
 import { tutorialCaption } from "../lib/tutorial-caption";
 import type { TutorialItem } from "../model/use-tutorial-list";
 import type { CatalogList } from "./BaseCatalogGrid";

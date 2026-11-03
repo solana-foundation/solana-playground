@@ -19,11 +19,11 @@ export async function locatePullRequest({ github, context, core }) {
     });
   // Strict match: the endpoint returns every pull request holding the commit, so a stacked branch or a rerun of a superseded head would otherwise take the comment
   const pr = prs.find(
-    (pr) =>
-      pr.state === "open" &&
-      pr.head.sha === run.head_sha &&
-      pr.head.ref === run.head_branch &&
-      pr.head.repo?.full_name === run.head_repository?.full_name
+    (candidate) =>
+      candidate.state === "open" &&
+      candidate.head.sha === run.head_sha &&
+      candidate.head.ref === run.head_branch &&
+      candidate.head.repo?.full_name === run.head_repository?.full_name
   );
   if (!pr) {
     return core.warning(

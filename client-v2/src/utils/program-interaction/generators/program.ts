@@ -5,8 +5,8 @@ import {
 
 import { PgCommon } from "../../common";
 import { PgProgramInfo } from "../../program-info";
-import { PgWeb3 } from "../../web3";
 import type { Arrayable } from "../../types";
+import { PgWeb3 } from "../../web3";
 
 /** Program data */
 interface Program {

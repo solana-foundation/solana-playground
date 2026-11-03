@@ -86,7 +86,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("stores nothing when GitHub does not answer in time", async () => {
     github(
       (_, init) =>
-        new Promise((_, reject) =>
+        new Promise((_resolve, reject) =>
           init.signal.addEventListener("abort", () =>
             reject(init.signal.reason)
           )

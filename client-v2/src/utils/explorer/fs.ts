@@ -1,8 +1,12 @@
 import FS from "@isomorphic-git/lightning-fs";
 
-import { PgExplorer } from "./explorer";
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "../common";
 import type { Disposable } from "../types";
+import { PgExplorer } from "./explorer";
+
+const log = createLogger("explorer:fs");
 
 /** What `ON_DID_WRITE_FILE` carries */
 export interface WriteEvent {
@@ -277,7 +281,7 @@ export class PgFs {
     } catch (e: any) {
       if (e.code === "ENOENT" || e.code === "ENOTDIR") return false;
 
-      console.log("Unknown error in `fs.exists`: ", e);
+      log.warn("Unknown error in `fs.exists`", { context: { error: e } });
       throw e;
     }
   }

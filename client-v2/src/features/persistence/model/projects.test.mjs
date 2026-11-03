@@ -120,15 +120,15 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("leaves the rows a patch does not name unwritten", async () => {
     // The point of the table: an edit to one file costs one row
     const first = await put({ files });
-    const before = await versions();
+    const versionsBefore = await versions();
     await put({
       changed: { "src/lib.rs": "edited" },
       removed: [],
       baseUpdatedAt: first.updatedAt,
     });
     const after = await versions();
-    assert.equal(after["Cargo.toml"], before["Cargo.toml"]);
-    assert.notEqual(after["src/lib.rs"], before["src/lib.rs"]);
+    assert.equal(after["Cargo.toml"], versionsBefore["Cargo.toml"]);
+    assert.notEqual(after["src/lib.rs"], versionsBefore["src/lib.rs"]);
   });
 
   it("creates a template-sized project in two statements, not one per file", async () => {
@@ -180,12 +180,15 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
 
   it("does not rewrite unchanged rows on a full swap", async () => {
     const first = await put({ files });
-    const before = await versions();
+    const versionsBefore = await versions();
     await put({
       files: { ...files, "src/lib.rs": "edited" },
       baseUpdatedAt: first.updatedAt,
     });
-    assert.equal((await versions())["Cargo.toml"], before["Cargo.toml"]);
+    assert.equal(
+      (await versions())["Cargo.toml"],
+      versionsBefore["Cargo.toml"]
+    );
   });
 
   it("refuses to clobber an existing project when no token is offered", async () => {
@@ -250,12 +253,12 @@ describe("projects", { skip: !DB && "DATABASE_URL not set" }, () => {
   describe("a tutorial deleted and started again", () => {
     // A tutorial's id is derived from its name, so starting one again after
     // a delete can only ever arrive at the tombstone
-    const tutorial = ({ files, baseUpdatedAt }) =>
+    const tutorial = ({ files: tutorialFiles, baseUpdatedAt }) =>
       saveProject(userId, {
         id: "tut:hello",
         name: "Hello",
         kind: "tutorial",
-        files,
+        files: tutorialFiles,
         baseUpdatedAt,
       });
 

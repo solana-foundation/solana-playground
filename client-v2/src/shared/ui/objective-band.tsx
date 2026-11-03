@@ -1,5 +1,6 @@
-import * as React from "react";
 import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import * as React from "react";
+
 import { cn } from "@/shared/lib/utils";
 import { BrandButton } from "@/shared/ui/brand-button";
 

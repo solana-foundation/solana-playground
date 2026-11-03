@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
 import type { BrowserContext, Page, Route } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
 import {
   applyWrite,
   currentProject,

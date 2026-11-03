@@ -1,8 +1,9 @@
 import { lazy, ReactNode, Suspense } from "react";
 
-import { ThemeProvider } from "../providers/theme";
-import { AppLoading } from "../components/Loading/App";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
+import { AppLoading } from "../components/Loading/App";
+import { ThemeProvider } from "../providers/theme";
 
 // If we initialize globals here e.g.
 //

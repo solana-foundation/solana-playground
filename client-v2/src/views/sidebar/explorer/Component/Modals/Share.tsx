@@ -1,17 +1,18 @@
-import { FC, useState } from "react";
 import { CircleCheckIcon, CircleXIcon } from "lucide-react";
+import { FC, useState } from "react";
 import styled from "styled-components";
+
+import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { CopyButton } from "@/shared/ui/copy-button";
+import type { ModalPageProps } from "@/widgets/overlays";
+import { ModalFrame, modalPage, ModalPages } from "@/widgets/overlays";
 
 import FilePicker from "../../../../../components/FilePicker";
 import Input from "../../../../../components/Input";
 import Link from "../../../../../components/Link";
-import { ModalFrame, ModalPages, modalPage } from "@/widgets/overlays";
-import type { ModalPageProps } from "@/widgets/overlays";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import { PgCommon, PgExplorer, PgRouter, PgShare } from "../../../../../utils";
-import { createLogger } from "@/shared/lib/logger";
-import { CopyButton } from "@/shared/ui/copy-button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 const log = createLogger("explorer:share");
 

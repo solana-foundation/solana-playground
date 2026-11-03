@@ -2,9 +2,9 @@ import type { FC } from "react";
 import { lazy, Suspense } from "react";
 import styled from "styled-components";
 
-import Write from "./Write";
 import { SpinnerWithBg } from "../../../components/Loading";
 import type { Stage } from "../state/stage";
+import Write from "./Write";
 
 const Build = lazy(() => import("./Build"));
 const Deploy = lazy(() => import("./Deploy"));

@@ -1,6 +1,7 @@
-import { useId } from "react";
-import { cn } from "@/shared/lib/utils";
 import { Star } from "lucide-react";
+import { useId } from "react";
+
+import { cn } from "@/shared/lib/utils";
 
 import type { Rating } from "../model/provider";
 

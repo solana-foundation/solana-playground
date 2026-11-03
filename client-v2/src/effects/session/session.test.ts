@@ -1,17 +1,18 @@
 import type { MockInstance } from "vitest";
-import { session } from "./session";
+
 import { PgSession } from "../../features/auth";
 import { PgChatStorage } from "../../features/persistence/model/chat-storage";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
-import { PgProjectSync } from "../../features/persistence/model/project-sync";
+import type { SyncResult } from "../../features/persistence/model/project-restore";
 import * as restore from "../../features/persistence/model/project-restore";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { PgSyncClient } from "../../features/persistence/model/sync-client";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
-import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import { PgFs } from "../../utils/explorer/fs";
-import type { SyncResult } from "../../features/persistence/model/project-restore";
 import type { ChatItem } from "../../views/sidebar/assistant/store";
+import { PgAssistant } from "../../views/sidebar/assistant/store";
+import { session } from "./session";
 
 /**
  * The order these run in is the whole of the behaviour.

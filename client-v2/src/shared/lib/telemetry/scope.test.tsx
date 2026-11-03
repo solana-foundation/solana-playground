@@ -1,5 +1,5 @@
-import { createPortal } from "react-dom";
 import { render } from "@testing-library/react";
+import { createPortal } from "react-dom";
 
 import { initTelemetry, resetTelemetry } from "./collector";
 import { memoryProvider } from "./providers/memory";

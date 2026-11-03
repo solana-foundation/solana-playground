@@ -1,7 +1,7 @@
 import { render } from "@testing-library/react";
 import { DefaultTheme, ThemeProvider } from "styled-components";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Tutorial } from "./Tutorial";
 

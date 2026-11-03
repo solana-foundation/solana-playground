@@ -8,9 +8,9 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
+  decideDevServer,
   DEV_SERVER_ROOT_HEADER,
   DevServerRefusal,
-  decideDevServer,
   foreignServerMessage,
   portHolderPid,
   silentServerMessage,

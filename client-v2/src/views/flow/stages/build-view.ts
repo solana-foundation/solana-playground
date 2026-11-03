@@ -1,6 +1,6 @@
-import { humanize } from "./humanize";
-import { parseBuildReport } from "./build-report";
 import type { BuildDiagnostic } from "./build-report";
+import { parseBuildReport } from "./build-report";
+import { humanize } from "./humanize";
 
 /** One line of source around a diagnostic, the faulty one marked */
 export interface SourceLine {

@@ -3,8 +3,8 @@ import type { ModelMessage } from "ai";
 import { fakeFetch, openAiError } from "./__fixtures__/fake-provider";
 import { createModel } from "./models";
 import { REDACTED_KEY } from "./redact";
-import { runTurn } from "./run-turn";
 import type { AiTurnError } from "./run-turn";
+import { runTurn } from "./run-turn";
 
 const KEY = "test-key-0123456789";
 const USER: ModelMessage[] = [{ role: "user", content: "hello" }];

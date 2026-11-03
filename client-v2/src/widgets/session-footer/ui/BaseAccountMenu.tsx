@@ -1,5 +1,3 @@
-import { useRef } from "react";
-import type { ReactNode } from "react";
 import {
   ArrowUpRight,
   BookOpen,
@@ -10,7 +8,12 @@ import {
   Wallet,
   X,
 } from "lucide-react";
+import type { ReactNode } from "react";
+import { useRef } from "react";
 
+import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
+import { shortAddress } from "@/shared/lib/short-address";
+import { cn } from "@/shared/lib/utils";
 import {
   DropdownMenuContent,
   DropdownMenuItem,
@@ -18,16 +21,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuShortcut,
 } from "@/shared/ui/dropdown-menu";
-import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
-import { cn } from "@/shared/lib/utils";
-import { shortAddress } from "@/shared/lib/short-address";
+
+import type { AccountItem, AccountView } from "../model/account";
 import {
   DOCS_URL,
   formatBalance,
   githubProfileUrl,
   profileName,
 } from "../model/account";
-import type { AccountItem, AccountView } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
 import GithubMark from "./GithubMark";
 

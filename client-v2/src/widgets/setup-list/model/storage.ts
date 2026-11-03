@@ -109,13 +109,13 @@ export const createSetupMarks = (storage?: Storage) => {
    * fold is the stored one, the latest any tab wrote, unless none was.
    */
   const merged = (current: SetupMarks, stored: SetupMarks): SetupMarks => {
-    const marks: SetupMarks = {
+    const union: SetupMarks = {
       dismissed: current.dismissed || stored.dismissed,
       completed: current.completed || stored.completed,
     };
     const folded = stored.folded ?? current.folded;
-    if (folded !== undefined) marks.folded = folded;
-    return marks;
+    if (folded !== undefined) union.folded = folded;
+    return union;
   };
 
   /** Writes `next` to memory at once, then to storage */

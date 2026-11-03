@@ -31,9 +31,9 @@ vi.mock("../../../utils", () => ({
   },
 }));
 
-import { INITIAL_FLOW_STATE, PgFlow, countErrors } from "./stage";
 import { StoppedError } from "../../../utils/stopped";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
+import { countErrors, INITIAL_FLOW_STATE, PgFlow } from "./stage";
 
 /** The mocked build-output module, in the shape the factory above gives it:
  * `latest` is a plain field here, where the real class has a getter. */

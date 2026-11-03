@@ -1,5 +1,4 @@
 import { expect, home, homeRegion, startProject, test } from "./fixtures";
-
 import { openGallery } from "./fixtures";
 
 /**

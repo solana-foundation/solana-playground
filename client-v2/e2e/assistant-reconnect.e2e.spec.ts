@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
 import type { Page, Request } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
 import { json, seedWorkspace, startProject, stubSession } from "./fixtures";
 
 /**
@@ -462,11 +463,8 @@ test.describe("assistant-own-key", () => {
 
     await seedWorkspace(page, "own-key-send");
     await connectOwn(page);
-    const composer = page.getByRole("textbox", {
-      name: "Message the assistant",
-    });
-    await composer.fill("hello");
-    await composer.press("Enter");
+    await composer(page).fill("hello");
+    await composer(page).press("Enter");
 
     await expect(page.getByText(REPLY)).toBeVisible(LONG);
     expect(providerAuth).toEqual([`Bearer ${KEY}`]);

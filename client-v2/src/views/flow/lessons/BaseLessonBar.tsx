@@ -1,8 +1,9 @@
 import type { FC } from "react";
 
-import { BandControls } from "./BaseObjectiveBand";
-import type { BaseObjectiveBandProps } from "./BaseObjectiveBand";
 import { ObjectiveBar } from "@/shared/ui/objective-band";
+
+import type { BaseObjectiveBandProps } from "./BaseObjectiveBand";
+import { BandControls } from "./BaseObjectiveBand";
 
 /* A later hint's label is long: on a narrow phone the action drops under the
    page rather than past the screen's edge */

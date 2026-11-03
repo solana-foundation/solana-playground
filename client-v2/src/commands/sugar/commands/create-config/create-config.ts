@@ -1,11 +1,11 @@
+import { Emoji } from "../../../../constants";
+import { PgCommon, PgExplorer, PgTerminal } from "../../../../utils";
 import {
   MAX_NAME_LENGTH,
   MAX_URI_LENGTH,
   REPLACEMENT_INDEX_INCREMENT,
 } from "../../constants";
 import { PgSugar } from "../../processor";
-import { Emoji } from "../../../../constants";
-import { PgCommon, PgExplorer, PgTerminal } from "../../../../utils";
 import { ConfigData, ToPrimitive, UploadMethod } from "../../types";
 
 export const processCreateConfig = async () => {

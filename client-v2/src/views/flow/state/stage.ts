@@ -1,11 +1,11 @@
+import { emptyFileOf } from "../../../commands/build/empty-source";
+import type { Disposable } from "../../../utils";
+import { PgCommand, PgExplorer, PgGlobal, PgProgramInfo } from "../../../utils";
+import { isStopped } from "../../../utils/stopped";
 import {
   PgBuildOutput,
   stripKnownNoise,
 } from "../../sidebar/assistant/bridge/build-output";
-import { emptyFileOf } from "../../../commands/build/empty-source";
-import { PgCommand, PgExplorer, PgGlobal, PgProgramInfo } from "../../../utils";
-import { isStopped } from "../../../utils/stopped";
-import type { Disposable } from "../../../utils";
 
 export type Stage = "write" | "build" | "deploy" | "interact";
 export type StageStatus = "upcoming" | "active" | "done" | "failed" | "running";

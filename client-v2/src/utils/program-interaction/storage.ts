@@ -52,7 +52,7 @@ export const syncAllInstructions = (idlIxs: IdlInstruction[]) => {
 
       // Check args
       const isAllArgsEqual = savedIx.args.every((savedArg) => {
-        const arg = ix.args.find((arg) => arg.name === savedArg.name);
+        const arg = ix.args.find((ixArg) => ixArg.name === savedArg.name);
         if (!arg) return false;
         return PgCommon.isEqual(arg.type, savedArg.type);
       });
@@ -60,7 +60,7 @@ export const syncAllInstructions = (idlIxs: IdlInstruction[]) => {
 
       // Check accounts
       const isAllAccsEqual = savedIx.accounts.every((savedAcc) => {
-        const acc = ix.accounts.find((acc) => acc.name === savedAcc.name);
+        const acc = ix.accounts.find((ixAcc) => ixAcc.name === savedAcc.name);
         if (!acc) return false;
 
         // TODO: Handle composite accounts?

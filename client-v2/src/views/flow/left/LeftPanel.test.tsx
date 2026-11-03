@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** What the mocked explorer and lesson report; each test sets its own */
@@ -63,8 +63,8 @@ vi.mock("../lessons/StepRail", () => ({
   default: () => <div data-testid="step-rail" />,
 }));
 
-import LeftPanel, { isLessonTab } from "./LeftPanel";
 import { forgetColumn } from "./kept-column";
+import LeftPanel, { isLessonTab } from "./LeftPanel";
 
 // A theme that answers every key: the styles are not under test, and the
 // real theme's module needs the utils barrel.

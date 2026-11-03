@@ -28,9 +28,9 @@ import { createRoot, type Root } from "react-dom/client";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-import LessonRoute from "./LessonRoute";
-import { PgTutorial } from "../../../utils";
 import type { TutorialData } from "../../../utils";
+import { PgTutorial } from "../../../utils";
+import LessonRoute from "./LessonRoute";
 
 const isStarted = PgTutorial.isStarted as Mock;
 const onDidChange = PgTutorial.onDidChange as unknown as Mock;

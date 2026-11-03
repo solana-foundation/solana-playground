@@ -1,6 +1,7 @@
-import { expect, test } from "@playwright/test";
-import { isUuid } from "../src/shared/lib/ids";
 import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
+import { isUuid } from "../src/shared/lib/ids";
 import { home, homeRegion, startProject } from "./fixtures";
 
 /**

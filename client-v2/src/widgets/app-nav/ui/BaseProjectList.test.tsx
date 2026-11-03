@@ -3,9 +3,10 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import type { ProjectEntry } from "../model/project-entries";
-import BaseProjectList from "./BaseProjectList";
 import type { BaseProjectListProps } from "./BaseProjectList";
+import BaseProjectList from "./BaseProjectList";
 
 // The stock Sidebar reads the viewport through `matchMedia`, which jsdom lacks
 beforeAll(() => {

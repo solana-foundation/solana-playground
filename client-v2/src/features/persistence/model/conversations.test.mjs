@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { before, beforeEach, describe, it } from "node:test";
 
-import { query } from "./db.mjs";
 import {
   appendMessages,
   getThread,
@@ -10,6 +9,7 @@ import {
   NotYours,
   ThreadDeleted,
 } from "./conversations.mjs";
+import { query } from "./db.mjs";
 import { deleteProject } from "./projects.mjs";
 
 // `yarn test-api` loads `.env`; without a database this suite skips rather

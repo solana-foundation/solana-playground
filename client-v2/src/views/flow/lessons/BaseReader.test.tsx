@@ -16,9 +16,10 @@ import {
   waitFor,
 } from "@testing-library/react";
 
-import { BaseReader } from "./BaseReader";
-import type { BaseReaderProps, ReaderBody } from "./BaseReader";
 import { Dialog, DialogContent, DialogTitle } from "@/shared/ui/dialog";
+
+import type { BaseReaderProps, ReaderBody } from "./BaseReader";
+import { BaseReader } from "./BaseReader";
 
 const noop = () => {};
 

@@ -1,8 +1,8 @@
 import { JsonMetadata } from "@metaplex-foundation/js";
 
-import { SugarUploadScreen } from "./SugarUploadScreen";
-import { CacheItem } from "../../utils";
 import { PgCodec, PgCommon, PgView } from "../../../../utils";
+import { CacheItem } from "../../utils";
+import { SugarUploadScreen } from "./SugarUploadScreen";
 
 class AssetPair {
   name: string;

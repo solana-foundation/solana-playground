@@ -1,7 +1,7 @@
 import type { MockInstance } from "vitest";
-import { projectSync } from "./project-sync";
-import { PgProjectSync } from "../../features/persistence/model/project-sync";
+
 import * as restore from "../../features/persistence/model/project-restore";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import * as snapshot from "../../features/persistence/model/snapshot";
 import { PgSyncBase } from "../../features/persistence/model/sync-base";
 import { PgSyncClaim } from "../../features/persistence/model/sync-claim";
@@ -10,9 +10,10 @@ import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgCommon } from "../../utils/common";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import { PgFs } from "../../utils/explorer/fs";
-import { PgWorkspace } from "../../utils/explorer/workspace";
 import type { CreatedWorkspace } from "../../utils/explorer/types";
+import { PgWorkspace } from "../../utils/explorer/workspace";
 import type { Disposable } from "../../utils/types";
+import { projectSync } from "./project-sync";
 
 /**
  * What this effect subscribes to is the whole of its job.

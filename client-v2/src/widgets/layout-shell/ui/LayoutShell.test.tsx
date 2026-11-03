@@ -1,9 +1,9 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { ThemeProvider } from "styled-components";
-import type { DefaultTheme } from "styled-components";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { useEffect } from "react";
 import type { ReactNode } from "react";
+import { useEffect } from "react";
+import type { DefaultTheme } from "styled-components";
+import { ThemeProvider } from "styled-components";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   initLogger,
@@ -86,15 +86,16 @@ vi.mock("react-resizable-panels", async (importOriginal) => {
   };
 });
 
+import { LAYOUT_BREAKPOINTS } from "@/shared/lib/hooks/use-viewport";
+import { TooltipProvider } from "@/shared/ui/tooltip";
 import { PgView } from "@/utils/view";
 import { PgFlow } from "@/views/flow/state/stage";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
+
 import { LAYOUT_STORAGE_KEY } from "../model/layout-state";
 import { SWIPE_SETTLE_MS } from "./BasePhonePager";
-import { TooltipProvider } from "@/shared/ui/tooltip";
-import { LAYOUT_BREAKPOINTS } from "@/shared/lib/hooks/use-viewport";
-import LayoutShell from "./LayoutShell";
 import type { LayoutShellProps } from "./LayoutShell";
+import LayoutShell from "./LayoutShell";
 
 const listeners = new Set<() => void>();
 let width = 1440;
@@ -839,18 +840,21 @@ describe.each([
 it.each([
   [LAYOUT_BREAKPOINTS.phone - 1, "the pager"],
   [LAYOUT_BREAKPOINTS.phone, "the frame, with the navigation as its rail"],
-])("should show at %i px %s, and never the stock Sidebar's Sheet", (width) => {
-  resizeTo(width);
-  shell();
-  const phone = width < LAYOUT_BREAKPOINTS.phone;
-  expect(screen.queryByRole("button", { name: "Menu" }) !== null).toBe(phone);
-  expect(
-    screen.queryByRole("button", { name: "Expand navigation" }) !== null
-  ).toBe(!phone);
-  expect(
-    document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
-  ).toBeNull();
-});
+])(
+  "should show at %i px %s, and never the stock Sidebar's Sheet",
+  (viewportWidth) => {
+    resizeTo(viewportWidth);
+    shell();
+    const phone = viewportWidth < LAYOUT_BREAKPOINTS.phone;
+    expect(screen.queryByRole("button", { name: "Menu" }) !== null).toBe(phone);
+    expect(
+      screen.queryByRole("button", { name: "Expand navigation" }) !== null
+    ).toBe(!phone);
+    expect(
+      document.querySelector('[data-slot="sidebar"][data-mobile="true"]')
+    ).toBeNull();
+  }
+);
 
 it("should fold the files column by Cmd+E and unfold the rail by Cmd+B at the phone's line", () => {
   resizeTo(LAYOUT_BREAKPOINTS.phone);

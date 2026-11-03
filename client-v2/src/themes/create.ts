@@ -1,5 +1,5 @@
-import { PgCommon } from "../utils/common";
 import type { ImportableTheme, ImportableThemeParam } from "../utils";
+import { PgCommon } from "../utils/common";
 
 /**
  * Create a theme with lazy loading support.

@@ -1,5 +1,5 @@
-import { createContext, useContext, useMemo } from "react";
 import type { ReactNode } from "react";
+import { createContext, useContext, useMemo } from "react";
 
 import type { Tracker } from "./tracker";
 import type { EventMap } from "./types";

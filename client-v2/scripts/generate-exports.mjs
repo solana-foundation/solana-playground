@@ -16,7 +16,7 @@ for (const name of await fs.readdir(srcPath)) {
 
   const items = await fs
     .readdir(itemPath)
-    .then((items) => items.map(pathModule.parse));
+    .then((fileNames) => fileNames.map(pathModule.parse));
   const isExportable = items.some((item) => item.name === name);
   if (!isExportable) continue;
 

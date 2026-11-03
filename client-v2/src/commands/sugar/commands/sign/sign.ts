@@ -1,12 +1,16 @@
 import { Metaplex } from "@metaplex-foundation/js";
 
+import { createLogger } from "@/shared/lib/logger";
+
+import { Emoji } from "../../../../constants";
+import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
 import {
   getCmCreatorMetadataAccounts,
   getMetaplex,
   loadCache,
 } from "../../utils";
-import { Emoji } from "../../../../constants";
-import { PgTerminal, PgView, PgWeb3 } from "../../../../utils";
+
+const log = createLogger("sugar:sign");
 
 export const processSign = async (
   rpcUrl: string | undefined,
@@ -79,7 +83,7 @@ export const processSign = async (
               new PgWeb3.PublicKey(metadataAccounts[j + i].data.slice(33, 65))
             );
           } catch (e: any) {
-            console.log(e.message);
+            log.warn(e.message);
             errorCount++;
           } finally {
             progressCount++;

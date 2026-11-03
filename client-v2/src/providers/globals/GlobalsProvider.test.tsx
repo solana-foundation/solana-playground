@@ -19,7 +19,7 @@ vi.mock("../../hooks", async () => ({
   ).useAsyncEffect,
 }));
 
-import { StrictMode, act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 
 // Tells React this environment runs `act`, as React 18+ expects
@@ -27,8 +27,8 @@ import { createRoot, type Root } from "react-dom/client";
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
 ).IS_REACT_ACT_ENVIRONMENT = true;
 
-import { GlobalsProvider } from "./GlobalsProvider";
 import { initAll } from "../../utils";
+import { GlobalsProvider } from "./GlobalsProvider";
 
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 

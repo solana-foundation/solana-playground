@@ -1,4 +1,5 @@
 import { StartFromScratch } from "@/features/new-project";
+
 import type { NewProjectState } from "../model/use-new-project";
 import BaseNewProject from "./BaseNewProject";
 

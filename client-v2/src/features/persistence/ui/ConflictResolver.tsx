@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { BaseConflictResolver } from "./BaseConflictResolver";
-import { conflictKey } from "./merge-editor/merge-file";
 import { createLogger } from "@/shared/lib/logger";
-import { PgProjectSync } from "../model/project-sync";
-import { persistenceTelemetry } from "../model/telemetry";
+
 import type { FileConflict, ResolvedFiles } from "../model/merge";
 import type { Conflict, Resolution } from "../model/project-sync";
+import { PgProjectSync } from "../model/project-sync";
 import type { HunkSideParam } from "../model/telemetry";
+import { persistenceTelemetry } from "../model/telemetry";
+import { BaseConflictResolver } from "./BaseConflictResolver";
 import type { HunkSide } from "./merge-editor/merge-file";
+import { conflictKey } from "./merge-editor/merge-file";
 
 const log = createLogger("persistence:resolve");
 

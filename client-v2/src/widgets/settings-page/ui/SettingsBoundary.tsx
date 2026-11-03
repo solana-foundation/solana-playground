@@ -1,6 +1,6 @@
-import { useEffect } from "react";
-import type { ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect } from "react";
 
 import { LoggerErrorBoundary } from "@/shared/lib/logger";
 import type { SettingsExit } from "@/shared/lib/settings-request";
