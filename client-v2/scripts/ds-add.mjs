@@ -94,6 +94,7 @@ const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
 // ESLint fails on a file it cannot parse, such as `src/index.css`.
 const scripts = written.filter((dir) => !path.extname(dir));
 // ESLint runs before prettier: its fixes are not prettier-formatted.
+// ESLint 8's `--quiet` also limits `--fix` to errors (`quietFixPredicate` in eslint/lib/cli.js), so no warning's autofix applies.
 if (scripts.length > 0) {
   status = run(
     ESLINT,
