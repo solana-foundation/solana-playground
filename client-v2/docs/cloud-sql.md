@@ -5,9 +5,12 @@ Cloud project, a Vercel project, and a GitHub repository. The design is the Open
 ([proposal](../../openspec/changes/cloud-sql/proposal.md), [design](../../openspec/changes/cloud-sql/design.md));
 how previews use their databases is in [Preview databases](preview-databases.md).
 
+Production comes first: steps 1 to 7 set up and cut over the production database and need none of the preview
+steps. Steps 8 to 16 move previews to Cloud SQL after the launch; they reuse steps 1 to 4.
+
 > **Not yet run end to end.** The steps below come from the change's design and Google's and Vercel's
 > documentation. The steps marked _unverified_ are the ones whose outcome on Cloud SQL for PostgreSQL 17 the
-> documentation does not state; task 2.1 of the change runs them and corrects this guide.
+> documentation does not state; tasks 3.1 and 2.1 of the change run them and correct this guide.
 
 ## Design
 
@@ -30,7 +33,7 @@ the Cloud SQL Node.js Connector; a workflow or an operator logs in through the C
 
 | Instance | Database | Owner | Read by | Migrated by |
 | --- | --- | --- | --- | --- |
-| `solpg` | `solpg` | `vercel-production` | Production | An operator, `migration-url production` |
+| `solpg` | `solpg` | `vercel-production` | Production | An operator, `migrate-production-db` (`migration-url production`) |
 | `solpg-preview` | `solpg_preview` | `vercel-preview` | Every Git-integration preview | `preview-shared-db.yml`, on push to `master` |
 | `solpg-preview` | `solpg_preview_pr_<n>` | `vercel-preview` | A PR labelled `preview` | `preview.yml`, on every push to the PR, after copying `solpg_preview` without its sessions |
 
@@ -83,7 +86,148 @@ gcloud services enable sqladmin.googleapis.com iam.googleapis.com \
   iamcredentials.googleapis.com sts.googleapis.com
 ```
 
-## 2. Google Cloud: the preview instance
+## 2. Google Cloud: federation for Vercel
+
+The provider accepts the audience Vercel puts in its tokens by default, `https://vercel.com/<team>`, which is the
+token the application sends (`getVercelOidcToken()` is called without an audience). The team issuer needs the
+project's issuer mode set to Team (step 3). Production and previews share this pool and provider; each binds its
+own service account to its own environment (steps 4 and 10).
+
+```sh
+gcloud iam workload-identity-pools create vercel --location=global --display-name=Vercel
+gcloud iam workload-identity-pools providers create-oidc vercel \
+  --location=global --workload-identity-pool=vercel \
+  --issuer-uri="https://oidc.vercel.com/$TEAM_SLUG" \
+  --allowed-audiences="https://vercel.com/$TEAM_SLUG" \
+  --attribute-mapping=google.subject=assertion.sub
+```
+
+## 3. Vercel: OIDC
+
+In the Vercel project: Settings → Security → Secure backend access with OIDC Federation, enabled, issuer mode
+**Team**. The provider in step 2 trusts the team issuer only.
+
+Settings → Functions → Function Region: the Vercel region nearest the instances' region. Each query crosses that
+distance; the latency is recorded by task 3.1 for production and task 2.7 for previews.
+
+## 4. Google Cloud: the production service account
+
+`vercel-production` may be impersonated by Vercel's Production environment only:
+
+```sh
+gcloud iam service-accounts create vercel-production --display-name="Vercel Production"
+
+POOL=projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools
+gcloud iam service-accounts add-iam-policy-binding "$PRODUCTION_SA" --role=roles/iam.workloadIdentityUser \
+  --member="principal://iam.googleapis.com/$POOL/vercel/subject/owner:$TEAM_SLUG:project:$VERCEL_PROJECT:environment:production"
+```
+
+The Cloud SQL roles are each bound with a condition naming one instance. `roles/cloudsql.client` lets an identity
+connect through the connector or the proxy; `roles/cloudsql.instanceUser` lets it log in with IAM. The condition
+form is the one Google documents for `roles/cloudsql.client`; that the same form scopes `roles/cloudsql.instanceUser`
+is _unverified_. Define the two helpers here:
+
+```sh
+only() {
+  echo "expression=resource.name == 'projects/$PROJECT_ID/instances/$1' && resource.service == 'sqladmin.googleapis.com',title=only-$1"
+}
+grant() { # member instance
+  for role in roles/cloudsql.client roles/cloudsql.instanceUser; do
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$1" --role="$role" --condition="$(only "$2")"
+  done
+}
+```
+
+`only` and `grant` are used in steps 5 and 10 and in [Adding an operator](#adding-an-operator), in the same shell.
+
+## 5. Google Cloud: the production instance
+
+`solpg` exists. List its flags first: `--database-flags` replaces the whole set, so every flag already set goes
+into the command with the new one. Changing flags may restart the instance.
+
+The operator who runs this step gets the `cloudsqlsuperuser` role, so the setup needs no password for the built-in
+`postgres` user. An operator added later needs only membership of the production user's role ([Adding an
+operator](#adding-an-operator)).
+
+```sh
+gcloud sql instances describe solpg --format='value(settings.databaseFlags)'
+gcloud sql instances patch solpg --database-flags=cloudsql.iam_authentication=on \
+  --connector-enforcement=REQUIRED --ssl-mode=ENCRYPTED_ONLY
+grant "serviceAccount:$PRODUCTION_SA" solpg
+grant "user:$OPERATOR" solpg
+gcloud sql users create "$PRODUCTION_DB_USER" --instance=solpg --type=cloud_iam_service_account
+gcloud sql users create "$OPERATOR" --instance=solpg --type=cloud_iam_user --database-roles=cloudsqlsuperuser
+```
+
+Through the proxy, as the operator (install
+[`cloud-sql-proxy`](https://cloud.google.com/sql/docs/postgres/sql-proxy#install) and `psql` first):
+
+```sh
+cloud-sql-proxy --auto-iam-authn --gcloud-auth --port 5434 "$PROJECT_ID:$REGION:solpg" &
+psql "postgres://$(printf %s "$OPERATOR" | sed 's/@/%40/')@127.0.0.1:5434/postgres?sslmode=disable"
+```
+
+```sql
+-- The operator may then act as the production user, so the migrations it runs create tables that user owns
+GRANT "vercel-production@<project id>.iam" TO "<operator e-mail>";
+CREATE DATABASE solpg OWNER "vercel-production@<project id>.iam";
+REVOKE CONNECT ON DATABASE solpg FROM PUBLIC;
+```
+
+On PostgreSQL 16 and later, `GRANT` of a role needs the `ADMIN` option on the target role. Whether
+`cloudsqlsuperuser` holds it on the IAM users Cloud SQL creates is _unverified_. If the `GRANT` answers
+`permission denied`, run it as the built-in `postgres` user instead: set a password with
+`gcloud sql users set-password postgres --instance=solpg --prompt-for-password`, use it for that statement only,
+then set it again to a random value nobody records.
+
+Stop the proxy (`kill %1`). `github-ci` and `vercel-preview` get nothing here.
+
+## 6. Vercel: the Production environment, staged
+
+Set the variables on Production while it still reads Neon, and check them on a deployment that takes no domain:
+
+```sh
+npx vercel deploy --prod --skip-domain \
+  -e DB_PROVIDER=cloud-sql -e CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" -e CLOUD_SQL_DATABASE=solpg \
+  -e CLOUD_SQL_USER="$PRODUCTION_DB_USER" -e GCP_PROJECT_NUMBER="$PROJECT_NUMBER" \
+  -e GCP_WORKLOAD_IDENTITY_POOL_ID=vercel -e GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel \
+  -e GCP_SERVICE_ACCOUNT_EMAIL="$PRODUCTION_SA" -e SYNC_ENABLED=false
+```
+
+Its `GET /api/sync` answers `{ "enabled": false, "db": "ok" }`, and the instance's log shows the production IAM
+user logging in. This proves the production identity's whole path before any data depends on it.
+
+## 7. Cutover
+
+For a deployment with no users to keep: nothing is copied and nothing is frozen. With users, a copy behind a write
+freeze is needed, and this guide does not give it.
+
+1. Confirm production still has no users.
+2. Migrate `solpg` as the operator:
+
+   ```sh
+   cd client-v2
+   CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" CLOUD_SQL_USER="$PRODUCTION_DB_USER" \
+     CLOUD_SQL_DATABASE=solpg scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema up
+   ```
+
+3. `\dt` on `solpg` shows every table owned by the production user.
+4. On Production, set the variables of step 6 (without `SYNC_ENABLED=false`), with `vercel env add <name>
+   production`, and remove `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
+5. Redeploy production. `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and a sign-in and a project
+   edit on the production domain write a row to `solpg`.
+6. `make -f client-v2/Makefile.vercel migrate-production-db` names `solpg` and reports nothing to apply.
+
+From then on, `migrate-production-db` migrates `solpg`: it reads `DB_PROVIDER` and the `CLOUD_SQL_*` variables from
+the Production environment it pulls, prints the database and instance, starts the proxy as `gcloud`'s active
+account, lists the pending migrations, and applies them after a typed `yes`, under the production user's role. It
+needs `cloud-sql-proxy` and `psql` installed and `gcloud` logged in as an operator. While Production's
+`DB_PROVIDER` is `url` or unset, it migrates the production Neon project as before.
+
+**Rollback:** restore `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `DB_PROVIDER=url` on Production and redeploy.
+The Neon project was not written to after the switch; rows written to `solpg` in between are lost.
+
+## 8. Google Cloud: the preview instance
 
 A small zonal instance. Public IP with no authorised network: only the connector front end answers, and it checks
 the client certificate the connector or the proxy fetched for an IAM identity.
@@ -96,22 +240,7 @@ gcloud sql instances create solpg-preview \
   --connector-enforcement=REQUIRED --ssl-mode=ENCRYPTED_ONLY
 ```
 
-## 3. Google Cloud: federation for Vercel
-
-The provider accepts the audience Vercel puts in its tokens by default, `https://vercel.com/<team>`, which is the
-token the application sends (`getVercelOidcToken()` is called without an audience). The team issuer needs the
-project's issuer mode set to Team (step 9).
-
-```sh
-gcloud iam workload-identity-pools create vercel --location=global --display-name=Vercel
-gcloud iam workload-identity-pools providers create-oidc vercel \
-  --location=global --workload-identity-pool=vercel \
-  --issuer-uri="https://oidc.vercel.com/$TEAM_SLUG" \
-  --allowed-audiences="https://vercel.com/$TEAM_SLUG" \
-  --attribute-mapping=google.subject=assertion.sub
-```
-
-## 4. Google Cloud: federation for GitHub Actions
+## 9. Google Cloud: federation for GitHub Actions
 
 The condition admits tokens from `REPO`'s workflows only; tokens from every other repository are refused at the
 exchange.
@@ -125,49 +254,32 @@ gcloud iam workload-identity-pools providers create-oidc github \
   --attribute-condition="assertion.repository == '$REPO'"
 ```
 
-## 5. Google Cloud: service accounts and their bindings
+## 10. Google Cloud: the preview service accounts and their bindings
 
 Each service account may be impersonated by one subject only:
 
 ```sh
 gcloud iam service-accounts create vercel-preview --display-name="Vercel Preview"
-gcloud iam service-accounts create vercel-production --display-name="Vercel Production"
 gcloud iam service-accounts create github-ci --display-name="GitHub Actions, preview databases"
 
 POOL=projects/$PROJECT_NUMBER/locations/global/workloadIdentityPools
 gcloud iam service-accounts add-iam-policy-binding "$PREVIEW_SA" --role=roles/iam.workloadIdentityUser \
   --member="principal://iam.googleapis.com/$POOL/vercel/subject/owner:$TEAM_SLUG:project:$VERCEL_PROJECT:environment:preview"
-gcloud iam service-accounts add-iam-policy-binding "$PRODUCTION_SA" --role=roles/iam.workloadIdentityUser \
-  --member="principal://iam.googleapis.com/$POOL/vercel/subject/owner:$TEAM_SLUG:project:$VERCEL_PROJECT:environment:production"
 gcloud iam service-accounts add-iam-policy-binding "$CI_SA" --role=roles/iam.workloadIdentityUser \
   --member="principalSet://iam.googleapis.com/$POOL/github/attribute.repository/$REPO"
 ```
 
-Then the Cloud SQL roles, each bound with a condition naming one instance. `roles/cloudsql.client` lets an identity
-connect through the connector or the proxy; `roles/cloudsql.instanceUser` lets it log in with IAM. The condition
-form is the one Google documents for `roles/cloudsql.client`; that the same form scopes `roles/cloudsql.instanceUser`
-is _unverified_.
+Then the Cloud SQL roles, with the helpers from step 4, each naming `solpg-preview` only:
 
 ```sh
-only() {
-  echo "expression=resource.name == 'projects/$PROJECT_ID/instances/$1' && resource.service == 'sqladmin.googleapis.com',title=only-$1"
-}
-grant() { # member instance
-  for role in roles/cloudsql.client roles/cloudsql.instanceUser; do
-    gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="$1" --role="$role" --condition="$(only "$2")"
-  done
-}
 grant "serviceAccount:$PREVIEW_SA" solpg-preview
 grant "serviceAccount:$CI_SA" solpg-preview
 grant "user:$OPERATOR" solpg-preview
-# Production, in step 12: grant "serviceAccount:$PRODUCTION_SA" solpg; grant "user:$OPERATOR" solpg
 ```
 
-`only` and `grant` are used again in step 12 and in [Adding an operator](#adding-an-operator), in the same shell.
+## 11. Google Cloud: IAM database users on the preview instance
 
-## 6. Google Cloud: IAM database users on the preview instance
-
-The operator who runs step 7 gets the `cloudsqlsuperuser` role, so the setup needs no password for the built-in
+The operator who runs step 12 gets the `cloudsqlsuperuser` role, so the setup needs no password for the built-in
 `postgres` user. An operator added later needs only membership of the application's role ([Adding an
 operator](#adding-an-operator)).
 
@@ -178,10 +290,9 @@ gcloud sql users create "$OPERATOR" --instance=solpg-preview --type=cloud_iam_us
   --database-roles=cloudsqlsuperuser
 ```
 
-## 7. Postgres: roles and databases on the preview instance
+## 12. Postgres: roles and databases on the preview instance
 
-Through the proxy, as the operator (install
-[`cloud-sql-proxy`](https://cloud.google.com/sql/docs/postgres/sql-proxy#install) and `psql` first):
+Through the proxy, as the operator, as in step 5:
 
 ```sh
 cloud-sql-proxy --auto-iam-authn --gcloud-auth --port 5434 "$PROJECT_ID:$REGION:solpg-preview" &
@@ -204,9 +315,9 @@ On PostgreSQL 16 and later, `GRANT` of a role and `ALTER ROLE` need the `ADMIN` 
 `gcloud sql users set-password postgres --instance=solpg-preview --prompt-for-password`, use it for these
 statements only, then set it again to a random value nobody records.
 
-Stop the proxy (`kill %1`). The database is empty; step 10 migrates it.
+Stop the proxy (`kill %1`). The database is empty; step 15 migrates it.
 
-## 8. GitHub: variables and the label
+## 13. GitHub: variables and the label
 
 On `REPO`. None is a secret: a token from the federation goes only to `REPO`'s workflows.
 
@@ -226,15 +337,9 @@ gh label create preview --repo "$REPO" --description "Deploy a preview with its 
 configured, `NEON_PROJECT_ID` and `NEON_API_KEY` may stay; with `PREVIEW_DB_PROVIDER=cloud-sql` the workflows do
 not read them.
 
-## 9. Vercel: OIDC and the Preview environment
+## 14. Vercel: the Preview environment
 
-In the Vercel project: Settings → Security → Secure backend access with OIDC Federation, enabled, issuer mode
-**Team**. The provider in step 3 trusts the team issuer only.
-
-Settings → Functions → Function Region: the Vercel region nearest the instances' region. Each query crosses that
-distance; the latency is recorded by task 2.7.
-
-The Preview environment's variables, for every preview the Git integration builds:
+OIDC is already on from step 3. The Preview environment's variables, for every preview the Git integration builds:
 
 ```sh
 add() { printf %s "$3" | npx vercel env add "$1" "$2" --force; }
@@ -251,15 +356,15 @@ npx vercel env rm DATABASE_URL preview --yes
 
 Run from a directory linked to the project (`make vercel-link-preview`). For Preview the CLI may ask for a Git
 branch; leave it empty, for every branch. The dashboard (Settings → Environment Variables) does the same. Leave `SYNC_ENABLED` off on
-Preview until step 11 has seen the database answer.
+Preview until step 16 has seen the database answer.
 
-## 10. Migrate the shared preview database
+## 15. Migrate the shared preview database
 
 With this change on `master`, run Actions → preview-shared-db → Run workflow. It migrates `solpg_preview` as
 `github-ci`. The run proves the GitHub federation, the IAM login, and the role
-memberships from step 7 at once; a failure names the step that broke.
+memberships from step 12 at once; a failure names the step that broke.
 
-## 11. Check the previews
+## 16. Check the previews
 
 1. An unlabelled PR's preview answers `{ "enabled": false, "db": "ok" }` on `GET /api/sync`: the database answers,
    with sync still off.
@@ -273,81 +378,28 @@ Then, with sync on:
 - Removing the label drops the database; the comment says so.
 - A dry run of Actions → preview-sweep lists nothing for an open labelled PR and never lists `solpg_preview`.
 
-## 12. Google Cloud: the production instance
-
-`solpg` exists. List its flags first: `--database-flags` replaces the whole set, so every flag already set goes
-into the command with the new one. Changing flags may restart the instance.
-
-```sh
-gcloud sql instances describe solpg --format='value(settings.databaseFlags)'
-gcloud sql instances patch solpg --database-flags=cloudsql.iam_authentication=on \
-  --connector-enforcement=REQUIRED --ssl-mode=ENCRYPTED_ONLY
-grant "serviceAccount:$PRODUCTION_SA" solpg
-grant "user:$OPERATOR" solpg
-gcloud sql users create "$PRODUCTION_DB_USER" --instance=solpg --type=cloud_iam_service_account
-gcloud sql users create "$OPERATOR" --instance=solpg --type=cloud_iam_user --database-roles=cloudsqlsuperuser
-```
-
-Through the proxy on `solpg`, as in step 7:
-
-```sql
-GRANT "vercel-production@<project id>.iam" TO "<operator e-mail>";
-CREATE DATABASE solpg OWNER "vercel-production@<project id>.iam";
-REVOKE CONNECT ON DATABASE solpg FROM PUBLIC;
-```
-
-`github-ci` and `vercel-preview` get nothing here.
-
-## 13. Vercel: the Production environment, staged
-
-Set the variables on Production while it still reads Neon, and check them on a deployment that takes no domain:
-
-```sh
-npx vercel deploy --prod --skip-domain \
-  -e DB_PROVIDER=cloud-sql -e CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" -e CLOUD_SQL_DATABASE=solpg \
-  -e CLOUD_SQL_USER="$PRODUCTION_DB_USER" -e GCP_PROJECT_NUMBER="$PROJECT_NUMBER" \
-  -e GCP_WORKLOAD_IDENTITY_POOL_ID=vercel -e GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID=vercel \
-  -e GCP_SERVICE_ACCOUNT_EMAIL="$PRODUCTION_SA" -e SYNC_ENABLED=false
-```
-
-Its `GET /api/sync` answers `{ "enabled": false, "db": "ok" }`, and the instance's log shows the production IAM
-user logging in. This proves the production identity's whole path before any data depends on it.
-
-## 14. Cutover
-
-For a deployment with no users to keep: nothing is copied and nothing is frozen. With users, a copy behind a write
-freeze is needed, and this guide does not give it.
-
-1. Confirm production still has no users.
-2. Migrate `solpg` as the operator:
-
-   ```sh
-   cd client-v2
-   CLOUD_SQL_INSTANCE="$PROJECT_ID:$REGION:solpg" CLOUD_SQL_USER="$PRODUCTION_DB_USER" \
-     CLOUD_SQL_DATABASE=solpg scripts/db/cloud-sql/migration-url production -- dbmate --no-dump-schema up
-   ```
-
-3. `\dt` on `solpg` shows every table owned by the production user.
-4. On Production, set the variables of step 13 (without `SYNC_ENABLED=false`), with `vercel env add <name>
-   production`, and remove `DATABASE_URL` and `DATABASE_URL_UNPOOLED`.
-5. Redeploy production. `GET /api/sync` answers `{ "enabled": true, "db": "ok" }`, and a sign-in and a project
-   edit on the production domain write a row to `solpg`.
-
-**Rollback:** restore `DATABASE_URL`, `DATABASE_URL_UNPOOLED`, and `DB_PROVIDER=url` on Production and redeploy.
-The Neon project was not written to after the switch; rows written to `solpg` in between are lost.
-
 ## Adding an operator
+
+For production migrations (`migrate-production-db`):
 
 ```sh
 OPERATOR=<their google account e-mail, lower case>
-grant "user:$OPERATOR" solpg-preview
-gcloud sql users create "$OPERATOR" --instance=solpg-preview --type=cloud_iam_user
-# For production migrations as well:
 grant "user:$OPERATOR" solpg
 gcloud sql users create "$OPERATOR" --instance=solpg --type=cloud_iam_user
 ```
 
-Then, through the proxy as an existing operator, on `solpg-preview`:
+Then, through the proxy as an existing operator, on `solpg`:
+`GRANT "vercel-production@<project id>.iam" TO "<their e-mail>";`. It needs what step 5's `GRANT` does, so the
+note there on PostgreSQL 16 applies.
+
+For previews as well:
+
+```sh
+grant "user:$OPERATOR" solpg-preview
+gcloud sql users create "$OPERATOR" --instance=solpg-preview --type=cloud_iam_user
+```
+
+and on `solpg-preview`:
 
 ```sql
 GRANT "vercel-preview@<project id>.iam" TO "<their e-mail>";
@@ -355,10 +407,8 @@ GRANT "vercel-preview@<project id>.iam" TO "<their e-mail>";
 ALTER ROLE "<their e-mail>" CREATEDB;
 ```
 
-and on `solpg`, for production migrations: `GRANT "vercel-production@<project id>.iam" TO "<their e-mail>";`. Both
-statements on `solpg-preview` need what step 7's do, so the note there on PostgreSQL 16 applies. Removing an
-operator reverses each line: `REVOKE`, `gcloud sql users delete`, and `gcloud projects remove-iam-policy-binding` with the
-same condition.
+Both statements need what step 12's do. Removing an operator reverses each line: `REVOKE`,
+`gcloud sql users delete`, and `gcloud projects remove-iam-policy-binding` with the same condition.
 
 ## Checks
 

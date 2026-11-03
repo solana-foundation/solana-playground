@@ -183,12 +183,21 @@ deploy-client-to-vercel-prod-fast: ## Rebuild without the wasm/install step and 
 		npx $(VERCEL_CLI) build --prod --local-config $(FAST_BUILD_CONFIG) $(VERCEL_TOKEN_ARG) && \
 		npx $(VERCEL_CLI) deploy --prebuilt --prod --archive=tgz $(VERCEL_TOKEN_ARG)
 
-# Reads the Production environment's DATABASE_URL_UNPOOLED -- the database
-# production actually uses -- and never the preview pull. The preview pull is
+# Migrates the database production actually reads, chosen by the Production
+# environment's DB_PROVIDER, and never the preview pull. The preview pull is
 # resolved for the checked-out git branch, so on a branch with branch-scoped
 # Preview variables it names that branch's Neon database: run from `master-2.0`
 # it once reported "nothing to apply" off `preview/master-2.0` while `main` had
 # no schema at all.
+#
+# `url` or unset: the production Neon project, through Production's
+# DATABASE_URL_UNPOOLED. `cloud-sql`: CLOUD_SQL_DATABASE on CLOUD_SQL_INSTANCE,
+# through the Cloud SQL Auth Proxy as the operator's own gcloud identity, with
+# the session role set to CLOUD_SQL_USER so the production user owns what a
+# migration creates (scripts/db/cloud-sql/migration-url production). The three
+# come from the Production pull only, never the shell: an exported preview
+# value must not redirect a production migration. See
+# $(CLIENT_DIR)/docs/cloud-sql.md.
 migrate-production-db: ## Apply pending migrations to the production database (SERVES PRODUCTION)
 	@command -v dbmate >/dev/null 2>&1 || { echo "dbmate required — see $(CLIENT_DIR)/db/README.md" >&2; exit 1; }
 	@test -f .vercel/project.json || { echo "no .vercel/project.json — run 'make vercel-bootstrap'" >&2; exit 1; }
@@ -205,7 +214,17 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 	@#
 	@# The host is printed before anything else, pending or not: "nothing to
 	@# apply" is only reassuring if it says which database had nothing pending.
-	@url=$$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.production.local 2>/dev/null | cut -d= -f2- | tr -d '"'); \
+	@#
+	@# On cloud-sql the database and instance are printed before the proxy
+	@# starts, and `dbmate status`, which only reads, is all that runs before
+	@# the `yes`. `migrate`, not `up`: `up` creates a missing database, which
+	@# here would belong to the operator instead of the production user, so a
+	@# missing database fails. CLOUD_SQL_LOGIN_USER is emptied so the proxy
+	@# logs in as gcloud's active account, the operator, whatever the shell has.
+	@provider=$$(grep -m1 '^DB_PROVIDER=' .vercel/.env.production.local 2>/dev/null | cut -d= -f2- | tr -d '"'); \
+	case "$$provider" in \
+	''|url) \
+		url=$$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.production.local 2>/dev/null | cut -d= -f2- | tr -d '"'); \
 		[ -n "$$url" ] || { echo "no DATABASE_URL_UNPOOLED in the Production environment" >&2; exit 1; }; \
 		host=$$(printf '%s\n' "$$url" | sed -E 's#^[^@]*@([^/?]*).*#\1#'); \
 		printf 'production database: %s\n' "$$host"; \
@@ -217,7 +236,27 @@ migrate-production-db: ## Apply pending migrations to the production database (S
 		printf 'That is the PRODUCTION database. Type yes to continue:'; \
 		read -r reply || { echo "aborted: no answer on stdin" >&2; exit 1; }; \
 		[ "$$reply" = yes ] || { echo "aborted" >&2; exit 1; }; \
-		DATABASE_URL="$$url" dbmate --no-dump-schema up
+		DATABASE_URL="$$url" dbmate --no-dump-schema up;; \
+	cloud-sql) \
+		prodenv() { grep -m1 "^$$1=" .vercel/.env.production.local | cut -d= -f2- | tr -d '"'; }; \
+		instance=$$(prodenv CLOUD_SQL_INSTANCE); database=$$(prodenv CLOUD_SQL_DATABASE); user=$$(prodenv CLOUD_SQL_USER); \
+		[ -n "$$instance" ] && [ -n "$$database" ] && [ -n "$$user" ] || { \
+			echo "Production's DB_PROVIDER is cloud-sql, but CLOUD_SQL_INSTANCE, CLOUD_SQL_DATABASE or CLOUD_SQL_USER is not set there" >&2; exit 1; }; \
+		printf 'production database: %s on Cloud SQL instance %s\n' "$$database" "$$instance"; \
+		cd $(CLIENT_DIR) || exit 1; \
+		CLOUD_SQL_INSTANCE="$$instance" CLOUD_SQL_DATABASE="$$database" CLOUD_SQL_USER="$$user" CLOUD_SQL_LOGIN_USER= \
+			scripts/db/cloud-sql/migration-url production -- sh -c ' \
+				status=$$(dbmate status) || exit 1; \
+				printf "%s\n" "$$status"; \
+				case "$$status" in *"Pending: 0"*) echo "nothing to apply"; exit 0;; esac; \
+				printf "Apply the migrations marked [ ] above to %s on %s\n" "$$1" "$$2"; \
+				printf "That is the PRODUCTION database. Type yes to continue:"; \
+				read -r reply || { echo "aborted: no answer on stdin" >&2; exit 1; }; \
+				[ "$$reply" = yes ] || { echo "aborted" >&2; exit 1; }; \
+				dbmate --no-dump-schema migrate' sh "$$database" "$$instance";; \
+	*) \
+		echo "Production's DB_PROVIDER must be url, cloud-sql or unset, not \"$$provider\"" >&2; exit 1;; \
+	esac
 
 preview-db-branch: ## Create (or reuse) this git branch's preview database (DB_PROVIDER=url|cloud-sql)
 	$(check_provider)
