@@ -79,6 +79,12 @@ the same time once 2.1 has merged.
   them. Verified by `yarn test-e2e e2e/project-sync-limits.e2e.spec.ts`
   passing and `yarn spec:coverage` listing none of this capability's scenarios.
 
+- [x] 3.4 Keep a project at sign-out while sync owes it (HOO-2418, depends on
+  3.1): `releaseLocalProjects` keeps a project with an outstanding question or
+  a generated file whose hash differs from the mark. Verified by
+  `project-restore.test.ts` cases for a changed `program-info.json`, an
+  outstanding question, and a built project the account already holds.
+
 ## Workflow follow-up
 
 - Ask a human whether to archive the change before opening the PR that ticks

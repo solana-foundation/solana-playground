@@ -203,6 +203,22 @@ refused until it is under every limit.
 - **WHEN** the user deletes that project
 - **THEN** the delete reaches the server and succeeds
 
+### Requirement: Sign-out keeps a project sync still owes
+
+Signing out SHALL NOT remove a local project from the browser while sync owes
+the account something of it: a refused upload leaves no sync mark behind, so
+the mark cannot say what was left unsent. A project SHALL stay when a sync
+question is outstanding for it, or when one of its generated workspace files
+(`SYNCED_WORKSPACE_FILES`) differs from what the account last accepted.
+
+#### Scenario: A keypair the limit kept from uploading (manual)
+- **WHEN** a build rewrites `.workspace/program-info.json` with a new keypair, the upload is refused for the project size limit, and the user signs out
+- **THEN** the project stays in the browser with the new keypair
+
+#### Scenario: A project the account already holds (manual)
+- **WHEN** every file of a project, generated files included, matches what the account last accepted, and no question is outstanding, and the user signs out
+- **THEN** the project is removed from the browser
+
 ### Requirement: A project under every limit syncs as before
 
 A project under every limit SHALL sync exactly as it did before the limits:
