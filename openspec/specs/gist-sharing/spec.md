@@ -200,8 +200,10 @@ under `tests/`, other TypeScript and JavaScript files under `client/`, other
 files of a supported language at the root, and files of a language the
 Playground does not support are dropped. The result SHALL say which way the
 files were placed (`manifest` or `loose`). A gist with no file left SHALL fail
-with reason `no-supported-files`. Files of `tsx` and `jsx` are dropped like any
-language the Playground does not support.
+with reason `no-supported-files`. `tsx` and `jsx` are not TypeScript or
+JavaScript here: the Playground registers no language for them, so they are
+dropped, and they take no `tests/` or `client/` place should one ever be
+registered.
 
 #### Scenario: A hand-made gist (manual)
 

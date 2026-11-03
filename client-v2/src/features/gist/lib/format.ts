@@ -534,16 +534,19 @@ if (import.meta.vitest) {
       });
     });
 
-    it("drops a hand-made gist's tsx file, which the Playground cannot open", () => {
-      // The languages the Playground registers: no tsx, no jsx
-      const supported = (path: string) => /\.(rs|py|ts|js|json)$/.test(path);
-
-      const back = fromGistFilesWith(supported)({
+    it("gives tsx and jsx no TypeScript or test place, as no Playground language opens them", () => {
+      // Every file supported, so only the placement rules decide
+      const back = fromGistFilesWith(() => true)({
         "App.tsx": { content: "a" },
-        "lib.rs": { content: "b" },
+        "app.test.jsx": { content: "b" },
+        "client.ts": { content: "c" },
       });
 
-      expect(back.files).toEqual({ "src/lib.rs": "b" });
+      expect(back.files).toEqual({
+        "App.tsx": "a",
+        "app.test.jsx": "b",
+        "client/client.ts": "c",
+      });
     });
 
     it("leaves a hand-made gist's root .tutorial.json out", () => {
