@@ -1571,7 +1571,10 @@ export class PgAssistant {
     const unchanged =
       merged.length === items.length &&
       merged.every((item, i) => item === items[i]);
-    if (unchanged) return true;
+    if (unchanged) {
+      PgAssistant._watchReopened(fromServer);
+      return true;
+    }
 
     PgAssistant._items = merged;
     PgAssistant._watchElsewhere(fromServer);
@@ -1594,19 +1597,50 @@ export class PgAssistant {
       ) {
         continue;
       }
-      // By this device's clock: the two devices' clocks need not agree
-      PgAssistant._elsewhere.set(item.id, Date.now());
-      const previous = PgAssistant._quietTimers.get(item.id);
-      if (previous) clearTimeout(previous);
-      PgAssistant._quietTimers.set(
-        item.id,
-        setTimeout(() => {
-          PgAssistant._quietTimers.delete(item.id);
-          PgAssistant._emitOnly();
-          // A margin: a timer can fire a little before `Date.now()` agrees
-        }, STREAM_QUIET_MS + 50)
-      );
+      PgAssistant._watch(item.id);
     }
+  }
+
+  /**
+   * Starts the wait again for a reply still streaming that the server's copy
+   * confirms unchanged, once per open of the thread. `closeThread` forgot the
+   * wait and `loadThread` restored the reply from storage, so without this a
+   * project switch and back showed a reply another device is still writing as
+   * cut off, and Try again asked the same question twice on the user's key.
+   * A reply already watched keeps its clock, so one that went quiet still
+   * reads as cut off however often the same copy folds in.
+   */
+  private static _watchReopened(fromServer: readonly ChatItem[]) {
+    for (const item of fromServer) {
+      if (
+        item.kind !== "assistant" ||
+        item.state !== "streaming" ||
+        PgAssistant._elsewhere.has(item.id) ||
+        PgAssistant._turn?.replies.includes(item.id)
+      ) {
+        continue;
+      }
+      const shown = PgAssistant._items.find((i) => i.id === item.id);
+      if (shown?.kind === "assistant" && shown.state === "streaming") {
+        PgAssistant._watch(item.id);
+      }
+    }
+  }
+
+  /** Notes a reply as written elsewhere now, and redraws once it goes quiet */
+  private static _watch(id: string) {
+    // By this device's clock: the two devices' clocks need not agree
+    PgAssistant._elsewhere.set(id, Date.now());
+    const previous = PgAssistant._quietTimers.get(id);
+    if (previous) clearTimeout(previous);
+    PgAssistant._quietTimers.set(
+      id,
+      setTimeout(() => {
+        PgAssistant._quietTimers.delete(id);
+        PgAssistant._emitOnly();
+        // A margin: a timer can fire a little before `Date.now()` agrees
+      }, STREAM_QUIET_MS + 50)
+    );
   }
 
   /** Forgets the replies `_watchElsewhere` watched, with their timers */
@@ -2336,6 +2370,32 @@ if (import.meta.vitest) {
           expect(changed).toHaveBeenCalled();
           expect(PgAssistant.isCutOff(folded())).toBe(true);
           listener.dispose();
+        });
+
+        it("keeps waiting after a project switch brings the thread back unchanged", async () => {
+          const copy = midReply(new Date().toISOString());
+          await PgAssistant.foldIn("fold", [copy]);
+          await settled();
+          PgAssistant.closeThread();
+          await PgAssistant.loadThread("fold");
+
+          await PgAssistant.foldIn("fold", [copy]);
+
+          expect(PgAssistant.isCutOff(folded())).toBe(false);
+        });
+
+        it("reads as cut off once quiet after a project switch", async () => {
+          vi.useFakeTimers({ toFake: ["setTimeout", "Date"] });
+          const copy = midReply(new Date().toISOString());
+          await PgAssistant.foldIn("fold", [copy]);
+          await settled();
+          PgAssistant.closeThread();
+          await PgAssistant.loadThread("fold");
+          await PgAssistant.foldIn("fold", [copy]);
+
+          vi.advanceTimersByTime(2 * 60_000 + 50);
+
+          expect(PgAssistant.isCutOff(folded())).toBe(true);
         });
       });
 
