@@ -294,8 +294,8 @@ those, and a PR that pushes the total over the cap fails. A sanctioned
 exception, such as `null` on the wire or a signature a library defines,
 passes with `// eslint-disable-next-line <rule> -- <why>` on the line before
 it. Import order is an ESLint error in all of `src/`, `api/` and `e2e/`
-(`simple-import-sort/imports`), legacy roots included, so it also fails the
-build's `lint:layers`. `yarn eslint --fix --quiet <files>` sorts the imports;
+(`simple-import-sort/imports`), legacy roots included; in the layers and
+`api/` it also fails the build's `lint:layers`. `yarn eslint --fix --quiet <files>` sorts the imports;
 `yarn lint --fix` would also apply every warning's autofix across the tree.
 
 - **The lint warnings are debt, not the normal state.** `yarn lint` reports
