@@ -15,8 +15,10 @@ is separate from production's Neon project. The only workflow that reaches
 Google Cloud is `cicd.yml`, through a stored JSON key.
 
 The project moves to `solana-foundation`'s Vercel project, which builds a
-preview of every PR through the Git integration with the Preview
-environment's variables. A Git-integration build has no step that runs before
+preview of every integration branch through the Git integration with the
+Preview environment's variables (`isIntegrationBranch` in
+`scripts/vercel-ignore-build.mjs` skips every ticket branch; `master`,
+`master-production`, and `scope/` and `integration/` branches build). A Git-integration build has no step that runs before
 it on a runner of ours, and that Vercel project has no preview Neon project.
 
 Verified 2026-10-22: with no change to the instance,
@@ -36,7 +38,8 @@ database `postgres`, one built-in user `postgres`.
 - Production's connection path is proven before any user depends on it: a
   staged production deployment with sync off (task 3.1), then production on
   its Vercel-generated domain, before the custom domain is attached.
-- After the launch, every PR gets a working preview without anyone acting,
+- After the launch, every integration branch gets a working preview without
+  anyone acting,
   and the production connection path runs on each one, under the Preview
   identity.
 - A PR whose preview needs a schema of its own can get one by label.
@@ -106,15 +109,19 @@ database `postgres`, one built-in user `postgres`.
   and creating it from the build or the function would give the Preview
   identity `CREATEDB` and run the PR's code with it. Previews share rows, which
   is accepted; a PR that needs its own takes the label.
-- **The shared database is migrated from `master`, never from a PR.**
-  `preview-shared-db.yml` runs on push to `master` that touches
+- **The shared database is migrated from `master`, never from a PR, by
+  convention.** `preview-shared-db.yml` runs on push to `master` that touches
   `client-v2/db/migrations`, and on manual dispatch, as `github-ci`. It
-  migrates `solpg_preview`. A `push` run reads the workflow and the migrations
+  migrates `solpg_preview`. Nothing technical enforces this: a branch runs its
+  own copy of the workflow on manual dispatch, and `github-ci` also runs
+  `preview.yml` on `pull_request`. Review of changes to the workflows enforces
+  it. A `push` run reads the workflow and the migrations
   from `master`, which a reviewer has seen; a `pull_request` run reads them
   from the PR's merge commit, so a PR that migrated the shared database would
   impose an unreviewed schema on every other preview.
 - **A PR that changes migrations is told to take the label.** A job in
-  `preview.yml`, on an unlabelled PR, lists the PR's files through the GitHub
+  `preview.yml`, on an unlabelled PR from an integration branch (the only PRs
+  with an automatic preview), lists the PR's files through the GitHub
   API and, when any is under `client-v2/db/migrations`, writes the PR's
   preview comment: its automatic preview runs on `solpg_preview` without those
   migrations, and the `preview` label gives it a database that has them. The
@@ -170,8 +177,8 @@ database `postgres`, one built-in user `postgres`.
 - **Provisioning is one script set per provider under `scripts/db/<provider>/`.**
   `create-preview-db`, `drop-preview-db`, and `migration-url`, each taking
   `--pr <number>` or `--branch <name>` and never a database name, and
-  `migration-url production`, and `migration-url shared` for `solpg_preview`.
-  The `url` set wraps `neon.sh` and
+  and, in the `cloud-sql` set only, `migration-url production` and
+  `migration-url shared` for `solpg_preview`. The `url` set wraps `neon.sh` and
   `neon-preview-branch.sh`; the `cloud-sql` set runs the Cloud SQL Auth Proxy,
   copies the shared database as the CI IAM user, and prints
   `postgres://<user>@127.0.0.1:<port>/<database>?sslmode=disable&options=-c%20role%3D<app user>`
@@ -183,7 +190,7 @@ database `postgres`, one built-in user `postgres`.
   naming this repository, and `google-github-actions/auth` exchanges the job's
   token for `github-ci`, which holds Cloud SQL Client and Instance User on
   `solpg-preview`, `CREATEDB`, and membership of the preview user's role,
-  which owns `solpg_preview` and the base. It holds nothing on `solpg`:
+  which owns `solpg_preview`. It holds nothing on `solpg`:
   `preview.yml` runs on `pull_request`, which reads
   the workflow from the PR's merge commit, so anyone who can push a branch can
   change what the job does with its identity. `cicd.yml`'s stored JSON key is

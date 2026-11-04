@@ -94,8 +94,11 @@ missing" in `client-v2/src/features/persistence/model/db.test.mjs`.
 
 ### Requirement: Only production may open the production database
 
-The `cloud-sql` provider SHALL refuse to create a pool when `VERCEL_ENV` is
-not `production` and `CLOUD_SQL_DATABASE` is `solpg`. The refusal SHALL happen
+The `cloud-sql` provider SHALL decide on the instance and the database
+together: with `VERCEL_ENV=production` it SHALL create a pool only for database
+`solpg` on instance `solpg`; in any other environment it SHALL refuse instance
+`solpg` and any database that is not a preview database (`solpg_preview`,
+`solpg_preview_pr_<n>`, `solpg_preview_br_<branch>_<hash>`). The refusal SHALL happen
 before any token exchange or connection, and `GET /api/sync` SHALL then answer
 `db: "unreachable"`. `VERCEL_ENV` is set by Vercel, never by the deployment's
 own variables.
@@ -118,6 +121,16 @@ in `client-v2/src/features/persistence/model/db.test.mjs`.
 - **THEN** the provider creates the pool
 
 Checked by the unit test "allows a preview database outside production" in
+`client-v2/src/features/persistence/model/db.test.mjs`.
+
+#### Scenario: Production on a preview instance or database is refused (manual)
+
+- **WHEN** a deployment with `VERCEL_ENV=production` sets `DB_PROVIDER=cloud-sql`
+  with instance `solpg-preview`, or a `solpg_preview*` database
+- **THEN** no connection is opened and the function log names the refusal
+
+Checked by the unit tests "refuses the preview instance in production" and
+"refuses a preview database on the production instance in production" in
 `client-v2/src/features/persistence/model/db.test.mjs`.
 
 ### Requirement: A pool that failed to build is built again

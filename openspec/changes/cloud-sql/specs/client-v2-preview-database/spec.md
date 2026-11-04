@@ -13,23 +13,26 @@ preview, whatever its label or variables, can reach the production database.
 
 The Preview environment on Vercel SHALL set `DB_PROVIDER=cloud-sql` and
 `CLOUD_SQL_DATABASE=solpg_preview` on instance `solpg-preview`, so every
-preview the Git integration builds, for any PR, reads and writes the shared
+preview the Git integration builds, for an integration branch, reads and writes the shared
 database `solpg_preview` with no workflow run before it.
 
-#### Scenario: An unlabelled PR's preview (manual)
+#### Scenario: An integration branch's preview (manual)
 
-- **WHEN** a PR without the `preview` label is pushed to and the Git
-  integration deploys it
+- **WHEN** an integration branch is pushed to and the Git integration
+  deploys it
 - **THEN** `GET /api/sync` on that deployment answers
   `{ "enabled": true, "db": "ok" }`, and the instance's log shows the Preview
   IAM database user connecting to `solpg_preview`
 
-### Requirement: The shared preview database is migrated from master only
+### Requirement: The shared preview database is migrated from master by convention
 
 `preview-shared-db.yml` SHALL migrate `solpg_preview` on every push to `master` that changes a file under
 `client-v2/db/migrations`, and on manual dispatch, through the Cloud SQL Auth
 Proxy under the preview IAM database user's role. No workflow that runs on
-`pull_request` SHALL migrate it.
+`pull_request` SHALL migrate it. This is a convention enforced by review of
+changes to the workflows, not by the service account: a branch runs its own
+copy of the workflow on manual dispatch, and the same `github-ci` account runs
+`preview.yml` on `pull_request`.
 
 #### Scenario: A migration lands on master (manual)
 
@@ -45,17 +48,17 @@ Proxy under the preview IAM database user's role. No workflow that runs on
 
 ### Requirement: A PR that changes migrations is told to take its own database
 
-On a PR without the `preview` label that adds, changes, or removes a file
-under `client-v2/db/migrations`, `preview.yml` SHALL write the PR's preview
+On a PR from an integration branch without the `preview` label that adds,
+changes, or removes a file under `client-v2/db/migrations`, `preview.yml` SHALL write the PR's preview
 comment saying the automatic preview reads `solpg_preview`, which lacks the
 PR's migrations, and that the `preview` label gives the PR a database that has
 them. A PR from a fork, whose token cannot comment, SHALL get the same text as
 a warning in the job summary.
 
-#### Scenario: An unlabelled PR adds a migration (manual)
+#### Scenario: An unlabelled integration-branch PR adds a migration (manual)
 
-- **WHEN** a PR without the label is pushed to with a new file under
-  `client-v2/db/migrations`
+- **WHEN** a PR from an integration branch without the label is pushed to
+  with a new file under `client-v2/db/migrations`
 - **THEN** the PR's preview comment names the shared database and suggests
   the `preview` label
 

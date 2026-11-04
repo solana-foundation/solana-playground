@@ -30,8 +30,12 @@ checks on what that build emits. `ci.yml`
 and `client-v2.yml` run on pushes to `master` and on every PR: a
 `pull_request` run reads the workflow from the PR's merge commit, and no
 `pull_request` workflow runs while the PR has a merge conflict.
-The Vercel Git integration previews every PR on the shared preview database
-`solpg_preview`, which `preview-shared-db.yml` migrates on push to `master`.
+Once `PREVIEW_DB_PROVIDER` is `cloud-sql`, the Vercel Git integration's
+previews, built only for integration branches (`isIntegrationBranch` in
+`client-v2/scripts/vercel-ignore-build.mjs`), read the shared preview database
+`solpg_preview`; until then previews stay on Neon. By convention
+`preview-shared-db.yml` migrates it on push to `master` and nothing else does;
+review of workflow changes enforces that, not the workflow.
 `preview.yml` deploys a labelled PR's preview with a database of its own and
 `preview-sweep.yml` cleans up after it on a schedule; all three run only in
 the repository the `PREVIEW_REPOSITORY` variable names, once

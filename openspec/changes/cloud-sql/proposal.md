@@ -3,15 +3,16 @@
 ## Why
 
 Production conversation and project data sits in a Neon database outside the
-team's Google Cloud project, which already holds an empty
-Cloud SQL instance, `solpg`, and the App Engine build server. The team wants
-production data in its own project, without opening Postgres's port to the
-internet and without a stored database password or service-account key. Neon
-cannot act as a connection pooler for a database it does not host and offers no
-Google Cloud region, so it cannot be the way there.
+team's Google Cloud project, which already holds an empty Cloud SQL instance,
+`solpg`, and the App Engine build server. The team wants production data in its
+own project, without opening Postgres's port to the internet and without a
+stored database password or service-account key. Neon cannot act as a
+connection pooler for a database it does not host and offers no Google Cloud
+region, so it cannot be the way there.
 
 The project also moves to `solana-foundation`'s Vercel project for good. It
-deploys a preview of every PR through its Git integration, and there is no
+deploys a preview of every integration branch through its Git integration (a
+ticket branch's PR gets one only through the `preview` label), and there is no
 preview Neon project behind it, so previews need a Cloud SQL home as well.
 
 ## What Changes
@@ -32,8 +33,8 @@ preview Neon project behind it, so previews need a Cloud SQL home as well.
   environment. The instance gains IAM authentication, connector enforcement,
   and encrypted-only connections; authorised networks stay empty.
 - **Previews on Cloud SQL.** A second, small instance, `solpg-preview`,
-  serves every preview. Each PR's preview from the Git integration reads one
-  shared database there, `solpg_preview`, named by the Preview environment's
+  serves every preview. Each preview from the Git integration, built for
+  integration branches only, reads one shared database there, `solpg_preview`, named by the Preview environment's
   variables. A PR labelled `preview` gets a database of its own,
   `solpg_preview_pr_<number>`, a copy of `solpg_preview` without its
   sessions, so the PR's migrations run on top of the rows previews have

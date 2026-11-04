@@ -47,8 +47,10 @@ Each is enforced by a different party, so one mistake does not open the producti
 1. **IAM.** Neither `vercel-preview` nor `github-ci` holds a Cloud SQL role on instance `solpg`.
 2. **Postgres.** `CONNECT` on database `solpg` is revoked from `PUBLIC`; only `vercel-production` and its members
    may connect.
-3. **The application.** The `cloud-sql` provider refuses `CLOUD_SQL_DATABASE=solpg` when `VERCEL_ENV` is not
-   `production`, before any token exchange (`src/features/persistence/model/providers/cloud-sql.mjs`).
+3. **The application.** The `cloud-sql` provider decides on the instance and the database together, before any
+   token exchange (`src/features/persistence/model/providers/cloud-sql.mjs`): Production opens only database
+   `solpg` on instance `solpg`; every other environment is refused instance `solpg` and may open only a preview
+   database (`solpg_preview`, `solpg_preview_pr_<n>`, `solpg_preview_br_*`).
 4. **The workflows.** A preview database's name comes from the PR number alone
    (`scripts/db/preview-name.mjs`); no workflow input or make variable names a database.
 

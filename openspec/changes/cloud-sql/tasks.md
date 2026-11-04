@@ -47,22 +47,29 @@ time.
       for a PR, `solpg_preview_br_<id>` for a laptop branch) and the provisioning
       scripts `scripts/db/url/{create-preview-db,drop-preview-db,migration-url}`
       (wrapping `.github/scripts/neon.sh` and `scripts/neon-preview-branch.sh`)
-      and `scripts/db/cloud-sql/{create-preview-db,drop-preview-db,migration-url,migrate-preview-base}`
-      (Cloud SQL Auth Proxy; `CREATE DATABASE ... TEMPLATE solpg_preview_base OWNER <preview user>`; the `localhost` URL for dbmate with the session role
-      set to the application's user; `migrate-preview-base` lifting
-      `ALLOW_CONNECTIONS` for its run and restoring it). Each takes `--pr <n>` or
-      `--branch <name>`, never a database name. Point `Makefile.vercel`'s
+      and `scripts/db/cloud-sql/{create-preview-db,drop-preview-db,migration-url}`
+      (Cloud SQL Auth Proxy; `create-preview-db` creates an empty database
+      owned by the preview user and restores `pg_dump` of `solpg_preview` into
+      it, without the rows of `session`, stamping the database's comment
+      `copying:<epoch>`, then `created-at:<epoch>`; the `localhost` URL for
+      dbmate with the session role set to the application's user;
+      `migration-url production` and `migration-url shared` exist in this set
+      only). Each takes `--pr <n>` or `--branch <name>`, never a database
+      name. Point `Makefile.vercel`'s
       `preview-db-branch`, `migrate-preview-db`, and
       `deploy-client-to-vercel-preview` at the generic names, selected by
-      `DB_PROVIDER`, with the Neon path's behaviour unchanged. Verify with
+      `DB_PROVIDER`, with the Neon path's behaviour unchanged;
+      `migrate-preview-db` reads `CLOUD_SQL_INSTANCE` and `CLOUD_SQL_USER`
+      from the Preview environment's pull only, never the shell, and refuses
+      an instance other than `solpg-preview`. Verify with
       `client-v2/scripts/db/preview-name.test.mjs` ("names a PR's database by its
       number", "cuts a long branch and appends a hash", "keeps branches that
       sanitise alike apart", "keeps a branch apart from the PR it is named like");
       with the three make targets run under `DB_PROVIDER=url` against a stubbed
       `neon.sh`, each printing the expected URL; and under `DB_PROVIDER=cloud-sql`
-      against a stubbed `cloud-sql-proxy` and a local Postgres holding a template
-      base, where the clone holds the base's rows, dbmate applies only the
-      migrations the base lacks, and `\dt` shows every table owned by the
+      against a stubbed `cloud-sql-proxy` and a local Postgres standing in for
+      `solpg_preview`, where the copy holds its rows but none of `session`,
+      dbmate applies only the migrations the copy lacks, and `\dt` shows every table owned by the
       application's user. Ticket to file.
 
 ## 2. Previews on Cloud SQL (after the Breakpoint launch)
@@ -92,10 +99,8 @@ time.
       authenticates with `google-github-actions/auth` through the GitHub
       federation, installs the PostgreSQL client at the instance's major version,
       runs `scripts/db/cloud-sql/create-preview-db` (a `pg_dump` copy of
-      `solpg_preview` without the rows of `session`, replacing task 1.3's clone
-      of the template `solpg_preview_base`, which goes with
-      `migrate-preview-base`) and dbmate
-      through `migration-url`, deploys with
+      `solpg_preview` without the rows of `session`, as built in task 1.3) and
+      dbmate through `migration-url`, deploys with
       `-e DB_PROVIDER=cloud-sql -e CLOUD_SQL_DATABASE=<name>` over the Preview
       environment's `CLOUD_SQL_*` and `GCP_*` variables, and names the database
       in the PR comment; teardown runs `drop-preview-db`. Unset, the Neon path
@@ -125,8 +130,9 @@ time.
       to apply, and a merge adding a migration whose run applies it. Depends on 1.3,
       2.1. Ticket to file.
 - [ ] 2.4 Migration notice in `preview.yml`: a job on `opened`, `reopened`,
-      and `synchronize` of a PR without the `preview` label that lists the PR's
-      files (`gh pr view --json files`) and, when any is under
+      and `synchronize` of a PR from an integration branch (the only PRs with
+      an automatic preview) without the `preview` label that lists the PR's
+      files (the paginated REST API, `gh api --paginate`) and, when any is under
       `client-v2/db/migrations`, writes the preview comment through
       `.github/scripts/preview-comment.sh` naming `solpg_preview` and
       suggesting the label; on a PR from a fork, a `::warning::` and a step
@@ -141,7 +147,7 @@ time.
       `DB_PROVIDER=cloud-sql`, `CLOUD_SQL_INSTANCE`, `CLOUD_SQL_USER`, the
       `GCP_*` variables, and `CLOUD_SQL_DATABASE=solpg_preview`, and remove
       `DATABASE_URL`; on GitHub set `PREVIEW_DB_PROVIDER=cloud-sql` and the
-      federation variables. Verify with an unlabelled PR's Git-integration
+      federation variables. Verify with an integration branch's Git-integration
       preview answering `{ "enabled": true, "db": "ok" }` on `GET /api/sync`.
       Depends on 2.1, 2.3. Ticket to file.
 - [ ] 2.6 Add the gates that are not code to `client-v2/docs/cloud-sql.md`
@@ -153,7 +159,7 @@ time.
       Ticket to file.
 - [ ] 2.7 Walk through every `(manual)` scenario of `client-v2-preview-database`
       and the preview scenarios of `client-v2-database-provider` on an
-      unlabelled PR and on a PR labelled `preview`: sign-in, a project edited
+      integration branch's PR and on a PR labelled `preview`: sign-in, a project edited
       in one browser appearing in a second, a pushed migration applied to the
       labelled PR's database and noticed on the unlabelled one, the label
       removed. Record the results in that PR, with the cold and warm latency of

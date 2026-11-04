@@ -1,17 +1,20 @@
 # Preview databases
 
-Every preview of `client-v2` reads a Postgres database on the preview Cloud SQL instance, `solpg-preview`, never
-the production instance. Which database depends on how the preview was deployed:
+Once `PREVIEW_DB_PROVIDER` is `cloud-sql` and the Preview environment on Vercel is switched with it, every preview
+of `client-v2` reads a Postgres database on the preview Cloud SQL instance, `solpg-preview`, never the production
+instance. Until then previews stay on Neon. Which database depends on how the preview was deployed:
 
 | Preview | Deployed by | Database |
 | --- | --- | --- |
-| Any PR, any push | The Vercel Git integration | The shared `solpg_preview` |
+| A push to an integration branch | The Vercel Git integration | The shared `solpg_preview` |
 | A PR labelled `preview` | [`preview.yml`](../../.github/workflows/preview.yml) | Its own `solpg_preview_pr_<number>` |
 | A laptop deploy | `make deploy-client-to-vercel-preview DB_PROVIDER=cloud-sql` | Its own `solpg_preview_br_<branch>_<hash>` |
 
 The repository variable `PREVIEW_DB_PROVIDER` turns on the Cloud SQL path for the label. While it is unset, the
 label still cuts a Neon branch, as [Neon preview databases](neon.md) describes; that path goes once every preview
 runs on Cloud SQL. A laptop deploy picks its provider with `DB_PROVIDER` (`url`, Neon, by default).
+With `cloud-sql`, `make migrate-preview-db` reads `CLOUD_SQL_INSTANCE` and `CLOUD_SQL_USER` from the Preview
+environment's pull only, never the shell, and refuses an instance other than `solpg-preview`.
 
 The application reaches the instance through the `cloud-sql` provider (`src/features/persistence/model/providers/`)
 with the Preview deployment's Vercel OIDC token, exchanged for the `vercel-preview` service account; the workflows
@@ -22,18 +25,22 @@ GitHub, and Vercel setup behind both is in [Cloud SQL for client-v2](cloud-sql.m
 ## The shared database
 
 `solpg_preview` is named by the Preview environment on Vercel (`CLOUD_SQL_DATABASE`), so every preview the Git
-integration builds reads it with no workflow involved. Previews share its rows: a project synced from one PR's
+integration builds reads it with no workflow involved. The Git integration builds only integration branches
+(`master`, `master-production`, and branches under `scope/` or `integration/`, as `isIntegrationBranch` in
+`scripts/vercel-ignore-build.mjs` decides); a ticket branch's PR gets a preview only through the label. Previews share its rows: a project synced from one PR's
 preview is visible from another's, under the same GitHub account. That is test data; a PR that needs rows of its
 own takes the label.
 
-It carries the migrations on `master` and no others.
+By convention it carries the migrations on `master` and no others.
 [`preview-shared-db.yml`](../../.github/workflows/preview-shared-db.yml) migrates it on every push to `master` that changes `client-v2/db/migrations`, and on a manual run (Actions → preview-shared-db →
-Run workflow, with `master` selected: a run from any other branch is skipped, so no branch's migrations reach the
-shared database). No workflow that runs on a PR migrates it: a `pull_request` run executes the PR's own workflow and
-migrations, and a PR's schema on the shared database would break every other preview.
+Run workflow, with `master` selected: a run from any other branch is skipped). Nothing technical enforces this: a
+branch runs its own copy of the workflow on a manual run, and the `github-ci` service account that migrates the
+shared database also runs `preview.yml` on `pull_request`. The rule holds because no workflow that runs on a PR
+migrates it, and review of any change to a workflow under `.github/workflows/` checks that. A PR's schema on the
+shared database would break every other preview.
 
-So a PR that adds a migration gets a preview whose code expects a schema the shared database lacks. `preview.yml`
-says so: on an unlabelled PR that changes a file under `client-v2/db/migrations`, it writes the PR's preview comment
+So a PR from an integration branch that adds a migration gets a preview whose code expects a schema the shared database lacks. `preview.yml`
+says so: on an unlabelled PR from an integration branch that changes a file under `client-v2/db/migrations`, it writes the PR's preview comment
 naming the files and suggesting the `preview` label. A PR from a fork, whose token cannot comment, gets the same
 text in the run's summary. The other direction breaks too: once a migration that drops or renames something lands,
 previews of PRs based on an older `master` fail until they are rebased, so such a migration is written in two
