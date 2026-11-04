@@ -1,3 +1,5 @@
+// @vitest-environment node -- noble checks `instanceof Uint8Array`, which jsdom's realm fails
+
 import * as ed25519 from "@noble/ed25519";
 
 import type { FromSandbox, SignReply } from "../js-runtime/protocol";
@@ -31,13 +33,13 @@ const reasonOf = (error: unknown) =>
 export const signRequestWith =
   (walletsOf: () => Wallet[]) =>
   async (request: SignRequest): Promise<SignReply> => {
-    const wallet = walletsOf().find(
-      (candidate) => candidate.publicKey.toBase58() === request.publicKey
-    );
-    // The public key names the account; it is not key material
-    if (!wallet) return { error: `No key for account ${request.publicKey}` };
-
     try {
+      const wallet = walletsOf().find(
+        (candidate) => candidate.publicKey.toBase58() === request.publicKey
+      );
+      // The public key names the account; it is not key material
+      if (!wallet) return { error: `No key for account ${request.publicKey}` };
+
       let signature: Uint8Array;
       if (request.kind === "message") {
         signature = await wallet.signMessage(request.bytes);
@@ -72,3 +74,22 @@ export const signRequestWith =
       return { error: reasonOf(error) };
     }
   };
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/wallet/sign-bridge", () => {
+    const request = {
+      publicKey: PgWeb3.Keypair.generate().publicKey.toBase58(),
+      kind: "message" as const,
+      bytes: new Uint8Array([1, 2, 3]),
+    };
+
+    it("answers with the reason when the page's wallets cannot be listed", async () => {
+      const reply = await signRequestWith(() => {
+        throw new Error("Wallet not connected");
+      })(request);
+      expect(reply).toEqual({ error: "Wallet not connected" });
+    });
+  });
+}

@@ -244,6 +244,54 @@ test.describe("project-code-sandbox", () => {
     await runFor(page)("run", /walked: true key found: false/);
   });
 
+  test("project-code-sandbox: A message to sign that is not bytes fails the call, not the run", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      [
+        "try {",
+        '  await pg.wallet.signMessage("hello");',
+        "} catch (e) {",
+        '  console.log("refused:", e.message);',
+        "}",
+        'const signature = await pg.wallet.signMessage(new TextEncoder().encode("hello"));',
+        'console.log("signed:", signature.length);',
+      ].join("\n")
+    );
+
+    await runFor(page)("run", /signed: 64/);
+    await expect(terminalRows(page)).toContainText(
+      "refused: signMessage takes the message as bytes"
+    );
+
+    // The run ended, so the next one starts
+    await runFor(page)("run", /signed: 64[\s\S]*signed: 64/);
+    await expect(terminalRows(page)).not.toContainText("already running");
+  });
+
+  test("project-code-sandbox: A run whose frame reloads ends", async ({
+    context,
+    page,
+  }) => {
+    const { writeClient } = await seedPlaynetProject(context, page);
+    await writeClient(
+      [
+        'console.log("reloading");',
+        "location.reload();",
+        "await sleep(60000);",
+      ].join("\n")
+    );
+
+    await runFor(page)("run", /reloaded or navigated away/);
+    await expect(terminalRows(page)).toHaveText(/\$\s*$/, LONG);
+
+    await writeClient('console.log("next run");');
+    await runFor(page)("run", /next run/);
+    await expect(terminalRows(page)).not.toContainText("already running");
+  });
+
   test("project-code-sandbox: Messages from elsewhere are ignored", async ({
     context,
     page,
