@@ -1,14 +1,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 
-import App, { applyFavicon, CrashFallback } from "./app";
+import App, { CrashFallback } from "./app";
 import { observabilityEnv } from "./shared/config/client-env";
 import { Observability } from "./widgets/observability";
 import "./index.css";
 
 const env = observabilityEnv();
-
-applyFavicon();
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

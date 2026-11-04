@@ -38,7 +38,7 @@ test("ignores HTML entities", () => {
   assert.deepEqual(findColors("<>&#8592;&#10003;</>"), []);
 });
 
-test("allows only the token bridge, the colour resolver, the language logos and the page icon", () => {
+test("allows only the token bridge, the colour resolver, the language logos and the brand art", () => {
   assert.equal(isAllowed("app/styles/playground-tokens.css"), true);
   assert.equal(isAllowed("app/styles/playground-theme.css"), true);
   assert.equal(isAllowed("shared/lib/css-color/css-color.ts"), true);
@@ -47,7 +47,7 @@ test("allows only the token bridge, the colour resolver, the language logos and 
   assert.equal(isAllowed("components/Markdown/Markdown.tsx"), false);
   assert.equal(isAllowed("views/sidebar/icons/build.svg"), false);
   assert.equal(isAllowed("app/styles/other.css"), false);
-  assert.equal(isAllowed("app/favicon.svg"), true);
+  assert.equal(isAllowed("app/favicon.svg"), false);
   assert.equal(isAllowed("widgets/catalog/ui/art/TutorialCover.tsx"), true);
   assert.equal(isAllowed("widgets/catalog/ui/BaseTutorialCard.tsx"), false);
   assert.equal(isAllowed("app/other.svg"), false);

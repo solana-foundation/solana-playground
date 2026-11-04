@@ -9,7 +9,8 @@
  * a worktree copies files in and never touches a submodule of its own.
  *
  * Files under `client-v2/static` then replace their upstream copies
- * (`static-overlay.mjs`).
+ * (`static-overlay.mjs`), and the mirrored `index.html` is pointed at the
+ * brand's icons (`brand-head.mjs`).
  *
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
@@ -18,6 +19,7 @@ import fs from "fs/promises";
 import path from "path";
 import { execFileSync } from "child_process";
 
+import { brandHead } from "./brand-head.mjs";
 import { overlayStatic } from "./static-overlay.mjs";
 import { CLIENT_PATH, exists } from "./utils.mjs";
 
@@ -60,6 +62,11 @@ for (const file of sourceFiles) {
 // the mirror, so the fork's copy wins.
 const overlaid = await overlayStatic(path.join(CLIENT_PATH, "static"), DEST_PATH);
 
+// The icons the overlay just copied are named only by the page's markup, so a
+// crawler or a home screen reads them without running the bundle.
+const indexHtml = path.join(DEST_PATH, "index.html");
+await fs.writeFile(indexHtml, brandHead(await fs.readFile(indexHtml, "utf8")));
+
 // craco derives each tutorial's date from git history. The destination is not a
 // git repo of its own, so capture the real dates from the source while we can.
 const tutorialsPath = path.join(SOURCE_PATH, "tutorials");
@@ -88,5 +95,6 @@ const commit = git(["rev-parse", "--short", "HEAD"], SOURCE_PATH).trim();
 console.log(
   `Synced ${sourceFiles.length} files from ${path.relative(primaryRoot, SOURCE_PATH)}@${commit}` +
     `, dated ${Object.keys(timestamps).length} tutorials` +
-    `, overlaid ${overlaid.length} from client-v2/static (${overlaid.join(", ")})`
+    `, overlaid ${overlaid.length} from client-v2/static (${overlaid.join(", ")})` +
+    ", pointed index.html at the brand icons"
 );
