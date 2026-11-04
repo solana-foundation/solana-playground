@@ -32,6 +32,9 @@ const UNAVAILABLE: WalletRead = { kind: "unavailable" };
 const foundOrNone = (wallet: SerializedWalletState | undefined): WalletRead =>
   wallet ? { kind: "wallet", wallet } : NONE;
 
+/** Where a write landed: the store, the `localStorage` fallback, or nowhere */
+export type WriteOutcome = "store" | "local" | "lost";
+
 /** The part of `Storage` the wallet uses */
 type LocalStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">;
 
@@ -234,13 +237,19 @@ export const walletStorageWith =
       }
     };
 
+    /** Whether `localStorage` took the wallet */
     const writeLocal = (state: SerializedWalletState) => {
       try {
         local.setItem(WALLET_LOCAL_KEY, JSON.stringify(state));
+        return true;
       } catch (error) {
         reportFailureFor(state)("Wallet not saved to localStorage", error);
+        return false;
       }
     };
+
+    const fallBack = (state: SerializedWalletState): WriteOutcome =>
+      writeLocal(state) ? "local" : "lost";
 
     /** Read the store, treating a record of the wrong shape as a failure */
     const readStore = async () => {
@@ -313,35 +322,43 @@ export const walletStorageWith =
         return store.exclusive(migrate);
       },
 
-      /** Write the wallet; falls back to `localStorage` if the store fails */
-      write(state: SerializedWalletState): Promise<void> {
+      /**
+       * Write the wallet; falls back to `localStorage` if the store fails.
+       * Resolves with where it landed, `lost` when neither store took it.
+       */
+      write(state: SerializedWalletState): Promise<WriteOutcome> {
         unsaved = state;
-        writes = writes
+        const landed = writes
           .then(() =>
             // Under the lock, so another tab's move cannot land on top of it
-            store.exclusive(async () => {
-              if (isDegraded) return writeLocal(state);
+            store.exclusive(async (): Promise<WriteOutcome> => {
+              if (isDegraded) return fallBack(state);
               try {
                 await store.write(state);
                 if (keptText !== undefined && unsaved === state) {
                   removeLocal(keptText);
                   keptText = undefined;
                 }
+                return "store";
               } catch (error) {
                 isDegraded = true;
                 reportFailureFor(state)("Wallet not saved to the store", error);
-                writeLocal(state);
+                return fallBack(state);
               }
             })
           )
-          .then(() => {
+          .then((outcome) => {
             if (unsaved === state) unsaved = undefined;
+            return outcome;
           })
-          .catch((error: unknown) => {
-            // Nothing above should throw; if it does, the next write still runs
+          .catch((error: unknown): WriteOutcome => {
+            // Nothing above should throw; if it does, the next write still
+            // runs, and this one counts as lost since nothing says it landed
             reportFailureFor(state)("Wallet write failed", error);
+            return "lost";
           });
-        return writes;
+        writes = landed.then(() => undefined);
+        return landed;
       },
 
       /**
@@ -674,6 +691,56 @@ if (import.meta.vitest) {
 
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(next));
       expect(logged.entries).toHaveLength(1);
+    });
+
+    /** A `localStorage` that refuses every write, as a full one does */
+    const fullLocal = () => {
+      const local = memoryLocal(undefined);
+      return {
+        getItem: local.getItem,
+        setItem: () => {
+          throw new DOMException("full", "QuotaExceededError");
+        },
+        removeItem: local.removeItem,
+      };
+    };
+
+    it("answers store for a write the store took", async () => {
+      const storage = walletStorageWith(memoryStore(undefined))(
+        memoryLocal(undefined)
+      );
+      await storage.read();
+
+      expect(await storage.write(walletOf([account(1, "Wallet 1")]))).toBe(
+        "store"
+      );
+    });
+
+    it("answers local for a write that fell back to localStorage", async () => {
+      const store = memoryStore(undefined);
+      const storage = walletStorageWith(store)(memoryLocal(undefined));
+      await storage.read();
+      store.write.mockRejectedValueOnce(new Error("quota"));
+
+      expect(await storage.write(walletOf([account(1, "Wallet 1")]))).toBe(
+        "local"
+      );
+    });
+
+    it("answers lost for a write neither store took", async () => {
+      const store = memoryStore(undefined);
+      const storage = walletStorageWith(store)(fullLocal());
+      await storage.read();
+      store.write.mockRejectedValue(new Error("quota"));
+
+      expect(await storage.write(walletOf([account(1, "Wallet 1")]))).toBe(
+        "lost"
+      );
+      // Degraded now: the next write goes to localStorage alone, and fails
+      expect(await storage.write(walletOf([account(2, "Wallet 2")]))).toBe(
+        "lost"
+      );
+      expect(store.write).toHaveBeenCalledTimes(1);
     });
 
     it("applies two quick writes in call order", async () => {

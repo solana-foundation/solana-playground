@@ -1,3 +1,4 @@
+import type { WalletNoticeKind } from "../../entities/wallet";
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import {
@@ -6,6 +7,7 @@ import {
   derivable,
   updatable,
 } from "../decorators";
+import { PgView } from "../view";
 import { PgWeb3 } from "../web3";
 import { parseKeypairFile } from "./keypair-file";
 import { indexedDbStoreFor } from "./keystore";
@@ -89,6 +91,23 @@ const localStorageOrRefusal = (): Pick<
   }
 };
 
+/** The notices this page load has already shown, each at most once */
+const toldNotices = new Set<WalletNoticeKind>();
+
+/**
+ * Show a wallet storage notice until the user closes it, once a page load:
+ * every failure is logged, and a toast per save would bury the page
+ */
+const tell = async (notice: WalletNoticeKind) => {
+  if (toldNotices.has(notice)) return;
+  toldNotices.add(notice);
+  const { WalletNotice } = await import("../../entities/wallet");
+  PgView.setToast(WalletNotice, {
+    componentProps: { notice },
+    options: { name: `wallet-${notice}`, duration: "persistent" },
+  });
+};
+
 const storage = {
   /** Read from storage and deserialize the data. */
   async read(): Promise<WalletState> {
@@ -104,7 +123,7 @@ const storage = {
   },
 
   /** Serialize the data and write to storage. */
-  write(wallet: WalletState) {
+  async write(wallet: WalletState) {
     // Saving it would replace the stored wallet that could not be read
     if (wallet.state === "unavailable") return;
 
@@ -116,7 +135,8 @@ const storage = {
       standardName: wallet.standardName,
     };
 
-    return walletStorage().write(serializedState);
+    const outcome = await walletStorage().write(serializedState);
+    if (outcome === "lost") await tell("save-failed");
   },
 };
 

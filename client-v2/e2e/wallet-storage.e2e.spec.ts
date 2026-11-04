@@ -1,7 +1,14 @@
 import type { Page } from "@playwright/test";
 import { Keypair } from "@solana/web3.js";
 
-import { expect, LONG, seedLocalWallet, seedWorkspace, test } from "./fixtures";
+import {
+  expect,
+  LONG,
+  runInTerminal,
+  seedLocalWallet,
+  seedWorkspace,
+  test,
+} from "./fixtures";
 
 /**
  * The built-in wallet's storage (`utils/wallet/wallet-storage.ts`): a wallet
@@ -67,6 +74,27 @@ const failWalletWrites = (page: Page) =>
       return put.apply(this, args);
     };
   });
+
+/** Make every write of the wallet to `localStorage` fail, in the page */
+const failLocalWalletWrites = (page: Page) =>
+  page.addInitScript(() => {
+    const setItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "wallet") {
+        throw new DOMException("e2e: storage full", "QuotaExceededError");
+      }
+      return setItem.call(this, key, value);
+    };
+  });
+
+/** The toasts that say the wallet could not be saved */
+const saveFailedNotices = (page: Page) =>
+  page
+    .locator("[data-sonner-toast]")
+    .filter({ hasText: "Your wallet could not be saved." });
+
+/** Longer than a toast takes to appear once it is raised */
+const TOAST_RENDER_MS = 1000;
 
 /** Make opening the wallet's own database fail, in the page */
 const blockWalletDatabase = (page: Page) =>
@@ -420,4 +448,29 @@ test("wallet-storage: The tab closes before a save lands", async ({
   expect((await storedWallet(holder))?.accounts[0].kp).toEqual(
     kept.accounts[0].kp
   );
+});
+
+test("wallet-storage: Neither store saves the wallet", async ({ page }) => {
+  await failWalletWrites(page);
+  await failLocalWalletWrites(page);
+  await seedWorkspace(page);
+
+  await createWallet(page);
+
+  await expect(saveFailedNotices(page)).toHaveCount(1, LONG);
+  await expect(saveFailedNotices(page)).toContainText(
+    "Changes are kept until you reload; export your keypair to keep it."
+  );
+
+  // A second save, disconnecting, fails the same way and tells no one again
+  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+  await runInTerminal(page, "connect");
+  await expect(page.locator(".xterm-rows").first()).toContainText(
+    "Disconnected."
+  );
+  await page.waitForTimeout(TOAST_RENDER_MS);
+  expect(await saveFailedNotices(page).count()).toBe(1);
 });
