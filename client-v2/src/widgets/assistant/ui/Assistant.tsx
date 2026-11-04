@@ -7,31 +7,20 @@ import { Button } from "@/shared/ui/button";
 
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import Grounding from "../../../views/sidebar/assistant/Component/Grounding";
-import { PROVIDERS } from "../../../views/sidebar/assistant/model/types";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { modelShown } from "../model/choice";
 import { connectLabel } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { headLabel } from "../model/head-label";
+import { assistantTelemetry } from "../model/telemetry";
 import type { ConnectOpener } from "../model/use-turn";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
-import type { ForgetKey } from "./BaseAssistantHead";
 import { BaseAssistantHead } from "./BaseAssistantHead";
 import { Thread } from "./Thread";
 
 /** What the panel shows under its head */
 type View = "chat" | "sources";
-
-/** Whether More offers Forget key, and whether it can be pressed now */
-const forgetKeyOf = (busy: boolean): ForgetKey => {
-  const id = PgAssistant.connection?.id;
-  const holdsKey = !!PROVIDERS.find((p) => p.id === id)?.needsKey;
-  if (!holdsKey) return "none";
-  // The turn is using the key
-  if (busy) return "busy";
-  return "ready";
-};
 
 /**
  * The open project's name, or `null` before one is open, kept live through a
@@ -154,8 +143,11 @@ export function Assistant({ widen, onHide, openConnect }: AssistantProps) {
         onHide={onHide}
         canWiden={canWiden}
         // Read on every render `useTurn` makes for a change in the store
-        forgetKey={forgetKeyOf(turn.busy)}
-        onForgetKey={() => PgAssistant.disconnect()}
+        deleteKey={PgAssistant.keyHold}
+        onDeleteKey={() => {
+          assistantTelemetry.track("assistant_key_deleted", {});
+          PgAssistant.disconnect();
+        }}
       />
       {view === "chat" && (
         <>

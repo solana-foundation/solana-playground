@@ -542,8 +542,8 @@ const Connect = ({ defaultBackend, preset, frame }: ConnectProps) => {
 
       {provider.needsKey && (
         <Note>
-          Kept in this tab until you press Forget key or close it; a copy of
-          this tab keeps it too. Sent only to{" "}
+          Kept in this tab&apos;s memory only, until you reload or close it or
+          press Delete my key. Sent only to{" "}
           {provider.endpoint ? "the endpoint above" : provider.name}, never to
           our server.
         </Note>

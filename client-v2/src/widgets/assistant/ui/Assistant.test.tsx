@@ -4,6 +4,11 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgSession } from "@/features/auth";
+import {
+  initTelemetry,
+  memoryProvider as memoryTelemetry,
+  resetTelemetry,
+} from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
 
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
@@ -298,36 +303,47 @@ describe("Assistant", () => {
     await waitFor(() => expect(document.activeElement).toBe(more));
   });
 
-  it("offers Forget key while a key is held, and forgets it", async () => {
+  it("offers Delete my key while a key is held, and forgets it", async () => {
     PgAssistant.connect({
       id: "anthropic",
       apiKey: "sk-ant-fake",
       settings: { model: "claude-opus-5-5", effort: "medium" },
     });
+    const events = memoryTelemetry();
+    initTelemetry({ providers: [events] });
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
-    await user.click(screen.getByRole("menuitem", { name: "Forget key" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete my key" }));
     expect(PgAssistant.connection).toBeNull();
     expect(sessionStorage.getItem("assistant.connection")).toBeNull();
+    expect(events.events.map((e) => [e.name, e.params])).toContainEqual([
+      "assistant_key_deleted",
+      {},
+    ]);
+    resetTelemetry();
   });
 
-  it("keeps Forget key disabled during a turn", async () => {
+  it("keeps Delete my key disabled during a turn", async () => {
     PgAssistant.connect({ id: "anthropic", apiKey: "sk-ant-fake" });
-    turn.busy = true;
+    // What `useTurn`, stubbed here, reports while its turn is busy
+    PgAssistant.markTurnBusy(true);
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
     expect(
       screen
-        .getByRole("menuitem", { name: "Forget key" })
+        .getByRole("menuitem", { name: "Delete my key" })
         .getAttribute("aria-disabled")
     ).toBe("true");
+    PgAssistant.markTurnBusy(false);
   });
 
-  it("offers no Forget key for the keyless default", async () => {
+  it("offers no Delete my key for the keyless default", async () => {
     PgAssistant.connect({ id: "default", apiKey: "" });
     const { user } = setup();
     await user.click(screen.getByRole("button", { name: "More" }));
-    expect(screen.queryByRole("menuitem", { name: "Forget key" })).toBeNull();
+    expect(
+      screen.queryByRole("menuitem", { name: "Delete my key" })
+    ).toBeNull();
   });
 
   it("widens through the shell, and hides through it", async () => {

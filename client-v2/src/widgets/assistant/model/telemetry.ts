@@ -42,6 +42,8 @@ export type AssistantEvents = {
   };
   /** The default backend's cost gate refused the turn (daily cap or exhausted pool); the kind and tier are on `agent_refused`. */
   assistant_turn_capped: { provider: ModelProvider };
+  /** The user picked Delete my key in the head's More: the key and the backend are dropped. Never the key or the provider. */
+  assistant_key_deleted: NoParams;
   /** A turn on a key-based backend ended on the provider refusing the key with a 401. Never the key, the model or the base URL. */
   assistant_key_rejected: { provider: ModelProvider };
   /** The probe of `GET /api/ai/status` failed and the hosted model was treated as unreachable; `reason` says whether the request, the status (not a 404, which is a deployment without the route), the body, or the server's reading of the session (`reason: "unavailable"` in the answer). */

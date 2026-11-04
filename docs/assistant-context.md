@@ -303,14 +303,15 @@ Honesty rule for the demo — never present a mocked step as working.
 - **Prototype-grade:** the default backend's spend: sign-in decides who can
   spend the configured key, but nothing yet caps how much one signed-in user
   spends.
-- **Real, kept per tab:** your own key. It is kept in the tab's
-  `sessionStorage`: a reload keeps it and a new tab asks again, while a tab the
-  browser duplicates or restores (a reopened closed tab, a restored session)
-  carries it and reconnects, as after a reload. Forget key, in the panel
-  head's More menu, removes it. It goes from the browser straight to the provider as a header on
-  every request, never through our server, and is never logged or synced.
-  Project code runs in the same origin and could read it while the tab is open;
-  that is why it is not in `localStorage`.
+- **Real, held in memory only:** your own key. It is never written to
+  browser storage: a reload, a new tab, and a tab the browser duplicates or
+  restores all ask for it again, with the backend chosen before (provider,
+  model, base URL, effort, kept without the key in `localStorage`) already
+  picked. Delete my key, in Settings (Assistant) and in the panel head's More
+  menu, removes it and disconnects. It goes from the browser straight to the
+  provider as a header on every request, never through our server, and is
+  never logged or synced. Project code runs in the same origin and could read
+  it while the tab is open.
 
 ## Answering questions about this project
 

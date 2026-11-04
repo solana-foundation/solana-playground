@@ -910,37 +910,70 @@ describe("useTurn", () => {
     await waitFor(() => expect(PgAssistant.connection?.id).toBe("default"));
   });
 
-  it("reconnects this tab's kept key over a remembered default, with one probe", async () => {
+  it("drops a key an older build kept, and does not reconnect it", () => {
     const own: Connection = {
       id: "openai",
       apiKey: "sk-test-turn-0123456789",
       endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
     };
-    rememberBackend({ id: "default", apiKey: "" });
+    rememberBackend(own);
     sessionStorage.setItem("assistant.connection", JSON.stringify(own));
-    const probe = defaultBackend(true);
-
-    renderHook(() => useTestTurn());
-
-    expect(PgAssistant.connection).toMatchObject({
-      id: "openai",
-      apiKey: own.apiKey,
-    });
-    await waitFor(() => expect(probe).toHaveBeenCalledTimes(1));
-    await act(() => Promise.resolve());
-    expect(PgAssistant.connection?.id).toBe("openai");
-  });
-
-  it("does not reconnect a kept key while Connect a model is open", () => {
-    sessionStorage.setItem(
-      "assistant.connection",
-      JSON.stringify({ id: "anthropic", apiKey: "sk-ant-kept" })
-    );
-    PgAssistant.pickBackend();
 
     renderHook(() => useTestTurn());
 
     expect(PgAssistant.connection).toBeNull();
+    expect(sessionStorage.getItem("assistant.connection")).toBeNull();
+  });
+
+  it("asks for the key again after a reload, preset to the remembered backend", async () => {
+    rememberBackend({
+      id: "openai",
+      apiKey: "sk-test-turn-0123456789",
+      endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
+    });
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(PgAssistant.connection).toBeNull();
+    expect(open).toHaveBeenCalledWith("send", {
+      provider: "openai",
+      model: "gpt-x",
+      baseUrl: "https://api.example.test/v1",
+    });
+    expect(provider.send).not.toHaveBeenCalled();
+  });
+
+  it("opens Connect a model on the remembered backend while nothing is connected", () => {
+    rememberBackend({
+      id: "openai",
+      apiKey: "sk-test-turn-0123456789",
+      endpoint: { baseUrl: "https://api.example.test/v1", model: "gpt-x" },
+    });
+    const { result } = renderHook(() => useTestTurn());
+
+    act(() => result.current.openConnect("menu"));
+
+    expect(open).toHaveBeenCalledWith("menu", {
+      provider: "openai",
+      model: "gpt-x",
+      baseUrl: "https://api.example.test/v1",
+    });
+  });
+
+  it("reports a busy turn to the store, so every Delete my key reads it", async () => {
+    PgAssistant.connect({ id: "anthropic", apiKey: "sk-ant-fake" });
+    provider.send.mockImplementation(untilAborted);
+    const { result } = renderHook(() => useTestTurn());
+    expect(PgAssistant.keyHold).toBe("ready");
+
+    act(() => {
+      void result.current.send("hi");
+    });
+    expect(PgAssistant.keyHold).toBe("busy");
+
+    act(() => result.current.stop());
+    await waitFor(() => expect(PgAssistant.keyHold).toBe("ready"));
   });
 
   it("does not connect the default for a send while Connect a model is open", async () => {

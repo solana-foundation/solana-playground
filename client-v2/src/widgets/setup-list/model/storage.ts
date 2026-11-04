@@ -6,9 +6,10 @@ const log = createLogger("setup-list:storage");
 
 /**
  * Where the checklist keeps what only this device knows: whether it was
- * dismissed, whether all four steps were once done together (the assistant
- * connection is per tab, so the live state alone would bring "3 of 4" back
- * in a new tab), and whether the user last left it folded.
+ * dismissed, whether all four steps were once done together (the user's own
+ * model key is held in memory only, so the live state alone would bring
+ * "3 of 4" back after a reload or in a new tab), and whether the user last
+ * left it folded.
  */
 export const SETUP_LIST_KEY = "setup-list";
 

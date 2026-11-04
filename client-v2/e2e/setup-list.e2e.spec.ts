@@ -138,7 +138,7 @@ test("client-v2-layout: Finishing the checklist", async ({ page, context }) => {
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(setupList(page)).toHaveCount(0);
 
-  // A new tab has no model connected: the connection is per tab
+  // A new tab has no model connected: the key is held in memory only
   const second = await context.newPage();
   await second.goto("/");
   await expect(second.locator("#root-dir")).toBeVisible(LONG);

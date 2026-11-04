@@ -10,20 +10,25 @@ import { expect, LONG, startProject, stubAiStatus, test } from "./fixtures";
 const LONG_ID = "deepseek/deepseek-chat-v3.1-terminus-instruct:free";
 const PHONE = { width: 390, height: 844 };
 
-/** Connected to OpenRouter on a model with a long id, as a kept connection the panel reconnects to */
-const connectLong = async (page: Page) => {
-  await stubAiStatus(page, "own");
-  await page.addInitScript((model) => {
-    sessionStorage.setItem(
-      "assistant.connection",
-      JSON.stringify({
-        id: "openrouter",
-        apiKey: "sk-or-fake-0123456789",
-        endpoint: { baseUrl: "https://openrouter.ai/api/v1", model },
-      })
-    );
+/** The deployment serves no default backend, so the composer names the connection */
+const stubNoDefault = (page: Page) => stubAiStatus(page, "own");
+
+/**
+ * Connected to OpenRouter on a model with a long id. Through the store: the
+ * key lives in memory only, so there is nothing to seed before the load
+ */
+const connectLong = (page: Page) =>
+  page.evaluate((model) => {
+    const assistant = (
+      window as Window & { __pgAssistant?: { connect: (c: unknown) => void } }
+    ).__pgAssistant;
+    if (!assistant) throw new Error("the page exposes no __pgAssistant");
+    assistant.connect({
+      id: "openrouter",
+      apiKey: "sk-or-fake-0123456789",
+      endpoint: { baseUrl: "https://openrouter.ai/api/v1", model },
+    });
   }, LONG_ID);
-};
 
 /** The element's box; a hidden element has none, which fails the test */
 const boxOf = async (locator: Locator) => {
@@ -54,9 +59,10 @@ const expectCut = async (page: Page) => {
 test("assistant-model-name: Long name in the composer, desktop and phone", async ({
   page,
 }) => {
-  await connectLong(page);
+  await stubNoDefault(page);
   await page.goto("/");
   await startProject(page, "long-model-name", LONG);
+  await connectLong(page);
   await expectCut(page);
 
   await page.setViewportSize(PHONE);

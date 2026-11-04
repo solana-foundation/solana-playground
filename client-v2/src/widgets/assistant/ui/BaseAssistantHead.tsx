@@ -16,17 +16,17 @@ import {
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
+import type { KeyHold } from "../../../views/sidebar/assistant/model/types";
 import type { HeadLabel } from "../model/head-label";
 import { headText } from "../model/head-label";
 import { OverflowTooltip } from "./OverflowTooltip";
 import { usePickedMenu } from "./use-picked-menu";
 
 /**
- * Forget key in More: `none` while no backend holding the user's key is
- * connected (the item is not shown), `busy` while a turn runs (shown
- * disabled, since the turn is using the key)
+ * Delete my key in More, by `KeyHold`: not shown at `none`, shown disabled at
+ * `busy`, since the turn is using the key
  */
-export type ForgetKey = "none" | "ready" | "busy";
+export type DeleteKey = KeyHold;
 
 export interface BaseAssistantHeadProps {
   /** The model in use, in the head's words (`headLabel`) */
@@ -50,9 +50,9 @@ export interface BaseAssistantHeadProps {
   onHide(): void;
   /** Widen is offered: not in the Sheet, which has no width to change */
   canWiden: boolean;
-  forgetKey: ForgetKey;
+  deleteKey: DeleteKey;
   /** Drops the backend and the key this tab holds */
-  onForgetKey(): void;
+  onDeleteKey(): void;
 }
 
 /**
@@ -73,8 +73,8 @@ export function BaseAssistantHead({
   onWiden,
   onHide,
   canWiden,
-  forgetKey,
-  onForgetKey,
+  deleteKey,
+  onDeleteKey,
 }: BaseAssistantHeadProps) {
   const more = usePickedMenu(focusPicked, { s: onSources, k: onConnect });
   const { pick } = more;
@@ -125,17 +125,17 @@ export function BaseAssistantHead({
             <MenuItemText>{connectLabel}</MenuItemText>
             <DropdownMenuShortcut>K</DropdownMenuShortcut>
           </DropdownMenuItem>
-          {forgetKey === "ready" && (
-            <DropdownMenuItem onSelect={() => pick(onForgetKey)}>
-              <MenuItemText>Forget key</MenuItemText>
+          {deleteKey === "ready" && (
+            <DropdownMenuItem onSelect={() => pick(onDeleteKey)}>
+              <MenuItemText>Delete my key</MenuItemText>
             </DropdownMenuItem>
           )}
-          {forgetKey === "busy" && (
+          {deleteKey === "busy" && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <div>
                   <DropdownMenuItem disabled>
-                    <MenuItemText>Forget key</MenuItemText>
+                    <MenuItemText>Delete my key</MenuItemText>
                   </DropdownMenuItem>
                 </div>
               </TooltipTrigger>

@@ -11,8 +11,9 @@ import {
 /**
  * The panel comes back usable after a reload, without being asked twice.
  *
- * A key-based backend comes back from this tab's `sessionStorage` (the
- * `assistant-own-key` describe block); the default backend needs no key at all
+ * The default backend needs no key at all
+ * (a key-based one is asked for again: its key lives in memory only, see the
+ * `assistant-own-key` describe block)
  * -- and making the user click the same button on every single reload, before
  * the assistant could be used at all, was the whole of the difference.
  *
@@ -173,6 +174,13 @@ const storedValues = (page: Page, store: "localStorage" | "sessionStorage") =>
     return values;
   }, store);
 
+/** Neither of the page's storages holds the key */
+const expectNoKeyStored = async (page: Page) => {
+  for (const store of ["localStorage", "sessionStorage"] as const) {
+    expect(JSON.stringify(await storedValues(page, store))).not.toContain(KEY);
+  }
+};
+
 /** Whether a request carries the key anywhere: its URL, a header or its body */
 const carriesKey = (req: Request) =>
   [req.url(), JSON.stringify(req.headers()), req.postData() ?? ""].some(
@@ -182,7 +190,7 @@ const carriesKey = (req: Request) =>
 /**
  * The composer's model button with nothing connected and no default on the
  * deployment (`stubNoDefault`). It reads so only once the shared probe has
- * answered, and the kept-key reconnect runs on mount, before that: a
+ * answered, after the mount has dropped any key an older build kept: a
  * connection made on load would already show here.
  */
 const connectButton = (page: Page) =>
@@ -205,10 +213,10 @@ const expectNothingConnected = async (page: Page) => {
  */
 const stubNoDefault = (page: Page) => stubAiStatus(page.context(), "own");
 
-/** Forget key, from the head's More */
-const forgetKey = async (page: Page) => {
+/** Delete my key, from the head's More */
+const deleteKey = async (page: Page) => {
   await page.getByRole("button", { name: "More", exact: true }).click();
-  await page.getByRole("menuitem", { name: "Forget key" }).click();
+  await page.getByRole("menuitem", { name: "Delete my key" }).click();
 };
 
 /** Every value the origin's IndexedDB holds, as one string */
@@ -248,82 +256,50 @@ test.describe("assistant-own-key", () => {
   test.setTimeout(240_000);
   test.beforeEach(({ page }) => stubNoDefault(page));
 
-  test("assistant-own-key: Reloading the tab keeps the connection", async ({
+  test("assistant-own-key: A reload asks for the key again", async ({
     page,
   }) => {
-    // The deployment serves a default, and this browser remembers picking it
-    // once: the key kept for this tab still wins, because it reconnects on
-    // load before the probe can answer and the default's reconnect then
-    // finds a connection
-    await stubAiStatus(page, "z-ai/glm-5.3-flash:US");
     await seedWorkspace(page, "own-key-reload");
     await connectOwn(page);
-    await page.evaluate(() =>
-      localStorage.setItem("assistant.backend", "default")
-    );
+    await expect(page.getByRole("button", { name: "gpt-x" })).toBeVisible(LONG);
+
     await page.reload();
 
-    await expect
-      .poll(() => connected(page), LONG)
-      .toMatchObject({ id: "openai", apiKey: KEY, endpoint: OWN.endpoint });
-    // Connected, the model button names the model instead
-    await expect(page.getByRole("button", { name: "gpt-x" })).toBeVisible(LONG);
-    // Nothing asks for the key again
-    await expect(page.locator("#assistant-api-key")).toHaveCount(0);
-    // The probe has answered by now; give the default's reconnect a window
-    // to show itself
-    await page.waitForTimeout(QUIET_WINDOW_MS);
-    expect(await connected(page)).toMatchObject({ id: "openai", apiKey: KEY });
+    await expectNothingConnected(page);
+    await expectNoKeyStored(page);
+    // Connect a model asks for the key, on the backend chosen before
+    await connectButton(page).click();
+    const dialog = page.getByRole("dialog", { name: "Connect a model" });
+    await expect(dialog.locator("#assistant-api-key")).toBeVisible(LONG);
+    await expect(dialog.locator("#assistant-api-key")).toHaveValue("");
+    // On the remembered endpoint, not the provider's own
+    for (const value of [OWN.endpoint.baseUrl, OWN.endpoint.model]) {
+      await expect(dialog.locator(`input[value="${value}"]`)).toHaveCount(1);
+    }
+    expect(await connected(page)).toBeNull();
   });
 
-  test("a model tuned in the composer comes back after a reload", async ({
+  test("assistant-own-key: A key an older build kept is removed", async ({
     page,
   }) => {
-    await seedWorkspace(page, "own-key-tuned");
-    await connectOwn(page, {
-      id: "anthropic",
-      apiKey: KEY,
-      settings: { model: "claude-opus-5-5", effort: "medium" },
-    });
-    await page.getByRole("button", { name: "Opus 5.5" }).click(LONG);
-    await page.getByRole("menuitemradio", { name: /Sonnet 5\.5/ }).click();
-    await expect(page.getByRole("button", { name: "Sonnet 5.5" })).toBeVisible(
-      LONG
+    // What a build before HOO-2423 kept for the tab, there before the app runs
+    await page.addInitScript(
+      (c) => sessionStorage.setItem("assistant.connection", JSON.stringify(c)),
+      OWN
     );
+    await seedWorkspace(page, "own-key-legacy");
 
-    await page.reload();
-
-    await expect(page.getByRole("button", { name: "Sonnet 5.5" })).toBeVisible(
-      LONG
-    );
-    expect(await connected(page)).toMatchObject({
-      id: "anthropic",
-      apiKey: KEY,
-    });
-  });
-
-  test("assistant-own-key: Storage that refuses access", async ({ page }) => {
-    await page.addInitScript(() => {
-      Object.defineProperty(window, "sessionStorage", {
-        get() {
-          throw new DOMException("blocked", "SecurityError");
-        },
-      });
-    });
-    await seedWorkspace(page, "own-key-blocked");
-    await connectOwn(page);
-    await expect
-      .poll(() => connected(page), LONG)
-      .toMatchObject({ id: "openai" });
-
-    await page.reload();
     await expectNothingConnected(page);
+    expect(
+      await page.evaluate(() => sessionStorage.getItem("assistant.connection"))
+    ).toBeNull();
   });
 
   test("assistant-own-key: Changing the backend is not undone", async ({
     page,
   }) => {
     await seedWorkspace(page, "own-key-change");
+    await connectOwn(page);
     await page.getByRole("button", { name: "More", exact: true }).click();
     await page
       .getByRole("menuitem", { name: /Connect a model…|Connection and key…/ })
@@ -331,24 +307,19 @@ test.describe("assistant-own-key", () => {
     const dialog = page.getByRole("dialog", { name: "Connect a model" });
     await expect(dialog.locator("#assistant-api-key")).toBeVisible(LONG);
 
-    // A key kept for this tab, with nothing connected: what the panel's
-    // reconnect on mount picks up
-    await page.evaluate(
-      (c) => sessionStorage.setItem("assistant.connection", JSON.stringify(c)),
-      OWN
-    );
     // Folding the panel unmounts it and opening it mounts it again, and with
-    // it the reconnect; the dialog stays, since it lives outside the panel
+    // it the cleanup on mount; the dialog stays, since it lives outside the
+    // panel, and the live connection must stay with it
     const expand = page.locator('[aria-label="Expand assistant"]');
     await page.keyboard.press("ControlOrMeta+r");
     await expect(expand).toHaveCount(1);
     await page.keyboard.press("ControlOrMeta+r");
     await expect(expand).toHaveCount(0);
 
-    // A reconnect would be asynchronous, so give one a window to show itself
+    // A change would be asynchronous, so give one a window to show itself
     await page.waitForTimeout(QUIET_WINDOW_MS);
 
-    expect(await connected(page)).toBeNull();
+    expect(await connected(page)).toMatchObject({ id: "openai", apiKey: KEY });
     expect(
       await page.evaluate(() => {
         const assistant = (window as OwnWindow).__pgAssistant;
@@ -373,23 +344,47 @@ test.describe("assistant-own-key", () => {
     ).not.toContain(KEY);
   });
 
-  test("assistant-own-key: Forgetting the key, then reload", async ({
+  test("assistant-own-key: Delete my key from the chat header", async ({
     page,
   }) => {
     await seedWorkspace(page, "own-key-forget");
     await connectOwn(page);
-    expect(
-      JSON.stringify(await storedValues(page, "sessionStorage"))
-    ).toContain(KEY);
 
-    await forgetKey(page);
+    await deleteKey(page);
     await expectNothingConnected(page);
     await page.reload();
 
     await expectNothingConnected(page);
-    expect(
-      JSON.stringify(await storedValues(page, "sessionStorage"))
-    ).not.toContain(KEY);
+    await expectNoKeyStored(page);
+  });
+
+  test("assistant-own-key: Delete my key from Settings", async ({ page }) => {
+    await seedWorkspace(page, "own-key-settings");
+    await connectOwn(page);
+
+    await page.keyboard.press("ControlOrMeta+,");
+    const settings = page.getByRole("region", { name: "Settings" });
+    const button = settings.getByRole("button", { name: "Delete my key" });
+    await expect(button).toBeEnabled(LONG);
+    await button.click();
+
+    await expect(button).toBeDisabled();
+    await expect(settings.getByText(/No key entered/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(settings).toBeHidden();
+    await expectNothingConnected(page);
+    await expectNoKeyStored(page);
+  });
+
+  test("assistant-own-key: No key, nothing to delete", async ({ page }) => {
+    await seedWorkspace(page, "own-key-none");
+    await expectNothingConnected(page);
+
+    await page.keyboard.press("ControlOrMeta+,");
+    const settings = page.getByRole("region", { name: "Settings" });
+    await expect(
+      settings.getByRole("button", { name: "Delete my key" })
+    ).toBeDisabled(LONG);
   });
 
   test("assistant-own-key: Switching to the default backend", async ({
@@ -397,27 +392,19 @@ test.describe("assistant-own-key", () => {
   }) => {
     await seedWorkspace(page, "own-key-switch");
     await connectOwn(page);
-    expect(
-      JSON.stringify(await storedValues(page, "sessionStorage"))
-    ).toContain(KEY);
     await connectOwn(page, { id: "default", apiKey: "" });
 
-    expect(
-      JSON.stringify(await storedValues(page, "sessionStorage"))
-    ).not.toContain(KEY);
+    await expectNoKeyStored(page);
   });
 
   test("assistant-own-key: Nothing durable holds the key", async ({ page }) => {
     await seedWorkspace(page, "own-key-durable");
     await connectOwn(page);
-    await page.reload();
     await expect
       .poll(() => connected(page), LONG)
       .toMatchObject({ apiKey: KEY });
 
-    expect(
-      JSON.stringify(await storedValues(page, "localStorage"))
-    ).not.toContain(KEY);
+    await expectNoKeyStored(page);
     // The seeded workspace's files live here, so zero records means the
     // read found nothing and the check below would pass for no reason
     const dump = await indexedDbDump(page);
@@ -429,9 +416,8 @@ test.describe("assistant-own-key", () => {
     page,
     baseURL,
   }) => {
-    // Connecting and reloading send no provider request, so this guards
-    // against a regression that would send the key to our own origin on load
-    // or reconnect
+    // Connecting sends no provider request, so this guards against a
+    // regression that would send the key to our own origin on connect
     const leaks: string[] = [];
     // Resolved here: a throw inside the listener would not fail the test
     const origin = new URL(requireFor("the base URL")(baseURL)).origin;
@@ -442,7 +428,6 @@ test.describe("assistant-own-key", () => {
 
     await seedWorkspace(page, "own-key-requests");
     await connectOwn(page);
-    await page.reload();
     await expect
       .poll(() => connected(page), LONG)
       .toMatchObject({ apiKey: KEY });

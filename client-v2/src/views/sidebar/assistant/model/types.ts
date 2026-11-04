@@ -5,6 +5,13 @@ export const isDefaultBackend = (id: ModelProvider | undefined) =>
   id === "default";
 
 /**
+ * Whether Delete my key can act, wherever it is offered (Settings, the
+ * assistant head's More): `none` while no backend holding the user's key is
+ * connected, `busy` while a turn is using the key, else `ready`
+ */
+export type KeyHold = "none" | "ready" | "busy";
+
+/**
  * One conversation with one backend.
  *
  * A provider owns its own message history and streams text into the store as it
