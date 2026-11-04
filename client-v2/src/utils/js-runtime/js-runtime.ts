@@ -11,7 +11,13 @@ import { serveSandboxWith } from "./page-channel";
 import { prepareCode } from "./prepare-code";
 import type { SandboxWallet, ToSandbox } from "./protocol";
 import { relayRpcWith } from "./rpc-relay";
-import { connectWith, LOAD_TIMEOUT_MS, SANDBOX_URL } from "./sandbox-frame";
+import {
+  connectWith,
+  LOAD_TIMEOUT_MS,
+  RELOADED_ERROR,
+  SANDBOX_URL,
+  watchReloadsOf,
+} from "./sandbox-frame";
 
 const log = createLogger("js-runtime:sandbox");
 
@@ -74,7 +80,7 @@ export class PgJsRuntime {
       }
 
       const run = this._runMessage(prepareCode(code), isTest);
-      const port = await this._openSandbox();
+      const { port, reloaded, stopWatching } = await this._openSandbox();
       const ended = serveSandboxWith({
         print: ({ level, text }) => {
           const line = formatOutputFor(level)(text);
@@ -91,8 +97,18 @@ export class PgJsRuntime {
         rpc: relayRpcWith(() => window.fetch)(window.location.origin),
       })(port);
       port.postMessage(run);
-      await ended;
-      port.close();
+      try {
+        // A frame that loads another document drops the run's sandbox,
+        // which then never posts `end`
+        const outcome = await Promise.race([
+          ended.then(() => "ended" as const),
+          reloaded.then(() => "reloaded" as const),
+        ]);
+        if (outcome === "reloaded") throw new Error(RELOADED_ERROR);
+      } finally {
+        stopWatching();
+        port.close();
+      }
 
       if (!isTest) PgTerminal.println("");
     } finally {
@@ -147,32 +163,42 @@ export class PgJsRuntime {
    * Loads a fresh sandbox and opens its private channel. The frame is made
    * once and reloaded for every run, so no run sees another's globals.
    *
-   * @returns the page's side of the channel
+   * @returns the page's side of the channel, a promise that resolves if the
+   * frame loads another document during the run, and what stops watching
    */
   private static async _openSandbox() {
-    if (!this._frame) {
-      const frame = document.createElement("iframe");
-      // Scripts only: no same-origin access, top-level navigation, popups
-      // or forms, so the frame's origin is opaque
-      frame.setAttribute("sandbox", "allow-scripts");
-      frame.setAttribute("aria-hidden", "true");
-      frame.title = "Project code runtime";
-      frame.style.display = "none";
-      document.body.appendChild(frame);
-      this._frame = frame;
-    }
-
-    const frame = this._frame;
+    const frame = this._frame ?? this._createFrame();
+    // Watched before the frame is pointed at the sandbox, so the sandbox's
+    // own `load` is the first one counted
+    const reloads = watchReloadsOf(frame);
     const connected = connectWith(window)(LOAD_TIMEOUT_MS)(
       () => frame.contentWindow
     );
     frame.src = SANDBOX_URL;
+    // Attached only now, with its `src` set: a frame attached without one
+    // loads `about:blank` first, which would count as a reload
+    if (!frame.isConnected) document.body.appendChild(frame);
     try {
-      return await connected;
+      const port = await connected;
+      return { port, reloaded: reloads.reloaded, stopWatching: reloads.stop };
     } catch (error) {
+      reloads.stop();
       log.error(error, { report: true });
       throw error;
     }
+  }
+
+  /** The sandbox's frame, not yet attached to the page */
+  private static _createFrame() {
+    const frame = document.createElement("iframe");
+    // Scripts only: no same-origin access, top-level navigation, popups
+    // or forms, so the frame's origin is opaque
+    frame.setAttribute("sandbox", "allow-scripts");
+    frame.setAttribute("aria-hidden", "true");
+    frame.title = "Project code runtime";
+    frame.style.display = "none";
+    this._frame = frame;
+    return frame;
   }
 
   /** What is running now */

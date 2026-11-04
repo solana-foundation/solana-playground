@@ -64,6 +64,30 @@ export const sandboxKeypairWith =
       [SIGN_THROUGH_PAGE]: { value: sign(publicKey)("transaction") },
     });
 
+/** Whether a value is a list of byte values (integers 0 to 255) */
+const isByteList = (value: unknown): value is number[] =>
+  Array.isArray(value) &&
+  value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255);
+
+/**
+ * The message project code asked to sign, as bytes the page accepts: a
+ * `Uint8Array` (a `Buffer` is one) or a `number[]` of byte values.
+ *
+ * @param message what project code passed to `signMessage`
+ * @returns a copy of its bytes
+ * @throws a `TypeError` naming what to pass instead, for anything else
+ */
+const messageBytesOf = (message: unknown): Uint8Array => {
+  if (message instanceof Uint8Array || isByteList(message)) {
+    return Uint8Array.from(message);
+  }
+  throw new TypeError(
+    `signMessage takes the message as bytes (a Uint8Array, Buffer or number[]), not ${
+      Array.isArray(message) ? "an array of non-bytes" : typeof message
+    }. Encode text first: new TextEncoder().encode(text).`
+  );
+};
+
 /**
  * The signing methods of a wallet whose key the page holds.
  *
@@ -89,7 +113,8 @@ export const signerMethodsWith =
         for (const tx of txs) await signTransaction(tx);
         return txs;
       },
-      signMessage: (message: Uint8Array) => sign(publicKey)("message")(message),
+      signMessage: async (message: Uint8Array) =>
+        sign(publicKey)("message")(messageBytesOf(message)),
     };
   };
 
@@ -118,3 +143,47 @@ export const sandboxSignerProviderWith = (
     throw new Error(SECRET_KEY_ERROR);
   },
 });
+
+if (import.meta.vitest) {
+  const { describe, it, expect } = import.meta.vitest;
+
+  describe("utils/wallet/sandbox-signer-provider", () => {
+    const publicKey = Keypair.generate().publicKey;
+
+    /** Signer methods whose "page" records the bytes it is asked to sign */
+    const recordingMethods = () => {
+      const asked: Array<number[] | string> = [];
+      const methods = signerMethodsWith(() => () => async (bytes) => {
+        // Only a `Uint8Array` passes the page's check of a sign request
+        asked.push(
+          bytes instanceof Uint8Array ? Array.from(bytes) : "not bytes"
+        );
+        return new Uint8Array(64);
+      })(publicKey);
+      return { methods, asked };
+    };
+
+    it("signMessage sends a Uint8Array, a Buffer or a number[] as bytes", async () => {
+      const { methods, asked } = recordingMethods();
+      await methods.signMessage(new Uint8Array([1, 2]));
+      await methods.signMessage(Buffer.from([3, 4]));
+      await methods.signMessage([5, 6] as unknown as Uint8Array);
+      expect(asked).toEqual([
+        [1, 2],
+        [3, 4],
+        [5, 6],
+      ]);
+    });
+
+    it("signMessage refuses a string or other non-bytes without asking the page", async () => {
+      const { methods, asked } = recordingMethods();
+      await expect(
+        methods.signMessage("hello" as unknown as Uint8Array)
+      ).rejects.toThrow("signMessage takes the message as bytes");
+      await expect(
+        methods.signMessage([1, 256] as unknown as Uint8Array)
+      ).rejects.toThrow("signMessage takes the message as bytes");
+      expect(asked).toEqual([]);
+    });
+  });
+}

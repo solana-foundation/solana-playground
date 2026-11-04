@@ -57,6 +57,41 @@ export const connectWith =
       host.addEventListener("message", handleMessage);
     });
 
+/** What a run fails with when the sandbox's frame loads a new document */
+export const RELOADED_ERROR =
+  "The runtime reloaded or navigated away before the code finished, so the run ended.";
+
+/** The part of the frame element whose `load` events are counted */
+type LoadHost = Pick<EventTarget, "addEventListener" | "removeEventListener">;
+
+/**
+ * Watches the sandbox's frame for a document other than the one a run talks
+ * to. Called just before the frame is pointed at the sandbox, so its first
+ * `load` is that document's, whether it fires before or after the handshake;
+ * any later `load` means the frame reloaded or navigated, and the sandbox the
+ * run talks to is gone and will never post `end`.
+ *
+ * @param frame the sandbox's frame element
+ * @returns `reloaded`, resolving at the second `load`, and `stop`, which
+ * removes the listener
+ */
+export const watchReloadsOf = (frame: LoadHost) => {
+  let loads = 0;
+  let resolveReloaded = () => {};
+  const reloaded = new Promise<void>((resolve) => {
+    resolveReloaded = resolve;
+  });
+  const handleLoad = () => {
+    loads += 1;
+    if (loads < 2) return;
+    stop();
+    resolveReloaded();
+  };
+  const stop = () => frame.removeEventListener("load", handleLoad);
+  frame.addEventListener("load", handleLoad);
+  return { reloaded, stop };
+};
+
 if (import.meta.vitest) {
   const { describe, it, expect, vi, afterEach } = import.meta.vitest;
 
@@ -112,6 +147,32 @@ if (import.meta.vitest) {
       // Nothing listens on `window` after the handshake
       expect(isListening()).toBe(false);
       port.close();
+    });
+
+    it("watchReloadsOf resolves at the frame's second load, never at its first", async () => {
+      const frame = new EventTarget();
+      const { reloaded, stop } = watchReloadsOf(frame);
+      let isReloaded = false;
+      void reloaded.then(() => {
+        isReloaded = true;
+      });
+
+      frame.dispatchEvent(new Event("load"));
+      await Promise.resolve();
+      expect(isReloaded).toBe(false);
+
+      frame.dispatchEvent(new Event("load"));
+      await reloaded;
+      expect(isReloaded).toBe(true);
+      stop();
+    });
+
+    it("watchReloadsOf stops listening once stopped", async () => {
+      const frame = new EventTarget();
+      const removed = vi.spyOn(frame, "removeEventListener");
+      const { stop } = watchReloadsOf(frame);
+      stop();
+      expect(removed).toHaveBeenCalledWith("load", expect.any(Function));
     });
 
     it("rejects when the frame does not announce itself in time", async () => {
