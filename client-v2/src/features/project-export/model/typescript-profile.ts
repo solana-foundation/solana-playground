@@ -126,7 +126,7 @@ const isGlobalUsedFor = (name: string) => (content: string) =>
  * @param content the script
  * @returns the import line, or empty when the script uses neither
  */
-const shimImport = (shimStem: string) => (path: string, content: string) => {
+const shimImportFor = (shimStem: string) => (path: string, content: string) => {
   const names = [
     isGlobalUsedFor("pg")(content) && !hasDeclarationFor("pg")(content) && "pg",
     isGlobalUsedFor("sleep")(content) &&
@@ -172,7 +172,7 @@ const convertScriptWith =
   (shimStem: string) =>
   (path: string, content: string) => {
     const converted = withoutImportsOfBound(importGlobals(content));
-    return shimImport(shimStem)(path, converted) + converted;
+    return shimImportFor(shimStem)(path, converted) + converted;
   };
 
 /** The client file `npm run client` runs, or `undefined` with no client */
