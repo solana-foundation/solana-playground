@@ -74,14 +74,6 @@ const Wrapped = ({ link }: { link: string }) => (
 );
 
 /**
- * The phone's way out for work a phone does poorly, such as typing code: a
- * row on the menu page and the sheet it opens, in the shape of the lesson's
- * "Write it yourself on a computer" sheet (Almaz's prototype), so the phone
- * has one look for it. Signed in, account sync carries the project and the
- * sheet gives the link; signed out, it says the project stays here and
- * offers only the sign-in, since the link would find nothing on a computer.
- */
-/**
  * What the signed-in sheet promises: the project goes with them only once the
  * account holds it, so an upload that failed or has not run yet is said
  */
@@ -92,6 +84,15 @@ const signedInLine = (
     ? `Your files and this conversation go with you. Open this link on a computer and sign in with GitHub as @${account.login}: this project is in your list there.`
     : `Some of this project is not in your account yet. Once it syncs, open this link on a computer and sign in with GitHub as @${account.login}.`;
 
+/**
+ * The phone's way out for work a phone does poorly, such as typing code: a
+ * row on the menu page and the sheet it opens, in the shape of the lesson's
+ * "Write it yourself on a computer" sheet (Almaz's prototype), so the phone
+ * has one look for it. Signed in, account sync carries the project and the
+ * sheet gives the link, promising the project only once the account holds it;
+ * signed out, it says the project stays here and offers only the sign-in,
+ * since the link would find nothing on a computer.
+ */
 const BaseHandoff = ({
   open,
   onOpenChange,
