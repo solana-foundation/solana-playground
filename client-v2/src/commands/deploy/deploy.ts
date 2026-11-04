@@ -342,7 +342,7 @@ const processDeploy = async (signal: AbortSignal, lockStop: () => void) => {
         report: true,
         context: { action: "close the buffer on stop" },
       });
-      const lamports = await keptLamports(bufferKp.publicKey);
+      const lamports = await keptLamportsOn(connection)(bufferKp.publicKey);
       // A live buffer is rent-exempt, so an empty one is gone: the close
       // landed and only its confirmation failed
       left =
@@ -587,20 +587,24 @@ const KEPT_BALANCE_MS = 5000;
  *
  * @returns the lamports, or `undefined` when the cluster did not answer in time,
  * and the line says "its SOL"
+ *
+ * @param connection the deploy's own: the user may have changed network since,
+ * and on another network the buffer reads 0, as if the close had landed
  */
-const keptLamports = async (buffer: PgWeb3.PublicKey) => {
-  try {
-    return await PgCommon.timeout(
-      PgConnection.current.getBalance(buffer),
-      KEPT_BALANCE_MS
-    );
-  } catch (e) {
-    // Not reported: the close failure just before it already is, and the
-    // line still says what to do
-    log.error(e, { context: { action: "read the kept buffer's balance" } });
-    return undefined;
-  }
-};
+const keptLamportsOn =
+  (connection: PgWeb3.Connection) => async (buffer: PgWeb3.PublicKey) => {
+    try {
+      return await PgCommon.timeout(
+        connection.getBalance(buffer),
+        KEPT_BALANCE_MS
+      );
+    } catch (e) {
+      // Not reported: the close failure just before it already is, and the
+      // line still says what to do
+      log.error(e, { context: { action: "read the kept buffer's balance" } });
+      return undefined;
+    }
+  };
 
 /**
  * Send and confirm transaction with retries based on `checkConfirmation`

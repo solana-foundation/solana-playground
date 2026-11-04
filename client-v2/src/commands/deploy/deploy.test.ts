@@ -10,6 +10,8 @@ const env = vi.hoisted(() => ({
   balance: 0,
   /** The buffer account's balance, read when a stop could not close it */
   bufferBalance: (async () => 0) as () => Promise<number>,
+  /** The user has switched network since the deploy began */
+  switchedNetwork: false,
   waitForInput: (async () => true) as (msg: string) => Promise<unknown>,
   executeFromStr: (async () => undefined) as (cmd: string) => Promise<unknown>,
 }));
@@ -27,12 +29,19 @@ vi.mock("../../utils", () => ({
     timeout: <R>(promisable: Promise<R>) => promisable,
   },
   PgConnection: {
-    current: {
-      // The buffer's key is the only one with `toBase58` (`Keypair.generate`)
-      getBalance: async (key: { toBase58?: unknown }) =>
-        key?.toBase58 ? env.bufferBalance() : env.balance,
-      getMinimumBalanceForRentExemption: async () => 2_000_000_000,
-      getAccountInfo: async () => null,
+    get current() {
+      // A connection stays on the network it was taken for: on another one
+      // the buffer does not exist, and its balance reads 0
+      const switched = env.switchedNetwork;
+      return {
+        // The buffer's key is the only one with `toBase58` (`Keypair.generate`)
+        getBalance: async (key: { toBase58?: unknown }) => {
+          if (!key?.toBase58) return env.balance;
+          return switched ? 0 : env.bufferBalance();
+        },
+        getMinimumBalanceForRentExemption: async () => 2_000_000_000,
+        getAccountInfo: async () => null,
+      };
     },
     getAirdropAmount: () => 5,
   },
@@ -106,6 +115,7 @@ describe("commands/deploy", () => {
     env.controller = new AbortController();
     env.balance = 0;
     env.bufferBalance = async () => 0;
+    env.switchedNetwork = false;
     env.waitForInput = async () => true;
     env.executeFromStr = async () => undefined;
     airdrop.mockClear();
@@ -182,6 +192,21 @@ describe("commands/deploy", () => {
     const failure = await runDeploy();
 
     expect(isStopped(failure)).toBe(true);
+    expect((failure as Error).message).toContain(
+      "Its buffer Buf1111 still holds 1.42 SOL."
+    );
+  });
+
+  it("reads a kept buffer on the deploy's network, not one chosen since", async () => {
+    stopKeepingTheBuffer();
+    env.bufferBalance = async () => 1_421_676_960;
+    closeBuffer.mockImplementation(async () => {
+      env.switchedNetwork = true;
+      throw new Error("blockhash not found");
+    });
+
+    const failure = await runDeploy();
+
     expect((failure as Error).message).toContain(
       "Its buffer Buf1111 still holds 1.42 SOL."
     );
