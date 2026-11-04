@@ -1,9 +1,12 @@
 # Design
 
-> **Frozen.** This design takes no new sections. A ticket larger than a bug
-> fix gets a change of its own (`/opsx:propose`), and a PR in this change
-> ticks only its own task line in `tasks.md` (`client-v2/CLAUDE.md`, "Specs
-> and changes", step 4).
+> **Frozen.** This umbrella design takes no new sections. A ticket larger
+> than a bug fix gets a change of its own (`/opsx:propose`), and a PR in
+> this change ticks only its own task line in `tasks.md`; the PR that
+> closes the change is the exception (`client-v2/CLAUDE.md`, "Specs and
+> changes"). Design detail for the open tasks 5.22 and 5.23 goes into
+> `plans/<task>.md` here or into a change of its own. (This is not the
+> Nov 11 design freeze in "Context", which is a date for the designs.)
 
 ## Context
 
