@@ -58,6 +58,14 @@ vi.mock("@/widgets/assistant", async () => ({
     .useDefaultBackend,
   useTurn: (await import("@/widgets/assistant/model/use-turn")).useTurn,
 }));
+// A send reads the context; the real bridge reaches the build's generated
+// globals
+vi.mock("@/views/sidebar/assistant/bridge/playground-bridge", () => ({
+  realBridge: {
+    listContextFiles: () => [],
+    toProjectPath: (path: string) => path,
+  },
+}));
 vi.mock("@/effects/chat-thread/push-thread", () => ({
   pushThread: vi.fn(() => Promise.resolve()),
 }));

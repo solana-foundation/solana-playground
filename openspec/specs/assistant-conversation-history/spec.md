@@ -12,7 +12,8 @@ Its scenarios are checked by unit tests, not in the browser, so they carry the
 `src/features/persistence/model/tool-call.ts`,
 `src/views/sidebar/assistant/store.ts`,
 `src/widgets/assistant/ui/BaseThreadItem.test.tsx`,
-`src/shared/lib/ai/run-turn.test.ts` and
+`src/shared/lib/ai/run-turn.test.ts`,
+`src/widgets/assistant/model/use-turn.test.tsx` and
 `src/views/sidebar/assistant/model/provider.test.ts`, all under `client-v2/`.
 
 ## Requirements
@@ -102,7 +103,12 @@ text that came before and after it, for the newest calls that fit 64,000
 characters together as JSON; older calls SHALL be left out. The replay SHALL
 open on the thread's first user message. A tool item that carries no stored call
 SHALL be left out, as today. A thread holding no stored calls SHALL replay as
-text only, as before.
+text only, as before. For a file that is not in the context when the replay
+is built, the replay SHALL send a note that the file was taken out of the
+context in place of what a `read_file` call returned and of the content a
+`write_file` call wrote; the stored thread SHALL keep the call whole. A
+provider whose history may hold such a file's content SHALL be rebuilt from
+the thread before the next message is sent.
 
 #### Scenario: A reload keeps what the model read (manual)
 
@@ -128,6 +134,11 @@ text only, as before.
 
 - **WHEN** a thread cut to its newest items opens on a reply and a stored call
 - **THEN** the replay leaves both out and opens on the first user message
+
+#### Scenario: A file taken out of the context is not replayed (manual)
+
+- **WHEN** the model read `src/secret.rs`, the person removes its chip and sends another message, or reopens the thread later
+- **THEN** the request carries the `read_file` call with a note in place of its result, and none of the file's content
 
 #### Scenario: A thread from before replays as text (manual)
 

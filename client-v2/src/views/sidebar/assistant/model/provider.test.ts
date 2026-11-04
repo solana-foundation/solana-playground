@@ -13,7 +13,7 @@ import {
   POOL_EXHAUSTED_REASON,
   REFUSAL_MESSAGES,
 } from "@/features/agent";
-import { toReplayMessages } from "@/features/persistence";
+import { toReplayMessagesWith } from "@/features/persistence";
 import {
   decodeThread,
   encodeThread,
@@ -363,7 +363,7 @@ describe("the assistant's provider", () => {
         kind: "user",
         text: "read lib.rs",
       };
-      const seed = toReplayMessages(
+      const seed = toReplayMessagesWith(() => true)(
         Array.of<ChatItem>(asked).concat(PgAssistant.items)
       );
       const sent = respond(anthropicText("It is missing.", "end_turn"));
@@ -442,7 +442,7 @@ describe("the assistant's provider", () => {
       const sent = respond(openAiText("It is written."));
       await createProvider(
         { id: "default", apiKey: "" },
-        toReplayMessages(thread)
+        toReplayMessagesWith(() => true)(thread)
       ).send("is it written?");
 
       expect(toolMessages(sent[0].body)).toEqual([

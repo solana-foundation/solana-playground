@@ -68,6 +68,13 @@ vi.mock("../../../utils/explorer/explorer", () => ({
 }));
 // No tutorial on screen: the panel is named after the project
 vi.mock("@/entities/tutorial", () => ({ useTutorialBeforeStart: () => null }));
+// A send reads the context; the real bridge reaches the whole explorer
+vi.mock("../../../views/sidebar/assistant/bridge/playground-bridge", () => ({
+  realBridge: {
+    listContextFiles: () => [],
+    toProjectPath: (path: string) => path,
+  },
+}));
 
 import { resetDefaultBackendProbe } from "../model/default-backend";
 import { Assistant } from "./Assistant";

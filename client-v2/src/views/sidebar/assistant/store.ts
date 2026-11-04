@@ -126,7 +126,7 @@ export type ChatItem =
       /**
        * Present on the item `addToolResult` writes when a tool returns or
        * throws: the call as the model made it and what it read back, so a
-       * provider built for this thread later replays it (`toReplayMessages`).
+       * provider built for this thread later replays it (`toReplayMessagesWith`).
        * The thread draws nothing for such an item; any marker the tool wrote
        * (`addToolCall`) is drawn as before.
        */

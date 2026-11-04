@@ -60,7 +60,7 @@ const createReplies = () => {
  */
 export const createProvider = (
   connection: ProviderConnection,
-  /** Prior turns, their stored tool calls included, when reopening a thread (`toReplayMessages`) */
+  /** Prior turns, their stored tool calls included, when reopening a thread (`toReplayMessagesWith`) */
   seed: readonly ModelMessage[] = []
 ): Provider => {
   const { supportsTools } = MODEL_PROVIDER_PROFILES[connection.id];

@@ -1,7 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
 import { PgSession } from "@/features/auth";
-import { report, toReplayMessages } from "@/features/persistence";
+import { report, toReplayMessagesWith } from "@/features/persistence";
 import type { AiTurnError, ModelProvider } from "@/shared/lib/ai";
 import { isNetworkFailure } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
@@ -10,6 +10,7 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { pushThread } from "../../../effects/chat-thread/push-thread";
 // Deep import rather than the `utils` barrel, as `effects/chat-thread` does
 import { PgExplorer } from "../../../utils/explorer/explorer";
+import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
 import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
@@ -43,6 +44,19 @@ import { assistantTelemetry } from "./telemetry";
 export type { ConnectPreset };
 
 const log = createLogger("assistant:turn");
+
+/**
+ * The open thread as the model's history, without the content of a file the
+ * user has taken out of the context since: a path is read the way `read_file`
+ * reads it
+ *
+ * @param context the context's project-relative paths now
+ */
+const replayFor = (context: readonly string[]) =>
+  toReplayMessagesWith((asked) => {
+    const path = realBridge.toProjectPath(asked);
+    return path !== undefined && context.includes(path);
+  })(PgAssistant.items);
 const connectLog = createLogger("assistant:connect");
 
 /**
@@ -324,6 +338,11 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     threadId: string | null;
     /** `PgAssistant.conversation` when it was seeded */
     conversation: number;
+    /**
+     * Every file in the context at a send since it was seeded: what its
+     * history may hold the content of
+     */
+    context: ReadonlySet<string>;
     instance: Provider;
   } | null>(null);
   const turn = useRef<AbortController | null>(null);
@@ -516,21 +535,32 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // open would otherwise hand the next account the last one's history. A
     // rebuild loses little: the new provider is seeded from the open thread,
     // which drops provider-only parts and the oldest calls past the replay
-    // budget (`toReplayMessages`).
+    // budget (`toReplayMessagesWith`).
+    //
+    // A file taken out of the context rebuilds it too: the history holds what
+    // the model read of it, and the replay leaves that out (`replayFor`)
+    const context = realBridge.listContextFiles();
     if (
       provider.current?.connection !== current ||
       provider.current.threadId !== PgAssistant.threadId ||
-      provider.current.conversation !== PgAssistant.conversation
+      provider.current.conversation !== PgAssistant.conversation ||
+      [...provider.current.context].some((path) => !context.includes(path))
     ) {
       provider.current = {
         connection: current,
         threadId: PgAssistant.threadId,
         conversation: PgAssistant.conversation,
+        context: new Set(context),
         // Seeded from the open thread, its stored tool calls included, so
         // reopening it gives the model the conversation and what its tools
         // returned
-        instance: createProvider(current, toReplayMessages(PgAssistant.items)),
+        instance: createProvider(current, replayFor(context)),
       };
+    } else {
+      provider.current.context = new Set([
+        ...provider.current.context,
+        ...context,
+      ]);
     }
     PgAssistant.addUserMessage(trimmed);
     // Cleared only once the message is in: a store that throws leaves the

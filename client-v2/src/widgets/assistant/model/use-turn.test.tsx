@@ -51,6 +51,15 @@ vi.mock("../../../views/sidebar/assistant/model", () => ({
 vi.mock("../../../effects/chat-thread/push-thread", () => ({
   pushThread: vi.fn(() => Promise.resolve()),
 }));
+// The context is the explorer's tabs and the user's chips; a test sets the
+// list it holds now
+const bridge = vi.hoisted(() => ({ context: Array.of<string>() }));
+vi.mock("../../../views/sidebar/assistant/bridge/playground-bridge", () => ({
+  realBridge: {
+    listContextFiles: () => bridge.context,
+    toProjectPath: (path: string) => path,
+  },
+}));
 
 /**
  * Stands in for `openConnectDialog`, the opener the app hands in: marks
@@ -835,6 +844,61 @@ describe("useTurn", () => {
 
     expect(createProvider).toHaveBeenCalledTimes(2);
     expect(vi.mocked(createProvider).mock.calls[1][1]).toEqual([]);
+  });
+
+  describe("a file taken out of the context", () => {
+    const SECRET = "const SECRET: u64 = 1;";
+    /** The thread holds a read of `src/secret.rs` that returned `SECRET` */
+    const readSecret = () =>
+      PgAssistant.addToolResult({
+        toolName: "read_file",
+        input: { path: "src/secret.rs" },
+        output: SECRET,
+        failed: false,
+      });
+
+    beforeEach(() => {
+      PgAssistant.clear();
+      bridge.context = [];
+    });
+
+    it("seeds the model without what a read of it returned", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      PgAssistant.addUserMessage("read the secret");
+      readSecret();
+      const { result } = renderHook(() => useTestTurn());
+
+      await act(() => result.current.send("and now?"));
+
+      const seed = vi.mocked(createProvider).mock.calls[0][1];
+      expect(JSON.stringify(seed)).not.toContain(SECRET);
+    });
+
+    it("rebuilds the provider once the file leaves the context", async () => {
+      bridge.context = ["src/secret.rs"];
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("read the secret"));
+      readSecret();
+
+      bridge.context = [];
+      await act(() => result.current.send("and now?"));
+
+      expect(createProvider).toHaveBeenCalledTimes(2);
+      const seed = vi.mocked(createProvider).mock.calls[1][1];
+      expect(JSON.stringify(seed)).not.toContain(SECRET);
+    });
+
+    it("keeps the provider while the context only grows", async () => {
+      PgAssistant.connect({ id: "default", apiKey: "" });
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("one"));
+
+      bridge.context = ["src/lib.rs"];
+      await act(() => result.current.send("two"));
+
+      expect(createProvider).toHaveBeenCalledTimes(1);
+    });
   });
 
   it("puts a requested prompt in the composer without sending", async () => {
