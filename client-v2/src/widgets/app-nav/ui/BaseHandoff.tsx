@@ -34,8 +34,8 @@ export type HandoffAccount =
       status: "signed-out";
       /** A sign-in is under way: its button waits */
       signingIn: boolean;
-      /** Why the last sign-in failed, in the user's words; null if it did not */
-      error: string | null;
+      /** Why the last sign-in failed, in the user's words, if it did */
+      error: string | undefined;
     };
 
 export interface BaseHandoffProps {
@@ -50,8 +50,8 @@ export interface BaseHandoffProps {
    * clipboard refused (and the caller has told the user)
    */
   onCopy: () => Promise<boolean>;
-  /** Hands the link to the browser's share sheet; null where there is none */
-  onShare: (() => Promise<void>) | null;
+  /** Hands the link to the browser's share sheet, where there is one */
+  onShare: (() => Promise<void>) | undefined;
 }
 
 /**

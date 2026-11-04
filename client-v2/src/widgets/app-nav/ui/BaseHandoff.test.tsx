@@ -21,7 +21,7 @@ const SIGNED_IN_UNSYNCED: HandoffAccount = {
 const SIGNED_OUT: HandoffAccount = {
   status: "signed-out",
   signingIn: false,
-  error: null,
+  error: undefined,
 };
 
 const props = (over: Partial<BaseHandoffProps> = {}): BaseHandoffProps => ({
@@ -32,9 +32,7 @@ const props = (over: Partial<BaseHandoffProps> = {}): BaseHandoffProps => ({
   onSignIn: over.onSignIn ?? vi.fn(),
   onCopy: over.onCopy ?? vi.fn().mockResolvedValue(true),
   onShare:
-    over.onShare === undefined
-      ? vi.fn().mockResolvedValue(undefined)
-      : over.onShare,
+    "onShare" in over ? over.onShare : vi.fn().mockResolvedValue(undefined),
 });
 
 afterEach(() => {
@@ -114,7 +112,7 @@ it("signed out, keeps the link and its buttons back until the sign-in", () => {
 it("holds the sign-in button while a sign-in is under way", () => {
   render(
     sheet({
-      account: { status: "signed-out", signingIn: true, error: null },
+      account: { status: "signed-out", signingIn: true, error: undefined },
     })
   );
   expect(
@@ -183,7 +181,7 @@ it("draws Share only where the browser can share", () => {
   fireEvent.click(screen.getByRole("button", { name: "Share" }));
   expect(onShare).toHaveBeenCalledTimes(1);
   unmount();
-  render(sheet({ onShare: null }));
+  render(sheet({ onShare: undefined }));
   expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
 });
 

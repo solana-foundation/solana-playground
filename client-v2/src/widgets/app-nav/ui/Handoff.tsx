@@ -73,7 +73,7 @@ const useAccount = (open: boolean): HandoffAccount => {
   ) as [string | null, boolean, string | null];
   const synced = useProjectSynced(open, login);
   return login === null
-    ? { status: "signed-out", signingIn, error }
+    ? { status: "signed-out", signingIn, error: error ?? undefined }
     : { status: "signed-in", login, synced };
 };
 
@@ -155,7 +155,7 @@ const Handoff = () => {
       account={account}
       onSignIn={onSignIn}
       onCopy={onCopy}
-      onShare={typeof navigator.share === "function" ? onShare : null}
+      onShare={typeof navigator.share === "function" ? onShare : undefined}
     />
   );
 };
