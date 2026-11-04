@@ -192,9 +192,79 @@ describe("sandbox web3.js patch", () => {
     await expect(spliceSignatures(wire)).rejects.toThrow("No key for account");
   });
 
+  it("signing the same message twice gives the same placeholder, and one request to the page", async () => {
+    let asked = 0;
+    const counting = sandboxKeypairWith((publicKey) => (kind) => (bytes) => {
+      asked += 1;
+      return pageSign(publicKey)(kind)(bytes);
+    })(wallet.publicKey);
+    const recent = web3.Keypair.generate().publicKey.toBase58();
+    const txWith = () =>
+      new web3.Transaction({
+        feePayer: wallet.publicKey,
+        recentBlockhash: recent,
+      }).add(transferFrom(wallet.publicKey));
+
+    const first = txWith();
+    const second = txWith();
+    const signedFirst = first.sign(counting) as unknown as Promise<void>;
+    const signedSecond = second.sign(counting) as unknown as Promise<void>;
+    expect(first.signature).toEqual(second.signature);
+
+    await Promise.all([signedFirst, signedSecond]);
+    expect(asked).toBe(1);
+    expect(first.verifySignatures() && second.verifySignatures()).toBe(true);
+  });
+
+  it("a second send of the same transfer gets a fresh blockhash from web3.js's duplicate check", async () => {
+    const connection = new web3.Connection("http://localhost:1", "confirmed");
+    const cached = web3.Keypair.generate().publicKey.toBase58();
+    const fresh = web3.Keypair.generate().publicKey.toBase58();
+    const blockhashes = vi
+      .spyOn(
+        connection as unknown as {
+          _blockhashWithExpiryBlockHeight: (
+            disableCache: boolean
+          ) => Promise<web3.BlockhashWithExpiryBlockHeight>;
+        },
+        "_blockhashWithExpiryBlockHeight"
+      )
+      .mockImplementation(async (disableCache) => ({
+        blockhash: disableCache ? fresh : cached,
+        lastValidBlockHeight: 100,
+      }));
+    const sent: string[] = [];
+    vi.spyOn(connection, "sendEncodedTransaction").mockImplementation(
+      async (encoded) => {
+        sent.push(encoded);
+        return "signature";
+      }
+    );
+    const transfer = () =>
+      new web3.Transaction({ feePayer: wallet.publicKey }).add(
+        transferFrom(wallet.publicKey)
+      );
+
+    await connection.sendTransaction(transfer(), [sandboxKeypair()]);
+    await connection.sendTransaction(transfer(), [sandboxKeypair()]);
+
+    expect(blockhashes).toHaveBeenLastCalledWith(true);
+    expect(
+      sent.map(
+        (encoded) =>
+          web3.VersionedTransaction.deserialize(Buffer.from(encoded, "base64"))
+            .message.recentBlockhash
+      )
+    ).toEqual([cached, fresh]);
+  });
+
   it("countUnsent counts placeholders serialized and never sent", async () => {
     const before = countUnsent();
-    const tx = legacyTx();
+    // A message no other test signed: a repeat shares its placeholder
+    const tx = new web3.Transaction({
+      feePayer: wallet.publicKey,
+      recentBlockhash: web3.Keypair.generate().publicKey.toBase58(),
+    }).add(transferFrom(wallet.publicKey));
     void tx.sign(sandboxKeypair());
     tx.serialize();
     expect(countUnsent()).toBe(before + 1);
