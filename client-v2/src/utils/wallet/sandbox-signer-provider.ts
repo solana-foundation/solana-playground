@@ -69,9 +69,14 @@ const isByteList = (value: unknown): value is number[] =>
   Array.isArray(value) &&
   value.every((byte) => Number.isInteger(byte) && byte >= 0 && byte <= 255);
 
+/** Whether a value is a hex string: pairs of hex digits, no `0x` */
+const isHex = (value: unknown): value is string =>
+  typeof value === "string" && /^(?:[\da-f]{2})*$/i.test(value);
+
 /**
  * The message project code asked to sign, as bytes the page accepts: a
- * `Uint8Array` (a `Buffer` is one) or a `number[]` of byte values.
+ * `Uint8Array` (a `Buffer` is one), a `number[]` of byte values, or a hex
+ * string, which the in-page wallet took through `ed25519.sign`.
  *
  * @param message what project code passed to `signMessage`
  * @returns a copy of its bytes
@@ -81,8 +86,9 @@ const messageBytesOf = (message: unknown): Uint8Array => {
   if (message instanceof Uint8Array || isByteList(message)) {
     return Uint8Array.from(message);
   }
+  if (isHex(message)) return Uint8Array.from(Buffer.from(message, "hex"));
   throw new TypeError(
-    `signMessage takes the message as bytes (a Uint8Array, Buffer or number[]), not ${
+    `signMessage takes the message as bytes (a Uint8Array, Buffer, number[] or hex string), not ${
       Array.isArray(message) ? "an array of non-bytes" : typeof message
     }. Encode text first: new TextEncoder().encode(text).`
   );
@@ -175,11 +181,20 @@ if (import.meta.vitest) {
       ]);
     });
 
+    it("signMessage sends a hex string as its bytes, as the in-page wallet did", async () => {
+      const { methods, asked } = recordingMethods();
+      await methods.signMessage("00ff7A" as unknown as Uint8Array);
+      await methods.signMessage("" as unknown as Uint8Array);
+      expect(asked).toEqual([[0, 255, 122], []]);
+    });
+
     it("signMessage refuses a string or other non-bytes without asking the page", async () => {
       const { methods, asked } = recordingMethods();
-      await expect(
-        methods.signMessage("hello" as unknown as Uint8Array)
-      ).rejects.toThrow("signMessage takes the message as bytes");
+      for (const text of ["hello", "abc", "0x12", "1g"]) {
+        await expect(
+          methods.signMessage(text as unknown as Uint8Array)
+        ).rejects.toThrow("signMessage takes the message as bytes");
+      }
       await expect(
         methods.signMessage([1, 256] as unknown as Uint8Array)
       ).rejects.toThrow("signMessage takes the message as bytes");
