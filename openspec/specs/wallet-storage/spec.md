@@ -10,8 +10,10 @@ Where the built-in wallet's state, its secret keys included, is persisted: its o
 The built-in wallet's state, including every account's secret key, SHALL be
 persisted in IndexedDB, in a database used only by the wallet. While
 IndexedDB works, no `localStorage` key SHALL hold a wallet secret key, with
-two exceptions this spec describes: the fallback when IndexedDB fails, and an
-unreadable copy set aside, which nothing removes.
+three exceptions this spec describes: the fallback when IndexedDB fails, an
+unreadable copy set aside, which nothing removes, and a save still waiting
+for the cross-tab lock when the page is hidden, until it lands or the next
+load moves it.
 
 #### Scenario: A new wallet is created
 
@@ -26,6 +28,16 @@ unreadable copy set aside, which nothing removes.
 - **WHEN** a user with a wallet in IndexedDB reloads the page
 - **THEN** the same accounts, names, current account and connection state are
   restored
+
+#### Scenario: The tab closes before a save lands
+
+- **WHEN** the wallet changes (for example, a new account) while another tab
+  holds the wallet's lock, and the page is hidden before the save runs
+- **THEN** the pending wallet is written to `localStorage['wallet']`
+- **AND** the next load moves it into IndexedDB, so the new account's key is
+  not lost
+- **AND** if the save lands in IndexedDB first, the `localStorage` copy is
+  removed
 
 ### Requirement: An existing localStorage wallet is migrated without loss
 

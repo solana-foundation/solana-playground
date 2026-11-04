@@ -44,20 +44,31 @@ let signerProvider: WalletSignerProvider = localSignerProviderWith(
     )?.kp
 );
 
-let walletStorageInstance: ReturnType<typeof walletStorageWith> | undefined;
+let walletStorageInstance:
+  | ReturnType<ReturnType<typeof walletStorageWith>>
+  | undefined;
 
 /**
  * The wallet's storage (`wallet-storage.ts`): its own IndexedDB database,
  * `pg-wallet`, with `localStorage` as what it moves from and falls back to.
  *
  * Made on first use, not at import: the build imports this module under Node
- * (`src/settings`), where `localStorage` does not exist.
+ * (`src/settings`), where `localStorage` does not exist. A save still waiting
+ * for the lock when the page hides is kept in `localStorage`
+ * (`keepUnsaved`), so closing the tab cannot lose a new account's key.
  */
-const walletStorage = () =>
-  (walletStorageInstance ??= walletStorageWith(
-    indexedDbStoreFor("pg-wallet"),
+const walletStorage = () => {
+  if (walletStorageInstance) return walletStorageInstance;
+  const instance = walletStorageWith(indexedDbStoreFor("pg-wallet"))(
     localStorageOrRefusal()
-  ));
+  );
+  window.addEventListener("pagehide", instance.keepUnsaved);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") instance.keepUnsaved();
+  });
+  walletStorageInstance = instance;
+  return instance;
+};
 
 /**
  * `localStorage`, or, where reading the global itself throws (a sandboxed or
