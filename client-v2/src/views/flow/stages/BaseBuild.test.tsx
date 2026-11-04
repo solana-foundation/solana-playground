@@ -38,7 +38,7 @@ const props = (
   surface: BuildSurfaceView,
   building = false,
   slow = false,
-  elapsedMs: number | null = null,
+  elapsedMs?: number,
   offline = false
 ): BaseBuildProps => ({
   surface,
@@ -292,7 +292,9 @@ describe("BaseBuild", () => {
 
       const alert = screen.getByRole("alert");
       expect(alert.getAttribute("data-slot")).toBe("stage-empty-description");
-      expect(alert.textContent).toMatch(/did not answer|reason we can't name/);
+      expect(alert.textContent).toMatch(
+        /did not answer|full log has the details/
+      );
     }
   );
 
@@ -354,7 +356,7 @@ describe("BaseBuild", () => {
       surface === "failed"
         ? failed([typeError("a", null)])
         : (surface as BuildSurfaceView);
-    render(<BaseBuild {...props(view, false, false, null, true)} />);
+    render(<BaseBuild {...props(view, false, false, undefined, true)} />);
     expect(
       (screen.getByRole("button", { name: label }) as HTMLButtonElement)
         .disabled

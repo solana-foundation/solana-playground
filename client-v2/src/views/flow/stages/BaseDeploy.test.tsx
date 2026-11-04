@@ -98,11 +98,7 @@ describe("BaseDeploy", () => {
     const p = props({ built: false, deploy: "idle", history: [] });
     const { container } = render(<BaseDeploy {...p} />);
 
-    expect(
-      screen.getByText(
-        "Build the program first. Deploy opens once the build passes."
-      )
-    ).toBeTruthy();
+    expect(screen.getByText("Build the program first.")).toBeTruthy();
     const goToBuild = screen.getByRole("button", { name: "Go to Build" });
     fireEvent.click(goToBuild);
     expect(p.onGoToBuild).toHaveBeenCalled();

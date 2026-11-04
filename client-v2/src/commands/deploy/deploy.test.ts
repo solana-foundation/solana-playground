@@ -183,7 +183,7 @@ describe("commands/deploy", () => {
 
     expect(isStopped(failure)).toBe(true);
     expect((failure as Error).message).toContain(
-      "The buffer account Buf1111 still holds 1.42 SOL."
+      "Its buffer Buf1111 still holds 1.42 SOL."
     );
   });
 
@@ -197,7 +197,7 @@ describe("commands/deploy", () => {
 
     expect(isStopped(failure)).toBe(true);
     expect((failure as Error).message).toContain(
-      "The buffer account Buf1111 still holds its SOL."
+      "Its buffer Buf1111 still holds its SOL."
     );
   });
 
