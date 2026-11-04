@@ -206,7 +206,7 @@ mainnet confirmation SHALL emit `interact_mainnet_confirmed { choice }`,
 
 Opening a program id SHALL emit `interact_program_opened { own }`, `own`
 true for the project's program. Expanding an instruction SHALL emit
-`interact_instruction_opened`, Fill random `interact_random_filled`, From seed
+`interact_instruction_opened`, Fill with Random `interact_random_filled`, From seed
 `interact_seed_opened` and its Generate `interact_seed_generated { seeds }`,
 `seeds` the number of seeds. Unlisted parameters are none.
 
