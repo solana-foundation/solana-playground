@@ -47,6 +47,10 @@ const sync = vi.hoisted(() => ({
   marker: vi.fn((): Promise<string | undefined> => Promise.resolve(undefined)),
   moved: new Set<() => void>(),
 }));
+const explorer = vi.hoisted(() => ({
+  currentWorkspaceName: "counter" as string | undefined,
+  workspaceIdOf: (name: string) => `id-${name}`,
+}));
 vi.mock("@/features/persistence", () => ({
   syncMarkerOf: sync.marker,
   onDidChangeSyncMarkers: (cb: () => void) => {
@@ -54,12 +58,7 @@ vi.mock("@/features/persistence", () => ({
     return { dispose: () => sync.moved.delete(cb) };
   },
 }));
-vi.mock("@/utils", () => ({
-  PgExplorer: {
-    currentWorkspaceName: "counter",
-    workspaceIdOf: (name: string) => `id-${name}`,
-  },
-}));
+vi.mock("@/utils", () => ({ PgExplorer: explorer }));
 // The toast needs a booted app; what matters here is that a failure reaches it
 const reported = vi.hoisted(() => ({ actions: [] as string[] }));
 vi.mock("@/shared/lib/report-button-failure", () => ({
@@ -75,6 +74,7 @@ let logged: ReturnType<typeof memoryLogs>;
 const writeText = vi.fn();
 beforeEach(() => {
   session.user = null;
+  sync.marker.mockClear();
   session.signIn.mockReset().mockResolvedValue(undefined);
   session.signInState.mockReset().mockReturnValue({ status: "idle" });
   known.failure.mockReset().mockReturnValue(false);
@@ -173,6 +173,17 @@ it("changes the line while open once the sync lands", async () => {
   expect(
     await screen.findByText(/Your files and this conversation go with you/)
   ).toBeTruthy();
+});
+
+it("has nothing to wait for with no project open", async () => {
+  session.user = { login: "ada" };
+  explorer.currentWorkspaceName = undefined;
+  open();
+  expect(
+    await screen.findByText(/Your files and this conversation go with you/)
+  ).toBeTruthy();
+  expect(sync.marker).not.toHaveBeenCalled();
+  explorer.currentWorkspaceName = "counter";
 });
 
 it("says the project goes with them when it is in sync", async () => {

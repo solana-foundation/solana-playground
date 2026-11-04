@@ -40,7 +40,11 @@ const useProjectSynced = (open: boolean, login: string | null) => {
     setSynced(false);
     const name = PgExplorer.currentWorkspaceName;
     const id = name ? PgExplorer.workspaceIdOf(name) : undefined;
-    if (!name || !id) return;
+    // No project open (the phone's Home): nothing here to wait for
+    if (!name || !id) {
+      setSynced(true);
+      return;
+    }
     const read = () =>
       syncMarkerOf(id, name)
         .then((marker) => {
