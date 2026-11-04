@@ -131,7 +131,23 @@ const SetupList = ({
     },
   };
 
+  /** Read the wallet again, as the page load did, and count what came of it */
+  const retryWallet = () => {
+    // `refresh` may answer synchronously; this way a throw is caught too
+    Promise.resolve()
+      .then(() => PgWallet.refresh())
+      .catch((error: unknown) => {
+        log.error(error, { report: true, context: { step: "wallet" } });
+      })
+      .finally(() => {
+        setupTelemetry.track("setup_wallet_retried", {
+          outcome: PgWallet.state === "unavailable" ? "unavailable" : "loaded",
+        });
+      });
+  };
+
   const pick = (step: TodoStep) => {
+    if (step === "wallet" && isWalletUnavailable) return retryWallet();
     setupTelemetry.track("setup_item_picked", { item: step });
     actions[step]();
   };

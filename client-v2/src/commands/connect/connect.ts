@@ -1,6 +1,7 @@
 import { PgCommon, PgTerminal, PgView, PgWallet } from "../../utils";
 import { createArgs, createCmd } from "../create";
 import { SETUP_REJECTED } from "./setup-rejected";
+import { WalletUnavailableError } from "./wallet-unavailable";
 
 export const connect = createCmd({
   name: "connect",
@@ -62,6 +63,9 @@ export const connect = createCmd({
 
         break;
       }
+
+      case "unavailable":
+        throw new WalletUnavailableError();
 
       case "setup": {
         const { Setup } = await import("../../components/Wallet/Modals/Setup");

@@ -24,7 +24,7 @@ const STEP_LABELS: Record<SetupStep, string> = {
 
 export interface BaseSetupListProps {
   steps: readonly StepView[];
-  /** A step to do was clicked; its action runs */
+  /** A step to do, or one with a problem, was clicked; its action runs */
   onPick: (step: TodoStep) => void;
   onDismiss: () => void;
   /** Folded to its title, "Get set up · n of 4 ›" */
@@ -56,9 +56,17 @@ const BaseSetupList = ({
       {steps.map((view) => {
         if ("problem" in view) {
           return (
-            <SetupListItem key={view.step} status="warn">
-              <SetupListIndicator />
-              <SetupListLabel>Wallet unavailable</SetupListLabel>
+            <SetupListItem key={view.step} status="warn" className="p-0">
+              <button
+                type="button"
+                onClick={() => onPick(view.step)}
+                aria-label="Wallet unavailable, try again"
+                className="flex size-full items-center gap-2.5 rounded-md px-2 text-left outline-none hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <SetupListIndicator />
+                <SetupListLabel>Wallet unavailable</SetupListLabel>
+                <SetupListValue>Try again</SetupListValue>
+              </button>
             </SetupListItem>
           );
         }

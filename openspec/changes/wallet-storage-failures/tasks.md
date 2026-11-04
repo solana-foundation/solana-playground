@@ -13,4 +13,4 @@
 
 ## 3. The unavailable state in the UI
 
-- [ ] 3.1 Handle `"unavailable"` in `connect.ts` and give the setup list's wallet step the warning status, "Wallet unavailable", Try again and `setup_wallet_retried`; verify "Try again reads the wallet" and "A browser without IndexedDB gets Setup" as Playwright tests and the event in a unit test of the step
+- [x] 3.1 Handle `"unavailable"` in `connect.ts` and give the setup list's wallet step the warning status, "Wallet unavailable", Try again and `setup_wallet_retried`; verify "Try again reads the wallet" and "A browser without IndexedDB gets Setup" as Playwright tests and the event in a unit test of the step

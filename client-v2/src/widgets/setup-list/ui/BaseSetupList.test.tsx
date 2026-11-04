@@ -119,8 +119,8 @@ it("warns on a network that does not answer, with no tick and no button", () => 
   );
 });
 
-it("shows a wallet that could not be read as a warning", () => {
-  renderList([
+it("shows a wallet that could not be read as a warning with Try again", async () => {
+  const { onPick } = renderList([
     todo("assistant"),
     done("network", "devnet"),
     done("github", "octocat"),
@@ -128,6 +128,10 @@ it("shows a wallet that could not be read as a warning", () => {
   ]);
   const wallet = screen.getAllByRole("listitem")[3];
   expect(wallet.getAttribute("data-status")).toBe("warn");
-  expect(wallet.textContent).toContain("Wallet unavailable");
   expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
+
+  await userEvent.click(
+    screen.getByRole("button", { name: "Wallet unavailable, try again" })
+  );
+  expect(onPick).toHaveBeenCalledExactlyOnceWith("wallet");
 });

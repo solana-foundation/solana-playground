@@ -9,6 +9,7 @@ import {
   seedWorkspace,
   test,
 } from "./fixtures";
+import { lineOf, linesOn } from "./telemetry";
 
 /**
  * The built-in wallet's storage (`utils/wallet/wallet-storage.ts`): a wallet
@@ -581,4 +582,56 @@ test("wallet-storage: Persistence is requested once", async ({ page }) => {
     .toBe("disconnected");
 
   expect(await persistCalls()).toBe(1);
+});
+
+test("wallet-storage: Try again reads the wallet", async ({ page }) => {
+  await seedWorkspace(page);
+  const shown = await createWallet(page);
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  // The database refuses to open until the test lets it
+  await page.addInitScript(() => {
+    Object.assign(window, { e2eWalletBlocked: true });
+    const open = indexedDB.open.bind(indexedDB);
+    indexedDB.open = (name, version) => {
+      const isBlocked = (window as unknown as { e2eWalletBlocked: boolean })
+        .e2eWalletBlocked;
+      if (name === "pg-wallet" && isBlocked) {
+        throw new DOMException("e2e: database blocked", "SecurityError");
+      }
+      return open(name, version);
+    };
+  });
+  const events = linesOn(page);
+  await page.reload();
+  await expect(walletWarning(page)).toBeVisible(LONG);
+
+  await page.evaluate(() => Object.assign(window, { e2eWalletBlocked: false }));
+  await page
+    .getByRole("button", { name: "Wallet unavailable, try again" })
+    .click();
+
+  await expect(walletStep(page)).toHaveText(shown, LONG);
+  await expect
+    .poll(() => lineOf(events, "setup_wallet_retried"), LONG)
+    .toContain("outcome: loaded");
+});
+
+test("wallet-storage: A browser without IndexedDB gets Setup", async ({
+  page,
+}) => {
+  // The app's files need IndexedDB, so only the wallet's database goes: its
+  // open fails as the keystore's does where `indexedDB` is undefined
+  await page.addInitScript(() => {
+    const open = indexedDB.open.bind(indexedDB);
+    indexedDB.open = (name, version) => {
+      if (name === "pg-wallet") throw new Error("indexedDB is not available");
+      return open(name, version);
+    };
+  });
+  await seedWorkspace(page);
+
+  await createWallet(page);
+
+  await expect(walletWarning(page)).toHaveCount(0);
+  await expect.poll(() => localCount(page), LONG).toBe(1);
 });
