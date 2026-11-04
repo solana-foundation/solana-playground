@@ -4,10 +4,10 @@ import { test } from "node:test";
 
 import {
   BRAND_HEAD,
+  brandHead,
   DESCRIPTION,
   IMAGE_ALT,
   SITE_URL,
-  brandHead,
 } from "./brand-head.mjs";
 
 /** Upstream's `client/public/index.html` head, as mirrored */

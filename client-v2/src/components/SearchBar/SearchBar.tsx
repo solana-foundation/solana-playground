@@ -1,4 +1,3 @@
-import { ArrowLeft, ChevronDown, Search, X } from "lucide-react";
 import { ArrowLeft, ChevronDown, X } from "lucide-react";
 import {
   Dispatch,
