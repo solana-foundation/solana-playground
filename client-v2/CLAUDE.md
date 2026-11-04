@@ -215,7 +215,16 @@ counts.
 4. **`/opsx:apply` implements, one task per PR.** It reads `tasks.md`,
    works a task, ticks it. Tick a task only in the PR that lands it, and
    name the task in the PR description. The ordinary PR checklist (section
-   "Before a PR") still applies to every task.
+   "Before a PR") still applies to every task. An umbrella is a change many
+   tickets share, such as `ui-migration`. A new ticket larger than a bug fix
+   gets a change of its own, even when an umbrella already names its area.
+   A task already listed in an umbrella stays there: its PR ticks only its
+   own task line, keeps its design detail in the task's `plans/` file, and
+   adds nothing to `design.md` or the specs, because every ticket appending
+   to one `design.md` made each merge conflict with the rest. A task writes
+   to the specs only when they are its deliverable, such as 3.8, or to describe
+   a telemetry event it adds or renames; `design.md` stays closed to it either
+   way. The PR that closes the umbrella (step 5) is the exception.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
    before the PR is opened (and before the sx review, if it runs); it never
@@ -233,7 +242,8 @@ counts.
    code as it is, never a plan; nothing is back-filled for code that is not changing.
 6. **Asked to build something, look in `openspec/changes/` first**
    (`openspec list`). If a change covers it, `/opsx:apply` that change and
-   say which task. If none does and the work is more than a bug fix, offer
+   say which task. If none does, or only an umbrella names the area without
+   a task for it (step 4), and the work is more than a bug fix, offer
    `/opsx:propose` rather than starting on the code. A bug fix in a slice
    that sends no events, or none for the path being fixed, says so and
    proposes the missing events as a follow-up ticket.
@@ -313,7 +323,10 @@ reason.
   that holds them when the fix stays inside that function. A PR never adds
   a warning, and a PR that removes warnings lowers `--max-warnings` to the
   new total. Warnings in files the change does not otherwise touch are
-  fixed in a PR of their own, so the diff stays reviewable.
+  fixed in a PR of their own, so the diff stays reviewable. Such a lint
+  batch takes one rule, or one small group of warnings, across the tree
+  (#95 fixed 17 one-off warnings), so the cap comes down step by step, not
+  in one sweep.
 - **Ids come from `src/shared/lib/ids`.** `uuid()` mints one, `isUuid()`
   checks one. Never `crypto.randomUUID()`, never a
   copied UUID regex, never `import ... from "uuid"` anywhere else.
@@ -510,8 +523,31 @@ reason.
   agent session that merges ready PRs) merges these PRs, never their author.
   Without the line, with a stale one or with any critical open, and for any
   other base, a human approves.
-- **A stacked PR is rebased** whenever the one under it moves. "Needs a
-  rebase" is a review verdict here, not a nit.
+- **Work that overlaps an open PR is stacked on it.** It branches from
+  that PR's branch, targets it, and says `Stacked on #<n>` in its
+  description. A stacked PR is rebased whenever the one under it moves.
+  "Needs a rebase" is a review verdict here, not a nit. Once the base is
+  squash-merged, its commits reach the integration branch as one new
+  commit, so a plain rebase replays them a second time. Fetch, find the
+  last commit of the base that your branch contains (the base PR's last
+  head, `gh pr view <n> --json headRefOid`, if you were rebased onto it;
+  the merge deletes the base branch), run
+  `git rebase --onto origin/<integration branch> <that sha>`, push with
+  `--force-with-lease`, and retarget the PR at the integration branch. A
+  stacked PR merges only after that retarget.
+- **Merges squash, and no branch carries a merge commit.** `master` allows
+  squash merges only. A branch takes its base with `git rebase`, never
+  `git merge`, a `git pull` without `--rebase`, or GitHub's "Update branch"
+  in its merge form: a merge commit breaks the `--onto` rebase above and
+  carries no signature, which the `master` ruleset requires of every
+  commit pushed there. A stack merges bottom-up. While an integration
+  branch is red (a `ci.yml` or `client-v2.yml` check fails on its head; the
+  Vercel preview does not count), the PR that turns it green, with any PRs
+  stacked under it, merges before anything else.
+- **Work not meant to merge is an issue, not a PR.** A verdict, a spike, a
+  prototype or a reference branch is a GitHub issue that names its branch,
+  never a draft PR. A draft PR is for work that will merge, such as an
+  integration branch's landing PR.
 - **The `check` script is green before the push.** It runs what CI runs,
   in CI's order, minus the production build. Opt in to running it on every
   push with `git config core.hooksPath .githooks` once per clone. The same

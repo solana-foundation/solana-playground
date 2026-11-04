@@ -1,5 +1,14 @@
 # Design
 
+> **Frozen.** This umbrella design takes no new sections. New work larger
+> than a bug fix gets a change of its own (`/opsx:propose`). A task already
+> in `tasks.md`, such as the open 5.22 and 5.23, stays here: its PR ticks
+> only its own line and keeps its design detail in
+> `plans/<task-number>-<slug>.md`. The PR that closes the change is the
+> exception (`client-v2/CLAUDE.md`, "Specs and changes", step 4). This note
+> is not the Nov 11 design freeze in "Context", which is a date for the
+> designs.
+
 ## Context
 
 `client-v2` is a copy of upstream's Create React App client plus the fork's
