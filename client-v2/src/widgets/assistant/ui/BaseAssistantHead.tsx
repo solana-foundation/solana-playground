@@ -22,7 +22,10 @@ import type { AiOffReason } from "../model/ai-off";
 import type { HeadLabel } from "../model/head-label";
 import { headText } from "../model/head-label";
 import { OverflowTooltip } from "./OverflowTooltip";
-import { usePickedMenu } from "./use-picked-menu";
+import { KEY_HINT, usePickedMenu } from "./use-picked-menu";
+
+/** The head's icon buttons are thumb sized on a phone */
+const THUMB = "max-md:size-11";
 
 /**
  * Delete my key in More, by `KeyHold`: not shown at `none`, shown disabled at
@@ -136,7 +139,12 @@ export function BaseAssistantHead({
       )}
       <DropdownMenu open={more.open} onOpenChange={more.setOpen}>
         <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label="More">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={THUMB}
+            aria-label="More"
+          >
             <EllipsisVertical aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
@@ -148,11 +156,11 @@ export function BaseAssistantHead({
         >
           <DropdownMenuItem onSelect={() => pick(onSources)}>
             <MenuItemText>Sources and tools</MenuItemText>
-            <DropdownMenuShortcut>S</DropdownMenuShortcut>
+            <DropdownMenuShortcut className={KEY_HINT}>S</DropdownMenuShortcut>
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => pick(onConnect)}>
             <MenuItemText>{connectLabel}</MenuItemText>
-            <DropdownMenuShortcut>K</DropdownMenuShortcut>
+            <DropdownMenuShortcut className={KEY_HINT}>K</DropdownMenuShortcut>
           </DropdownMenuItem>
           {deleteKey === "ready" && (
             <DropdownMenuItem onSelect={() => pick(onDeleteKey)}>
@@ -195,6 +203,7 @@ export function BaseAssistantHead({
             <Button
               variant="ghost"
               size="icon-sm"
+              className={THUMB}
               aria-label={widenLabel}
               onClick={onWiden}
             >
@@ -213,6 +222,7 @@ export function BaseAssistantHead({
           <Button
             variant="ghost"
             size="icon-sm"
+            className={THUMB}
             aria-label="Collapse assistant"
             onClick={onHide}
           >

@@ -84,8 +84,8 @@ describe("write_file", () => {
       item.kind === "approval" ? [item.request, item.outcome] : null
     );
     expect(outcomes).toEqual([
-      [expect.objectContaining({ path: "src/a.rs" }), "wrote src/a.rs"],
-      [expect.objectContaining({ path: "src/b.rs" }), "wrote src/b.rs"],
+      [expect.objectContaining({ path: "src/a.rs" }), "Wrote src/a.rs"],
+      [expect.objectContaining({ path: "src/b.rs" }), "Wrote src/b.rs"],
     ]);
   });
 

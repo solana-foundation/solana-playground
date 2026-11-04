@@ -171,8 +171,7 @@ const finishUndo = (item: ApprovalItem, request: PatchApproval) => {
 };
 
 /** The card's outcome once its patch is taken back */
-export const undoneOutcome = (path: string) =>
-  `undone, ${path} is back as it was`;
+export const undoneOutcome = (path: string) => `${path} is back as it was`;
 
 /** Said when Undo patch would drop an edit made after Apply */
 export const editedAfterApply = (path: string) =>

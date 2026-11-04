@@ -23,7 +23,6 @@ import { threadBackend } from "../../../views/sidebar/assistant/model/thread-bac
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
 import {
   isDefaultBackend,
-  PROVIDERS,
   TurnFailure,
 } from "../../../views/sidebar/assistant/model/types";
 import type {
@@ -38,6 +37,7 @@ import {
 } from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
+import { KEY_OWNER } from "./head-label";
 import type { AssistantEvents } from "./telemetry";
 import { assistantTelemetry } from "./telemetry";
 
@@ -610,12 +610,12 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         isRejectedKey(e) &&
         !isDefaultBackend(current.id)
       ) {
-        // The key-based backend refused the key: say which, and offer to enter
-        // it again on the same backend rather than leaving the generic words
+        // The key-based backend refused the key: say whose, as the head does;
+        // the error's buttons say what to do (`Thread`)
         const { id } = current;
-        const name = PROVIDERS.find((p) => p.id === id)?.name ?? id;
+        const name = id === "default" ? id : KEY_OWNER[id];
         PgAssistant.addErrorWith(paramsOf(current))(
-          `${name} did not accept this key. Check it and enter it again, or pick another model.`
+          `${name} did not accept this key.`
         );
         assistantTelemetry.track("assistant_key_rejected", {
           provider: current.id,

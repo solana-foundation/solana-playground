@@ -17,10 +17,11 @@ export const headText = (label: HeadLabel) =>
     : `${label.lead}${label.model}${label.tail}`;
 
 /**
- * Whose key a keyed model runs on, as "your … key" reads it. Not
- * `PROVIDERS`' names: "your OpenAI-compatible key" says nothing to a person.
+ * Whose key a keyed model runs on, as "your … key" and the refused key's
+ * error read it. Not `PROVIDERS`' names: "your OpenAI-compatible key" says
+ * nothing to a person.
  */
-const KEY_OWNER: Record<KeyedProviderId, string> = {
+export const KEY_OWNER: Record<KeyedProviderId, string> = {
   anthropic: "Anthropic",
   openai: "OpenAI",
   openrouter: "OpenRouter",

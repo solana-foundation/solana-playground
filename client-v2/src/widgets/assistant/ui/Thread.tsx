@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 
+import { PgSession } from "@/features/auth";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 import { useRenderOnChange } from "../../../hooks/useRenderOnChange";
@@ -23,6 +24,8 @@ import {
   turnAppliedApproval,
   turnProducedApproval,
 } from "../../../views/sidebar/assistant/store";
+import { DEFAULT_CONNECTION } from "../model/connection";
+import { useDefaultBackend } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";
 import type { Turn } from "../model/use-turn";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
@@ -72,6 +75,8 @@ export const Thread = ({
   const [lessonState, setLessonState] =
     useState<LessonState>(INITIAL_LESSON_STATE);
   useEffect(() => PgLesson.onDidChange(setLessonState).dispose, []);
+
+  const defaultBackend = useDefaultBackend();
 
   const items = PgAssistant.items;
   const status = PgAssistant.status;
@@ -125,7 +130,7 @@ export const Thread = ({
   const skippableId =
     onFinishedReply && stepAttempted && PgLesson.canPass() ? lastItem.id : null;
 
-  // Enter key goes on a refused key only while nothing has followed it but
+  // Change key goes on a refused key only while nothing has followed it but
   // notices: a reply or a newer error after it means it has been answered,
   // and `recover` is stored with the thread, so it would otherwise come back
   // on every load
@@ -135,10 +140,36 @@ export const Thread = ({
       ? backendParamsFrom(lastWord.recover)
       : undefined;
 
+  /**
+   * Use hosted model on a refused key: the thread moves to the hosted model
+   * and nothing is sent; the refused message goes back in an empty composer
+   * for the user to send. The hosted model answers only a signed-in user, so
+   * anyone else gets Connect a model on it, where the sign-in is, as the
+   * composer's model menu does.
+   */
+  const handleUseHosted = () => {
+    if (!PgSession.get()) {
+      turn.openConnect("key-rejected", { provider: "default" });
+      return;
+    }
+    PgAssistant.connect(DEFAULT_CONNECTION);
+    assistantTelemetry.track("assistant_model_picked", {
+      provider: "default",
+      via: "key-rejected",
+    });
+    const refusedMessage = items.findLast((item) => item.kind === "user");
+    if (!turn.input && refusedMessage?.kind === "user") {
+      turn.setInput(refusedMessage.text);
+    }
+  };
+
   const actionsFor = (id: string): ReplyActions | undefined => {
     const actions: ReplyActions = {};
     if (refused && id === lastWord?.id) {
-      actions.enterKey = () => turn.openConnect("key-rejected", refused);
+      actions.changeKey = () => turn.openConnect("key-rejected", refused);
+      if (defaultBackend.state === "present") {
+        actions.useHosted = handleUseHosted;
+      }
     }
     if (id === changeableId) {
       actions.makeChange = {

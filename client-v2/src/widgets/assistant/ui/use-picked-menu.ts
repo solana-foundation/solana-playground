@@ -2,6 +2,12 @@ import type { KeyboardEvent } from "react";
 import { useRef, useState } from "react";
 
 /**
+ * The class on a shortcut's hint: a phone has no keyboard to press it with,
+ * so the hint is hidden there and the shortcut still works
+ */
+export const KEY_HINT = "max-md:hidden";
+
+/**
  * A menu whose items open something (Sources in place of the chat, Connect a
  * model over it), shared by the head's More and the composer's +.
  *

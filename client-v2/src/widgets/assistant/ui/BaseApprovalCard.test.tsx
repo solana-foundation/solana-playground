@@ -94,7 +94,7 @@ describe("BaseApprovalCard", () => {
     );
     expect(screen.getByText("Not applied")).toBeTruthy();
     expect(
-      screen.getByText("not applied -- the session ended before you answered")
+      screen.getByText("Not applied: the session ended before you answered")
     ).toBeTruthy();
     expect(screen.queryByRole("button", { name: ANSWERS })).toBeNull();
   });
@@ -126,7 +126,7 @@ describe("BaseApprovalCard", () => {
       <BaseApprovalCard item={commandCard("denied")} onAnswer={vi.fn()} />
     );
     expect(screen.getByText("Declined")).toBeTruthy();
-    expect(screen.getByText("not applied")).toBeTruthy();
+    expect(screen.getByText("Not applied")).toBeTruthy();
   });
 
   it("a discarded patch says so", () => {
@@ -137,7 +137,7 @@ describe("BaseApprovalCard", () => {
       />
     );
     expect(screen.getByText("Discarded")).toBeTruthy();
-    expect(screen.getByText("not applied")).toBeTruthy();
+    expect(screen.getByText("Not applied")).toBeTruthy();
   });
 
   it("the actions are thumb-sized on a phone", () => {
@@ -170,7 +170,7 @@ describe("BaseApprovalCard", () => {
       createdAt: CREATED,
       kind: "approval",
       status: "allowed",
-      outcome: "undone, src/lib.rs is back as it was",
+      outcome: "src/lib.rs is back as it was",
       undo: "done",
       request,
     });
@@ -281,9 +281,7 @@ describe("BaseApprovalCard", () => {
       render(<BaseApprovalCard item={undoneCard()} onAnswer={vi.fn()} />);
       expect(screen.getByText("Undone")).toBeTruthy();
       expect(screen.queryByText("Applied")).toBeNull();
-      expect(
-        screen.getByText("undone, src/lib.rs is back as it was")
-      ).toBeTruthy();
+      expect(screen.getByText("src/lib.rs is back as it was")).toBeTruthy();
     });
   });
 });

@@ -3,6 +3,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
 import * as reportModule from "@/shared/lib/report-button-failure";
 import {
   initTelemetry,
@@ -16,8 +17,15 @@ import {
   PgAssistant,
   THREAD_NOT_SAVED,
 } from "../../../views/sidebar/assistant/store";
+import type { DefaultBackend } from "../model/default-backend";
 import type { Turn } from "../model/use-turn";
 import { Thread } from "./Thread";
+
+// The probe is the deployment's; a test says what it answered
+let backend: DefaultBackend = { state: "absent" };
+vi.mock("../model/default-backend", () => ({
+  useDefaultBackend: () => backend,
+}));
 
 /** The open lesson as the thread sees it; no lesson unless a test opens one */
 const lesson = vi.hoisted(() => ({
@@ -123,6 +131,9 @@ afterEach(() => {
   undo.original.mockReturnValue(undefined);
   // The thread is still mounted here: RTL's own cleanup runs after this hook
   act(() => PgAssistant.clear());
+  act(() => PgAssistant.disconnect());
+  PgSession.reset();
+  backend = { state: "absent" };
   resetTelemetry();
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -392,35 +403,106 @@ describe("Thread, the working marker", () => {
 
 describe("Thread, a refused key", () => {
   const RECOVER = { provider: "openai" as const, model: "gpt-x" };
+  const REFUSED = "OpenAI did not accept this key.";
   const withOpener = (openConnect: Turn["openConnect"]) =>
     ({ busy: false, send: vi.fn(), openConnect } as unknown as Turn);
-
-  it("offers Enter key on the error, opening Connect on that backend", () => {
+  /** A turn whose composer reads `input`, for Use hosted model to fill */
+  const withInput = (input: string, setInput: Turn["setInput"]) =>
+    ({
+      busy: false,
+      send: vi.fn(),
+      openConnect: vi.fn(),
+      input,
+      setInput,
+    } as unknown as Turn);
+  const refuse = () =>
     act(() => {
       PgAssistant.addUserMessage("hi");
-      PgAssistant.addErrorWith(RECOVER)(
-        "OpenAI-compatible did not accept this key."
-      );
+      PgAssistant.addErrorWith(RECOVER)(REFUSED);
     });
+  const hosted = () => {
+    backend = { state: "present", model: "z-ai/glm-5.3-flash:US" };
+  };
+  const signIn = () =>
+    act(() =>
+      // eslint-disable-next-line unicorn/no-null -- a session user's fields are `null` when GitHub gave none
+      PgSession.refreshWith({ id: "u1", name: null, image: null, login: null })
+    );
+
+  it("offers Change key on the error, opening Connect on that backend", () => {
+    refuse();
     const openConnect = vi.fn();
     render(<Thread turn={withOpener(openConnect)} project="Counter" />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change key" }));
 
     expect(openConnect).toHaveBeenCalledWith("key-rejected", RECOVER);
   });
 
-  it("offers nothing once a reply came after the error", () => {
-    act(() => {
-      PgAssistant.addUserMessage("hi");
-      PgAssistant.addErrorWith(RECOVER)(
-        "OpenAI-compatible did not accept this key."
-      );
+  it("offers no hosted model on a deployment without one", () => {
+    refuse();
+    render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
+
+    expect(
+      screen.queryByRole("button", { name: "Use hosted model" })
+    ).toBeNull();
+  });
+
+  it("moves the thread to the hosted model, sends nothing and puts the message back", async () => {
+    hosted();
+    await signIn();
+    refuse();
+    const setInput = vi.fn();
+    const turn = withInput("", setInput);
+    render(<Thread turn={turn} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(PgAssistant.connection).toMatchObject({ id: "default" });
+    expect(turn.send).not.toHaveBeenCalled();
+    expect(setInput).toHaveBeenCalledWith("hi");
+    expect(tracked()).toContainEqual([
+      "assistant_model_picked",
+      { provider: "default", via: "key-rejected" },
+    ]);
+  });
+
+  it("leaves a draft in the composer as it is", async () => {
+    hosted();
+    await signIn();
+    refuse();
+    const setInput = vi.fn();
+    render(<Thread turn={withInput("draft", setInput)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(setInput).not.toHaveBeenCalled();
+  });
+
+  it("opens Connect on the hosted model for a signed-out user", () => {
+    hosted();
+    refuse();
+    const openConnect = vi.fn();
+    render(<Thread turn={withOpener(openConnect)} project="Counter" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
+
+    expect(openConnect).toHaveBeenCalledWith("key-rejected", {
+      provider: "default",
     });
+    expect(PgAssistant.connection).toBeNull();
+  });
+
+  it("offers nothing once a reply came after the error", () => {
+    hosted();
+    refuse();
     act(() => finishedReply("Hello."));
     render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
 
-    expect(screen.queryByRole("button", { name: "Enter key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Use hosted model" })
+    ).toBeNull();
   });
 
   it("offers nothing for a backend this build does not have", () => {
@@ -432,7 +514,7 @@ describe("Thread, a refused key", () => {
     });
     render(<Thread turn={withOpener(vi.fn())} project="Counter" />);
 
-    expect(screen.queryByRole("button", { name: "Enter key" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Change key" })).toBeNull();
   });
 });
 

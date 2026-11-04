@@ -647,7 +647,7 @@ test.describe("The thread", () => {
     await expect(card).toBeVisible(LONG);
     await expect(card.getByText("Not applied", { exact: true })).toBeVisible();
     await expect(
-      card.getByText("not applied -- the session ended before you answered")
+      card.getByText("Not applied: the session ended before you answered")
     ).toBeVisible();
     await expect(page.getByRole("button", { name: "Apply" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Discard" })).toHaveCount(0);

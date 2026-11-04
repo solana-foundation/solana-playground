@@ -98,25 +98,29 @@ describe("BaseThreadItem", () => {
     expect(container.innerHTML).toBe("");
   });
 
-  it("an error offers Enter key when its turn says so", () => {
-    const enterKey = vi.fn();
+  it("an error offers Change key and the hosted model when its turn says so", () => {
+    const changeKey = vi.fn();
+    const useHosted = vi.fn();
     render(
       <BaseThreadItem
         item={{
           kind: "error",
           id: "e",
           createdAt: CREATED,
-          text: "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model.",
+          text: "OpenAI did not accept this key.",
         }}
-        actions={{ enterKey }}
+        actions={{ changeKey, useHosted }}
         onAnswer={vi.fn()}
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Enter key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Change key" }));
+    fireEvent.click(screen.getByRole("button", { name: "Use hosted model" }));
 
-    expect(enterKey).toHaveBeenCalledTimes(1);
+    expect(changeKey).toHaveBeenCalledTimes(1);
+    expect(useHosted).toHaveBeenCalledTimes(1);
     expect(document.querySelector("#assistant-enter-key")).not.toBeNull();
+    expect(document.querySelector("#assistant-use-hosted")).not.toBeNull();
   });
 
   it("an error offers nothing on its own", () => {

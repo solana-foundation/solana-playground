@@ -204,7 +204,7 @@ export const turnAppliedApproval = (items: readonly ChatItem[]) => {
 };
 
 /** A patch card's outcome once `write_file` wrote its file */
-export const wroteOutcome = (path: string) => `wrote ${path}`;
+export const wroteOutcome = (path: string) => `Wrote ${path}`;
 
 /** Where Undo patch left a card; see the approval item's `undo` */
 export type UndoState = "done" | "stranded";

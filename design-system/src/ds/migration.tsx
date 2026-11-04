@@ -29,7 +29,7 @@ const OURS: Row[] = [
   { now: "Card that opens", next: "ActionCard, frame", keep: "The ring of brand colours on hover, and the lift.", state: "built" },
   { now: "Input with a validator", next: "Field and FieldError", keep: "The message above the field, a success edge.", state: "planned" },
   { now: "SearchBar", next: "Command inside a Popover", keep: "Drill-down pages, paste to pick, the last value restored.", state: "planned" },
-  { now: "Text (callout)", next: "Callout", keep: "Five kinds, each with its tint and icon.", state: "built" },
+  { now: "Text (callout)", next: "Callout", keep: "Five kinds, each with its tint and icon. Actions are CalloutAction, in the callout's tone.", state: "built" },
   { now: "Tag", next: "Tag", keep: "The level colours. Framework and language icons.", state: "built" },
   { now: "Four menus", next: "DropdownMenu and ContextMenu, with Menu extras. Drawer on a phone", keep: "Lines under names, key hints, rows that fold open, notes.", state: "built" },
   { now: "Popover, Tooltip", next: "Tooltip, Popover, HoverCard, HelpTip", keep: "The 500 ms delay. The question-mark help.", state: "built" },

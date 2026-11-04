@@ -623,17 +623,37 @@ test.describe("assistant-own-key", () => {
     await composer(page).fill("hello");
     await composer(page).press("Enter");
 
-    await expect(
-      page.getByText(
-        "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model."
-      )
-    ).toBeVisible(LONG);
+    await expect(page.getByText("OpenAI did not accept this key.")).toBeVisible(
+      LONG
+    );
     await page.locator("#assistant-enter-key").click();
 
     const dialog = page.getByRole("dialog", { name: "Connect a model" });
     await expect(dialog).toBeVisible(LONG);
     await expect(dialog.locator("#assistant-model")).toHaveValue("gpt-x");
     await expect(dialog.locator("#assistant-api-key")).toHaveValue("");
+  });
+  test("assistant-own-key: A 401 offers the hosted model", async ({ page }) => {
+    const defaultTurns = await countedDefault(page);
+    await page.route(COMPLETIONS_URL, (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Incorrect API key" } }),
+      })
+    );
+    await seedWorkspace(page, "own-key-401-hosted");
+    await connectOwn(page);
+    await composer(page).fill("hello");
+    await composer(page).press("Enter");
+
+    await page.locator("#assistant-use-hosted").click(LONG);
+
+    await expect
+      .poll(async () => (await connected(page))?.id, LONG)
+      .toBe("default");
+    await expect(composer(page)).toHaveValue("hello");
+    expect(defaultTurns).toEqual([]);
   });
   /** A deployment serving a default whose turns are counted, signed in */
   const countedDefault = async (page: Page) => {

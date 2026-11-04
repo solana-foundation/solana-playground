@@ -439,7 +439,7 @@ describe("useTurn", () => {
 
     expect(PgAssistant.items.at(-1)).toMatchObject({
       kind: "error",
-      text: "OpenAI-compatible did not accept this key. Check it and enter it again, or pick another model.",
+      text: "OpenAI did not accept this key.",
       recover: {
         provider: "openai",
         model: "gpt-x",

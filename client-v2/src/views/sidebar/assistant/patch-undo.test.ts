@@ -107,7 +107,7 @@ describe("PgPatchUndo", () => {
 
     expect(file.content).toBe("old");
     expect(card.undo).toBe("done");
-    expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
+    expect(card.outcome).toBe("src/lib.rs is back as it was");
     expect(card.updatedAt).toBeDefined();
     expect(PgPatchUndo.canWith(bridge)(card)).toBe(false);
   });
@@ -336,7 +336,7 @@ describe("PgPatchUndo", () => {
       expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
       expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
       expect(card.undo).toBe("done");
-      expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
+      expect(card.outcome).toBe("src/lib.rs is back as it was");
       expect(PgPatchUndo.original(card)).toBeUndefined();
     });
 
@@ -361,7 +361,7 @@ describe("PgPatchUndo", () => {
       // The card offers Undo, and the press finishes it
       expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
       expect(await PgPatchUndo.undoWith(bridge)(card)).toBe("undone");
-      expect(card.outcome).toBe("undone, src/lib.rs is back as it was");
+      expect(card.outcome).toBe("src/lib.rs is back as it was");
       expect(PgAssistant.items.some((i) => i.kind === "notice")).toBe(false);
     });
 
@@ -380,7 +380,7 @@ describe("PgPatchUndo", () => {
       expect(card.outcome).toContain("Undo did not finish");
 
       await expect(PgPatchUndo.undoWith(bridge)(card)).rejects.toThrow("disk");
-      expect(card.outcome).toBe("wrote src/lib.rs");
+      expect(card.outcome).toBe("Wrote src/lib.rs");
       expect(PgPatchUndo.original(card)).toBeUndefined();
       expect(PgPatchUndo.canWith(bridge)(card)).toBe(true);
     });

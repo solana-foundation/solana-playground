@@ -37,7 +37,12 @@ const boxOf = async (locator: Locator) => {
   return box;
 };
 
-const expectCut = async (page: Page) => {
+/**
+ * The name is cut, not wrapped, in a button `height` tall at most: one line.
+ * The composer's buttons are 32px on a desktop and 48px on a phone, as tall
+ * as + and Send beside them
+ */
+const expectCutWithin = (height: number) => async (page: Page) => {
   const composer = page.locator("form").filter({
     has: page.getByRole("textbox", { name: "Message the assistant" }),
   });
@@ -49,8 +54,7 @@ const expectCut = async (page: Page) => {
   const form = await boxOf(composer);
   const send = await boxOf(composer.getByRole("button", { name: "Send" }));
   expect(send.x + send.width).toBeLessThanOrEqual(form.x + form.width);
-  // One line: the name is cut, not wrapped
-  expect(box.height).toBeLessThanOrEqual(32);
+  expect(box.height).toBeLessThanOrEqual(height);
 
   await model.focus();
   await expect(page.getByRole("tooltip")).toHaveText(LONG_ID);
@@ -63,11 +67,11 @@ test("assistant-model-name: Long name in the composer, desktop and phone", async
   await page.goto("/");
   await startProject(page, "long-model-name", LONG);
   await connectLong(page);
-  await expectCut(page);
+  await expectCutWithin(32)(page);
 
   await page.setViewportSize(PHONE);
   await page.getByRole("radio", { name: "Chat" }).click();
   await expect(page.getByRole("region", { name: "Work" })).toBeInViewport();
   await page.keyboard.press("Escape");
-  await expectCut(page);
+  await expectCutWithin(48)(page);
 });

@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from "react";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
+import {
+  Callout,
+  CalloutAction,
+  CalloutActions,
+  CalloutDescription,
+  CalloutTitle,
+} from "@/shared/ui/callout";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,
@@ -128,19 +134,20 @@ const BusyRetry = ({ retry }: { retry: BusyRetryView }) => (
     <CalloutDescription>
       Trying again in {retry.secondsLeft} s.
     </CalloutDescription>
-    <div className="flex gap-2">
-      <AsyncButton
-        size="sm"
-        disabled={!retry.canTryNow}
-        onClick={retry.onTryNow}
-        onError={reportButtonFailure("send your message again")}
-      >
-        Try now
-      </AsyncButton>
-      <Button size="sm" variant="ghost" onClick={retry.onStop}>
-        Stop
-      </Button>
-    </div>
+    <CalloutActions>
+      <CalloutAction asChild>
+        <AsyncButton
+          variant="ghost"
+          size="sm"
+          disabled={!retry.canTryNow}
+          onClick={retry.onTryNow}
+          onError={reportButtonFailure("send your message again")}
+        >
+          Try now
+        </AsyncButton>
+      </CalloutAction>
+      <CalloutAction onClick={retry.onStop}>Stop</CalloutAction>
+    </CalloutActions>
   </Callout>
 );
 

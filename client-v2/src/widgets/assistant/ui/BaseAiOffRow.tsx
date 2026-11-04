@@ -1,5 +1,10 @@
-import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
+import {
+  Callout,
+  CalloutAction,
+  CalloutActions,
+  CalloutDescription,
+  CalloutTitle,
+} from "@/shared/ui/callout";
 
 import type { AiOffReason } from "../model/ai-off";
 
@@ -69,14 +74,9 @@ export function BaseAiOffRow({
 }: BaseAiOffRowProps) {
   const { title, text, action } = REASONS[reason];
   const retryButton = (
-    <Button
-      size="sm"
-      variant={action === "retry" ? "default" : "outline"}
-      onClick={onRetry}
-      disabled={retrying}
-    >
+    <CalloutAction onClick={onRetry} disabled={retrying}>
       Try again
-    </Button>
+    </CalloutAction>
   );
   return (
     <Callout id="assistant-ai-off" variant="info" role="status">
@@ -88,22 +88,16 @@ export function BaseAiOffRow({
           <span className="block">{signInError}</span>
         )}
       </CalloutDescription>
-      <div className="mt-2 flex flex-wrap gap-2">
+      <CalloutActions>
         {action === "sign-in" && (
-          <Button size="sm" onClick={onSignIn} disabled={signingIn}>
+          <CalloutAction onClick={onSignIn} disabled={signingIn}>
             Sign in with GitHub
-          </Button>
+          </CalloutAction>
         )}
         {action === "retry" && retryButton}
-        <Button
-          size="sm"
-          variant={action === undefined ? "default" : "outline"}
-          onClick={onAddKey}
-        >
-          Add an API key
-        </Button>
+        <CalloutAction onClick={onAddKey}>Add an API key</CalloutAction>
         {action === undefined && retryButton}
-      </div>
+      </CalloutActions>
     </Callout>
   );
 }

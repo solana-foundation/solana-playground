@@ -5,7 +5,12 @@ import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Bubble, BubbleContent } from "@/shared/ui/bubble";
 import { Button } from "@/shared/ui/button";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import {
+  Callout,
+  CalloutAction,
+  CalloutActions,
+  CalloutDescription,
+} from "@/shared/ui/callout";
 import { Marker, MarkerContent, MarkerIcon } from "@/shared/ui/marker";
 import { Message, MessageContent, MessageFooter } from "@/shared/ui/message";
 
@@ -43,7 +48,12 @@ export type ReplyActions = {
    * On an error whose provider refused the key: reopens Connect a model on
    * that backend for the key to be entered again
    */
-  enterKey?: () => void;
+  changeKey?: () => void;
+  /**
+   * On the same error, while the deployment serves a hosted model: moves the
+   * thread to it, sending nothing
+   */
+  useHosted?: () => void;
 };
 
 const MAKE_CHANGE: Record<
@@ -162,22 +172,34 @@ export const BaseThreadItem = ({
           <CalloutDescription className="break-words">
             {item.text}
           </CalloutDescription>
-          {actions?.enterKey && (
-            // Spec 08 (state AI-05) offers Open settings and Use hosted model;
-            // the key lives in Connect a model here, so Enter key opens that.
-            // TODO(HOO-1719): its look awaits Design alignment's sync item
-            // 4.15; the design system's outline button until then
-            <Button
-              id="assistant-enter-key"
-              variant="outline"
-              size="sm"
-              className="mt-2 self-start"
-              onClick={actions.enterKey}
-            >
-              Enter key
-            </Button>
+          {(actions?.changeKey || actions?.useHosted || onRetry) && (
+            // Spec 08 (state AI-05) offers Open settings and Use hosted model.
+            // Settings here can only delete a key; Connect a model is where a
+            // key is entered, so Change key opens that (DES-196). The
+            // callout's own actions take its tone, where a Button would sit
+            // on the red as a grey patch
+            <CalloutActions>
+              {actions?.changeKey && (
+                <CalloutAction
+                  id="assistant-enter-key"
+                  onClick={actions.changeKey}
+                >
+                  Change key
+                </CalloutAction>
+              )}
+              {actions?.useHosted && (
+                <CalloutAction
+                  id="assistant-use-hosted"
+                  onClick={actions.useHosted}
+                >
+                  Use hosted model
+                </CalloutAction>
+              )}
+              {onRetry && (
+                <CalloutAction onClick={onRetry}>Try again</CalloutAction>
+              )}
+            </CalloutActions>
           )}
-          {onRetry && <TryAgain onClick={onRetry} />}
         </Callout>
       );
 
@@ -186,7 +208,9 @@ export const BaseThreadItem = ({
         <Callout role="status">
           <CalloutDescription className="flex flex-wrap items-center justify-between gap-2">
             {item.text}
-            {onRetry && <TryAgain onClick={onRetry} />}
+            {onRetry && (
+              <CalloutAction onClick={onRetry}>Try again</CalloutAction>
+            )}
           </CalloutDescription>
         </Callout>
       );

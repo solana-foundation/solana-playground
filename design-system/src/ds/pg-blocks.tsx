@@ -36,7 +36,7 @@ import { AsyncButton } from "@/components/ui/async-button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { BrandButton, BrandButtonIcon } from "@/components/ui/brand-button"
 import { Button } from "@/components/ui/button"
-import { Callout, CalloutDescription, CalloutTitle } from "@/components/ui/callout"
+import { Callout, CalloutAction, CalloutActions, CalloutDescription, CalloutTitle } from "@/components/ui/callout"
 import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockHeader, CodeBlockLine, CodeBlockTitle } from "@/components/ui/code-block"
 import {
   Composer,
@@ -745,7 +745,7 @@ function PlaygroundComponents() {
         </div>
       </Block>
 
-      <Block id="callout" title="Callout" source="playground" registry="callout" note="A note in a page or a form: a tint and a hairline, calm enough to read past. Alert speaks for the whole page. A callout speaks for the place it sits." className="block">
+      <Block id="callout" title="Callout" source="playground" registry="callout" note="A note in a page or a form: a tint and a hairline, calm enough to read past. Alert speaks for the whole page. A callout speaks for the place it sits. Its actions are CalloutAction, which has no surface of its own and takes the callout's tone, never a Button." className="block">
         <div className="grid max-w-xl gap-3">
           <Callout variant="info">
             <Info />
@@ -761,6 +761,28 @@ function PlaygroundComponents() {
             <CircleAlert />
             <CalloutTitle>The paymaster said no</CalloutTitle>
             <CalloutDescription>The program is over the size Kora will pay for. Try a smaller build.</CalloutDescription>
+          </Callout>
+          <Callout variant="error">
+            <CalloutDescription>OpenAI did not accept this key.</CalloutDescription>
+            <CalloutActions>
+              <CalloutAction>Change key</CalloutAction>
+              <CalloutAction>Use hosted model</CalloutAction>
+            </CalloutActions>
+          </Callout>
+          <Callout variant="warning">
+            <CalloutTitle>The model is busy</CalloutTitle>
+            <CalloutDescription>Trying again in 12 s.</CalloutDescription>
+            <CalloutActions>
+              <CalloutAction>Try now</CalloutAction>
+              <CalloutAction>Stop</CalloutAction>
+            </CalloutActions>
+          </Callout>
+          <Callout variant="info">
+            <CalloutDescription>Sign in with GitHub to use the hosted model, or add a key of your own.</CalloutDescription>
+            <CalloutActions>
+              <CalloutAction>Sign in with GitHub</CalloutAction>
+              <CalloutAction>Add an API key</CalloutAction>
+            </CalloutActions>
           </Callout>
         </div>
       </Block>

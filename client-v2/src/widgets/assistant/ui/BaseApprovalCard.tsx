@@ -47,9 +47,9 @@ const PATCH_STATUS_LABEL: Record<ApprovalStatus, string> = {
 
 /** What a card no longer pending says when the tool reported no outcome of its own */
 const OUTCOME: Record<Exclude<ApprovalStatus, "pending">, string> = {
-  allowed: "done",
-  denied: "not applied",
-  unanswered: "not applied -- the session ended before you answered",
+  allowed: "Done",
+  denied: "Not applied",
+  unanswered: "Not applied: the session ended before you answered",
 };
 
 /** An undo that did not finish is a warning; a patch still applied, a success */
