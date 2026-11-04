@@ -14,8 +14,7 @@ quietly reintroducing a stub on a default path.
 - Every default path builds, installs, or requires the real wasm packages:
   `yarn setup` and `yarn build`, the scripts that serve, build, or test the
   app, the compose `v2` and `v2-prod` profiles, the Vercel install and build,
-  the fast production deploy in `Makefile.vercel`, and CI on pushes to `master`
-  and on every pull request.
+  and CI on pushes to `master` and on every pull request.
 - The stubs are written only under `USE_WASM_STUBS=true`, the exact string,
   which the `:with-stubs` scripts and the dispatch-only `client-v2-with-stubs.yml`
   set. `wasm/stub-packages.sh` is not gated itself; its only caller is.
@@ -51,7 +50,7 @@ None.
   `yarn setup:with-stubs` remains, by name.
 - Code: `client-v2/package.json` scripts, `client-v2/scripts/setup-wasm.sh`,
   `wasm-stubs.sh`, `wasm-stubs.mjs`, `vercel-install.sh`, `vercel.json`,
-  `Makefile.vercel`, `compose.yaml`, the `client-v2*.yml` workflows, and
+  `compose.yaml`, the `client-v2*.yml` workflows, and
   `wasm/stub-packages.sh`, all as #34 leaves them.
 - Out of scope: making the three build routes (`wasm/build.sh` directly, the
   compose `wasm` image, and `build_wasm_packages` on Vercel and CI) produce

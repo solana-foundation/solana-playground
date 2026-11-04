@@ -1,6 +1,6 @@
 # Deploy the client to Vercel
 
-Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label or a local deploy. `preview.yml` and the Makefile also deploy previews, built outside Vercel (on a runner, or wherever `make` runs), each with a Neon branch of its own ([Neon preview databases](neon.md)). Makefile targets pin `client-v2` themselves and work whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
+Vercel's native Git integration deploys every push from the dashboard's Root Directory, `client-v2`: the Production Branch ([settings](#verified-vercel-project-settings)) to production, and `master-production`, `scope/*`, `integration/*` and `new-face-polish-<n>` to a preview. Every other branch is skipped by `vercel.json`'s `ignoreCommand` (`scripts/vercel-ignore-build.mjs`); a ticket branch gets a preview from the `preview` label. `preview.yml` deploys those previews, built on a runner outside Vercel, each with a Neon branch of its own ([Neon preview databases](neon.md)). It pins `client-v2` itself and works whatever the dashboard holds; see [Which client gets deployed](#which-client-gets-deployed).
 
 ## Release checklist: `client-v2` to production
 
@@ -15,7 +15,7 @@ as soon as the Root Directory points at `client-v2`.
    [Assistant default backend](#assistant-default-backend) and
    [Conversation and project sync](#conversation-and-project-sync):
    - `DATABASE_URL` — the pooled URL of production's Neon database, the same one
-     `migrate-production-db` migrates. It is in a Neon project of its own,
+     [Migrate production](#migrate-production) migrates. It is in a Neon project of its own,
      never the preview project ([Neon preview databases](neon.md)).
    - `AUTH_OAUTH_PROXY_SECRET` — the same value as on Preview, and never equal
      to either `AUTH_SECRET` ([Sign-in on previews](#sign-in-on-previews)).
@@ -41,22 +41,14 @@ as soon as the Root Directory points at `client-v2`.
    the host's, by the [OAuth proxy](#sign-in-on-previews).
 4. **Build server CORS.** `PG_CLIENT_URLS` on the build server includes the
    production origin.
-5. **Dry run on a preview**, from `master`:
-
-   ```sh
-   make -f client-v2/Makefile.vercel migrate-preview-db
-   make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview
-   ```
-
-   This uses the Neon branch `preview/master`, cut from the preview Neon
-   project, so the dry run runs on preview data. On the preview URL:
-   `/api/sync` answers `{"enabled":true,"db":"ok"}`, sign-in works, and a
-   project edited in one browser shows up in a second.
-6. **Migrate production:**
-
-   ```sh
-   make -f client-v2/Makefile.vercel migrate-production-db
-   ```
+5. **Dry run on a preview:** add the `preview` label to a PR whose head is the
+   commit to release. `preview.yml` migrates the PR's Neon branch, cut from the
+   preview Neon project, so the dry run runs on preview data, and posts the
+   preview URL on the PR. On that URL: `/api/sync` answers
+   `{"enabled":true,"db":"ok"}`, sign-in works, and a project edited in one
+   browser shows up in a second.
+6. **Migrate production** by the steps in
+   [Migrate production](#migrate-production).
 
    A deployment that ships ahead of its migration runs against a schema
    missing what it expects — and `/api/sync` still reports `db: "ok"`, because
@@ -123,23 +115,23 @@ Both paths build `client-v2`, each from its own setting:
 | Path | Root Directory used | Deploys |
 | --- | --- | --- |
 | `git push` (Git integration) | dashboard: `client-v2` | the fork's client |
-| `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview` | pinned to `client-v2` | the fork's client |
+| `preview.yml` (a PR labelled `preview`) | pinned to `client-v2` | the fork's client |
 
-`vercel build` takes the built directory from `settings.rootDirectory` in `.vercel/project.json`, which `vercel pull` caches from the dashboard. `vercel.json` has no `rootDirectory` key, so the dashboard is the only source for the Git path. `vercel-link-preview` rewrites the cached value to `client-v2` after every pull, so the local targets build the fork whatever the dashboard holds.
+`vercel build` takes the built directory from `settings.rootDirectory` in `.vercel/project.json`, which `vercel pull` caches from the dashboard. `vercel.json` has no `rootDirectory` key, so the dashboard is the only source for the Git path. `preview.yml` rewrites the cached value to `client-v2` after its pull, so it builds the fork whatever the dashboard holds.
 
 ## One-time setup
 
 1. Create the project. Framework: Other. Root Directory: `client-v2`.
 2. Build Machine: Enhanced on Enterprise; default on Pro.
 3. Production Branch: `master`. Ignored Build Step: leave it; `vercel.json`'s `ignoreCommand` overrides it.
-4. A Vercel token, only if you need one — see [Tokens](#tokens). Local deploys do not: the Makefile targets fall back to your `vercel login` session.
-5. Link the local checkout (from repo root):
+4. A Vercel token, for `preview.yml` only; see [Tokens](#tokens).
+5. Link the local checkout, from the repository root, for [Migrate production](#migrate-production). The Team ID is in the team's Settings → General, the Project ID in the project's Settings → General:
 
    ```sh
-   VERCEL_PROJECT_ID=prj_xxx make -f client-v2/Makefile.vercel vercel-bootstrap
+   mkdir -p .vercel
+   jq -n --arg org team_xxx --arg proj prj_xxx '{orgId: $org, projectId: $proj}' > .vercel/project.json
    ```
 
-   The root `Makefile` includes `client-v2/Makefile.vercel`, so a bare `make <target>` from the repo root runs the same targets, and `make help` lists them.
 6. Neon: set `NEON_API_KEY` and `NEON_PROJECT_ID` in `client-v2/.env` and on GitHub (a secret and a variable); see [Neon preview databases](neon.md#configuration).
 
 Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://github.com/solana-playground/solana-playground/blob/cd5555155c61572c8c49fb351890519af9e493ef/.env.example#L3) environment variable or CORS will reject every request.
@@ -147,17 +139,13 @@ Add the Vercel deployment origin to the server's [`PG_CLIENT_URLS`](https://gith
 ## Deploy
 
 - **Automatic:** push. The Git integration builds `client-v2`, the dashboard's Root Directory. A push to the Production Branch deploys to production; a push to `master-production` or to a `scope/*`, `integration/*` or `new-face-polish-<n>` branch deploys a preview (any other branch is skipped), reachable at its per-commit URL and at the branch's alias, both of which sign in ([Sign-in on previews](#sign-in-on-previews)).
-- **Local preview:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-preview`. Promote later with `vercel promote <url> --prod`.
-- **Local production:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-production`. The target prints the branch and commit, asks for a typed `yes`, and then runs `vercel build --prod` and `vercel deploy --prebuilt --prod`. Run `migrate-production-db` first when migrations are pending.
-- **Local production, fast:** `make -f client-v2/Makefile.vercel deploy-client-to-vercel-prod-fast`. Rebuilds from the working tree in ~5 minutes by skipping `installCommand` (rustup + `wasm/build.sh`, about an hour). It refuses to run unless a previous full build left `client-v2/node_modules` and the real — not stubbed — `wasm/*/pkg` packages on disk. It deploys whatever is in the working tree, committed or not.
+- **A PR labelled `preview`:** `preview.yml` builds on a runner and deploys a preview with the PR's own Neon branch ([Previews from a PR label](neon.md#previews-from-a-pr-label)).
 
-`vercel-link-preview` or `vercel-link-production` runs automatically as a prerequisite of the preview and full production targets.
+A Git-integration build with no cache does not finish inside Vercel's [build time limit](https://vercel.com/docs/builds#limits-and-resources); see [Build cache](#build-cache) for what each build reuses.
 
-A Git-integration build with no cache does not finish inside Vercel's [build time limit](https://vercel.com/docs/builds#limits-and-resources). A local build has no such limit, and it reuses the Rust state of earlier local builds (see [Build cache](#build-cache)).
+A changed variable reaches only a deployment created after the change: server-side variables (anything `api/*.mjs` reads) are attached to functions when a deployment is created, and `REACT_APP_*` are inlined into the bundle. Redeploy from the dashboard to pick one up.
 
-To pick up only changed **server-side** variables (anything `api/*.mjs` reads), no rebuild is needed: re-run `npx vercel@<version> deploy --prebuilt --prod --archive=tgz` on the existing `.vercel/output`, with the version pinned as `VERCEL_CLI` in `Makefile.vercel`. Variables are attached to functions when a deployment is created. `REACT_APP_*` are inlined into the bundle and do need a rebuild.
-
-`deploy-client-to-vercel-preview` resolves this git branch's Neon branch first, before building, and passes it as `-e DATABASE_URL=<pooled url>` so the deployment overrides the project-level variable. Resolving first is deliberate: a Neon failure should not cost a full wasm build.
+`preview.yml` resolves the PR's Neon branch first, before building, and passes it as `-e DATABASE_URL=<pooled url>` so the deployment overrides the project-level variable. Resolving first is deliberate: a Neon failure should not cost a full wasm build.
 
 `--archive=tgz` is not optional. The prebuilt output is about 16k files and the upload API rejects more than 15000 (`files should NOT have more than 15000 items`), so the tree goes up as a single tarball.
 
@@ -199,16 +187,10 @@ The version comes from the lockfile, the file wasm-pack reads, after `cargo meta
 
 ## Tokens
 
-`Makefile.vercel` passes `--token` only when `VERCEL_TOKEN` is set. Unset, the
-CLI uses the session from `vercel login`, so local deploys need no token at all.
-
-The targets that link first (`vercel-link-preview`, `vercel-link-production`,
-and the preview and full production deploys) run `vercel whoami` with the same
-credentials, and stop with the fix when they are rejected. Run
-`make -f client-v2/Makefile.vercel vercel-auth` to run only that check.
-
-`vercel-bootstrap` is the exception to both: it calls the REST API with `curl`,
-and a raw HTTP request has no stored login to fall back on.
+Without `--token`, the CLI uses the session from `vercel login`, so the commands
+in [Migrate production](#migrate-production) need no token. `"$vercel" whoami`, with
+`$vercel` as that section sets it, names the account the CLI acts as; it must be a
+member of the linked team.
 
 **A project-scoped token cannot drive the CLI.** Choosing a single project in
 Account Settings → Tokens creates one, and it denies every user-level request.
@@ -219,9 +201,9 @@ The CLI calls `/v2/user` and `/v3/user/tokens/current` on startup and enumerates
 Error: Could not retrieve Project Settings. To link your Project, remove the `.vercel` directory and deploy again.
 ```
 
-The `.vercel` directory is fine. The tell is that the same token works for
-`vercel-bootstrap`, because `/v9/projects/<id>` is project-level — when `curl`
-succeeds and the CLI does not, suspect the scope, not the link.
+The `.vercel` directory is fine. The tell is that the same token answers a
+`curl` of `https://api.vercel.com/v9/projects/<id>`, which is project-level:
+when `curl` succeeds and the CLI does not, suspect the scope, not the link.
 
 Selecting **All Projects** creates a team-scoped token, which does work, at the
 cost of org-wide CLI access. Vercel has had project-scoped CLI support open since
@@ -243,8 +225,7 @@ without the key fails: `vercel.json`'s `buildCommand` runs
 alike. Store it as a Secret. A production build also fails when the key is set
 without sign-in's variables or without a parseable `AUTH_BASE_URL`. On Vercel's
 build machine (`CI` set) an empty value counts as unset, as it does at runtime.
-A local `vercel build` (the `Makefile.vercel` deploy targets) pulls a Secret as
-an empty value; there the check accepts an empty value and warns, since the
+A local `vercel build` pulls a Secret as an empty value; there the check accepts an empty value and warns, since the
 deployment reads the real value at runtime:
 
 | Variable | Meaning |
@@ -373,8 +354,8 @@ The limits are optional and default to the starting values in the change's
 A malformed number falls back to its default and logs `server-env: ...`.
 
 **Order.** The change adds a migration (`agent_spend` and
-`"user"."githubCreatedAt"`): run `migrate-production-db` first, then merge to
-`master` ([Conversation and project sync](#conversation-and-project-sync)). The
+`"user"."githubCreatedAt"`): migrate production first, then merge to
+`master` ([Migrate production](#migrate-production)). The
 merge alone moves nothing: with `PG_AI_BASE_URL` unset, turns still go to the
 Nous Research default, with no provider restriction, and the ledger and caps
 apply to them already.
@@ -523,43 +504,20 @@ before this existed.
 | `AUTH_OAUTH_PROXY_URL` | Previews only: the origin of the host, the deployment whose callback is on the GitHub app |
 | `AUTH_OAUTH_PROXY_SECRET` | The OAuth proxy's encryption key. The same value on the host and every preview, never `AUTH_SECRET`'s. Unset, the proxy is off |
 
-**Migrations are never applied by a function.** A preview from `preview.yml` or
-the Makefile gets its own Neon branch, so its schema is its own problem. A
-Git-triggered preview runs on the Preview-scoped `DATABASE_URL`, which nothing
-here migrates. A labelled PR's preview is migrated by
-`preview.yml` on every deploy (see
-[Previews from a PR label](neon.md#previews-from-a-pr-label)); a preview
-deployed by hand is migrated by hand:
-
-```sh
-make -f client-v2/Makefile.vercel migrate-preview-db
-```
-
-What that target does to the preview's Neon branch, and why it asks for no
-confirmation, is in [Neon preview databases](neon.md#a-branch-per-git-branch).
-
-The shared database behind the project-level `DATABASE_URL` still needs its own
-schema, and that one serves production:
-
-```sh
-make -f client-v2/Makefile.vercel migrate-production-db
-```
-
-It pulls the **Production** environment's `DATABASE_URL_UNPOOLED` into
-`.vercel/.env.production.local` and migrates that — never the preview pull,
-which is resolved for the checked-out git branch and so can name a preview
-branch's database instead (it did: run from `master-2.0` it checked
-`preview/master-2.0` and reported nothing pending while `main` had no schema).
-It prints the target host first, then the pending migrations, then requires a
-typed `yes`. It skips the prompt entirely when nothing is pending, so the warning
-never becomes something to click through.
+**Migrations are never applied by a function.** A preview from `preview.yml`
+gets its own Neon branch, so its schema is its own problem, and `preview.yml`
+migrates it on every deploy (see
+[Previews from a PR label](neon.md#previews-from-a-pr-label)). A Git-triggered
+preview runs on the Preview-scoped `DATABASE_URL`, which nothing here migrates.
+A migration can also be tried by hand on this git branch's own Neon branch
+([A branch per git branch](neon.md#a-branch-per-git-branch)).
 
 **Nothing migrates production automatically.** The only real databases CI
 migrates are labelled PRs' preview branches. Its `yarn db-migrate` in
 `client-v2.yml` runs against a throwaway service container, which proves the
 history replays from scratch but touches nothing real. The Git integration deploys `master` to production with no
-hook before or after it. Production is therefore migrated by a person running
-`migrate-production-db` from a laptop, and the ordering is theirs to get right:
+hook before or after it. Production is therefore migrated by a person following
+[Migrate production](#migrate-production) from a laptop, and the ordering is theirs to get right:
 migrate first, then merge to `master`. A deployment that ships ahead of its migration runs
 against a schema missing the columns it expects.
 
@@ -567,6 +525,61 @@ A preview deployment pointed at a database that has not been migrated will
 answer `db: "unreachable"` from `/api/sync` and stay local, which is the
 intended failure rather than a broken app. Note the limit of that: it covers a
 database that cannot be reached, not one whose schema is merely out of date.
+
+### Migrate production
+
+The database behind the Production environment's `DATABASE_URL` needs its own
+schema. Run from the repository root, with `jq`, `dbmate`, a linked checkout
+([One-time setup](#one-time-setup)), and a `vercel login` session in the linked
+team. The CLI is the one `preview.yml` runs, installed from
+[`.github/vercel-cli/package-lock.json`](../../.github/vercel-cli/package-lock.json),
+so every package is checked against its hash:
+
+```sh
+npm ci --ignore-scripts --prefix .github/vercel-cli
+vercel="$PWD/.github/vercel-cli/node_modules/.bin/vercel"
+export VERCEL_ORG_ID=$(jq -r .orgId .vercel/project.json)
+export VERCEL_PROJECT_ID=$(jq -r .projectId .vercel/project.json)
+rm -f .vercel/.env.production.local
+"$vercel" env pull .vercel/.env.production.local --environment=production --yes
+url=$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.production.local | cut -d= -f2- | tr -d '"')
+[ -n "$url" ] || echo "no DATABASE_URL_UNPOOLED pulled: stop here" >&2
+printf '%s\n' "$url" | sed -E 's#^[^@]*@([^/?]*).*#production database: \1#'
+cd client-v2
+[ -n "$url" ] && DATABASE_URL="$url" dbmate status
+```
+
+Read the host the `printf` line prints and confirm it is production's. When
+`dbmate status` reports `Pending: 0`, stop there. Otherwise apply the
+migrations it marks `[ ]`:
+
+```sh
+[ -n "$url" ] && DATABASE_URL="$url" dbmate --no-dump-schema up
+```
+
+Why each step is the way it is:
+
+- **A fresh pull or no URL.** The saved file is deleted before the pull, so a
+  failed pull leaves no URL to read, and each `dbmate` line runs only with one.
+
+- **Both IDs come from the link file.** An exported `VERCEL_PROJECT_ID` alone
+  outranks the file in the CLI's project resolution and leaves `orgId`
+  unresolved.
+- **`env pull`, not `pull`.** It writes only the named file and leaves the
+  cached project settings, and the pinned Root Directory, alone.
+- **The Production pull, never the preview pull.** The preview pull is resolved
+  for the checked-out git branch, so on a branch with branch-scoped Preview
+  variables it names that branch's Neon database. Run from `master-2.0`, it once
+  checked `preview/master-2.0` and reported nothing pending while `main` had no
+  schema.
+- **`DATABASE_URL_UNPOOLED`, not `DATABASE_URL`.** `DATABASE_URL` is the
+  PgBouncer endpoint and carries `channel_binding`, which dbmate's driver cannot
+  parse. The unpooled URL is direct and still carries the `sslmode` that both
+  dbmate and `src/features/persistence/model/db.mjs` require.
+- **`DATABASE_URL` inline on each `dbmate` command.** It wins over
+  `client-v2/.env`, so the local database is never the one migrated here.
+- **The host before anything else.** "Nothing pending" is only reassuring when
+  it says which database had nothing pending.
 
 ### Sign-in on previews
 
@@ -595,8 +608,8 @@ Whoever holds one preview's environment holds `AUTH_OAUTH_PROXY_SECRET`, and
 with it can forge a session on any preview. Two rules keep that away from real
 accounts:
 
-- **No preview reaches production's data.** A preview from `preview.yml` or the
-  Makefile runs on a branch of the preview Neon project
+- **No preview reaches production's data.** A preview from `preview.yml` runs
+  on a branch of the preview Neon project
   ([The parent branch](neon.md#the-parent-branch)). A Git-triggered preview
   runs on the Preview-scoped `DATABASE_URL`, which names a database in that
   project too, never production's.
@@ -656,10 +669,9 @@ database behind it, use the per-commit URL `preview.yml` posts on the PR.
 - The deployed-preview reachability of `DATABASE_URL` has not been verified;
   everything so far has run against a local container.
 - **A Git-triggered preview has no Neon branch of its own.** It runs with the
-  project's Preview-scoped variables. Only `preview.yml` and the Makefile cut a
-  Neon branch and pass it as `DATABASE_URL`
-  ([Neon preview databases](neon.md)).
-- **The Neon targets are untested against real Neon.** See
+  project's Preview-scoped variables. Only `preview.yml` cuts a Neon branch and
+  passes it as `DATABASE_URL` ([Neon preview databases](neon.md)).
+- **`scripts/neon-preview-branch.sh` is untested against real Neon.** See
   [Neon preview databases](neon.md#known-gaps).
 
 ## Endpoint routing

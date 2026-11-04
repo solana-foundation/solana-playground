@@ -1,0 +1,8 @@
+{
+  "name": "vercel-cli",
+  "private": true,
+  "description": "The Vercel CLI preview.yml and the production migration run, locked with package-lock.json",
+  "dependencies": {
+    "vercel": "62.7.0"
+  }
+}

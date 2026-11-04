@@ -1,5 +1,5 @@
 # client-v2 targets. Run from this directory.
-# Mirrors the root Makefile's `## description` help convention.
+# `make help` lists every target that carries a `## description`.
 
 .DEFAULT_GOAL := help
 

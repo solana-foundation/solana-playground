@@ -36,10 +36,10 @@ cleans up after it on a schedule; both run only in the repository the
 GitHub runs scheduled workflows only from the default branch.
 
 `cicd.yml` deploys App Engine from a tagged commit on `master`. A push to
-`master` also deploys `client-v2` to Vercel production, so run
-`migrate-production-db` first when migrations are pending: "migrate first,
-then merge to `master`"
-([deploy-client-vercel.md, "Conversation and project sync"](client-v2/docs/deploy-client-vercel.md#conversation-and-project-sync)).
+`master` also deploys `client-v2` to Vercel production, so migrate
+production first when migrations are pending: "migrate first, then merge to
+`master`"
+([deploy-client-vercel.md, "Migrate production"](client-v2/docs/deploy-client-vercel.md#migrate-production)).
 
 Greptile reviews only PRs into `master` on the foundation repository, as
 `greptile.json` configures. When adding a file of review rules, add it to `customContext.files` in
@@ -90,8 +90,6 @@ yarn db-migrate            # dbmate up; reads client-v2/.env
 yarn db-status             # which migrations are applied
 yarn db-dump               # regenerate db/schema.sql after a migration
 ```
-
-`make help` at the root lists Vercel deploy targets.
 
 Once per machine, for planning: `npm i -g @fission-ai/openspec@latest`
 (or `brew install openspec`). The `/opsx:*` commands committed under
@@ -164,7 +162,8 @@ Asked to build something in the client, look in `openspec/changes/` first.
   `yarn dev-cra` (which `vercel dev` runs) and `yarn test-e2e` refuse stubs
   nobody asked for, `vercel-install.sh` refuses the variable, and the
   Vercel build fails on a bundle that carries a stub or lacks any of the six
-  real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`). yarn 1 copies a `file:`
+  real packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`);
+  `openspec/specs/client-v2-build/spec.md` holds these requirements. yarn 1 copies a `file:`
   package again only when its folder is missing, so `setup-wasm.sh` clears
   `node_modules` (all but `.cache`, less webpack's `default-<mode>` caches, which
   identify a package by name and version) before it installs; `--check-files` alone

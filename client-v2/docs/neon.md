@@ -2,7 +2,7 @@
 
 A PR labelled `preview`, whatever its base branch, in the repository the `PREVIEW_REPOSITORY` variable names, gets a
 preview deployment with its own Neon branch, `preview/pr-<number>`, cut from `main`, the default branch of the preview
-Neon project. A preview deployed by hand from a laptop gets `preview/<git-branch>`. Production's database is in a Neon
+Neon project. `scripts/neon-preview-branch.sh`, run by hand, cuts `preview/<git-branch>`. Production's database is in a Neon
 project of its own, which no preview reads; production reaches it through the Production-scoped `DATABASE_URL`, see
 [Deploy the client to Vercel](deploy-client-vercel.md).
 
@@ -20,8 +20,7 @@ option is off, a preview the Git integration deploys runs with the project's Pre
 
 A push cancels the deploy it supersedes; a close cancels a deploy still running. PRs from forks and runs that
 Dependabot triggers get no deploy secrets and are skipped, and a Dependabot PR never gets a preview, even
-labelled by a human. The build runs on the runner, as `deploy-client-to-vercel-preview` does, and
-`vercel-install.sh` takes the wasm packages from Remote Cache with the runner's `VERCEL_TOKEN`.
+labelled by a human. The build runs on the runner, and `vercel-install.sh` takes the wasm packages from Remote Cache with the runner's `VERCEL_TOKEN`.
 
 The deployment gets only `DATABASE_URL` from the workflow. The app reads no other `DATABASE_*` variable, so the
 integration's project-level ones are unused there. A preview the Git integration deploys does read the Preview-scoped
@@ -32,7 +31,7 @@ integration's project-level ones are unused there. A preview the Git integration
 cancelled or failed. Daily, it deletes every `preview/pr-<n>` older than its `MIN_AGE_MINUTES` whose PR is no
 longer open and labelled. Run by hand (Actions → preview-sweep → Run workflow) it defaults to a dry run, and scope `all-preview`
 extends it to every other `preview/*` branch whose git branch has no open PR: the integration's leftovers and
-hand-deployed previews. It never touches `main` (the default branch), a protected branch, or `preview/master`, the
+branches cut by hand. It never touches `main` (the default branch), a protected branch, or `preview/master`, the
 production dry run's branch, which the teardown keeps too.
 
 GitHub runs a schedule, and lists a workflow under Run workflow, only from the repository's default branch,
@@ -57,8 +56,8 @@ REPO=<owner>/<name>   # the repository whose PRs get previews
 
 Both go in two places:
 
-- **`client-v2/.env`**, for the `Makefile.vercel` targets. Make does not read `.env` the way dbmate does, so
-  `Makefile.vercel` reads these two names out of it. A value already exported in the shell wins.
+- **`client-v2/.env`**, for `scripts/neon-preview-branch.sh`. The script reads the two names from the
+  environment, not from the file, so export them first ([A branch per git branch](#a-branch-per-git-branch)).
 - **GitHub**, under the same names, for the [preview workflows](#previews-from-a-pr-label): the key as a
   repository secret, the project ID as a repository variable, since it grants nothing on its own. Only GitHub
   needs `PREVIEW_REPOSITORY` (`client-v2/.env` does not), a repository variable whose value is `REPO`; the preview
@@ -113,15 +112,24 @@ no preview branch still has it as its parent.
 ## A branch per git branch
 
 `scripts/neon-preview-branch.sh` creates `preview/<git-branch>` on first use and prints its connection string. The
-name comes from the local branch checked out where `make` runs. Three targets call it:
+name comes from the local branch checked out where the script runs. It reads `NEON_API_KEY` and `NEON_PROJECT_ID`
+from the environment. Export the two names, not the whole of `client-v2/.env`, which also holds a `DATABASE_URL`;
+`tr` drops the quotes a `.env` value may carry. To try this git branch's migrations on preview data, from the
+repository root:
 
-| Target | What it does with the branch |
-| --- | --- |
-| `preview-db-branch` | Creates or reuses it and prints its host |
-| `migrate-preview-db` | Applies pending migrations to it, with no confirmation prompt |
-| `deploy-client-to-vercel-preview` | Passes its pooled URL as the deployment's `DATABASE_URL` |
+```sh
+export NEON_API_KEY=$(sed -n 's/^NEON_API_KEY=//p' client-v2/.env | head -1 | tr -d "\"'")
+export NEON_PROJECT_ID=$(sed -n 's/^NEON_PROJECT_ID=//p' client-v2/.env | head -1 | tr -d "\"'")
+url=$(client-v2/scripts/neon-preview-branch.sh)
+cd client-v2
+[ -n "$url" ] && DATABASE_URL="$url" dbmate status
+[ -n "$url" ] && DATABASE_URL="$url" dbmate --no-dump-schema up
+```
 
-`migrate-preview-db` applies the migrations the git branch has and `main` lacks. The branch belongs to one git branch and
+The script prints nothing when it fails, so each `dbmate` line runs only with a URL.
+
+Without `--pooled` the script prints the direct connection string, which dbmate needs. dbmate applies the migrations
+the git branch has and `main` lacks, with no confirmation step. The branch belongs to one git branch and
 nothing else reads it, so a bad migration costs a `neon branches delete`, not an incident, and two people testing
 two migrations cannot corrupt each other. A Git-triggered preview has no branch of its own: it shares the database
 the Preview-scoped `DATABASE_URL` names with every other Git-triggered preview.
@@ -129,9 +137,9 @@ the Preview-scoped `DATABASE_URL` names with every other Git-triggered preview.
 ## Cleanup
 
 The Neon project caps its branch count, so every `preview/*` branch left behind blocks a future preview. Labelled
-PRs clean up after themselves (see [Previews from a PR label](#previews-from-a-pr-label)). A hand-deployed
+PRs clean up after themselves (see [Previews from a PR label](#previews-from-a-pr-label)). A hand-cut
 `preview/<git-branch>` is deleted when a PR with that head branch closes. Otherwise it stays until the
-`all-preview` sweep or a hand delete removes it. A hand deploy from a local branch named differently from the
+`all-preview` sweep or a hand delete removes it. A branch cut from a local branch named differently from the
 PR's head branch, or from a detached HEAD (`preview/HEAD`), is never matched to a PR.
 
 By hand, with both values exported from `client-v2/.env`:
@@ -143,7 +151,6 @@ npx neonctl@latest branches delete preview/<git-branch> --project-id "$NEON_PROJ
 
 ## Known gaps
 
-- **The `Makefile.vercel` Neon targets are untested against real Neon.** `preview-db-branch` and
-  `migrate-preview-db` were exercised with a stubbed `neonctl` against a local Postgres, which proves the
-  arguments and the shell but not that the Neon API accepts them. `preview-db-branch` is the smallest real call
-  and fails fastest.
+- **`scripts/neon-preview-branch.sh` is untested against real Neon.** It was exercised with a stubbed `neonctl`
+  against a local Postgres, which proves the arguments and the shell but not that the Neon API accepts them.
+  Running the script alone, without dbmate, is the smallest real call and fails fastest.

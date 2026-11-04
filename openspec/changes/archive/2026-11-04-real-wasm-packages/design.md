@@ -26,8 +26,8 @@ below reads the place its path consumes.
 
 ## Decisions
 
-- **One variable, the exact string `true`.** `wasm-stubs.sh` (POSIX, sourced
-  by `Makefile.vercel`) and `wasm-stubs.mjs` declare it; a test compares the
+- **One variable, the exact string `true`.** `wasm-stubs.sh` and
+  `wasm-stubs.mjs` declare it; a test compares the
   two and the stub writer. Any other value means the real packages, so a stray
   `1` or `yes` cannot opt in. Alternative: a truthiness check, rejected
   because it turns an accidental value into stubs.
@@ -38,7 +38,7 @@ below reads the place its path consumes.
 - **Each check reads what its path consumes.** The serve and test scripts read
   `node_modules` (the guard), the deploy reads the built bundle
   (`check-build`, looking for the stub text and each package's wasm-bindgen
-  module), and the fast deploy reads both `wasm/*/pkg` and `node_modules`.
+  module).
   Alternative: one check on `wasm/*/pkg`, rejected because an install keeps an
   old stub copy in `node_modules`.
 - **The snapshot test skips on a stub run.** The snapshot measures the real

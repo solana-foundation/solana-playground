@@ -8,7 +8,7 @@ name: preview-sweep
 # Scope `managed` (the schedule) touches only `preview/pr-<n>`, the names
 # preview.yml creates. Scope `all-preview` also takes any other `preview/*`
 # branch -- those the Vercel integration created per git branch before its
-# option was turned off, and those `make deploy-client-to-vercel-preview` cuts
+# option was turned off, and those client-v2/scripts/neon-preview-branch.sh cuts
 # per local branch -- unless an open PR still has that head branch. Neither
 # scope touches `main` (the default branch), a protected one, or
 # `preview/master`, the production dry run's branch
@@ -62,7 +62,7 @@ jobs:
       # the PR list below was read.
       MIN_AGE_MINUTES: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: .github/scripts
 
