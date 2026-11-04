@@ -102,7 +102,7 @@ const warned = new Set();
 const warnOnce = (message) => {
   if (warned.has(message)) return;
   warned.add(message);
-  console.warn(message);
+  log.warn(message);
 };
 
 /**
@@ -140,13 +140,11 @@ const resolveAgent = (suffix) => {
   const legacyValue = process.env[legacy];
   if (legacyValue === undefined) return { name, value };
   if (agentVariableName(suffix) === legacy) {
-    warnOnce(`server-env: ${legacy} is deprecated; rename it ${name}`);
+    warnOnce(`${legacy} is deprecated; rename it ${name}`);
     return { name: legacy, value: legacyValue };
   }
   if (value !== legacyValue) {
-    warnOnce(
-      `server-env: ${legacy} is ignored: ${name} is set; delete ${legacy}`
-    );
+    warnOnce(`${legacy} is ignored: ${name} is set; delete ${legacy}`);
   }
   return { name, value };
 };

@@ -1,6 +1,7 @@
 import type { Page, Request } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
   seedWorkspace,
   startProject,

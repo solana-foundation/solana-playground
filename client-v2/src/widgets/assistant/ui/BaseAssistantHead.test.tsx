@@ -302,10 +302,10 @@ describe("BaseAssistantHead", () => {
 
 it("is the frame's 44 px column bar", () => {
   setup();
-  const head = screen.getByRole("heading", {
-    name: "Assistant · GLM 5.3 Flash · hosted",
-  }).parentElement;
-  if (!head) throw new Error("the heading has no bar");
+  const head = requireFor("the heading's bar")(
+    screen.getByRole("heading", { name: "Assistant · GLM 5.3 Flash · hosted" })
+      .parentElement
+  );
   expect(head.className).toMatch(/\bh-11\b/);
   expect(head.className).toMatch(/\bborder-b\b/);
 });

@@ -3,6 +3,11 @@ import type { Mock } from "vitest";
 import { describe, it } from "vitest";
 
 import { UPSTREAM_DROPPED } from "@/shared/lib/ai/config.mjs";
+import type { ServerLogEntry } from "@/shared/lib/logger/server.mjs";
+import {
+  initServerLogger,
+  resetServerLogger,
+} from "@/shared/lib/logger/server.mjs";
 
 import handler from "../../../api/agent.mjs";
 import { jsonBody, makeReq, makeRes, postJson } from "../../test/api-handler";
@@ -673,17 +678,20 @@ describe("POST /api/agent streaming", () => {
   });
 
   it("logs an upstream that drops mid-answer, without the key", async () => {
-    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logged = serverLog();
     await call(makeRes(), upstream(["data: a\n\n"], "fail"));
 
-    expect(warned).toHaveBeenCalledWith("agent: upstream stream failed", {
-      message: "connection reset",
-      callerLeft: false,
-    });
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "upstream stream failed",
+        context: { message: "connection reset", callerLeft: false },
+      })
+    );
   });
 
   it("logs an upstream that drops after the caller left", async () => {
-    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logged = serverLog();
     const res = makeRes();
     const dropping = upstream(["data: a\n\n"], "fail");
     const read = dropping.body.getReader();
@@ -700,14 +708,17 @@ describe("POST /api/agent streaming", () => {
 
     await call(res, dropping);
 
-    expect(warned).toHaveBeenCalledWith("agent: upstream stream failed", {
-      message: "connection reset",
-      callerLeft: true,
-    });
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "upstream stream failed",
+        context: { message: "connection reset", callerLeft: true },
+      })
+    );
   });
 
   it("logs nothing when the read fails on the caller's own hang-up", async () => {
-    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logged = serverLog();
     const res = makeRes();
     const stream = upstream(["data: a\n\n"]);
     const read = stream.body.getReader();
@@ -725,11 +736,11 @@ describe("POST /api/agent streaming", () => {
 
     await call(res, stream);
 
-    expect(warned).not.toHaveBeenCalled();
+    expect(logged).toEqual([]);
   });
 
   it("reports a failure to relay as its own, not as the upstream's", async () => {
-    const failed = vi.spyOn(console, "error").mockImplementation(() => {});
+    const logged = serverLog();
     const res = makeRes({
       write: () => {
         throw new Error("write EPIPE");
@@ -738,10 +749,16 @@ describe("POST /api/agent streaming", () => {
 
     await call(res, upstream(["data: a\n\n"]));
 
-    expect(failed).toHaveBeenCalledWith("agent: relaying the stream failed", {
-      error: "Error",
-      message: "write EPIPE",
-    });
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "error",
+        report: true,
+        error: expect.objectContaining({
+          message: "relaying the stream failed: write EPIPE",
+        }),
+        context: { error: "Error" },
+      })
+    );
     expect(res.body()).not.toContain("Upstream stream failed");
     expect(res.ended).toBe(true);
   });
@@ -1619,7 +1636,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("logs a settle that fails, with what it would have charged", async () => {
-      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const logged = serverLog();
       network();
       db.state.during = (text) => {
         if (text.includes("insert into agent_turn")) db.state.down = true;
@@ -1630,15 +1647,18 @@ describe("POST /api/agent spend gate", () => {
       expect(res.statusCode).toBe(200);
       expect(res.ended).toBe(true);
       expect(db.state.turns).toEqual([]);
-      expect(logged).toHaveBeenCalledWith(
-        "agent: settling a turn failed",
+      expect(logged).toContainEqual(
         expect.objectContaining({
-          message: "connect ECONNREFUSED",
-          end: "completed",
-          tier: "established",
-          day: today(),
-          reserved: RESERVED,
-          charge: USAGE_COST,
+          level: "error",
+          report: true,
+          error: expect.objectContaining({ message: "connect ECONNREFUSED" }),
+          context: expect.objectContaining({
+            end: "completed",
+            tier: "established",
+            day: today(),
+            reserved: RESERVED,
+            charge: USAGE_COST,
+          }),
         })
       );
     });
@@ -1656,7 +1676,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("still answers 429 when counting a capped turn fails", async () => {
-      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const logged = serverLog();
       spendSoFar("user-1", CAP.established);
       network();
       db.state.during = (text) => {
@@ -1666,12 +1686,15 @@ describe("POST /api/agent spend gate", () => {
       const res = await postJson(handler, TURN);
 
       expect(res.statusCode).toBe(429);
-      expect(logged).toHaveBeenCalledWith(
-        "agent: counting a capped turn failed",
+      expect(logged).toContainEqual(
         expect.objectContaining({
-          message: "connect ECONNREFUSED",
-          tier: "established",
-          day: today(),
+          level: "error",
+          report: true,
+          error: expect.objectContaining({ message: "connect ECONNREFUSED" }),
+          context: expect.objectContaining({
+            tier: "established",
+            day: today(),
+          }),
         })
       );
     });

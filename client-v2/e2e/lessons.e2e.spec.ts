@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import { expect, home, homeRegion, stubAiStatus, test } from "./fixtures";
 
 const FIRST = "Define the hello instruction and log a message";

@@ -138,7 +138,8 @@ describe("agentEnv", () => {
     assert.equal(env.BASE_URL, "https://ai-gateway.vercel.sh/v1");
     assert.deepEqual(env.PROVIDERS, ["baseten", "fireworks"]);
     assert.equal(warned.mock.callCount(), 2);
-    const [first] = warned.mock.calls[0].arguments;
+    // The server logger prints its namespace first, then the message
+    const [, first] = warned.mock.calls[0].arguments;
     assert.match(first, /AGENT_API_KEY/);
     assert.match(first, /PG_AI_API_KEY/);
   });
@@ -179,7 +180,7 @@ describe("agentEnv", () => {
     assert.deepEqual(env.PROVIDERS, ["baseten"]);
     assert.equal(env.PRICE_INPUT, 0.15);
     assert.equal(env.NEWCOMER_DAILY_CAP, 0.02);
-    const messages = warned.mock.calls.map((call) => call.arguments[0]);
+    const messages = warned.mock.calls.map((call) => call.arguments[1]);
     assert.ok(messages.some((m) => m.includes('AGENT_PRICE_INPUT="cheap"')));
   });
 
@@ -194,7 +195,7 @@ describe("agentEnv", () => {
     read();
     assert.equal(read().API_KEY, "rotated");
     assert.equal(warned.mock.callCount(), 1);
-    const [message] = warned.mock.calls[0].arguments;
+    const [, message] = warned.mock.calls[0].arguments;
     assert.match(message, /AGENT_API_KEY is ignored/);
     assert.doesNotMatch(message, /stale|rotated/);
   });

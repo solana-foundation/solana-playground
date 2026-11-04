@@ -19,6 +19,9 @@ import {
 } from "../src/features/api/server.mjs";
 import { missingConfig, readSession } from "../src/features/auth/server.mjs";
 import { agentEnv } from "../src/shared/config/server-env.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:ai");
 
 /**
  * The answer, one variant per state the client acts on. `available` is about
@@ -64,7 +67,9 @@ const hostedModel = () => {
   if (missing.length > 0) {
     // A key with sign-in half set up is a deployment mistake, not a choice:
     // say which settings are missing (names only, see `missingConfig`)
-    console.warn("ai/status: a hosted key is set, but sign-in lacks", missing);
+    log.warn("a hosted key is set, but sign-in lacks", {
+      context: { missing },
+    });
     return undefined;
   }
   return agent.MODEL;
@@ -94,8 +99,8 @@ const hostedStatus = (model, session) => {
       // complete, so `unconfigured` (or a status `readSession` gains later)
       // means the two checks drifted apart. No turn could be taken, so no
       // hosted key
-      console.warn("ai/status: unexpected session status for a hosted key", {
-        status: session.status,
+      log.warn("unexpected session status for a hosted key", {
+        context: { status: session.status },
       });
       return OWN;
   }

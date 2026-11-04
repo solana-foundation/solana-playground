@@ -66,6 +66,9 @@ import {
 import { query } from "../src/features/persistence/server.mjs";
 import { agentEnv } from "../src/shared/config/server-env.mjs";
 import { UPSTREAM_DROPPED } from "../src/shared/lib/ai/config.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:agent");
 
 /**
  * Request fields forwarded upstream; everything else is the server's to
@@ -165,8 +168,11 @@ const pipeStream = async (res, body, observe, redact) => {
     if (res.writableEnded || res.destroyed) return;
     try {
       res.write(`\n\ndata: ${JSON.stringify({ error })}\n\n`);
-    } catch {
-      // The failure is already logged by the caller of this function
+    } catch (e) {
+      // The failure itself is already logged by this function's caller
+      log.warn("the cut-short frame could not be written", {
+        context: { error: e instanceof Error ? e.name : typeof e },
+      });
     }
   };
 
@@ -182,9 +188,8 @@ const pipeStream = async (res, body, observe, redact) => {
         // The upstream broke: logged whether or not the caller is still
         // there, since a caller who left gets no frame to read it from
         const message = redact(String(e?.message ?? e));
-        console.warn("agent: upstream stream failed", {
-          message,
-          callerLeft: res.destroyed,
+        log.warn("upstream stream failed", {
+          context: { message, callerLeft: res.destroyed },
         });
         sayCutShort({
           message: `Upstream stream failed: ${message}`,
@@ -221,10 +226,15 @@ const pipeStream = async (res, body, observe, redact) => {
   } catch (e) {
     // Ours, not the upstream's: the usage reader or the write to the caller
     // threw. Named as such, so a bug here is not chased upstream.
-    console.error("agent: relaying the stream failed", {
-      error: e instanceof Error ? e.name : typeof e,
-      message: redact(String(e?.message ?? e)),
-    });
+    log.error(
+      new Error(
+        `relaying the stream failed: ${redact(String(e?.message ?? e))}`
+      ),
+      {
+        report: true,
+        context: { error: e instanceof Error ? e.name : typeof e },
+      }
+    );
     sayCutShort({
       message: "The default backend failed while relaying the answer.",
     });
@@ -380,25 +390,25 @@ async function handler(req, res) {
       }).catch((e) =>
         // The reservation stays spent for the day: an overcharge, never an
         // undercharge
-        console.error("agent: settling a turn failed", {
-          message: e?.message,
-          code: e?.code,
-          end: end.kind,
-          tier: gate.tier,
-          day: turn.day,
-          reserved: turn.amount,
-          charge: chargeFor(end, turn.amount, configured.prices),
+        log.error(e, {
+          report: true,
+          context: {
+            code: e?.code,
+            end: end.kind,
+            tier: gate.tier,
+            day: turn.day,
+            reserved: turn.amount,
+            charge: chargeFor(end, turn.amount, configured.prices),
+          },
         })
       );
     } else {
       // Only the count is lost: the caller already has the 429
       await recordCapped(query, { userId: turn.userId, day: turn.day }).catch(
         (e) =>
-          console.error("agent: counting a capped turn failed", {
-            message: e?.message,
-            code: e?.code,
-            tier: gate.tier,
-            day: turn.day,
+          log.error(e, {
+            report: true,
+            context: { code: e?.code, tier: gate.tier, day: turn.day },
           })
       );
     }
@@ -478,37 +488,49 @@ const relay = async (res, configured, body, tier, now) => {
     // the upstream may already have taken the request: charging nothing here
     // would let a caller that hangs up early spend past the cap
     if (abortUpstream.signal.aborted) return { kind: "unfinished" };
-    sendJson(res, 502, {
-      error: redact(`Upstream unreachable: ${e.message}`),
+    // Rebuilt rather than passed on: the error's message and stack may quote
+    // the key it was dialled with
+    const unreachable = redact(`Upstream unreachable: ${e?.message ?? e}`);
+    log.error(new Error(unreachable), {
+      report: true,
+      context: { error: e instanceof Error ? e.name : typeof e },
     });
+    sendJson(res, 502, { error: unreachable });
     return { kind: "refused" };
   }
 
   if (!response.ok) {
     // Classified as received, relayed and logged only redacted
-    const text = await response.text().catch(() => "");
+    const text = await response.text().catch((e) => {
+      log.warn(
+        `upstream ${response.status} body unreadable: ${redact(
+          String(e?.message ?? e)
+        )}`
+      );
+      return "";
+    });
     const shown = redact(text);
     // Our request was refused: relayed, it would read as this route refusing
     // the caller
     if (response.status === 401 || response.status === 403) {
       const cause = refusalCause(response.status, text);
-      console.error("agent: upstream refused the default backend", {
-        status: response.status,
-        cause,
-        tier,
-        body: shown,
+      log.error(new Error("upstream refused the default backend"), {
+        report: true,
+        context: { status: response.status, cause, tier },
       });
-      // Kept out of Sentry: a refusal's text can quote part of the key
-      log.warn(`upstream ${response.status} body: ${text.slice(0, 300)}`);
+      // Kept out of Sentry even redacted: a refusal's text can quote a part
+      // of the key shorter than the redaction catches
+      log.warn(`upstream ${response.status} body: ${shown}`);
       sendJson(res, 502, {
         error: `${REFUSAL_CAUSES[cause]} (${response.status}).`,
       });
       return { kind: "refused" };
     }
     if (response.status === 402 && isPoolExhausted(text)) {
-      console.warn("agent: tier pool exhausted", {
-        tier,
-        body: shown,
+      // Reported: the tier's pool stays out until a person buys credits
+      log.warn("tier pool exhausted", {
+        report: true,
+        context: { tier, body: shown },
       });
       res.setHeader("retry-after", String(secondsToReset(now)));
       sendJson(res, REFUSAL_STATUS[POOL_EXHAUSTED_REASON], {
