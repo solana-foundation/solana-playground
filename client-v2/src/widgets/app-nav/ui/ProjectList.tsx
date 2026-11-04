@@ -55,9 +55,8 @@ const refusalOf = (error: unknown, entry: ProjectEntry, newName: string) => {
 };
 
 /**
- * An `Error` for whatever an action threw: `PgView.setModal` rejects with
- * the bare `{ message }` of `PgCommon.sendAndReceiveCustomEvent`, which the
- * logger would otherwise record as "[object Object]"
+ * An `Error` for whatever an action threw, so the logger never records a
+ * plain `{ message }` as "[object Object]"
  */
 const asError = (thrown: unknown) => {
   if (thrown instanceof Error) return thrown;

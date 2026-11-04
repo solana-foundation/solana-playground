@@ -63,8 +63,7 @@ const UNKNOWN_ERROR = "Something went wrong";
 /** The message to show for whatever a submit threw; never empty */
 const messageOf = (error: unknown) => {
   if (typeof error === "string") return error || UNKNOWN_ERROR;
-  // An `Error`, or the bare `{ message }` that
-  // `PgCommon.sendAndReceiveCustomEvent` rejects with
+  // An `Error`, or a plain `{ message }`
   if (
     typeof error === "object" &&
     error !== null &&

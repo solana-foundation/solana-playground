@@ -189,7 +189,7 @@ it("should show the message of a rejected { message } object", async () => {
     title: "Rename",
     buttonProps: {
       text: "Rename",
-      // eslint-disable-next-line prefer-promise-reject-errors -- `PgCommon.sendAndReceiveCustomEvent` rejects with this shape
+      // eslint-disable-next-line prefer-promise-reject-errors -- the case under test is a non-Error rejection
       onSubmit: () => Promise.reject({ message: "no wallet" }),
     },
   });

@@ -1,3 +1,4 @@
+import { CustomEventError } from "./custom-event-error";
 import type {
   Accessor,
   AllPartial,
@@ -1009,7 +1010,7 @@ export class PgCommon {
    * - `noReceiver`: the failure to reject with at once when nothing claims
    * the event, such as a call to a component that is not mounted
    * @returns the resolved data
-   * @throws a plain `{ message }` when the receiver fails, or what
+   * @throws {CustomEventError} when the receiver fails, or what
    * `noReceiver` returns, as it is, when nothing claims the event
    */
   static async sendAndReceiveCustomEvent<R, D = unknown>(
@@ -1029,8 +1030,7 @@ export class PgCommon {
         );
 
         if (ev.detail.error) {
-          // eslint-disable-next-line prefer-promise-reject-errors -- the `@throws` contract is a plain `{ message }`, which callers and tests match
-          rej({ message: ev.detail.error });
+          rej(new CustomEventError(ev.detail.error));
         } else {
           res(ev.detail.data);
         }
@@ -1496,6 +1496,25 @@ if (import.meta.vitest) {
           ).resolves.toBe(42);
         } finally {
           stop();
+        }
+      });
+
+      it("rejects with a CustomEventError carrying the receiver's error", async () => {
+        const handleSend = (ev: Event) => {
+          ev.preventDefault();
+          void Promise.resolve().then(() =>
+            PgCommon.createAndDispatchCustomEvent(receive, { error: "no host" })
+          );
+        };
+        document.addEventListener(send, handleSend);
+        try {
+          const failure = PgCommon.sendAndReceiveCustomEvent(event, undefined, {
+            noReceiver,
+          });
+          await expect(failure).rejects.toBeInstanceOf(CustomEventError);
+          await expect(failure).rejects.toThrow("no host");
+        } finally {
+          document.removeEventListener(send, handleSend);
         }
       });
 

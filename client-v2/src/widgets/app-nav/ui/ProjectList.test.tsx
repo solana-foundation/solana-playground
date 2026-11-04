@@ -440,7 +440,7 @@ describe("ProjectList", () => {
   });
 
   it("logs the message of a dialog that failed to open, not [object Object]", async () => {
-    // `PgCommon.sendAndReceiveCustomEvent` rejects with a bare `{ message }`
+    // A non-Error rejection, which `asError` wraps
     app.PgView.setModal.mockRejectedValue({ message: "no modal host" });
     draw();
     fireEvent.keyDown(menuOf("alpha"), { key: "e" });
