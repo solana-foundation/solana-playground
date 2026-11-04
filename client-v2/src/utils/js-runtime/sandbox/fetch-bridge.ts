@@ -1,10 +1,10 @@
 /**
  * Every JSON-RPC request made in the sandbox goes through the page.
  *
- * `global-fetch.ts` routes `globalThis.fetch` here, for web3.js too. The page carries the request out
- * with its own `window.fetch`, which Playnet replaces with in-browser answers,
- * so Playnet works from the sandbox, and the sandbox's `null` origin never
- * meets CORS. Before the request leaves, real signatures replace the
+ * `global-fetch.ts` routes `globalThis.fetch` here, for web3.js too. The page
+ * carries the request out with its own `window.fetch`, which Playnet replaces
+ * with in-browser answers, so Playnet works from the sandbox, and the
+ * sandbox's `null` origin never meets CORS. Before the request leaves, real signatures replace the
  * placeholders of `tx.sign(pg.wallet.keypair)` (`placeholders.ts`).
  *
  * Anything that is not JSON-RPC goes out through the sandbox's own `fetch`,
@@ -40,9 +40,8 @@ const rpcBodyOf = (body: string) => {
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);
-  } catch (error) {
+  } catch {
     // Not JSON, so not JSON-RPC: it goes out as any other request
-    void error;
     return undefined;
   }
   const requests = Array.isArray(parsed) ? parsed : [parsed];

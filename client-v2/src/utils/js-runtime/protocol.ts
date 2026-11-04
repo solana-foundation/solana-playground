@@ -31,8 +31,10 @@ export type SignReply = { signature: Uint8Array } | { error: string };
 /** The page's answer to an RPC request */
 export type RpcReply = { status: number; body: string } | { error: string };
 
+const OUTPUT_LEVELS = ["log", "info", "warn", "error", "mocha"] as const;
+
 /** How a line of output is shown in the terminal */
-export type OutputLevel = "log" | "info" | "warn" | "error" | "mocha";
+export type OutputLevel = typeof OUTPUT_LEVELS[number];
 
 /** Messages the page sends to the sandbox, on the port */
 export type ToSandbox =
@@ -168,7 +170,10 @@ export const isFromSandbox = (data: unknown): data is FromSandbox => {
   if (!isRecord(data)) return false;
   switch (data.type) {
     case "output":
-      return typeof data.text === "string" && typeof data.level === "string";
+      return (
+        typeof data.text === "string" &&
+        OUTPUT_LEVELS.includes(data.level as OutputLevel)
+      );
     case "result":
       return typeof data.passes === "number";
     case "end":
@@ -184,6 +189,8 @@ export const isFromSandbox = (data: unknown): data is FromSandbox => {
       return (
         typeof data.id === "number" &&
         typeof data.url === "string" &&
+        typeof data.method === "string" &&
+        isRecord(data.headers) &&
         typeof data.body === "string"
       );
     default:
@@ -201,8 +208,8 @@ if (import.meta.vitest) {
           (kind) => kind !== "text" && kind !== "flag" && kind !== "count"
         )
       );
-      // Addresses, the IDL and the accounts list are public data; the only
-      // binary field is the signature of a sign reply
+      // Addresses, names, the IDL and the accounts list are public data; the
+      // only binary field is the signature of a sign reply
       expect(new Set(byteKinds)).toEqual(
         new Set([
           "idl",
@@ -240,6 +247,28 @@ if (import.meta.vitest) {
       expect(isHandshake({ type: "ready" })).toBe(true);
       expect(isHandshake({ type: "sign" })).toBe(false);
       expect(isHandshake("ready")).toBe(false);
+    });
+
+    it("refuses an output line of an unknown level and an RPC request without its fields", () => {
+      expect(isFromSandbox({ type: "output", level: "x", text: "a" })).toBe(
+        false
+      );
+      expect(isFromSandbox({ type: "output", level: "warn", text: "a" })).toBe(
+        true
+      );
+      expect(
+        isFromSandbox({ type: "rpc", id: 1, url: "http://a", body: "{}" })
+      ).toBe(false);
+      expect(
+        isFromSandbox({
+          type: "rpc",
+          id: 1,
+          url: "http://a",
+          method: "POST",
+          headers: {},
+          body: "{}",
+        })
+      ).toBe(true);
     });
 
     it("refuses a sign request without the bytes to sign", () => {

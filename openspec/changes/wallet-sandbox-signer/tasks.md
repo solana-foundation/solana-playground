@@ -19,7 +19,7 @@
 
 ## 4. Signing from the sandbox
 
-- [ ] 4.1 Add the sandbox signer provider and the page's sign handler (local provider for `pg.wallet`, the standard wallet for `pg.wallets.<name>`), and verify with unit tests "pg.wallet signs from the sandbox", "A sign request for an account the page does not hold" and "No message to the sandbox carries the key"
+- [x] 4.1 Add the sandbox signer provider and the page's sign handler (local provider for `pg.wallet`, the standard wallet for `pg.wallets.<name>`), and verify with unit tests "pg.wallet signs from the sandbox", "A sign request for an account the page does not hold" and "No message to the sandbox carries the key"
 - [ ] 4.2 Make `pg.wallet.keypair` a keypair-shaped object whose `secretKey` throws a named error, and verify "Reading the secret key" as a Playwright test
 - [ ] 4.3 Patch the sandbox's web3 `sign`, `partialSign`, `VersionedTransaction.sign`, `serialize` and the send and simulate methods for placeholders, and verify each patched method in unit tests plus "The hello-solana client signs with tx.sign", "sendAndConfirmTransaction with pg.wallet.keypair", "A v0 transaction signed with pg.wallet.keypair", "Anchor's payer signs an instruction", "The native template's test passes" and "Another signer alongside the wallet" as Playwright tests on Playnet
 - [x] 4.4 Update `e2e/wallet-signing.e2e.spec.ts` to `await tx.sign(...)` before `verifySignatures`, and verify "Project code signs with pg.wallet.keypair" passes
