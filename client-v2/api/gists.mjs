@@ -186,7 +186,7 @@ export const createHandler =
         });
       }
       // The database or the configuration: a new sign-in would not help
-      log.error(e, { report: true });
+      log.error(e);
       return sendJson(res, 503, { error: "Sign-in is unavailable" });
     }
 

@@ -105,7 +105,7 @@ export const createGistWith =
         return fail(502, "request-failed");
       }
       if (typeof gist?.html_url !== "string" || typeof gist?.id !== "string") {
-        log.error(new Error("GitHub's 201 named no gist"), { report: true });
+        log.error(new Error("GitHub's 201 named no gist"));
         return fail(502, "request-failed");
       }
       return { status: 201, body: { url: gist.html_url, id: gist.id } };
@@ -127,7 +127,6 @@ export const createGistWith =
     }
 
     log.error(new Error("unexpected GitHub answer"), {
-      report: true,
       context: { status: response.status, message },
     });
     return fail(502, "request-failed");
