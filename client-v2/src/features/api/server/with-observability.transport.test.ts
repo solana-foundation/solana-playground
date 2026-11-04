@@ -74,6 +74,8 @@ describe("withObservability against the real SDK", { timeout: 30_000 }, () => {
     const events = errorEvents();
     expect(events).toHaveLength(1);
     expect(events[0].exception.values[0].value).toBe("boom");
+    // The request's span was sent too, so the check below covers spans as well
+    expect(JSON.stringify(sent.envelopes)).toContain("POST /api/agent");
     expect(JSON.stringify(sent.envelopes)).not.toContain(key);
   });
 
@@ -90,6 +92,7 @@ describe("withObservability against the real SDK", { timeout: 30_000 }, () => {
       new Error(`duplicate key value violates unique constraint (${value})`),
       {
         code: "23505",
+        severity: "ERROR",
         constraint: "projects_pkey",
         detail: `Key (id)=(${value}) already exists.`,
       }
@@ -110,5 +113,30 @@ describe("withObservability against the real SDK", { timeout: 30_000 }, () => {
     );
     expect(events[0].tags).toMatchObject({ ns: "api:projects" });
     expect(JSON.stringify(sent.envelopes)).not.toContain(value);
+  });
+
+  it("reduces a pg error that is the cause of a thrown one, as the SDK links it", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { withObservability } = await import("./with-observability.mjs");
+    const input = ["uuid", "secret", "7"].join("-");
+    const pgError = Object.assign(
+      new Error(`invalid input syntax for type uuid: "${input}"`),
+      { code: "22P02", severity: "ERROR" }
+    );
+    const wrapper = new Error("save failed", { cause: pgError });
+
+    await expect(
+      withObservability("projects", async () => {
+        throw wrapper;
+      })({ method: "PUT", headers: {} } as never, { statusCode: 200 } as never)
+    ).rejects.toBe(wrapper);
+
+    const events = errorEvents();
+    expect(events).toHaveLength(1);
+    expect(
+      events[0].exception.values.map(({ value }: { value: string }) => value)
+    ).toEqual(["database error 22P02", "save failed"]);
+    expect(JSON.stringify(sent.envelopes)).not.toContain(input);
   });
 });

@@ -106,12 +106,16 @@ describe("scrubEvent", () => {
       event as { exception: { values: Array<{ value: string }> } }
     ).exception.values.map(({ value }) => value);
 
+  /** A `pg` server error as the driver raises it: a SQLSTATE and a severity */
+  const pgErrorWith = (message: string, code: string) =>
+    Object.assign(new Error(message), { code, severity: "ERROR" });
+
   it("sends a pg error by its code and constraint, never its message", async () => {
     const { scrubEvent } = await load();
-    const pgError = Object.assign(new Error("Key (id)=(abc) already exists"), {
-      code: "23505",
-      constraint: "projects_pkey",
-    });
+    const pgError = Object.assign(
+      pgErrorWith("Key (id)=(abc) already exists", "23505"),
+      { constraint: "projects_pkey" }
+    );
 
     const event = scrubEvent(exceptionEvent(pgError), {
       originalException: pgError,
@@ -122,9 +126,9 @@ describe("scrubEvent", () => {
 
   it("reduces a pg error that is the cause of the one reported", async () => {
     const { scrubEvent } = await load();
-    const pgError = Object.assign(
-      new Error('invalid input syntax for type uuid: "abc"'),
-      { code: "22P02" }
+    const pgError = pgErrorWith(
+      'invalid input syntax for type uuid: "abc"',
+      "22P02"
     );
     const wrapper = new Error("save failed", { cause: pgError });
 
@@ -135,17 +139,77 @@ describe("scrubEvent", () => {
     expect(valuesOf(event)).toEqual(["database error 22P02", "save failed"]);
   });
 
-  it("sends a network error as it is", async () => {
+  it("ends on a cause chain that loops", async () => {
     const { scrubEvent } = await load();
-    const reset = Object.assign(new Error("socket hang up"), {
+    const pgError = pgErrorWith('invalid input: "abc"', "22P02");
+    pgError.cause = pgError;
+
+    const event = scrubEvent(exceptionEvent(pgError), {
+      originalException: pgError,
+    });
+
+    expect(valuesOf(event)).toEqual(["database error 22P02"]);
+  });
+
+  it.each([
+    {
+      label: "a connection reset",
+      message: "socket hang up",
       code: "ECONNRESET",
+    },
+    { label: "a broken pipe", message: "write EPIPE", code: "EPIPE" },
+  ])("sends $label as it is", async ({ message, code }) => {
+    const { scrubEvent } = await load();
+    const error = Object.assign(new Error(message), { code });
+
+    const event = scrubEvent(exceptionEvent(error), {
+      originalException: error,
     });
 
-    const event = scrubEvent(exceptionEvent(reset), {
-      originalException: reset,
+    expect(valuesOf(event)).toEqual([message]);
+  });
+
+  it("drops the pg fields that quote values from extra, and keeps the rest", async () => {
+    const { scrubEvent } = await load();
+
+    const event = scrubEvent(
+      {
+        extra: {
+          code: "23505",
+          constraint: "projects_pkey",
+          detail: "Key (id)=(abc) already exists.",
+          hint: "abc",
+        },
+      } as never,
+      {}
+    ) as never as { extra: Record<string, unknown> };
+
+    expect(event.extra).toEqual({ code: "23505", constraint: "projects_pkey" });
+  });
+
+  it("sends the event stripped, and prints why, when scrubbing it throws", async () => {
+    const print = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { scrubEvent } = await load();
+    const error = new Error('invalid input: "abc"');
+    Object.defineProperty(error, "cause", {
+      get: () => {
+        throw new Error("cause getter");
+      },
     });
 
-    expect(valuesOf(event)).toEqual(["socket hang up"]);
+    const event = scrubEvent(
+      {
+        exception: { values: [{ type: "Error", value: error.message }] },
+        request: { data: { apiKey: "sk-secret" } },
+        extra: { body: "abc" },
+      } as never,
+      { originalException: error }
+    ) as never as Record<string, unknown>;
+
+    expect(valuesOf(event)).toEqual(["(not sent: scrubbing the event failed)"]);
+    expect(event).not.toHaveProperty("request");
+    expect(event).not.toHaveProperty("extra");
+    expect(print.mock.calls[0][0]).toBe("[api:observability]");
   });
 });
 
@@ -166,6 +230,52 @@ describe("scrubSpan", () => {
       "http.url": "https://mcp.test/x",
       "http.request.method": "GET",
     });
+  });
+
+  it("drops a database span's status message and its connection string's query", async () => {
+    const { scrubSpan } = await load();
+    const span = scrubSpan({
+      attributes: {
+        "sentry.op": "db.query",
+        "sentry.status.message": 'invalid input syntax for type uuid: "abc"',
+        "db.connection_string": "postgres://db.test:5432/pg?sslmode=require",
+      },
+    } as never) as never as { attributes: Record<string, unknown> };
+
+    expect(span.attributes).toEqual({
+      "sentry.op": "db.query",
+      "db.connection_string": "postgres://db.test:5432/pg",
+    });
+  });
+
+  it("keeps the status message of a span that is not a database's", async () => {
+    const { scrubSpan } = await load();
+    const span = scrubSpan({
+      attributes: {
+        "sentry.op": "http.client",
+        "sentry.status.message": "internal_error",
+      },
+    } as never) as never as { attributes: Record<string, unknown> };
+
+    expect(span.attributes).toEqual({
+      "sentry.op": "http.client",
+      "sentry.status.message": "internal_error",
+    });
+  });
+
+  it("drops every attribute, and prints why, when scrubbing a span throws", async () => {
+    const print = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { scrubSpan } = await load();
+    const attributes = Object.freeze({
+      "url.full": "https://mcp.test/x?key=secret",
+    });
+
+    const span = scrubSpan({ attributes } as never) as never as {
+      attributes: Record<string, unknown>;
+    };
+
+    expect(span.attributes).toEqual({});
+    expect(print.mock.calls[0][0]).toBe("[api:observability]");
   });
 });
 
@@ -189,7 +299,7 @@ describe("withObservability", () => {
     expect(sentry.flush).not.toHaveBeenCalled();
   });
 
-  it("scrubs error events, and sends no PII by default", async () => {
+  it("installs scrubEvent and scrubSpan as the send hooks", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
     vi.stubEnv("VERCEL_ENV", "production");
     const { withObservability, scrubEvent, scrubSpan } = await load();

@@ -279,9 +279,10 @@ async function handler(req, res) {
     const { status, body } = describeDriverError(e);
     // Only the generic branch is a surprise, and its text is the half that
     // must not travel: driver messages name columns, constraints and values.
-    // The function log gets every field; Sentry gets these names alone, never
-    // `detail` or `hint`, which quote values, and `scrubEvent` reduces the
-    // message to the code.
+    // The function log gets every field; Sentry gets these fields as `extra`,
+    // never `detail` or `hint`, which quote values. `scrubEvent` reduces a
+    // `pg` error's message to its code and constraint; any other error's
+    // message travels as it is.
     if (status === 500) {
       log.error(e, {
         report: true,

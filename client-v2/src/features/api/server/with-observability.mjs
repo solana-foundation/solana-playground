@@ -31,7 +31,10 @@ export const tracesSampleRate = (value) => {
   return 1;
 };
 
-/** Request headers worth keeping on an event; every other one is dropped */
+/**
+ * Request headers worth keeping on an event; every other one is dropped. A
+ * backstop: `requestDataIntegration` in `loadSentry` attaches no headers.
+ */
 const KEPT_HEADERS = new Set([
   "accept",
   "content-length",
@@ -41,12 +44,27 @@ const KEPT_HEADERS = new Set([
   "x-vercel-id",
 ]);
 
-/** A SQLSTATE is five characters; a Node system error's code (ECONNRESET) is not one */
+/**
+ * Fields of a `pg` error that quote values of the request, dropped from an
+ * event's `extra` should a route ever pass one in its `context`
+ */
+const VALUE_FIELDS = ["detail", "hint", "where", "internalQuery"];
+
+/**
+ * A `pg` server error: a five-character SQLSTATE and the `severity` every
+ * such error carries. A Node system error (`EPIPE`, `ECONNREFUSED`) has no
+ * `severity`, and goes as it is.
+ *
+ * @param {unknown} error
+ * @returns {error is Error & { code: string; constraint?: unknown }}
+ */
 const isDatabaseError = (error) =>
   error instanceof Error &&
+  typeof (/** @type {{ severity?: unknown }} */ (error).severity) ===
+    "string" &&
   /^[0-9A-Z]{5}$/.test(String(/** @type {{ code?: unknown }} */ (error).code));
 
-/** @param {Error & { code?: unknown; constraint?: unknown }} error */
+/** @param {Error & { code: string; constraint?: unknown }} error */
 const databaseSummary = ({ code, constraint }) =>
   `database error ${code}${
     typeof constraint === "string" ? ` (${constraint})` : ""
@@ -55,10 +73,11 @@ const databaseSummary = ({ code, constraint }) =>
 /**
  * Rewrites the exception value of each database error in the chain of
  * `hint.originalException` to its code and constraint: a `pg` error's message
- * echoes values of the request (an invalid input, a duplicate key) and a
- * connection failure's names the host. Values are matched by text, which
- * holds because `loadSentry` sets no `maxValueLength`; stack frames carry no
- * message. The routes still print the whole error to the function log.
+ * echoes values of the request (an invalid input, a duplicate key). Values
+ * are matched by text, which holds because `loadSentry` sets no
+ * `maxValueLength`; stack frames carry no message. A wrapper whose own
+ * message quotes the driver's is not caught. The routes still print the whole
+ * error to the function log.
  *
  * @param {import("@sentry/node").ErrorEvent} event
  * @param {import("@sentry/node").EventHint | undefined} hint
@@ -86,25 +105,17 @@ const summariseDatabaseErrors = (event, hint) => {
 };
 
 /**
- * What leaves the function on an event: never a body, a cookie, the query
- * string (an OAuth callback carries its `code` there), a header outside
- * `KEPT_HEADERS` (`authorization`, and the key headers a client may send), the
- * user, the breadcrumbs, or a database error's message. Every event passes
- * here, the server logger's `report: true` entries (`sentryServerProvider`)
- * and the errors `withObservability` catches alike. A second line behind
- * `dataCollection` in `loadSentry`, which keeps request data off events and
- * spans alike; spans are not passed to `beforeSend`.
- *
  * @template {import("@sentry/node").ErrorEvent} E
  * @param {E} event
  * @param {import("@sentry/node").EventHint} hint
  * @returns {E}
  */
-export const scrubEvent = (event, hint) => {
+const scrubbed = (event, hint) => {
   delete event.user;
   // The console provider prints every field of a logged error (a driver's
   // `detail` among them), and console calls land here as breadcrumbs
   delete event.breadcrumbs;
+  for (const field of VALUE_FIELDS) delete event.extra?.[field];
   summariseDatabaseErrors(event, hint);
   const request = event.request;
   if (!request) return event;
@@ -122,28 +133,99 @@ export const scrubEvent = (event, hint) => {
   return event;
 };
 
+/** Said in place of every text an event carries when scrubbing it failed */
+const UNSCRUBBED = "(not sent: scrubbing the event failed)";
+
+/**
+ * `event` with nothing left that `scrubbed` would have had to judge, so a
+ * failure still reaches Sentry as an event with its stack.
+ *
+ * @template {import("@sentry/node").ErrorEvent} E
+ * @param {E} event
+ * @returns {E}
+ */
+const stripped = (event) => {
+  delete event.user;
+  delete event.breadcrumbs;
+  delete event.request;
+  delete event.extra;
+  delete event.logentry;
+  if (event.message !== undefined) event.message = UNSCRUBBED;
+  for (const value of event.exception?.values ?? []) value.value = UNSCRUBBED;
+  return event;
+};
+
+/**
+ * What leaves the function on an error event: never a body, a cookie, the
+ * query string (an OAuth callback carries its `code` there), a header outside
+ * `KEPT_HEADERS` (`authorization`, `cookie`), the user, the breadcrumbs, a
+ * `pg` error's message, or a `pg` value field in `extra`. Every error and
+ * message event passes here: the server logger's `report: true` entries
+ * (`sentryServerProvider`, whose `context` becomes `extra` as it is) and the
+ * errors `withObservability` catches alike. A second line behind
+ * `dataCollection` and `requestDataIntegration` in `loadSentry`; spans are
+ * not passed to `beforeSend`. The SDK drops an event whose `beforeSend`
+ * throws, so a failure here sends the event stripped and prints why.
+ *
+ * @template {import("@sentry/node").ErrorEvent} E
+ * @param {E} event
+ * @param {import("@sentry/node").EventHint} hint
+ * @returns {E}
+ */
+export const scrubEvent = (event, hint) => {
+  try {
+    return scrubbed(event, hint);
+  } catch (error) {
+    // Printed only: reporting it would come back through this hook
+    log.error(error, { context: { failed: "scrubEvent" } });
+    return stripped(event);
+  }
+};
+
 /** The text of an attribute, whether the SDK holds it raw or as `{ value }` */
 const attributeText = (attribute) =>
   typeof attribute === "object" && attribute !== null
     ? attribute.value
     : attribute;
 
+/** Span attributes holding a URL whose query string is dropped */
+const URL_ATTRIBUTES = ["url.full", "http.url", "db.connection_string"];
+
+/**
+ * @typedef {Parameters<
+ *   NonNullable<import("@sentry/node").NodeOptions["beforeSendSpan"]>
+ * >[0]} StreamedSpan
+ */
+
 /**
  * What leaves on a streamed span: outgoing requests (AI providers, MCP
  * upstreams) carry their URL, and an MCP source may keep a credential in its
- * query string, so `url.query` goes and `url.full` and `http.url` lose theirs.
- * Spans are not passed to `beforeSend`.
+ * query string, so `url.query` goes and the URLs lose theirs. A database
+ * span's status message is the driver's message, which `scrubEvent` keeps off
+ * events, so it goes too. Spans are not passed to `beforeSend`, and the SDK
+ * sends a span unchanged when this throws, so a failure drops the attributes
+ * instead.
  *
- * @param {import("@sentry/node").StreamedSpanJSON} span
- * @returns {import("@sentry/node").StreamedSpanJSON}
+ * @param {StreamedSpan} span
+ * @returns {StreamedSpan}
  */
 export const scrubSpan = (span) => {
   const attributes = span.attributes;
-  delete attributes["url.query"];
-  delete attributes["http.query"];
-  for (const key of ["url.full", "http.url"]) {
-    const text = attributeText(attributes[key]);
-    if (typeof text === "string") attributes[key] = text.split(/[?#]/)[0];
+  if (!attributes) return span;
+  try {
+    delete attributes["url.query"];
+    delete attributes["http.query"];
+    for (const key of URL_ATTRIBUTES) {
+      const text = attributeText(attributes[key]);
+      if (typeof text === "string") attributes[key] = text.split(/[?#]/)[0];
+    }
+    const op = attributeText(attributes["sentry.op"]);
+    if (typeof op === "string" && op.startsWith("db")) {
+      delete attributes["sentry.status.message"];
+    }
+  } catch (error) {
+    log.error(error, { context: { failed: "scrubSpan" } });
+    span.attributes = {};
   }
   return span;
 };
