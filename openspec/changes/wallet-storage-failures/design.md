@@ -25,7 +25,7 @@ for `"setup"`. The setup list's "Connect a wallet" step reads only
 ## Decisions
 
 1. **`read` returns a result, not `undefined`.** It becomes
-   `{ kind: "wallet", wallet, setAside } | { kind: "none" } | { kind: "unavailable" }`.
+   `{ kind: "wallet", wallet, setAside } | { kind: "none", setAside } | { kind: "unavailable" }`.
    `unavailable` is returned when the store fails with anything but
    `IndexedDB is not available` (absent API) and `localStorage` holds no
    wallet. `wallet.ts` maps `unavailable` to a new `WalletState.state`
@@ -37,7 +37,11 @@ for `"setup"`. The setup list's "Connect a wallet" step reads only
    with `duration: "persistent"`, the pattern of
    `views/flow/lessons/SaveFailedToast.tsx`.
 3. **Damaged accounts are filtered, not rejected.** `isStoredWallet` checks
-   the wallet's shape and at least one valid account; a `partition` splits
+   the wallet's shape and at least one valid account; a store record that
+   fails it is set aside whole, as one entry of the set-aside record, and
+   reads as no wallet with the set-aside notice (Try again could never have
+   read it). If it cannot be set aside and `localStorage` holds no wallet,
+   the read stays `unavailable`. A `partition` splits
    accounts into valid and damaged, and `currentIndex` is remapped (to 0 when
    the current one was damaged). The damaged accounts are written under a
    second key, `set-aside`, in the same object store, appended to what is

@@ -167,6 +167,8 @@ const storage = {
         if (read.setAside > 0) tell("set-aside");
         return { ...defaultState, ...read.wallet };
       case "none":
+        // A stored record that could not be read was set aside
+        if (read.setAside > 0) tell("set-aside");
         return defaultState;
       case "unavailable":
         return { ...defaultState, state: "unavailable" };

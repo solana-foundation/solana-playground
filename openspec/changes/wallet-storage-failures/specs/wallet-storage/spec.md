@@ -86,8 +86,11 @@ are damaged (not a name and a 64-byte keypair) SHALL load with its valid
 accounts. The damaged accounts SHALL be kept aside in the wallet's IndexedDB
 database, never in `localStorage`, and no later write SHALL remove them. The
 user SHALL be told once per page load with the notice "Some wallet accounts
-could not be read and were set aside." A wallet with no valid account is
-unreadable as a whole, as before.
+could not be read and were set aside." A record in IndexedDB that is not a
+wallet's shape, a wallet with no valid account among them, SHALL be set aside
+whole in the same set-aside record, never in `localStorage`, and read as no
+wallet, with the same notice. A `localStorage` copy of the wrong shape is
+kept aside in `localStorage`, as before.
 
 #### Scenario: One of three accounts is damaged
 
@@ -101,6 +104,22 @@ unreadable as a whole, as before.
 
 - **WHEN** the current account is the damaged one
 - **THEN** the first valid account becomes current
+
+#### Scenario: The stored record is not a wallet
+
+- **WHEN** the wallet's IndexedDB record is not a wallet's shape, or has no
+  valid account, and `localStorage` holds no wallet
+- **THEN** the whole record is in the wallet's database under the set-aside
+  record
+- **AND** the wallet reads as no wallet, so the Setup flow is offered
+- **AND** the notice is shown once
+
+#### Scenario: The stored record is not a wallet, and localStorage holds one
+
+- **WHEN** the wallet's IndexedDB record is not a wallet's shape and
+  `localStorage` holds a wallet
+- **THEN** the record is set aside whole and the `localStorage` wallet moves
+  into IndexedDB in its place
 
 ### Requirement: The wallet's storage is kept persistent
 

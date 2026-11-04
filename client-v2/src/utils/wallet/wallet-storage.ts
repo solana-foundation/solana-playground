@@ -19,22 +19,22 @@ const UNREADABLE_KEY = "wallet.unreadable";
  * What reading the wallet found: a wallet, none anywhere, or a store that
  * failed with nothing in `localStorage` to fall back to, which must not be
  * taken for "none" (that would offer to make a new wallet over the old one).
- * `setAside` counts the damaged accounts this read moved to the store's
- * set-aside record.
+ * `setAside` counts the damaged accounts, or the stored record of the wrong
+ * shape, this read moved to the store's set-aside record.
  */
 export type WalletRead =
   | { kind: "wallet"; wallet: SerializedWalletState; setAside: number }
-  | { kind: "none" }
+  | { kind: "none"; setAside: number }
   | { kind: "unavailable" };
 
-const NONE: WalletRead = { kind: "none" };
+const NONE: WalletRead = { kind: "none", setAside: 0 };
 const UNAVAILABLE: WalletRead = { kind: "unavailable" };
 
 /** The read result for a wallet that may not be there */
 const foundOrNoneWith =
   (setAside: number) =>
   (wallet: SerializedWalletState | undefined): WalletRead =>
-    wallet ? { kind: "wallet", wallet, setAside } : NONE;
+    wallet ? { kind: "wallet", wallet, setAside } : { kind: "none", setAside };
 
 const foundOrNone = foundOrNoneWith(0);
 
@@ -146,6 +146,15 @@ const partitionWallet = (stored: StoredWallet): PartitionedWallet => {
   };
 };
 
+/**
+ * What the store holds: nothing, a wallet (some accounts possibly damaged),
+ * or a record of the wrong shape, which is set aside whole
+ */
+type StoreRead =
+  | { kind: "none" }
+  | { kind: "wallet"; partitioned: PartitionedWallet }
+  | { kind: "misshapen"; record: unknown };
+
 /** Whether `value` is the pre-accounts format, a single `sk` keypair */
 const isLegacyWallet = (value: unknown) =>
   typeof value === "object" &&
@@ -221,7 +230,9 @@ const mergeWallets = (
  *
  * Damaged accounts (not a name and a 64-byte keypair) in either copy are
  * split off: the wallet loads with the valid ones, and the damaged ones go to
- * the store's set-aside record before any copy is rewritten without them.
+ * the store's set-aside record before any copy is rewritten without them. A
+ * store record of the wrong shape (no valid account among them) goes there
+ * whole, and the store reads as holding no wallet.
  * They never go to `localStorage`; where the store cannot take them, nothing
  * is moved or rewritten that read.
  *
@@ -302,12 +313,14 @@ export const walletStorageWith =
     const fallBack = (state: SerializedWalletState): WriteOutcome =>
       writeLocal(state) ? "local" : "lost";
 
-    /** Read the store, treating a record of the wrong shape as a failure */
-    const readStore = async () => {
+    /** Read the store, telling a record of the wrong shape from a wallet */
+    const readStore = async (): Promise<StoreRead> => {
       const value: unknown = await store.read();
-      if (value === undefined) return undefined;
-      if (isStoredWallet(value)) return partitionWallet(value);
-      throw new Error("The stored wallet has the wrong shape");
+      if (value === undefined) return { kind: "none" };
+      if (isStoredWallet(value)) {
+        return { kind: "wallet", partitioned: partitionWallet(value) };
+      }
+      return { kind: "misshapen", record: value };
     };
 
     /** Copy `state` into the store and confirm it reads back the same */
@@ -335,9 +348,9 @@ export const walletStorageWith =
       const fromLocal = readLocal();
       if (isDegraded) return foundOrNone(fromLocal?.wallet);
 
-      let stored: PartitionedWallet | undefined;
+      let fromStore: StoreRead;
       try {
-        stored = await readStore();
+        fromStore = await readStore();
       } catch (error) {
         reportFailure("Wallet store unavailable", error);
         // A store that may hold a wallet, and no copy to fall back to: not
@@ -346,6 +359,12 @@ export const walletStorageWith =
         isDegraded = true;
         return foundOrNone(fromLocal?.wallet);
       }
+      const stored =
+        fromStore.kind === "wallet" ? fromStore.partitioned : undefined;
+      // A record of the wrong shape may still hold key bytes: it is set
+      // aside whole, like a damaged account, and the wallet reads as none
+      const misshapen =
+        fromStore.kind === "misshapen" ? [fromStore.record] : [];
 
       const merged =
         fromLocal && stored
@@ -353,16 +372,21 @@ export const walletStorageWith =
           : (fromLocal ?? stored)?.wallet;
       // Before anything is rewritten without them: never in `localStorage`,
       // since a damaged account may still hold key bytes
-      const damaged = (fromLocal?.damaged ?? []).concat(stored?.damaged ?? []);
+      const damaged = (fromLocal?.damaged ?? [])
+        .concat(stored?.damaged ?? [])
+        .concat(misshapen);
       if (damaged.length > 0) {
         const reportDamaged = reportFailureWith({ accounts: damaged.length });
         try {
           await store.setAside(damaged);
         } catch (error) {
+          reportDamaged("Damaged wallet accounts not set aside", error);
+          // A store record that could not be set aside, and no copy to fall
+          // back to: not degraded, so Try again asks the store again
+          if (!fromLocal && misshapen.length > 0) return UNAVAILABLE;
           // Nothing moves and nothing is rewritten, so the damaged accounts
           // stay where they were
           isDegraded = true;
-          reportDamaged("Damaged wallet accounts not set aside", error);
           return foundOrNone(merged);
         }
         reportDamaged("Damaged wallet accounts set aside", new Error("shape"));
@@ -697,17 +721,19 @@ if (import.meta.vitest) {
       expect(logged.entries).toHaveLength(1);
     });
 
-    it("falls back to localStorage when the stored record has the wrong shape", async () => {
+    it("keeps the localStorage wallet when the store keeps reading a record of the wrong shape", async () => {
       const old = walletOf([account(1, "Wallet 1")]);
       const store = memoryStore(undefined);
-      store.read.mockResolvedValue({ accounts: "corrupt" } as never);
+      const record = { accounts: "corrupt" };
+      store.read.mockResolvedValue(record as never);
       const local = memoryLocal(JSON.stringify(old));
 
       const read = await walletStorageWith(store)(local).read();
 
-      expect(read).toEqual(found(old));
+      expect(read).toEqual({ kind: "wallet", wallet: old, setAside: 1 });
+      expect(store.heldAside()).toEqual([record]);
+      // The copy read back different, so localStorage keeps the wallet
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(old));
-      expect(logged.entries).toHaveLength(1);
     });
 
     it("leaves unreadable localStorage JSON in place", async () => {
@@ -940,16 +966,51 @@ if (import.meta.vitest) {
       expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
     });
 
-    it("reads unavailable and logs when the stored record has the wrong shape", async () => {
+    it("sets a stored record of the wrong shape aside whole and reads no wallet", async () => {
+      const store = memoryStore(undefined);
+      const record = { accounts: "corrupt" };
+      store.read.mockResolvedValue(record as never);
+      const local = memoryLocal(undefined);
+
+      const read = await walletStorageWith(store)(local).read();
+
+      expect(read).toEqual({ kind: "none", setAside: 1 });
+      expect(store.heldAside()).toEqual([record]);
+      expect(local.items.size).toBe(0);
+      expect(logged.entries).toHaveLength(1);
+    });
+
+    it("sets a stored record with no valid account aside and moves the localStorage wallet over it", async () => {
+      const store = memoryStore(undefined);
+      const record = {
+        state: "pg",
+        accounts: [{ kp: [1, 2], name: "A" }],
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      };
+      store.read.mockResolvedValueOnce(record as never);
+      const wallet = walletOf([account(1, "Wallet 1")]);
+      const local = memoryLocal(JSON.stringify(wallet));
+
+      const read = await walletStorageWith(store)(local).read();
+
+      expect(read).toEqual({ kind: "wallet", wallet, setAside: 1 });
+      expect(store.heldAside()).toEqual([record]);
+      expect(store.held()).toEqual(wallet);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
+    it("reads unavailable when a stored record of the wrong shape cannot be set aside", async () => {
       const store = memoryStore(undefined);
       store.read.mockResolvedValue({ accounts: "corrupt" } as never);
+      store.setAside.mockRejectedValueOnce(new Error("quota"));
+      const storage = walletStorageWith(store)(memoryLocal(undefined));
 
-      const read = await walletStorageWith(store)(
-        memoryLocal(undefined)
-      ).read();
+      expect(await storage.read()).toEqual(UNAVAILABLE);
+      expect(store.write).not.toHaveBeenCalled();
 
-      expect(read).toEqual(UNAVAILABLE);
-      expect(logged.entries).toHaveLength(1);
+      // Not degraded: Try again asks the store again
+      expect(await storage.read()).toEqual({ kind: "none", setAside: 1 });
     });
 
     it("sets aside every localStorage wallet that is not a wallet's shape", async () => {
