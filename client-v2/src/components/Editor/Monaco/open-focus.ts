@@ -1,4 +1,5 @@
 import { isTypingElsewhere } from "@/shared/lib/focus";
+import { isInPager } from "@/shared/lib/pager";
 
 /** Which open the editor is answering: its mount's, or any after it */
 export type OpenKind = "mount" | "later";
@@ -57,12 +58,14 @@ export const leavesFocusElsewhere = ({
 };
 
 /**
- * The editor sits left or right of the screen, as it does on the phone's
- * pager while another page shows or the pager is moving to one. A hidden
- * editor has an empty box at the origin, so it is not reported: focus there
- * scrolls nothing
+ * The editor sits left or right of the screen on the phone's pager, while
+ * another page shows or the pager is moving to one. Only there: elsewhere it
+ * is off the screen just for a moment, while a narrowed window lays out again,
+ * and its focus must not be lost to that. A hidden editor has an empty box at
+ * the origin, so it is not reported: focus there scrolls nothing
  */
 const isOffScreen = (editor: Element) => {
+  if (!isInPager(editor)) return false;
   const { left, right } = editor.getBoundingClientRect();
   // A pixel's leeway for a box at fractional coordinates
   return left < -1 || right > window.innerWidth + 1;
@@ -88,7 +91,7 @@ if (import.meta.vitest) {
       document.body.innerHTML =
         '<div id="root-dir"><input id="name" /><div id="item" tabindex="0"></div></div>' +
         '<textarea id="composer"></textarea><button id="button"></button>' +
-        '<div id="editor"><textarea id="inputarea"></textarea></div>';
+        '<div data-pager><div id="editor"><textarea id="inputarea"></textarea></div></div>';
       const get = (id: string) => document.getElementById(id)!;
       return {
         editor: get("editor"),
@@ -244,6 +247,23 @@ if (import.meta.vitest) {
         expect(
           leavesFocusElsewhere({ open: "mount", editor, tree, active: item })
         ).toBe(true);
+      });
+
+      it("takes focus while off the screen outside the phone's pager", () => {
+        const { editor, tree } = page();
+        // Out of the pager, as the wide frame holds it
+        document.body.append(editor);
+        vi.spyOn(editor, "getBoundingClientRect").mockReturnValue(
+          new DOMRect(window.innerWidth, 0, window.innerWidth, 400)
+        );
+        expect(
+          leavesFocusElsewhere({
+            open: "mount",
+            editor,
+            tree,
+            active: document.body,
+          })
+        ).toBe(false);
       });
 
       it("takes focus when the editor is hidden, with an empty box", () => {

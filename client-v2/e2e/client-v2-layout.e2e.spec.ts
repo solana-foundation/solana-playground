@@ -15,6 +15,7 @@ import {
   projectRow,
   runInTerminal,
   seedWorkspace,
+  startTutorialFromAbout,
   stubSignedIn,
   test,
 } from "./fixtures";
@@ -45,7 +46,7 @@ const startTutorial = async (page: Page) => {
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
   // `exact`: Connect a model's dialog has a "Start" of its own
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
   // The lesson's switch is in the tree; open it whatever the saved layout
   await openFiles(page);
   await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
@@ -94,6 +95,24 @@ const drag = async (
   await page.mouse.down();
   await page.mouse.move(x + dx, y + dy, { steps: 8 });
   await page.mouse.up();
+};
+
+/**
+ * A project open at 1280, then the window at `size`. The editor focuses itself
+ * when it opens the first file; that is waited for before the resize, so it
+ * cannot land later, over a page the test opened. The resize keeps the same
+ * editor (it is not mounted again): below 768 px moving it into the pager
+ * drops that focus to the document, and nothing takes it back; at a wider
+ * width it keeps it.
+ */
+const seedThenResize = async (
+  page: Page,
+  size: { width: number; height: number }
+) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await seedWorkspace(page);
+  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await page.setViewportSize(size);
 };
 
 test("client-v2-layout: A resized assistant and an open console", async ({
@@ -457,11 +476,8 @@ test.describe("on a phone", () => {
 
   // The seed runs on a desktop-sized page, as the fixture waits on the tree
   // a phone keeps in a closed Sheet; the window is narrowed afterwards
-  const seedThenNarrow = async (page: Page) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await seedWorkspace(page);
-    await page.setViewportSize({ width: 390, height: 844 });
-  };
+  const seedThenNarrow = (page: Page) =>
+    seedThenResize(page, { width: 390, height: 844 });
 
   test("the account is a page of its own on a phone", async ({ page }) => {
     await seedThenNarrow(page);
@@ -635,11 +651,6 @@ test.describe("on a phone", () => {
 
   test("client-v2-layout: Settings on a phone", async ({ page }) => {
     await seedThenNarrow(page);
-    // The editor focuses itself when it opens the first file; landing after
-    // the menu opened, it would take focus from the settings
-    await expect(
-      page.locator(".monaco-editor textarea.inputarea")
-    ).toBeFocused();
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page
       .getByRole("region", { name: "Navigation" })
@@ -665,9 +676,6 @@ test.describe("on a phone", () => {
     page,
   }) => {
     await seedThenNarrow(page);
-    await expect(
-      page.locator(".monaco-editor textarea.inputarea")
-    ).toBeFocused();
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     await page
       .getByRole("region", { name: "Navigation" })
@@ -840,10 +848,7 @@ test("client-v2-layout: The navigation on a narrow window", async ({
 // The key has no way of its own to leave the menu page, so it takes the one
 // the navigation handed over, and the settings show over Work
 test("⌘, opens the settings from the phone's menu page", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 740, height: 812 });
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await seedThenResize(page, { width: 740, height: 812 });
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "Navigation" })
@@ -1868,10 +1873,7 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
     await held;
     await route.fulfill({ status: 500, body: "" });
   });
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 800, height: 812 });
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await seedThenResize(page, { width: 800, height: 812 });
   const navigation = page.locator('[data-slot="sidebar"]');
   const accountButton = navigation.getByRole("button", { name: /^Account/ });
 
@@ -2111,12 +2113,7 @@ test.describe("the settings page at 1440 by 900", () => {
 });
 
 test("client-v2-layout: The settings page on a phone", async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 800 });
-  await seedWorkspace(page);
-  await page.setViewportSize({ width: 390, height: 844 });
-  // The editor focuses itself when it opens the first file; landing after
-  // the page opened, it would take focus from it
-  await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
+  await seedThenResize(page, { width: 390, height: 844 });
   await page.getByRole("button", { name: "Menu", exact: true }).click();
   await page
     .getByRole("region", { name: "Navigation" })

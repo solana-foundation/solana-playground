@@ -8,6 +8,7 @@ import {
   projectRow,
   seedWorkspace,
   startAnotherProject,
+  startTutorialFromAbout,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -207,7 +208,7 @@ test("client-v2-layout: A lesson's menu", async ({ seededPage: page }) => {
   await page.getByRole("button", { name: "Open Hello Anchor" }).click();
   await expect(page).toHaveURL(/\/tutorials\/hello-anchor/, LONG);
   // A lesson is a workspace only once it is started
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
 
   // A started lesson is a row among the projects, as the prototype lists it
   const projects = page.getByRole("group", { name: "Projects" });

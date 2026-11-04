@@ -3,6 +3,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { Outlet } from "@/shared/lib/outlet";
+import { pagerAttrs } from "@/shared/lib/pager";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
@@ -303,6 +304,7 @@ const BasePhonePager = (props: BasePhonePagerProps) => {
     <div
       ref={ref}
       data-testid="phone-pager"
+      {...pagerAttrs}
       onScroll={armSettle}
       className="flex h-full w-full snap-x snap-mandatory overflow-x-auto overflow-y-hidden motion-safe:scroll-smooth [scrollbar-width:none]"
     >

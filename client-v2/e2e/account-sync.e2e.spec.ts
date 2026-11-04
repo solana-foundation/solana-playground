@@ -17,6 +17,7 @@ import {
   projectMenu,
   projectRow,
   settled,
+  startTutorialFromAbout,
   workspaceIdOf,
 } from "./fixtures";
 
@@ -834,7 +835,7 @@ test("a started tutorial hands over its keypair and progress", async ({
   await homeRegion(page)
     .getByRole("button", { name: "Open Hello Anchor" })
     .click();
-  await page.getByRole("button", { name: "Start", exact: true }).click();
+  await startTutorialFromAbout(page);
   // The thread id is the conversation's own, not the workspace's: a project
   // may hold several. What matters here is that opening the lesson opened a
   // conversation at all.

@@ -35,6 +35,18 @@ export const startProject = async (page: Page, name: string, timeout = {}) => {
 export const filesToggle = (page: Page) => page.locator("#editor-head-files");
 
 /**
+ * The About page's Start, which begins a tutorial. The page draws it only once
+ * the tutorial's lazy chunk loads, which a cold dev server compiles in more
+ * than an action's 10 s: the wait names the button if it never comes. `exact`
+ * keeps it off Connect a model's own Start.
+ */
+export const startTutorialFromAbout = async (page: Page) => {
+  const start = page.getByRole("button", { name: "Start", exact: true });
+  await expect(start).toBeVisible(LONG);
+  await start.click();
+};
+
+/**
  * A browser with one project already created.
  *
  * A fresh profile shows Home, not the work, so any test that clicks the

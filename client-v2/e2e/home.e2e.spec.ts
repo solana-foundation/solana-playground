@@ -8,6 +8,7 @@ import {
   projectMenu,
   projectRow,
   startProject,
+  startTutorialFromAbout,
   test,
 } from "./fixtures";
 import { lineOf, linesOn } from "./telemetry";
@@ -76,10 +77,10 @@ test.describe("on a desktop window", () => {
     // that was never started shows (see lesson-path.e2e.spec.ts)
     await expect(
       page.getByRole("button", { name: "Start", exact: true })
-    ).toBeVisible();
+    ).toBeVisible(LONG);
     await expect(home(page)).toBeHidden();
 
-    await page.getByRole("button", { name: "Start", exact: true }).click();
+    await startTutorialFromAbout(page);
     // The lesson panel's Steps | Files switch is a Segmented: its items are
     // radios (5.19)
     await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
