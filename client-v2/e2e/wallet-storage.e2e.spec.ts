@@ -28,12 +28,12 @@ const storedRecordFor =
           open.onerror = () => reject(open.error);
           open.onsuccess = () => {
             const db = open.result;
-            if (!db.objectStoreNames.contains("state")) {
+            if (!db.objectStoreNames.contains("wallet-state")) {
               return resolve(undefined);
             }
             const get = db
-              .transaction("state", "readonly")
-              .objectStore("state")
+              .transaction("wallet-state", "readonly")
+              .objectStore("wallet-state")
               .get(record);
             get.onerror = () => reject(get.error);
             get.onsuccess = () => resolve(get.result);
@@ -374,7 +374,7 @@ test("wallet-storage: The cross-tab lock cannot be taken", async ({ page }) => {
     const locks = navigator.locks;
     const request = locks.request.bind(locks);
     const refusing = (name: string, ...rest: unknown[]) =>
-      name === "pg-wallet:state"
+      name === "pg-wallet:wallet-state"
         ? Promise.reject(new DOMException("e2e: lock refused", "SecurityError"))
         : (request as (...args: unknown[]) => Promise<unknown>)(name, ...rest);
     locks.request = refusing as LockManager["request"];
@@ -444,7 +444,7 @@ test("wallet-storage: The tab closes before a save lands", async ({
   await holder.goto("/");
   await holder.evaluate(() => {
     void navigator.locks.request(
-      "pg-wallet:state",
+      "pg-wallet:wallet-state",
       () => new Promise<void>(() => {})
     );
   });
