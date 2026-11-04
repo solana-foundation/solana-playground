@@ -620,6 +620,40 @@ test("wallet-storage: Try again reads the wallet", async ({ page }) => {
     .toContain("outcome: loaded");
 });
 
+test("wallet-storage: An unavailable wallet saves nothing over the stored one", async ({
+  page,
+}) => {
+  await seedWorkspace(page);
+  await createWallet(page);
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  const before = await storedWallet(page);
+  // The database refuses to open until the test lets it
+  await page.addInitScript(() => {
+    Object.assign(window, { e2eWalletBlocked: true });
+    const open = indexedDB.open.bind(indexedDB);
+    indexedDB.open = (name, version) => {
+      const isBlocked = (window as unknown as { e2eWalletBlocked: boolean })
+        .e2eWalletBlocked;
+      if (name === "pg-wallet" && isBlocked) {
+        throw new DOMException("e2e: database blocked", "SecurityError");
+      }
+      return open(name, version);
+    };
+  });
+  await page.reload();
+  await expect(walletWarning(page)).toBeVisible(LONG);
+
+  await toggleConnection(page);
+
+  await expect(page.locator(".xterm-rows").first()).toContainText(
+    "Wallet unavailable",
+    LONG
+  );
+  await page.evaluate(() => Object.assign(window, { e2eWalletBlocked: false }));
+  expect(await storedWallet(page)).toEqual(before);
+  expect(await localWallet(page)).toBeNull();
+});
+
 test("wallet-storage: A browser without IndexedDB gets Setup", async ({
   page,
 }) => {
