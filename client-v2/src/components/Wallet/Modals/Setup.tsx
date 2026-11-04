@@ -83,9 +83,9 @@ export const Setup = () => {
         <Callout variant="warning" className="mt-4">
           <TriangleAlertIcon />
           <CalloutDescription>
-            Wallet information is stored in your browser's local storage. You
-            are going to lose the wallet if you clear your browser history
-            unless you save the keypair.
+            Wallet information is stored in your browser. You are going to lose
+            the wallet if you clear this site's data unless you save the
+            keypair.
           </CalloutDescription>
         </Callout>
         <WalletButtonsWrapper>
