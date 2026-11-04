@@ -113,17 +113,20 @@ no preview branch still has it as its parent.
 
 `scripts/neon-preview-branch.sh` creates `preview/<git-branch>` on first use and prints its connection string. The
 name comes from the local branch checked out where the script runs. It reads `NEON_API_KEY` and `NEON_PROJECT_ID`
-from the environment. Export the two names, not the whole of `client-v2/.env`, which also holds a `DATABASE_URL`.
-To try this git branch's migrations on preview data, from the repository root:
+from the environment. Export the two names, not the whole of `client-v2/.env`, which also holds a `DATABASE_URL`;
+`tr` drops the quotes a `.env` value may carry. To try this git branch's migrations on preview data, from the
+repository root:
 
 ```sh
-export NEON_API_KEY=$(sed -n 's/^NEON_API_KEY=//p' client-v2/.env)
-export NEON_PROJECT_ID=$(sed -n 's/^NEON_PROJECT_ID=//p' client-v2/.env)
+export NEON_API_KEY=$(sed -n 's/^NEON_API_KEY=//p' client-v2/.env | head -1 | tr -d "\"'")
+export NEON_PROJECT_ID=$(sed -n 's/^NEON_PROJECT_ID=//p' client-v2/.env | head -1 | tr -d "\"'")
 url=$(client-v2/scripts/neon-preview-branch.sh)
 cd client-v2
-DATABASE_URL="$url" dbmate status
-DATABASE_URL="$url" dbmate --no-dump-schema up
+[ -n "$url" ] && DATABASE_URL="$url" dbmate status
+[ -n "$url" ] && DATABASE_URL="$url" dbmate --no-dump-schema up
 ```
+
+The script prints nothing when it fails, so each `dbmate` line runs only with a URL.
 
 Without `--pooled` the script prints the direct connection string, which dbmate needs. dbmate applies the migrations
 the git branch has and `main` lacks, with no confirmation step. The branch belongs to one git branch and

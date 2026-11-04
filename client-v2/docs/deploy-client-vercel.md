@@ -540,11 +540,13 @@ npm ci --ignore-scripts --prefix .github/vercel-cli
 vercel="$PWD/.github/vercel-cli/node_modules/.bin/vercel"
 export VERCEL_ORG_ID=$(jq -r .orgId .vercel/project.json)
 export VERCEL_PROJECT_ID=$(jq -r .projectId .vercel/project.json)
+rm -f .vercel/.env.production.local
 "$vercel" env pull .vercel/.env.production.local --environment=production --yes
 url=$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.production.local | cut -d= -f2- | tr -d '"')
+[ -n "$url" ] || echo "no DATABASE_URL_UNPOOLED pulled: stop here" >&2
 printf '%s\n' "$url" | sed -E 's#^[^@]*@([^/?]*).*#production database: \1#'
 cd client-v2
-DATABASE_URL="$url" dbmate status
+[ -n "$url" ] && DATABASE_URL="$url" dbmate status
 ```
 
 Read the host the `printf` line prints and confirm it is production's. When
@@ -552,10 +554,13 @@ Read the host the `printf` line prints and confirm it is production's. When
 migrations it marks `[ ]`:
 
 ```sh
-DATABASE_URL="$url" dbmate --no-dump-schema up
+[ -n "$url" ] && DATABASE_URL="$url" dbmate --no-dump-schema up
 ```
 
 Why each step is the way it is:
+
+- **A fresh pull or no URL.** The saved file is deleted before the pull, so a
+  failed pull leaves no URL to read, and each `dbmate` line runs only with one.
 
 - **Both IDs come from the link file.** An exported `VERCEL_PROJECT_ID` alone
   outranks the file in the CLI's project resolution and leaves `orgId`
