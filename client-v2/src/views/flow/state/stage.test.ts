@@ -198,6 +198,17 @@ describe("PgFlow.reduce", () => {
       INITIAL_FLOW_STATE
     );
   });
+
+  it("workspace-change keeps the previous project's program answer", () => {
+    const noProgram = PgFlow.reduce(INITIAL_FLOW_STATE, {
+      type: "program",
+      has: false,
+    });
+    const next = PgFlow.reduce(noProgram, { type: "workspace-change" });
+    expect(next.hasProgram).toBe(false);
+    expect(next.stage).toBe("write");
+    expect(next.build).toBe("upcoming");
+  });
 });
 
 // Spec 13: a stopped run shows no result; the stage goes back to where it was

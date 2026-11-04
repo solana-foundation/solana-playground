@@ -283,7 +283,10 @@ export class PgFlow {
           ? state
           : { ...state, hasProgram: ev.has };
       case "workspace-change":
-        return INITIAL_FLOW_STATE;
+        // The previous project's answer holds until `_readProgram` gives the
+        // new one: a reset to "has a program" would flash the stages, and
+        // move a phone off the preview a project with no program shows
+        return { ...INITIAL_FLOW_STATE, hasProgram: state.hasProgram };
       case "restore": {
         // Seeds only forward: a stage the live session has already moved
         // off `upcoming` knows more about this run than the workspace's
@@ -379,7 +382,8 @@ export class PgFlow {
       }),
       PgExplorer.onDidSwitchWorkspace(() => {
         PgFlow._dispatch({ type: "workspace-change" });
-        // After the reset, which forgets the previous project's answer
+        // After the reset, which keeps the previous project's answer only
+        // until this one replaces it
         PgFlow._readProgram();
       }),
       PgExplorer.onDidInit(PgFlow._readProgram),

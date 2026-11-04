@@ -253,6 +253,32 @@ test("project-without-program: A project with no program on a phone", async ({
   await expect(page.locator("#flow-run")).toBeVisible();
 });
 
+test("project-without-program: The preview of a project with no program on a phone", async ({
+  seededPage: page,
+}) => {
+  await stubRepository(page, CLIENT_AND_TESTS);
+  await importAndReturn(page);
+  await expect(item(page, "tests/rpc.test.ts")).toHaveCount(1, LONG);
+  await expect.poll(() => stageTabIds(page)).toEqual(["flow-stage-tab-write"]);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Preview the build" }).click();
+
+  // In the viewport, not only present: the pager used to bounce back to Code
+  // while both stayed in the DOM, visible to a count
+  const preview = page.getByRole("region", { name: "Preview" });
+  await expect(preview).toBeInViewport({ ratio: 1 });
+  await expect(page.locator("#flow-client-project")).toBeInViewport();
+  await expect(
+    preview.getByText("Run the client to see its output here.")
+  ).toBeInViewport();
+  await expect(page.getByRole("region", { name: "Work" })).not.toBeInViewport();
+  // The welcome names no Build or Deploy for a project that has none
+  await expect(preview.locator(".xterm-rows")).toContainText(
+    "Output from your client and your commands shows here."
+  );
+});
+
 test("project-without-program: A program is added", async ({
   seededPage: page,
 }) => {

@@ -8,7 +8,11 @@ import Terminal from "../../main/secondary/terminal/Component/Terminal";
 import { PgBuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import { PgFlow } from "../state/stage";
 import BaseConsoleDrawer from "./BaseConsoleDrawer";
-import { describeConsoleStatus, runToStop } from "./status";
+import {
+  describeConsoleStatus,
+  runToStop,
+  withoutClientRunHint,
+} from "./status";
 
 const log = createLogger("flow:console");
 
@@ -55,6 +59,12 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
   // the bare "Build failed" fallback.
   const [, outputLanded] = useReducer((n: number) => n + 1, 0);
 
+  const [hasClientRun, setHasClientRun] = useState(false);
+  useEffect(() => {
+    const sub = PgCommandManager.onDidStart("run", () => setHasClientRun(true));
+    return () => sub.dispose();
+  }, []);
+
   useEffect(() => {
     const b = PgFlow.onDidChange(setFlow);
     const c = PgBuildOutput.onDidChange(outputLanded);
@@ -68,7 +78,9 @@ const ConsoleDrawer: FC<ConsoleDrawerProps> = ({ open, onToggle }) => {
     describeConsoleStatus(flow).tone === "running",
     flow.build === "running" ? flow.buildStartedAt : null
   );
-  const status = describeConsoleStatus(flow, elapsed);
+  const described = describeConsoleStatus(flow, elapsed);
+  // The hint asks for a client run; once one has started, it has done its job
+  const status = hasClientRun ? withoutClientRunHint(described) : described;
   const stop = runToStop(flow);
 
   // What `PgTerminal.process` needs to know whether a failure it printed

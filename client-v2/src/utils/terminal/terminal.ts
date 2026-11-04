@@ -309,6 +309,8 @@ export class PgTerm {
   private _isOpen: boolean;
   private _prefixes: Prefixes;
   private _defaultText?: string;
+  /** Whether nothing has been printed since the welcome and its prompt */
+  private _isUntouched = false;
 
   constructor(
     cmdManager: CommandManager,
@@ -399,6 +401,20 @@ export class PgTerm {
 
     // Prompt
     this.enable();
+    this._isUntouched = true;
+  }
+
+  /**
+   * Replace the welcome. While nothing else has been printed since it, the
+   * screen is cleared and the new one printed in its place; otherwise it is
+   * kept for the next open.
+   */
+  setDefaultText(text: string) {
+    this._defaultText = text;
+    if (!this._isOpen || !this._isUntouched) return;
+    this.clear({ full: true });
+    this.println(text);
+    this._isUntouched = true;
   }
 
   /** Fit terminal. */
@@ -439,6 +455,7 @@ export class PgTerm {
   /** Print a message. */
   print(msg: any, opts?: PrintOptions) {
     if (!this._isOpen) return;
+    this._isUntouched = false;
 
     if (this._shell.isPrompting()) {
       // Cancel the current prompt and restart

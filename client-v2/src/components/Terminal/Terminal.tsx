@@ -12,7 +12,21 @@ import {
   PgTerminal,
   PgTheme,
 } from "../../utils";
+import type { FlowState } from "../../views/flow/state/stage";
+import { PgFlow } from "../../views/flow/state/stage";
 import { xtermTheme } from "./terminal-theme";
+
+/**
+ * Spec 13's welcome: what the terminal is for, and `help`. A project with no
+ * program has no Build or Deploy, so its welcome names the client instead.
+ */
+const welcomeFor = (flow: Pick<FlowState, "hasProgram">) =>
+  [
+    flow.hasProgram
+      ? "Output from Build, Deploy and your commands shows here."
+      : "Output from your client and your commands shows here.",
+    `Type ${PgTerminal.bold("help")} to see commands.\n`,
+  ].join("\n");
 
 interface TerminalProps {
   cmdManager: CommandManager;
@@ -30,11 +44,7 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
     const xterm = theme.components.terminal.xterm;
 
     return new PgTerm(cmdManager, {
-      // Spec 13's welcome: what the terminal is for, and `help`
-      defaultText: [
-        "Output from Build, Deploy and your commands shows here.",
-        `Type ${PgTerminal.bold("help")} to see commands.\n`,
-      ].join("\n"),
+      defaultText: welcomeFor(PgFlow.state),
       xterm: {
         convertEol: true,
         rendererType: "dom",
@@ -72,6 +82,19 @@ const Terminal: FC<React.PropsWithChildren<TerminalProps>> = ({
 
     term.open(terminalRef.current);
     openedRef.current = term;
+  }, [term]);
+
+  // The explorer says whether the project has a program after the terminal
+  // opens, and a project switch can change it: the welcome follows
+  useEffect(() => {
+    let shown = welcomeFor(PgFlow.state);
+    const sub = PgFlow.onDidChange((flow) => {
+      const next = welcomeFor(flow);
+      if (next === shown) return;
+      shown = next;
+      term.setDefaultText(next);
+    });
+    return () => sub.dispose();
   }, [term]);
 
   // Handle resize

@@ -17,7 +17,12 @@ import type {
   WorkView,
   WorkViewSource,
 } from "../model/phone-pages";
-import { pageForStage, stageForPage, stagePageOf } from "../model/phone-pages";
+import {
+  isPreviewAtWrite,
+  pageForStage,
+  stageForPage,
+  stagePageOf,
+} from "../model/phone-pages";
 import { homeOf, isCovered, screenOf } from "../model/screen";
 import type { ToggleSource } from "../model/telemetry";
 import { layoutTelemetry } from "../model/telemetry";
@@ -256,8 +261,13 @@ const LayoutShell = ({
     pageRef.current = next;
     setPage(next);
     layoutTelemetry.track("layout_page_shown", { page: next, via });
-    const toStage = stageForPage(next, PgFlow.state.stage, lastPreview.current);
+    const toStage = stageForPage(next, PgFlow.state, lastPreview.current);
     if (toStage) PgFlow.setStage(toStage);
+    // Without a program the console is all the preview shows: folded, the
+    // page would be its strip over an empty screen
+    if (next === "preview" && isPreviewAtWrite(PgFlow.state)) {
+      setPhoneConsoleOpen(true, "auto");
+    }
   };
   // The phone's Files sheet and console are the visit's: reported, never saved
   const setPhoneFiles = (open: boolean, via: ToggleSource) => {
@@ -296,7 +306,7 @@ const LayoutShell = ({
       if (flow.stage !== "write") lastPreview.current = flow.stage;
       // Home and a page have no preview page to move to
       if (!phone || isCovered(screenNow.current)) return;
-      const next = pageForStage(flow.stage, pageRef.current);
+      const next = pageForStage(flow, pageRef.current);
       if (next) showPage(next, "auto");
     });
     return () => sub.dispose();
@@ -344,6 +354,16 @@ const LayoutShell = ({
     if (isCovered(screenNow.current)) return;
     if (phone) setPhoneConsoleOpen(true, "auto");
     else setOpen("console", { open: true, via: "auto" });
+  };
+  /**
+   * A script run opens the console: its output is the run's result. A phone
+   * with no program also moves to the preview, the page whose bar holds Run
+   * and the console, so the output is in view wherever Run was tapped.
+   */
+  const showClientRun = () => {
+    if (isCovered(screenNow.current)) return;
+    if (phone && isPreviewAtWrite(PgFlow.state)) showPage("preview", "auto");
+    openConsole();
   };
 
   // The handlers read what they toggle, so they are renewed with it
@@ -410,8 +430,7 @@ const LayoutShell = ({
     let prevDeploy: StageStatus | undefined;
     const subs = [
       PgCommand.deploy.onDidStart(openConsole),
-      // A script's output is the run's result: the stage row's Run shows it
-      PgCommand.run.onDidStart(openConsole),
+      PgCommand.run.onDidStart(showClientRun),
       PgFlow.onDidChange((flow) => {
         if (
           prevDeploy !== undefined &&
@@ -425,8 +444,8 @@ const LayoutShell = ({
       PgAssistant.onDidRequestPrompt(() => setAssistant(true, "auto")),
     ];
     return () => subs.forEach((sub) => sub.dispose());
-    // `setOpen` is stable; `setAssistant` and `openConsole` change only with
-    // the viewport
+    // `setOpen` is stable; `setAssistant`, `openConsole` and `showClientRun`
+    // change only with the viewport
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewport]);
 

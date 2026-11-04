@@ -22,11 +22,26 @@ export type ConsoleStatusTone = DotVariants<
 >;
 
 export interface ConsoleStatus {
-  /** e.g. `Building… · 12 s`, `Built in 3.4 s`, or `""` before the first
-   * build, when the tone is `"idle"` */
+  /** e.g. `Building… · 12 s`, `Built in 3.4 s`, or, with the tone `"idle"`,
+   * `""` before the first build: a project with no program has the client
+   * run hint there instead (`isClientRunHint`) */
   text: string;
   tone: ConsoleStatusTone;
 }
+
+/** The strip's words before a client run, in a project with no program */
+const CLIENT_RUN_HINT = "Run the client to see its output here.";
+
+/** Whether the strip shows the hint that asks for a client run */
+const isClientRunHint = (status: ConsoleStatus) =>
+  status.text === CLIENT_RUN_HINT;
+
+/** Nothing to report: the strip before the first build */
+const IDLE: ConsoleStatus = { text: "", tone: "idle" };
+
+/** The status with the client run hint left out, for after a client run */
+export const withoutClientRunHint = (status: ConsoleStatus) =>
+  isClientRunHint(status) ? IDLE : status;
 
 /** A run's words, with its whole seconds so far when they are known */
 const running = (what: string, elapsedMs: number | null): ConsoleStatus => ({
@@ -53,7 +68,10 @@ const running = (what: string, elapsedMs: number | null): ConsoleStatus => ({
  * Precedence (most recent/relevant first): a run in progress, then a
  * stop, then a deploy result (it is always newer than the build that
  * unlocked it), then the last build's result, then nothing before the first
- * build.
+ * build. A project with no program never builds: where nothing else is
+ * reported, the strip asks for the client's run, whose output the console
+ * shows. The flow knows nothing of client runs, so the drawer drops the hint
+ * once one has started (`isClientRunHint`).
  */
 export const describeConsoleStatus = (
   flow: FlowState,
@@ -84,7 +102,8 @@ export const describeConsoleStatus = (
     const time = msLabel(flow.buildMs);
     return { text: time ? `Built in ${time}` : "Built", tone: "success" };
   }
-  return { text: "", tone: "idle" };
+  if (!flow.hasProgram) return { text: CLIENT_RUN_HINT, tone: "idle" };
+  return IDLE;
 };
 
 /**

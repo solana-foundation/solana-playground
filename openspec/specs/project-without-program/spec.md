@@ -103,6 +103,15 @@ the stepper never shows Write, no stepper (`role="tablist"` named
 SHALL still show. The check SHALL follow the files, so the stages return as
 soon as a program file is added and leave when the last one is removed.
 
+On a phone, the "Preview the build" button SHALL bring such a project's
+Preview page (the region named "Preview") into view and keep it there while
+the stage stays Write, with the label "Client project" and the console in
+the viewport; the open console SHALL take the page below the bar. Before
+anything has run, the console strip SHALL read "Run the client to see its
+output here." A client run (the `run` command) in such a project SHALL open
+the console at every width, and on a phone SHALL also bring the Preview page
+into view.
+
 #### Scenario: An imported TypeScript project
 - **WHEN** the user opens a project that holds only `client/` and
   `tests/` files
@@ -114,6 +123,13 @@ soon as a program file is added and leave when the last one is removed.
 - **WHEN** a project with no program is open below the phone breakpoint
 - **THEN** no "Development loop" tablist is rendered, and the label "Client
   project" shows
+
+#### Scenario: The preview of a project with no program on a phone
+- **WHEN** a project with no program is open at 390x844 and the user taps
+  "Preview the build"
+- **THEN** the Preview page is in the viewport and stays, the label "Client
+  project" and the console strip reading "Run the client to see its output
+  here." are in the viewport, and the Work page is not
 
 #### Scenario: A program is added
 - **WHEN** the user creates `src/lib.rs` in a project with no program

@@ -56,6 +56,13 @@ describe("describeConsoleStatus", () => {
     });
   });
 
+  it("asks for a run before the first one in a project with no program", () => {
+    expect(describeConsoleStatus(state({ hasProgram: false }))).toEqual({
+      text: "Run the client to see its output here.",
+      tone: "idle",
+    });
+  });
+
   it("shows building while a build runs", () => {
     expect(describeConsoleStatus(state({ build: "running" }))).toEqual({
       text: "Building…",
