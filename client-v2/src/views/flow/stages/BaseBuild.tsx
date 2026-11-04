@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import { CircleAlert, CircleCheck, CircleX, History } from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { cn } from "@/shared/lib/utils";
@@ -33,14 +33,15 @@ import {
   StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
+
 import {
   EMPTY_SOURCE_HINT,
   fileLabel,
 } from "../../../commands/build/empty-source";
-import { errorMeta, msLabel, warningCount } from "./build-view";
-import type { BuildSurface } from "./build-surface";
 import type { BuildFailure } from "../state/stage";
+import type { BuildSurface } from "./build-surface";
 import type { DiagnosticView, FailedView } from "./build-view";
+import { errorMeta, msLabel, warningCount } from "./build-view";
 import {
   STAGE_BODY,
   STAGE_FOOT,

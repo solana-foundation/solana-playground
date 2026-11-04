@@ -10,6 +10,7 @@ import {
 } from "@/shared/ui/console-drawer";
 import { Kbd } from "@/shared/ui/kbd";
 import { StatusDot } from "@/shared/ui/status-dot";
+
 import type { RunKind } from "../state/stage";
 import type { ConsoleStatus } from "./status";
 

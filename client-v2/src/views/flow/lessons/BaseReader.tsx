@@ -1,12 +1,13 @@
+import { XIcon } from "lucide-react";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import type { FC } from "react";
 import { useRef } from "react";
-import { Dialog as DialogPrimitive } from "radix-ui";
-import { XIcon } from "lucide-react";
 
-import Markdown from "../../../components/Markdown";
-import { SpinnerWithBg } from "../../../components/Loading";
 import { Button } from "@/shared/ui/button";
 import { Dialog, DialogTitle } from "@/shared/ui/dialog";
+
+import { SpinnerWithBg } from "../../../components/Loading";
+import Markdown from "../../../components/Markdown";
 
 export type ReaderBody =
   | { kind: "loading" }

@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import type { ReactElement } from "react";
-import { ThemeProvider } from "styled-components";
 import type { DefaultTheme } from "styled-components";
+import { ThemeProvider } from "styled-components";
 import { expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";

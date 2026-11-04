@@ -14,8 +14,8 @@
  *
  *   __pgSyncDiagnostics.failures()
  */
-import { createLogger } from "@/shared/lib/logger";
 import { isMissing } from "@/shared/lib/is-missing";
+import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("persistence:diagnostics");
 

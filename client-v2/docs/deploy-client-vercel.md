@@ -488,18 +488,21 @@ DSN and a Production deployment, or a Preview one with
 `SENTRY_PREVIEW_ENABLED=true`; otherwise it does neither.
 
 An error that escapes a handler is captured and rethrown, so the 500 is
-unchanged. A handler that answers a 500 itself (a driver failure, a broken
-catalogue) calls `captureServerError` before it responds; `api/auth.mjs`,
-`api/agent.mjs` and `api/sync.mjs` answer failures without it, so those are not
-reported. Each function flushes before it returns.
+unchanged. A handler that answers a failure itself (a driver failure, a broken
+catalogue) reports it through the server logger, `log.error(e, { report: true })`
+(`src/shared/lib/logger/server.mjs`), whose Sentry provider `withObservability`
+installs once the SDK loads; a failure logged without `report: true` reaches
+only the function log. Each function flushes before it returns.
 
 An error event carries the stack, release and environment, and where the SDK's
 HTTP integration has seen the request, its method and path. The status is on the
 request's span. Nothing from the request travels: the SDK is told to collect no
 bodies, cookies, headers, query strings, user or IP, and `scrubEvent` and
-`scrubSpan` remove them again, together with the breadcrumbs (the handlers log
-upstream bodies and driver details to the console). A `pg` error is sent as its
-code and constraint, never its message, which echoes request values. Any other
+`scrubSpan` remove them again, together with the breadcrumbs (the server
+logger prints upstream bodies and every driver field to the console). Every
+event, the logger's included, passes `scrubEvent`. A `pg` error is sent as its
+code and constraint, never its message, which echoes request values; the routes
+add its table, column and statement text, never its `detail`. Any other
 error is sent with its message as it is. AI keys never reach an event because
 they are only ever sent outbound, from the function's environment.
 

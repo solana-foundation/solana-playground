@@ -1,8 +1,8 @@
 import { diffArrays } from "diff";
 
 import { report } from "./diagnostics";
-import { isUserFile } from "./snapshot";
 import type { FileHashes } from "./snapshot";
+import { isUserFile } from "./snapshot";
 
 /** Where `PgProgramInfo` keeps the program's keypair, relative to a workspace */
 export const PROGRAM_INFO_PATH = ".workspace/program-info.json";

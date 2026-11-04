@@ -1,5 +1,6 @@
-import * as React from "react";
 import { Plus, Square } from "lucide-react";
+import * as React from "react";
+
 import { cn } from "@/shared/lib/utils";
 
 /* Where you ask the assistant for something: a note above it, the files it

@@ -1,8 +1,8 @@
 import { FC } from "react";
 
-import { SpinnerWithBg } from "../Loading";
 import { useAsyncEffect } from "../../hooks";
 import type { Fn } from "../../utils";
+import { SpinnerWithBg } from "../Loading";
 
 interface ThrowErrorProps {
   /** Refresh the element */

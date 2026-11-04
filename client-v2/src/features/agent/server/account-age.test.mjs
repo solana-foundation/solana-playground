@@ -10,6 +10,10 @@ import {
 } from "node:test";
 import pg from "pg";
 
+import {
+  initServerLogger,
+  resetServerLogger,
+} from "../../../shared/lib/logger/server.mjs";
 import { learnAccountAge } from "./account-age.mjs";
 
 // `yarn test-api` loads `.env`; without a database this suite skips rather
@@ -86,7 +90,7 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
   it("stores nothing when GitHub does not answer in time", async () => {
     github(
       (_, init) =>
-        new Promise((_, reject) =>
+        new Promise((_resolve, reject) =>
           init.signal.addEventListener("abort", () =>
             reject(init.signal.reason)
           )
@@ -108,15 +112,18 @@ describe("learnAccountAge", { skip: !DB && "DATABASE_URL not set" }, () => {
   });
 
   it("logs why a body that is not JSON was skipped, without the body", async (t) => {
-    const warn = t.mock.method(console, "warn", () => {});
+    const entries = [];
+    initServerLogger({ providers: [{ log: (entry) => entries.push(entry) }] });
+    t.after(resetServerLogger);
     github(async () => new Response('{"email": "private@example.com"'));
 
     assert.equal((await learnAccountAge(query, USER)).reason, "malformed");
-    assert.deepEqual(warn.mock.calls[0].arguments[1], {
+    assert.deepEqual(entries[0].context, {
       userId: USER,
       reason: "malformed",
       detail: "SyntaxError",
     });
+    assert.doesNotMatch(JSON.stringify(entries), /private@example\.com/);
   });
 
   it("asks GitHub nothing for a user with no GitHub token", async () => {

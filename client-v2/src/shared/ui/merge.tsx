@@ -1,4 +1,3 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
 import {
   ArrowDown,
@@ -13,8 +12,9 @@ import {
   UnfoldVertical,
   XIcon,
 } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
+import * as React from "react";
 
+import { cn } from "@/shared/lib/utils";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 
 /* Two devices changed the same lines: this device on the left, the result

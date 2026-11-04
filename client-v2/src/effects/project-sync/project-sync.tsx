@@ -1,6 +1,6 @@
 import { report } from "../../features/persistence/model/diagnostics";
-import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import { reconcile } from "../../features/persistence/model/project-restore";
+import { PgProjectSync } from "../../features/persistence/model/project-sync";
 import {
   isSyncedWorkspaceFile,
   snapshotOf,
@@ -10,11 +10,11 @@ import { PgSyncClaim } from "../../features/persistence/model/sync-claim";
 import { PgSyncMark } from "../../features/persistence/model/sync-mark";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
 import { PgWorkspaceRegistry } from "../../features/persistence/model/workspace-registry";
-import { PgFs } from "../../utils/explorer/fs";
 // Deep import rather than the `utils` barrel: the barrel reaches `settings.ts`,
 // which reads `GLOBAL_SETTINGS`, a global only webpack defines, so the unit
 // tests could not load this module.
 import { PgExplorer } from "../../utils/explorer/explorer";
+import { PgFs } from "../../utils/explorer/fs";
 import type { Disposable } from "../../utils/types";
 
 /** Long enough that typing is one upload, short enough to survive a crash */

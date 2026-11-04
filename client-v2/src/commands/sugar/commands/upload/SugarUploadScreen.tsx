@@ -1,6 +1,7 @@
 import { FC, useCallback, useState } from "react";
 
 import { ModalFrame } from "@/widgets/overlays";
+
 import UploadArea from "../../../../components/UploadArea";
 import { PgCommon } from "../../../../utils";
 

@@ -1,3 +1,7 @@
+import { createLogger } from "@/shared/lib/logger";
+import { timeoutSignal } from "@/shared/lib/timeout-signal";
+
+import type { Disposable } from "../../../utils/types";
 import {
   AUTH_CHANNEL_NAME,
   AUTH_COMPLETE_ROUTE,
@@ -5,13 +9,10 @@ import {
   FLOW_MAX_AGE_SECONDS,
   SIGN_OUT_TIMEOUT_MS,
 } from "../config.mjs";
-import { openPopupChannel } from "../lib/popup-channel";
 import type { PopupChannel } from "../lib/popup-channel";
-import { authTelemetry } from "./telemetry";
+import { openPopupChannel } from "../lib/popup-channel";
 import type { SignInFailure } from "./telemetry";
-import { createLogger } from "@/shared/lib/logger";
-import { timeoutSignal } from "@/shared/lib/timeout-signal";
-import type { Disposable } from "../../../utils/types";
+import { authTelemetry } from "./telemetry";
 
 /** A sign-in that ended at a known step; any other error counts as `request-failed` */
 class SignInFailed extends Error {
@@ -699,7 +700,7 @@ if (import.meta.vitest) {
 
       it("only accepts a reply carrying this flow's nonce", async () => {
         vi.spyOn(globalThis, "fetch").mockImplementation(
-          vi.fn().mockImplementation((url: string, init: RequestInit) =>
+          vi.fn().mockImplementation((url: string) =>
             url === "/api/auth/sign-in/social"
               ? Promise.resolve({
                   ok: true,

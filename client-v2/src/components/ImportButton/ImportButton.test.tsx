@@ -1,6 +1,6 @@
-import type { ChangeEvent, ComponentProps } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import type { ChangeEvent, ComponentProps } from "react";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import * as reportModule from "@/shared/lib/report-button-failure";

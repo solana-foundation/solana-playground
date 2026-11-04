@@ -1,6 +1,6 @@
 import { consoleProvider, reportProviderFailure } from "./providers/console";
-import { isReported } from "./severity";
 import type { Level } from "./severity";
+import { isReported } from "./severity";
 import type { LogEntry, LogOptions, LogProvider, Namespace } from "./types";
 
 // Read on every call: module-level loggers exist before `initLogger` runs
@@ -149,7 +149,7 @@ if (import.meta.vitest) {
     });
 
     it("should keep delivering to other providers when one throws", () => {
-      vi.spyOn(console, "error").mockImplementation(() => {});
+      const printed = vi.spyOn(console, "error").mockImplementation(() => {});
       const broken = {
         log: () => {
           throw new Error("broken");
@@ -160,7 +160,7 @@ if (import.meta.vitest) {
       Logger.warn("still delivered");
 
       expect(logged.entries).toHaveLength(1);
-      expect(console.error).toHaveBeenCalledWith(
+      expect(printed).toHaveBeenCalledWith(
         "[logger:provider] a log provider threw",
         expect.any(Error)
       );

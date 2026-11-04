@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
-
 import { parseAdditionalUserInputFromProviderProfile } from "better-auth/db";
 
 import {
@@ -67,6 +66,7 @@ describe("readSession", () => {
       { status: "unavailable" },
     ],
   ]) {
+    // eslint-disable-next-line jest/valid-title -- a table test, titled by its row
     test(label, async () => {
       mock.method(getAuth().api, "getSession", getSession);
       mock.method(console, "error", () => {});
@@ -91,6 +91,7 @@ describe("isAllowedOrigin", () => {
     // A sandboxed frame or a `file:` page sends the literal string "null"
     ["refuses an opaque origin", "null", false],
   ]) {
+    // eslint-disable-next-line jest/valid-title -- a table test, titled by its row
     test(label, () => {
       assert.equal(isAllowedOrigin(req({ origin })), expected);
     });

@@ -1,13 +1,13 @@
 import { FC, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
-import styled, { css } from "styled-components";
 import remarkGfm from "remark-gfm";
+import styled, { css } from "styled-components";
 
+import { PgCommon, PgRouter, PgTheme } from "../../utils";
 import CodeBlock from "../CodeBlock";
+import { HyperLink } from "../Icons";
 import Img from "../Img";
 import Link, { LinkProps } from "../Link";
-import { HyperLink } from "../Icons";
-import { PgCommon, PgRouter, PgTheme } from "../../utils";
 
 interface MarkdownProps {
   /** Markdown string */
@@ -67,28 +67,28 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
       remarkPlugins={[remarkGfm]}
       components={{
         /** Links */
-        a: (props) => <Link {...(props as unknown as LinkProps)} />,
+        a: (linkProps) => <Link {...(linkProps as unknown as LinkProps)} />,
 
         /** Images */
-        img: (props) => {
+        img: (imgProps) => {
           return (
             <Img
-              {...props}
+              {...imgProps}
               src={
-                props.src && !props.src.startsWith("/")
+                imgProps.src && !imgProps.src.startsWith("/")
                   ? PgCommon.joinPaths(
                       rootSrc ?? PgRouter.location.pathname,
-                      props.src
+                      imgProps.src
                     )
-                  : props.src
+                  : imgProps.src
               }
             />
           );
         },
 
         /** Code blocks */
-        pre: (props) => {
-          const codeProps = first((props as any).children).props;
+        pre: (preProps) => {
+          const codeProps = first((preProps as any).children).props;
           const lang = codeProps.className?.split("-")?.at(1);
           const code = first(codeProps.children);
 
@@ -96,9 +96,15 @@ const Markdown: FC<React.PropsWithChildren<MarkdownProps>> = ({
         },
 
         /** Section headers */
-        h1: (props) => <Header element="h1" linkable={linkable} {...props} />,
-        h2: (props) => <Header element="h2" linkable={linkable} {...props} />,
-        h3: (props) => <Header element="h3" linkable={linkable} {...props} />,
+        h1: (headerProps) => (
+          <Header element="h1" linkable={linkable} {...headerProps} />
+        ),
+        h2: (headerProps) => (
+          <Header element="h2" linkable={linkable} {...headerProps} />
+        ),
+        h3: (headerProps) => (
+          <Header element="h3" linkable={linkable} {...headerProps} />
+        ),
       }}
       {...props}
     />

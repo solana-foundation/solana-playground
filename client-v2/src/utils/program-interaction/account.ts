@@ -1,6 +1,6 @@
-import { getAnchorProgram } from "./program";
 import { PgCommon } from "../common";
 import type { PgWeb3 } from "../web3";
+import { getAnchorProgram } from "./program";
 
 /**
  * Fetch the given on-chain account.

@@ -1,10 +1,12 @@
 import type { Mock } from "vitest";
+
+import { tabSync } from "../../../effects/tab-sync/tab-sync";
+import { requireFor } from "../../../test-utils/require-for";
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgWorkspace } from "../../../utils/explorer/workspace";
 import { PgEditorModels } from "./editor-models";
 import { reconcile } from "./project-restore";
 import { reloadCurrentFromDisk } from "./tab-reload";
-import { tabSync } from "../../../effects/tab-sync/tab-sync";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgWorkspace } from "../../../utils/explorer/workspace";
 
 /**
  * Another tab renames or deletes the workspace this one has open, and this
@@ -47,7 +49,11 @@ type Config = {
   currentId?: string;
 };
 const config = () =>
-  JSON.parse(store().get(PgWorkspace.WORKSPACES_CONFIG_PATH)!) as Config;
+  JSON.parse(
+    requireFor("the stored workspaces config")(
+      store().get(PgWorkspace.WORKSPACES_CONFIG_PATH)
+    )
+  ) as Config;
 
 /** What the other tab leaves in the store, and nothing in this tab's memory */
 const elsewhere = {

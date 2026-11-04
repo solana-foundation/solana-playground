@@ -1,7 +1,5 @@
 import { Option, toBigNumber } from "@metaplex-foundation/js";
 
-import { parseGuards } from "./guards";
-import { PgSugar } from "../processor";
 import {
   PgCodec,
   PgCommon,
@@ -9,7 +7,9 @@ import {
   PgTerminal,
   PgWeb3,
 } from "../../../utils";
+import { PgSugar } from "../processor";
 import type { ConfigData, ToPrimitive } from "../types";
+import { parseGuards } from "./guards";
 
 export const loadConfigData = async (): Promise<ConfigData> => {
   const configStr = PgExplorer.getFileContent(

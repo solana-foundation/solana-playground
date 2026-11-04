@@ -1,6 +1,8 @@
-import { test as base, expect } from "@playwright/test";
 import type { BrowserContext, Page, Route } from "@playwright/test";
+import { expect, test as base } from "@playwright/test";
+
 import { isUuid } from "../src/shared/lib/ids";
+import { requireFor } from "../src/test-utils/require-for";
 
 /** For a step that waits on the explorer, sync or a reload */
 export const LONG = { timeout: 60_000 };
@@ -314,7 +316,7 @@ export const settled = async (page: Page, writes: unknown[]) => {
  * is simply the one that parses as a workspace list naming this project.
  */
 export const workspaceIdOf = (page: Page, name: string) =>
-  page.evaluate(async (name) => {
+  page.evaluate(async (workspaceName) => {
     const dbs: Array<{ name?: string }> = await (
       indexedDB as unknown as {
         databases: () => Promise<Array<{ name?: string }>>;
@@ -348,7 +350,7 @@ export const workspaceIdOf = (page: Page, name: string) =>
             const parsed = JSON.parse(text);
             const found = (
               parsed?.workspaces as Array<{ id: string; name: string }>
-            )?.find?.((w) => w.name === name);
+            )?.find?.((w) => w.name === workspaceName);
             if (found) {
               db.close();
               return found.id;
@@ -379,8 +381,9 @@ export const makeLocalProject = async (page: Page, name: string) => {
   await expect
     .poll(async () => (id = await workspaceIdOf(page, name)), LONG)
     .toBeTruthy();
-  expect(isUuid(id!)).toBe(true);
-  return id!;
+  const workspaceId = requireFor("the new project's workspace id")(id);
+  expect(isUuid(workspaceId)).toBe(true);
+  return workspaceId;
 };
 
 /**

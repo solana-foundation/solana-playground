@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+
 // TODO(hoodieshq): move DEFAULT_BACKEND_URL into widgets/assistant; a widget must not import from a legacy view
 import { DEFAULT_BACKEND_URL } from "../../../views/sidebar/assistant/config";
-import { assistantTelemetry } from "./telemetry";
 import type { AssistantEvents } from "./telemetry";
+import { assistantTelemetry } from "./telemetry";
 
 const log = createLogger("assistant:connect");
 
@@ -102,8 +103,8 @@ const ask = async (): Promise<Asked> => {
 export const probeDefaultBackend = (): Promise<DefaultBackend> => {
   if (probe) return probe;
   const current: Promise<DefaultBackend> = ask().then(
-    ({ backend, failed }) => {
-      if (failed && probe === current) probe = undefined;
+    ({ backend, failed: askFailed }) => {
+      if (askFailed && probe === current) probe = undefined;
       return backend;
     },
     (error: unknown) => {

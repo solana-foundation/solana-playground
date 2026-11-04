@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
+
+import type {
+  LayoutPanel,
+  LayoutState,
+  PanelLayout,
+  SizeKey,
+} from "./layout-state";
 import {
   horizontalOf,
   readLayout,
@@ -10,14 +17,8 @@ import {
   writeLayout,
 } from "./layout-state";
 import { DEFAULT_LAYOUT } from "./layout-state";
-import type {
-  LayoutPanel,
-  LayoutState,
-  PanelLayout,
-  SizeKey,
-} from "./layout-state";
-import { layoutTelemetry } from "./telemetry";
 import type { ToggleSource } from "./telemetry";
+import { layoutTelemetry } from "./telemetry";
 
 const log = createLogger("layout-shell:state");
 

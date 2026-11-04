@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+
 import { EFFECTS } from "../../effects";
 
 const Effects = () => {

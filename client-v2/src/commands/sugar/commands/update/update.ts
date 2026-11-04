@@ -1,13 +1,13 @@
 import { toBigNumber } from "@metaplex-foundation/js";
 
+import { Emoji } from "../../../../constants";
+import { PgTerminal, PgWeb3 } from "../../../../utils";
 import {
   assertCorrectAuthority,
   getMetaplex,
   loadCache,
   loadConfigData,
 } from "../../utils";
-import { Emoji } from "../../../../constants";
-import { PgTerminal, PgWeb3 } from "../../../../utils";
 
 export const processUpdate = async (
   rpcUrl: string | undefined,

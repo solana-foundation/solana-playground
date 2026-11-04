@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
 
-import BaseDeploy from "./BaseDeploy";
-import type { DeployDetails, DeployStatus } from "./BaseDeploy";
-import IdlActions from "./IdlActions";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
 import {
   useBlockExplorer,
   useProgramInfo,
@@ -15,12 +14,14 @@ import {
   PgGlobal,
   PgProgramInfo,
 } from "../../../utils";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { toldByStage } from "./stage-failure";
-import { PgDeployHistory } from "../state/deploy-history";
 import type { DeployRecord } from "../state/deploy-history";
-import { PgFlow } from "../state/stage";
+import { PgDeployHistory } from "../state/deploy-history";
 import type { FlowState } from "../state/stage";
+import { PgFlow } from "../state/stage";
+import type { DeployDetails, DeployStatus } from "./BaseDeploy";
+import BaseDeploy from "./BaseDeploy";
+import IdlActions from "./IdlActions";
+import { toldByStage } from "./stage-failure";
 
 /** This workspace's deployments, newest first */
 const readHistory = () =>

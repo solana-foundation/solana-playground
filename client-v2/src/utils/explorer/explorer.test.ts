@@ -1,9 +1,10 @@
-import { PgExplorer } from "./explorer";
-import { PgWorkspace } from "./workspace";
 import {
   clearFailures,
   getFailures,
 } from "../../features/persistence/model/diagnostics";
+import { requireFor } from "../../test-utils/require-for";
+import { PgExplorer } from "./explorer";
+import { PgWorkspace } from "./workspace";
 
 /**
  * The two states the explorer could not hold: no current workspace, and a
@@ -116,7 +117,9 @@ describe("deleting the current workspace", () => {
     await PgExplorer.createWorkspace("beta", { files: files("beta") });
     await PgExplorer.createWorkspace("gamma", { files: files("gamma") });
 
-    for (const name of [...PgExplorer.allWorkspaceNames!]) {
+    for (const name of Array.from(
+      requireFor("the workspace names")(PgExplorer.allWorkspaceNames)
+    )) {
       await PgExplorer.deleteWorkspace(name);
     }
 
@@ -173,11 +176,19 @@ describe("init calls that overlap", () => {
  * neighbour's current workspace as its own.
  */
 
+/** The id of a workspace the explorer lists */
+const idOf = (name: string) =>
+  requireFor(`the id of workspace ${name}`)(PgExplorer.workspaceIdOf(name));
+
 const stored = () =>
   (PgExplorer.fs as unknown as { __files: Map<string, string> }).__files;
 
 const readConfig = () =>
-  JSON.parse(stored().get(PgWorkspace.WORKSPACES_CONFIG_PATH)!) as {
+  JSON.parse(
+    requireFor("the stored workspaces config")(
+      stored().get(PgWorkspace.WORKSPACES_CONFIG_PATH)
+    )
+  ) as {
     workspaces: Array<{ id: string; name: string }>;
     currentId?: string;
   };
@@ -198,8 +209,8 @@ describe("PgExplorer.refreshWorkspaces", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("takes a neighbour's list and keeps this tab's current", async () => {
-    const alpha = PgExplorer.workspaceIdOf("alpha")!;
-    const beta = PgExplorer.workspaceIdOf("beta")!;
+    const alpha = idOf("alpha");
+    const beta = idOf("beta");
     writeConfig({
       workspaces: [
         { id: alpha, name: "alpha" },
@@ -218,8 +229,8 @@ describe("PgExplorer.refreshWorkspaces", () => {
   });
 
   it("follows the current workspace through a rename elsewhere", async () => {
-    const alpha = PgExplorer.workspaceIdOf("alpha")!;
-    const beta = PgExplorer.workspaceIdOf("beta")!;
+    const alpha = idOf("alpha");
+    const beta = idOf("beta");
     writeConfig({
       workspaces: [
         { id: alpha, name: "alpha" },
@@ -234,8 +245,8 @@ describe("PgExplorer.refreshWorkspaces", () => {
   });
 
   it("tells a listener the list changed when it takes a neighbour's", async () => {
-    const alpha = PgExplorer.workspaceIdOf("alpha")!;
-    const beta = PgExplorer.workspaceIdOf("beta")!;
+    const alpha = idOf("alpha");
+    const beta = idOf("beta");
     writeConfig({
       workspaces: [
         { id: alpha, name: "renamed" },
@@ -269,7 +280,7 @@ describe("PgExplorer.refreshWorkspaces", () => {
   });
 
   it("drops a workspace deleted elsewhere", async () => {
-    const alpha = PgExplorer.workspaceIdOf("alpha")!;
+    const alpha = idOf("alpha");
     writeConfig({
       workspaces: [{ id: alpha, name: "alpha" }],
       currentId: alpha,
@@ -284,7 +295,7 @@ describe("PgExplorer.refreshWorkspaces", () => {
   });
 
   it("writes nothing", async () => {
-    const alpha = PgExplorer.workspaceIdOf("alpha")!;
+    const alpha = idOf("alpha");
     const config = {
       workspaces: [{ id: alpha, name: "alpha" }],
       currentId: "x",
@@ -479,10 +490,11 @@ describe("renaming a workspace that is not the current one", () => {
     await PgExplorer.renameWorkspace("gamma", { from: "alpha" });
 
     expect(PgExplorer.currentWorkspaceName).toBe("beta");
-    expect([...PgExplorer.allWorkspaceNames!].sort()).toEqual([
-      "beta",
-      "gamma",
-    ]);
+    expect(
+      Array.from(
+        requireFor("the workspace names")(PgExplorer.allWorkspaceNames)
+      ).sort()
+    ).toEqual(["beta", "gamma"]);
     expect(PgExplorer.workspaceIdOf("gamma")).toBe(alphaId);
     expect(stored().get("/gamma/src/lib.rs")).toBe("declare_id!();");
     expect(stored().has("/alpha/src/lib.rs")).toBe(false);
@@ -555,7 +567,9 @@ describe("renaming a workspace that is not the current one", () => {
       failing.mockRestore();
     }
 
-    expect(PgExplorer.workspaceNameOf(alphaId!)).toBe("alpha");
+    expect(PgExplorer.workspaceNameOf(requireFor("alpha's id")(alphaId))).toBe(
+      "alpha"
+    );
     expect(stored().get("/alpha/src/lib.rs")).toBe("declare_id!();");
     expect(stored().has("/gamma/src/lib.rs")).toBe(false);
     expect(

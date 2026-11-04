@@ -1,5 +1,5 @@
-import { additionalProgramLen } from "./additional-len";
 import { PgWeb3 } from "../../utils";
+import { additionalProgramLen } from "./additional-len";
 
 // The utils barrel needs webpack's globals; the class under test only needs
 // the loader program's arithmetic

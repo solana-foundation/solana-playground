@@ -11,6 +11,7 @@ import {
   ActionCardMedia,
   ActionCardTitle,
 } from "@/shared/ui/action-card";
+
 import TutorialCover from "./art/TutorialCover";
 import type { CardOpen } from "./BaseCatalogGrid";
 

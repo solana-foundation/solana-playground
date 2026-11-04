@@ -1,4 +1,5 @@
 import { createLogger } from "@/shared/lib/logger";
+
 import type { Cluster } from "../../utils";
 
 const log = createLogger("wallet:txs-error");

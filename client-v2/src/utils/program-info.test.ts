@@ -1,6 +1,6 @@
+import { initLogger, memoryProvider, resetLogger } from "../shared/lib/logger";
 import { PgExplorer } from "./explorer";
 import { writeWorkspaceFile } from "./explorer/workspace-file";
-import { initLogger, memoryProvider, resetLogger } from "../shared/lib/logger";
 import { PgProgramInfo } from "./program-info";
 
 // `settings.ts`, reached through the connection module, reads a global that

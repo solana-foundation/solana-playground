@@ -1,7 +1,7 @@
 import { RefObject } from "react";
 
-import { PgExplorer } from "../../../../utils";
 import { useOnClickOutside } from "../../../../hooks";
+import { PgExplorer } from "../../../../utils";
 
 /** The context menu's content, which Radix portals to the body. */
 export const MENU_CONTENT_SELECTOR = '[data-slot="context-menu-content"]';

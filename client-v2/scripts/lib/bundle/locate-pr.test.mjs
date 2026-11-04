@@ -82,21 +82,21 @@ const readText = (relative) =>
   fs.readFile(new URL(relative, import.meta.url), "utf8");
 const workflow = (name) => readText(`../../../../.github/workflows/${name}`);
 
-/** The value of `key` under the first step of `source` that uses `action`, whatever the order of its keys */
-const stepValue = (source, action, key) =>
+/** The value of `key` under the first step of `source` whose text holds `marker`, whatever the order of its keys */
+const stepValue = (source, marker, key) =>
   source
     .split(/\n(?=\s+- )/)
-    .find((step) => step.includes(`uses: ${action}@`))
+    .find((step) => step.includes(marker))
     ?.match(new RegExp(`\\n\\s+${key}: (.+)`))?.[1];
 
 // [contract, () => [actual, expected]]; a rename on one side alone makes the comment workflow skip or fail outside the PR's checks
 const CONTRACT = [
   [
-    "reusable-client-v2-build.yml uploads the artifact ARTIFACT",
+    "reusable-client-v2.yml uploads the artifact ARTIFACT",
     async () => [
       stepValue(
-        await workflow("reusable-client-v2-build.yml"),
-        "actions/upload-artifact",
+        await workflow("reusable-client-v2.yml"),
+        "name: Save bundle change report",
         "name"
       ),
       ARTIFACT,
@@ -107,7 +107,7 @@ const CONTRACT = [
     async () => [
       stepValue(
         await workflow("bundle-info-comment.yml"),
-        "actions/download-artifact",
+        "uses: actions/download-artifact@",
         "name"
       ),
       ARTIFACT,
@@ -123,11 +123,11 @@ const CONTRACT = [
     ],
   ],
   [
-    "reusable-client-v2-build.yml uploads REPORT_FILE from build/",
+    "reusable-client-v2.yml uploads REPORT_FILE from build/",
     async () => [
       stepValue(
-        await workflow("reusable-client-v2-build.yml"),
-        "actions/upload-artifact",
+        await workflow("reusable-client-v2.yml"),
+        "name: Save bundle change report",
         "path"
       ),
       `client-v2/build/${REPORT_FILE}`,

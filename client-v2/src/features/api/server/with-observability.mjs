@@ -1,9 +1,18 @@
 // Observability for the API functions: one `http.server` span per request,
-// errors captured, flushed before the function returns. Sentry is the
-// provider, and runs only where the browser reports too (`sentryEnabled`);
-// elsewhere `@sentry/node` is never imported.
+// errors captured, flushed before the function returns, and the server
+// logger's reported entries routed to Sentry. Sentry is the provider, and
+// runs only where the browser reports too (`sentryEnabled`); elsewhere
+// `@sentry/node` is never imported.
 import { sentryEnabled } from "../../../../scripts/sentry-gate.mjs";
 import { sentryEnv } from "../../../shared/config/server-env.mjs";
+import {
+  createServerLogger,
+  initServerLogger,
+  sentryServerProvider,
+  serverConsoleProvider,
+} from "../../../shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:observability");
 
 /**
  * `SENTRY_TRACES_SAMPLE_RATE` as a rate: unset traces everything, and a value
@@ -16,8 +25,8 @@ export const tracesSampleRate = (value) => {
   if (value === undefined) return 1;
   const rate = Number(value);
   if (value.trim() !== "" && rate >= 0 && rate <= 1) return rate;
-  console.warn(
-    `api: SENTRY_TRACES_SAMPLE_RATE=${value} is not a rate from 0 to 1; using 1`
+  log.warn(
+    `SENTRY_TRACES_SAMPLE_RATE=${value} is not a rate from 0 to 1; using 1`
   );
   return 1;
 };
@@ -32,23 +41,71 @@ const KEPT_HEADERS = new Set([
   "x-vercel-id",
 ]);
 
+/** A SQLSTATE is five characters; a Node system error's code (ECONNRESET) is not one */
+const isDatabaseError = (error) =>
+  error instanceof Error &&
+  /^[0-9A-Z]{5}$/.test(String(/** @type {{ code?: unknown }} */ (error).code));
+
+/** @param {Error & { code?: unknown; constraint?: unknown }} error */
+const databaseSummary = ({ code, constraint }) =>
+  `database error ${code}${
+    typeof constraint === "string" ? ` (${constraint})` : ""
+  }`;
+
+/**
+ * Rewrites the exception value of each database error in the chain of
+ * `hint.originalException` to its code and constraint: a `pg` error's message
+ * echoes values of the request (an invalid input, a duplicate key) and a
+ * connection failure's names the host. Values are matched by text, which
+ * holds because `loadSentry` sets no `maxValueLength`; stack frames carry no
+ * message. The routes still print the whole error to the function log.
+ *
+ * @param {import("@sentry/node").ErrorEvent} event
+ * @param {import("@sentry/node").EventHint | undefined} hint
+ */
+const summariseDatabaseErrors = (event, hint) => {
+  const values = event.exception?.values;
+  if (!values) return;
+  /** @type {Map<string, string>} */
+  const summaries = new Map();
+  const seen = new Set();
+  for (
+    let error = hint?.originalException;
+    error instanceof Error && !seen.has(error);
+    error = error.cause
+  ) {
+    seen.add(error);
+    if (isDatabaseError(error)) {
+      summaries.set(error.message, databaseSummary(error));
+    }
+  }
+  for (const value of values) {
+    const summary = value.value && summaries.get(value.value);
+    if (summary) value.value = summary;
+  }
+};
+
 /**
  * What leaves the function on an event: never a body, a cookie, the query
  * string (an OAuth callback carries its `code` there), a header outside
- * `KEPT_HEADERS` (`authorization`, and the key headers a client may send), or
- * the user, and the breadcrumbs. A second line behind `dataCollection` in
- * `loadSentry`, which keeps request data off events and spans alike; spans are
- * not passed to `beforeSend`.
+ * `KEPT_HEADERS` (`authorization`, and the key headers a client may send), the
+ * user, the breadcrumbs, or a database error's message. Every event passes
+ * here, the server logger's `report: true` entries (`sentryServerProvider`)
+ * and the errors `withObservability` catches alike. A second line behind
+ * `dataCollection` in `loadSentry`, which keeps request data off events and
+ * spans alike; spans are not passed to `beforeSend`.
  *
  * @template {import("@sentry/node").ErrorEvent} E
  * @param {E} event
+ * @param {import("@sentry/node").EventHint} hint
  * @returns {E}
  */
-export const scrubEvent = (event) => {
+export const scrubEvent = (event, hint) => {
   delete event.user;
-  // `console.*` calls land here with their raw arguments, and the handlers log
-  // upstream bodies and driver details on purpose
+  // The console provider prints every field of a logged error (a driver's
+  // `detail` among them), and console calls land here as breadcrumbs
   delete event.breadcrumbs;
+  summariseDatabaseErrors(event, hint);
   const request = event.request;
   if (!request) return event;
   delete request.data;
@@ -91,47 +148,8 @@ export const scrubSpan = (span) => {
   return span;
 };
 
-/**
- * A copy of `error` that is safe to send: a `pg` error's message echoes
- * values of the request (an invalid input, a duplicate key) and a connection
- * failure's names the host, so only its code and constraint stay, with the
- * original stack. Anything else goes as it is.
- *
- * @param {unknown} error
- */
-const sendable = (error) => {
-  const code = /** @type {{ code?: unknown }} */ (error)?.code;
-  // A SQLSTATE is five characters; a Node system error's code (ECONNRESET) is not one
-  if (!(error instanceof Error) || !/^[0-9A-Z]{5}$/.test(String(code))) {
-    return error;
-  }
-  const constraint = /** @type {{ constraint?: unknown }} */ (error).constraint;
-  const safe = new Error(
-    `database error ${code}${
-      typeof constraint === "string" ? ` (${constraint})` : ""
-    }`
-  );
-  safe.stack = error.stack?.replace(error.message, safe.message);
-  return safe;
-};
-
 /** The initialised SDK, `null` where Sentry is off; one per function instance */
 let sdk;
-
-/** The same SDK once it has loaded, for code that cannot wait on `sdk` */
-let loaded;
-
-/**
- * Reports an error a handler answers with a 500 itself (a driver failure, a
- * broken catalogue), as the routes do just before they respond. An error that escapes the handler is
- * captured by `withObservability` itself; do not report it twice. Does nothing
- * where Sentry is off.
- *
- * @param {unknown} error
- */
-export const captureServerError = (error) => {
-  loaded?.captureException(sendable(error));
-};
 
 const loadSentry = () => {
   if (sdk !== undefined) return sdk;
@@ -177,7 +195,10 @@ const loadSentry = () => {
         Sentry.httpIntegration({ disableIncomingRequestSpans: true }),
       ],
     });
-    return (loaded = Sentry);
+    initServerLogger({
+      providers: [serverConsoleProvider(), sentryServerProvider(Sentry)],
+    });
+    return Sentry;
   });
   return sdk;
 };

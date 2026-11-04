@@ -1,8 +1,4 @@
 import { PgCommon } from "../common";
-import { PgExplorer, TupleFiles } from "../explorer";
-import { PgWorkspace } from "../explorer/workspace";
-import { writeWorkspaceFile } from "../explorer/workspace-file";
-import { PgRouter } from "../router";
 import {
   createDerivable,
   declareDecorator,
@@ -10,6 +6,10 @@ import {
   initable,
   updatable,
 } from "../decorators";
+import { PgExplorer, TupleFiles } from "../explorer";
+import { PgWorkspace } from "../explorer/workspace";
+import { writeWorkspaceFile } from "../explorer/workspace-file";
+import { PgRouter } from "../router";
 import type {
   TutorialData,
   TutorialMetadata,
@@ -112,8 +112,8 @@ const derive = () => ({
 });
 
 const getTutorialsRoute = () => {
-  const route = PgRouter.all.find((route) =>
-    route.path.startsWith("/tutorials")
+  const route = PgRouter.all.find((candidate) =>
+    candidate.path.startsWith("/tutorials")
   );
   if (!route) throw new Error("/tutorials route not found");
 

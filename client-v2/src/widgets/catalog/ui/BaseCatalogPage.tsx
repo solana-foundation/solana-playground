@@ -1,5 +1,5 @@
-import BaseCatalogGrid from "./BaseCatalogGrid";
 import type { CatalogList } from "./BaseCatalogGrid";
+import BaseCatalogGrid from "./BaseCatalogGrid";
 import CatalogSearch from "./CatalogSearch";
 
 export type {

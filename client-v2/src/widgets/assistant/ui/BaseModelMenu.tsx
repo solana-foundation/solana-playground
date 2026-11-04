@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemDescription, MenuItemText } from "@/shared/ui/menu-extras";
+
 import type { ModelOption, ModelShown } from "../model/choice";
 
 /** Whether an option is the one the composer shows: the default by its provider, a keyed one by provider and model id */

@@ -2,8 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { PgExplorer } from "../../../../utils";
 
+import { PgExplorer } from "../../../../utils";
 import { ExplorerContextMenu } from "./ExplorerContextMenu";
 
 // The utils barrel needs build-time globals the unit runner does not define.

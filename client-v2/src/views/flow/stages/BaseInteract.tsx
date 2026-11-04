@@ -10,6 +10,7 @@ import {
   StageEmptyNotice,
   StageEmptyTitle,
 } from "@/shared/ui/stage-empty";
+
 import type { Stage } from "../state/stage";
 import type { InteractSurface } from "./interact-surface";
 import { STAGE_BODY, STAGE_FOOT, STAGE_FRAME } from "./stage-layout";

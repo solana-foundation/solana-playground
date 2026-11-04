@@ -1,5 +1,5 @@
-import { expect } from "@playwright/test";
 import type { Page, Route } from "@playwright/test";
+import { expect } from "@playwright/test";
 
 import { LONG, seedWorkspace, test } from "./fixtures";
 
@@ -150,10 +150,13 @@ test("client-v2-layout: A workspace re-open leaves the composer focused", async 
   );
 
   // Connected, so the panel shows the composer rather than its picker
-  await page.evaluate(
-    (c) => (window as AssistantWindow).__pgAssistant!.connect(c),
-    KEY_CONNECTION
-  );
+  await page.evaluate((c) => {
+    const assistant = (window as AssistantWindow).__pgAssistant;
+    if (!assistant) {
+      throw new Error("Expected the assistant's test handle on window");
+    }
+    assistant.connect(c);
+  }, KEY_CONNECTION);
   const composer = page.getByRole("textbox", { name: "Message the assistant" });
   await expect(composer).toBeVisible(LONG);
 

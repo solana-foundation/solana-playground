@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 
-import { fetchPrograms, PROGRAMS_URL } from "@/entities/program";
 import type { ProgramListing } from "@/entities/program";
+import { fetchPrograms, PROGRAMS_URL } from "@/entities/program";
 import { createLogger } from "@/shared/lib/logger";
+
 import { matchesProgram } from "../lib/filter";
 import type { CardList, CardOpenOf } from "./lists";
 

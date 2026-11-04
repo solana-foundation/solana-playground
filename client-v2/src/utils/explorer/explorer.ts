@@ -1,24 +1,28 @@
-import { PgFs } from "./fs";
-import { PgWorkspace } from "./workspace";
+import { createLogger } from "@/shared/lib/logger";
+
 import {
   isMissing,
   report,
 } from "../../features/persistence/model/diagnostics";
 import { PgCommon } from "../common";
 import { PgLanguage } from "../language";
-import { PgView } from "../view";
 import type { Disposable } from "../types";
+import { PgView } from "../view";
+import { PgFs } from "./fs";
 import type {
   CreatedWorkspace,
   EditorBuffers,
   Explorer,
-  TupleFiles,
+  ExplorerFiles,
   Folder,
   FullFile,
   ItemMetaFile,
-  ExplorerFiles,
   Position,
+  TupleFiles,
 } from "./types";
+import { PgWorkspace } from "./workspace";
+
+const log = createLogger("explorer:explorer");
 
 export class PgExplorer {
   /** Internal state */
@@ -252,7 +256,7 @@ export class PgExplorer {
     // This should no longer be an issue after the partial rewrite of explorer,
     // but keeping it anyway just in case the same problem occurs in the future.
     if (PgExplorer.tabs.length && !PgExplorer.currentFilePath) {
-      console.log("Tab and current file state is partially invalid");
+      log.warn("Tab and current file state is partially invalid");
       PgExplorer.openFile(PgExplorer.tabs[0]);
     }
 
@@ -391,22 +395,22 @@ export class PgExplorer {
 
     // Rename in state
     const files = this.files;
-    const rename = (oldPath: string, newPath: string) => {
+    const rename = (fromPath: string, toPath: string) => {
       // Store the item
-      const item = files[oldPath];
+      const item = files[fromPath];
 
       // Delete the old item
-      delete files[oldPath];
+      delete files[fromPath];
 
       // Set the new path
-      files[newPath] = item;
+      files[toPath] = item;
 
       // Handle tabs if it's a file
-      if (PgExplorer.getItemTypeFromPath(newPath).file) {
+      if (PgExplorer.getItemTypeFromPath(toPath).file) {
         // Rename tabs manually instead of closing the old file and opening the
         // new file in order to keep the tab order
-        const tabIndex = this.tabs.indexOf(oldPath);
-        if (tabIndex !== -1) this._explorer.tabs[tabIndex] = newPath;
+        const tabIndex = this.tabs.indexOf(fromPath);
+        if (tabIndex !== -1) this._explorer.tabs[tabIndex] = toPath;
       }
     };
 
@@ -476,10 +480,10 @@ export class PgExplorer {
     const isCurrentFile = this.currentFilePath === fullPath;
     const isCurrentParent = this.currentFilePath?.startsWith(fullPath);
 
-    for (const path in this.files) {
-      if (path.startsWith(fullPath)) {
-        delete this.files[path];
-        this.closeFile(path);
+    for (const filePath in this.files) {
+      if (filePath.startsWith(fullPath)) {
+        delete this.files[filePath];
+        this.closeFile(filePath);
       }
     }
 
@@ -1488,7 +1492,7 @@ export class PgExplorer {
             const content = await this.fs.readToString(subItemPath);
             this.files[subItemPath] = { content };
           } catch (e: any) {
-            console.log(`Couldn't read to string: ${e.message} ${subItemPath}`);
+            log.warn(`Couldn't read to string: ${e.message} ${subItemPath}`);
           }
         } else {
           await setupFiles(subItemPath);
@@ -1499,7 +1503,7 @@ export class PgExplorer {
     try {
       await setupFiles(workspacePath);
     } catch (e: any) {
-      console.log("Couldn't setup files:", e.message);
+      log.warn(`Couldn't setup files: ${e.message}`);
 
       // The most likely cause for `setupFiles` failure is if the current
       // workspace doesn't exist in the filesystem but it's saved as the
@@ -1529,12 +1533,12 @@ export class PgExplorer {
         return;
       }
 
-      console.log("No workspace found. Most likely needs initial setup.");
+      log.info("No workspace found. Most likely needs initial setup.");
     }
 
     // Runs when `indexedDB` is empty
     if (!Object.keys(this.files).length && !this.allWorkspaceNames?.length) {
-      console.log("Setting up default FS...");
+      log.info("Setting up default FS...");
       // For backwards compatibility reasons, we check whether explorer key is used in localStorage
       // and move the localStorage FS to `indexedDB`.
       // TODO: delete this check after moving domains

@@ -1,4 +1,5 @@
 import { shortAddress } from "@/shared/lib/short-address";
+
 import type { PgWeb3 } from "../../utils";
 
 /**

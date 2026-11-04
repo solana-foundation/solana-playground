@@ -3,10 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { OutletContent, useOutletNode } from "@/shared/lib/outlet";
+import { requireFor } from "@/test-utils/require-for";
 
 import { PHONE_PAGES } from "../model/phone-pages";
-import BasePhonePager, { SWIPE_SETTLE_MS } from "./BasePhonePager";
 import type { BasePhonePagerProps } from "./BasePhonePager";
+import BasePhonePager, { SWIPE_SETTLE_MS } from "./BasePhonePager";
 
 class NoopResizeObserver {
   observe() {}
@@ -291,19 +292,20 @@ it("does not report its own scroll to the page it was given", () => {
 it("aligns instantly on load and smoothly after", () => {
   // jsdom has no scrolling: record what the element's scroll-behavior is at
   // each write of `scrollLeft`
-  const original = Object.getOwnPropertyDescriptor(
-    Element.prototype,
-    "scrollLeft"
-  )!;
+  const original = requireFor("jsdom's scrollLeft descriptor")(
+    Object.getOwnPropertyDescriptor(Element.prototype, "scrollLeft")
+  );
+  const get = requireFor("jsdom's scrollLeft getter")(original.get);
+  const set = requireFor("jsdom's scrollLeft setter")(original.set);
   const behaviors: string[] = [];
   Object.defineProperty(Element.prototype, "scrollLeft", {
     configurable: true,
     get() {
-      return original.get!.call(this);
+      return get.call(this);
     },
     set(value: number) {
       behaviors.push((this as HTMLElement).style.scrollBehavior);
-      original.set!.call(this, value);
+      set.call(this, value);
     },
   });
   try {

@@ -1,7 +1,11 @@
 import { FC, useRef } from "react";
 import styled from "styled-components";
 
-import Img from "../Img";
+import { createLogger } from "@/shared/lib/logger";
+import {
+  markFailureShown,
+  reportButtonFailure,
+} from "@/shared/lib/report-button-failure";
 import { Button } from "@/shared/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +14,11 @@ import {
   DropdownMenuTrigger,
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
+
+import { isSignInFailure } from "../../features/auth";
+import { useCopy } from "../../hooks";
+import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
+import { KeypairFileError } from "../../utils/wallet/keypair-file";
 import {
   Airdrop,
   Copy,
@@ -20,17 +29,9 @@ import {
   ThreeDots,
   Trash,
 } from "../Icons";
-import { createLogger } from "@/shared/lib/logger";
-import {
-  markFailureShown,
-  reportButtonFailure,
-} from "@/shared/lib/report-button-failure";
-import { Fn, PgCommand, PgView, PgWallet } from "../../utils";
-import { KeypairFileError } from "../../utils/wallet/keypair-file";
-import { importedText } from "./imported-text";
+import Img from "../Img";
 import { useAirdrop, useDarken } from "./hooks";
-import { isSignInFailure } from "../../features/auth";
-import { useCopy } from "../../hooks";
+import { importedText } from "./imported-text";
 
 const log = createLogger("wallet:settings");
 

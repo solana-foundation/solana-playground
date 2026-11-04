@@ -1,6 +1,7 @@
-import { expect, test } from "@playwright/test";
-import { isUuid } from "../src/shared/lib/ids";
 import type { Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
+import { isUuid } from "../src/shared/lib/ids";
 import { home, homeRegion, startProject } from "./fixtures";
 
 /**
@@ -58,9 +59,11 @@ const remember = async (page: Page) => {
     .toBe(true);
   await expect.poll(() => threadId(page), LONG).toBeTruthy();
 
-  await page.evaluate(() =>
-    (window as AssistantWindow).__pgAssistant!.addUserMessage("remember me")
-  );
+  await page.evaluate(() => {
+    const store = (window as AssistantWindow).__pgAssistant;
+    if (!store) throw new Error("Expected the assistant store on window");
+    store.addUserMessage("remember me");
+  });
   // The store writes back asynchronously; reloading straight away races it
   await expect.poll(() => items(page), LONG).toContain("remember me");
   await page.waitForTimeout(1000);
@@ -83,12 +86,14 @@ const stillRemembers = async (page: Page) => {
   // resets the panel and then wrote the emptied list back over the stored
   // thread. Restored and then immediately thrown away is indistinguishable
   // from never saved.
-  await page.evaluate(() =>
-    (window as AssistantWindow).__pgAssistant!.connect({
+  await page.evaluate(() => {
+    const store = (window as AssistantWindow).__pgAssistant;
+    if (!store) throw new Error("Expected the assistant store on window");
+    store.connect({
       id: "anthropic",
       apiKey: "not-used-here",
-    })
-  );
+    });
+  });
   await expect.poll(() => items(page), LONG).toContain("remember me");
 };
 

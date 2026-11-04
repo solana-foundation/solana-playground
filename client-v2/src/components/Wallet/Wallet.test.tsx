@@ -3,6 +3,7 @@ import { DefaultTheme, ThemeProvider } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import { WalletName } from "./Wallet";
 
 // The utils barrel needs build-time globals the unit runner does not define.

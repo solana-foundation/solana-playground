@@ -1,18 +1,19 @@
-import { FC, useState } from "react";
 import { InfoIcon } from "lucide-react";
+import { FC, useState } from "react";
 import styled from "styled-components";
 
-import Input from "../../../../../components/Input";
-import { ModalFrame } from "@/widgets/overlays";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { ModalFrame } from "@/widgets/overlays";
+
+import Input from "../../../../../components/Input";
 import UploadArea from "../../../../../components/UploadArea";
+import { useMounted } from "../../../../../hooks";
 import {
   PgExplorer,
   PgFramework,
   PgView,
   TupleFiles,
 } from "../../../../../utils";
-import { useMounted } from "../../../../../hooks";
 import { IMPORTED } from "./imported";
 
 interface ImportFsProps {

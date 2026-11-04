@@ -1,10 +1,11 @@
+import "./index.css";
+
 import React from "react";
 import { createRoot } from "react-dom/client";
 
 import App, { applyFavicon } from "./app";
 import { observabilityEnv } from "./shared/config/client-env";
 import { Observability } from "./widgets/observability";
-import "./index.css";
 
 const env = observabilityEnv();
 

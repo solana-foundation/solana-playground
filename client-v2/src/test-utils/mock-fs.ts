@@ -86,11 +86,7 @@ export const mockFsModule = () => {
       );
     },
 
-    async writeFile(
-      path: string,
-      data: string,
-      _opts?: { createParents?: boolean }
-    ) {
+    async writeFile(path: string, data: string) {
       path = await full(path);
       files.set(path, data);
       // Dispatched here as well, because what listens for it is the only
@@ -137,7 +133,7 @@ export const mockFsModule = () => {
     },
 
     /** A no-op: a directory exists here while anything is stored beneath it */
-    async createDir(_path: string, _opts?: { createParents?: boolean }) {},
+    async createDir() {},
 
     async exists(path: string) {
       path = await full(path);

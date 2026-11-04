@@ -1,12 +1,14 @@
-import { createElement } from "react";
-import type { FC } from "react";
 import { render } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { FC } from "react";
+import { createElement } from "react";
 import type { MockInstance } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
-import { PgView } from "@/utils/view";
+import { requireFor } from "@/test-utils/require-for";
 import type { ToastChildProps } from "@/utils/view";
+import { PgView } from "@/utils/view";
+
 import {
   BUTTON_FAILED_TOAST,
   markFailureShown,
@@ -28,7 +30,9 @@ afterEach(() => {
 
 /** Render what the last `setToast` call would have put on screen */
 const renderToast = () => {
-  const [elementable] = setToast.mock.calls.at(-1)!;
+  const [elementable] = requireFor("a setToast call")(
+    setToast.mock.calls.at(-1)
+  );
   const Toast = elementable as FC<ToastChildProps>;
   return render(createElement(Toast, { id: BUTTON_FAILED_TOAST }));
 };

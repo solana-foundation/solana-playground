@@ -1,8 +1,8 @@
-import { admits, foldRecord } from "./ledger";
-import { nextSeq } from "./events";
 import type { LessonRecordEvent, StoredLesson } from "./events";
-import { graderClass } from "./verify";
+import { nextSeq } from "./events";
+import { admits, foldRecord } from "./ledger";
 import type { LessonPath } from "./types";
+import { graderClass } from "./verify";
 
 /** The record shape #19 shipped: three fields, no provenance */
 export interface LessonProgressV1 {

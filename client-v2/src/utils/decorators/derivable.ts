@@ -1,6 +1,6 @@
 import { PgCommon } from "../common";
-import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
 import type { Disposable } from "../types";
+import { addInit, addOnDidChange, getChangePropName, PROPS } from "./common";
 
 /** Derivable state properties */
 export type DerivableState<T> = {
@@ -56,12 +56,12 @@ export function derivable<T extends Derivable>(
           });
         }
 
-        const derivable = state[prop];
-        const derive: typeof derivable["derive"] = async (value) => {
-          if (derivable.infallible) return await derivable.derive(value);
+        const entry = state[prop];
+        const derive: typeof entry["derive"] = async (value) => {
+          if (entry.infallible) return await entry.derive(value);
 
           try {
-            return await derivable.derive(value);
+            return await entry.derive(value);
           } catch {
             return null;
           }
@@ -69,9 +69,9 @@ export function derivable<T extends Derivable>(
         const disposable = PgCommon.batchChanges(
           async (value) => {
             sClass[PROPS.INTERNAL_STATE][prop] = await derive(value);
-            sClass[PROPS.DISPATCH_CHANGE_EVENT](prop, derivable.noCache);
+            sClass[PROPS.DISPATCH_CHANGE_EVENT](prop, entry.noCache);
           },
-          PgCommon.toArray(derivable.onChange).map((onChange) => {
+          PgCommon.toArray(entry.onChange).map((onChange) => {
             if (typeof onChange === "string") {
               return sClass[getChangePropName(onChange)];
             }
@@ -95,5 +95,5 @@ export function derivable<T extends Derivable>(
  * This function is a type helper function.
  */
 export const createDerivable = <T, R, C extends boolean = false>(
-  derivable: Derivable<T, R, C>
-) => derivable;
+  definition: Derivable<T, R, C>
+) => definition;

@@ -1,22 +1,23 @@
 import { FC, useState } from "react";
 
-import CodeResult from "../CodeResult";
-import InputLabel from "../InputLabel";
-import Interaction from "../Interaction";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
+import { Callout, CalloutDescription } from "@/shared/ui/callout";
 import {
   Collapsible,
   CollapsibleChevron,
   CollapsibleContent,
   CollapsibleHeading,
 } from "@/shared/ui/collapsible";
-import SearchBar from "../../../../../components/SearchBar";
-import { Callout, CalloutDescription } from "@/shared/ui/callout";
+
 import { SpinnerWithBg } from "../../../../../components/Loading";
+import SearchBar from "../../../../../components/SearchBar";
+import { useWallet } from "../../../../../hooks";
 import { PgCommon, PgWeb3 } from "../../../../../utils";
 import { PgProgramInteraction } from "../../../../../utils/program-interaction";
-import { useWallet } from "../../../../../hooks";
-import { AsyncButton } from "@/shared/ui/async-button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import CodeResult from "../CodeResult";
+import InputLabel from "../InputLabel";
+import Interaction from "../Interaction";
 
 interface AccountProps {
   accountName: string;

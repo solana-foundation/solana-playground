@@ -1,4 +1,4 @@
-import { SIGNED_OUT_REASON } from "../../../../../features/auth";
+import type { AgentRefusalReason, AgentTierParam } from "@/features/agent";
 import {
   AGENT_TIERS,
   DAILY_CAP_REASON,
@@ -6,9 +6,10 @@ import {
   REFUSAL_MESSAGES,
   REFUSAL_STATUS,
 } from "@/features/agent";
-import type { AgentRefusalReason, AgentTierParam } from "@/features/agent";
-import { DEFAULT_BACKEND_URL } from "../../config";
 import type { AiTurnError } from "@/shared/lib/ai";
+
+import { SIGNED_OUT_REASON } from "../../../../../features/auth";
+import { DEFAULT_BACKEND_URL } from "../../config";
 import type { BackendRefusal, ModelProviderProfile } from "./types";
 
 const LIMIT_REASONS: readonly string[] = [

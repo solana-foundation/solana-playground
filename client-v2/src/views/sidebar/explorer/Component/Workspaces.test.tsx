@@ -2,8 +2,8 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { initLogger, resetLogger } from "@/shared/lib/logger";
 import type { LogEntry } from "@/shared/lib/logger";
+import { initLogger, resetLogger } from "@/shared/lib/logger";
 
 // The utils barrel reads a build-time global and cannot load under vitest;
 // the real `PgCommon` splits the names, the rest are spies

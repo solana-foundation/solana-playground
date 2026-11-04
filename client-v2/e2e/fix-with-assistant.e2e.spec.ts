@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+
 import { json, startProject } from "./fixtures";
 
 /**
@@ -35,10 +36,13 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
   await page.goto("/");
   await startProject(page, "fix-prompt", LONG);
 
-  await page.evaluate(
-    (text) => (window as AssistantWindow).__pgAssistant!.requestPrompt(text),
-    PROMPT
-  );
+  await page.evaluate((text) => {
+    const assistant = (window as AssistantWindow).__pgAssistant;
+    if (!assistant) {
+      throw new Error("Expected the assistant's test handle on window");
+    }
+    assistant.requestPrompt(text);
+  }, PROMPT);
   await expect(page.getByText(HINT)).toBeVisible(LONG);
 
   await page.getByRole("radio", { name: "OpenAI-compatible" }).click();
@@ -50,16 +54,24 @@ test("a prompt asked for before connecting leaves no notice behind", async ({
     page.getByRole("textbox", { name: "Message the assistant" })
   ).toHaveValue(PROMPT, LONG);
   await expect(page.getByText(HINT)).toBeHidden();
-  const kinds = await page.evaluate(() =>
-    (window as AssistantWindow).__pgAssistant!.items.map((i) => i.kind)
-  );
+  const kinds = await page.evaluate(() => {
+    const assistant = (window as AssistantWindow).__pgAssistant;
+    if (!assistant) {
+      throw new Error("Expected the assistant's test handle on window");
+    }
+    return assistant.items.map((i) => i.kind);
+  });
   expect(kinds).not.toContain("notice");
 
   // Disconnected, the composer offers to connect again, and the hint answered
   // by that connect stays gone
-  await page.evaluate(() =>
-    (window as AssistantWindow).__pgAssistant!.disconnect()
-  );
+  await page.evaluate(() => {
+    const assistant = (window as AssistantWindow).__pgAssistant;
+    if (!assistant) {
+      throw new Error("Expected the assistant's test handle on window");
+    }
+    assistant.disconnect();
+  });
   await expect(
     page.getByRole("button", { name: "Connect a model" })
   ).toBeVisible(LONG);

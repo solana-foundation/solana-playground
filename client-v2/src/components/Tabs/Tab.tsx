@@ -6,9 +6,6 @@ import {
   useState,
 } from "react";
 
-import { BaseEditorTab, EditorTabDrag } from "./BaseEditorTab";
-import LangIcon from "../LangIcon";
-import { PgExplorer } from "../../utils";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -17,7 +14,11 @@ import {
   ContextMenuTrigger,
 } from "@/shared/ui/context-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
+
+import { PgExplorer } from "../../utils";
 import type { SortableItemCommonProps } from "../Dnd/Sortable";
+import LangIcon from "../LangIcon";
+import { BaseEditorTab, EditorTabDrag } from "./BaseEditorTab";
 
 type SortableFlags = Partial<
   Pick<SortableItemCommonProps, "isDragging" | "isDragOverlay">

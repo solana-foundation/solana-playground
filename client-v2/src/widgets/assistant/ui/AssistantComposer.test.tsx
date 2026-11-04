@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { PgSession } from "@/features/auth";
 import {
   initLogger,
   memoryProvider as memoryLog,
@@ -13,9 +14,10 @@ import {
   resetTelemetry,
 } from "@/shared/lib/telemetry";
 import { TooltipProvider } from "@/shared/ui/tooltip";
-import { PgSession } from "@/features/auth";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
+import { requireFor } from "@/test-utils/require-for";
+
 import type { Connection } from "../../../views/sidebar/assistant/store";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { DefaultBackend } from "../model/default-backend";
 import { useTurn } from "../model/use-turn";
 import { AssistantComposer } from "./AssistantComposer";
@@ -154,8 +156,7 @@ describe("AssistantComposer, connected", () => {
     const other = screen
       .getAllByRole("menuitemradio")
       .find((item) => /Gemini/.test(item.textContent ?? ""));
-    expect(other).toBeTruthy();
-    await user.click(other!);
+    await user.click(requireFor("the Gemini menu item")(other));
 
     expect(openConnect).toHaveBeenCalledTimes(1);
     expect(openConnect).toHaveBeenCalledWith("model", {

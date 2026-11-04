@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { initLogger, memoryProvider, resetLogger } from "@/shared/lib/logger";
+
 import { DetailTag } from "./DetailTag";
 
 // The utils barrel reads build-time globals jsdom lacks; the tag uses a sliver.

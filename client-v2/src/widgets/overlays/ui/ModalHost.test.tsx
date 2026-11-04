@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   act,
   fireEvent,
@@ -6,6 +5,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -20,6 +20,7 @@ import {
 } from "@/shared/lib/telemetry";
 import { PgCommon } from "@/utils/common";
 import { PgView } from "@/utils/view";
+
 import { ModalFrame } from "./ModalFrame";
 import { ModalHost } from "./ModalHost";
 
@@ -327,11 +328,11 @@ describe("focus after a dialog closes", () => {
     // A menu closes when one of its items is picked, so the item is gone by
     // the time the dialog closes; its trigger names it through aria-controls
     const Menu = () => {
-      const [open, setOpen] = useState(true);
+      const [isOpen, setOpen] = useState(true);
       return (
         <>
           <button aria-controls="actions-menu">Actions</button>
-          {open && (
+          {isOpen && (
             <div role="menu" id="actions-menu">
               <button
                 role="menuitem"
@@ -465,11 +466,11 @@ describe("focus after a dialog closes", () => {
   it("should return focus to the trigger of a menu a submenu opened from", async () => {
     const Menus = () => {
       // Picking an item closes the menu and the menus above it
-      const [open, setOpen] = useState(true);
+      const [isOpen, setOpen] = useState(true);
       return (
         <>
           <button aria-controls="outer-menu">More</button>
-          {open && (
+          {isOpen && (
             <>
               <div role="menu" id="outer-menu">
                 <button role="menuitem" aria-controls="inner-menu">
@@ -520,11 +521,11 @@ describe("focus after a dialog closes", () => {
 describe("focus after a dialog opened from a context menu", () => {
   /** A context menu: its trigger names no menu, so the right-click is the opener */
   const ContextMenu = ({ children }: { children: React.ReactNode }) => {
-    const [open, setOpen] = useState(false);
+    const [isOpen, setOpen] = useState(false);
     return (
       <div onContextMenu={() => setOpen(true)}>
         {children}
-        {open && (
+        {isOpen && (
           <div role="menu">
             <button
               role="menuitem"

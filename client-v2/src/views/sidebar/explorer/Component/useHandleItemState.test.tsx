@@ -1,8 +1,9 @@
 import { render } from "@testing-library/react";
-import { useRef, type ReactElement } from "react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type ReactElement, useRef } from "react";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { requireFor } from "../../../../test-utils/require-for";
 import { PgExplorer } from "../../../../utils";
 import { forgetTree } from "./kept-tree";
 import { useHandleItemState } from "./useHandleItemState";
@@ -14,10 +15,10 @@ const given = vi.hoisted(() => ({
 }));
 
 /** The explorer's listeners, for a test to fire as the explorer would */
-const fire = vi.hoisted(() => ({
-  openFile: (_file: { path: string } | null) => {},
-  switchWorkspace: () => {},
-}));
+const fire = vi.hoisted(() => {
+  const openFile: (file: { path: string } | null) => void = () => {};
+  return { openFile, switchWorkspace: () => {} };
+});
 
 // The utils barrel needs build-time globals the unit runner does not define.
 vi.mock("../../../../utils", () => ({
@@ -94,9 +95,9 @@ const inTheme = (tree: ReactElement) => (
 const draw = (open?: boolean) => render(inTheme(<Tree open={open} />));
 
 const srcIsOpen = (workspace = "w1") =>
-  document
-    .querySelector(`[data-path='/${workspace}/src/']`)!
-    .classList.contains("open");
+  requireFor(`${workspace}'s src folder`)(
+    document.querySelector(`[data-path='/${workspace}/src/']`)
+  ).classList.contains("open");
 
 // Before, not after: Testing Library unmounts the last tree after this file's
 // own `afterEach`, and that unmount keeps it again
@@ -184,7 +185,9 @@ describe("useHandleItemState when a project opens", () => {
     openFile("/w2/src/lib.rs");
     view.rerender(inTheme(<Tree workspace="w2" />));
 
-    document.querySelector("[data-path='/w2/src/']")!.classList.remove("open");
+    requireFor("w2's src folder")(
+      document.querySelector("[data-path='/w2/src/']")
+    ).classList.remove("open");
     view.rerender(inTheme(<Tree workspace="w2" />));
     expect(srcIsOpen("w2")).toBe(false);
   });

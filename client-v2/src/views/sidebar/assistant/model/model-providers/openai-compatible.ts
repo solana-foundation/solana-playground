@@ -1,5 +1,6 @@
-import { PROVIDERS } from "../types";
 import type { OpenAiCompatibleProvider } from "@/shared/lib/ai";
+
+import { PROVIDERS } from "../types";
 import type { ModelProviderProfile } from "./types";
 
 /** One profile per OpenAI-compatible provider id; they differ only in their default endpoint */

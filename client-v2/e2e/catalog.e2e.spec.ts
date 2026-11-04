@@ -1,10 +1,10 @@
 import type { Page } from "@playwright/test";
 
 import {
-  LONG,
   currentProject,
   expect,
   home,
+  LONG,
   projectRow,
   stubPrograms,
   test,

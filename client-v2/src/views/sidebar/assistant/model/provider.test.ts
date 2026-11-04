@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  DAILY_CAP_REASON,
+  POOL_EXHAUSTED_REASON,
+  REFUSAL_MESSAGES,
+} from "@/features/agent";
+import {
   anthropicText,
   fakeFetch,
   openAiError,
@@ -13,18 +18,14 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { createProvider } from "./provider";
-import { MODEL_PROVIDER_PROFILES } from "./model-providers";
-import { ModelBusyError } from "./model-busy";
-import { TurnFailure } from "./types";
-import {
-  DAILY_CAP_REASON,
-  POOL_EXHAUSTED_REASON,
-  REFUSAL_MESSAGES,
-} from "@/features/agent";
-import { PgAssistant, type ChatItem } from "../store";
+
 import { PgSession } from "../../../../features/auth";
 import { DEFAULT_BACKEND_URL, MAX_RESUMES, MAX_STEPS } from "../config";
+import { type ChatItem, PgAssistant } from "../store";
+import { ModelBusyError } from "./model-busy";
+import { MODEL_PROVIDER_PROFILES } from "./model-providers";
+import { createProvider } from "./provider";
+import { TurnFailure } from "./types";
 
 // Values unlike run-turn's and createModel's fallbacks, so a provider that forgets to pass them fails
 vi.mock("../config", () => ({
@@ -40,7 +41,7 @@ vi.mock("./prompt", () => ({
 }));
 
 vi.mock("./tools", async () => {
-  const { PgAssistant } = await import("../store");
+  const { PgAssistant: assistant } = await import("../store");
   return {
     createTools: () => [
       {
@@ -48,7 +49,7 @@ vi.mock("./tools", async () => {
         description: "Write a file",
         schema: { type: "object", properties: {}, additionalProperties: false },
         run: () => {
-          PgAssistant.addToolCall("wrote src/lib.rs");
+          assistant.addToolCall("wrote src/lib.rs");
           return "Wrote src/lib.rs.";
         },
       },

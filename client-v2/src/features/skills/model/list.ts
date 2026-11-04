@@ -1,4 +1,5 @@
 import { createLogger } from "@/shared/lib/logger";
+
 import { BUNDLED_SKILLS } from "./registry";
 import type { ListedSkill, SkillEntry } from "./types";
 

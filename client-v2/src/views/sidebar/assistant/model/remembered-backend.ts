@@ -1,5 +1,6 @@
-import { createLogger } from "@/shared/lib/logger";
 import type { ModelProvider } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
+
 import type { Connection } from "../store";
 import { REMEMBERED_BACKEND_KEY } from "./remembered-backend-key";
 import { PROVIDERS } from "./types";

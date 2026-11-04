@@ -1,10 +1,10 @@
-import { useEffect, useRef } from "react";
-import type { ReactNode } from "react";
 import { ChevronLeft } from "lucide-react";
+import type { ReactNode } from "react";
+import { useEffect, useRef } from "react";
 
-import { cn } from "@/shared/lib/utils";
 import { createLogger } from "@/shared/lib/logger";
 import type { SettingsFocus } from "@/shared/lib/settings-request";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
 
 const log = createLogger("settings-page:frame");

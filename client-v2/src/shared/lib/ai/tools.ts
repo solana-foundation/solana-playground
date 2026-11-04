@@ -1,5 +1,5 @@
-import { jsonSchema, tool } from "ai";
 import type { JSONSchema7, ToolSet } from "ai";
+import { jsonSchema, tool } from "ai";
 
 import type { AnyToolDefinition, ToolSchema } from "./types";
 

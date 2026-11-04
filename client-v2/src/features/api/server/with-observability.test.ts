@@ -27,48 +27,52 @@ afterEach(() => {
 });
 
 describe("tracesSampleRate", () => {
-  const cases: Array<[label: string, value: string | undefined, rate: number]> =
-    [
-      ["traces everything when unset", undefined, 1],
-      ["takes a rate inside 0..1", "0.25", 0.25],
-      ["takes 0, which turns tracing off", "0", 0],
-      ["refuses a rate above 1", "1.5", 1],
-      ["refuses a negative rate", "-0.1", 1],
-    ];
+  const cases: Array<{
+    label: string;
+    value: string | undefined;
+    rate: number;
+  }> = [
+    { label: "traces everything when unset", value: undefined, rate: 1 },
+    { label: "takes a rate inside 0..1", value: "0.25", rate: 0.25 },
+    { label: "takes 0, which turns tracing off", value: "0", rate: 0 },
+    { label: "refuses a rate above 1", value: "1.5", rate: 1 },
+    { label: "refuses a negative rate", value: "-0.1", rate: 1 },
+  ];
 
   // A refused rate warns; keep the test output clean
   beforeEach(() => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  for (const [label, value, rate] of cases) {
-    it(label, async () => {
-      const { tracesSampleRate } = await load();
-      expect(tracesSampleRate(value)).toBe(rate);
-    });
-  }
+  it.each(cases)("$label", async ({ value, rate }) => {
+    const { tracesSampleRate } = await load();
+    expect(tracesSampleRate(value)).toBe(rate);
+  });
 });
 
 describe("scrubEvent", () => {
   it("drops the body, cookies, query string, user, breadcrumbs and every header but a safe few", async () => {
     const { scrubEvent } = await load();
-    const event = scrubEvent({
-      user: { id: "u1", ip_address: "1.2.3.4" },
-      breadcrumbs: [{ message: "api/agent: body" }],
-      request: {
-        url: "https://x.test/api/auth/callback?code=secret#frag",
-        query_string: "code=secret",
-        cookies: { session: "s" },
-        data: { apiKey: "sk-secret" },
-        headers: {
-          Authorization: "Bearer sk-secret",
-          Cookie: "session=s",
-          "x-api-key": "sk-secret",
-          "User-Agent": "jest",
-          "content-type": "application/json",
+    const event = scrubEvent(
+      {
+        user: { id: "u1", ip_address: "1.2.3.4" },
+        breadcrumbs: [{ message: "api/agent: body" }],
+        request: {
+          url: "https://x.test/api/auth/callback?code=secret#frag",
+          query_string: "code=secret",
+          cookies: { session: "s" },
+          data: { apiKey: "sk-secret" },
+          headers: {
+            Authorization: "Bearer sk-secret",
+            Cookie: "session=s",
+            "x-api-key": "sk-secret",
+            "User-Agent": "jest",
+            "content-type": "application/json",
+          },
         },
-      },
-    } as never) as never as {
+      } as never,
+      {}
+    ) as never as {
       user?: unknown;
       request: Record<string, unknown>;
     };
@@ -83,7 +87,65 @@ describe("scrubEvent", () => {
 
   it("passes an event with no request through", async () => {
     const { scrubEvent } = await load();
-    expect(scrubEvent({ message: "m" } as never)).toEqual({ message: "m" });
+    expect(scrubEvent({ message: "m" } as never, {})).toEqual({ message: "m" });
+  });
+
+  /** An event as the SDK builds it for `error`, its cause first */
+  const exceptionEvent = (...errors: Error[]) =>
+    ({
+      exception: {
+        values: errors.map((error) => ({
+          type: "Error",
+          value: error.message,
+        })),
+      },
+    } as never);
+
+  const valuesOf = (event: unknown) =>
+    (
+      event as { exception: { values: Array<{ value: string }> } }
+    ).exception.values.map(({ value }) => value);
+
+  it("sends a pg error by its code and constraint, never its message", async () => {
+    const { scrubEvent } = await load();
+    const pgError = Object.assign(new Error("Key (id)=(abc) already exists"), {
+      code: "23505",
+      constraint: "projects_pkey",
+    });
+
+    const event = scrubEvent(exceptionEvent(pgError), {
+      originalException: pgError,
+    });
+
+    expect(valuesOf(event)).toEqual(["database error 23505 (projects_pkey)"]);
+  });
+
+  it("reduces a pg error that is the cause of the one reported", async () => {
+    const { scrubEvent } = await load();
+    const pgError = Object.assign(
+      new Error('invalid input syntax for type uuid: "abc"'),
+      { code: "22P02" }
+    );
+    const wrapper = new Error("save failed", { cause: pgError });
+
+    const event = scrubEvent(exceptionEvent(pgError, wrapper), {
+      originalException: wrapper,
+    });
+
+    expect(valuesOf(event)).toEqual(["database error 22P02", "save failed"]);
+  });
+
+  it("sends a network error as it is", async () => {
+    const { scrubEvent } = await load();
+    const reset = Object.assign(new Error("socket hang up"), {
+      code: "ECONNRESET",
+    });
+
+    const event = scrubEvent(exceptionEvent(reset), {
+      originalException: reset,
+    });
+
+    expect(valuesOf(event)).toEqual(["socket hang up"]);
   });
 });
 
@@ -107,50 +169,11 @@ describe("scrubSpan", () => {
   });
 });
 
-describe("captureServerError", () => {
-  it("sends a pg error by its code and constraint, never its message", async () => {
-    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
-    vi.stubEnv("VERCEL_ENV", "production");
-    vi.stubEnv("SENTRY_PREVIEW_ENABLED", "");
-    const { withObservability, captureServerError } = await load();
-    const pgError = Object.assign(new Error("Key (id)=(abc) already exists"), {
-      code: "23505",
-      constraint: "projects_pkey",
-    });
-
-    await withObservability("projects", async () => {
-      captureServerError(pgError);
-    })(req, res);
-
-    const sent = sentry.captureException.mock.calls[0][0] as Error;
-    expect(sent.message).toBe("database error 23505 (projects_pkey)");
-    expect(sent.stack).not.toContain("abc");
-  });
-});
-
-describe("captureServerError and system errors", () => {
-  it("sends a network error as it is", async () => {
-    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
-    vi.stubEnv("VERCEL_ENV", "production");
-    vi.stubEnv("SENTRY_PREVIEW_ENABLED", "");
-    const { withObservability, captureServerError } = await load();
-    const reset = Object.assign(new Error("socket hang up"), {
-      code: "ECONNRESET",
-    });
-
-    await withObservability("agent", async () => {
-      captureServerError(reset);
-    })(req, res);
-
-    expect(sentry.captureException).toHaveBeenCalledWith(reset);
-  });
-});
-
 describe("withObservability", () => {
   it("leaves the response alone and loads nothing without a DSN", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "");
     vi.stubEnv("VERCEL_ENV", "production");
-    const { withObservability, captureServerError } = await load();
+    const { withObservability } = await load();
     const handler = vi.fn(async (_req, response) => {
       response.statusCode = 500;
       return "failed";
@@ -161,7 +184,6 @@ describe("withObservability", () => {
       withObservability("agent", handler)(req, response as never)
     ).resolves.toBe("failed");
     expect(response.statusCode).toBe(500);
-    captureServerError(new Error("ignored"));
     expect(sentry.init).not.toHaveBeenCalled();
     expect(sentry.captureException).not.toHaveBeenCalled();
     expect(sentry.flush).not.toHaveBeenCalled();
@@ -176,27 +198,29 @@ describe("withObservability", () => {
 
     const options = sentry.init.mock.calls[0][0];
     expect(options.beforeSend).toBe(scrubEvent);
-    expect(options.dataCollection).toMatchObject({
-      httpBodies: [],
-      cookies: false,
-      httpHeaders: false,
-    });
     expect(options.beforeSendSpan).toBe(scrubSpan);
   });
 
-  it("reports an answered 500 through captureServerError, once", async () => {
+  it("reports a 500 the handler answers through the server logger, once", async () => {
     vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
     vi.stubEnv("VERCEL_ENV", "production");
-    const { withObservability, captureServerError } = await load();
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { withObservability } = await load();
+    const { createServerLogger } = await import(
+      "@/shared/lib/logger/server.mjs"
+    );
     const error = new Error("driver");
 
     await withObservability("projects", async (_req, response) => {
-      captureServerError(error);
+      createServerLogger("api:projects").error(error, { report: true });
       response.statusCode = 500;
     })(req, { statusCode: 200 } as never);
 
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
-    expect(sentry.captureException).toHaveBeenCalledWith(error);
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      error,
+      expect.anything()
+    );
   });
 
   it("hands the request straight to the handler where Sentry is off", async () => {
@@ -245,5 +269,45 @@ describe("withObservability", () => {
     expect(sentry.captureException).toHaveBeenCalledTimes(1);
     expect(sentry.captureException).toHaveBeenCalledWith(error);
     expect(sentry.flush).toHaveBeenCalled();
+  });
+
+  it("collects no request body, cookie, header, query, user, AI text or query data", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const { withObservability } = await load();
+
+    await withObservability("agent", async () => "done")(req, res);
+
+    expect(sentry.init.mock.calls[0][0].dataCollection).toEqual({
+      userInfo: false,
+      cookies: false,
+      httpHeaders: false,
+      httpBodies: [],
+      urlQueryParams: false,
+      genAI: { inputs: false, outputs: false },
+      databaseQueryData: false,
+    });
+  });
+
+  it("sends the server logger's reported entries to Sentry once Sentry loads, and still prints them", async () => {
+    vi.stubEnv("REACT_APP_SENTRY_DSN", "https://key@o0.ingest.sentry.io/0");
+    vi.stubEnv("VERCEL_ENV", "production");
+    const print = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { withObservability } = await load();
+    const { createServerLogger } = await import(
+      "@/shared/lib/logger/server.mjs"
+    );
+    const error = new Error("insert failed");
+
+    await withObservability("projects", async () =>
+      createServerLogger("api:projects").error(error, { report: true })
+    )(req, res);
+
+    expect(sentry.captureException).toHaveBeenCalledWith(
+      error,
+      expect.anything()
+    );
+    expect(print).toHaveBeenCalledTimes(1);
+    expect(print.mock.calls[0][0]).toBe("[api:projects]");
   });
 });

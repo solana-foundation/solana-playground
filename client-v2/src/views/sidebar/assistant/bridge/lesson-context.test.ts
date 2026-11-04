@@ -12,9 +12,9 @@ vi.mock("../../../../utils", () => ({
   PgTutorial: { getStorage: vi.fn() },
 }));
 
-import { describeLesson } from "./lesson-context";
 import { INITIAL_LESSON_STATE } from "../../../flow/lessons/store";
 import type { LessonPath } from "../../../flow/lessons/types";
+import { describeLesson } from "./lesson-context";
 
 const hints: [string, string, string] = ["a", "b", "c"];
 

@@ -24,7 +24,6 @@
 import {
   readJson,
   warnAboutMissingObservabilityIds,
-  captureServerError,
   withObservability,
 } from "../src/features/api/server.mjs";
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
@@ -38,6 +37,9 @@ import {
   rpcRequest,
   rpcResult,
 } from "../src/shared/lib/json-rpc.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:mcp");
 
 const PROTOCOL_VERSION = "2025-06-18";
 
@@ -295,8 +297,7 @@ async function handler(req, res) {
     configured = await upstreams(req);
   } catch (e) {
     // A broken catalogue fails every request, with the entry at fault named, rather than serving part of it
-    captureServerError(e);
-    console.error("mcp: the sources catalogue is invalid", e);
+    log.error(e, { report: true });
     return sendJson(res, 500, { error: /** @type {Error} */ (e).message });
   }
 

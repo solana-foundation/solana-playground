@@ -1,7 +1,8 @@
 import { FC, useEffect, useRef, useState } from "react";
 
-import Input from "../../../../../components/Input";
 import { ModalFrame } from "@/widgets/overlays";
+
+import Input from "../../../../../components/Input";
 import { PgCommon, PgExplorer } from "../../../../../utils";
 
 interface RenameItemProps {

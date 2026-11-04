@@ -1,8 +1,8 @@
 import * as Sentry from "@sentry/react";
 import { expect, it, vi } from "vitest";
 
-import { sentryProvider } from "./sentry";
 import type { LogEntry } from "../types";
+import { sentryProvider } from "./sentry";
 
 vi.mock("@sentry/react", () => {
   const scope = { setLevel: vi.fn(), setTag: vi.fn(), setExtras: vi.fn() };

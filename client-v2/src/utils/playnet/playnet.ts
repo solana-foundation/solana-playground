@@ -1,8 +1,12 @@
-import { PgPlaynetRpc } from "./rpc";
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "../common";
 import { PgExplorer } from "../explorer";
 import { PgPackage } from "../package";
+import { PgPlaynetRpc } from "./rpc";
 import type { OverridableConnection } from "./types";
+
+const log = createLogger("utils:playnet");
 
 export class PgPlaynet {
   /** Overridable Playnet connection */
@@ -110,7 +114,7 @@ export class PgPlaynet {
         { createParents: true }
       );
     } catch (e: any) {
-      console.log("Couldn't save Playnet data:", e.message);
+      log.warn(`Couldn't save Playnet data: ${e.message}`);
     }
   }
 
@@ -123,7 +127,7 @@ export class PgPlaynet {
     try {
       return await PgExplorer.fs.readToString(this._PATHS.SAVE_DATA);
     } catch (e: any) {
-      console.log("Couldn't get Playnet data:", e.message);
+      log.warn(`Couldn't get Playnet data: ${e.message}`);
     }
   }
 }

@@ -1,5 +1,5 @@
-import { ImportCancelledError, PgGithub } from "@/utils";
 import type { ImportProgress } from "@/utils";
+import { ImportCancelledError, PgGithub } from "@/utils";
 
 /** Where an import is, in the user's terms */
 const progressText = ({ loaded, total }: ImportProgress) =>

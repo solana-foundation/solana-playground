@@ -1,15 +1,15 @@
 import { Terminal as XTerm } from "xterm";
 
+import { PgCommon } from "../common";
 import { PgAutocomplete } from "./autocomplete";
 import { PgTerminal } from "./terminal";
-import { parse } from "./utils";
-import { PgCommon } from "../common";
 import type {
   ActiveCharPrompt,
   ActivePrompt,
   CommandManager,
   PrintOptions,
 } from "./types";
+import { parse } from "./utils";
 
 /**
  * TTY manages text I/O related things such as prompting, input parsing and

@@ -56,7 +56,7 @@ export const getRustDependencies = async (files: TupleFiles) => {
   const dependencies: Dependencies = {};
   const rustContents = files
     .filter(([path]) => path.endsWith(".rs"))
-    .map(([_, content]) => content);
+    .map(([, content]) => content);
 
   for (const content of rustContents) {
     for (const crateName of CRATES.importable) {
@@ -88,7 +88,7 @@ export const getJSDependencies = async (files: TupleFiles) => {
   const dependencies: Dependencies = {};
   const jsContents = files
     .filter(([path]) => PgLanguage.getIsPathJsLike(path))
-    .map(([_, content]) => content);
+    .map(([, content]) => content);
 
   for (const content of jsContents) {
     // Importables

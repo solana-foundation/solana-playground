@@ -1,10 +1,10 @@
 import { createSetCollectionInstruction } from "@metaplex-foundation/mpl-candy-machine-core";
 
-import { hashAndUpdate } from "../hash";
-import { processUpdate } from "../update";
-import { assertCorrectAuthority, getMetaplex, loadCache } from "../../utils";
 import { Emoji } from "../../../../constants";
 import { PgTerminal, PgWeb3 } from "../../../../utils";
+import { assertCorrectAuthority, getMetaplex, loadCache } from "../../utils";
+import { hashAndUpdate } from "../hash";
+import { processUpdate } from "../update";
 
 export const processCollectionSet = async (
   rpcUrl: string | undefined,

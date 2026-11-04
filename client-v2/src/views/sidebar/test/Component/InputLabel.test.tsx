@@ -2,6 +2,7 @@
 import { render, screen } from "@testing-library/react";
 import { expect, it } from "vitest";
 
+import { requireFor } from "../../../../test-utils/require-for";
 import InputLabel from "./InputLabel";
 
 const tags = (container: HTMLElement) =>
@@ -22,7 +23,9 @@ it("the type tag keeps the type's case, in mono", () => {
   const { container } = render(
     <InputLabel name="authority" type="publicKey" />
   );
-  const type = container.querySelector('[data-slot="tag"]')!;
+  const type = requireFor("the type tag")(
+    container.querySelector('[data-slot="tag"]')
+  );
   expect(type.className).toContain("normal-case");
   expect(type.className).toContain("font-mono");
 });

@@ -1,11 +1,12 @@
 import styled from "styled-components";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
-import { CreateWorkspace } from "./Modals";
+
 import { Plus } from "../../../../components/Icons";
 import { PgView } from "../../../../utils";
-import { AsyncButton } from "@/shared/ui/async-button";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { CreateWorkspace } from "./Modals";
 
 const NoWorkspace = () => {
   const createWorkspace = () => PgView.setModal(CreateWorkspace);

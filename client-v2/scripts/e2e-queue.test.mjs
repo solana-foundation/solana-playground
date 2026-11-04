@@ -7,9 +7,9 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 import {
-  QUEUE_BASE_PORT,
   acquireSlot,
   describeHolders,
+  QUEUE_BASE_PORT,
   queuePort,
   tryAcquireSlot,
 } from "./e2e-queue.mjs";

@@ -4,10 +4,10 @@ import * as BufferLayout from "@solana/buffer-layout";
 
 import {
   PublicKey,
-  TransactionInstruction,
   SystemProgram,
   SYSVAR_CLOCK_PUBKEY,
   SYSVAR_RENT_PUBKEY,
+  TransactionInstruction,
 } from "./web3";
 
 /** Initialize buffer ix params */

@@ -32,13 +32,13 @@ export const setting = createCmd({
           description: "Value to set",
           values: (token, tokens) => {
             const id = getSettingIdFromTokens(tokens);
-            const setting = getSetting(id);
+            const selected = getSetting(id);
 
             // If `values` field is not specified, default to boolean
-            if (!setting.values) return ["true", "false"];
+            if (!selected.values) return ["true", "false"];
 
             // Normalize values
-            const values = PgCommon.callIfNeeded(setting.values).flatMap(
+            const values = PgCommon.callIfNeeded(selected.values).flatMap(
               (v) => {
                 if (typeof v === "string") return v;
                 if (typeof v === "object" && v.name && v.value) return v.name;
@@ -50,9 +50,9 @@ export const setting = createCmd({
 
             // If the setting has a custom value parser, allow the current
             // token to be used as a setting value after a validation check
-            if (setting.custom) {
+            if (selected.custom) {
               try {
-                setting.custom.parse(token);
+                selected.custom.parse(token);
                 values.push(token);
               } catch {}
             }
@@ -61,20 +61,20 @@ export const setting = createCmd({
           },
           parse: (token, tokens) => {
             const id = getSettingIdFromTokens(tokens);
-            const setting = getSetting(id);
+            const selected = getSetting(id);
             const value = token;
-            const namedValue = PgCommon.callIfNeeded(setting.values)?.find(
+            const namedValue = PgCommon.callIfNeeded(selected.values)?.find(
               (v) => v.name === value
             )?.value;
             if (namedValue) return namedValue;
 
-            if (setting.custom) {
+            if (selected.custom) {
               try {
-                return setting.custom.parse(value);
+                return selected.custom.parse(value);
               } catch {}
             }
 
-            return setting.values ? value : value === "true";
+            return selected.values ? value : value === "true";
           },
         },
       ]),
@@ -91,9 +91,9 @@ export const setting = createCmd({
  * @returns the full setting object
  */
 const getSetting = (id: string) => {
-  const setting = PgSettings.all.find((s) => s.id === id);
-  if (!setting) throw new Error(`Setting not found: ${id}`);
-  return setting;
+  const found = PgSettings.all.find((s) => s.id === id);
+  if (!found) throw new Error(`Setting not found: ${id}`);
+  return found;
 };
 
 /**

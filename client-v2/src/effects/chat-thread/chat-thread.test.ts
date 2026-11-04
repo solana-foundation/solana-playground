@@ -1,13 +1,14 @@
 import type { MockInstance } from "vitest";
-import { chatThread } from "./chat-thread";
-import { openThread } from "./open-thread";
-import { pushThread } from "./push-thread";
+
 import { PgSession } from "../../features/auth";
 import { PgChatSync } from "../../features/persistence/model/chat-sync";
 import { PgThreadIndex } from "../../features/persistence/model/thread-index";
-import { PgAssistant } from "../../views/sidebar/assistant/store";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import type { Disposable } from "../../utils/types";
+import { PgAssistant } from "../../views/sidebar/assistant/store";
+import { chatThread } from "./chat-thread";
+import { openThread } from "./open-thread";
+import { pushThread } from "./push-thread";
 
 /**
  * Conversations have none of the machinery that keeps project code safe.

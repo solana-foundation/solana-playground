@@ -1,5 +1,6 @@
 import { FC, useRef } from "react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -8,6 +9,7 @@ import {
   ContextMenuTrigger,
 } from "@/shared/ui/context-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
+
 import {
   Edit,
   NewFile,
@@ -22,7 +24,6 @@ import {
 } from "../../../../components/Icons";
 import { PgExplorer, PgView } from "../../../../utils";
 import type { useExplorerContextMenu } from "./useExplorerContextMenu";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
 /**
  * Radix drops the promise an `onSelect` returns, so a run that fails would

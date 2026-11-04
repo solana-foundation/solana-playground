@@ -1,12 +1,13 @@
 import type { Mock } from "vitest";
-import { reloadCurrentFromDisk } from "./tab-reload";
-import { PgEditorModels } from "./editor-models";
-import { clearFailures, getFailures } from "./diagnostics";
+
 import { PgCommon } from "../../../utils/common";
 import { PgExplorer } from "../../../utils/explorer/explorer";
 import { PgFs } from "../../../utils/explorer/fs";
-import { PgRouter } from "../../../utils/router";
 import { PgWorkspace } from "../../../utils/explorer/workspace";
+import { PgRouter } from "../../../utils/router";
+import { clearFailures, getFailures } from "./diagnostics";
+import { PgEditorModels } from "./editor-models";
+import { reloadCurrentFromDisk } from "./tab-reload";
 
 // `mockReset` (`vitest.config.ts`) puts every mock back to these answers
 // before each test. `valueOf` answers `null`, not `undefined`, which reads as

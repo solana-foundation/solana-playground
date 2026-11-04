@@ -1,11 +1,11 @@
 import { FC, useEffect, useState } from "react";
 
-import CodeResult from "../CodeResult";
-import Interaction from "../Interaction";
+import { useConnection, useWallet } from "../../../../../hooks";
 import { PgCommon } from "../../../../../utils";
 import { PgProgramInteraction } from "../../../../../utils/program-interaction";
-import { useConnection, useWallet } from "../../../../../hooks";
+import CodeResult from "../CodeResult";
 import { useIdl } from "../IdlProvider";
+import Interaction from "../Interaction";
 
 interface EventProps {
   eventName: string;

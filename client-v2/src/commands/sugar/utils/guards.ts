@@ -5,8 +5,8 @@ import {
   toDateTime,
   token,
 } from "@metaplex-foundation/js";
-import { PgWeb3 } from "../../../utils";
 
+import { PgWeb3 } from "../../../utils";
 import type { ConfigData, ToPrimitive } from "../types";
 
 export const parseGuards = (

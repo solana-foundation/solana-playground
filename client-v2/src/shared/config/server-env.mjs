@@ -8,6 +8,10 @@
 // its variables share one: `agentEnv().API_KEY` is `AGENT_API_KEY`.
 // Names and defaults live here and nowhere else; `.env.example` documents them.
 
+import { createServerLogger } from "../lib/logger/server.mjs";
+
+const log = createServerLogger("config:server-env");
+
 /**
  * A variable's value as set, or `undefined` when it is unset or empty.
  * Node-only: a bundler inlines `process.env.NAME`, never `process.env[name]`.
@@ -53,8 +57,8 @@ const readChecked = (name, fallback, isValid, expected) => {
   if (raw === undefined) return fallback;
   const value = Number(raw);
   if (isValid(value) && value >= 0) return value;
-  console.warn(`server-env: ${name}="${raw}" is not ${expected}`, {
-    using: fallback,
+  log.warn(`${name}="${raw}" is not ${expected}`, {
+    context: { using: fallback },
   });
   return fallback;
 };

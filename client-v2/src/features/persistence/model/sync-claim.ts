@@ -1,7 +1,8 @@
-import { isMissing, report } from "./diagnostics";
 // TODO(ui-migration 1.4): a feature importing a feature; a claim is kept per signed-in account
 import { PgSession } from "@/features/auth";
+
 import { PgFs } from "../../../utils/explorer/fs";
+import { isMissing, report } from "./diagnostics";
 
 /**
  * Next to the marks, not inside their directory: `PgSyncMark.projectIds()`

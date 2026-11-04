@@ -1,6 +1,8 @@
-import { createTools } from "./tools";
-import { PgAssistant } from "../store";
+import { requireFor } from "@/test-utils/require-for";
+
 import type { PlaygroundBridge } from "../bridge/playground-bridge";
+import { PgAssistant } from "../store";
+import { createTools } from "./tools";
 
 vi.mock("./skill-tools", () => ({ createSkillTools: () => [] }));
 vi.mock("./mcp-tools", () => ({ createMcpTools: () => [] }));
@@ -15,7 +17,9 @@ const bridge = (content: string | null): PlaygroundBridge =>
   } as unknown as PlaygroundBridge);
 
 const writeFile = (b: PlaygroundBridge) =>
-  createTools(b).find((tool) => tool.name === "write_file")!;
+  requireFor("the write_file tool")(
+    createTools(b).find((tool) => tool.name === "write_file")
+  );
 
 /** The id of the approval card added most recently */
 const latestCard = () =>

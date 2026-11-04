@@ -1,6 +1,6 @@
 import { PgPackage } from "../../utils";
-import { createCmd } from "../create";
 import { checkPgWallet } from "../checks";
+import { createCmd } from "../create";
 
 export const anchor = createCmd({
   name: "anchor",

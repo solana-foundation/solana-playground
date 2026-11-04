@@ -1,11 +1,11 @@
+import { displayModelName } from "../../../views/sidebar/assistant/model/labels";
 import {
-  PROVIDERS,
   type Effort,
+  PROVIDERS,
 } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import type { KeyedProviderId } from "./connection";
 import type { DefaultBackend } from "./default-backend";
-import { displayModelName } from "../../../views/sidebar/assistant/model/labels";
 
 /** The effort a connection runs at, on the ladder its provider offers */
 export interface EffortChoice {

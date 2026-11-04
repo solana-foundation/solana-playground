@@ -1,3 +1,5 @@
+import { createLogger } from "@/shared/lib/logger";
+
 import {
   PgCommand,
   PgCommon,
@@ -12,15 +14,14 @@ import {
   PgWeb3,
   SyncOrAsync,
 } from "../../utils";
-import { checkWallet } from "../checks";
 import { StoppedError, throwIfStopped } from "../../utils/stopped";
+import { checkWallet } from "../checks";
 import { createCmd } from "../create";
 import { additionalProgramLen } from "./additional-len";
 import { airdropTopUp } from "./airdrop-top-up";
 import { BpfLoaderUpgradeable } from "./bpf-loader-upgradeable";
-import { deployStoppedLine } from "./stopped";
 import type { StoppedBuffer } from "./stopped";
-import { createLogger } from "@/shared/lib/logger";
+import { deployStoppedLine } from "./stopped";
 
 const log = createLogger("commands:deploy");
 
@@ -591,7 +592,9 @@ const sendAndConfirmTxWithRetries = async (
       if (!result?.err) return txHash;
       if (await checkConfirmation()) return txHash;
     } catch (e: any) {
-      console.log(e);
+      log.warn("Deploy transaction attempt failed", {
+        context: { error: e, attempt: i + 1, maxAttempts: MAX_RETRIES },
+      });
       err = e;
       if (i === MAX_RETRIES - 1) break;
       await PgCommon.sleep(sleepAmount);

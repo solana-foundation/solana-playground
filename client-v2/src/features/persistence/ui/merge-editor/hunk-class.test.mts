@@ -4,6 +4,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 
 import { mergeHunkVariants } from "@/shared/ui/merge";
+
 import { hunkLineClass } from "./hunk-class";
 import type { LineLook } from "./merge-file";
 

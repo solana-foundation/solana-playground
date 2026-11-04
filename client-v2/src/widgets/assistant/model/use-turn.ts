@@ -1,10 +1,14 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
-
-import { pushThread } from "../../../effects/chat-thread/push-thread";
 import { PgSession } from "@/features/auth";
 import { report, toReplayMessages } from "@/features/persistence";
+import { createLogger } from "@/shared/lib/logger";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+
+import { pushThread } from "../../../effects/chat-thread/push-thread";
+// Deep import rather than the `utils` barrel, as `effects/chat-thread` does
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
 import { createProvider } from "../../../views/sidebar/assistant/model";
 import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
 import {
@@ -12,19 +16,15 @@ import {
   rememberedConnection,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type {
   Connection,
   PromptRequest,
 } from "../../../views/sidebar/assistant/store";
-import type { ConnectPreset } from "../../../views/sidebar/assistant/Component/Connect";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-// Deep import rather than the `utils` barrel, as `effects/chat-thread` does
-import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { DEFAULT_CONNECTION } from "./connection";
 import { probeDefaultBackend } from "./default-backend";
-import { assistantTelemetry } from "./telemetry";
 import type { AssistantEvents } from "./telemetry";
+import { assistantTelemetry } from "./telemetry";
 
 export type { ConnectPreset };
 
@@ -283,9 +283,9 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     // arriving can make the default reconnect
     let signedIn = !!PgSession.get();
     const session = PgSession.onDidChange(() => {
-      const now = !!PgSession.get();
-      if (now && !signedIn) void reconnectDefault();
-      signedIn = now;
+      const signedInNow = !!PgSession.get();
+      if (signedInNow && !signedIn) void reconnectDefault();
+      signedIn = signedInNow;
     });
     return () => {
       live = false;
@@ -432,10 +432,14 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * server's when it names one, and Try now is off until it ends; a wait past
    * `BUSY_WAIT_MAX_SECONDS` is not counted down at all.
    */
-  const waitOnBusy = (text: string, attempt: number, busy: ModelBusyError) => {
-    const seconds = Math.max(1, busy.waitSeconds ?? BUSY_WAIT_SECONDS);
+  const waitOnBusy = (
+    text: string,
+    attempt: number,
+    busyError: ModelBusyError
+  ) => {
+    const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
     if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
-      PgAssistant.addError(`${busy.message} ${COME_BACK_LATER}`);
+      PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
       return;
     }
     const at = Date.now();
@@ -443,7 +447,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     setWaiting({
       text,
       at: at + seconds * 1000,
-      canTryNow: busy.waitSeconds === undefined,
+      canTryNow: busyError.waitSeconds === undefined,
       attempt: attempt + 1,
       threadId: PgAssistant.threadId,
       conversation: PgAssistant.conversation,
@@ -555,8 +559,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
      * refused because another is under way leaves it in the composer rather
      * than dropping a prompt the user never typed and cannot retype.
      */
-    const run = ({ text, send }: PromptRequest) => {
-      if (!send) {
+    const run = ({ text, send: shouldSend }: PromptRequest) => {
+      if (!shouldSend) {
         place(text);
         return;
       }

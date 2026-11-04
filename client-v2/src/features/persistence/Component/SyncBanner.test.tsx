@@ -11,16 +11,17 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-
-import SyncBanner from "./SyncBanner";
 import {
   initTelemetry,
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
-import { PgProjectSync } from "../model/project-sync";
-import type { FileConflict } from "../model/merge";
+import { requireFor } from "@/test-utils/require-for";
+
 import { PgExplorer } from "../../../utils/explorer/explorer";
+import type { FileConflict } from "../model/merge";
+import { PgProjectSync } from "../model/project-sync";
+import SyncBanner from "./SyncBanner";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -63,10 +64,12 @@ describe("SyncBanner telemetry", () => {
     ["Keep this version", "keep-local"],
     ["Take the other version", "take-server"],
   ])("tracks %s from the banner", async (label, answer) => {
-    const found = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === label
+    const found = requireFor(`the "${label}" button`)(
+      Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === label
+      )
     );
-    await act(async () => found!.click());
+    await act(async () => found.click());
 
     expect(sent.events).toEqual([
       { name: "sync_whole_file_answered", params: { answer, from: "banner" } },
@@ -77,15 +80,17 @@ describe("SyncBanner telemetry", () => {
   it("reports an answer that fails and leaves the prompt up", async () => {
     const failure = new Error("offline");
     vi.spyOn(PgProjectSync, "resolve").mockRejectedValue(failure);
-    const found = Array.from(container.querySelectorAll("button")).find(
-      (b) => b.textContent?.trim() === "Keep this version"
+    const found = requireFor('the "Keep this version" button')(
+      Array.from(container.querySelectorAll("button")).find(
+        (b) => b.textContent?.trim() === "Keep this version"
+      )
     );
-    await act(async () => found!.click());
+    await act(async () => found.click());
 
     expect(reportButtonFailure).toHaveBeenCalledWith("apply your choice");
     expect(report).toHaveBeenCalledWith(failure);
     expect(container.querySelector('[role="alert"]')).not.toBeNull();
-    expect(found!.disabled).toBe(false);
+    expect(found.disabled).toBe(false);
   });
 });
 
@@ -105,7 +110,9 @@ describe("SyncBanner wording", () => {
     act(() => root.unmount());
     root = createRoot(container);
     await act(async () => root.render(<SyncBanner />));
-    return container.querySelector('[role="alert"] p')!.textContent;
+    return requireFor("the banner's message")(
+      container.querySelector('[role="alert"] p')
+    ).textContent;
   };
 
   /** A file still in conflict */

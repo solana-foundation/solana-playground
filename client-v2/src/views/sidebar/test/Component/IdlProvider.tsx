@@ -1,4 +1,4 @@
-import { FC, createContext, useContext } from "react";
+import { createContext, FC, useContext } from "react";
 
 import type { Idl } from "../../../../utils/program-interaction";
 

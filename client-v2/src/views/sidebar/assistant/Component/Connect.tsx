@@ -1,7 +1,8 @@
-import { useRef, useState } from "react";
 import type { ReactElement, ReactNode } from "react";
+import { useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
+import type { ModelProvider } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { cn } from "@/shared/lib/utils";
 import { Field, FieldLabel } from "@/shared/ui/field";
@@ -15,18 +16,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/shared/ui/select";
+
 import Link from "../../../../components/Link";
 import { isSignInFailure, PgSession } from "../../../../features/auth";
 import { useRenderOnChange } from "../../../../hooks/useRenderOnChange";
-import { PgAssistant } from "../store";
-import type { ModelProvider } from "@/shared/lib/ai";
-import {
-  isDefaultBackend,
-  PROVIDERS,
-  type Effort,
-  type ProviderInfo,
-} from "../model/types";
 import { displayModelName, EFFORT_LABELS } from "../model/labels";
+import {
+  type Effort,
+  isDefaultBackend,
+  type ProviderInfo,
+  PROVIDERS,
+} from "../model/types";
+import { PgAssistant } from "../store";
 
 /** Model and effort a backend starts on, when it offers the choice */
 const defaultSettings = (provider: ProviderInfo) =>

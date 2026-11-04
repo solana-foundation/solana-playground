@@ -1,11 +1,19 @@
+import * as monaco from "monaco-editor";
 import { useEffect, useRef, useState } from "react";
 import styled, { useTheme } from "styled-components";
-import * as monaco from "monaco-editor";
 
-import { editorBuffersOf } from "./editor-buffers";
-import { initLanguages } from "./languages";
-import { SpinnerWithBg } from "../../Loading";
+import { editorFont } from "@/shared/lib/editor-font";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { createLogger } from "@/shared/lib/logger";
+
 import { isMergeModel } from "../../../features/persistence/ui/merge-editor/scheme";
+import {
+  useAsyncEffect,
+  useKeybind,
+  useRenderOnChange,
+  useSendAndReceiveCustomEvent,
+} from "../../../hooks";
+import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
 import {
   PgCommand,
   PgCommon,
@@ -20,18 +28,11 @@ import {
   PgView,
   resolveTextMateTheme,
 } from "../../../utils";
-import {
-  useAsyncEffect,
-  useKeybind,
-  useRenderOnChange,
-  useSendAndReceiveCustomEvent,
-} from "../../../hooks";
-import { resolveColor, TRANSPARENT } from "../../../shared/lib/css-color";
+import { SpinnerWithBg } from "../../Loading";
+import { editorBuffersOf } from "./editor-buffers";
+import { initLanguages } from "./languages";
 import { createMountOpen } from "./mount-open";
 import { leavesFocusElsewhere } from "./open-focus";
-import { createLogger } from "@/shared/lib/logger";
-import { useViewport } from "@/shared/lib/hooks/use-viewport";
-import { editorFont } from "@/shared/lib/editor-font";
 
 const log = createLogger("editor:monaco");
 
@@ -344,7 +345,7 @@ const Monaco = () => {
       const model =
         monaco.editor
           .getModels()
-          .find((model) => model.uri.path === curFile.path) ??
+          .find((existing) => existing.uri.path === curFile.path) ??
         monaco.editor.createModel(
           curFile.content!,
           undefined,
@@ -464,9 +465,11 @@ const Monaco = () => {
         try {
           await PgExplorer.fs.writeFile(...args);
         } catch (e: any) {
-          console.log(
-            `Error saving file ${PgExplorer.currentFilePath}. ${e.message}`
-          );
+          // The edit is lost on reload, so the team must hear of it
+          log.error(e, {
+            report: true,
+            context: { path: PgExplorer.currentFilePath },
+          });
         }
       }, 500);
     });

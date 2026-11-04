@@ -1,5 +1,6 @@
-import { createTracker } from "@/shared/lib/telemetry";
 import type { Viewport } from "@/shared/lib/hooks/use-viewport";
+import { createTracker } from "@/shared/lib/telemetry";
+
 import type { LayoutPanel, RestoreFailure } from "./layout-state";
 import type {
   PageSource,

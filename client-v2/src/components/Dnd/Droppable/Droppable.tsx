@@ -1,5 +1,5 @@
-import { CSSProperties, FC, useEffect } from "react";
 import { UniqueIdentifier, useDroppable } from "@dnd-kit/core";
+import { CSSProperties, FC, useEffect } from "react";
 
 interface DroppableProps {
   id: UniqueIdentifier;

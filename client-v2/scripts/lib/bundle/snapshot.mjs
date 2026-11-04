@@ -13,9 +13,9 @@ export const SNAPSHOT_PATH = path.relative(path.dirname(ROOT), SNAPSHOT);
 export const DISPLAY_STEP_TOLERANCE_BYTES = 11 * 1024;
 export const TOLERANCE_LABEL = `${DISPLAY_STEP_TOLERANCE_BYTES / 1024} KiB`;
 
-// CI measures the merge commit with no GA id; the empty value wins over client-v2/.env, which dotenv does not override
+// CI measures the merge commit on the real wasm packages with no GA id; the empty value wins over client-v2/.env, which dotenv does not override
 export const REFRESH_STEPS =
-  "rebase onto the base branch, run `REACT_APP_GA_MEASUREMENT_ID= yarn build-fast`, then `yarn bundle:info`, and commit the refreshed file";
+  "rebase onto the base branch, run `yarn setup` for the real wasm packages, then `REACT_APP_GA_MEASUREMENT_ID= yarn build-fast` and `yarn bundle:info`, and commit the refreshed file";
 
 const UNIT_FACTORS = { B: 1, kB: 1024, MB: 1024 * 1024 };
 

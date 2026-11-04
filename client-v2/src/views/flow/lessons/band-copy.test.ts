@@ -18,10 +18,10 @@ import {
   describeStep,
   positionLabel,
 } from "./band-copy";
-import { foldRecord } from "./ledger";
-import { INITIAL_LESSON_STATE } from "./store";
-import type { LessonState } from "./store";
 import type { LessonRecordEvent } from "./events";
+import { foldRecord } from "./ledger";
+import type { LessonState } from "./store";
+import { INITIAL_LESSON_STATE } from "./store";
 import type { LessonPath } from "./types";
 
 const hints: [string, string, string] = ["a", "b", "c"];

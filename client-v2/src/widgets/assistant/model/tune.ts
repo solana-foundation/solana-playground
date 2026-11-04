@@ -1,6 +1,6 @@
 import {
-  PROVIDERS,
   type Effort,
+  PROVIDERS,
 } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 

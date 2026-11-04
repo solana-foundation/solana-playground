@@ -2,10 +2,10 @@
 // CLI resolves a bare dependency name (`button`) against ui.shadcn.com, and
 // an undeclared import lands a file that imports a file that never landed,
 // or a package the install never added.
-import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 const DS = path.resolve(

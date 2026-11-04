@@ -1,20 +1,20 @@
 import { Creator, Metaplex } from "@metaplex-foundation/js";
 import {
-  createCreateMetadataAccountV3Instruction,
   createCreateMasterEditionV3Instruction,
+  createCreateMetadataAccountV3Instruction,
 } from "@metaplex-foundation/mpl-token-metadata";
 import {
   createAssociatedTokenAccountInstruction,
+  createInitializeMintInstruction,
+  createMintToInstruction,
   getAssociatedTokenAddress,
   MINT_SIZE,
   TOKEN_PROGRAM_ID,
-  createInitializeMintInstruction,
-  createMintToInstruction,
 } from "@solana/spl-token";
 
-import { CandyCache } from "../../utils";
-import type { ConfigData } from "../../types";
 import { PgWeb3 } from "../../../../utils";
+import type { ConfigData } from "../../types";
+import { CandyCache } from "../../utils";
 
 export const createCollection = async (
   metaplex: Metaplex,

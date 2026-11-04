@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 
 import { PgTutorial } from "@/utils";
+
 import type { BaseNewProjectProps } from "../ui/BaseNewProject";
+import { toastOpenFailed } from "../ui/open-failed-toast";
 import { importProgram, isImportCancel } from "./program-open";
-import { catalogTelemetry } from "./telemetry";
 import type { CatalogPage } from "./telemetry";
+import { catalogTelemetry } from "./telemetry";
 import { useCardOpen } from "./use-card-open";
 import { useProgramList } from "./use-program-list";
 import { useTutorialList } from "./use-tutorial-list";
-import { toastOpenFailed } from "../ui/open-failed-toast";
 
 /** New project's state, held by its dialog and drawn by `NewProject` */
 export interface NewProjectState {
@@ -70,8 +71,8 @@ export const useNewProject = (
   // Each list refuses its own second Open; this refuses the other's while
   // one runs, and any while Start runs
   const unlessHeld =
-    (open: (id: string) => Promise<void>) => async (id: string) => {
-      if (!held) await open(id);
+    (openProject: (id: string) => Promise<void>) => async (id: string) => {
+      if (!held) await openProject(id);
     };
 
   return {

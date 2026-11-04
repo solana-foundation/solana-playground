@@ -1,10 +1,11 @@
-import styled, { css } from "styled-components";
 import { TriangleAlertIcon } from "lucide-react";
+import styled, { css } from "styled-components";
 
-import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { ModalFrame } from "@/widgets/overlays";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { ModalFrame } from "@/widgets/overlays";
+
 import { PgWallet } from "../../../utils";
 
 export const Remove = () => (

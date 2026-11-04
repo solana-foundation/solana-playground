@@ -3,15 +3,16 @@ import { Link as RouterLink } from "react-router-dom";
 import styled, { css } from "styled-components";
 
 import { Button } from "@/shared/ui/button";
+
+import { PROJECT_NAME } from "../../../constants";
+import { PgFramework, PgTheme, PgView } from "../../../utils";
 import Card from "../../Card";
+import { External, ShortArrow } from "../../Icons";
 import Img from "../../Img";
 import Link from "../../Link";
 import { getSrc } from "./platform-icon";
 import { ResourceProps, RESOURCES } from "./resources";
 import { TutorialProps, TUTORIALS } from "./tutorials";
-import { External, ShortArrow } from "../../Icons";
-import { PROJECT_NAME } from "../../../constants";
-import { PgFramework, PgTheme, PgView } from "../../../utils";
 
 const Home = () => {
   // This prevents unnecessarily fetching the home content for a frame when the

@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import styled, { css } from "styled-components";
 
-import { AsyncButton } from "@/shared/ui/async-button";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import Input from "../Input";
+import { AsyncButton } from "@/shared/ui/async-button";
 import {
   Collapsible,
   CollapsibleChevron,
   CollapsibleContent,
   CollapsibleHeading,
 } from "@/shared/ui/collapsible";
+
+import { useBalance, useKeybind } from "../../hooks";
 import {
   PgCommon,
   PgTerminal,
@@ -18,7 +19,7 @@ import {
   PgWallet,
   PgWeb3,
 } from "../../utils";
-import { useBalance, useKeybind } from "../../hooks";
+import Input from "../Input";
 
 const Send = () => (
   <Wrapper>

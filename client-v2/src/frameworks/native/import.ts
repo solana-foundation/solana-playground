@@ -1,5 +1,5 @@
-import { convertToPlaygroundCommon, selectProgram } from "../common";
 import type { TupleFiles } from "../../utils";
+import { convertToPlaygroundCommon, selectProgram } from "../common";
 
 /**
  * {@link Framework.importToPlayground}
@@ -27,7 +27,7 @@ export const convertToPlayground = async (files: TupleFiles) => {
       const programMembers = members.filter((member) => {
         return files
           .filter(([path]) => path.includes(member))
-          .some(([_, content]) => content.includes("entrypoint!"));
+          .some(([, content]) => content.includes("entrypoint!"));
       });
       programNames.push(...programMembers);
     }

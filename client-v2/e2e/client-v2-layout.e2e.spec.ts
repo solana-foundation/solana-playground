@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
   currentProject,
   expect,
@@ -80,7 +81,9 @@ const drag = async (
   dx: number,
   dy: number
 ) => {
-  const box = (await separator.boundingBox())!;
+  const box = requireFor("the bounding box of separator")(
+    await separator.boundingBox()
+  );
   const x = box.x + box.width / 2;
   const y = box.y + box.height / 2;
   await page.mouse.move(x, y);
@@ -93,7 +96,9 @@ test("client-v2-layout: A resized assistant and an open console", async ({
   seededPage: page,
 }) => {
   const before = await widthOf(page);
-  const box = (await assistantHandle(page).boundingBox())!;
+  const box = requireFor("the bounding box of assistantHandle")(
+    await assistantHandle(page).boundingBox()
+  );
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   await page.mouse.move(box.x + 120, box.y + box.height / 2, { steps: 8 });
@@ -460,17 +465,17 @@ test.describe("on a phone", () => {
     await page.getByRole("button", { name: "Menu", exact: true }).click();
     // A tap: the page opens over the row, and the release lands on its foot
     await page.getByRole("button", { name: "Account, signed out" }).click();
-    const account = page.getByRole("menu", { name: "Account" });
-    await expect(account).toBeVisible();
+    const accountMenu = page.getByRole("menu", { name: "Account" });
+    await expect(accountMenu).toBeVisible();
     // Once its opening animation has settled
     await expect
-      .poll(() => account.boundingBox())
+      .poll(() => accountMenu.boundingBox())
       .toEqual({ x: 0, y: 0, width: 390, height: 844 });
     await expect(
-      account.getByRole("menuitem", { name: "Sign in with GitHub" })
+      accountMenu.getByRole("menuitem", { name: "Sign in with GitHub" })
     ).toBeInViewport();
-    await account.getByRole("menuitem", { name: "Close" }).click();
-    await expect(account).toHaveCount(0);
+    await accountMenu.getByRole("menuitem", { name: "Close" }).click();
+    await expect(accountMenu).toHaveCount(0);
     // The release that opened it was no pick: no sign-in started
     await expect(
       page.getByRole("button", { name: "Account, signed out" })
@@ -715,7 +720,7 @@ test.describe("on a phone", () => {
     const bar = page
       .getByRole("region", { name: "Work" })
       .getByTestId("phone-bar");
-    const box = (await bar.boundingBox())!;
+    const box = requireFor("the bounding box of bar")(await bar.boundingBox());
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.wheel(390, 0);
     await expect(page.locator("#flow-stage-panel-build")).toBeInViewport();
@@ -991,7 +996,9 @@ test("a toast opens above the navigation", async ({ seededPage: page }) => {
   );
   const toast = page.getByText("layout e2e toast");
   await expect(toast).toBeVisible();
-  const left = (await navColumn(page).boundingBox())!;
+  const left = requireFor("the bounding box of navColumn")(
+    await navColumn(page).boundingBox()
+  );
   // It rises into place from below the window, so the first frames sit off
   // screen where nothing is hit; wait for it to be the topmost thing at its
   // own centre
@@ -1008,7 +1015,9 @@ test("a toast opens above the navigation", async ({ seededPage: page }) => {
     )
     .toBe(true);
   // The toast really is over the navigation, not beside it
-  const box = (await toast.boundingBox())!;
+  const box = requireFor("the bounding box of toast")(
+    await toast.boundingBox()
+  );
   expect(box.x).toBeLessThan(left.x + left.width);
 });
 
@@ -1131,11 +1140,10 @@ test("client-v2-layout: A layout saved before the four columns", async ({
 });
 
 /** Where an element sits on the page */
-const boxOf = async (locator: ReturnType<Page["locator"]>) => {
-  const box = await locator.boundingBox();
-  expect(box).not.toBeNull();
-  return box!;
-};
+const boxOf = async (locator: ReturnType<Page["locator"]>) =>
+  requireFor(`the bounding box of ${String(locator)}`)(
+    await locator.boundingBox()
+  );
 
 test("client-v2-layout: A wide window", async ({ seededPage: page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
@@ -1350,7 +1358,7 @@ test("the account menu opens inside the window, its Sign out on top", async ({
   await expect(menu).toBeVisible();
 
   const box = await boxOf(menu);
-  const viewport = page.viewportSize()!;
+  const viewport = requireFor("the viewport size")(page.viewportSize());
   expect(box.x).toBeGreaterThanOrEqual(0);
   expect(box.y).toBeGreaterThanOrEqual(0);
   expect(box.x + box.width).toBeLessThanOrEqual(viewport.width);
@@ -1370,7 +1378,9 @@ test("the account menu opens inside the window, its Sign out on top", async ({
 
 /** The top edge and height of an element, in px */
 const barOf = async (locator: ReturnType<Page["locator"]>) => {
-  const box = (await locator.boundingBox())!;
+  const box = requireFor("the bounding box of locator")(
+    await locator.boundingBox()
+  );
   return { y: Math.round(box.y), height: Math.round(box.height) };
 };
 
@@ -1378,7 +1388,12 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   // Flush: the navigation starts at the window's edge, the bars at its top
   await expect
-    .poll(async () => (await navColumn(page).boundingBox())!.x)
+    .poll(
+      async () =>
+        requireFor("the bounding box of navColumn")(
+          await navColumn(page).boundingBox()
+        ).x
+    )
     .toBe(0);
   const head = assistantPanel(page)
     .getByRole("heading", { level: 2 })
@@ -1387,18 +1402,30 @@ test("client-v2-layout: The frame at 1440", async ({ seededPage: page }) => {
   await expect.poll(() => barOf(head)).toEqual({ y: 0, height: 44 });
   await expect.poll(() => barOf(stageBar)).toEqual({ y: 0, height: 44 });
   // The stage tabs span the files column and the stage together
-  const tabs = (await page
-    .locator('[data-slot="stepper-list"]')
-    .boundingBox())!;
-  const work = (await page.locator("#work[data-panel]").boundingBox())!;
+  const tabs = requireFor("the stepper list's box")(
+    await page.locator('[data-slot="stepper-list"]').boundingBox()
+  );
+  const work = requireFor("the work panel's box")(
+    await page.locator("#work[data-panel]").boundingBox()
+  );
   expect(tabs.width).toBeGreaterThan(work.width - 20);
   // The prototype's widths: nav 232, assistant 368, files 240
-  expect(Math.round((await navColumn(page).boundingBox())!.width)).toBe(232);
+  expect(
+    Math.round(
+      requireFor("the bounding box of navColumn")(
+        await navColumn(page).boundingBox()
+      ).width
+    )
+  ).toBe(232);
   expect(Math.round(await widthOf(page))).toBe(368);
   await expect(filesPanel(page)).toHaveJSProperty("offsetWidth", 240);
   // One background, separated by 1 px lines: no gutter between the columns
-  const assistant = (await assistantPanel(page).boundingBox())!;
-  const handle = (await assistantHandle(page).boundingBox())!;
+  const assistant = requireFor("the bounding box of assistantPanel")(
+    await assistantPanel(page).boundingBox()
+  );
+  const handle = requireFor("the bounding box of assistantHandle")(
+    await assistantHandle(page).boundingBox()
+  );
   expect(Math.round(handle.width)).toBe(1);
   expect(Math.round(work.x - (assistant.x + assistant.width))).toBe(1);
 });
@@ -1437,9 +1464,9 @@ test("client-v2-layout: A layout saved before the column bars", async ({
   );
   await page.reload();
   await expect(filesPanel(page)).toHaveCount(0);
-  const row = (await page
-    .locator('[data-slot="sidebar-inset"]')
-    .boundingBox())!;
+  const row = requireFor("the sidebar inset's box")(
+    await page.locator('[data-slot="sidebar-inset"]').boundingBox()
+  );
   await expect
     .poll(async () => Math.abs((await widthOf(page)) / row.width - 0.3))
     .toBeLessThan(0.02);
@@ -1779,10 +1806,10 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
   await page.setViewportSize({ width: 800, height: 812 });
   await expect(page.locator(".monaco-editor textarea.inputarea")).toBeFocused();
   const navigation = page.locator('[data-slot="sidebar"]');
-  const account = navigation.getByRole("button", { name: /^Account/ });
+  const accountButton = navigation.getByRole("button", { name: /^Account/ });
 
   await page.getByRole("button", { name: "Expand navigation" }).click();
-  await account.click();
+  await accountButton.click();
   await page.getByRole("menuitem", { name: "Sign in with GitHub" }).click();
   await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "Collapse navigation" }).click();
@@ -1793,7 +1820,7 @@ test("a sign-in outlives the rail folding on a narrow window", async ({
     navigation.getByRole("button", { name: "Cancel" })
   ).toBeVisible();
   release();
-  await expect(account).toContainText("Couldn't sign in");
+  await expect(accountButton).toContainText("Couldn't sign in");
 });
 
 // The scenarios of "Settings are a page of their own" and "The settings page
@@ -1985,8 +2012,10 @@ test.describe("the settings page at 1440 by 900", () => {
           window.innerWidth / 2,
           window.innerHeight / 2
         );
-        const page = el.closest('[role="region"][aria-label="Settings"]');
-        return hit === el && !!page?.contains(middle);
+        const settingsRegion = el.closest(
+          '[role="region"][aria-label="Settings"]'
+        );
+        return hit === el && !!settingsRegion?.contains(middle);
       });
 
     for (const theme of ["Dark", "Light"]) {

@@ -154,10 +154,11 @@ const handleTutorial = (name: string, page: string) => {
 
       // Handle workspace switch
       PgExplorer.onDidSwitchWorkspace(() => {
-        const name = PgExplorer.currentWorkspaceName;
-        if (!name || name === tutorial.name) return;
+        const workspaceName = PgExplorer.currentWorkspaceName;
+        if (!workspaceName || workspaceName === tutorial.name) return;
 
-        if (PgTutorial.isWorkspaceTutorial(name)) PgTutorial.open(name);
+        if (PgTutorial.isWorkspaceTutorial(workspaceName))
+          PgTutorial.open(workspaceName);
         else PgRouter.navigate();
       }),
 

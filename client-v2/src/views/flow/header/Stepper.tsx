@@ -1,16 +1,16 @@
-import { useEffect, useRef, useState } from "react";
 import type { FC } from "react";
+import { useEffect, useRef, useState } from "react";
 
+import type { StepperStatus } from "@/shared/ui/stepper";
 import {
   Stepper as DsStepper,
   StepperItem,
   StepperList,
 } from "@/shared/ui/stepper";
-import type { StepperStatus } from "@/shared/ui/stepper";
 
-import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
-import { STAGES } from "../state/stage";
 import type { FlowState, Stage, StageStatus } from "../state/stage";
+import { STAGES } from "../state/stage";
+import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
 
 const LABEL: Record<Stage, string> = {
   write: "Write",

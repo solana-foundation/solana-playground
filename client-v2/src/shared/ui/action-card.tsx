@@ -1,7 +1,8 @@
-import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
-import { cn } from "@/shared/lib/utils";
 import { Slot } from "radix-ui";
+import * as React from "react";
+
+import { cn } from "@/shared/lib/utils";
 
 /* A card you open: a tutorial, a sample, a program. The link inside it
    covers the whole card, so the card is one target and the text stays

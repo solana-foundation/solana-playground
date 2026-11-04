@@ -1,14 +1,14 @@
-import { cn } from "@/shared/lib/utils";
-import { useEffect, useRef, useState } from "react";
 import type { CSSProperties, MutableRefObject, ReactNode } from "react";
-import { usePanelRef } from "react-resizable-panels";
+import { useEffect, useRef, useState } from "react";
 import type { PanelImperativeHandle } from "react-resizable-panels";
+import { usePanelRef } from "react-resizable-panels";
 
-import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import type { Viewport } from "@/shared/lib/hooks/use-viewport";
-import { createLogger } from "@/shared/lib/logger";
+import { RAIL_WIDTH } from "@/shared/lib/hooks/use-viewport";
 import { KeybindsActive } from "@/shared/lib/keybinds-active";
+import { createLogger } from "@/shared/lib/logger";
 import { Outlet, OutletContent, useOutletNode } from "@/shared/lib/outlet";
+import { cn } from "@/shared/lib/utils";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -22,15 +22,16 @@ import {
   useSidebar,
 } from "@/shared/ui/sidebar";
 import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
-import { homeOf, isWorkInFrame, screenOf } from "../model/screen";
-import BasePhonePager from "./BasePhonePager";
-import type { PhonePagerState } from "./BasePhonePager";
+
 import type {
   HorizontalLayout,
   PanelLayout,
   VerticalLayout,
   WorkLayout,
 } from "../model/layout-state";
+import { homeOf, isWorkInFrame, screenOf } from "../model/screen";
+import type { PhonePagerState } from "./BasePhonePager";
+import BasePhonePager from "./BasePhonePager";
 
 const FILES = { default: 240, min: 192, folded: 0 } as const;
 /** The stage over the console, beside the files column inside `work` */

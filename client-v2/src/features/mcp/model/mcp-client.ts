@@ -1,14 +1,15 @@
-import { loadAi } from "@/shared/lib/ai";
-import { createLogger } from "@/shared/lib/logger";
-import { MCP_TIMEOUT_MS } from "../config";
-import { serverUrl } from "./config";
-import { mcpTelemetry } from "./telemetry";
 import type {
   McpCallOptions,
   McpConnection,
   McpToolResult,
 } from "@/shared/lib/ai";
+import { loadAi } from "@/shared/lib/ai";
+import { createLogger } from "@/shared/lib/logger";
+
+import { MCP_TIMEOUT_MS } from "../config";
+import { serverUrl } from "./config";
 import type { McpEventParams, McpServerKind } from "./telemetry";
+import { mcpTelemetry } from "./telemetry";
 import type { McpServerEntry } from "./types";
 
 export type { McpTool } from "@/shared/lib/ai";

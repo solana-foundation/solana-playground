@@ -1,11 +1,12 @@
 import { recheckWhileBad } from "@/shared/lib/backoff-recheck";
+
 import { PLATFORM_ENDPOINTS } from "../constants";
 import { PgCommon } from "./common";
 import { createDerivable, declareDecorator, derivable } from "./decorators";
 import { OverridableConnection, PgPlaynet } from "./playnet";
 import { PgSettings } from "./settings";
-import { PgWeb3 } from "./web3";
 import type { Disposable } from "./types";
+import { PgWeb3 } from "./web3";
 
 /** Solana public clusters or "localnet" */
 export type Cluster = "playnet" | "localnet" | PgWeb3.Cluster;

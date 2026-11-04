@@ -1,4 +1,7 @@
 import type { Page } from "@playwright/test";
+
+import { SIGNED_OUT_REASON } from "../src/features/auth/config.mjs";
+import { REMEMBERED_BACKEND_KEY } from "../src/views/sidebar/assistant/model/remembered-backend-key";
 import {
   expect,
   json,
@@ -8,8 +11,6 @@ import {
   test,
   TEST_USER,
 } from "./fixtures";
-import { SIGNED_OUT_REASON } from "../src/features/auth/config.mjs";
-import { REMEMBERED_BACKEND_KEY } from "../src/views/sidebar/assistant/model/remembered-backend-key";
 
 /**
  * The default backend is offered only to a signed-in user, because

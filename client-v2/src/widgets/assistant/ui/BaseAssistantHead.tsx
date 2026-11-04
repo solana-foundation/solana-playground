@@ -1,11 +1,11 @@
-import { useRef, useState } from "react";
-import type { KeyboardEvent } from "react";
 import {
   EllipsisVertical,
   FoldHorizontal,
   PanelLeftClose,
   UnfoldHorizontal,
 } from "lucide-react";
+import type { KeyboardEvent } from "react";
+import { useRef, useState } from "react";
 
 import { Button } from "@/shared/ui/button";
 import {

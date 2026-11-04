@@ -4,10 +4,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../utils", () => ({}));
 
+import { requireFor } from "../../../test-utils/require-for";
+import type { FlowState } from "../state/stage";
+import { INITIAL_FLOW_STATE } from "../state/stage";
 import Stepper from "./Stepper";
 import { STEPPER_FULL_WIDTH_PX } from "./stepper-width";
-import { INITIAL_FLOW_STATE } from "../state/stage";
-import type { FlowState } from "../state/stage";
 
 const failedBuild: FlowState = {
   stage: "build",
@@ -55,7 +56,9 @@ class StubResizeObserver {
 
 /** Gives the stepper root, and only it, this much room */
 const resizeTo = (width: number) => {
-  const root = document.querySelector('[data-slot="stepper"]')!;
+  const root = requireFor("the stepper")(
+    document.querySelector('[data-slot="stepper"]')
+  );
   const fire = observed.get(root);
   if (!fire) throw new Error("the stepper root is not observed");
   act(() => fire(width));
@@ -73,7 +76,9 @@ describe("Stepper", () => {
     expect(
       screen.getByRole("tablist", { name: "Development loop" })
     ).toBeTruthy();
-    const build = document.getElementById("flow-stage-tab-build")!;
+    const build = requireFor("the Build tab")(
+      document.getElementById("flow-stage-tab-build")
+    );
     expect(build.getAttribute("role")).toBe("tab");
     expect(build.getAttribute("aria-controls")).toBe("flow-stage-panel-build");
     expect(build.getAttribute("data-slot")).toBe("stepper-item");
@@ -143,7 +148,9 @@ describe("fill", () => {
       <Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} fill />
     );
     const list = () =>
-      container.querySelector('[data-slot="stepper-list"]')!.className;
+      requireFor("the stepper list")(
+        container.querySelector('[data-slot="stepper-list"]')
+      ).className;
     expect(list()).toMatch(/\bw-full\b/);
     rerender(<Stepper state={INITIAL_FLOW_STATE} onSelect={vi.fn()} />);
     expect(list()).not.toMatch(/\bw-full\b/);

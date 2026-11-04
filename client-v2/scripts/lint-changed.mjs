@@ -10,8 +10,14 @@ const CLIENT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const ROOT = path.dirname(CLIENT);
 
 // The directories and extensions `yarn lint` covers, as repo-relative prefixes and suffixes.
-const LINTED_DIRS = ["client-v2/src/", "client-v2/api/", "client-v2/e2e/"];
-const LINTED_EXTENSIONS = [".ts", ".tsx", ".mjs", ".mts"];
+const LINTED_DIRS = [
+  "client-v2/src/",
+  "client-v2/api/",
+  "client-v2/e2e/",
+  "client-v2/scripts/",
+  "client-v2/eslint-plugin-layers/",
+];
+const LINTED_EXTENSIONS = [".js", ".ts", ".tsx", ".mjs", ".mts"];
 
 /**
  * Whether `yarn lint` covers this repo-relative path, by directory and extension only.
@@ -47,11 +53,11 @@ const compareText = (a, b) => {
  */
 export const formatReportFor = (root) => (results) => {
   const prefix = root + path.sep;
-  const messages = results.flatMap(({ filePath, messages }) =>
-    messages.map((message) => ({
-      file: filePath.startsWith(prefix)
-        ? filePath.slice(prefix.length)
-        : filePath,
+  const messages = results.flatMap((result) =>
+    result.messages.map((message) => ({
+      file: result.filePath.startsWith(prefix)
+        ? result.filePath.slice(prefix.length)
+        : result.filePath,
       line: message.line ?? 0,
       column: message.column ?? 0,
       level: message.severity === 2 ? "error" : "warn",

@@ -1,5 +1,6 @@
-import * as React from "react";
 import { ChevronUp } from "lucide-react";
+import * as React from "react";
+
 import { cn } from "@/shared/lib/utils";
 
 /* The console under the stage: a thin frosted strip that says how the last

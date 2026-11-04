@@ -143,9 +143,12 @@ Done:
   actually works, with file paths, and was checked by running it, not by reading
   alone.
 - Local development unblocked: the client would not install until six Rust→WASM
-  packages were compiled (~1 hour). They are behind lazy imports and none are on
-  the UI boot path, so `wasm/stub-packages.sh` stands them in and setup is now
-  about three minutes.
+  packages were compiled (~1 hour). `yarn setup` builds them into the
+  checkout's own cargo target folders, and a new worktree starts from a copy of
+  the main checkout's, so a setup after the first takes minutes. CI builds them once per change to `wasm/`. They are behind lazy
+  imports and none are on the UI boot path, so `wasm/stub-packages.sh` can stand
+  them in under `USE_WASM_STUBS=true`, for UI-only work and the manual stub
+  workflow; a deployment refuses the stubs.
 - Verified the client runs standalone against the public build server
   (`https://api.solpg.io`) — CORS allows `http://localhost:3000` and a real build
   returned in 3.5 seconds. No Docker, no Rust toolchain needed.
@@ -288,9 +291,11 @@ Honesty rule for the demo — never present a mocked step as working.
   server and each skill has a checkbox in the Sources tab; one switched off
   offers nothing to the next turn, and the choice lasts until the page
   reloads.
-- **Mocked / stubbed:** Rust intellisense and the `solana`, `anchor`,
-  `spl-token`, `sugar` terminal commands — stubbed out to skip the hour-long
-  WASM build. They throw a clear message pointing at `wasm/build.sh`.
+- **Real, stubbed only on request:** Rust intellisense and the `solana`,
+  `anchor`, `spl-token`, `sugar` terminal commands. A deployment always ships
+  the real packages. Local UI work may stub them with `USE_WASM_STUBS=true` to
+  skip the WASM build; a stub throws a message pointing at
+  `yarn --cwd client-v2 setup`.
 - **Prototype-grade:** the default backend's spend: sign-in decides who can
   spend the configured key, but nothing yet caps how much one signed-in user
   spends.

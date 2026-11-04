@@ -14,6 +14,8 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { requireFor } from "@/test-utils/require-for";
+
 import { SETUP_LIST_KEY, setupMarks } from "../model/storage";
 import SetupList from "./SetupList";
 
@@ -94,6 +96,7 @@ const listShown = () =>
   screen.queryByRole("button", { name: "Connect a wallet" }) !== null;
 
 const title = () => screen.queryByRole("button", { name: /^Get set up/ });
+const presentTitle = () => requireFor("the setup list's title button")(title());
 
 /** What this widget logged, without what `PgSession` logs of its own */
 const ours = () =>
@@ -130,7 +133,7 @@ it("ticks the network step before the cluster is known, with no value", () => {
 
 it("stays folded after a reload", async () => {
   const { view } = draw();
-  await userEvent.click(title()!);
+  await userEvent.click(presentTitle());
   expect(listShown()).toBe(false);
   reload(view);
   draw();
@@ -139,8 +142,8 @@ it("stays folded after a reload", async () => {
 
 it("stays unfolded after a reload once unfolded again", async () => {
   const { view } = draw();
-  await userEvent.click(title()!);
-  await userEvent.click(title()!);
+  await userEvent.click(presentTitle());
+  await userEvent.click(presentTitle());
   reload(view);
   draw();
   expect(listShown()).toBe(true);
@@ -159,7 +162,7 @@ it("keeps a fold from elsewhere on the device over the phone's default", () => {
 it("starts folded on a phone's menu until the user unfolds it there", async () => {
   const { view } = draw(true);
   expect(listShown()).toBe(false);
-  await userEvent.click(title()!);
+  await userEvent.click(presentTitle());
   reload(view);
   draw(true);
   expect(listShown()).toBe(true);

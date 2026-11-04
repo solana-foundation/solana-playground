@@ -1,6 +1,3 @@
-import { PgBuildOutput, stripKnownNoise } from "./build-output";
-import { describeLesson } from "./lesson-context";
-import type { LessonContext } from "./lesson-context";
 import {
   PgBlockExplorer,
   PgCommand,
@@ -11,6 +8,9 @@ import {
   PgWallet,
 } from "../../../../utils";
 import { PgLesson } from "../../../flow/lessons";
+import { PgBuildOutput, stripKnownNoise } from "./build-output";
+import type { LessonContext } from "./lesson-context";
+import { describeLesson } from "./lesson-context";
 
 /** A condensed view of the program's interface, cheaper than the whole IDL */
 export interface IdlSummary {

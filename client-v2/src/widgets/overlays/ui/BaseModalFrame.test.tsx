@@ -3,8 +3,10 @@ import type { ReactNode } from "react";
 import { expect, it, vi } from "vitest";
 
 import { Modal } from "@/shared/ui/modal";
-import { BaseModalFrame } from "./BaseModalFrame";
+import { requireFor } from "@/test-utils/require-for";
+
 import type { BaseModalFrameProps, SubmitStatus } from "./BaseModalFrame";
+import { BaseModalFrame } from "./BaseModalFrame";
 
 type Submit = NonNullable<BaseModalFrameProps["submit"]>;
 
@@ -248,7 +250,9 @@ it("should focus the body's first input on open", () => {
 it("should draw the hairline under a shown title only", () => {
   const { unmount } = renderFrame({ title: { text: "Rename", hidden: false } });
   const header = () =>
-    document.querySelector('[data-slot="modal-header"]')!.classList;
+    requireFor("the modal header")(
+      document.querySelector('[data-slot="modal-header"]')
+    ).classList;
   expect(header().contains("border-b")).toBe(true);
   expect(header().contains("md:border-b-0")).toBe(false);
   unmount();

@@ -1,15 +1,16 @@
-import { cn } from "@/shared/lib/utils";
-import { useEffect, useLayoutEffect, useRef } from "react";
 import type { CSSProperties, ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 import { Outlet } from "@/shared/lib/outlet";
+import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
-import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
 import { Segmented, SegmentedItem } from "@/shared/ui/segmented";
 import { Sheet, SheetContent, SheetTitle } from "@/shared/ui/sheet";
-import { isCovered, isWorkInFrame, screenOf } from "../model/screen";
-import { PHONE_PAGES, isWorkView } from "../model/phone-pages";
+import { BOTTOM_BAR_PX } from "@/views/flow/tokens";
+
 import type { PhonePage, StagePage, WorkView } from "../model/phone-pages";
+import { isWorkView, PHONE_PAGES } from "../model/phone-pages";
+import { isCovered, isWorkInFrame, screenOf } from "../model/screen";
 import { PHONE_ICONS } from "./phone-icons";
 
 /** How long a scroll must rest before it counts as a swipe that settled */

@@ -1,7 +1,8 @@
-import type { ReactNode, Ref } from "react";
 import { ChevronsUpDown } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
+import type { ReactNode, Ref } from "react";
 
+import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
+import { cn } from "@/shared/lib/utils";
 import { DropdownMenu, DropdownMenuTrigger } from "@/shared/ui/dropdown-menu";
 import {
   SidebarMenu,
@@ -11,16 +12,16 @@ import {
 } from "@/shared/ui/sidebar";
 import { Spinner } from "@/shared/ui/spinner";
 import { StatusDot } from "@/shared/ui/status-dot";
-import { SETTINGS_TRIGGER_ATTR } from "@/shared/lib/settings-request";
+
+import type { AccountLine, AccountView } from "../model/account";
 import {
   accountLabel,
   accountLines,
   accountUser,
   clusterLabel,
-  NOT_ANSWERING,
   lineText,
+  NOT_ANSWERING,
 } from "../model/account";
-import type { AccountLine, AccountView } from "../model/account";
 import AccountAvatar from "./AccountAvatar";
 
 const LINE_STYLE: Record<AccountLine["kind"], string> = {

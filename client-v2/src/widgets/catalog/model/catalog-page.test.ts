@@ -70,10 +70,10 @@ it("reports a switch from one page to the other", () => {
 
 it("tells its listeners when the page closes", () => {
   const seen: Array<string | null> = [];
-  const sub = catalogPage.onDidChange((page) => seen.push(page));
+  const subscription = catalogPage.onDidChange((page) => seen.push(page));
   catalogPage.open("tutorials", "nav");
   catalogPage.close();
-  sub.dispose();
+  subscription.dispose();
   catalogPage.open("programs", "nav");
 
   expect(seen).toEqual(["tutorials", null]);

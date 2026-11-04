@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as mocha from "mocha/browser-entry";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { PgJsRuntime } from "./js-runtime";
 

@@ -1,4 +1,3 @@
-import { FC, useEffect, useMemo } from "react";
 import {
   StandardWalletAdapter,
   WalletReadyState,
@@ -7,9 +6,10 @@ import {
   useWallet as useSolanaWallet,
   WalletProvider,
 } from "@solana/wallet-adapter-react";
+import { FC, useEffect, useMemo } from "react";
 
-import { PgWallet } from "../../utils";
 import { useWallet } from "../../hooks";
+import { PgWallet } from "../../utils";
 
 export const SolanaProvider: FC<React.PropsWithChildren<unknown>> = ({
   children,

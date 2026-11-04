@@ -1,4 +1,5 @@
 import type { ModelProvider } from "@/shared/lib/ai";
+
 import type { Connection } from "../../../views/sidebar/assistant/store";
 
 /** The deployment's keyless default, as `PgAssistant.connect` takes it */

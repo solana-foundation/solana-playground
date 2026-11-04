@@ -1,9 +1,9 @@
 import { CirclePlayIcon } from "lucide-react";
 
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { Button } from "@/shared/ui/button";
 import { Callout, CalloutDescription, CalloutTitle } from "@/shared/ui/callout";
-import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import { Marker, MarkerIcon } from "@/shared/ui/marker";
 import {
   MessageScroller,
@@ -14,11 +14,12 @@ import {
   MessageScrollerViewport,
 } from "@/shared/ui/message-scroller";
 import { Spinner } from "@/shared/ui/spinner";
-import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
+
 import type { ChatItem } from "../../../views/sidebar/assistant/store";
-import { BaseThreadItem } from "./BaseThreadItem";
-import type { ReplyActions } from "./BaseThreadItem";
+import { THREAD_NOT_SAVED } from "../../../views/sidebar/assistant/store";
 import type { ApprovalAnswer } from "./BaseApprovalCard";
+import type { ReplyActions } from "./BaseThreadItem";
+import { BaseThreadItem } from "./BaseThreadItem";
 
 /** A message the model turned away for load, counting down to its next send */
 export interface BusyRetryView {

@@ -3,9 +3,10 @@ import styled, { css } from "styled-components";
 
 import { Checkbox } from "@/shared/ui/checkbox";
 import { Label } from "@/shared/ui/label";
-import LangIcon from "../LangIcon";
-import { PgCommon, PgExplorer } from "../../utils";
+
 import { useDifferentBackground } from "../../hooks";
+import { PgCommon, PgExplorer } from "../../utils";
+import LangIcon from "../LangIcon";
 
 interface FilePickerProps {
   path: string;

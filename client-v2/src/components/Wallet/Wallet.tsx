@@ -1,25 +1,8 @@
 import { FC, useCallback, useEffect, useRef, useState } from "react";
-import styled, { css } from "styled-components";
 import { Rnd } from "react-rnd";
+import styled, { css } from "styled-components";
 
-import Balance from "./Balance";
-import Send from "./Send";
-import Settings from "./Settings";
-import Transactions from "./Transactions";
 import { Button } from "@/shared/ui/button";
-import FadeIn from "../FadeIn";
-import ErrorBoundary from "../ErrorBoundary";
-import Img from "../Img";
-import Input from "../Input";
-import { Close, ShortArrow } from "../Icons";
-import {
-  Wallet as WalletType,
-  Fn,
-  PgCommon,
-  PgTheme,
-  PgView,
-  PgWallet,
-} from "../../utils";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,13 +11,31 @@ import {
 } from "@/shared/ui/dropdown-menu";
 import { MenuItemText } from "@/shared/ui/menu-extras";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
-import { useDarken } from "./hooks";
+
 import {
   useKeybind,
   useOnClickOutside,
   useRenderOnChange,
   useWallet,
 } from "../../hooks";
+import {
+  Fn,
+  PgCommon,
+  PgTheme,
+  PgView,
+  PgWallet,
+  Wallet as WalletType,
+} from "../../utils";
+import ErrorBoundary from "../ErrorBoundary";
+import FadeIn from "../FadeIn";
+import { Close, ShortArrow } from "../Icons";
+import Img from "../Img";
+import Input from "../Input";
+import Balance from "./Balance";
+import { useDarken } from "./hooks";
+import Send from "./Send";
+import Settings from "./Settings";
+import Transactions from "./Transactions";
 
 const Wallet = () => {
   const show = useRenderOnChange(PgWallet.onDidChangeShow);
@@ -127,15 +128,15 @@ export const WalletName = () => {
   const wallet = useWallet();
   const { darken, lighten } = useDarken();
 
-  const getAccountDisplayName = useCallback((wallet: WalletType) => {
-    const name = PgCommon.withMaxLength(wallet.name, 12);
+  const getAccountDisplayName = useCallback((account: WalletType) => {
+    const name = PgCommon.withMaxLength(account.name, 12);
 
     // On standard wallet disconnect, the `publicKey` field appears `null` for a
     // brief moment until `PgWallet.getConnectedStandardWallets` runs again.
     //
     // TODO: Make sure `publicKey` can never be `null`
-    if (!wallet.publicKey) return name;
-    return `${name} - (${PgCommon.shorten(wallet.publicKey.toBase58())})`;
+    if (!account.publicKey) return name;
+    return `${name} - (${PgCommon.shorten(account.publicKey.toBase58())})`;
   }, []);
 
   if (!wallet) return null;

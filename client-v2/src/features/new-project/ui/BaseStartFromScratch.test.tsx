@@ -1,8 +1,8 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-import BaseStartFromScratch from "./BaseStartFromScratch";
 import type { BaseStartFromScratchProps } from "./BaseStartFromScratch";
+import BaseStartFromScratch from "./BaseStartFromScratch";
 
 // The framework picker measures its indicator with a `ResizeObserver`, which
 // jsdom lacks

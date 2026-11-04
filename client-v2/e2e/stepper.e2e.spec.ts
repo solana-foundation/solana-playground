@@ -1,5 +1,4 @@
 import { STEPPER_FULL_WIDTH_PX } from "../src/views/flow/header/stepper-width";
-
 import { expect, seedWorkspace, test } from "./fixtures";
 
 /** What a check or dot beside a label adds to the list, in px */
@@ -25,11 +24,11 @@ test("the full-label stepper fits the width it folds at", async ({ page }) => {
   // the row's; measured at its natural width, as the phone's bar lays it out,
   // border included, since `Stepper` compares its room with the border box
   const width = await list.evaluate((el) => {
-    const list = el as HTMLElement;
-    const stretched = list.style.width;
-    list.style.width = "fit-content";
-    const natural = list.getBoundingClientRect().width;
-    list.style.width = stretched;
+    const listElement = el as HTMLElement;
+    const stretched = listElement.style.width;
+    listElement.style.width = "fit-content";
+    const natural = listElement.getBoundingClientRect().width;
+    listElement.style.width = stretched;
     return natural;
   });
   // A test cannot drive all four stages to a mark, so the unmarked list stands

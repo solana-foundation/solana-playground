@@ -1,10 +1,11 @@
 import type { Mock } from "vitest";
-import { tabSync } from "./tab-sync";
+
 import { reloadCurrentFromDisk } from "../../features/persistence/model/tab-reload";
 import { PgCommon } from "../../utils/common";
 import { PgExplorer } from "../../utils/explorer/explorer";
 import { PgFs } from "../../utils/explorer/fs";
 import { PgWorkspace } from "../../utils/explorer/workspace";
+import { tabSync } from "./tab-sync";
 
 vi.mock("../../features/persistence/model/tab-reload", () => ({
   reloadCurrentFromDisk: vi.fn(async () => "unchanged"),

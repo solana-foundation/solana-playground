@@ -5,9 +5,11 @@
 // Builds the registry in ../design-system, serves it on the port
 // components.json maps `@playground` to, runs the shadcn CLI the design
 // system pins with `--overwrite` (the CLI never overwrites silently, and
-// `shared/ui` is installed, never edited), stops the server, and formats what
-// landed with this package's prettier, so CI's format check passes and a
-// reinstall of an unchanged component leaves no diff.
+// `shared/ui` is installed, never edited), stops the server, applies this
+// package's error-level ESLint fixes (import order among them) to `src/shared`
+// and formats what landed with this package's prettier, so CI's import-order
+// and format checks pass and a reinstall of an unchanged component leaves no
+// diff.
 //
 // Nothing comes from the design system's public site or from ui.shadcn.com:
 // the stock shadcn parts are registry items too, and
@@ -22,6 +24,7 @@ const CLIENT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DS = path.resolve(CLIENT, "../design-system");
 const SHADCN = path.join(DS, "node_modules/.bin/shadcn");
 const PRETTIER = path.join(CLIENT, "node_modules/.bin/prettier");
+const ESLINT = path.join(CLIENT, "node_modules/.bin/eslint");
 // The port is read from the `@playground` URL in components.json, so the
 // server and shadcn cannot disagree on it.
 const PORT = new URL(
@@ -33,6 +36,8 @@ const SERVER_START_MS = 10_000;
 // Where components.json's aliases and the registry's file targets write, and
 // the `tailwind.css` file shadcn adds an item's `cssVars` to.
 const INSTALLED = ["src/shared", "src/app/styles", "src/index.css"];
+// The installed paths that hold scripts; the others are CSS, which ESLint cannot parse.
+const SCRIPT_DIRS = ["src/shared"];
 // The shadcn flags that preview instead of writing. Only these pass through,
 // and only bare: a value given to one (`--diff src/x.tsx`) would be read here
 // as a component name.
@@ -54,7 +59,9 @@ if (names.length === 0 || unknown.length > 0) {
   process.exit(1);
 }
 if (!existsSync(SHADCN)) fail(`run \`npm ci\` in ${DS} first.`);
-if (!existsSync(PRETTIER)) fail(`run \`yarn install\` in ${CLIENT} first.`);
+if (!existsSync(PRETTIER) || !existsSync(ESLINT)) {
+  fail(`run \`yarn install\` in ${CLIENT} first.`);
+}
 
 const built = run("npm", ["run", "build:registry"], { cwd: DS });
 if (built !== 0) process.exit(built);
@@ -83,24 +90,49 @@ try {
   }
   server.kill();
 }
-// A preview wrote nothing, so there is nothing to format.
+// A preview wrote nothing, so there is nothing to lint or format.
 if (status !== 0 || flags.length > 0) process.exit(status);
 
 const written = INSTALLED.filter((dir) => existsSync(path.join(CLIENT, dir)));
+const scripts = written.filter((dir) => SCRIPT_DIRS.includes(dir));
+// ESLint runs before prettier: its fixes are not prettier-formatted.
+// ESLint 8's `--quiet` limits `--fix` to errors (`quietFixPredicate`), so no warning's autofix applies.
+if (scripts.length > 0) {
+  const eslintArgs = ["--fix", "--quiet", "--ext", ".ts,.tsx,.mjs,.mts"];
+  status = run(ESLINT, [...eslintArgs, ...scripts], { cwd: CLIENT });
+  const rerun = `yarn eslint ${[...eslintArgs, ...scripts].join(" ")}`;
+  const where = scripts.join(", ");
+  // 1 is lint errors ESLint could not fix; anything else means it did not finish (`run` reads a spawn error or a signal as 2).
+  if (status === 1) {
+    console.error(
+      `ds-add: the components were installed, but ESLint left errors in ${where}. ` +
+        `Fix the errors above and run \`${rerun}\`.`
+    );
+  } else if (status !== 0) {
+    console.error(
+      "ds-add: the components were installed, but ESLint did not finish. " +
+        `Fix the cause above, then run \`${rerun}\`.`
+    );
+  }
+}
 if (written.length > 0) {
-  status = run(PRETTIER, ["--write", "--loglevel=warn", ...written], {
+  const formatted = run(PRETTIER, ["--write", "--loglevel=warn", ...written], {
     cwd: CLIENT,
   });
-  if (status !== 0) {
+  if (formatted !== 0) {
     console.error(
       "ds-add: the components were installed, but formatting them failed. " +
         "Fix the error above and run `yarn format`."
     );
   }
+  status = status || formatted;
 }
 process.exit(status);
 
-/** Runs a command to completion and says why when it did not run cleanly. */
+/**
+ * Runs a command to completion and says why when it did not run cleanly.
+ * A spawn error or a signal returns 2, so it never reads as ESLint's lint-error status 1.
+ */
 function run(cmd, cmdArgs, opts) {
   const result = spawnSync(cmd, cmdArgs, { stdio: "inherit", ...opts });
   if (result.error) {
@@ -108,7 +140,7 @@ function run(cmd, cmdArgs, opts) {
   } else if (result.signal) {
     console.error(`ds-add: ${cmd} was stopped by ${result.signal}`);
   }
-  return result.status ?? 1;
+  return result.status ?? 2;
 }
 
 /** `run` without blocking the event loop, so the server's exit is seen. */
@@ -117,11 +149,11 @@ function runAsync(cmd, cmdArgs, opts) {
     const child = spawn(cmd, cmdArgs, { stdio: "inherit", ...opts });
     child.once("error", (err) => {
       console.error(`ds-add: could not run ${cmd}: ${err.message}`);
-      resolve(1);
+      resolve(2);
     });
     child.once("exit", (code, signal) => {
       if (signal) console.error(`ds-add: ${cmd} was stopped by ${signal}`);
-      resolve(code ?? 1);
+      resolve(code ?? 2);
     });
   });
 }

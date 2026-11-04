@@ -1,6 +1,8 @@
-import { expect, test } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
 import { hunkLineClass } from "../src/features/persistence/ui/merge-editor/hunk-class";
+import { requireFor } from "../src/test-utils/require-for";
 import { applyWrite, json, LONG, makeLocalProject, settled } from "./fixtures";
 
 /**
@@ -47,7 +49,8 @@ const stubAccount = async (page: Page, id: string, name: string) => {
     hold: null as Promise<void> | null,
     /** The files as the account holds them */
     get files(): Files {
-      return account.row.snapshot!.files;
+      return requireFor("the account's stored project")(account.row.snapshot)
+        .files;
     },
     /** The other device saves: each path to new content, or deleted (null) */
     save(changes: Record<string, string | null>) {
@@ -172,10 +175,12 @@ const linesIn = (pane: Locator) =>
  * `hunkLineClass` names on the decoration at that line's height.
  */
 const looksOf = (pane: Locator, text: string) =>
-  pane.locator(".monaco-editor").evaluate((editor, text) => {
+  pane.locator(".monaco-editor").evaluate((editor, textInPage) => {
     const line = Array.from(
       editor.querySelectorAll<HTMLElement>(".view-lines .view-line")
-    ).find((l) => (l.textContent ?? "").replace(/\u00a0/g, " ").includes(text));
+    ).find((l) =>
+      (l.textContent ?? "").replace(/\u00a0/g, " ").includes(textInPage)
+    );
     if (!line) return null;
     const overlay = Array.from(
       editor.querySelectorAll<HTMLElement>(".view-overlays > div")
@@ -193,7 +198,7 @@ const banner = (page: Page) => page.getByText("changed on another device");
  * store keys files by inode, so a file is found by what it holds.
  */
 const storedWith = (page: Page, marker: string) =>
-  page.evaluate(async (marker) => {
+  page.evaluate(async (markerInPage) => {
     const dbs: Array<{ name?: string }> = await (
       indexedDB as unknown as {
         databases: () => Promise<Array<{ name?: string }>>;
@@ -229,7 +234,7 @@ const storedWith = (page: Page, marker: string) =>
           return "";
         }
       })
-      .filter((text) => text.includes(marker));
+      .filter((text) => text.includes(markerInPage));
   }, marker);
 
 /**

@@ -39,7 +39,7 @@
     "@solana/web3.js": "*",
     "ai": "~7.0.141",
     "assert": "^2.0.0",
-    "better-auth": "^1.7.5",
+    "better-auth": "^1.7.15",
     "class-variance-authority": "^0.7.1",
     "cmdk": "^1.1.1",
     "cn": "^0.4.0",
@@ -105,7 +105,9 @@
     "eslint-import-resolver-typescript": "^3.10.1",
     "eslint-plugin-boundaries": "7.3.0",
     "eslint-plugin-layers": "link:./eslint-plugin-layers",
+    "eslint-plugin-simple-import-sort": "14.0.0",
     "eslint-plugin-unicorn": "47.0.0",
+    "express": "^5.2.1",
     "jsdom": "^29.1.1",
     "markdownlint-cli2": "0.24.0",
     "monaco-editor-webpack-plugin": "^7.0.1",
@@ -127,28 +129,35 @@
     "@types/react-dom": "^19.2.0",
     "elliptic": "^6.6.1",
     "crypto-js": "^4.2.0",
-    "axios": "^0.32.0"
+    "axios": "^0.34.0",
+    "toml": "^5.0.1",
+    "better-auth/zod": "^4.6.6",
+    "better-auth/@better-auth/core/zod": "^4.6.6",
+    "@fission-ai/openspec/zod": "^4.6.6",
+    "**/express/qs": "^6.16.1"
   },
   "engines": {
     "node": "^22.23.4"
   },
   "scripts": {
-    "setup": "yarn build-wasm && yarn install && yarn generate",
-    "start": "yarn generate && craco start",
-    "dev": "yarn generate-fast && craco start",
-    "dev-cra": "BROWSER=none craco start",
+    "setup": "bash scripts/setup-wasm.sh && yarn generate",
+    "setup:with-stubs": "USE_WASM_STUBS=true yarn setup",
+    "start": "node scripts/wasm-stubs.mjs guard start && yarn generate && craco start",
+    "dev": "node scripts/wasm-stubs.mjs guard dev && yarn generate-fast && craco start",
+    "dev:with-stubs": "USE_WASM_STUBS=true yarn dev",
+    "dev-cra": "node scripts/wasm-stubs.mjs guard dev-cra && BROWSER=none craco start",
     "dev-vercel": "yarn generate-fast && npx vercel dev --cwd .. --listen ${VERCEL_DEV_PORT:-3000}",
-    "build": "bash ../wasm/build.sh && yarn install --frozen-lockfile --check-files && yarn build:bundle",
+    "build": "bash scripts/setup-wasm.sh && yarn build:bundle",
     "build:bundle": "yarn lint:layers && yarn generate && GENERATE_SOURCEMAP=false craco build && node scripts/upload-sourcemaps.mjs",
-    "build-fast": "yarn lint:layers && yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
-    "build-wasm": "build=\"../wasm/build.sh\" && chmod +x $build && $build --update",
-    "format": "prettier --write src/ api/",
-    "check-format": "prettier --check src/ api/",
+    "build-fast": "node scripts/wasm-stubs.mjs guard build-fast && yarn lint:layers && yarn generate-fast && GENERATE_SOURCEMAP=false craco build",
+    "build-wasm": "bash ../wasm/build.sh",
+    "format": "prettier --write src/ api/ e2e/ scripts/ eslint-plugin-layers/",
+    "check-format": "prettier --check src/ api/ e2e/ scripts/ eslint-plugin-layers/",
     "format-md": "markdownlint-cli2 --fix",
     "check-md": "markdownlint-cli2",
     "check-colors": "node scripts/check-colors.mjs",
     "ds-add": "node scripts/ds-add.mjs",
-    "lint": "eslint --max-warnings 2918 --ext .ts,.tsx,.mjs,.mts src api e2e",
+    "lint": "eslint --max-warnings 2536 --ext .js,.ts,.tsx,.mjs,.mts src api e2e scripts eslint-plugin-layers",
     "lint:layers": "eslint --quiet --ext .ts,.tsx,.mjs,.mts src/app src/widgets src/features src/entities src/shared api",
     "spec:validate": "openspec validate --all --strict --no-interactive",
     "spec:coverage": "node scripts/spec-coverage.mjs",
@@ -170,9 +179,10 @@
     "db-rollback": "dbmate --no-dump-schema down",
     "db-status": "dbmate status",
     "db-new": "dbmate new",
-    "test-e2e": "playwright test",
+    "test-e2e": "node scripts/wasm-stubs.mjs guard test-e2e && playwright test",
+    "test-e2e:with-stubs": "USE_WASM_STUBS=true yarn test-e2e --grep-invert @real-wasm",
     "test-build": "node --test \"scripts/*.build-test.mjs\"",
-    "bundle:info": "node scripts/bundle-info.mjs",
+    "bundle:info": "node scripts/wasm-stubs.mjs check-build build && node scripts/bundle-info.mjs",
     "db-dump": "./scripts/db-dump.sh"
   },
   "eslintConfig": {
@@ -303,6 +313,54 @@
       },
       {
         "files": [
+          "api/**"
+        ],
+        "rules": {
+          "no-console": "error"
+        }
+      },
+      {
+        "files": [
+          "src/shared/lib/logger/providers/**"
+        ],
+        "excludedFiles": [
+          "src/shared/lib/logger/providers/sentry.ts",
+          "src/shared/lib/logger/providers/sentry.test.ts"
+        ],
+        "rules": {
+          "no-restricted-imports": [
+            "error",
+            {
+              "paths": [
+                {
+                  "name": "uuid",
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "name": "cn",
+                  "message": "Import cn from src/shared/lib/utils; it knows the theme type scale, the bare package drops text-control, font-act and the rest."
+                }
+              ],
+              "patterns": [
+                {
+                  "group": [
+                    "uuid/*"
+                  ],
+                  "message": "Import uuid() / isUuid() from src/shared/lib/ids; it is the one module that talks to the library."
+                },
+                {
+                  "group": [
+                    "@sentry/*"
+                  ],
+                  "message": "The browser logger reaches Sentry only through providers/sentry.ts; the server logger is handed the SDK by with-observability.mjs. See the client-v2-logging spec."
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "files": [
           "src/shared/lib/ids.ts",
           "src/shared/lib/ids.test.mts"
         ],
@@ -367,9 +425,9 @@
           ],
           "no-unused-vars": "off",
           "@typescript-eslint/no-unused-vars": [
-            "warn",
+            "error",
             {
-              "args": "none",
+              "args": "after-used",
               "ignoreRestSiblings": true
             }
           ]
@@ -403,10 +461,98 @@
       },
       {
         "files": [
+          "src/**",
+          "api/**",
+          "e2e/**",
+          "scripts/**",
+          "eslint-plugin-layers/**"
+        ],
+        "plugins": [
+          "simple-import-sort"
+        ],
+        "rules": {
+          "no-shadow": "error",
+          "no-unused-vars": [
+            "error",
+            {
+              "args": "after-used",
+              "ignoreRestSiblings": true
+            }
+          ],
+          "simple-import-sort/imports": [
+            "error",
+            {
+              "groups": [
+                [
+                  "^\\u0000"
+                ],
+                [
+                  "^node:",
+                  "^@?\\w"
+                ],
+                [
+                  "^@/"
+                ],
+                [
+                  "^\\."
+                ]
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**/*.{ts,tsx,mts}",
+          "api/**/*.{ts,tsx,mts}",
+          "e2e/**/*.{ts,tsx,mts}"
+        ],
+        "rules": {
+          "no-shadow": "off",
+          "@typescript-eslint/no-shadow": "error",
+          "no-unused-vars": "off",
+          "@typescript-eslint/no-unused-vars": [
+            "error",
+            {
+              "args": "after-used",
+              "ignoreRestSiblings": true
+            }
+          ]
+        }
+      },
+      {
+        "files": [
+          "src/**",
+          "e2e/**"
+        ],
+        "rules": {
+          "no-console": "error"
+        }
+      },
+      {
+        "files": [
+          "src/shared/lib/logger/providers/console.ts",
+          "src/shared/lib/logger/providers/server-console.mjs"
+        ],
+        "rules": {
+          "no-console": "off"
+        }
+      },
+      {
+        "files": [
           "api/**"
         ],
         "rules": {
           "max-params": "off"
+        }
+      },
+      {
+        "files": [
+          "scripts/**",
+          "eslint-plugin-layers/**"
+        ],
+        "env": {
+          "es2022": true
         }
       },
       {

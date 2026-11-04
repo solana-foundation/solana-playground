@@ -1,6 +1,12 @@
 import { useState } from "react";
 import styled, { css } from "styled-components";
 
+import type { McpServerEntry } from "@/features/mcp";
+import {
+  LOCAL_MCP_SERVERS,
+  parseServers,
+  serializeServers,
+} from "@/features/mcp";
 import { Checkbox } from "@/shared/ui/checkbox";
 import {
   Collapsible,
@@ -18,19 +24,14 @@ import {
   FieldSet,
 } from "@/shared/ui/field";
 import { HelpTip } from "@/shared/ui/help-tip";
-import ServerConsole from "./ServerConsole";
+
 import { useRenderOnChange } from "../../../../hooks";
-import { PgAssistant } from "../store";
-import { isAlwaysOn, isCommunity } from "../grounding";
 import type { SkillEntry } from "../grounding";
-import {
-  LOCAL_MCP_SERVERS,
-  parseServers,
-  serializeServers,
-} from "@/features/mcp";
+import { isAlwaysOn, isCommunity } from "../grounding";
 import { MODEL_PROVIDER_PROFILES } from "../model/model-providers";
 import { PROVIDERS } from "../model/types";
-import type { McpServerEntry } from "@/features/mcp";
+import { PgAssistant } from "../store";
+import ServerConsole from "./ServerConsole";
 
 const ENTRY_FORMAT_DOC_URL =
   "https://github.com/solana-foundation/solana-playground/blob/master/client-v2/docs/agent-sources-and-tools.md";

@@ -1,7 +1,8 @@
-import * as React from "react";
 import { XIcon } from "lucide-react";
-import { cn } from "@/shared/lib/utils";
 import { Dialog as DialogPrimitive } from "radix-ui";
+import * as React from "react";
+
+import { cn } from "@/shared/lib/utils";
 
 /* The product's dialog. On a desk, a card on the dimmed stage: bg2, a
    stronger edge, 16 corners, the title on the left in the headline face.

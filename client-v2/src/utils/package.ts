@@ -1,6 +1,6 @@
+import { GITHUB_URL } from "../constants";
 import { PgCommon } from "./common";
 import { PgTerminal } from "./terminal";
-import { GITHUB_URL } from "../constants";
 
 /** Mapped import results */
 interface ImportResult {

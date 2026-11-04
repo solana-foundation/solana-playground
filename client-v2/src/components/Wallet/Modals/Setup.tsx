@@ -1,15 +1,16 @@
-import { useState } from "react";
 import { TriangleAlertIcon } from "lucide-react";
+import { useState } from "react";
 import styled, { css } from "styled-components";
 
-import { AsyncButton } from "@/shared/ui/async-button";
+import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
-import { ModalFrame } from "@/widgets/overlays";
+import { AsyncButton } from "@/shared/ui/async-button";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+import { ModalFrame } from "@/widgets/overlays";
+
 import { PgWallet, PgWeb3 } from "../../../utils";
 import { KeypairFileError } from "../../../utils/wallet/keypair-file";
 import { importedText } from "../imported-text";
-import { createLogger } from "@/shared/lib/logger";
 
 const log = createLogger("wallet:setup");
 

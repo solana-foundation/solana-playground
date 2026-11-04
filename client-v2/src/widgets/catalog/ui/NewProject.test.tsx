@@ -18,6 +18,7 @@ import {
   memoryProvider,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+import { requireFor } from "@/test-utils/require-for";
 
 const utils = vi.hoisted(() => {
   class ImportCancelledError extends Error {}
@@ -70,8 +71,8 @@ vi.mock("@/features/new-project", () => ({
 }));
 
 import { catalogPage } from "../model/catalog-page";
-import { useNewProject } from "../model/use-new-project";
 import type { CatalogPage } from "../model/telemetry";
+import { useNewProject } from "../model/use-new-project";
 import NewProjectView from "./NewProject";
 
 /** The dialog's component: it holds the state, as `NewWorkspaceModal` does */
@@ -142,7 +143,9 @@ it("draws each tutorial as the tutorial card, with its level and framework", asy
   render(<NewProject />);
 
   const open = screen.getByRole("button", { name: "Open Hello Anchor" });
-  const card = open.closest<HTMLElement>('[data-slot="action-card"]')!;
+  const card = requireFor("the tutorial card")(
+    open.closest<HTMLElement>('[data-slot="action-card"]')
+  );
   expect(within(card).getByText("Beginner · Anchor")).toBeTruthy();
   expect(within(card).queryByText(/\d+ of \d+/)).toBeNull();
   expect(within(card).getAllByRole("button")).toEqual([open]);
@@ -166,7 +169,9 @@ it("shows a failed tutorial Open on its own card and frees the others", async ()
   await act(async () => fireEvent.click(anchor));
 
   const card = (b: HTMLElement) =>
-    b.closest<HTMLElement>('[data-slot="action-card"]')!;
+    requireFor("the tutorial card")(
+      b.closest<HTMLElement>('[data-slot="action-card"]')
+    );
   expect(within(card(anchor)).getByRole("alert").textContent).toBe("gone");
   const solana = screen.getByRole("button", { name: "Open Hello Solana" });
   expect(within(card(solana)).queryByRole("alert")).toBeNull();

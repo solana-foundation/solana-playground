@@ -1,9 +1,11 @@
-import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { TooltipProvider } from "@/shared/ui/tooltip";
+import { requireFor } from "@/test-utils/require-for";
+
 import { BaseAssistantComposer } from "./BaseAssistantComposer";
 
 interface Setup {
@@ -131,9 +133,10 @@ describe("BaseAssistantComposer", () => {
     setup({ sendBlocked: "Connect a model to send" });
     const reason = input().getAttribute("aria-describedby");
     expect(reason).toBeTruthy();
-    expect(document.getElementById(reason!)?.textContent).toBe(
-      "Connect a model to send"
+    const description = document.getElementById(
+      requireFor("the describing id")(reason)
     );
+    expect(description?.textContent).toBe("Connect a model to send");
   });
 
   it("shows Stop, and no blocked Send, during a turn", async () => {

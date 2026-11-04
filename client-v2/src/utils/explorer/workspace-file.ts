@@ -1,5 +1,5 @@
-import { PgExplorer } from "./explorer";
 import { createLogger } from "../../shared/lib/logger";
+import { PgExplorer } from "./explorer";
 
 const log = createLogger("explorer:workspace-file");
 

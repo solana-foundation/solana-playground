@@ -7,6 +7,7 @@ import {
   StepRailMeta,
   StepRailTitle,
 } from "@/shared/ui/step-rail";
+
 import type { LessonMark } from "./events";
 
 export interface RailRow {

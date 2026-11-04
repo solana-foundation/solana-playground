@@ -1,6 +1,10 @@
-import { getIsOption, parse } from "./utils";
+import { createLogger } from "@/shared/lib/logger";
+
 import { PgCommon } from "../common";
 import type { Disposable, Getable } from "../types";
+import { getIsOption, parse } from "./utils";
+
+const log = createLogger("terminal:autocomplete");
 
 /** Autocomplete handler input type */
 type AutocompleteHandler =
@@ -72,10 +76,10 @@ export class PgAutocomplete {
     // Collect all auto-complete candidates from the callbacks
     const candidates = this._handlers.reduce((acc, cb) => {
       try {
-        const candidates = cb(tokens, index);
-        return acc.concat(candidates);
+        const handlerCandidates = cb(tokens, index);
+        return acc.concat(handlerCandidates);
       } catch (e) {
-        console.log("Autocomplete error:", e);
+        log.warn("Autocomplete error", { context: { error: e } });
         return acc;
       }
     }, [] as string[]);

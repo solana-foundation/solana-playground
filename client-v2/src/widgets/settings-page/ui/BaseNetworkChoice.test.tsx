@@ -2,8 +2,9 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import BaseNetworkChoice from "./BaseNetworkChoice";
 import { Endpoint } from "@/constants";
+
+import BaseNetworkChoice from "./BaseNetworkChoice";
 
 describe("BaseNetworkChoice", () => {
   beforeEach(() => {

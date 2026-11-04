@@ -1,8 +1,8 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 
-import BasePhoneHome from "./BasePhoneHome";
 import type { BasePhoneHomeProps } from "./BasePhoneHome";
+import BasePhoneHome from "./BasePhoneHome";
 
 const props = (): BasePhoneHomeProps => ({
   quickstarts: [

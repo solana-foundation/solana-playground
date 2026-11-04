@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, it, vi } from "vitest";
 
 import { SidebarProvider } from "@/shared/ui/sidebar";
 import { TooltipProvider } from "@/shared/ui/tooltip";
+
 import type { NavItem } from "../model/nav-item";
 import BaseAppNav from "./BaseAppNav";
 

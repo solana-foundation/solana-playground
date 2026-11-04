@@ -1,20 +1,20 @@
 import { useState, useSyncExternalStore } from "react";
-import { cn } from "@/shared/lib/utils";
 
-import Link from "@/components/Link";
 import { ExportFile, Github, ImportFile } from "@/components/Icons";
+import Link from "@/components/Link";
 import {
   useBlockExplorer,
   useProgramInfo,
   useRenderOnChange,
   useWallet,
 } from "@/hooks";
+import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 import type {
   SettingsExit,
   SettingsFocus,
 } from "@/shared/lib/settings-request";
-import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { cn } from "@/shared/lib/utils";
 import { AsyncButton } from "@/shared/ui/async-button";
 import { PgFramework, PgProgramInfo, PgSettings, PgView } from "@/utils";
 import {
@@ -22,15 +22,16 @@ import {
   ImportGithub,
   isImported,
 } from "@/views/sidebar/explorer/Component/Modals";
-import { groupSettings, sectionTitle } from "../model/sections";
+
 import type { SectionId } from "../model/sections";
+import { groupSettings, sectionTitle } from "../model/sections";
 import { settingsTelemetry } from "../model/telemetry";
 import BaseNetworkChoice from "./BaseNetworkChoice";
 import BaseSettingRow from "./BaseSettingRow";
-import BaseSettingsPage from "./BaseSettingsPage";
-import SettingsBoundary from "./SettingsBoundary";
 import type { SettingsSection } from "./BaseSettingsPage";
+import BaseSettingsPage from "./BaseSettingsPage";
 import { SettingControl } from "./SettingControl";
+import SettingsBoundary from "./SettingsBoundary";
 
 // The sections the page draws itself, typed so a rename in `SECTION_ORDER`
 // fails to compile here

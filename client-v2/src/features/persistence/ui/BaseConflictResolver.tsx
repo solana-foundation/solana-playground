@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   useCallback,
   useEffect,
@@ -6,12 +7,11 @@ import {
   useRef,
   useState,
 } from "react";
-import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useTheme } from "styled-components";
 
-import { Button } from "@/shared/ui/button";
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
+import { Button } from "@/shared/ui/button";
 import {
   Merge,
   MergeCount,
@@ -43,12 +43,13 @@ import {
   ModalHeader,
   ModalTitle,
 } from "@/shared/ui/modal";
-import { createMergeEditor } from "./merge-editor/controller";
-import { MergeFile, resolvedFiles } from "./merge-editor/merge-file";
-import type { MergeEditor, MergeLayout } from "./merge-editor/controller";
-import type { HunkAction } from "./merge-editor/result-model";
-import type { HunkSide, MergePane as Pane } from "./merge-editor/merge-file";
+
 import type { FileConflict, ResolvedFiles } from "../model/merge";
+import type { MergeEditor, MergeLayout } from "./merge-editor/controller";
+import { createMergeEditor } from "./merge-editor/controller";
+import type { HunkSide, MergePane as Pane } from "./merge-editor/merge-file";
+import { MergeFile, resolvedFiles } from "./merge-editor/merge-file";
+import type { HunkAction } from "./merge-editor/result-model";
 
 export interface BaseConflictResolverProps {
   /** The conflicted files, as the divergent conflict holds them */

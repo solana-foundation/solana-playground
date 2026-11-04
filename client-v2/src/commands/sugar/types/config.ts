@@ -1,8 +1,8 @@
 import { BigNumber, Creator, Option } from "@metaplex-foundation/js";
 import { HiddenSettings } from "@metaplex-foundation/mpl-candy-machine-core";
 
-import type { CandyGuardData } from "./guard-data";
 import type { PgWeb3 } from "../../../utils";
+import type { CandyGuardData } from "./guard-data";
 
 export type ToPrimitive<T> = {
   [K in keyof T]: T[K] extends PgWeb3.PublicKey

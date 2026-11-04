@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { ThemeProvider, type DefaultTheme } from "styled-components";
+import { type DefaultTheme, ThemeProvider } from "styled-components";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 /** What the mocked explorer and lesson report; each test sets its own */
@@ -63,8 +63,9 @@ vi.mock("../lessons/StepRail", () => ({
   default: () => <div data-testid="step-rail" />,
 }));
 
-import LeftPanel, { isLessonTab } from "./LeftPanel";
+import { requireFor } from "../../../test-utils/require-for";
 import { forgetColumn } from "./kept-column";
+import LeftPanel, { isLessonTab } from "./LeftPanel";
 
 // A theme that answers every key: the styles are not under test, and the
 // real theme's module needs the utils barrel.
@@ -89,9 +90,14 @@ const draw = (collapsed: boolean, onHide?: () => void) =>
 const inLesson = () => {
   given.lesson = { path: { id: "lesson" }, record: [] };
 };
-const body = () => document.getElementById("flow-left-tabpanel")!;
+const body = () =>
+  requireFor("the left panel body")(
+    document.getElementById("flow-left-tabpanel")
+  );
 const tab = (name: "steps" | "files") =>
-  document.getElementById(`flow-left-tab-${name}`)!;
+  requireFor(`the ${name} tab`)(
+    document.getElementById(`flow-left-tab-${name}`)
+  );
 
 // Before, not after: Testing Library unmounts the last panel after this
 // file's own hooks, and that unmount keeps it again
@@ -164,7 +170,7 @@ describe("LeftPanel in a lesson", () => {
     given.canPass = true;
     // A new object: the same one would bail out of the re-render
     act(() => given.listener?.({ path: { id: "lesson" }, record: [] }));
-    fireEvent.click(skip()!);
+    fireEvent.click(requireFor("the Skip button")(skip()));
     expect(given.pass).toHaveBeenCalledTimes(1);
   });
 });

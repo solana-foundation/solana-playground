@@ -1,19 +1,20 @@
 import { useEffect, useReducer, useState } from "react";
 
-import { createLogger } from "@/shared/lib/logger";
 import { PgSession } from "@/features/auth";
+import { createLogger } from "@/shared/lib/logger";
 import { Callout, CalloutDescription } from "@/shared/ui/callout";
+
+import { PgExplorer } from "../../../utils/explorer/explorer";
+import { PgProgramInfo } from "../../../utils/program-info";
+import type { LessonState } from "../../../views/flow/lessons";
+import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
 import { PgBuildOutput } from "../../../views/sidebar/assistant/bridge/build-output";
 import { describeLesson } from "../../../views/sidebar/assistant/bridge/lesson-context";
 import { realBridge } from "../../../views/sidebar/assistant/bridge/playground-bridge";
-import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { Connection } from "../../../views/sidebar/assistant/store";
-import { INITIAL_LESSON_STATE, PgLesson } from "../../../views/flow/lessons";
-import type { LessonState } from "../../../views/flow/lessons";
-import { PgExplorer } from "../../../utils/explorer/explorer";
-import { PgProgramInfo } from "../../../utils/program-info";
-import { modelOptions, modelShown } from "../model/choice";
+import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import type { ModelOption } from "../model/choice";
+import { modelOptions, modelShown } from "../model/choice";
 import { DEFAULT_CONNECTION } from "../model/connection";
 import { useDefaultBackend } from "../model/default-backend";
 import { assistantTelemetry } from "../model/telemetry";

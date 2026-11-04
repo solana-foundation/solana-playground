@@ -1,8 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
 import { cleanup, renderHook } from "@testing-library/react";
+import { afterEach, describe, expect, it } from "vitest";
 
-import { useSendAndReceiveCustomEvent } from "./useSendAndReceiveCustomEvent";
 import { PgCommon } from "../utils/common";
+import { useSendAndReceiveCustomEvent } from "./useSendAndReceiveCustomEvent";
 
 const event = "pg-test-hook-get";
 const noReceiver = () => new Error("nothing is listening");

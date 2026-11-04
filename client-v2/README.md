@@ -6,35 +6,55 @@ This is the main application of Solana Playground.
 
 `wasm/*/pkg` and `public/` are both gitignored, so a fresh clone or a new
 worktree has never built them. `yarn install` cannot resolve the local `file:`
-dependencies until `wasm/*/pkg` exists, which leaves two paths.
+dependencies until `wasm/*/pkg` exists.
 
-**UI work (seconds).** Write placeholder WASM packages, no Rust toolchain needed:
-
-```sh
-bash ../wasm/stub-packages.sh
-yarn install
-yarn start
-```
-
-You lose Rust intellisense and the `solana`, `anchor`, `spl-token` and `sugar`
-terminal commands plus Seahorse builds. The UI, Monaco, rustfmt, Playnet, the
-wallet, and Rust program builds via the build server all keep working.
-
-**Full setup (~1h).** Compile the WASM packages from Rust, then install and
-generate:
+**Fresh clone or new worktree.** Compile the WASM packages from Rust, then
+install and generate:
 
 ```sh
 yarn setup
 yarn start
 ```
 
-`yarn setup` rebuilds `wasm/*/pkg` unconditionally, so running it after
-`stub-packages.sh` replaces the stubs with the real packages.
+`yarn setup` (`scripts/setup-wasm.sh`) builds `wasm/*/pkg` with
+`../wasm/build.sh` into the checkout's own cargo target folders, `wasm/target`
+and `wasm/rust-analyzer/target`. A folder shared between worktrees is unsafe:
+cargo names a path `cdylib` without a hash and judges freshness by mtime, so
+one worktree could package another's `.wasm`. In a linked worktree, a target
+folder that does not exist yet starts as a copy of the main checkout's (an
+APFS clone on macOS), so only a checkout with nothing to copy from runs the
+cold build, which takes about an hour; the worktree's own crates still compile
+once. `setup` unsets a `CARGO_TARGET_DIR` set by the user, and fails when a
+cargo config's `build.target-dir` moves either target folder elsewhere. It then
+clears `node_modules` (all but `.cache`, less webpack's `default-<mode>` caches) and
+installs, because yarn 1 copies a local `file:` package again only when its
+folder is missing, and an install over an old tree can keep a hoisting the
+lockfile no longer describes. Webpack's cache goes because it identifies a
+package by name and version, which a rebuilt wasm package keeps.
+
+**Stubs, by request only.** `USE_WASM_STUBS=true` (the exact string `true`)
+writes placeholder packages with `../wasm/stub-packages.sh` instead of
+compiling them. The scripts with the `:with-stubs` suffix set it themselves:
+
+```sh
+yarn setup:with-stubs
+yarn dev:with-stubs
+yarn test-e2e:with-stubs
+```
+
+The stubs lose Rust intellisense, the `solana`, `anchor`, `spl-token` and
+`sugar` terminal commands, and Seahorse builds. `yarn start`, `yarn dev`,
+`yarn dev-cra` (and so `yarn dev-vercel`), and `yarn test-e2e` stop with the
+names of the stubbed packages when they find stubs in `node_modules` and
+`USE_WASM_STUBS=true` is not set. `yarn test-e2e:with-stubs` leaves out the
+`@real-wasm` specs, which run the CLIs. A deployment refuses the
+variable, and the Vercel build fails on a bundle built from a stub
+(`node scripts/wasm-stubs.mjs check-build build`). `yarn setup` replaces the
+stubs with the real packages.
 
 **Production build.** `yarn build` is the whole build in one command: it
-compiles `wasm/*/pkg` from Rust, reinstalls with `--check-files` so
-`node_modules` takes the new packages (yarn copies the local `file:` packages,
-and a plain install skips them when the lockfile is unchanged), copies
+compiles and installs `wasm/*/pkg` as `yarn setup` does (`scripts/setup-wasm.sh`,
+which clears `node_modules` first so it takes the new packages), copies
 `public/` from the assets submodule, generates the crate, package and tutorial
 data, and bundles the app into `build/`. A first run takes about an hour;
 cargo reuses its output after that.
@@ -105,7 +125,8 @@ a variable already set). Sentry stays out of a build without `VERCEL_ENV`
 
 `public/` is mirrored from the `client/public` submodule, and `yarn start` /
 `yarn build` refresh it automatically. Run `make update-static` by hand only
-after bumping that submodule to change asset content.
+after bumping that submodule to change asset content; the bump also updates
+`scripts/assets-commit.txt` (see [Docker](#docker)).
 
 Worktrees are supported: the mirror is always copied from the _primary_
 checkout, so a worktree never initialises a submodule of its own. (A submodule's
@@ -114,16 +135,47 @@ detaches it in the first — which is why `public/` is not a submodule here.)
 
 ## Docker
 
-Run client-v2 together with the build server via [Docker Compose](https://github.com/docker/compose):
+Run client-v2 with everything it talks to via [Docker Compose](https://github.com/docker/compose).
+`compose.yaml` is a local development layout, not a production one.
 
 ```sh
-docker compose -f ../compose.yaml --profile v2 up --build
+docker compose -f ../compose.yaml --profile v2 up --build       # dev server, `yarn start`
+docker compose -f ../compose.yaml --profile v2-prod up --build  # production bundle
 ```
 
-The client is served on `http://localhost:3000` (override with
-`PG_CLIENT_V2_PORT`) and the build server on `http://localhost:8080`.
+Both profiles start the same services:
 
-For a production build served statically, use the `v2-prod` profile instead.
+| Service             | What it does                                                                 |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `wasm`              | Builds the real `wasm/*/pkg` packages (`wasm/build.sh`); the client image copies them in. Never stubs. |
+| `postgres`          | Conversation and project sync, on host port `PG_POSTGRES_PORT` (5432).       |
+| `migrate`           | Runs dbmate over `db/migrations` once Postgres is healthy, then exits.       |
+| `server-standalone` | The Rust build server on `http://localhost:8080` (`PG_PORT`), without MongoDB, which only its share routes use. |
+| `client-v2` / `client-v2-prod` | The client on `http://localhost:3000` (`PG_CLIENT_V2_PORT`), started once `wasm` and `migrate` have exited 0. |
+
+`client-v2-prod` runs `yarn build:bundle`, refuses to serve a bundle that
+`node scripts/wasm-stubs.mjs check-build build` rejects, and then serves
+`build/` and `api/*.mjs` with `scripts/serve-build.mjs`, following
+`vercel.json`'s headers and rewrites. `client-v2` serves `api/*.mjs` from the
+dev server, through the same dispatcher (`scripts/api-route.mjs`).
+
+The compose file sets `DATABASE_URL` (the compose Postgres), `SYNC_ENABLED`,
+`AUTH_BASE_URL` and `REACT_APP_SERVER_URL` itself; those values win over
+`.env`. Everything else, such as the GitHub OAuth app, `AUTH_SECRET` and the
+model keys, comes from `client-v2/.env` when it exists (names in
+`.env.example`). The file reaches the containers through `env_file`; it is
+kept out of the image.
+
+The client image builds from the primary checkout and from a linked worktree
+alike: it reads no git data of the checkout. It clones the assets repository
+at the commit in `scripts/assets-commit.txt` and points `update-static.mjs` at
+the clone through `ASSETS_DIR`. After staging a bump of the `client/public` submodule,
+update that file from the repository root (`yarn test-api` fails until it
+matches):
+
+```sh
+git ls-files -s client/public | awk '{print $2}' > client-v2/scripts/assets-commit.txt
+```
 
 The `dev`, `prod` and `client-standalone` profiles build the upstream `client/`,
 not this one. See the [root README](../README.md#run-with-docker).

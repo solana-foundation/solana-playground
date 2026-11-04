@@ -1,8 +1,9 @@
 import { ArrowUpRight, Bug, MessageCircle } from "lucide-react";
 
 import { DropdownMenuItem } from "@/shared/ui/dropdown-menu";
-import { GITHUB_LINKS } from "../lib/github-links";
+
 import type { GithubLink } from "../lib/github-links";
+import { GITHUB_LINKS } from "../lib/github-links";
 
 export interface BaseFeedbackMenuItemsProps {
   /** Offers "Share feedback": only where a send can succeed */

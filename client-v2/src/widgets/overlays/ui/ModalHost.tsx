@@ -1,3 +1,4 @@
+import type { ErrorInfo, ReactNode } from "react";
 import {
   Component,
   useCallback,
@@ -5,11 +6,11 @@ import {
   useRef,
   useSyncExternalStore,
 } from "react";
-import type { ErrorInfo, ReactNode } from "react";
 
 import { createLogger } from "@/shared/lib/logger";
 import { Modal } from "@/shared/ui/modal";
 import { PgView } from "@/utils/view";
+
 import {
   ModalDismissContext,
   ModalIdContext,

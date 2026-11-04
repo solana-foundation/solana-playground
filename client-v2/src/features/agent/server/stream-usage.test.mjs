@@ -1,12 +1,24 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import {
+  initServerLogger,
+  resetServerLogger,
+} from "../../../shared/lib/logger/server.mjs";
 import { usageReader } from "./stream-usage.mjs";
 
 const feed = (...chunks) => {
   const reader = usageReader();
   for (const chunk of chunks) reader.push(Buffer.from(chunk));
   return reader.usage();
+};
+
+/** The server logger's entries for one test, in place of the console */
+const logged = (t) => {
+  const entries = [];
+  initServerLogger({ providers: [{ log: (entry) => entries.push(entry) }] });
+  t.after(resetServerLogger);
+  return entries;
 };
 
 describe("usageReader", () => {
@@ -33,30 +45,27 @@ describe("usageReader", () => {
   });
 
   it("skips a malformed event and keeps reading", (t) => {
-    t.mock.method(console, "warn", () => {});
+    logged(t);
     assert.deepEqual(feed('data: {"usage": nope}\n\n', last), USAGE);
   });
 
   it("logs the first malformed event of a turn, and only the first", (t) => {
-    const warn = t.mock.method(console, "warn", () => {});
+    const entries = logged(t);
 
     feed('data: {"usage": nope}\n\n', 'data: {"usage": nor this}\n\n', last);
 
-    assert.equal(warn.mock.callCount(), 1);
-    assert.deepEqual(warn.mock.calls[0].arguments[1], {
+    assert.equal(entries.length, 1);
+    assert.deepEqual(entries[0].context, {
       error: "SyntaxError",
       bytes: '{"usage": nope}'.length,
     });
   });
 
   it("keeps the event's text out of the log", (t) => {
-    const warn = t.mock.method(console, "warn", () => {});
+    const entries = logged(t);
 
     feed('data: {"usage": null, "content": "private answer\n\n', last);
 
-    assert.doesNotMatch(
-      JSON.stringify(warn.mock.calls[0].arguments),
-      /private answer/
-    );
+    assert.doesNotMatch(JSON.stringify(entries), /private answer/);
   });
 });

@@ -1,3 +1,4 @@
+import type { Level } from "@/shared/lib/logger";
 import {
   consoleProvider,
   createLogger,
@@ -5,12 +6,12 @@ import {
   installGlobalHandlers,
   sentryProvider,
 } from "@/shared/lib/logger";
-import type { Level } from "@/shared/lib/logger";
 import {
   ga4Provider,
   initTelemetry,
   logProvider,
 } from "@/shared/lib/telemetry";
+
 import { observabilityTelemetry } from "./telemetry";
 
 export interface ObservabilityConfig {

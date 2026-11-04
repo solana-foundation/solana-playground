@@ -1,6 +1,6 @@
-import { declarePackage } from "./helper";
-import { importTypes } from "../../common";
 import type { Disposable, JsRuntimePackageName } from "../../../../../../utils";
+import { importTypes } from "../../common";
+import { declarePackage } from "./helper";
 
 /**
  * Declare importable types in the editor and update them based on file switch

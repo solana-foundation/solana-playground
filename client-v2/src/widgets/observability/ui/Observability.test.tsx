@@ -1,10 +1,11 @@
-import { StrictMode } from "react";
-import type { ReactNode } from "react";
 import * as Sentry from "@sentry/react";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
+import { StrictMode } from "react";
 
 import { resetLogger } from "@/shared/lib/logger";
 import { resetTelemetry } from "@/shared/lib/telemetry";
+
 import { resetObservability } from "../model/init";
 import { Observability } from "./Observability";
 

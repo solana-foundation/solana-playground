@@ -441,7 +441,9 @@ behaviour stays covered by the browser specs in task 3.1.
 
 ## Migration Plan
 
-Each task lands as one PR, in the order of [tasks.md](tasks.md). Until task
+Each task lands as one PR, in the order of
+[tasks.md](https://github.com/solana-foundation/solana-playground/blob/bcb78410013d1bc73edc137d69305e83d64ee808/openspec/changes/assistant-ai-sdk-transport/tasks.md).
+Until task
 4.1, the old loops stay in the tree, unused after task 3.1, so reverting 3.2 and 3.1
 restores the old transport and the `server` executor. Task 3.2 leaves
 `model/anthropic.ts` compiling by declaring no connector server, since

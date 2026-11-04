@@ -1,5 +1,5 @@
-import { useCallback, useRef, useState } from "react";
 import type { FC } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { overlayTelemetry } from "../model/telemetry";
 import { ModalOpenReportContext } from "./modal-layer";

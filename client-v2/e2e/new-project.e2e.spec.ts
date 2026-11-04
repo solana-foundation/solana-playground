@@ -1,12 +1,13 @@
 import type { Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
-  LONG,
-  PROGRAM,
   currentProject,
   expect,
   home,
+  LONG,
   openGallery,
+  PROGRAM,
   seedWorkspace,
   stubPrograms,
   test,
@@ -51,10 +52,12 @@ test("client-v2-layout: New project's controls line up and its list shows it scr
       dialog(page).getByRole("radio", { name: /Anchor/ }),
       dialog(page).getByLabel("Project name"),
       dialog(page).getByRole("button", { name: /^Start/ }),
-    ].map((l) => l.boundingBox())
+    ].map(async (l) =>
+      requireFor("a control's bounding box")(await l.boundingBox())
+    )
   );
-  const heights = boxes.map((b) => Math.round(b!.height));
-  const middles = boxes.map((b) => Math.round(b!.y + b!.height / 2));
+  const heights = boxes.map((b) => Math.round(b.height));
+  const middles = boxes.map((b) => Math.round(b.y + b.height / 2));
   expect(new Set(heights).size).toBe(1);
   expect(new Set(middles).size).toBe(1);
 
@@ -66,23 +69,24 @@ test("client-v2-layout: New project's controls line up and its list shows it scr
   const fade = dialog(page).locator("[data-scroll-fade]");
   await expect(fade).toBeVisible();
   const [fadeBox, bodyBox] = await Promise.all([
-    fade.boundingBox(),
-    body.boundingBox(),
+    fade.boundingBox().then(requireFor("the fade's bounding box")),
+    body.boundingBox().then(requireFor("the body's bounding box")),
   ]);
   expect(
-    Math.abs(fadeBox!.y + fadeBox!.height - (bodyBox!.y + bodyBox!.height))
+    Math.abs(fadeBox.y + fadeBox.height - (bodyBox.y + bodyBox.height))
   ).toBeLessThan(40);
 
   // At the end of the list the fade covers none of the last card
   await body.evaluate((b) => b.scrollTo(0, b.scrollHeight));
   const last = dialog(page).locator('[data-slot="action-card"]').last();
   const [lastBox, endFadeBox] = await Promise.all([
-    last.locator('[data-slot="action-card-content"]').boundingBox(),
-    fade.boundingBox(),
+    last
+      .locator('[data-slot="action-card-content"]')
+      .boundingBox()
+      .then(requireFor("the last card's bounding box")),
+    fade.boundingBox().then(requireFor("the fade's bounding box")),
   ]);
-  expect(endFadeBox!.y).toBeGreaterThanOrEqual(
-    lastBox!.y + lastBox!.height - 1
-  );
+  expect(endFadeBox.y).toBeGreaterThanOrEqual(lastBox.y + lastBox.height - 1);
   await last.getByRole("button", { name: /^Open / }).click({ trial: true });
 });
 

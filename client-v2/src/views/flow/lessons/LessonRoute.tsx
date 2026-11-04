@@ -1,11 +1,11 @@
-import { lazy, Suspense, useState } from "react";
 import type { FC } from "react";
+import { lazy, Suspense, useState } from "react";
 
-import LessonSurface from "./LessonSurface";
 import { SpinnerWithBg } from "../../../components/Loading";
-import { PgTutorial } from "../../../utils";
 import { useRenderOnChange } from "../../../hooks";
 import type { TutorialData } from "../../../utils";
+import { PgTutorial } from "../../../utils";
+import LessonSurface from "./LessonSurface";
 
 interface LessonRouteProps {
   tutorial: TutorialData;
