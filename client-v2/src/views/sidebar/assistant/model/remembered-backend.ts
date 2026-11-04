@@ -172,10 +172,11 @@ export const isDefaultBackendRemembered = () =>
   rememberedChoice()?.provider === DEFAULT_ID;
 
 /**
- * Remove the key-based connection an older build kept for this tab. Run on
- * every mount that may be the first after a deploy (the panel, the Settings
- * row), so a tab reloaded across the deploy does not keep the key in storage;
- * it reads one entry when nothing is kept.
+ * Remove the key-based connection an older build kept for this tab. Run at
+ * startup (`effects/kept-key`), whatever panel is open, and on every mount
+ * that may come before it (the panel, the Settings row), so a tab reloaded
+ * across the deploy does not keep the key in storage; it reads one entry when
+ * nothing is kept.
  *
  * @returns whether the key is gone from this tab's storage
  */

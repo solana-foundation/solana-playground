@@ -230,7 +230,8 @@ key-based connection. The backend's parameters without the key (provider,
 model, base URL, effort) stay remembered, so Connect a model, opened with
 nothing connected, starts on them with the key field `#assistant-api-key`
 empty. A key-based connection
-an older build left in `sessionStorage` SHALL be removed on the first load.
+an older build left in `sessionStorage` SHALL be removed on the first load,
+whether or not the assistant panel is open.
 
 #### Scenario: A reload asks for the key again
 
@@ -252,6 +253,15 @@ an older build left in `sessionStorage` SHALL be removed on the first load.
   `assistant.connection` and the app loads
 - **THEN** the panel is not connected and `sessionStorage` no longer holds
   the entry
+
+#### Scenario: A kept key is removed with the panel closed (manual)
+
+- **WHEN** the tab's `sessionStorage` holds a key-based connection under
+  `assistant.connection` and the app loads on the code view with the
+  assistant panel closed, as a phone starts
+- **THEN** `sessionStorage` no longer holds the entry, before the panel is
+  opened (checked by the unit test in
+  `client-v2/src/effects/kept-key/kept-key.ts`)
 
 #### Scenario: Changing the backend is not undone
 

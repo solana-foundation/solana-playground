@@ -400,7 +400,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * A key-based backend is never reconnected: its key lives in memory only,
    * so a reload asks for it again, and the next send opens Connect a model
    * preset to it (`resolveSendBackend`). A key an older build kept in this
-   * tab's `sessionStorage` is removed here, on the first mount (HOO-2423).
+   * tab's `sessionStorage` is removed at startup (`effects/kept-key`), and
+   * again here, for a panel that mounts before the effects run (HOO-2423).
    *
    * `probeDefaultBackend` is shared with the composer and Connect a model, so
    * the page asks once (again only after a failure).
