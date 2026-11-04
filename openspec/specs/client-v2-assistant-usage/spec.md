@@ -25,7 +25,8 @@ before it ends, because another thread opens or the user signs out while it
 runs or while its busy message waits, sends no ending event: it is the
 store's cut-off, not the user's action. A busy message that waits and is not
 sent again because the model changed ends as `assistant_turn_failed` with
-reason `other`.
+reason `other`. A busy message that waits while the user closes the assistant
+panel ends as `assistant_turn_stopped`, as Stop would end it.
 
 #### Scenario: An answered turn (manual)
 
@@ -60,6 +61,13 @@ reason `other`.
 
 - **WHEN** a busy message waits, the user changes the model, and the wait ends
 - **THEN** `assistant_turn_failed` is sent with reason `other` and no status
+
+#### Scenario: A waiting busy message the panel closes on (manual)
+
+- **WHEN** a busy message waits to be sent again and the user closes the
+  assistant panel
+- **THEN** `assistant_turn_sent` and then `assistant_turn_stopped` are sent,
+  and the message is not sent again
 
 ### Requirement: A failed turn names its reason
 

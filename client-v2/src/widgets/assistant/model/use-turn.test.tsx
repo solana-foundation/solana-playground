@@ -540,6 +540,26 @@ describe("useTurn", () => {
       ]);
     });
 
+    it("ends the wait as stopped when the panel closes, sending nothing", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result, unmount } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      unmount();
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(
+        PgAssistant.items.filter(
+          (item) => item.kind === "notice" && item.text === "Stopped."
+        )
+      ).toHaveLength(1);
+      expect(turnEvents()).toEqual([
+        SENT_ON_DEFAULT,
+        ["assistant_turn_stopped", {}],
+      ]);
+    });
+
     it("starts no other turn while a message waits", async () => {
       provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
       const { result } = renderHook(() => useTestTurn());

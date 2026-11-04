@@ -603,6 +603,17 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     assistantTelemetry.track("assistant_turn_stopped", {});
   };
 
+  // Closing the panel unmounts this hook and the countdown with it, so the
+  // wait ends as a Stop; a running turn is left to finish on its own
+  useEffect(
+    () => () => {
+      if (!waiting.current) return;
+      PgAssistant.addNotice("Stopped.");
+      assistantTelemetry.track("assistant_turn_stopped", {});
+    },
+    []
+  );
+
   // A build error's Explain or Fix and similar callers outside the panel ask
   // for a prompt to be sent through `PgAssistant.requestPrompt`; this is the
   // only place that turns the request into an actual send
