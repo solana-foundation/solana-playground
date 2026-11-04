@@ -34,11 +34,11 @@ Steps: failing tests from each spec scenario, run, implement, run, commit.
 
 ## Task 2: `.github/actions/gcp-auth/action.yml`, `cicd.yml`
 
-Composite with inputs `workload_identity_provider`, `service_account`, `credentials_json`; `cicd.yml` drops its auth step for it, adds `id-token: write` on `deploy_server`. Verify with `actionlint`. Commit.
+Composite with inputs `workload_identity_provider`, `service_account`, `credentials_json`, `project_id`; `cicd.yml` drops its auth step for it, adds `id-token: write` on `deploy_server`. Verify with `actionlint`. Commit.
 
 ## Task 3: `.github/workflows/server-release.yml`
 
-`workflow_dispatch`, input `version`; `if: github.ref == 'refs/heads/master'`; `concurrency: server-release`. Verify with `actionlint` and by running the steps' shell against a stub `gcloud` on `PATH` for a promote, a rollback, a no-op and a refusal. Commit.
+`workflow_dispatch`, input `version`; a `check_branch` job that fails off `master`, which `release` needs; `concurrency: server-release` on `release`; the plan written to the summary before the move. Verify with `actionlint` and by running the steps' shell against a stub `gcloud` on `PATH` for a promote, a rollback, a no-op and a refusal. Commit.
 
 ## Task 4: `docs/server-release.md`, README pointer
 
