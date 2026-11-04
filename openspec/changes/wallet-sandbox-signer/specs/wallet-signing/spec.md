@@ -30,8 +30,7 @@ provider, which keeps the keys in the page, SHALL be the default.
 
 #### Scenario: Project code gets the sandbox provider by default
 
-- **WHEN** `run` or `test` executes project code with no developer override
-  set
+- **WHEN** `run` or `test` executes project code
 - **THEN** `pg.wallet` inside it comes from the sandbox provider, and the
   page keeps the local provider for deploy, the CLIs and the key file export
 
