@@ -105,29 +105,29 @@ const inflateCode = (
   const inflator = new Inflate({ raw: true, chunkSize: 16 * 1024 });
   const chunks: Uint8Array[] = [];
   let length = 0;
-  let tooLarge = false;
-  let complete = false;
+  let isTooLarge = false;
+  let isComplete = false;
   inflator.onData = (chunk) => {
     const bytes = chunk as Uint8Array;
     length += bytes.length;
     if (length > MAX_DOCS_LINK_BYTES) {
-      tooLarge = true;
+      isTooLarge = true;
       throw new Error("docs link larger than the cap");
     }
     chunks.push(bytes);
   };
   inflator.onEnd = (status) => {
-    complete = status === 0;
+    isComplete = status === 0;
   };
   try {
     inflator.push(input, true);
   } catch {
     // Thrown by `onData` past the cap, or by a stream pako cannot read
-    if (!tooLarge) return { ok: false, reason: "decode" };
+    if (!isTooLarge) return { ok: false, reason: "decode" };
   }
-  if (tooLarge) return { ok: false, reason: "size" };
+  if (isTooLarge) return { ok: false, reason: "size" };
   // A stream cut short ends without its final block, and without an error
-  if (!complete) return { ok: false, reason: "decode" };
+  if (!isComplete) return { ok: false, reason: "decode" };
   if (!length) return { ok: false, reason: "size" };
 
   const bytes = new Uint8Array(length);

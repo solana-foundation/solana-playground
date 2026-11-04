@@ -47,10 +47,15 @@ let state: RunState = { kind: "idle" };
  * guard against a second press, not a state to show: the setup modal or the
  * funding card is what the user sees meanwhile.
  */
-let starting = false;
+let isStarting = false;
 /** How many runs have started, so `runScripts` can tell whether its own did */
 let started = 0;
-let listening = false;
+/**
+ * How many times another project opened, so a Run or a Check again that
+ * waited on the wallet can tell its project is gone and run nothing
+ */
+let switches = 0;
+let isListening = false;
 const listeners = new Set<Listener>();
 
 const set = (next: RunState) => {
@@ -111,7 +116,7 @@ const currentSource = (): RunSource => (PgDocsLink.opened ? "link" : "project");
  * at import: `PgCommand` reads the command list, which is filled at startup.
  */
 const listen = () => {
-  if (listening) return;
+  if (isListening) return;
 
   PgCommand.run.onDidStart((input) => {
     if (isHelp(input)) return;
@@ -145,14 +150,20 @@ const listen = () => {
   // A new link, a broken one, or another project opened starts from a clean
   // callout: the last run's end belongs to the project it ran
   PgDocsLink.onDidChange(reset);
-  PgExplorer.onDidSwitchWorkspace(reset);
+  PgExplorer.onDidSwitchWorkspace(() => {
+    switches++;
+    reset();
+  });
 
-  listening = true;
+  isListening = true;
 };
 
 /** The wallet's balance now, read from the chain rather than the cached one */
 const balanceOf = async (address: PgWeb3.PublicKey) =>
   PgWeb3.lamportsToSol(await PgConnection.current.getBalance(address));
+
+/** What the SOL check found */
+type Funds = "enough" | "short" | "project-left";
 
 /**
  * The SOL check a docs link asks for: the funding card when the Playground
@@ -160,32 +171,37 @@ const balanceOf = async (address: PgWeb3.PublicKey) =>
  * not checked: `signerFromFile` reads the Playground wallet only, and says so
  * when the script asks for it.
  *
+ * @param since `switches` when the press began: another project opened
+ * while the balance was read means the answer belongs to a project that is
+ * no longer open, so no card is shown and nothing runs
  * @param wallet `new` when Run had to set the wallet up first; Check again
  * always reports `existing`, since the card's wallet exists by then
- * @returns whether the run may start
  */
-const funded = async (wallet: WalletOrigin) => {
-  const needed = PgDocsLink.opened?.sol;
-  if (!needed) return true;
+const fundsFor =
+  (since: number) =>
+  async (wallet: WalletOrigin): Promise<Funds> => {
+    const needed = PgDocsLink.opened?.sol;
+    if (!needed) return "enough";
 
-  const current = PgWallet.current;
-  // `start` connects the wallet first, so this is a wallet that vanished
-  if (!current) throw new Error("No wallet to run the script with.");
-  if (!current.isPg) return true;
+    const current = PgWallet.current;
+    // `start` connects the wallet first, so this is a wallet that vanished
+    if (!current) throw new Error("No wallet to run the script with.");
+    if (!current.isPg) return "enough";
 
-  const balance = await balanceOf(current.publicKey);
-  if (balance >= needed) return true;
+    const balance = await balanceOf(current.publicKey);
+    if (switches !== since) return "project-left";
+    if (balance >= needed) return "enough";
 
-  docsLinkTelemetry.track("docs_link_run_funding_shown", { wallet });
-  set({
-    kind: "funding",
-    address: current.publicKey.toBase58(),
-    balance,
-    needed,
-    previous: restingOf(state),
-  });
-  return false;
-};
+    docsLinkTelemetry.track("docs_link_run_funding_shown", { wallet });
+    set({
+      kind: "funding",
+      address: current.publicKey.toBase58(),
+      balance,
+      needed,
+      previous: restingOf(state),
+    });
+    return "short";
+  };
 
 /**
  * Connect the wallet when Run finds none: the setup for a first visit, the
@@ -272,29 +288,31 @@ export const PgClientRun = {
   async start() {
     listen();
     // One run at a time, counting the wallet setup and balance read before it
-    if (state.kind === "running" || starting) return;
-    starting = true;
+    if (state.kind === "running" || isStarting) return;
+    isStarting = true;
+    const since = switches;
     try {
       const wallet = await connectWallet();
-      if (!wallet) return;
-      if (!(await funded(wallet))) return;
+      if (!wallet || switches !== since) return;
+      if ((await fundsFor(since)(wallet)) !== "enough") return;
     } finally {
-      starting = false;
+      isStarting = false;
     }
     await runScripts();
   },
 
   /** The funding card's Check again */
   async checkAgain() {
-    if (starting) return;
-    starting = true;
-    let enough: boolean;
+    if (isStarting) return;
+    isStarting = true;
+    const since = switches;
+    let funds: Funds;
     try {
-      enough = await funded("existing");
+      funds = await fundsFor(since)("existing");
     } finally {
-      starting = false;
+      isStarting = false;
     }
-    if (enough) await runScripts();
+    if (funds === "enough") await runScripts();
   },
 
   /** The funding card's Not now */

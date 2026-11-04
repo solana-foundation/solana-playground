@@ -18,6 +18,8 @@ const utils = vi.hoisted(() => {
     handlers,
     lamports: 0,
     balanceError: undefined as Error | undefined,
+    /** Runs while the balance read is in flight, before it answers */
+    duringBalance: undefined as (() => void) | undefined,
     PgCommand: {
       run: {
         onDidStart: (cb: (input: string | null) => void) => {
@@ -52,6 +54,7 @@ vi.mock("@/utils", () => ({
   PgConnection: {
     current: {
       getBalance: async () => {
+        utils.duringBalance?.();
         if (utils.balanceError) throw utils.balanceError;
         return utils.lamports;
       },
@@ -101,6 +104,7 @@ const switchWorkspace = () =>
 beforeEach(() => {
   utils.lamports = 0;
   utils.balanceError = undefined;
+  utils.duringBalance = undefined;
   utils.PgWallet.state = "pg";
   utils.PgCommand.run.execute.mockClear();
   utils.PgCommand.connect.execute.mockClear();
@@ -310,6 +314,41 @@ describe("PgClientRun", () => {
 
     utils.PgWallet.current = wallet;
     expect(PgClientRun.state).toMatchObject({ kind: "failed" });
+    expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+  });
+
+  it("runs nothing when another project opens while Run reads the balance", async () => {
+    const { PgClientRun, PgDocsLink } = await load();
+    PgDocsLink.open(QUICKSTART);
+    utils.lamports = 0.5e9;
+    utils.duringBalance = switchWorkspace;
+
+    await PgClientRun.start();
+
+    expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
+    expect(PgClientRun.state.kind).toBe("idle");
+  });
+
+  it("shows no funding card for a project left while Run read the balance", async () => {
+    const { PgClientRun, PgDocsLink } = await load();
+    PgDocsLink.open(QUICKSTART);
+    utils.duringBalance = switchWorkspace;
+
+    await PgClientRun.start();
+
+    expect(PgClientRun.state.kind).toBe("idle");
+  });
+
+  it("runs nothing when another project opens while Check again reads the balance", async () => {
+    const { PgClientRun, PgDocsLink } = await load();
+    PgDocsLink.open(QUICKSTART);
+    await PgClientRun.start();
+    expect(PgClientRun.state.kind).toBe("funding");
+    utils.lamports = 0.5e9;
+    utils.duringBalance = switchWorkspace;
+
+    await PgClientRun.checkAgain();
+
     expect(utils.PgCommand.run.execute).not.toHaveBeenCalled();
   });
 

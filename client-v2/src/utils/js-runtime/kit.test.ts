@@ -7,7 +7,7 @@ import { transpile } from "typescript";
 import { describe, expect, it } from "vitest";
 
 import {
-  pgSignerFromFile,
+  pgSignerFromFileWith,
   reasonMessage,
   showBigInts,
   SIGNER_NEEDS_PG_WALLET,
@@ -132,15 +132,15 @@ describe("wrapScript", () => {
   });
 });
 
-describe("pgSignerFromFile", () => {
+describe("pgSignerFromFileWith", () => {
   const deps = { createKeyPairSignerFromBytes, signer };
 
   it("makes the Playground wallet the identity and the payer", async () => {
     const keypair = Keypair.generate();
-    const signerFromFile = pgSignerFromFile(
-      () => ({ isPg: true, keypair }),
-      deps
-    );
+    const signerFromFile = pgSignerFromFileWith(deps)(() => ({
+      isPg: true,
+      keypair,
+    }));
 
     const client = await signerFromFile("wallet.json")({});
 
@@ -149,7 +149,7 @@ describe("pgSignerFromFile", () => {
   });
 
   it("refuses a wallet that is not the Playground wallet", async () => {
-    const signerFromFile = pgSignerFromFile(() => ({ isPg: false }), deps);
+    const signerFromFile = pgSignerFromFileWith(deps)(() => ({ isPg: false }));
 
     await expect(signerFromFile("wallet.json")({})).rejects.toThrow(
       SIGNER_NEEDS_PG_WALLET

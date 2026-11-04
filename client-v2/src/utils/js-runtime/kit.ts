@@ -78,13 +78,13 @@ export const reasonMessage = (reason: unknown): string => {
 export const SIGNER_NEEDS_PG_WALLET =
   "signerFromFile uses your Playground wallet. Switch to it to run this script.";
 
-/** The parts of the current wallet `pgSignerFromFile` reads */
+/** The parts of the current wallet `pgSignerFromFileWith` reads */
 type WalletLike =
   | { isPg: true; keypair: { secretKey: Uint8Array } }
   | { isPg?: false }
   | null;
 
-/** What `pgSignerFromFile` needs from Kit, passed in to keep Kit lazy */
+/** What `pgSignerFromFileWith` needs from Kit, passed in to keep Kit lazy */
 interface KitSignerDeps {
   createKeyPairSignerFromBytes: (bytes: Uint8Array) => Promise<any>;
   signer: (signer: any) => (client: any) => any;
@@ -98,15 +98,13 @@ type KitPlugin = <T extends object>(client: T) => Promise<any>;
  * keypair file from disk, with one that uses the Playground wallet: a docs
  * script's `wallet.json` is the wallet the user already has here.
  *
- * @param getWallet the current wallet
  * @param deps Kit's signer factory and the plugin's `signer`
+ * @param getWallet the current wallet
  * @returns a `signerFromFile` that ignores its path
  */
-export const pgSignerFromFile =
-  (
-    getWallet: () => WalletLike,
-    deps: KitSignerDeps
-  ): ((path: string) => KitPlugin) =>
+export const pgSignerFromFileWith =
+  (deps: KitSignerDeps) =>
+  (getWallet: () => WalletLike): ((path: string) => KitPlugin) =>
   // The path the docs pass is their file name; Playground has one wallet
   () =>
   async <T extends object>(client: T) => {

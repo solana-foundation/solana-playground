@@ -12,7 +12,7 @@ import type { MergeUnion, OrString } from "../types";
 import { PgWallet, Wallet } from "../wallet";
 import type { PgWeb3 } from "../web3";
 import {
-  pgSignerFromFile,
+  pgSignerFromFileWith,
   reasonMessage,
   showBigInts,
   TRANSPILE_OPTIONS,
@@ -441,13 +441,13 @@ export class PgJsRuntime {
     if (name === "@solana/kit-plugin-signer") {
       return {
         ...pkg,
-        signerFromFile: pgSignerFromFile(() => PgWallet.current, {
+        signerFromFile: pgSignerFromFileWith({
           createKeyPairSignerFromBytes: async (bytes) => {
             const kit = await import("@solana/kit");
             return kit.createKeyPairSignerFromBytes(bytes);
           },
           signer: pkg.signer,
-        }),
+        })(() => PgWallet.current),
       };
     }
 
