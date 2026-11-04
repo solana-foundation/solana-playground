@@ -511,13 +511,34 @@ describe("deleting a workspace here", () => {
     vi.spyOn(PgProjectSync, "remove").mockResolvedValue(true as never);
     vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
     registered([]);
+    vi.spyOn(PgProjectSync, "list").mockResolvedValue([]);
     PgAccountList.listed(1);
 
     effect = projectSync();
     dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await vi.waitFor(() => expect(PgAccountList.state).toBe("empty"));
+    PgAccountList.forget();
+  });
+
+  it("keeps the account holding a project this browser never downloaded", async () => {
+    vi.spyOn(PgSyncMark, "projectIds").mockResolvedValue(["last"]);
+    vi.spyOn(PgSyncMark, "remove").mockResolvedValue(undefined);
+    vi.spyOn(PgExplorer, "workspaceNameOf").mockReturnValue(undefined);
+    vi.spyOn(PgExplorer, "allWorkspaceNames", "get").mockReturnValue([]);
+    vi.spyOn(PgProjectSync, "remove").mockResolvedValue(true as never);
+    vi.spyOn(PgThreadIndex, "forget").mockResolvedValue(true);
+    const list = vi
+      .spyOn(PgProjectSync, "list")
+      .mockResolvedValue([{ id: "skipped" }] as never);
+    registered([]);
+    PgAccountList.listed(2);
+
+    effect = projectSync();
+    dispatch(PgExplorer.events.ON_DID_DELETE_WORKSPACE);
+    await vi.waitFor(() => expect(list).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(PgAccountList.state).toBe("empty");
+    expect(PgAccountList.state).toBe("holds");
     PgAccountList.forget();
   });
 

@@ -272,16 +272,18 @@ export const projectSync = (): Disposable => {
         await PgSyncClaim.forget(projectId);
       }
 
-      // The account's list was read, and every delete above reached it, so a
-      // browser left with no project means an account with none: Home offers
-      // the example again. An unread list stays unread: a delete here says
-      // nothing of projects the account holds that this browser never saw
+      // Every delete above reached the account and this browser has no project
+      // left, so the account may be empty: Home would offer the example again.
+      // Asked, not assumed: a project whose download failed is in the account
+      // and was never here. An unread list stays unread, and a list that
+      // cannot be read now changes nothing
       if (
         allReached &&
         PgAccountList.state === "holds" &&
         PgExplorer.allWorkspaceNames?.length === 0
       ) {
-        PgAccountList.listed(0);
+        const server = await PgProjectSync.list();
+        if (server) PgAccountList.listed(server.length);
       }
     } catch (e) {
       report("settle local deletes", e);
