@@ -5,7 +5,7 @@ import { PgCommand, PgTerminal, PgWallet, TerminalLineError } from "../utils";
 /** Check whether Playground Wallet is connected and ask to connect if not. */
 export const checkPgWallet = async () => {
   if (!PgWallet.current?.isPg) {
-    await connect("Playground Wallet is not connected. Connect it?");
+    await connect("Your Playground wallet is not connected. Connect it?");
   }
 };
 
@@ -14,7 +14,7 @@ export const checkWallet = async () => {
   // `connect` with no argument connects the Playground Wallet, so the
   // question names what a yes does
   if (!PgWallet.current) {
-    await connect("No wallet is connected. Connect the Playground Wallet?");
+    await connect("No wallet is connected. Connect the Playground wallet?");
   }
 };
 

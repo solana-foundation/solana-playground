@@ -348,7 +348,8 @@ const Marker = ({ id, marker }: { id: string; marker: SyncMarker }) => (
 );
 
 /**
- * A lesson's page as "3/5", or a check once it is finished. The digits and
+ * A lesson's place as "3 of 5", the way the tutorial list and the catalogue
+ * card write it, or a check once it is finished. The digits and
  * the check are for the eye and hidden from screen readers; the words beside
  * them carry the id that describes the row, so the row keeps its name
  */
@@ -371,7 +372,7 @@ const Progress = ({
   }
   return (
     <span data-lesson-progress="started" className="tabular-nums">
-      <span aria-hidden>{`${progress.page}/${progress.pages}`}</span>
+      <span aria-hidden>{`${progress.page} of ${progress.pages}`}</span>
       <span id={id} className="sr-only">
         {`Page ${progress.page} of ${progress.pages}`}
       </span>
@@ -381,10 +382,10 @@ const Progress = ({
 
 /** Right padding for what sits at the row's end, so the name stops short */
 const roomFor = (entry: ProjectEntry) => {
-  // The marker, "12/12" and a pin side by side
-  if (entry.marker && entry.progress) return entry.pinned ? "pr-40" : "pr-36";
+  // The marker, "12 of 12" and a pin side by side
+  if (entry.marker && entry.progress) return entry.pinned ? "pr-46" : "pr-42";
   if (entry.marker) return "pr-24";
-  if (entry.progress) return entry.pinned ? "pr-20" : "pr-16";
+  if (entry.progress) return entry.pinned ? "pr-26" : "pr-22";
   return undefined;
 };
 

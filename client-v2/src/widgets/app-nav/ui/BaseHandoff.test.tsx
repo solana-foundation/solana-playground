@@ -54,7 +54,9 @@ it("signed in, says the project is in the account and names the login", () => {
   expect(
     screen.getByRole("dialog", { name: "Continue on a computer" })
   ).toBeTruthy();
-  expect(screen.getByText(/saved to your account/)).toBeTruthy();
+  expect(
+    screen.getByText(/Your files and this conversation go with you/)
+  ).toBeTruthy();
   expect(screen.getByText(/@ada/)).toBeTruthy();
   expect(
     screen.queryByRole("button", { name: "Sign in with GitHub" })
@@ -64,7 +66,7 @@ it("signed in, says the project is in the account and names the login", () => {
 it("signed out, says the project is on this phone only and offers sign-in", () => {
   const onSignIn = vi.fn();
   render(sheet({ account: SIGNED_OUT, onSignIn }));
-  expect(screen.getByText(/on this phone only/)).toBeTruthy();
+  expect(screen.getByText(/This project stays on this phone/)).toBeTruthy();
   const signIn = screen.getByRole("button", { name: "Sign in with GitHub" });
   // GitHub's mark, as on every GitHub sign-in
   expect(signIn.querySelector("svg")).toBeTruthy();

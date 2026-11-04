@@ -71,7 +71,9 @@ test.describe("on a phone", () => {
     await stubSession(page, ADA);
     const menu = await openMenu(page);
     await menu.getByRole("button", { name: TITLE }).click();
-    await expect(sheet(page)).toContainText("saved to your account");
+    await expect(sheet(page)).toContainText(
+      "Your files and this conversation go with you"
+    );
     await expect(sheet(page)).toContainText("@ada");
     await expect(
       sheet(page).getByRole("button", { name: "Sign in with GitHub" })
@@ -82,7 +84,7 @@ test.describe("on a phone", () => {
     await stubSession(page, null);
     const menu = await openMenu(page);
     await menu.getByRole("button", { name: TITLE }).click();
-    await expect(sheet(page)).toContainText("on this phone only");
+    await expect(sheet(page)).toContainText("This project stays on this phone");
     await expect(
       sheet(page).getByRole("button", { name: "Sign in with GitHub" })
     ).toBeVisible();

@@ -32,15 +32,15 @@ the only sign.
 The network indicator SHALL show the cluster's name. While the connection
 has not answered yet it SHALL be working and read "<Name> · Connecting";
 when the cluster does not answer it SHALL be waiting (warning dot), read
-"<Name> · Not answering" and be named "Change cluster, currently <name>, not
-answering". A click SHALL open the settings on the cluster, as the cluster row
+"<Name> · Not responding" and be named "Change cluster, currently <name>, not
+responding". A click SHALL open the settings on the cluster, as the cluster row
 did.
 
 #### Scenario: A cluster that stops answering
 
 - **WHEN** the cluster stops answering
 - **THEN** the network indicator's dot is the warning colour, it reads
-  "<Name> · Not answering", and a click opens the settings on the cluster
+  "<Name> · Not responding", and a click opens the settings on the cluster
 
 ### Requirement: The AI indicator
 
@@ -183,8 +183,8 @@ say "You're offline. Editing still works. Build, Deploy and the assistant need a
 connection." on every stage, and the Build stage's Build buttons SHALL be
 disabled until the connection returns. While online, on the Deploy and
 Interact stages, while the cluster does not answer or its slot does not move,
-a warning line over the stage SHALL say "<Network> isn't answering.
-Playground keeps trying. You can switch network." with two buttons: "Try
+a warning line over the stage SHALL say "<Network> is not responding.
+Try again, or change the network." with two buttons: "Try
 again", which asks the cluster again at once and is busy while it asks, and
 "Change network", which opens the settings with the network field focused.
 The Write and Build stages SHALL show no cluster notice. Each notice is a
@@ -202,8 +202,8 @@ when its condition ends.
 #### Scenario: A cluster that does not answer on Deploy
 
 - **WHEN** the cluster stops answering while the user is on the Deploy stage
-- **THEN** a line over the stage reads "Devnet isn't answering. Playground
-  keeps trying. You can switch network." with "Try again" and "Change
+- **THEN** a line over the stage reads "Devnet is not responding. Try again, or
+  change the network." with "Try again" and "Change
   network"
 
 #### Scenario: Change network from the notice

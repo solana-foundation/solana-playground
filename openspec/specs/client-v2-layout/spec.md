@@ -11,7 +11,7 @@ Start from scratch SHALL be a short form: a title, then a "Framework" row and
 a "Name" row, each with its label, Start at the end of the Name row. A
 message about the project name SHALL show under the name field, linked to it
 with `aria-describedby`, and SHALL name the rule ("Use letters, numbers,
-spaces, - or _"); showing it SHALL move nothing above it. The field SHALL be
+spaces, - or _."); showing it SHALL move nothing above it. The field SHALL be
 marked invalid with a red edge while the message shows. A valid name SHALL
 get no edge of its own: the field stays quiet while the name is fine.
 Whether a name is taken SHALL still be checked on Start only, and typing
@@ -20,7 +20,7 @@ SHALL clear the message.
 #### Scenario: An invalid name (manual)
 
 - **WHEN** a user types `my.project` and presses Start
-- **THEN** the message "Use letters, numbers, spaces, - or _" shows under the
+- **THEN** the message "Use letters, numbers, spaces, - or _." shows under the
   name field, the field is `aria-invalid` and described by the message, and
   no project is created
 
@@ -37,7 +37,7 @@ SHALL clear the message.
 ### Requirement: A started lesson shows its progress in the list
 
 In the project list, a started lesson's row SHALL show the page it is on out
-of its page count as "<page>/<pages>" (for example "3/5"), and a finished
+of its page count as "<page> of <pages>" (for example "3 of 5"), and a finished
 lesson's row SHALL show a check, at the row's end where the pin and the sync
 marker sit, hidden with them on hover and focus. The row SHALL be described
 to assistive technology as "Page <page> of <pages>" or "Completed", and its
@@ -49,7 +49,7 @@ page as the user turns it, without waiting for the page to be saved.
 #### Scenario: A lesson part way through (manual)
 
 - **WHEN** a user on page 3 of the 5 pages of Hello Anchor looks at the list
-- **THEN** the Hello Anchor row shows "3/5" and is described as "Page 3 of 5"
+- **THEN** the Hello Anchor row shows "3 of 5" and is described as "Page 3 of 5"
 
 #### Scenario: A finished lesson (manual)
 
@@ -59,7 +59,7 @@ page as the user turns it, without waiting for the page to be saved.
 #### Scenario: The open lesson's row follows its page (manual)
 
 - **WHEN** a user on page 2 of Hello Anchor goes on to page 3
-- **THEN** the Hello Anchor row shows "3/<pages>" without a reload
+- **THEN** the Hello Anchor row shows "3 of <pages>" without a reload
 
 #### Scenario: A project has no progress (manual)
 

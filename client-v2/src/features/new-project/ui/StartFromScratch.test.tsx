@@ -101,7 +101,7 @@ it("refuses an invalid name and makes nothing until it is edited", async () => {
   await act(async () => fireEvent.click(start()));
 
   expect(screen.getByRole("alert").textContent).toBe(
-    "Use letters, numbers, spaces, - or _"
+    "Use letters, numbers, spaces, - or _."
   );
   expect(start()).toHaveProperty("disabled", true);
   expect(utils.PgExplorer.createWorkspace).not.toHaveBeenCalled();

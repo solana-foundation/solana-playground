@@ -40,8 +40,7 @@ const DOWN: NetworkInput = {
 };
 const OFFLINE =
   "You're offline. Editing still works. Build, Deploy and the assistant need a connection.";
-const CLUSTER =
-  "Devnet isn't answering. Playground keeps trying. You can switch network.";
+const CLUSTER = "Devnet is not responding. Try again, or change the network.";
 
 let online = true;
 const goOnline = (next: boolean) => {

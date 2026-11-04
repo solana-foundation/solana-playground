@@ -205,7 +205,7 @@ export const WalletName = () => {
 
 /** Spec 12's "Wallet panel help" */
 const PG_WALLET_HELP =
-  "A wallet kept in this browser. Playground uses it to sign your calls without asking. Use it for devnet, testnet and local clusters only.";
+  "A wallet kept in this browser. Playground uses it to deploy and to sign your calls without asking. Use it for devnet, testnet and local clusters only.";
 
 const WalletTitleWrapper = styled.div`
   ${({ theme }) => css`

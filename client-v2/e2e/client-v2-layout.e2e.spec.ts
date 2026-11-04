@@ -1629,7 +1629,7 @@ test("client-v2-layout: A cluster that is down", async ({
   await page.reload();
 
   const row = nav(page).getByRole("button", {
-    name: "Change cluster, currently devnet, not answering",
+    name: "Change cluster, currently devnet, not responding",
   });
   await expect(row).toBeVisible({ timeout: 15_000 });
   await account(page).click();
@@ -1637,7 +1637,7 @@ test("client-v2-layout: A cluster that is down", async ({
     .getByRole("menu", { name: "Account" })
     .getByRole("menuitem")
     .first();
-  await expect(first).toContainText("devnet is not answering");
+  await expect(first).toContainText("devnet is not responding");
   await first.click();
   const network = page
     .getByRole("region", { name: "Settings" })
@@ -1694,7 +1694,7 @@ test("a cluster that does not answer is down", async ({ seededPage: page }) => {
 
   await expect(
     nav(page).getByRole("button", {
-      name: "Change cluster, currently devnet, not answering",
+      name: "Change cluster, currently devnet, not responding",
     })
   ).toBeVisible({ timeout: 15_000 });
 });
@@ -1717,7 +1717,7 @@ test("a stalled cluster that moves again is not down", async ({
   });
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, not answering",
+    "Change cluster, currently devnet, not responding",
     { timeout: 15_000 }
   );
 
@@ -1734,7 +1734,7 @@ test("a cluster that answers again is not down", async ({
   await refuseCluster(page);
   await page.reload();
   await expect(clusterRow(page)).toHaveAccessibleName(
-    "Change cluster, currently devnet, not answering",
+    "Change cluster, currently devnet, not responding",
     { timeout: 15_000 }
   );
 

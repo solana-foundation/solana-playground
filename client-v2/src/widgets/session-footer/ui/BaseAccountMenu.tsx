@@ -348,7 +348,7 @@ const BaseAccountMenu = ({
               {...settingsTrigger}
               onSelect={() => pick("cluster-down")}
             >
-              <TriangleAlert /> {cluster.name} is not answering
+              <TriangleAlert /> {cluster.name} is not responding
             </DropdownMenuItem>
             <DropdownMenuSeparator />
           </>

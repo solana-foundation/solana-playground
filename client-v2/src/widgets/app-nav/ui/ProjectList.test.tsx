@@ -355,7 +355,7 @@ describe("ProjectList", () => {
     progress.set("Hello Anchor", { state: "started", page: 3, pages: 5 });
     progress.set("alpha", { state: "completed" });
     draw();
-    expect(screen.getByText("3/5")).toBeTruthy();
+    expect(screen.getByText("3 of 5")).toBeTruthy();
     expect(document.querySelectorAll("[data-lesson-progress]")).toHaveLength(1);
   });
 

@@ -46,7 +46,7 @@ describe("commands/checks", () => {
 
     expect(env.questions).toEqual([
       {
-        msg: "Playground Wallet is not connected. Connect it?",
+        msg: "Your Playground wallet is not connected. Connect it?",
         opts: { confirm: true, default: "yes" },
       },
     ]);
@@ -57,7 +57,7 @@ describe("commands/checks", () => {
     await checkWallet();
 
     expect(env.questions.map((q) => q.msg)).toEqual([
-      "No wallet is connected. Connect the Playground Wallet?",
+      "No wallet is connected. Connect the Playground wallet?",
     ]);
     // `connect` with no argument is the Playground Wallet
     expect(connectExecute).toHaveBeenCalledWith();

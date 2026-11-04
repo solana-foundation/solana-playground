@@ -77,9 +77,9 @@ test.describe("on a 1440 px window", () => {
     await page.reload();
 
     const down = row(page).getByRole("button", {
-      name: "Change cluster, currently devnet, not answering",
+      name: "Change cluster, currently devnet, not responding",
     });
-    await expect(down).toHaveText("Devnet · Not answering", {
+    await expect(down).toHaveText("Devnet · Not responding", {
       timeout: 15_000,
     });
     // Waiting, not broken: the offline notice's warning colour, not red
@@ -167,7 +167,7 @@ test.describe("on a 1440 px window", () => {
     await page.reload();
     await expect(
       row(page).getByRole("button", {
-        name: "Change cluster, currently devnet, not answering",
+        name: "Change cluster, currently devnet, not responding",
       })
     ).toBeVisible({ timeout: 15_000 });
     // Build does not wait for the cluster: no line there
@@ -176,7 +176,7 @@ test.describe("on a 1440 px window", () => {
 
     await page.locator("#flow-stage-tab-deploy").click();
     await expect(notice(page).getByRole("alert")).toContainText(
-      "Devnet isn't answering. Playground keeps trying. You can switch network."
+      "Devnet is not responding. Try again, or change the network."
     );
     // The cluster recovers; Try again asks it now, and the line clears
     await page.unrouteAll({ behavior: "ignoreErrors" });

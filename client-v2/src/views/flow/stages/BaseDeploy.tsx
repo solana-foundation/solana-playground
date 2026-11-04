@@ -85,7 +85,7 @@ const clusterTitle = (cluster: string) =>
 
 const description = (p: BaseDeployProps, latest: DeployRecord | null) => {
   if (!p.built) {
-    return "Build the program first. Deploy opens once the build passes.";
+    return "Build the program first.";
   }
   if (latest) {
     return "The program id stays constant across deploys; redeploying upgrades it in place.";
@@ -261,7 +261,7 @@ const BaseDeploy = (p: BaseDeployProps) => {
         {p.deploy === "failed" && (
           <Callout variant="error" role="alert">
             <CalloutDescription>
-              Deploy failed. The terminal has the details.
+              Could not deploy. The full log has the details.
             </CalloutDescription>
           </Callout>
         )}

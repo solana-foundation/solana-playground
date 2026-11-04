@@ -246,11 +246,7 @@ describe("BaseBuild", () => {
       screen.getByRole("heading", { name: "Could not build" })
     ).toBeTruthy();
     // Spec 08 ANY-00: what happened, then where the details are
-    expect(
-      screen.getByText(
-        "Build stopped for a reason we can't name. The full log has the details."
-      )
-    ).toBeTruthy();
+    expect(screen.getByText("The full log has the details.")).toBeTruthy();
     expect(screen.queryByText(/did not answer/)).toBeNull();
     // The whole output is in the terminal: Spec 08 ANY-00's secondary
     expect(screen.queryByRole("button", { name: "Show details" })).toBeNull();

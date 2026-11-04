@@ -48,7 +48,7 @@ export const stageNotice = (
       kind: "cluster-down",
       text: `${capitalize(
         name
-      )} isn't answering. Playground keeps trying. You can switch network.`,
+      )} is not responding. Try again, or change the network.`,
     };
   }
   return null;
@@ -104,10 +104,10 @@ if (import.meta.vitest) {
     it("shows the cluster line on Deploy and Interact only", () => {
       expect(stageNotice("cluster-down", "devnet", "deploy")).toEqual({
         kind: "cluster-down",
-        text: "Devnet isn't answering. Playground keeps trying. You can switch network.",
+        text: "Devnet is not responding. Try again, or change the network.",
       });
       expect(stageNotice("cluster-down", "testnet", "interact")?.text).toBe(
-        "Testnet isn't answering. Playground keeps trying. You can switch network."
+        "Testnet is not responding. Try again, or change the network."
       );
       expect(stageNotice("cluster-down", "devnet", "write")).toBeNull();
       expect(stageNotice("cluster-down", "devnet", "build")).toBeNull();

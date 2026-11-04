@@ -246,7 +246,7 @@ it("names the extension wallet it disconnects, which hands back to the Playgroun
 it("puts a cluster that is down first, as the way to the network settings", async () => {
   const onPick = await open(view({ cluster: { name: "devnet", down: true } }));
   const first = screen.getAllByRole("menuitem")[0];
-  expect(first.textContent).toContain("devnet is not answering");
+  expect(first.textContent).toContain("devnet is not responding");
   expect(first.hasAttribute("data-settings-trigger")).toBe(true);
   await userEvent.click(first);
   expect(onPick).toHaveBeenCalledExactlyOnceWith("cluster-down");
@@ -263,7 +263,7 @@ it("marks Settings as a settings trigger, as tests find it", async () => {
 it.each([
   ["Settings", view({})],
   [
-    "devnet is not answering",
+    "devnet is not responding",
     view({ cluster: { name: "devnet", down: true } }),
   ],
 ] as const)(

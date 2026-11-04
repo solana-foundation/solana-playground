@@ -103,12 +103,12 @@ it("marks the network indicator as a settings trigger that opens the settings", 
 });
 
 // Spec 08's NET-02, which replaced the "Switch to localnet?" toast
-it("says a cluster that is down is not answering, in words and a warning dot", () => {
+it("says a cluster that is down is not responding, in words and a warning dot", () => {
   drawRow([DOWN, AI_OFF, STARTING]);
   const network = screen.getByRole("button", {
-    name: "Change cluster, currently devnet, not answering",
+    name: "Change cluster, currently devnet, not responding",
   });
-  expect(network.textContent).toBe("Devnet · Not answering");
+  expect(network.textContent).toBe("Devnet · Not responding");
   expect(dotOf(network)).toBe("warning");
 });
 

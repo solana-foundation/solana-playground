@@ -148,7 +148,7 @@ describe("WalletName help", () => {
 
     expect(
       await screen.findByRole("tooltip", {
-        name: "A wallet kept in this browser. Playground uses it to sign your calls without asking. Use it for devnet, testnet and local clusters only.",
+        name: "A wallet kept in this browser. Playground uses it to deploy and to sign your calls without asking. Use it for devnet, testnet and local clusters only.",
       })
     ).toBeTruthy();
   });

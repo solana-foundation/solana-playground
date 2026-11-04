@@ -10,7 +10,7 @@ import BaseStartFromScratch, { canStart } from "./BaseStartFromScratch";
 const log = createLogger("new-project:start");
 
 /** What `PgExplorer.isWorkspaceNameValid` lets through, as the field says it */
-const NAME_RULE = "Use letters, numbers, spaces, - or _";
+const NAME_RULE = "Use letters, numbers, spaces, - or _.";
 
 const defaultName = (framework: FrameworkName) =>
   `${framework.toLowerCase()}-project`;

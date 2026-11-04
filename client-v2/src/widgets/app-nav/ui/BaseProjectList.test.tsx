@@ -175,7 +175,7 @@ describe("BaseProjectList", () => {
       ],
     });
     const row = screen.getByRole("button", { name: "Hello Anchor" });
-    expect(screen.getByText("3/5")).toBeTruthy();
+    expect(screen.getByText("3 of 5")).toBeTruthy();
     const id = row.getAttribute("aria-describedby") ?? "";
     expect(
       id
@@ -238,7 +238,7 @@ describe("BaseProjectList", () => {
     expect(
       screen.getByRole("button", { name: "A lesson with a long name" })
         .className
-    ).toContain("pr-40");
+    ).toContain("pr-46");
   });
 
   it("draws Not synced with a warning dot, beside the pin", () => {
