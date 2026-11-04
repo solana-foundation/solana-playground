@@ -48,6 +48,10 @@ In the sandbox, project code SHALL get `pg` (`connection`, `wallet`,
 of `supported-packages.json` (`web3`, `anchor`, `BN`, `borsh`, `Buffer`,
 `BufferLayout`, `assert`, `mocha`), imports of every importable package,
 and the anchor IDL from `target/types`, as the in-page runtime gave them.
+A standard wallet under `pg.wallets`, and `pg.wallet` when it is the current
+one, SHALL expose its name, its public key, `signTransaction`,
+`signAllTransactions` and `signMessage` only, since only those cross into the
+sandbox.
 
 #### Scenario: The default client runs
 
