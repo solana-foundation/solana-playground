@@ -106,6 +106,11 @@ class BundleModulesPlugin {
 const SANDBOX_ENTRY = "sandbox";
 const SANDBOX_PAGE = "runtime.html";
 
+/** The CSP `runtime.html` is served with: `vercel.json`'s, so the two agree */
+const RUNTIME_CSP = require("./vercel.json")
+  .headers.find((rule) => rule.source === `/${SANDBOX_PAGE}`)
+  .headers.find((header) => header.key === "Content-Security-Policy").value;
+
 /**
  * Adds the sandbox's entry and page beside CRA's, and keeps CRA's
  * index.html to its own entry
@@ -573,13 +578,22 @@ module.exports = {
       // Percent-encoded: a header value must be ASCII, a path need not be.
       [DEV_SERVER_ROOT_HEADER]: encodeURIComponent(__dirname),
     };
-    // As `vercel.json`: the sandbox's opaque origin makes every script it
-    // loads cross-origin, which its COEP blocks without this header
-    devServerConfig.headers = (req) =>
+    // As `vercel.json`
+    devServerConfig.headers = (req) => {
       // `originalUrl`: the middleware is mounted on "*", which strips `path`
-      req.originalUrl.startsWith("/static/")
-        ? { ...headers, "Cross-Origin-Resource-Policy": "cross-origin" }
-        : headers;
+      const urlPath = req.originalUrl.split("?")[0];
+      // The sandbox's opaque origin makes every script it loads
+      // cross-origin, which its COEP blocks without this header
+      if (urlPath.startsWith("/static/")) {
+        return { ...headers, "Cross-Origin-Resource-Policy": "cross-origin" };
+      }
+      // The sandbox's page is an opaque origin however it is framed, and
+      // only the app may frame it
+      if (urlPath === `/${SANDBOX_PAGE}`) {
+        return { ...headers, "Content-Security-Policy": RUNTIME_CSP };
+      }
+      return headers;
+    };
 
     // Serve `api/*.mjs` from the dev server itself, so local API work needs
     // neither `vercel dev` (which wants a login and team access) nor a second
