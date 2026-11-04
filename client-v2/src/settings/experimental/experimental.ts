@@ -1,13 +1,12 @@
+import { SERVER_UNSTABLE } from "../../shared/config/client-env";
 import { createSetting } from "../create";
 
 export const experimental = [
   createSetting({
     id: "experimental.unstable",
     description:
-      "Whether to use the build server's unstable routes: sandboxed builds and the package bundler. Needs a server built with the unstable feature",
-    // Upstream defaults this to `NODE_ENV !== "production"`. This fork
-    // develops against hosted servers, none of which enable the feature,
-    // so the switch is off everywhere and turning it on is deliberate (D37)
-    default: false,
+      "Whether to build and deploy through the build server's unstable routes, which run each build in a sandbox. Needs a server built with the unstable feature",
+    // Hosted servers have no unstable routes, so only a build configured for one turns it on
+    default: SERVER_UNSTABLE === "true",
   }),
 ];

@@ -166,6 +166,63 @@ model keys, comes from `client-v2/.env` when it exists (names in
 `.env.example`). The file reaches the containers through `env_file`; it is
 kept out of the image.
 
+### The unstable server
+
+The `v2-unstable` profile runs the same services with `server-unstable` in
+place of `server-standalone`: the build server compiled with
+`--features unstable`, which serves `/unstable/build` and `/unstable/bundle`
+and runs each build in a sandbox container. It is for local use only: the
+service mounts `/var/run/docker.sock`, which gives the container control of
+the host's Docker daemon.
+
+```sh
+docker compose -f ../compose.yaml --profile v2-unstable up --build
+```
+
+- Start-up runs `docker build` for the `bundle` image and one
+  `program-<template>` image per template before the port answers; a cold
+  start takes several minutes under amd64 emulation.
+- The ports are the `v2` profile's: client-v2 on `3000`, the server on
+  `8080`, Postgres on `5432`. `PG_CLIENT_V2_PORT`, `PG_PORT`, and
+  `PG_POSTGRES_PORT` move them, in the shell or the root `.env`, for example
+  beside a running `v2` stack:
+
+  ```sh
+  PG_CLIENT_V2_PORT=3001 PG_PORT=8081 PG_POSTGRES_PORT=5433 \
+    docker compose -f ../compose.yaml -p solana-playground-unstable --profile v2-unstable up --build
+  ```
+
+  A second stack needs its own `-p` project name: in the same project both
+  profiles share `postgres`, `migrate`, and `wasm`, and the new ports recreate
+  them under the running `v2` stack.
+- `PG_SERVER_DIR` is the absolute path of another checkout's `server/`
+  directory, for example a pull request's worktree. Its `templates/`
+  replaces the image's whole, but start-up builds only the names in the
+  image's `get_all_templates` (`server/src/templates/mod.rs`), with the
+  image's settings for each: the Rust-side settings, `images/`, and `src/`
+  stay the image's. A listed template that the mounted `templates/` lacks,
+  for example one the pull request renames or re-versions, fails start-up;
+  a directory the pull request adds is ignored. A path that does not exist
+  makes `up` refuse. A changed
+  `PG_SERVER_DIR` applies with `docker compose up -d server-unstable`,
+  which recreates the container; `restart` keeps the old mount.
+- `PG_DOCKER_GID` is the numeric group that owns the Docker socket inside a
+  container: `0` on Docker Desktop and OrbStack, and on Linux the output of
+  `stat -c %g /var/run/docker.sock`.
+- client-v2 sends build and deploy to the unstable routes only with the
+  `experimental.unstable` setting on. The profile sets
+  `REACT_APP_SERVER_UNSTABLE=true`, which turns the setting on by default. A
+  browser profile that already stored the setting keeps its value, as with
+  `REACT_APP_SERVER_URL`; run this in the client's terminal to turn it on:
+
+  ```sh
+  setting set experimental.unstable true
+  ```
+
+  A Vercel build fails while `REACT_APP_SERVER_UNSTABLE=true`
+  (`scripts/check-unstable-env.mjs`), because no hosted server serves
+  `/unstable`. `yarn build` and the `v2-prod` profile keep the flag.
+
 The client image builds from the primary checkout and from a linked worktree
 alike: it reads no git data of the checkout. It clones the assets repository
 at the commit in `scripts/assets-commit.txt` and points `update-static.mjs` at

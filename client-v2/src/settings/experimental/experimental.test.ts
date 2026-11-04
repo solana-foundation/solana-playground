@@ -11,19 +11,35 @@ vi.mock("../../utils", () => ({
   PgSettings: {},
 }));
 
-// Upstream defaults this to `NODE_ENV !== "production"`. This fork builds
-// against hosted servers that have no `unstable` routes, so the default is
-// off everywhere and turning it on is the deliberate act (D37).
+const UNSTABLE_ID = "experimental.unstable";
+
+// `client-env` reads the variable at import, so each case loads the modules afresh
+const importDefaultWith = async (value: string | undefined) => {
+  vi.stubEnv("REACT_APP_SERVER_UNSTABLE", value);
+  vi.resetModules();
+  const fresh = await import("./experimental");
+  return fresh.experimental.find((s) => s.id === UNSTABLE_ID)?.default;
+};
+
 describe("experimental.unstable", () => {
-  const setting = experimental.find((s) => s.id === "experimental.unstable");
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it("exists as a checkbox setting", () => {
+    const setting = experimental.find((s) => s.id === UNSTABLE_ID);
     expect(setting).toBeDefined();
     expect(setting?.values).toBeUndefined();
   });
 
-  it("defaults to off, as a literal rather than a NODE_ENV rule", () => {
-    expect(process.env.NODE_ENV).toBe("test");
-    expect(setting?.default).toBe(false);
-  });
+  it.each([
+    { value: "true", expected: true },
+    { value: undefined, expected: false },
+    { value: "1", expected: false },
+  ])(
+    "defaults to $expected when REACT_APP_SERVER_UNSTABLE is $value",
+    async ({ value, expected }) => {
+      expect(await importDefaultWith(value)).toBe(expected);
+    }
+  );
 });

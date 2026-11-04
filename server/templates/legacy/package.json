@@ -25,9 +25,14 @@
     "typescript": "=5.0.4"
   },
   "resolutions": {
+    "**/@ethersproject/providers/ws": "^7.5.11",
     "@solana/buffer-layout": "^4.0.0",
+    "axios": "^0.34.0",
     "crypto-js": "^4.2.0",
     "elliptic": "^6.6.1",
+    "serialize-javascript": "^7.0.3",
+    "tmp": "^0.2.6",
+    "toml": "^5.0.1",
     "typescript": "5.0.4"
   }
 }

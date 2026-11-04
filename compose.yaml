@@ -50,7 +50,7 @@ x-client-v2: &client-v2
       required: false
     - path: client-v2/.env.local
       required: false
-  environment:
+  environment: &client-v2-environment
     DATABASE_URL: postgres://solpg:solpg@postgres:5432/solpg?sslmode=disable
     SYNC_ENABLED: "true"
     # The browser runs on the host, so it reaches both through their published ports
@@ -163,6 +163,25 @@ services:
     profiles:
       - client-v2-standalone
 
+  client-v2-unstable:
+    <<: *client-v2
+    image: solana-playground-client-v2
+    depends_on:
+      wasm:
+        condition: service_completed_successfully
+      server-unstable:
+        condition: service_started
+      migrate:
+        condition: service_completed_successfully
+    # A merge replaces the anchor's whole `environment`, so its keys come back through their own anchor
+    environment:
+      <<: *client-v2-environment
+      REACT_APP_SERVER_UNSTABLE: "true"
+    tty: true
+    stdin_open: true
+    profiles:
+      - v2-unstable
+
   server:
     <<: *server
     image: solana-playground-server
@@ -187,6 +206,53 @@ services:
       - v2
       - v2-prod
 
+  # The stock server image that server-unstable builds on, under its own name; `scale: 0` never runs it
+  server-unstable-base:
+    image: solana-playground-server-unstable-base
+    platform: linux/amd64
+    build:
+      context: ./server
+      args:
+        USER: solpg
+      # Built as a context of server-unstable, it ignores `platform` and builds for the host's architecture
+      platforms:
+        - linux/amd64
+    scale: 0
+    profiles:
+      - v2-unstable
+
+  # Local use only: the socket mount gives the container control of the host Docker daemon
+  server-unstable:
+    <<: *server
+    image: solana-playground-server-unstable
+    build:
+      context: ./server
+      dockerfile: ../docker/server-unstable.Dockerfile
+      args:
+        USER: solpg
+      additional_contexts:
+        server-image: service:server-unstable-base
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # Anza publishes no arm64 Solana release for the program images
+      DOCKER_DEFAULT_PLATFORM: linux/amd64
+      PG_PORT: "8080" # the container port `ports` maps; a host PG_PORT in .env would move the listener off it
+    group_add:
+      - ${PG_DOCKER_GID:-0} # the socket's numeric group: 0 on Docker Desktop and OrbStack, `stat -c %g /var/run/docker.sock` on Linux
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Replaces templates/ whole, but only get_all_templates names are built: a missing one fails start-up, an added one is ignored
+      - type: bind
+        source: ${PG_SERVER_DIR:-./server}/templates
+        target: /home/solpg/templates
+        read_only: true
+        bind:
+          create_host_path: false
+    profiles:
+      - v2-unstable
+
   wasm:
     image: solana-playground-wasm
     platform: linux/amd64
@@ -199,6 +265,7 @@ services:
       - client-v2-standalone
       - v2
       - v2-prod
+      - v2-unstable
 
   db:
     image: mongo:7
@@ -236,6 +303,7 @@ services:
       - prod
       - v2
       - v2-prod
+      - v2-unstable
 
   # `yarn db-migrate` against the compose Postgres; the client-v2 services start once it exits 0
   migrate:
@@ -251,6 +319,7 @@ services:
     profiles:
       - v2
       - v2-prod
+      - v2-unstable
 
 volumes:
   mongodb:
