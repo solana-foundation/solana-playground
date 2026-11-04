@@ -17,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   deployState: "ready",
   history: [] as unknown[],
   update: vi.fn(),
+  setStage: vi.fn(),
+  requestConsole: vi.fn(),
   noop: () => ({ dispose: () => undefined }),
 }));
 
@@ -46,7 +48,11 @@ vi.mock("../state/stage", () => ({
       return mocks.flow;
     },
     onDidChange: mocks.noop,
+    setStage: mocks.setStage,
   },
+}));
+vi.mock("@/widgets/layout-shell", () => ({
+  requestConsole: mocks.requestConsole,
 }));
 vi.mock("../state/deploy-history", () => ({
   PgDeployHistory: { list: () => mocks.history, onDidChange: mocks.noop },
@@ -158,5 +164,21 @@ describe("Deploy stage", () => {
 
     expect(mocks.update).toHaveBeenCalledWith({ customPk: null });
     expect(mocks.execute).toHaveBeenCalled();
+  });
+
+  it("opens the Build stage from Go to Build while nothing is built", () => {
+    mocks.flow = { build: "active", deploy: "upcoming" };
+    render(<Deploy />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to Build" }));
+    expect(mocks.setStage).toHaveBeenCalledWith("build");
+  });
+
+  it("opens the console from Show full log after a failed deploy", () => {
+    mocks.flow = { build: "done", deploy: "failed" };
+    render(<Deploy />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    expect(mocks.requestConsole).toHaveBeenCalled();
   });
 });

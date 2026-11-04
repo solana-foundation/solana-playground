@@ -18,10 +18,45 @@ describe("commands/deploy/stopped", () => {
     );
   });
 
-  it("names a buffer it could not close and how to reclaim its SOL", () => {
-    expect(deployStoppedLine({ state: "kept", address: "Buf1111" })).toBe(
+  it("names a buffer it could not close, the SOL it holds and how to reclaim it", () => {
+    expect(
+      deployStoppedLine({
+        state: "kept",
+        address: "Buf1111",
+        lamports: 1_421_676_960,
+      })
+    ).toBe(
+      "Stopped. The program was not deployed. The buffer account Buf1111 " +
+        "still holds 1.42 SOL. Run `solana program close --buffers` to reclaim it."
+    );
+  });
+
+  it("says less than 0.01 SOL when the amount rounds to nothing", () => {
+    expect(
+      deployStoppedLine({
+        state: "kept",
+        address: "Buf1111",
+        lamports: 890_880,
+      })
+    ).toContain("still holds less than 0.01 SOL.");
+  });
+
+  it('keeps "its SOL" when the buffer\'s balance could not be read', () => {
+    expect(
+      deployStoppedLine({ state: "kept", address: "Buf1111", lamports: null })
+    ).toBe(
       "Stopped. The program was not deployed. The buffer account Buf1111 " +
         "still holds its SOL. Run `solana program close --buffers` to reclaim it."
     );
+  });
+
+  it("rounds a half cent up to 0.01 SOL", () => {
+    expect(
+      deployStoppedLine({
+        state: "kept",
+        address: "Buf1111",
+        lamports: 5_000_000,
+      })
+    ).toContain("still holds 0.01 SOL.");
   });
 });
