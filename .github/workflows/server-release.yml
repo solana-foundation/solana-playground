@@ -5,24 +5,35 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version or tag to send all traffic to. Empty rolls back to the version before the live one.
+        description: Version or tag to send all traffic to. Empty rolls back to the newest serving version created before the live one, which may never have been live.
         required: false
         type: string
 
 permissions:
   contents: read
 
-# Queued, not cancelled: a cancelled run could stop between moving traffic and checking it
-concurrency:
-  group: server-release
-  cancel-in-progress: false
-
 jobs:
+  # Fails instead of skipping: a skipped job leaves a green run that reads as a finished rollback
+  check_branch:
+    name: Check the branch
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - run: |
+          if [ "$GITHUB_REF" != "refs/heads/master" ]; then
+            echo "::error::Run this from master; $GITHUB_REF moved no traffic."
+            exit 1
+          fi
+
   release:
     name: Move traffic
-    if: github.ref == 'refs/heads/master'
+    needs: check_branch
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # A running move is never cancelled, so it cannot stop between moving traffic and checking it. GitHub keeps one waiting run: a newer dispatch replaces it.
+    concurrency:
+      group: server-release
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
@@ -48,6 +59,19 @@ jobs:
           gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/versions.json"
           node client-v2/scripts/lib/release/resolve-target.mjs select < "$RUNNER_TEMP/versions.json" >> "$GITHUB_OUTPUT"
 
+      # Before the move, so a run that fails after it still names the version to go back to
+      - name: Record the plan
+        env:
+          CURRENT_VERSION: ${{ steps.select.outputs.current }}
+          TARGET_VERSION: ${{ steps.select.outputs.target }}
+          CHANGED: ${{ steps.select.outputs.changed }}
+        run: |
+          if [ "$CHANGED" = "true" ]; then
+            echo "playground-server: \`$CURRENT_VERSION\` before, \`$TARGET_VERSION\` target." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "playground-server: \`$TARGET_VERSION\` was already live; traffic not changed." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Move all traffic
         if: steps.select.outputs.changed == 'true'
         env:
@@ -60,15 +84,4 @@ jobs:
         run: |
           gcloud app versions list --service=playground-server --format=json > "$RUNNER_TEMP/after.json"
           node client-v2/scripts/lib/release/resolve-target.mjs verify < "$RUNNER_TEMP/after.json"
-
-      - name: Summary
-        env:
-          CURRENT_VERSION: ${{ steps.select.outputs.current }}
-          TARGET_VERSION: ${{ steps.select.outputs.target }}
-          CHANGED: ${{ steps.select.outputs.changed }}
-        run: |
-          if [ "$CHANGED" = "true" ]; then
-            echo "playground-server: \`$CURRENT_VERSION\` before, \`$TARGET_VERSION\` after." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "playground-server: \`$TARGET_VERSION\` was already live; traffic not changed." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "Checked: \`$TARGET_VERSION\` holds all traffic." >> "$GITHUB_STEP_SUMMARY"

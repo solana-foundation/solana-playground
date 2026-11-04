@@ -20,7 +20,7 @@
 
 **One auth step shared by a composite action.** `.github/actions/gcp-auth` takes the provider, service account and key as inputs, since a composite cannot read secrets, and passes each to `google-github-actions/auth` with an expression that leaves the unused path empty. Alternative, copying the expressions: two workflows would drift, and the key path is meant to be removed in one place. `SERVICE_ACCOUNT` is reused, so `GCP_WORKLOAD_IDENTITY_PROVIDER` is the only new setting.
 
-**The GCP provider is restricted to this repository and `master`.** The setup document's attribute condition is `assertion.repository == 'solana-foundation/solana-playground' && assertion.ref == 'refs/heads/master'`. The workflow's own branch check can be edited by anyone who pushes a branch; the condition cannot, so a dispatched branch with a modified workflow gets no token. Both triggers of `cicd.yml` run on `master` in normal use, and the condition applies to it too.
+**The GCP provider is restricted to this repository and `master`.** The setup document's attribute condition is `assertion.repository_id` of this repository `&& assertion.ref == 'refs/heads/master'`; the id, because a repository name can be re-registered after a rename. The workflow's own branch check can be edited by anyone who pushes a branch; the condition cannot, so once the key is gone a dispatched branch with a modified workflow gets no token. Both triggers of `cicd.yml` run on `master` in normal use, and the condition applies to it too.
 
 **Least privilege per job.** `id-token: write` is set on the deploy and promote jobs only, and `contents: read` stays the default. `google-github-actions/auth` and `setup-gcloud` are pinned to a SHA on their current major, as newer workflows here do, because they now hold the token.
 
@@ -30,6 +30,7 @@
 
 - [The JSON differs from what gcloud's source implies] → fail closed; verified by the first no-op run above.
 - [A rollback lands on an old version whose data expectations no longer hold] → the summary names both versions; the server has no migrations run by this workflow.
+- [Rollback by creation time can land on a version that was parked and never live, since App Engine keeps no history] → the input and the document say so and the summary names the target; a named version is the way around it. Tracking history would need state of our own, which this change does not add.
 - [The `master` condition blocks a dispatch from a branch during an incident] → intended; the hotfix path is a named-version run from `master`.
 
 ## Migration Plan

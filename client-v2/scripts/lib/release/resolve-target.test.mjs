@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdtempSync, symlinkSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
@@ -68,13 +71,51 @@ for (const [name, broken] of [
   ["its traffic split", { traffic_split: undefined }],
   ["its status", { version: { createTime: "2026-11-01T10:00:00Z" } }],
   ["its creation time", { version: { servingStatus: "SERVING" } }],
-  ["a readable creation time", { version: { servingStatus: "SERVING", createTime: "soon" } }],
+  [
+    "a readable creation time",
+    { version: { servingStatus: "SERVING", createTime: "soon" } },
+  ],
 ]) {
   test(`a record without ${name} is refused`, () => {
     const list = [{ ...version("a", 1), ...broken }, version("b", 2, 1)];
     assert.throws(() => selectTarget(list, "b"), /Unreadable version list/);
   });
 }
+
+test("a list that is not an array is refused", () => {
+  assert.throws(
+    () => selectTarget({ error: "x" }, ""),
+    /Unreadable version list/
+  );
+});
+
+test("a null record is refused", () => {
+  assert.throws(() => selectTarget([null], ""), /Unreadable version list/);
+});
+
+test("a split written as a string is refused", () => {
+  const list = [{ ...version("a", 1), traffic_split: "1.0" }];
+  assert.throws(() => selectTarget(list, "a"), /Unreadable version list/);
+});
+
+test("a malformed version is refused before the list is read", () => {
+  assert.throws(() => selectTarget([null], "$(x)"), /Malformed version/);
+});
+
+test("fractional seconds in the creation time still order", () => {
+  const list = [
+    version("a", 1),
+    {
+      ...version("b", 1),
+      version: {
+        servingStatus: "SERVING",
+        createTime: "2026-11-01T10:00:00.5Z",
+      },
+    },
+    version("c", 2, 1),
+  ];
+  assert.equal(selectTarget(list, "").target, "b");
+});
 
 test("an empty list is refused", () => {
   assert.throws(() => selectTarget([], ""), /No versions/);
@@ -138,6 +179,10 @@ test("assertLive refuses a target without all traffic", () => {
   assert.doesNotThrow(() => assertLive(LIVE_B, "b"));
 });
 
+test("assertLive refuses a target missing from the list", () => {
+  assert.throws(() => assertLive(LIVE_B, "z"), /"z" does not hold all traffic/);
+});
+
 const run = (mode, env, list = LIVE_B) =>
   spawnSync(process.execPath, [SCRIPT, mode], {
     encoding: "utf8",
@@ -154,6 +199,13 @@ test("select prints output lines, and split for no current", () => {
   assert.equal(
     run("select", { REQUESTED_VERSION: "a" }, split).stdout,
     "current=split\ntarget=a\nchanged=true\n"
+  );
+});
+
+test("select says changed=false for the live version", () => {
+  assert.equal(
+    run("select", { REQUESTED_VERSION: "b" }).stdout,
+    "current=b\ntarget=b\nchanged=false\n"
   );
 });
 
@@ -176,4 +228,16 @@ test("unparsable input is refused", () => {
 test("verify exits by whether the target holds all traffic", () => {
   assert.equal(run("verify", { TARGET_VERSION: "b" }).status, 0);
   assert.equal(run("verify", { TARGET_VERSION: "a" }).status, 1);
+  assert.equal(run("verify", { TARGET_VERSION: "" }).status, 1);
+});
+
+test("verify still checks when reached through a symlink", () => {
+  const link = join(mkdtempSync(join(tmpdir(), "resolve-target-")), "link.mjs");
+  symlinkSync(SCRIPT, link);
+  const { status } = spawnSync(process.execPath, [link, "verify"], {
+    encoding: "utf8",
+    input: JSON.stringify(LIVE_B),
+    env: { ...process.env, TARGET_VERSION: "a" },
+  });
+  assert.equal(status, 1);
 });

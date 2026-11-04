@@ -1,8 +1,8 @@
 // Loaded alone: server-release.yml runs it with bare `node`, before any install, so it imports nothing but node's own modules
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-/** gcloud's own test for all traffic (`_ALL_TRAFFIC_EPSILON`): the smallest real split is 0.001, so this must stay above 0.999 */
+/** gcloud's own test for all traffic: `_ALL_TRAFFIC_EPSILON = 1e-4` in api_lib/app/version_util.py. Its smallest real split is 0.001, so a live 0.999 is a split */
 const ALL_TRAFFIC = 1 - 1e-4;
 const VERSION_FORMAT = /^[a-z0-9][a-z0-9.-]*$/;
 
@@ -24,7 +24,9 @@ function readList(versions) {
       Number.isNaN(createdAt)
     ) {
       throw new Error(
-        `Unreadable version list: ${JSON.stringify(record)} lacks id, traffic_split, version.servingStatus or version.createTime`
+        `Unreadable version list: ${JSON.stringify(
+          record
+        )} lacks id, traffic_split, version.servingStatus or version.createTime`
       );
     }
     return { id, split, status, createdAt };
@@ -33,11 +35,12 @@ function readList(versions) {
 
 /**
  * Picks the version to send all traffic to: the requested one, or with none requested, the newest serving version created before
- * the live one. `current` is null when no single version holds all traffic.
+ * the live one. `current` is null when no single version holds all traffic. The list does not say which versions were ever live, so a
+ * parked version that never was counts as the one before.
  * @param {unknown[]} versions `gcloud app versions list --format=json`
  * @param {string} requested a version label or git tag, or empty to roll back
  * @returns {{ current: string | null, target: string, changed: boolean }}
- * @throws {Error} when the target cannot take traffic; the message says why
+ * @throws {Error} on a malformed request, an unreadable list, or no usable target; the message says why
  */
 export function selectTarget(versions, requested) {
   if (requested && !VERSION_FORMAT.test(requested)) {
@@ -71,7 +74,9 @@ export function selectTarget(versions, requested) {
     )
     .sort((a, b) => b.createdAt - a.createdAt)[0];
   if (!previous) {
-    throw new Error(`Nothing to roll back to: no serving version before "${live.id}"`);
+    throw new Error(
+      `Nothing to roll back to: no serving version before "${live.id}"`
+    );
   }
   return { current, target: previous.id, changed: true };
 }
@@ -109,7 +114,8 @@ function main(mode) {
   );
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+// Realpath: if this ever read false on a CI path, `verify` would exit 0 having checked nothing
+if (realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     main(process.argv[2]);
   } catch (error) {
