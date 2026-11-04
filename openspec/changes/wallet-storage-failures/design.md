@@ -45,8 +45,13 @@ for `"setup"`. The setup list's "Connect a wallet" step reads only
    accounts into valid and damaged, and `currentIndex` is remapped (to 0 when
    the current one was damaged). The damaged accounts are written under a
    second key, `set-aside`, in the same object store, appended to what is
-   there, inside the same lock. They never go to `localStorage`, since they
-   may hold key bytes.
+   there, inside the same lock. They go to `localStorage` only when the store
+   refuses that write: the text that held them (the `localStorage` copy
+   first, since a save while falling back rewrites it without them, or else
+   the store's record as JSON) is kept in `localStorage['wallet.unreadable']`
+   through the path an unreadable copy takes, the first copy kept and never
+   replaced. They may hold key bytes, and a key kept in `localStorage` beats
+   a key lost (Slava's decision, 5 Nov).
 4. **Unavailable in the UI.** `connect.ts` throws a marked
    `WalletUnavailableError` for `"unavailable"`. The setup list's wallet step
    gets a `warn` status with the label "Wallet unavailable" when
