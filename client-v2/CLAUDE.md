@@ -239,7 +239,8 @@ counts.
    code as it is, never a plan; nothing is back-filled for code that is not changing.
 6. **Asked to build something, look in `openspec/changes/` first**
    (`openspec list`). If a change covers it, `/opsx:apply` that change and
-   say which task. If none does and the work is more than a bug fix, offer
+   say which task; when that change is an umbrella and the work is more than
+   a bug fix, step 4 gives it a change of its own. If none does and the work is more than a bug fix, offer
    `/opsx:propose` rather than starting on the code. A bug fix in a slice
    that sends no events, or none for the path being fixed, says so and
    proposes the missing events as a follow-up ticket.
@@ -522,20 +523,22 @@ reason.
   description. A stacked PR is rebased whenever the one under it moves.
   "Needs a rebase" is a review verdict here, not a nit. Once the base is
   squash-merged, its commits reach the integration branch as one new
-  commit, so a plain rebase replays them a second time. Fetch, take the
-  base PR's last head (`gh pr view <n> --json headRefOid`, since the merge
-  deletes its branch), run
+  commit, so a plain rebase replays them a second time. Fetch, find the
+  last commit of the base that your branch contains (the base PR's last
+  head, `gh pr view <n> --json headRefOid`, if you were rebased onto it;
+  the merge deletes the base branch), run
   `git rebase --onto origin/<integration branch> <that sha>`, push with
   `--force-with-lease`, and retarget the PR at the integration branch. A
   stacked PR merges only after that retarget.
 - **Merges squash, and no branch carries a merge commit.** `master` allows
-  squash merges only, and its ruleset requires signed commits, so an
-  unsigned merge commit anywhere in a branch keeps it from landing. A
-  branch takes its base with `git rebase`, never `git merge` or a
-  `git pull` without `--rebase`. A stack merges bottom-up. While an
-  integration branch is red (a `ci.yml` or `client-v2.yml` check fails on
-  its head; the Vercel preview does not count), the PR that turns it green
-  merges before anything else.
+  squash merges only. A branch takes its base with `git rebase`, never
+  `git merge`, a `git pull` without `--rebase`, or GitHub's "Update branch"
+  in its merge form: a merge commit breaks the `--onto` rebase above and
+  carries no signature, which the `master` ruleset requires of every
+  commit pushed there. A stack merges bottom-up. While an integration
+  branch is red (a `ci.yml` or `client-v2.yml` check fails on its head; the
+  Vercel preview does not count), the PR that turns it green, with any PRs
+  stacked under it, merges before anything else.
 - **Work not meant to merge is an issue, not a PR.** A verdict, a spike, a
   prototype or a reference branch is a GitHub issue that names its branch,
   never a draft PR. A draft PR is for work that will merge, such as an
