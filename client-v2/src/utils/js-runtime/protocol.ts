@@ -14,6 +14,8 @@
 export interface SandboxWallet {
   /** Name of the account or of the standard wallet */
   name: string;
+  /** Its key in `pg.wallets` */
+  key: string;
   /** Base58 public key */
   publicKey: string;
   /** Whether it is a built-in (Playground) account */
@@ -42,6 +44,8 @@ export type ToSandbox =
       isTest: boolean;
       /** The project's Anchor IDL, when built */
       idl?: object;
+      /** The names `anchor.workspace` lists the program under */
+      workspaceNames: string[];
       /** Base58 program id, when the project has one */
       programId?: string;
       /** RPC endpoint */
@@ -98,6 +102,7 @@ type FieldKind =
   | "count"
   | "address"
   | "idl"
+  | "names"
   | "accounts"
   | "signature-or-error"
   | "response-or-error";
@@ -117,6 +122,7 @@ export const TO_SANDBOX_FIELDS: {
     code: "text",
     isTest: "flag",
     idl: "idl",
+    workspaceNames: "names",
     programId: "address",
     endpoint: "text",
     commitment: "text",
@@ -200,6 +206,7 @@ if (import.meta.vitest) {
       expect(new Set(byteKinds)).toEqual(
         new Set([
           "idl",
+          "names",
           "address",
           "accounts",
           "signature-or-error",
