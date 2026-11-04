@@ -1,10 +1,12 @@
 name: preview
 
 # A preview deployment of client-v2 with a database of its own, for a PR that
-# carries the `preview` label, and only for that PR. Every PR also gets the
-# Vercel Git integration's preview, which reads the shared preview database
-# the Preview environment names (client-v2/docs/preview-databases.md); this
-# workflow is for a PR whose preview needs its own schema or rows.
+# carries the `preview` label, and only for that PR. The Vercel Git
+# integration builds a preview only of an integration branch
+# (`isIntegrationBranch` in client-v2/scripts/vercel-ignore-build.mjs), which
+# reads the database the Preview environment names: the shared `solpg_preview`
+# once PREVIEW_DB_PROVIDER is `cloud-sql` (client-v2/docs/preview-databases.md).
+# This workflow is for a PR whose preview needs its own schema or rows.
 #
 # The repository variable PREVIEW_DB_PROVIDER says where that database lives:
 #
@@ -21,9 +23,10 @@ name: preview
 #   the database, migrate it, build, deploy with it, and post the URL on the
 #   PR;
 # - label removed, or PR closed or merged: drop the database;
-# - unlabelled and changing client-v2/db/migrations, on Cloud SQL: say on the
-#   PR that the Git integration's preview runs on the shared database without
-#   those migrations, and suggest the label.
+# - unlabelled, from an integration branch, and changing
+#   client-v2/db/migrations, on Cloud SQL: say on the PR that the Git
+#   integration's preview runs on the shared database without those
+#   migrations, and suggest the label.
 #
 # Previews follow the label on a PR into any branch of the repository the
 # PREVIEW_REPOSITORY variable names. A labelled PR on another repository or
@@ -122,13 +125,13 @@ jobs:
       # The head commit, not the merge commit `pull_request` checks out by
       # default: the preview shows the branch as pushed. Submodule with full
       # history, as in client-v2.yml: update-static dates tutorials from it.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
 
@@ -309,7 +312,7 @@ jobs:
     steps:
       # Sparse: only the scripts, not the submodule. The runner's own Node
       # runs preview-name.mjs.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: |
             .github/scripts
@@ -414,9 +417,11 @@ jobs:
     steps:
       - run: echo "::warning::Previews are half-configured; PREVIEW_DB_PROVIDER or NEON_PROJECT_ID is set, but PREVIEW_REPOSITORY is unset or names another repository (client-v2/docs/preview-databases.md, \"Configuration\")."
 
-  # The Git integration's preview of every PR reads the shared database, which
-  # carries only the migrations on master (preview-shared-db.yml). A PR that
-  # changes one is told so, with the label as the remedy; the label's deploy
+  # The Git integration's preview of an integration branch reads the shared
+  # database, which carries only the migrations on master
+  # (preview-shared-db.yml). A PR from one that changes a migration is told
+  # so, with the label as the remedy; a ticket branch gets no such preview,
+  # so nothing to warn about. The label's deploy
   # then overwrites this comment. Fork and Dependabot PRs get a read-only
   # token, so the notice goes to the job summary instead.
   migration-notice:
@@ -434,12 +439,29 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
       READ_ONLY: ${{ github.event.pull_request.head.repo.full_name != github.repository || github.actor == 'dependabot[bot]' }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          sparse-checkout: .github/scripts
+          sparse-checkout: |
+            .github/scripts
+            client-v2/scripts
+
+      # Asks vercel.json's ignoreCommand itself, so the rule lives in one
+      # place: it exits 0 to skip a branch. Any other exit, a crash included,
+      # reads as an integration branch and runs the check.
+      - name: Is the head an integration branch
+        id: integration
+        run: |
+          if VERCEL_GIT_COMMIT_REF=$HEAD_REF VERCEL_ENV=preview node client-v2/scripts/vercel-ignore-build.mjs; then
+            echo "The Git integration builds no preview of $HEAD_REF; nothing reads the shared database for it."
+            echo "integration=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "integration=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Look for migrations
+        if: steps.integration.outputs.integration == 'true'
         env:
           # How the notice starts, so a later run can tell it from the
           # deploy's and the teardown's comments

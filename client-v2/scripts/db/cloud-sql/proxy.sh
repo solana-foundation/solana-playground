@@ -21,9 +21,11 @@
 : "${CLOUD_SQL_USER:?CLOUD_SQL_USER is unset: the IAM database user the application connects as}"
 PROXY_PORT=${CLOUD_SQL_PROXY_PORT:-5434}
 
-# The database every unlabelled preview reads, named by the Preview
-# environment on Vercel, migrated from master by preview-shared-db.yml, and
-# copied into each PR's own database by create-preview-db
+# The database the Git integration's previews read once PREVIEW_DB_PROVIDER
+# is cloud-sql, named by the Preview environment on Vercel, and copied into
+# each PR's own database by create-preview-db. By convention only
+# preview-shared-db.yml migrates it, from master, enforced by review of
+# workflow changes.
 SHARED_PREVIEW_DB=solpg_preview
 # Better Auth's sessions, left out of that copy: a sign-in on one preview
 # must not be valid on another

@@ -52,7 +52,8 @@ jobs:
     # Runs only where PREVIEW_REPOSITORY names this repository and a provider
     # is configured (see preview.yml's header).
     # A manual run may pick any branch, whose copy of this job could drop
-    # anything; only master's runs
+    # anything; only master's runs, by convention, enforced by review of
+    # workflow changes (a branch's copy could drop this check)
     if: >-
       github.ref == 'refs/heads/master' &&
       (vars.PREVIEW_DB_PROVIDER == 'cloud-sql' || vars.NEON_PROJECT_ID != '') &&
@@ -80,7 +81,7 @@ jobs:
       # the PR list below was read.
       MIN_AGE_MINUTES: 60
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: |
             .github/scripts
@@ -111,31 +112,7 @@ jobs:
       # A listing that fails fails the step before anything is dropped.
       - name: Sweep Cloud SQL databases
         if: env.PREVIEW_DB_PROVIDER == 'cloud-sql'
-        run: |
-          keep=$(jq -r --arg l "$PREVIEW_LABEL" '.[] | select(any(.labels[]; .name == $l)) | .number' prs.json)
-          bash client-v2/scripts/db/cloud-sql/list-preview-dbs > dbs.txt
-          deleted=0 kept=0 failed=0
-          while read -r pr age; do
-            name=solpg_preview_pr_$pr
-            # An age that is not a number (no creation stamp) is kept, never read as old.
-            if grep -qxF "$pr" <<<"$keep" || ! [[ "$age" =~ ^[0-9]+$ ]] || [ "$age" -lt "$MIN_AGE_MINUTES" ]; then
-              kept=$((kept + 1))
-              continue
-            fi
-            if [ "$DRY_RUN" = true ]; then
-              echo "would drop $name (age ${age}m)"
-            elif ! bash client-v2/scripts/db/cloud-sql/drop-preview-db --pr "$pr"; then
-              # One failure must not stop the rest of the sweep.
-              echo "::warning::could not drop $name"
-              failed=$((failed + 1))
-              continue
-            fi
-            deleted=$((deleted + 1))
-          done < dbs.txt
-
-          verb=$([ "$DRY_RUN" = true ] && echo "Would drop" || echo "Dropped")
-          echo "$verb $deleted preview databases, kept $kept, failed $failed; $(wc -l < dbs.txt) PR databases on the instance before the sweep." | tee -a "$GITHUB_STEP_SUMMARY"
-          [ "$failed" -eq 0 ]
+        run: bash client-v2/scripts/db/cloud-sql/sweep-preview-dbs prs.json
 
       - name: Sweep Neon branches
         if: env.PREVIEW_DB_PROVIDER != 'cloud-sql'
