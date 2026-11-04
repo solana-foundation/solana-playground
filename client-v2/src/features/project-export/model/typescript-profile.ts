@@ -144,9 +144,12 @@ const clientEntry = (paths: string[]) => {
   return topLevel ?? clients[0];
 };
 
-/** A path as one shell word: as it is when it is plain, single-quoted otherwise */
+/**
+ * A path as one shell word: as it is when it is plain, double-quoted
+ * otherwise, which both npm's `sh` and Windows `cmd` read as one word
+ */
 const shellQuote = (path: string) =>
-  /^[\w./-]+$/.test(path) ? path : `'${path.replace(/'/g, "'\\''")}'`;
+  /^[\w./-]+$/.test(path) ? path : `"${path.replace(/["\\$`]/g, "\\$&")}"`;
 
 /** An npm package name from a project name */
 const toPackageName = (name: string) =>
@@ -313,7 +316,7 @@ exist only in Playground.
  * `playground.ts` added at the root, unless the project holds one there
  * already.
  *
- * @param getDependencies the packages the given files use, with versions
+ * @param fetchDependencies the packages the given files use, with versions
  * (`fetchJSDependencyMap`)
  * @param importGlobals the script with imports added for the Playground's
  * global packages (`addImports`); both are passed in because
@@ -326,7 +329,7 @@ exist only in Playground.
  * when it has one at the root, which the profile keeps
  */
 export const toNodeProjectWith =
-  (getDependencies: (files: TupleFiles) => Promise<Record<string, string>>) =>
+  (fetchDependencies: (files: TupleFiles) => Promise<Record<string, string>>) =>
   (importGlobals: (content: string) => string) =>
   (endpoint: string) =>
   (name: string) =>
@@ -345,7 +348,7 @@ export const toNodeProjectWith =
     );
 
     const shimFile: [string, string] = [SHIM_PATH, shim(endpoint)];
-    const dependencies = await getDependencies([...converted, shimFile]);
+    const dependencies = await fetchDependencies([...converted, shimFile]);
     for (const builtin of NODE_BUILTINS) delete dependencies[builtin];
     const devDependencies: Record<string, string> = {
       ...DEV_DEPENDENCIES,
@@ -547,7 +550,7 @@ console.log(await pg.connection.getSlot());
 
     it("quotes a client path with a space in the client script", async () => {
       const pkg = packageOf(await exportOf([["client/my client.ts", CLIENT]]));
-      expect(pkg.scripts.client).toBe("tsx 'client/my client.ts'");
+      expect(pkg.scripts.client).toBe('tsx "client/my client.ts"');
     });
 
     it("leaves files outside client and tests as they are", async () => {
