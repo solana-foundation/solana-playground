@@ -41,7 +41,7 @@ A run SHALL fail without changing traffic when its target cannot take traffic.
 - **THEN** the run fails and traffic is unchanged
 
 ### Requirement: Roll back to the previous version
-A manual run given no version SHALL send all traffic to the newest serving version created before the one that receives all traffic now.
+A manual run given no version SHALL send all traffic to the newest serving version created before the one that receives all traffic now. The version list does not record which versions were ever live, so creation time decides.
 
 #### Scenario: A previous version exists
 - **WHEN** version `b` receives all traffic and `a` is the newest serving version created before it
@@ -60,25 +60,29 @@ A manual run given no version SHALL send all traffic to the newest serving versi
 - **THEN** the run fails, asks for a named version, and traffic is unchanged
 
 ### Requirement: Report what changed
-A run that moves traffic SHALL read the traffic back and write the version before and the version after to its job summary, and SHALL fail if the target does not hold all traffic.
+A run SHALL write the version before and the target to its job summary before moving traffic, then read the traffic back, and SHALL fail if the target does not hold all of it.
 
 #### Scenario: Traffic moved
 - **WHEN** a run moves traffic from `b` to `a`
-- **THEN** the job summary shows `b` before and `a` after
+- **THEN** the job summary shows `b` before and `a` as the target, and says `a` holds all traffic
+
+#### Scenario: Traffic did not move
+- **WHEN** the target does not hold all traffic after the move
+- **THEN** the run fails and the job summary still names the version before
 
 ### Requirement: Runs only from the default branch
 The promote and rollback workflow SHALL run only on `master`.
 
 #### Scenario: Dispatched from another branch
 - **WHEN** the workflow is dispatched on any other branch
-- **THEN** no job that can reach GCP runs
+- **THEN** the run fails and no job that can reach GCP runs
 
 ### Requirement: Authenticate through OIDC when configured
 Deploy and promote SHALL authenticate through Workload Identity Federation when the repository variable `GCP_WORKLOAD_IDENTITY_PROVIDER` is set, and with the `GCP_KEY` secret when it is not.
 
 #### Scenario: Provider configured
 - **WHEN** the variable is set
-- **THEN** the run authenticates with a short-lived OIDC token and does not read `GCP_KEY`
+- **THEN** the run authenticates with a short-lived OIDC token and does not use `GCP_KEY`
 
 #### Scenario: Provider not configured
 - **WHEN** the variable is empty
