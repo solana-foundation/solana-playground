@@ -132,7 +132,9 @@ test("client-v2-layout: Export with a failed conversion", async ({ page }) => {
   test.setTimeout(120_000);
   await seedWorkspace(page, "alpha");
 
-  // Without its program the framework cannot be told, so converting fails
+  // Without its program the project exports with the TypeScript profile,
+  // which reads the package versions; with that read refused, converting fails
+  await page.route("**/packages/versions.json", (route) => route.abort());
   await page
     .locator("#root-dir")
     .getByText("lib.rs", { exact: true })

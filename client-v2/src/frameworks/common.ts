@@ -76,12 +76,13 @@ export const getRustDependencies = async (files: TupleFiles) => {
 };
 
 /**
- * Get `package.json` dependencies from the given files.
+ * Get the packages the given files import or use as Playground globals, with
+ * the versions the Playground runs.
  *
  * @param files all files
- * @returns the dependency list
+ * @returns a map of package name to version, `*` when the version is unknown
  */
-export const getJSDependencies = async (files: TupleFiles) => {
+export const getJSDependencyMap = async (files: TupleFiles) => {
   const versions = await getVersions("packages");
   const getVersion = (packageName: string) => versions[packageName] ?? "*";
 
@@ -107,6 +108,17 @@ export const getJSDependencies = async (files: TupleFiles) => {
     }
   }
 
+  return dependencies;
+};
+
+/**
+ * Get `package.json` dependencies from the given files.
+ *
+ * @param files all files
+ * @returns the dependency list
+ */
+export const getJSDependencies = async (files: TupleFiles) => {
+  const dependencies = await getJSDependencyMap(files);
   const devDependencies: Dependencies = {
     "@types/bn.js": "^5.1.1",
     "@types/chai": "^4.3.5",

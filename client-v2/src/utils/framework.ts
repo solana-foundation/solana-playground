@@ -367,29 +367,20 @@ export class PgFramework {
   }
 
   /**
-   * Export a workspace as a zip file: the open one, unless `opts.name` names
-   * another.
+   * Read a workspace's files, hidden ones left out.
    *
-   * @param opts options
-   * - `convert`: whether to convert the playground layout to the framework's layout
-   * - `name`: the workspace to export; the open one by default
-   * @returns README Markdown text if `opts.convert` is `true`
-   * @throws when `opts.convert` is set and the framework cannot be told
-   * (`PgFramework.isUnknownFramework`), and when nothing names a workspace
+   * @param name the workspace to read
+   * @returns the files, paths relative to the workspace root
+   * @throws when nothing names a workspace
    */
-  static async exportWorkspace<C extends boolean = false>(opts?: {
-    convert?: C;
-    /** The workspace to export; the open one by default */
-    name?: string;
-  }) {
-    const name = opts?.name ?? PgExplorer.currentWorkspaceName;
+  static async readWorkspaceFiles(name: string) {
     // An empty name would read the root and zip every workspace as ".zip"
     if (!name) throw new Error(PgWorkspace.errors.CURRENT_NOT_FOUND);
     const workspacePath = PgCommon.appendSlash(
       PgCommon.joinPaths(PgExplorer.PATHS.ROOT_DIR_PATH, name)
     );
 
-    let files: TupleFiles = [];
+    const files: TupleFiles = [];
     const recursivelyGetItems = async (path: string) => {
       const itemNames = await PgExplorer.fs.readDir(path);
       const subItemPaths = itemNames
@@ -410,18 +401,35 @@ export class PgFramework {
     };
     await recursivelyGetItems(workspacePath);
 
-    // Convert from playground layout to framework layout
-    let readme: string | undefined;
-    if (opts?.convert) {
-      const framework = await this.getFromFiles(files);
-      if (!framework) throw new Error(UNKNOWN_FRAMEWORK);
+    return files;
+  }
 
-      const frameworkFrom = await framework.export();
-      readme = frameworkFrom.readme;
-      files = await frameworkFrom.convertFromPlayground(files);
-    }
+  /**
+   * Convert playground layout files to their framework's layout.
+   *
+   * @param files playground layout files
+   * @returns the framework's files, the README to show after, and the framework
+   * @throws when no framework recognises the files (`isUnknownFramework`)
+   */
+  static async convertToFramework(files: TupleFiles) {
+    const framework = await this.getFromFiles(files);
+    if (!framework) throw new Error(UNKNOWN_FRAMEWORK);
 
-    // Compress Zip
+    const { convertFromPlayground, readme } = await framework.export();
+    return {
+      files: await convertFromPlayground(files),
+      readme,
+      framework: framework.name,
+    };
+  }
+
+  /**
+   * Zip the given files and download the zip as `<name>.zip`.
+   *
+   * @param name the zip's name, without the extension
+   * @param files the files to zip; a path with no file name is a folder
+   */
+  static async downloadZip(name: string, files: TupleFiles) {
     const { default: JSZip } = await import("jszip");
     const zip = new JSZip();
     files.forEach(([path, content]) => {
@@ -431,6 +439,34 @@ export class PgFramework {
     });
     const blob = await zip.generateAsync({ type: "blob" });
     PgCommon.export(name + ".zip", blob);
+  }
+
+  /**
+   * Export a workspace as a zip file: the open one, unless `opts.name` names
+   * another.
+   *
+   * @param opts options
+   * - `convert`: whether to convert the playground layout to the framework's layout
+   * - `name`: the workspace to export; the open one by default
+   * @returns README Markdown text if `opts.convert` is `true`
+   * @throws when `opts.convert` is set and the framework cannot be told
+   * (`PgFramework.isUnknownFramework`), and when nothing names a workspace
+   */
+  static async exportWorkspace<C extends boolean = false>(opts?: {
+    convert?: C;
+    /** The workspace to export; the open one by default */
+    name?: string;
+  }) {
+    const name = opts?.name ?? PgExplorer.currentWorkspaceName;
+    if (!name) throw new Error(PgWorkspace.errors.CURRENT_NOT_FOUND);
+    let files = await this.readWorkspaceFiles(name);
+
+    // Convert from playground layout to framework layout
+    let readme: string | undefined;
+    if (opts?.convert)
+      ({ files, readme } = await this.convertToFramework(files));
+
+    await this.downloadZip(name, files);
 
     return { readme } as { readme: C extends true ? string : undefined };
   }
