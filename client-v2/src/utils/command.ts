@@ -1,7 +1,14 @@
 import { createLogger } from "@/shared/lib/logger";
 
 import { PgCommon } from "./common";
-import { PgTerminal, TerminalLineError, unknownCommand } from "./terminal";
+import {
+  PgTerminal,
+  TerminalLineError,
+  TonedLineError,
+  toneWith,
+  unknownCommand,
+  watchSlowRun,
+} from "./terminal";
 import type { Arrayable, Disposable, Getable, SyncOrAsync } from "./types";
 
 const log = createLogger("terminal:command");
@@ -41,7 +48,16 @@ export type CommandParam<
    * `StoppedError`. Any other command answers a stop with "can't be stopped".
    */
   stoppable?: true;
+  /**
+   * Whether the command needs the server or a cluster: offline, it ends at
+   * once with `OFFLINE_LINE`, before its pre-checks (Spec 13, "Offline"),
+   * unless it was asked for its help. Read on the top-level command only.
+   */
+  needsConnection?: true;
 } & (WithSubcommands<S> | WithHandle<A, O, R>);
+
+/** What a command that needs a connection ends with offline (Spec 13) */
+export const OFFLINE_LINE = "You're offline. This command needs a connection.";
 
 type WithSubcommands<S> = {
   /** Command arguments */
@@ -352,6 +368,14 @@ export class PgCommandManager {
         throw new TerminalLineError(answer.line);
       }
 
+      // Before the start event and the pre-checks: no wallet question first,
+      // and nothing has run, so nothing finishes. Asking for a command's help
+      // reaches no server, so it stays available
+      const asksForHelp = tokens.includes("--help") || tokens.includes("-h");
+      if (topCmd.needsConnection && !asksForHelp && !navigator.onLine) {
+        throw new TonedLineError("error", OFFLINE_LINE);
+      }
+
       const input = tokens.join(" ");
 
       const run: Run = {
@@ -369,6 +393,18 @@ export class PgCommandManager {
       // flow's stages among them, on "running". Help and a bare parent
       // command print and end without a result, and finish nothing.
       let result: { ok: unknown } | { err: unknown } | undefined;
+      // One clock per top-level run: a run another run starts (deploy
+      // building first) is part of the outer one's quiet (Spec 13, TRM-52)
+      const stopSlowRun = PgCommandManager._runs.size
+        ? undefined
+        : watchSlowRun((line) => {
+            // Only a notice, from a timer: nothing above it can catch this
+            PgTerminal.println(toneWith("info")(line)).catch((e) => {
+              log.warn("could not print the slow-run line", {
+                context: { reason: String(e) },
+              });
+            });
+          });
       try {
         PgCommandManager._runs.add(run);
         let cmd: Command<string, Arg[], Option[], any[], any> = topCmd;
@@ -617,6 +653,7 @@ Available subcommands: ${cmd.subcommands
         result = { err: e };
         throw e;
       } finally {
+        stopSlowRun?.();
         PgCommandManager._runs.delete(run);
         if (result) {
           PgCommon.createAndDispatchCustomEvent(eventNames.finish, result);

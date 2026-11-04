@@ -14,8 +14,9 @@ import type { ClassReturnType, Methods, SyncOrAsync } from "../types";
 import { PgAutocomplete } from "./autocomplete";
 import { confirmReply, confirmSuffix } from "./confirm";
 import { PgHistory } from "./history";
-import { processErrorLine } from "./line-error";
+import { lineTone, processErrorLine, toneWith } from "./line-error";
 import { PgShell } from "./shell";
+import { noteOutput } from "./slow-run";
 import { PgTty } from "./tty";
 import type { CommandManager, Prefixes, PrintOptions } from "./types";
 
@@ -54,7 +55,7 @@ export class PgTerminal {
   }
 
   static error(text: string) {
-    return `\x1b[1;31m${text}\x1b[0m`;
+    return toneWith("error")(text);
   }
 
   static warning(text: string) {
@@ -62,7 +63,7 @@ export class PgTerminal {
   }
 
   static info(text: string) {
-    return `\x1b[1;34m${text}\x1b[0m`;
+    return toneWith("info")(text);
   }
 
   static primary(text: string) {
@@ -458,6 +459,8 @@ export class PgTerm {
   print(msg: any, opts?: PrintOptions) {
     if (!this._isOpen) return;
     this._isUntouched = false;
+    // A run that prints is not quiet (Spec 13, TRM-52)
+    noteOutput();
 
     if (this._shell.isPrompting()) {
       // Cancel the current prompt and restart
@@ -710,8 +713,12 @@ export class PgTerm {
 
       // A stop, and a failure that is its own line, print with no prefix
       const msg = processErrorLine(e);
+      // Compared plain: xterm's text carries no colour codes
       const previousLine = this._tty.getLine(1)?.translateToString().trim();
-      if (previousLine !== msg) this.println(msg);
+      if (previousLine !== msg) {
+        const tone = lineTone(e);
+        this.println(tone ? toneWith(tone)(msg) : msg);
+      }
 
       throw e;
     } finally {

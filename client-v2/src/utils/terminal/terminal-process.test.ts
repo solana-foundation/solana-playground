@@ -6,7 +6,10 @@ import {
 } from "@/shared/lib/report-button-failure";
 
 import { StoppedError } from "../stopped";
-import { isTerminalUnmounted, PgTerminal } from "./terminal";
+import { TonedLineError } from "./line-error";
+import { PgShell } from "./shell";
+import { SLOW_RUN_LINE, SLOW_RUN_MS, watchSlowRun } from "./slow-run";
+import { isTerminalUnmounted, PgTerm, PgTerminal } from "./terminal";
 
 beforeEach(() => {
   PgTerminal.setConsoleOpen(true);
@@ -133,5 +136,100 @@ describe.each([
     vi.spyOn(PgTerminal, "run").mockRejectedValue(failure);
 
     await expect(call()).rejects.toBe(failure);
+  });
+});
+
+describe("PgTerm.process, a line with a tone", () => {
+  const fakeTerm = (previousLine: string | undefined) => ({
+    disable: vi.fn(),
+    enable: vi.fn(),
+    scrollToBottom: vi.fn(),
+    println: vi.fn(),
+    _tty: {
+      getLine: () =>
+        previousLine ? { translateToString: () => previousLine } : undefined,
+    },
+  });
+
+  const failWith = (term: ReturnType<typeof fakeTerm>, failure: Error) =>
+    PgTerm.prototype.process.call(term as never, () => {
+      throw failure;
+    });
+
+  it("prints it in the terminal's own colour for that tone", async () => {
+    const term = fakeTerm(undefined);
+    const failure = new TonedLineError("error", "Offline.");
+
+    await expect(failWith(term, failure)).rejects.toBe(failure);
+
+    expect(term.println).toHaveBeenCalledWith(PgTerminal.error("Offline."));
+  });
+
+  it("does not repeat a line already on screen, whatever its colour", async () => {
+    const term = fakeTerm("Offline.");
+    const failure = new TonedLineError("error", "Offline.");
+
+    await expect(failWith(term, failure)).rejects.toBe(failure);
+
+    expect(term.println).not.toHaveBeenCalled();
+  });
+});
+
+// The slow-run clock's own tests call its functions by hand; these are the
+// terminal calling them
+describe("the terminal feeding the slow-run clock", () => {
+  let printed: string[];
+  let stop: () => void;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    printed = [];
+    stop = watchSlowRun((line) => printed.push(line));
+  });
+
+  afterEach(() => {
+    stop();
+    vi.useRealTimers();
+  });
+
+  it("starts the 10 s again when the terminal prints", () => {
+    const term = {
+      _isOpen: true,
+      _shell: { isPrompting: () => false },
+      _tty: { print: vi.fn() },
+    };
+
+    vi.advanceTimersByTime(SLOW_RUN_MS - 1);
+    PgTerm.prototype.print.call(term as never, "output");
+    vi.advanceTimersByTime(SLOW_RUN_MS - 1);
+    expect(printed).toEqual([]);
+
+    vi.advanceTimersByTime(1);
+    expect(printed).toEqual([SLOW_RUN_LINE]);
+  });
+
+  it("does not count the time a question stays open", async () => {
+    const shell = {
+      _waitingForInput: false,
+      _prefixes: { waitingInputMsg: "" },
+      _prompt: async () => {},
+      _tty: { clearLine: vi.fn(), println: vi.fn(), input: "y" },
+    };
+
+    const answer = PgShell.prototype.waitForInput.call(shell as never, "Sure?");
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS * 3);
+    expect(printed).toEqual([]);
+
+    document.dispatchEvent(
+      new Event(
+        (
+          PgShell as unknown as { _TERMINAL_WAIT_FOR_INPUT: string }
+        )._TERMINAL_WAIT_FOR_INPUT
+      )
+    );
+    await expect(answer).resolves.toBe("y");
+
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS);
+    expect(printed).toEqual([SLOW_RUN_LINE]);
   });
 });

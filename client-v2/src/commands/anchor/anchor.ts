@@ -5,6 +5,7 @@ import { createCmd } from "../create";
 export const anchor = createCmd({
   name: "anchor",
   description: "Anchor CLI",
+  needsConnection: true,
   preChecks: checkPgWallet,
   handle: async (input) => {
     const { runAnchor } = await PgPackage.import("anchor-cli", {

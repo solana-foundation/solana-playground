@@ -49,6 +49,7 @@ const createCommonArgs = (parentPath: string) =>
 export const run = createCmd({
   name: "run",
   description: "Run script(s)",
+  needsConnection: true,
   args: createCommonArgs(PgExplorer.PATHS.CLIENT_DIRNAME),
   handle: (input) => processCommon({ paths: input.args.paths, isTest: false }),
 });
@@ -56,6 +57,7 @@ export const run = createCmd({
 export const test = createCmd({
   name: "test",
   description: "Run test(s)",
+  needsConnection: true,
   args: createCommonArgs(PgExplorer.PATHS.TESTS_DIRNAME),
   handle: (input) => processCommon({ paths: input.args.paths, isTest: true }),
 });

@@ -28,6 +28,7 @@ const log = createLogger("commands:deploy");
 export const deploy = createCmd({
   name: "deploy",
   description: "Deploy your program",
+  needsConnection: true,
   preChecks: [checkWallet, checkProgram],
   stoppable: true,
   handle: async ({ signal, lockStop }) => {

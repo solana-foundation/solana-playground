@@ -13,6 +13,7 @@ import { createArgs, createCmd } from "../create";
 export const airdrop = createCmd({
   name: "airdrop",
   description: "Airdrop SOL",
+  needsConnection: true,
   args: createArgs([
     // TODO: Add `default` value
     {

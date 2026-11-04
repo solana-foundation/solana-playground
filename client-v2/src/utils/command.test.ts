@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PgCommandManager } from "./command";
 import { isStopped, StoppedError } from "./stopped";
 import { PgTerminal, TerminalLineError } from "./terminal";
+import { SLOW_RUN_LINE, SLOW_RUN_MS } from "./terminal/slow-run";
 
 let saved: typeof PgCommandManager.all;
 
@@ -27,10 +28,12 @@ const install = ({
   preChecks,
   handle,
   stoppable,
+  needsConnection,
 }: {
   preChecks?: () => void;
   handle: (input: { signal: AbortSignal; lockStop: () => void }) => unknown;
   stoppable?: true;
+  needsConnection?: true;
 }) => {
   PgCommandManager.all = {
     probe: {
@@ -40,6 +43,7 @@ const install = ({
       preChecks,
       handle,
       stoppable,
+      needsConnection,
     },
   } as never;
 };
@@ -235,5 +239,151 @@ describe("PgCommandManager.execute, an unknown command", () => {
       "`xyzzy` is not a command. Type `help` to see commands."
     );
     expect(get).not.toHaveBeenCalled();
+  });
+});
+
+describe("PgCommandManager.execute, offline", () => {
+  const offline = () =>
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(false);
+
+  it("ends a command that needs a connection with the offline line, before its pre-checks", async () => {
+    offline();
+    const preChecks = vi.fn();
+    const handle = vi.fn();
+    install({ preChecks, handle, needsConnection: true });
+    const { seen, dispose } = finishes();
+
+    const failure = await PgCommandManager.execute(["probe"]).catch((e) => e);
+
+    dispose();
+    expect(failure).toBeInstanceOf(TerminalLineError);
+    expect(failure.message).toBe(
+      "You're offline. This command needs a connection."
+    );
+    expect(failure.tone).toBe("error");
+    expect(preChecks).not.toHaveBeenCalled();
+    expect(handle).not.toHaveBeenCalled();
+    // Nothing started, so nothing finishes
+    expect(seen).toEqual([]);
+  });
+
+  it("runs a command that needs a connection while online", async () => {
+    vi.spyOn(navigator, "onLine", "get").mockReturnValue(true);
+    install({ handle: async () => 1, needsConnection: true });
+
+    await expect(PgCommandManager.execute(["probe"])).resolves.toBe(1);
+  });
+
+  it("gives a command that needs a connection its help offline", async () => {
+    offline();
+    install({ handle: async () => 1, needsConnection: true });
+
+    await expect(PgCommandManager.execute(["probe", "--help"])).resolves.toBe(
+      1
+    );
+    await expect(PgCommandManager.execute(["probe", "-h"])).resolves.toBe(1);
+  });
+
+  it("answers an unknown command as one offline", async () => {
+    offline();
+    install({ handle: vi.fn(), needsConnection: true });
+
+    await expect(PgCommandManager.execute(["xyzzy"])).rejects.toThrow(
+      "`xyzzy` is not a command."
+    );
+  });
+
+  it("runs a local command offline", async () => {
+    offline();
+    install({ handle: async () => 1 });
+
+    await expect(PgCommandManager.execute(["probe"])).resolves.toBe(1);
+  });
+});
+
+describe("PgCommandManager.execute, a quiet run", () => {
+  let printed: string[];
+  const slowLines = () =>
+    printed.filter((line) => line.includes(SLOW_RUN_LINE));
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    printed = [];
+    vi.spyOn(PgTerminal, "println").mockImplementation(async (line) => {
+      printed.push(line);
+    });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("says once, in info blue, that a run quiet for 10 s is taking longer", async () => {
+    let finish!: () => void;
+    install({ handle: () => new Promise<void>((res) => (finish = res)) });
+
+    const run = PgCommandManager.execute(["probe"]);
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS * 3);
+    finish();
+    await run;
+
+    expect(slowLines()).toEqual(["\x1b[1;34m" + SLOW_RUN_LINE + "\x1b[0m"]);
+  });
+
+  it("says nothing after a run that ended in time", async () => {
+    install({ handle: async () => 1 });
+
+    await PgCommandManager.execute(["probe"]);
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS * 2);
+
+    expect(slowLines()).toEqual([]);
+  });
+
+  it("says nothing after a run that failed", async () => {
+    install({
+      handle: async () => {
+        throw new Error("boom");
+      },
+    });
+
+    await expect(PgCommandManager.execute(["probe"])).rejects.toThrow("boom");
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS * 2);
+
+    expect(slowLines()).toEqual([]);
+  });
+
+  it("logs a slow line it could not print, and the run goes on", async () => {
+    vi.spyOn(PgTerminal, "println").mockRejectedValue(new Error("no xterm"));
+    let finish!: () => void;
+    install({ handle: () => new Promise<void>((res) => (finish = res)) });
+
+    const run = PgCommandManager.execute(["probe"]);
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS);
+    finish();
+
+    await expect(run).resolves.toBeUndefined();
+  });
+
+  it("keeps the outer run's clock through a run it starts", async () => {
+    let finish!: () => void;
+    PgCommandManager.all = {
+      outer: {
+        name: "outer",
+        description: "",
+        options: [],
+        handle: async () => {
+          await PgCommandManager.execute(["inner"]);
+          await new Promise<void>((res) => (finish = res));
+        },
+      },
+      inner: { name: "inner", description: "", options: [], handle: () => {} },
+    } as never;
+
+    const run = PgCommandManager.execute(["outer"]);
+    await vi.advanceTimersByTimeAsync(SLOW_RUN_MS);
+    finish();
+    await run;
+
+    expect(slowLines()).toHaveLength(1);
   });
 });
