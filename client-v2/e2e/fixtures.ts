@@ -613,3 +613,75 @@ export const isStored = (page: Page, needle: string) =>
     }
     return false;
   }, needle);
+
+/**
+ * Starts the test's pages on Playnet, the in-browser cluster, so a script
+ * can send transactions with no network. Set on every load, after the
+ * fixture's devnet default.
+ */
+export const startOnPlaynet = (page: Page) =>
+  page.addInitScript(() => {
+    localStorage.setItem(
+      "settings",
+      JSON.stringify({ connection: { endpoint: { option: "playnet" } } })
+    );
+  });
+
+/**
+ * Waits until Playnet answers: it replaces the page's `fetch` once its WASM
+ * has loaded (`PgPlaynetRpc.overrideConnection`).
+ */
+export const playnetReady = (page: Page) =>
+  page.waitForFunction(
+    () => !String(window.fetch).includes("[native code]"),
+    undefined,
+    LONG
+  );
+
+/** A browser with one Native project, whose test is the hello world one */
+export const seedNativeWorkspace = async (page: Page, name = "e2e-native") => {
+  await page.goto("/");
+  await expect(home(page)).toBeVisible();
+  const region = homeRegion(page);
+  await region.getByRole("button", { name: /^New project/ }).click();
+  await region.getByRole("radio", { name: /Native/ }).click();
+  await region.getByLabel("Project name").fill(name);
+  await region.getByRole("button", { name: /^Start/ }).click();
+  await expect(home(page)).toBeHidden();
+  await expect(page.locator("#root-dir")).toBeVisible();
+};
+
+/** Opens the terminal drawer, if it is closed */
+export const openTerminal = async (page: Page) => {
+  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+};
+
+/**
+ * Opens `folder/file` from the tree and replaces its text with `code`.
+ *
+ * A paste, not typing: the editor closes brackets as they are typed. Then a
+ * wait for the editor's autosave (500 ms after the last change,
+ * `Monaco.tsx`), since `run` and `test` read the saved file.
+ */
+export const replaceFile =
+  (context: BrowserContext, page: Page) =>
+  async (folder: string, file: string, code: string) => {
+    await page.getByRole("button", { name: folder, exact: true }).click();
+    await page.getByRole("button", { name: file, exact: true }).click();
+    const lines = page.locator(".monaco-editor .view-lines");
+    await expect(lines).not.toBeEmpty(LONG);
+    await page.locator(".monaco-editor textarea.inputarea").focus();
+    await page.keyboard.press("ControlOrMeta+A");
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await page.evaluate((text) => navigator.clipboard.writeText(text), code);
+    await page.keyboard.press("ControlOrMeta+V");
+    const last = code.trim().split("\n").at(-1) ?? "";
+    await expect(lines).toContainText(last.trim());
+    await page.waitForTimeout(1000);
+  };
+
+/** The terminal's rows in view */
+export const terminalRows = (page: Page) => page.locator(".xterm-rows").first();
