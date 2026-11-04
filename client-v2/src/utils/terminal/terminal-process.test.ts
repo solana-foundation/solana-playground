@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  initLogger,
+  installGlobalHandlers,
+  memoryProvider,
+  resetLogger,
+} from "@/shared/lib/logger";
+import {
   unavailableHere,
   wasFailureShown,
 } from "@/shared/lib/report-button-failure";
@@ -231,5 +237,44 @@ describe("the terminal feeding the slow-run clock", () => {
 
     await vi.advanceTimersByTimeAsync(SLOW_RUN_MS);
     expect(printed).toEqual([SLOW_RUN_LINE]);
+  });
+});
+
+describe("PgTerm.process", () => {
+  afterEach(() => resetLogger());
+
+  /** The parts of a terminal `process` touches, without an xterm */
+  const fakeTerm = () =>
+    Object.assign(Object.create(PgTerm.prototype), {
+      disable: () => {},
+      enable: () => {},
+      scrollToBottom: () => {},
+      println: vi.fn(),
+      _tty: { getLine: () => undefined },
+    }) as PgTerm;
+
+  it("leaves a warning, never a panic, for a command failure the terminal printed", async () => {
+    const logged = memoryProvider();
+    initLogger({ providers: [logged] });
+    const uninstall = installGlobalHandlers();
+    const term = fakeTerm();
+    const failure = new Error("Command `nope` not found.");
+
+    const reason = await term
+      .process(() => {
+        throw failure;
+      })
+      .catch((error: unknown) => error);
+    const event = new Event("unhandledrejection") as PromiseRejectionEvent;
+    Object.defineProperty(event, "reason", { value: reason });
+    globalThis.dispatchEvent(event);
+    uninstall();
+
+    expect(reason).toBe(failure);
+    expect(term.println).toHaveBeenCalledWith(
+      "Process error: Command `nope` not found."
+    );
+    expect(logged.entries.map((entry) => entry.level)).toEqual(["warn"]);
+    expect(logged.entries[0].report).toBe(false);
   });
 });

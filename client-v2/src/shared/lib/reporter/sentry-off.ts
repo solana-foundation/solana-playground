@@ -9,6 +9,7 @@ export const reporter: Reporter = {
   carried: false,
   init: () => {},
   capture: () => {},
+  trail: () => {},
   sendFeedback: () =>
     Promise.reject(new Error("This build does not carry a reporter")),
 };

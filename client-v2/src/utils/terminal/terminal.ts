@@ -2,7 +2,7 @@ import { ITerminalOptions, ITheme, Terminal as XTerm } from "xterm";
 import { FitAddon } from "xterm-addon-fit";
 import { WebLinksAddon } from "xterm-addon-web-links";
 
-import { createLogger } from "@/shared/lib/logger";
+import { createLogger, markShown } from "@/shared/lib/logger";
 import {
   markFailureShown,
   markUnavailableHere,
@@ -720,6 +720,8 @@ export class PgTerm {
         this.println(tone ? toneWith(tone)(msg) : msg);
       }
 
+      // The user has seen it: an unknown command or a declined question is not a bug to report
+      markShown(e);
       throw e;
     } finally {
       this.enable();

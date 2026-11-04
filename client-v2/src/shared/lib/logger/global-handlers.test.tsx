@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 
 import { LoggerErrorBoundary } from "./error-boundary";
-import { installGlobalHandlers } from "./global-handlers";
+import { installGlobalHandlers, markShown } from "./global-handlers";
 import { initLogger, resetLogger } from "./logger";
 import { memoryProvider } from "./providers/memory";
 
@@ -38,6 +38,24 @@ describe("installGlobalHandlers", () => {
         level: "panic",
         error: reason,
         unhandled: true,
+      }),
+    ]);
+  });
+
+  it("should leave a warning, not a panic, for a rejection the user was shown", () => {
+    const reason = new Error("Command `nope` not found.");
+    markShown(reason);
+    const event = new Event("unhandledrejection") as PromiseRejectionEvent;
+    Object.defineProperty(event, "reason", { value: reason });
+
+    globalThis.dispatchEvent(event);
+
+    expect(logged.entries).toEqual([
+      expect.objectContaining({
+        ns: "logger:global",
+        level: "warn",
+        message: "Shown to the user: Error: Command `nope` not found.",
+        report: false,
       }),
     ]);
   });

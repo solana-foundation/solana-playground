@@ -10,6 +10,7 @@ vi.mock("@sentry/react", () => {
     init: vi.fn(),
     captureException: vi.fn(),
     captureMessage: vi.fn(),
+    addBreadcrumb: vi.fn(),
     withScope: vi.fn((callback: (s: typeof scope) => void) => callback(scope)),
     scope,
   };
@@ -40,16 +41,18 @@ it("should initialise nothing and send nothing without a DSN", () => {
   expect(Sentry.captureException).not.toHaveBeenCalled();
 });
 
-it("should leave out Sentry's global handlers so errors take the logger's path", () => {
+it("should leave out Sentry's global handlers and console breadcrumbs", () => {
   sentryProvider({ dsn: DSN });
 
   const { integrations } = vi.mocked(Sentry.init).mock.calls[0][0] as {
     integrations: (defaults: { name: string }[]) => { name: string }[];
   };
   expect(
-    integrations([{ name: "GlobalHandlers" }, { name: "Dedupe" }]).map(
-      (i) => i.name
-    )
+    integrations([
+      { name: "GlobalHandlers" },
+      { name: "Console" },
+      { name: "Dedupe" },
+    ]).map((i) => i.name)
   ).toEqual(["Dedupe"]);
 });
 
@@ -97,4 +100,55 @@ it("should prefix a reported warning with its namespace", () => {
   expect(Sentry.captureMessage).toHaveBeenCalledWith(
     "[persistence:sync] slow push"
   );
+});
+
+it.each([
+  {
+    name: "a warning",
+    level: "warn",
+    message: "slow push",
+    error: undefined,
+    severity: "warning",
+    text: "slow push",
+  },
+  {
+    name: "an error",
+    level: "error",
+    message: undefined,
+    error: new TypeError("push rejected"),
+    severity: "error",
+    text: "TypeError: push rejected",
+  },
+] as const)(
+  "should leave $name as a breadcrumb in its namespace, reported or not",
+  ({ level, message, error, severity, text }) => {
+    vi.mocked(Sentry.addBreadcrumb).mockClear();
+
+    sentryProvider({ dsn: DSN }).log(
+      entry({
+        level,
+        report: false,
+        message,
+        error,
+        context: { projectId: "p1" },
+      })
+    );
+
+    expect(Sentry.addBreadcrumb).toHaveBeenCalledWith({
+      category: "persistence:sync",
+      level: severity,
+      message: text,
+      data: { projectId: "p1" },
+    });
+  }
+);
+
+it("should leave no breadcrumb for an entry below warn", () => {
+  vi.mocked(Sentry.addBreadcrumb).mockClear();
+
+  sentryProvider({ dsn: DSN }).log(
+    entry({ level: "info", report: false, message: "pushed" })
+  );
+
+  expect(Sentry.addBreadcrumb).not.toHaveBeenCalled();
 });
