@@ -1,5 +1,5 @@
 import type { WalletNoticeKind } from "../../entities/wallet";
-import { createLogger } from "../../shared/lib/logger";
+import { createLogger, toError } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import {
@@ -93,6 +93,8 @@ const localStorageOrRefusal = (): Pick<
 };
 
 const log = createLogger("wallet:notice");
+
+const migrateLog = createLogger("wallet:migrate");
 
 /** The notices this page load has already raised, each at most once */
 const toldNotices = new Set<WalletNoticeKind>();
@@ -326,9 +328,14 @@ const migrate = () => {
   let walletStr: string | null;
   try {
     walletStr = localStorage.getItem(WALLET_LOCAL_KEY);
-  } catch {
+  } catch (error) {
     // Nothing to upgrade where storage is refused: `walletStorage().read`
     // meets the same refusal, reports it and reads IndexedDB
+    migrateLog.warn(
+      `legacy wallet upgrade skipped, localStorage refused: ${
+        toError(error).name
+      }`
+    );
     return;
   }
   if (!walletStr) return;
@@ -342,9 +349,12 @@ const migrate = () => {
   let oldOrNewWallet: OldWalletState | WalletState;
   try {
     oldOrNewWallet = JSON.parse(walletStr);
-  } catch {
-    // Not logged here: `walletStorage().read` reports it, without the
-    // `SyntaxError`'s message, which quotes the text and so key bytes
+  } catch (error) {
+    // The name only: the `SyntaxError`'s message quotes the text, and so key
+    // bytes. `walletStorage().read` reports the unreadable wallet itself.
+    migrateLog.warn(
+      `legacy wallet upgrade skipped, unreadable JSON: ${toError(error).name}`
+    );
     return;
   }
   if (typeof oldOrNewWallet !== "object" || oldOrNewWallet === null) return;
