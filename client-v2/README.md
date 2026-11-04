@@ -219,6 +219,10 @@ docker compose -f ../compose.yaml --profile v2-unstable up --build
   setting set experimental.unstable true
   ```
 
+  A Vercel build fails while `REACT_APP_SERVER_UNSTABLE=true`
+  (`scripts/check-unstable-env.mjs`), because no hosted server serves
+  `/unstable`. `yarn build` and the `v2-prod` profile keep the flag.
+
 The client image builds from the primary checkout and from a linked worktree
 alike: it reads no git data of the checkout. It clones the assets repository
 at the commit in `scripts/assets-commit.txt` and points `update-static.mjs` at
