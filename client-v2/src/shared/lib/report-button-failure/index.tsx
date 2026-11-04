@@ -19,11 +19,10 @@ const shownStrings: unknown[] = [];
  * stage shows it failed, and the wallet's airdrop for a sign-in failure the
  * account row shows.
  *
- * Objects are matched by identity. A thrown primitive (`Send` throws the
- * transaction's error string) can only be matched by value, so it answers one
- * check and is forgotten: a later failure with the same text, from a path
- * that printed nothing, is still toasted. The newest `SHOWN_STRINGS_CAP` are
- * kept. `null` and `undefined` say nothing about which failure they were and
+ * Objects are matched by identity. A thrown primitive can only be matched by
+ * value, so it answers one check and is forgotten: a later failure with the
+ * same text, from a path that printed nothing, is still toasted. The newest
+ * `SHOWN_STRINGS_CAP` are kept. `null` and `undefined` say nothing about which failure they were and
  * are never marked.
  */
 export const markFailureShown = (error: unknown): void => {

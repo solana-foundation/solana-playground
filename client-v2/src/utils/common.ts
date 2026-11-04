@@ -82,7 +82,9 @@ export class PgCommon {
     }
 
     return (await Promise.race([
-      new Promise((_, rej) => this.sleep(ms).then(() => rej("Timed out"))),
+      new Promise((_, rej) =>
+        this.sleep(ms).then(() => rej(new Error("Timed out")))
+      ),
       promisable,
     ])) as Awaited<R>;
   }
@@ -1027,6 +1029,7 @@ export class PgCommon {
         );
 
         if (ev.detail.error) {
+          // eslint-disable-next-line prefer-promise-reject-errors -- the `@throws` contract is a plain `{ message }`, which callers and tests match
           rej({ message: ev.detail.error });
         } else {
           res(ev.detail.data);
@@ -1546,9 +1549,11 @@ if (import.meta.vitest) {
       // Callers read `.message` in their `catch`
       it("rejects with an Error carrying a non-Error's message", async () => {
         await expect(
+          // eslint-disable-next-line prefer-promise-reject-errors -- the case under test is a non-Error rejection
           PgCommon.transition(Promise.reject({ message: "locked" }), 0)
         ).rejects.toThrow(new Error("locked"));
         await expect(
+          // eslint-disable-next-line prefer-promise-reject-errors -- the case under test is a non-Error rejection
           PgCommon.transition(Promise.reject(undefined), 0)
         ).rejects.toBeInstanceOf(Error);
       });

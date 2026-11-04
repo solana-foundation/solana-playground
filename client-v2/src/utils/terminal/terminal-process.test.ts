@@ -38,7 +38,7 @@ describe("PgTerminal.process", () => {
   it("marks a thrown string", async () => {
     await expect(
       PgTerminal.process(() => {
-        // eslint-disable-next-line no-throw-literal -- the case under test is a thrown string
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal -- the case under test is a thrown string
         throw "AccountNotFound";
       })
     ).rejects.toBe("AccountNotFound");

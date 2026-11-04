@@ -74,14 +74,21 @@ const SendExpanded = () => {
         PgTerminal.info(`Sending ${amount} SOL to ${recipient}...`)
       );
 
+      const wallet = PgWallet.current;
+      if (!wallet) throw new Error("Wallet not connected");
+
       const ix = PgWeb3.SystemProgram.transfer({
-        fromPubkey: PgWallet.current!.publicKey,
+        fromPubkey: wallet.publicKey,
         toPubkey: new PgWeb3.PublicKey(recipient),
         lamports: PgWeb3.solToLamports(parseFloat(amount)),
       });
       const txHash = await PgTx.send(ix);
       const txResult = await PgCommon.transition(PgTx.confirm(txHash));
-      if (txResult?.err) throw txResult.err;
+      if (txResult?.err) {
+        throw new Error(`Transfer failed: ${JSON.stringify(txResult.err)}`, {
+          cause: txResult.err,
+        });
+      }
 
       PgTerminal.println(PgTerminal.success("Success."));
 

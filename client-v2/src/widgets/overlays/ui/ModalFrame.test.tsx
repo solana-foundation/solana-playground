@@ -135,8 +135,7 @@ it("should show a thrown string as the message", async () => {
     buttonProps: {
       text: "Rename",
       onSubmit: () => {
-        // Legacy dialog bodies throw strings; the frame must still show them
-        // eslint-disable-next-line no-throw-literal
+        // eslint-disable-next-line @typescript-eslint/no-throw-literal -- legacy dialog bodies throw strings; the frame must still show them
         throw "nope";
       },
     },
@@ -190,7 +189,7 @@ it("should show the message of a rejected { message } object", async () => {
     title: "Rename",
     buttonProps: {
       text: "Rename",
-      // `PgCommon.sendAndReceiveCustomEvent` rejects with this shape
+      // eslint-disable-next-line prefer-promise-reject-errors -- `PgCommon.sendAndReceiveCustomEvent` rejects with this shape
       onSubmit: () => Promise.reject({ message: "no wallet" }),
     },
   });
