@@ -12,7 +12,7 @@
  *
  * Files under `client-v2/static` then replace their upstream copies
  * (`static-overlay.mjs`), and the mirrored `index.html` is pointed at the
- * brand's icons (`brand-head.mjs`).
+ * brand's icons and share card (`brand-head.mjs`).
  *
  * Run via `make update-static` after cloning, after creating a worktree, or
  * after bumping the submodule.
@@ -79,8 +79,9 @@ const overlaid = await overlayStatic(
   DEST_PATH
 );
 
-// The icons the overlay just copied are named only by the page's markup, so a
-// crawler or a home screen reads them without running the bundle.
+// The icons and share image the overlay just copied are named only by the
+// page's markup, so a crawler, a link preview or a home screen reads them
+// without running the bundle.
 const indexHtml = path.join(DEST_PATH, "index.html");
 await fs.writeFile(indexHtml, brandHead(await fs.readFile(indexHtml, "utf8")));
 
@@ -115,5 +116,5 @@ console.log(
     `, overlaid ${overlaid.length} from client-v2/static (${overlaid.join(
       ", "
     )})` +
-    ", pointed index.html at the brand icons"
+    ", pointed index.html at the brand icons and share card"
 );

@@ -174,8 +174,9 @@ not the OS. `PgTheme.set` toggles `dark` on `<html>` next to `colorScheme`.
   `yarn run check` and in CI, and fails on any hex colour or colour function
   (`rgb()`, `hsl()`, `color(srgb ...)` and the like) outside the installed
   token files, `shared/lib/css-color`, the third-party logo colours in
-  `languages/`, and `app/favicon.svg`, which the browser draws outside the
-  page, where no token reaches (HOO-2241). Named colours (`white`, `red`) are not caught: the words are
+  `languages/`, and the tutorial covers' brand art in
+  `widgets/catalog/ui/art/`, whose grounds no token describes. The brand
+  icons live outside `src/` (`client-v2/static/`, HOO-2568). Named colours (`white`, `red`) are not caught: the words are
   too common in code to tell from a colour without parsing CSS. Sidebar icons colour through a CSS mask over the
   text colour, which reaches the rail's raster icons too.
 
