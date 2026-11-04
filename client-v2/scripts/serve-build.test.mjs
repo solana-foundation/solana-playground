@@ -12,14 +12,26 @@ const vercelJson = JSON.parse(
 
 describe("platformRules", () => {
   it("takes the COOP and COEP headers the app needs from vercel.json", () => {
-    const { headers } = platformRules(vercelJson);
+    const headers = platformRules(vercelJson).headersFor("/");
     assert.equal(headers["Cross-Origin-Embedder-Policy"], "require-corp");
     assert.equal(headers["Cross-Origin-Opener-Policy"], "same-origin");
   });
 
+  it("adds the sandbox's CORP header to /static/ paths only", () => {
+    const { headersFor } = platformRules(vercelJson);
+    const asset = headersFor("/static/js/main.js");
+    assert.equal(asset["Cross-Origin-Resource-Policy"], "cross-origin");
+    assert.equal(asset["Cross-Origin-Embedder-Policy"], "require-corp");
+    assert.equal(headersFor("/")["Cross-Origin-Resource-Policy"], undefined);
+    assert.equal(
+      headersFor("/staticky")["Cross-Origin-Resource-Policy"],
+      undefined
+    );
+  });
+
   it("refuses a header rule it would not apply", () => {
     assert.throws(() =>
-      platformRules({ headers: [{ source: "/static/(.*)", headers: [] }] })
+      platformRules({ headers: [{ source: "/:path*", headers: [] }] })
     );
   });
 });

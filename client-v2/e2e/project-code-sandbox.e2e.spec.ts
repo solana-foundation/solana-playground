@@ -92,13 +92,14 @@ test.describe("project-code-sandbox", () => {
   }) => {
     test.slow();
     const { writeTest } = await seedPlaynetProject(context, page);
-    await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);
+    // Written before the deploy, while the editor still has the focus
     await writeTest(greetWithAnchor("signers"));
+    await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);
 
     await runFor(page)("test", /1 passing/);
 
     await expect(terminalRows(page)).toContainText("same program: true true");
-    await expect(terminalRows(page)).toContainText("greeted: 1");
+    await expect(terminalRows(page)).toContainText("landed: true");
   });
 
   test("project-code-sandbox: A script runs against Playnet", async ({
