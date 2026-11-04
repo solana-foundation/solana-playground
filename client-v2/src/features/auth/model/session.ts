@@ -122,21 +122,14 @@ const READ_TIMEOUT_MS = 10_000;
 export type ReadState = "unread" | "failed" | "answered";
 
 /**
- * A 2xx body, or `undefined` when it is an HTML page: a host with no auth route
- * serves its app shell there, which says nobody can be signed in. Any other
- * body that does not parse (a cut-off answer, a portal's text) throws, and
- * the read fails.
+ * A 2xx that is an HTML page: a host with no auth route serves its app shell
+ * there, which says nobody can be signed in. Any other body is read as JSON,
+ * and one that does not parse (a cut-off answer, a portal's text) throws, so
+ * the read fails. JSON `null` is not a page: it is the route saying nobody is
+ * signed in, as it does for an expired session.
  */
-const jsonOrPage = async (response: Response) => {
-  if (response.headers?.get("content-type")?.includes("text/html")) {
-    log.warn("session read answered a page, not JSON", {
-      context: { status: response.status },
-    });
-    return undefined;
-  }
-  // A JSON `null` body says as little as a page does
-  return (await response.json()) ?? undefined;
-};
+const isPage = (response: Response) =>
+  !!response.headers?.get("content-type")?.includes("text/html");
 
 /**
  * The auth route's 503 for a deployment with no sign-in configured. Only a
@@ -247,18 +240,24 @@ export class PgSession {
         signal: timeoutSignal(READ_TIMEOUT_MS),
       });
       if (response.ok) {
-        const body = await jsonOrPage(response);
-        // A page where this user's session came from is a proxy's, not this
-        // host lacking the route: it says nothing about them
-        if (body === undefined && PgSession._user) failed = true;
-        next = body?.user
-          ? {
-              id: String(body.user.id),
-              name: body.user.name ?? undefined,
-              image: body.user.image ?? undefined,
-              login: body.user.login ?? undefined,
-            }
-          : undefined;
+        if (isPage(response)) {
+          log.warn("session read answered a page, not JSON", {
+            context: { status: response.status },
+          });
+          // A page where this user's session came from is a proxy's, not this
+          // host lacking the route: it says nothing about them
+          if (PgSession._user) failed = true;
+        } else {
+          const body = await response.json();
+          next = body?.user
+            ? {
+                id: String(body.user.id),
+                name: body.user.name ?? undefined,
+                image: body.user.image ?? undefined,
+                login: body.user.login ?? undefined,
+              }
+            : undefined;
+        }
       } else if (await notConfigured(response)) {
         // This deployment has no sign-in, so nobody is signed in: an answer
       } else if (response.status === 404 && PgSession._user) {
@@ -1028,6 +1027,27 @@ if (import.meta.vitest) {
           "/api/auth/get-session",
           expect.objectContaining({ credentials: "include" })
         );
+      });
+
+      it("signs a known user out when the route answers JSON null, an expired session", async () => {
+        await PgSession.refreshWith({
+          id: "u1",
+          name: "Ada",
+          image: undefined,
+          login: "ada",
+        });
+        vi.spyOn(globalThis, "fetch").mockImplementation(
+          vi.fn().mockResolvedValue({
+            ok: true,
+            // eslint-disable-next-line unicorn/no-null -- the auth route's wire JSON answers `null` for nobody
+            json: async () => null,
+          }) as unknown as typeof fetch
+        );
+
+        await PgSession.refresh();
+
+        expect(PgSession.get()).toBeUndefined();
+        expect(PgSession.readState).toBe("answered");
       });
 
       it("treats an empty session body as signed out", async () => {
