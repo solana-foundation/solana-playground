@@ -221,9 +221,10 @@ counts.
    A task already listed in an umbrella stays there: its PR ticks only its
    own task line, keeps its design detail in the task's `plans/` file, and
    adds nothing to `design.md` or the specs, because every ticket appending
-   to one `design.md` made each merge conflict with the rest. A task whose
-   deliverable is specs, such as 3.8, writes them and still leaves `design.md`
-   alone. The PR that closes the umbrella (step 5) is the exception.
+   to one `design.md` made each merge conflict with the rest. A task writes
+   to the specs only when they are its deliverable, such as 3.8, or to describe
+   a telemetry event it adds or renames; `design.md` stays closed to it either
+   way. The PR that closes the umbrella (step 5) is the exception.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
    before the PR is opened (and before the sx review, if it runs); it never
