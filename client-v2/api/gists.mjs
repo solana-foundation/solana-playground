@@ -27,6 +27,9 @@ import {
   MAX_GIST_BYTES,
   MAX_GIST_FILES,
 } from "../src/features/gist/server.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:gists");
 
 const sendJson = (res, status, body) => {
   res.statusCode = status;
@@ -176,17 +179,14 @@ export const createHandler =
       if (e instanceof NoGithubGrant) {
         // Signed in to us, but GitHub's grant is gone: signing in again
         // stores a fresh token
-        console.warn("gists: no usable GitHub token", { message: e.message });
+        log.warn("no usable GitHub token", { context: { reason: e.message } });
         return sendJson(res, 401, {
           error: "GitHub authorization is missing",
           reason: GITHUB_UNAUTHORIZED,
         });
       }
       // The database or the configuration: a new sign-in would not help
-      console.error("gists: could not read the GitHub token", {
-        message: e?.message,
-        stack: e?.stack,
-      });
+      log.error(e, { report: true });
       return sendJson(res, 503, { error: "Sign-in is unavailable" });
     }
 

@@ -41,6 +41,7 @@ vi.mock("../../../utils", () => ({
   },
 }));
 
+import { requireFor } from "../../../test-utils/require-for";
 import { StoppedError } from "../../../utils/stopped";
 import type { BuildOutput } from "../../sidebar/assistant/bridge/build-output";
 import type { FlowEvent } from "./stage";

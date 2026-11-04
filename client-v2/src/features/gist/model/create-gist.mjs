@@ -4,11 +4,14 @@
  *
  * Plain ESM: `/api/gists` runs it as written (see `api/health.mjs`).
  */
+import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 import {
   GIST_SCOPE,
   GITHUB_UNAUTHORIZED,
   NEEDS_GIST_SCOPE,
 } from "../config.mjs";
+
+const log = createServerLogger("gist:create-gist");
 
 const GISTS_URL = "https://api.github.com/gists";
 
@@ -53,9 +56,8 @@ const messageOf = async (response) => {
     return typeof body?.message === "string" ? body.message : "";
   } catch (e) {
     // A body that is not JSON carries no message to read; the status decides
-    console.warn("gist: unreadable GitHub answer", {
-      status: response.status,
-      message: e?.message,
+    log.warn("unreadable GitHub answer", {
+      context: { status: response.status, reason: e?.message },
     });
     return "";
   }
@@ -90,7 +92,7 @@ export const createGistWith =
         body: JSON.stringify({ description, public: visibility, files }),
       });
     } catch (e) {
-      console.error("gist: GitHub request failed", { message: e?.message });
+      log.error(e, { context: { during: "GitHub request" } });
       return fail(502, "request-failed");
     }
 
@@ -99,13 +101,11 @@ export const createGistWith =
       try {
         gist = await response.json();
       } catch (e) {
-        console.error("gist: unreadable 201 from GitHub", {
-          message: e?.message,
-        });
+        log.error(e, { context: { during: "reading GitHub's 201" } });
         return fail(502, "request-failed");
       }
       if (typeof gist?.html_url !== "string" || typeof gist?.id !== "string") {
-        console.error("gist: GitHub's 201 named no gist");
+        log.error(new Error("GitHub's 201 named no gist"), { report: true });
         return fail(502, "request-failed");
       }
       return { status: 201, body: { url: gist.html_url, id: gist.id } };
@@ -122,13 +122,13 @@ export const createGistWith =
       return fail(403, NEEDS_GIST_SCOPE);
     }
     if (response.status === 422) {
-      console.warn("gist: GitHub rejected the gist", { message });
+      log.warn("GitHub rejected the gist", { context: { message } });
       return fail(422, "rejected");
     }
 
-    console.error("gist: unexpected GitHub answer", {
-      status: response.status,
-      message,
+    log.error(new Error("unexpected GitHub answer"), {
+      report: true,
+      context: { status: response.status, message },
     });
     return fail(502, "request-failed");
   };
