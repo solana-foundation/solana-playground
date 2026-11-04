@@ -42,8 +42,7 @@ export const awaitPortFrom =
         resolve(port);
       };
       self.addEventListener("message", handleMessage);
-      // The page's origin is the only one we may not name from an opaque
-      // origin's point of view, so `"*"`; the message carries nothing
+      // `"*"`: the message carries nothing, and the answer is checked above
       parent.postMessage(HANDSHAKE, "*");
     });
 

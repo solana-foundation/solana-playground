@@ -25,7 +25,7 @@ export const relayRpcWith =
     let url: URL;
     try {
       url = new URL(request.url);
-    } catch (error) {
+    } catch {
       return { error: `Not an RPC address: ${request.url}` };
     }
     if (url.protocol !== "http:" && url.protocol !== "https:") {
