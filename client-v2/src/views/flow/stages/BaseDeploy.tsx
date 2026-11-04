@@ -59,6 +59,10 @@ export interface BaseDeployProps {
   txUrl: (signature: string) => string;
   onDeploy: () => void;
   onInteract: () => void;
+  /** Opens the Build stage, offered while the program is not built */
+  onGoToBuild: () => void;
+  /** Opens the console, where the terminal has a failed deploy's whole log */
+  onShowLog: () => void;
   /** The rare "Upload IDL" action, a link under the pill (`IdlActions mode="upload"`) */
   idlUpload: ReactNode;
 }
@@ -70,8 +74,17 @@ const deployBlockedReason = (p: BaseDeployProps) => {
   return undefined;
 };
 
+/**
+ * A failed deploy of a built program: the stage maps no failure to a named
+ * state (Spec 08 ANY-00), so the pill runs the deploy again and says so. With
+ * no build the pill is faded, keeps naming where the deploy would go, and Go
+ * to Build is the way on instead.
+ */
+const offersRetry = (p: BaseDeployProps) => p.built && p.deploy === "failed";
+
 const deployLabel = (p: BaseDeployProps, redeploy: boolean) => {
   if (p.deploy === "running") return redeploy ? "Upgrading..." : "Deploying...";
+  if (offersRetry(p)) return "Try again";
   const where = clusterName(p);
   return redeploy ? `Redeploy to ${where}` : `Deploy to ${where}`;
 };
@@ -277,11 +290,25 @@ const BaseDeploy = (p: BaseDeployProps) => {
             {deployLabel(p, latest !== null)}
             {!running && <BrandButtonIcon />}
           </BrandButton>
-          {/* A link, not a second button: loading an IDL by hand is rare.
-              Before the first deploy, centred under the pill on a desk and
-              above it on a phone, where the pill keeps the foot; after one,
-              beside the pill */}
-          <div className="flex justify-center">{p.idlUpload}</div>
+          {/* Links, not second pills: the stage has one way on. Go to Build
+              (Spec 03 DEP-07) while the pill is faded, Show full log (Spec 08
+              ANY-00) after a failure, then Upload IDL, loaded by hand
+              rarely. Before the first deploy, centred under the pill on a
+              desk and above it on a phone, where the pill keeps the foot;
+              after one, beside the pill */}
+          <div className="flex flex-wrap justify-center">
+            {!p.built && (
+              <Button variant="link" onClick={p.onGoToBuild}>
+                Go to Build
+              </Button>
+            )}
+            {offersRetry(p) && (
+              <Button variant="link" onClick={p.onShowLog}>
+                Show full log
+              </Button>
+            )}
+            {p.idlUpload}
+          </div>
         </StageEmptyActions>
       </StageEmpty>
     </div>

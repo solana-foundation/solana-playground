@@ -54,6 +54,8 @@ const props = (state: {
   txUrl: (sig) => `https://explorer.test/tx/${sig}`,
   onDeploy: vi.fn(),
   onInteract: vi.fn(),
+  onGoToBuild: vi.fn(),
+  onShowLog: vi.fn(),
   idlUpload: <button>Upload IDL</button>,
 });
 
@@ -90,6 +92,35 @@ describe("BaseDeploy", () => {
     expect(deploy).toHaveProperty("disabled", true);
     expect(deploy.getAttribute("title")).toBe("Build successfully first");
     expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  it("offers Go to Build, before Upload IDL, while nothing is built (Spec 03 DEP-07)", () => {
+    const p = props({ built: false, deploy: "idle", history: [] });
+    const { container } = render(<BaseDeploy {...p} />);
+
+    expect(
+      screen.getByText(
+        "Build the program first. Deploy opens once the build passes."
+      )
+    ).toBeTruthy();
+    const goToBuild = screen.getByRole("button", { name: "Go to Build" });
+    fireEvent.click(goToBuild);
+    expect(p.onGoToBuild).toHaveBeenCalled();
+    // A link under the faded pill, never a second pill
+    expect(brandButtons(container)).toHaveLength(1);
+    expect(
+      goToBuild.compareDocumentPosition(
+        screen.getByRole("button", { name: "Upload IDL" })
+      ) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it("offers no Go to Build once the program is built", () => {
+    render(
+      <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
+    );
+
+    expect(screen.queryByRole("button", { name: "Go to Build" })).toBeNull();
   });
 
   it("deploys a built program and names its id", () => {
@@ -134,6 +165,33 @@ describe("BaseDeploy", () => {
     expect(screen.getByRole("alert").textContent).toContain(
       "Could not deploy. The full log has the details."
     );
+  });
+
+  it("offers Try again and Show full log after a failed deploy (Spec 08 ANY-00)", () => {
+    const p = props({
+      built: true,
+      deploy: "failed",
+      history: [record("a", null)],
+    });
+    const { container } = render(<BaseDeploy {...p} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(p.onDeploy).toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Show full log" }));
+    expect(p.onShowLog).toHaveBeenCalled();
+    expect(brandButtons(container)).toHaveLength(1);
+    expect(
+      screen.queryByRole("button", { name: "Redeploy to devnet" })
+    ).toBeNull();
+  });
+
+  it("offers no Show full log while no deploy failed", () => {
+    render(
+      <BaseDeploy {...props({ built: true, deploy: "idle", history: [] })} />
+    );
+
+    expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
   });
 
   it("shows the latest deployment's program id to copy", () => {
@@ -319,6 +377,8 @@ describe("BaseDeploy", () => {
         txUrl={p.txUrl}
         onDeploy={p.onDeploy}
         onInteract={p.onInteract}
+        onGoToBuild={p.onGoToBuild}
+        onShowLog={p.onShowLog}
         idlUpload={p.idlUpload}
       />
     );
@@ -353,5 +413,17 @@ describe("BaseDeploy", () => {
         .getByRole("button", { name: "Interact" })
         .getAttribute("data-variant")
     ).toBe("outline");
+  });
+
+  it("offers Go to Build, not Try again, when a failed deploy's build is gone", () => {
+    render(
+      <BaseDeploy {...props({ built: false, deploy: "failed", history: [] })} />
+    );
+
+    expect(screen.getByRole("button", { name: "Go to Build" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Show full log" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Deploy to devnet" })
+    ).toHaveProperty("disabled", true);
   });
 });

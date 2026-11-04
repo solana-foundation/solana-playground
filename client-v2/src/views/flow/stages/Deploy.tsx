@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { requestConsole } from "@/widgets/layout-shell";
 
 import {
   useBlockExplorer,
@@ -16,11 +18,13 @@ import {
 } from "../../../utils";
 import type { DeployRecord } from "../state/deploy-history";
 import { PgDeployHistory } from "../state/deploy-history";
+import { PgDeployHistory } from "../state/deploy-history";
 import type { FlowState } from "../state/stage";
 import { PgFlow } from "../state/stage";
 import type { DeployDetails, DeployStatus } from "./BaseDeploy";
 import BaseDeploy from "./BaseDeploy";
 import IdlActions from "./IdlActions";
+import { toldByStage } from "./stage-failure";
 import { toldByStage } from "./stage-failure";
 
 /** This workspace's deployments, newest first */
@@ -97,6 +101,8 @@ const Deploy = () => {
           .catch(reportButtonFailure("deploy"));
       }}
       onInteract={() => PgFlow.setStage("interact")}
+      onGoToBuild={() => PgFlow.setStage("build")}
+      onShowLog={requestConsole}
       idlUpload={<IdlActions mode="upload" look="link" />}
     />
   );
