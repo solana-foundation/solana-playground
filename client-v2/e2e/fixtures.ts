@@ -234,7 +234,7 @@ export const applyWrite = (
   const files: Record<string, string> = {};
   if (body.files) Object.assign(files, body.files);
   else Object.assign(files, held?.files, body.changed);
-  for (const path of body.removed ?? []) delete files[path];
+  for (const removed of body.removed ?? []) delete files[removed];
   return { files };
 };
 
@@ -691,15 +691,18 @@ export const replaceFile =
 export const terminalRows = (page: Page) => page.locator(".xterm-rows").first();
 
 /**
- * The hello world program's ELF, the one the Native template's test greets,
- * as Playnet's own tests carry it (`wasm/playnet/src/test_programs`)
+ * Playnet's own hello world program (`wasm/playnet/src/test_programs`): it
+ * logs and succeeds, and changes no account. It stands in for a built program
+ * so a test can send instructions to a deployed program offline; it is not
+ * the Native template's program, which counts greetings.
  */
 const helloWorldElf = () => {
   const source = fs.readFileSync(
     path.join(__dirname, "../../wasm/playnet/src/test_programs/hello_world.rs"),
     "utf8"
   );
-  const body = source.slice(source.indexOf("["), source.lastIndexOf("]"));
+  // From the array, not the first bracket: that is the `&[u8]` of its type
+  const body = source.slice(source.indexOf("= &["), source.lastIndexOf("]"));
   return Buffer.from(body.match(/\d+/g)?.map(Number) ?? []);
 };
 
@@ -715,7 +718,12 @@ export const deployHelloWorldWith =
     const uuid = "e2e-hello-world";
     await page.route("**/build", (route) =>
       // eslint-disable-next-line unicorn/no-null -- the build server's wire shape
-      json(route, { stderr: "", uuid, idl: idl ?? null })
+      json(route, {
+        // `improveOutput` says "Build successful." on this line of cargo's
+        stderr: "    Finished release [optimized] target(s) in 1.00s\n",
+        uuid,
+        idl: idl ?? null,
+      })
     );
     await page.route(`**/deploy/${uuid}`, (route) =>
       route.fulfill({
@@ -725,6 +733,12 @@ export const deployHelloWorldWith =
       })
     );
     const rows = terminalRows(page);
+    // `airdrop` refuses until the session has loaded
+    await expect(
+      page
+        .locator('[data-slot="setup-list-item"][data-status="done"]')
+        .filter({ hasText: "Sign in with GitHub" })
+    ).toBeVisible(LONG);
     await runInTerminal(page, "airdrop 5");
     await expect(rows).toContainText("Airdrop successful.", LONG);
     await runInTerminal(page, "build");
@@ -742,6 +756,8 @@ export const seedPlaynetProject = async (
   page: Page
 ) => {
   const keypair = Keypair.generate();
+  // `airdrop`, which `deployHelloWorldWith` runs, is for a signed-in account
+  await stubSignedIn(context);
   await seedLocalWallet(page)({
     state: "pg",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
@@ -762,8 +778,8 @@ export const seedPlaynetProject = async (
 };
 
 /**
- * An Anchor IDL for the hello world program: it ignores the instruction data
- * and greets its first account, which the program must own
+ * An Anchor IDL for the hello world program, which ignores the instruction
+ * data; the greeting account it names is created in the same transaction
  */
 export const HELLO_ANCHOR_IDL = {
   version: "0.1.0",
@@ -805,7 +821,7 @@ export const greetWithAnchor = (sign: "signers" | "sendAndConfirm") =>
       : "    await web3.sendAndConfirmTransaction(pg.connection, await greet.transaction(), [payer, greeting]);",
     "    const info = await pg.connection.getAccountInfo(greeting.publicKey);",
     '    console.log("same program:", program.programId.equals(pg.PROGRAM_ID), pg.program.programId.equals(pg.PROGRAM_ID));',
-    '    console.log("greeted:", info.data[0]);',
+    '    console.log("landed:", info.owner.equals(pg.PROGRAM_ID));',
     "  });",
     "});",
   ].join("\n");

@@ -91,7 +91,7 @@ that names `pg.wallet.signMessage` and `pg.wallet.signTransaction`.
 
 - **WHEN** project code calls `tx.sign([pg.wallet.keypair])` on a
   `VersionedTransaction` and sends it
-- **THEN** the transaction lands with a valid signature by the current
+- **THEN** the bytes the RPC receives hold a valid signature by the current
   account
 
 #### Scenario: Anchor's payer signs an instruction
@@ -101,7 +101,7 @@ that names `pg.wallet.signMessage` and `pg.wallet.signTransaction`.
 - **THEN** the transaction is sent with a valid signature by the current
   account
 
-#### Scenario: The native template's test passes
+#### Scenario: The native template's test passes (manual)
 
 - **WHEN** the native template's default test, which signs with
   `pg.wallet.keypair`, runs with `test` against a deployed program

@@ -1,5 +1,6 @@
+import { createPublicKey, verify } from "node:crypto";
 import type { Page } from "@playwright/test";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, PublicKey, VersionedTransaction } from "@solana/web3.js";
 
 import {
   deployHelloWorldWith,
@@ -77,6 +78,12 @@ const clientWith = (body: string[]) =>
     "const { blockhash } = await pg.connection.getLatestBlockhash();",
     body.join("\n"),
   ].join("\n");
+
+/** An RPC endpoint no one answers but the v0 test's stub */
+const V0_RPC = "https://v0-rpc.e2e.test";
+
+/** What makes a raw Ed25519 public key a DER SubjectPublicKeyInfo */
+const ED25519_SPKI_PREFIX = Buffer.from("302a300506032b6570032100", "hex");
 
 /** Prints whether a sent transaction landed without error, and its signer */
 const REPORT = [
@@ -227,23 +234,74 @@ test.describe("wallet-signing in the sandbox", () => {
     await runFor(page)("run", /landed: true received: 1000000/);
   });
 
+  // Not on Playnet, whose `sendTransaction` reads legacy transactions only
+  // (`PgSerde.serializeTx`): an RPC stub takes the bytes as they leave
   test("wallet-signing: A v0 transaction signed with pg.wallet.keypair", async ({
     context,
     page,
   }) => {
-    const { writeClient } = await seedPlaynetProject(context, page);
-    await writeClient(
-      clientWith([
+    const keypair = Keypair.generate();
+    await seedLocalWallet(page)({
+      state: "pg",
+      accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+      currentIndex: 0,
+    });
+    const sent: string[] = [];
+    await context.route(`${V0_RPC}/**`, (route) => {
+      const headers = {
+        "access-control-allow-origin": "*",
+        "access-control-allow-headers": "*",
+      };
+      if (route.request().method() === "OPTIONS") {
+        return route.fulfill({ status: 204, headers });
+      }
+      const { id, params } = route.request().postDataJSON();
+      sent.push(params[0]);
+      return route.fulfill({
+        headers,
+        contentType: "application/json",
+        body: JSON.stringify({ jsonrpc: "2.0", id, result: "1".repeat(64) }),
+      });
+    });
+    await seedWorkspace(page);
+    await replaceFile(context, page)("client", "client.ts")(
+      [
+        `const connection = new web3.Connection("${V0_RPC}/");`,
         "const tx = new web3.VersionedTransaction(new web3.TransactionMessage({",
-        "  payerKey: pg.wallet.publicKey, recentBlockhash: blockhash, instructions: [transfer],",
+        "  payerKey: pg.wallet.publicKey,",
+        "  recentBlockhash: web3.PublicKey.default.toBase58(),",
+        "  instructions: [web3.SystemProgram.transfer({ fromPubkey: pg.wallet.publicKey, toPubkey: web3.Keypair.generate().publicKey, lamports: 1 })],",
         "}).compileToV0Message());",
         "tx.sign([pg.wallet.keypair]);",
-        "const sig = await pg.connection.sendTransaction(tx);",
-        REPORT,
-      ])
+        'console.log("sent:", await connection.sendTransaction(tx, { skipPreflight: true }));',
+      ].join("\n")
     );
+    await openTerminal(page);
 
-    await runFor(page)("run", /landed: true received: 1000000/);
+    await runFor(page)("run", /sent: 1+/);
+
+    expect(sent).toHaveLength(1);
+    const tx = VersionedTransaction.deserialize(Buffer.from(sent[0], "base64"));
+    expect(tx.message.staticAccountKeys[0].equals(keypair.publicKey)).toBe(
+      true
+    );
+    // The bytes that left hold the real signature, not the placeholder
+    expect(
+      verify(
+        // eslint-disable-next-line unicorn/no-null -- `crypto.verify` takes null for Ed25519
+        null,
+        tx.message.serialize(),
+        createPublicKey({
+          key: Buffer.concat([
+            ED25519_SPKI_PREFIX,
+            keypair.publicKey.toBuffer(),
+          ]),
+          format: "der",
+          type: "spki",
+        }),
+        tx.signatures[0]
+      )
+    ).toBe(true);
   });
 
   test("wallet-signing: Another signer alongside the wallet", async ({
@@ -298,23 +356,12 @@ test.describe("wallet-signing in the sandbox", () => {
   }) => {
     test.slow();
     const { writeTest } = await seedPlaynetProject(context, page);
-    await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);
+    // Written before the deploy, while the editor still has the focus
     await writeTest(greetWithAnchor("sendAndConfirm"));
+    await deployHelloWorldWith(HELLO_ANCHOR_IDL)(page);
 
     await runFor(page)("test", /1 passing/);
 
-    await expect(terminalRows(page)).toContainText("greeted: 1");
-  });
-
-  test("wallet-signing: The native template's test passes", async ({
-    context,
-    page,
-  }) => {
-    test.slow();
-    await seedPlaynetProject(context, page);
-    await deployHelloWorldWith(undefined)(page);
-
-    // The template's own test, untouched
-    await runFor(page)("test", /1 passing/);
+    await expect(terminalRows(page)).toContainText("landed: true");
   });
 });
