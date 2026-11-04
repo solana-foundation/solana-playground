@@ -1,4 +1,4 @@
-import { expect, test } from "./fixtures";
+import { consoleTrigger, expect, test } from "./fixtures";
 
 test.describe("on a 1440 px window", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
@@ -11,7 +11,7 @@ test.describe("on a 1440 px window", () => {
     await page.route("**/build", (route) =>
       route.fulfill({ status: 500, body: "boom" })
     );
-    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+    const drawer = consoleTrigger(page);
     if ((await drawer.getAttribute("aria-expanded")) === "true") {
       await drawer.click();
     }

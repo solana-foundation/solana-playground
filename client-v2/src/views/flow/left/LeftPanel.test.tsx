@@ -78,8 +78,8 @@ import { requireFor } from "../../../test-utils/require-for";
 import { forgetColumn } from "./kept-column";
 import LeftPanel, { isLessonTab } from "./LeftPanel";
 
-const draw = (collapsed: boolean, onHide?: () => void) =>
-  render(<LeftPanel collapsed={collapsed} onHide={onHide} />);
+const draw = (collapsed: boolean) =>
+  render(<LeftPanel collapsed={collapsed} />);
 
 /** A lesson the panel shows its Steps and Files tabs for */
 const inLesson = () => {
@@ -124,6 +124,12 @@ describe("LeftPanel in a lesson", () => {
     expect(group?.getAttribute("aria-label")).toBe("Lesson panel");
     expect(tab("steps").getAttribute("data-state")).toBe("on");
     expect(tab("files").getAttribute("data-state")).toBe("off");
+  });
+
+  it("keeps the switch at the column's top, with no Hide button", () => {
+    draw(false);
+    expect(document.querySelector('[data-slot="segmented"]')).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Hide files" })).toBeNull();
   });
 
   it("opens on the tab it is told to, over the kept one", () => {
@@ -186,12 +192,10 @@ describe("isLessonTab", () => {
 
 describe("LeftPanel in the flush frame", () => {
   it.each([false, true])(
-    "has no fold strip of its own (collapsed: %s): the stage bar folds it",
+    "has no fold strip of its own (collapsed: %s): the editor head folds it",
     (collapsed) => {
       draw(collapsed);
-      expect(
-        screen.queryByRole("button", { name: /project panel/ })
-      ).toBeNull();
+      expect(screen.queryByRole("button", { name: /files/i })).toBeNull();
       expect(screen.queryByRole("button", { name: "New file" })).toBeNull();
     }
   );
@@ -207,19 +211,11 @@ describe("LeftPanel in the flush frame", () => {
     expect(document.getElementById("flow-left-tab-files")).toBeNull();
   });
 
-  /** The prototype's head: "Files" and a way to hide the column */
-  it("hides the column from its own head, named with its key", () => {
-    const onHide = vi.fn();
-    draw(false, onHide);
-    const hide = screen.getByRole("button", { name: "Hide files" });
-    expect(hide.getAttribute("title")).toBe("Hide files (\u2318E)");
-    fireEvent.click(hide);
-    expect(onHide).toHaveBeenCalledOnce();
-  });
-
-  it("draws no hide button where nothing can hide it", () => {
+  // The editor head names the column and hides it (DES-205)
+  it("has no head of its own outside a lesson", () => {
     draw(false);
     expect(screen.queryByRole("button", { name: "Hide files" })).toBeNull();
+    expect(screen.queryByText("Files", { exact: true })).toBeNull();
   });
 
   it("draws nothing while hidden", () => {

@@ -2,13 +2,16 @@ import type { Page } from "@playwright/test";
 
 import { requireFor } from "../src/test-utils/require-for";
 import {
+  consoleTrigger,
   currentProject,
   expect,
+  filesToggle,
   HELP_TAIL,
   home,
   homeRegion,
   json,
   leaveEditor,
+  openFiles,
   projectRow,
   runInTerminal,
   seedWorkspace,
@@ -33,8 +36,8 @@ const onlyLineOf = async (page: Page, lines: string[], name: string) => {
 };
 
 /**
- * Starts Hello Anchor's first lesson on a fresh profile, which opens on Home,
- * from Home's tutorial card
+ * Starts Hello Anchor's first lesson from Home's tutorial card, on a profile
+ * with no project, which opens on Home
  */
 const startTutorial = async (page: Page) => {
   await expect(home(page)).toBeVisible({ timeout: 20_000 });
@@ -43,12 +46,13 @@ const startTutorial = async (page: Page) => {
     .click();
   // `exact`: Connect a model's dialog has a "Start" of its own
   await page.getByRole("button", { name: "Start", exact: true }).click();
+  // The lesson's switch is in the tree; open it whatever the saved layout
+  await openFiles(page);
   await expect(page.getByRole("radio", { name: "Steps" })).toBeVisible();
 };
 
 const assistantPanel = (page: Page) => page.locator("#assistant[data-panel]");
-const consoleHandle = (page: Page) =>
-  page.getByRole("button", { name: "Terminal" });
+const consoleHandle = (page: Page) => consoleTrigger(page);
 // A separator controls the panel before it: the assistant's is right of it
 const assistantHandle = (page: Page) =>
   page.locator('[data-slot="resizable-handle"][aria-controls="assistant"]');
@@ -188,13 +192,15 @@ test("a window resize does not pin the panels' sizes", async ({
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.reload();
   await expect(assistantPanel(page)).toBeVisible();
-  expect(await savedLayout(page)).toBeNull();
+  // The suite's profile holds open flags and no sizes (`playwright.config`)
+  const before = await savedLayout(page);
+  expect(JSON.parse(before ?? "{}")).not.toHaveProperty("h");
 
   await page.setViewportSize({ width: 1920, height: 900 });
   await expect.poll(() => widthOf(page)).toBeGreaterThan(300);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.waitForTimeout(300);
-  expect(await savedLayout(page)).toBeNull();
+  expect(await savedLayout(page)).toBe(before);
 });
 
 test("a restored width the library would fold opens the assistant, and changes nothing", async ({
@@ -265,9 +271,8 @@ test("client-v2-layout: An unreadable saved layout", async ({
 }) => {
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Collapse project panel" })
-  ).toBeVisible();
+  // A first visit's layout: the tree closed under the head
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(page.locator(".monaco-editor")).toBeVisible();
 });
 
@@ -328,7 +333,7 @@ test("client-v2-layout: Folding the project panel", async ({
   // The fold is kept over a reload
   await page.reload();
   await expect(files).toHaveCount(0);
-  await page.getByRole("button", { name: "Expand project panel" }).click();
+  await filesToggle(page).click();
   await expect(files).toHaveJSProperty("offsetWidth", 240);
   await expect(files.locator("#root-dir")).toBeVisible();
 });
@@ -372,12 +377,10 @@ test("client-v2-layout: The files column keeps its tree", async ({
       await expect(files).toHaveCount(0);
       await page.keyboard.press("ControlOrMeta+e");
     },
-    "the stage bar": async () => {
-      await page
-        .getByRole("button", { name: "Collapse project panel" })
-        .click();
+    "the editor head": async () => {
+      await filesToggle(page).click();
       await expect(files).toHaveCount(0);
-      await page.getByRole("button", { name: "Expand project panel" }).click();
+      await filesToggle(page).click();
     },
   };
   for (const [via, toggle] of Object.entries(hideAndShow)) {
@@ -407,9 +410,9 @@ test("client-v2-layout: A lesson's column keeps its tab", async ({ page }) => {
   await filesTab.click();
   await expect(filesTab).toHaveAttribute("aria-checked", "true");
 
-  await page.getByRole("button", { name: "Collapse project panel" }).click();
+  await filesToggle(page).click();
   await expect(filesPanel(page)).toHaveCount(0);
-  await page.getByRole("button", { name: "Expand project panel" }).click();
+  await filesToggle(page).click();
 
   await expect(page.getByRole("radio", { name: "Files" })).toHaveAttribute(
     "aria-checked",
@@ -944,9 +947,7 @@ test("client-v2-layout: A corrupt saved layout is reported", async ({
   await page.evaluate(() => localStorage.setItem("layout", "{"));
   const lines = linesOn(page);
   await page.reload();
-  await expect(
-    page.getByRole("button", { name: "Collapse project panel" })
-  ).toBeVisible();
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect.poll(() => lineOf(lines, "layout_restore_failed")).toBeTruthy();
   expect(lineOf(lines, "layout_restore_failed")).toContain("reason: corrupt");
 });
@@ -1125,9 +1126,7 @@ test("client-v2-layout: A layout saved before the four columns", async ({
   );
   await page.reload();
   await expect(filesPanel(page)).toHaveCount(0);
-  await expect(
-    page.getByRole("button", { name: "Expand project panel" })
-  ).toBeVisible();
+  await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
   await expect(consoleHandle(page)).toHaveAttribute("aria-expanded", "true");
   await expect(navColumn(page)).toHaveJSProperty("offsetWidth", 232);
   await expect(
@@ -1490,11 +1489,11 @@ test("client-v2-layout: Widening the assistant", async ({
 // A hidden files column takes no width, so a handle of its own would sit 1 px
 // from the assistant's, and the library takes every separator within reach of
 // the pointer: one drag resized both. Hidden, the column has no handle; the
-// stage bar and ⌘E bring it back, and a drag there moves the assistant alone.
+// editor head's Files and ⌘E bring it back, and a drag there moves the assistant alone.
 test("dragging at a hidden files column's edge moves only the assistant", async ({
   seededPage: page,
 }) => {
-  await page.getByRole("button", { name: "Collapse project panel" }).click();
+  await filesToggle(page).click();
   await expect(filesPanel(page)).toHaveCount(0);
   await expect(filesHandle(page)).toHaveCount(0);
   const before = await widthOf(page);
@@ -1811,8 +1810,12 @@ test("the tab row keeps its height with a wallet connected", async ({
   const icon = row.getByRole("button", { name: "Wallet" }).locator("img");
   await expect(icon).toBeVisible();
   expect((await icon.boundingBox())?.height).toBeLessThanOrEqual(16);
-  // The row is 40 px tall (`h-10`), plus its bottom border's rounding
-  expect((await row.boundingBox())?.height).toBeLessThanOrEqual(41);
+  // The row fills the 44 px editor head, whose bottom line it sits above
+  const head = await page.locator("#editor-head").boundingBox();
+  if (!head) throw new Error("#editor-head has no box");
+  expect((await row.boundingBox())?.height).toBeLessThanOrEqual(
+    head.height - 1
+  );
   await expect(row.getByRole("tab").first()).toBeInViewport({ ratio: 1 });
 });
 

@@ -55,7 +55,8 @@ test("client-v2-overlays: Escape closes a menu", async ({
   await page.keyboard.press("Escape");
   await expect(page.getByRole("menu")).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  // In the explorer: the assistant's chip has a "Leave lib.rs out…" button
+  // Back on the tree's row the menu opened from: the editor head's tab for the
+  // same file and the assistant's "Leave lib.rs out…" chip match the name too
   await expect(
     page.locator("#root-dir").getByRole("button", { name: "lib.rs" }).first()
   ).toBeFocused();

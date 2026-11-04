@@ -1,9 +1,4 @@
-import {
-  CircleHelp,
-  Ellipsis,
-  FolderClosed,
-  MessageSquare,
-} from "lucide-react";
+import { CircleHelp, Ellipsis, MessageSquare } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { cn } from "@/shared/lib/utils";
@@ -19,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/shared/ui/tooltip";
 
 export const DOCS_URL = "https://solana.com/docs";
 
-/** A column's toggle in the bar: whether the column shows, and the click */
+/** A panel's toggle, here or in the editor head: whether it shows, and the click */
 export interface BarToggle {
   open: boolean;
   onToggle: () => void;
@@ -28,11 +23,6 @@ export interface BarToggle {
 export interface BaseStageBarProps {
   /** The project's name, shown while the assistant is hidden; null hides it */
   title: string | null;
-  /**
-   * The files column's toggle; null where there is no files column to
-   * toggle (under Home)
-   */
-  files: BarToggle | null;
   /**
    * The assistant's toggle: the panel's on a wide window, the Sheet's below;
    * null draws none, as over a page, which covers the assistant
@@ -90,21 +80,6 @@ const BarButton = ({
   </Tooltip>
 );
 
-/** The files toggle, named by what a click does, as before the bar */
-const FilesToggle = ({ files }: { files: BarToggle }) => {
-  const label = files.open ? "Collapse project panel" : "Expand project panel";
-  return (
-    <BarButton
-      label={label}
-      hint={`${label} (⌘E)`}
-      expanded={files.open}
-      onClick={files.onToggle}
-    >
-      <FolderClosed aria-hidden="true" />
-    </BarButton>
-  );
-};
-
 /** The assistant's toggle, named by what a click does */
 const AssistantToggle = ({
   assistant,
@@ -118,9 +93,8 @@ const AssistantToggle = ({
     <BarButton
       label={label}
       hint={assistantKey === null ? label : `${label} (${assistantKey})`}
-      // Whether the pane is open, as the files toggle says it: the ghost
-      // button draws `aria-expanded` filled, the prototype's look for a
-      // shown assistant. Not `aria-pressed`, which is for a toggle whose
+      // Whether the pane is open: the ghost button draws `aria-expanded`
+      // filled, the prototype's look for a shown assistant. Not `aria-pressed`, which is for a toggle whose
       // label stays the same, and this label changes with each click
       expanded={assistant.open}
       onClick={assistant.onToggle}
@@ -133,14 +107,14 @@ const AssistantToggle = ({
 /**
  * The 44 px bar over the files column and the stage (design.md, "Frame chrome
  * (5.25)"): the project's name while the assistant is hidden, then one row
- * of icons, as Claude's corner: the page's actions (Share), the files and
- * assistant toggles and More, which holds the documentation. The
- * assistant's toggle is named apart from the head's "Collapse assistant", so
+ * of icons, as Claude's corner: the page's actions (Share), the assistant's
+ * toggle and More, which holds the documentation. The files toggle lives in
+ * the editor head (`BaseEditorHead`), beside the terminal's. The assistant's
+ * toggle is named apart from the head's "Collapse assistant", so
  * each name stays one button.
  */
 const BaseStageBar = ({
   title,
-  files,
   assistant,
   assistantKey = "Ctrl+R",
   actions,
@@ -158,7 +132,6 @@ const BaseStageBar = ({
       </span>
       <div className="flex items-center gap-1">
         {actions}
-        {files && <FilesToggle files={files} />}
         {assistant && (
           <AssistantToggle assistant={assistant} assistantKey={assistantKey} />
         )}

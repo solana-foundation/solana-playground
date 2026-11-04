@@ -1,7 +1,12 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
-import { HELP_TAIL, runInTerminal, seedWorkspace } from "./fixtures";
+import {
+  consoleTrigger,
+  HELP_TAIL,
+  runInTerminal,
+  seedWorkspace,
+} from "./fixtures";
 
 /**
  * The editor and its neighbours, end to end. Written for the React 19 move,
@@ -106,7 +111,7 @@ test.describe.serial("the editor", () => {
   });
 
   test("runs a terminal command", async () => {
-    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+    const drawer = consoleTrigger(page);
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }

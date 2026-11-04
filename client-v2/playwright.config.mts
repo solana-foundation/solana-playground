@@ -109,6 +109,12 @@ const takeQueueSlot = () => {
 const port = queued ? takeQueueSlot() : ownPort ?? 3000;
 const origin = `http://localhost:${port}`;
 
+/** A saved layout with every column but the console open */
+const TREE_OPEN_LAYOUT = JSON.stringify({
+  v: 2,
+  open: { nav: true, files: true, assistant: true, console: false },
+});
+
 // Playwright evaluates this config again in every worker, where our own dev
 // server is already up. The runner's first evaluation probes the port and
 // leaves the decision here, so workers read it instead of probing again.
@@ -199,6 +205,19 @@ export default defineConfig({
   globalTimeout: process.env.CI ? 15 * 60_000 : 0,
   use: {
     baseURL: origin,
+    // Every page starts as a visitor who left the file tree open: a first
+    // visit opens it closed (client-v2-editor-head), and most specs drive
+    // the tree. A spec about a first visit removes it and reloads
+    // (`client-v2-editor-head.e2e.spec.ts`, `first-run.e2e.spec.ts`).
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin,
+          localStorage: [{ name: "layout", value: TREE_OPEN_LAYOUT }],
+        },
+      ],
+    },
     // Every failed attempt keeps its trace, a flaky test's first attempt
     // included; CI uploads them as the shard job's artifact, and locally
     // `yarn playwright show-trace test-results/<test>/trace.zip` opens one.

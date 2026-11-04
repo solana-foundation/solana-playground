@@ -236,7 +236,7 @@ const Monaco = () => {
         automaticLayout: true,
         fontLigatures: true,
         // Hovers and suggestions escape the stage panel that holds the
-        // editor, which clips the editor's own overflow at the tab row
+        // editor, which clips the editor's own overflow at its edges
         fixedOverflowWidgets: true,
       })
     );

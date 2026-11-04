@@ -30,11 +30,6 @@ const StageRouter: FC<React.PropsWithChildren<StageRouterProps>> = ({
     <div
       className={cn(
         "flex min-h-0 flex-1 flex-col transition-[opacity] duration-150 ease-[ease] motion-reduce:transition-none",
-        // The upstream tab strip (PgView.ids.TABS) butts its right-aligned
-        // Wallet button against the column edge. Give it the same inset the
-        // panel uses elsewhere. Failure mode: if upstream renames the id the
-        // inset is simply lost, nothing breaks.
-        "[&_#tabs]:pr-3",
         // `Primary` draws its own border and radius, a card on its own.
         // Inside Flow the frame is flush, with no card edges, so the stage
         // panel strips them.

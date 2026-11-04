@@ -383,10 +383,12 @@ const FlowFrame = () => {
             );
           }}
           stageTabs={<StageBar />}
-          files={({ collapsed, toggle, phone: isPhone }) => (
+          // The editor's tab row belongs to Write, which stays mounted,
+          // hidden, on the other stages
+          showTabs={state.stage === "write"}
+          files={({ collapsed, phone: isPhone }) => (
             <LeftPanel
               collapsed={collapsed}
-              onHide={isPhone ? undefined : toggle}
               startOn={isPhone ? "files" : undefined}
             />
           )}

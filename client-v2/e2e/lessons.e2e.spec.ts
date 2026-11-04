@@ -88,8 +88,9 @@ test.describe("client-v2-lessons", () => {
     const bandBox = requireFor("the band's bounding box")(
       await b.boundingBox()
     );
+    // The stage under the band: the tab row sits in the editor head above it
     const editorBox = requireFor("the editor's bounding box")(
-      await page.locator("#tabs").boundingBox()
+      await page.locator("#flow-stage-panel-write").boundingBox()
     );
     expect(bandBox.y + bandBox.height).toBeLessThanOrEqual(editorBox.y + 1);
   });
@@ -175,8 +176,9 @@ test.describe("client-v2-lessons", () => {
     const bandBox = requireFor("the band's bounding box")(
       await band(page).boundingBox()
     );
+    // The stage under the band: the tab row sits in the editor head above it
     const editorBox = requireFor("the editor's bounding box")(
-      await page.locator("#tabs").boundingBox()
+      await page.locator("#flow-stage-panel-write").boundingBox()
     );
     expect(readerBox.y).toBeGreaterThanOrEqual(bandBox.y + bandBox.height - 1);
     expect(readerBox.y).toBeLessThanOrEqual(editorBox.y + 1);

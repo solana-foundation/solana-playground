@@ -51,6 +51,26 @@ export const seedWorkspace = async (page: Page, name = "e2e-project") => {
 };
 
 /**
+ * The console bar's own "Terminal" button; the editor head's toggle has the
+ * same name (`#editor-head-terminal`), so a role lookup finds both
+ */
+export const consoleTrigger = (page: Page) =>
+  page.locator('[data-slot="console-drawer-trigger"]');
+
+/** The editor head's Files toggle (client-v2-editor-head) */
+export const filesToggle = (page: Page) => page.locator("#editor-head-files");
+
+/** Opens the file tree from the editor head, if it is not open already */
+export const openFiles = async (page: Page) => {
+  const toggle = filesToggle(page);
+  await expect(toggle).toBeVisible(LONG);
+  if ((await toggle.getAttribute("aria-pressed")) !== "true") {
+    await toggle.click();
+  }
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+};
+
+/**
  * The last line `help` prints in the terminal (`test`'s description), so it
  * is in view however narrow the console is. An entry above it scrolls out of
  * the terminal's rows once the stage column is narrow enough to wrap the

@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import {
   expect,
+  filesToggle,
   home,
   homeRegion,
   LONG,
@@ -54,6 +55,11 @@ test.describe("on a desktop window", () => {
   test("client-v2-first-run: First press", async ({ page }) => {
     const builds = await countBuilds(page);
     await page.goto("/");
+    // A real first visitor has no saved layout; the suite's profile keeps
+    // the tree open (`playwright.config`), and is applied once, so a reload
+    // stays clear
+    await page.evaluate(() => localStorage.removeItem("layout"));
+    await page.reload();
     await homeRegion(page).getByRole("button", { name: "Run it" }).click();
 
     await expect(home(page)).toBeHidden(LONG);
@@ -67,10 +73,12 @@ test.describe("on a desktop window", () => {
 
     // A reload keeps the example and starts no second build
     await page.reload();
-    await expect(page.locator("#root-dir")).toBeVisible(LONG);
+    await expect(filesToggle(page)).toBeVisible(LONG);
     await expect(
       page.getByRole("heading", { level: 2, name: "anchor-example" })
     ).toBeVisible();
+    // The tree stays closed, as a first visit leaves it
+    await expect(filesToggle(page)).toHaveAttribute("aria-pressed", "false");
     expect(builds).toHaveLength(1);
   });
 

@@ -1,4 +1,3 @@
-import { PanelLeft } from "lucide-react";
 import type { FC } from "react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
@@ -30,16 +29,10 @@ export const isLessonTab = (value: string): value is Tab =>
 
 interface LeftPanelProps {
   /**
-   * Hidden by the stage bar's toggle or ⌘E: the column takes no width
+   * Hidden by the editor head's Files or ⌘E: the column takes no width
    * (design.md, "Frame chrome (5.25)"), so it draws nothing
    */
   collapsed: boolean;
-  /**
-   * Hides the column, as ⌘E does; its button sits in the column's head, as
-   * the prototype draws it. Absent where nothing can hide the column (the
-   * phone's Files sheet has its own close).
-   */
-  onHide?: () => void;
   /**
    * The tab to open on, over the kept one. The phone's Files sheet opens
    * from the files row, so in a lesson it lands on Files, with Steps one
@@ -47,21 +40,6 @@ interface LeftPanelProps {
    */
   startOn?: Tab;
 }
-
-/** The head's way to hide the column */
-const HideButton = ({ onHide }: { onHide: () => void }) => (
-  <Button
-    type="button"
-    variant="ghost"
-    size="icon-sm"
-    aria-label="Hide files"
-    title="Hide files (⌘E)"
-    className="ml-auto text-muted-foreground"
-    onClick={onHide}
-  >
-    <PanelLeft />
-  </Button>
-);
 
 /**
  * Where you are inside the current project. Which project you are in is
@@ -71,7 +49,6 @@ const HideButton = ({ onHide }: { onHide: () => void }) => (
  */
 const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
   collapsed,
-  onHide,
   startOn,
 }) => {
   // From the first commit, not from the subscription's first call: a commit
@@ -169,18 +146,10 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
                 Files
               </SegmentedItem>
             </Segmented>
-            {onHide && <HideButton onHide={onHide} />}
           </div>
         )}
-        {/* The prototype's head: the column's name and a way to hide it */}
-        {!inLesson && (
-          <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border pr-1.5 pl-3">
-            <span className="truncate text-[0.8125rem] font-medium text-muted-foreground">
-              Files
-            </span>
-            {onHide && <HideButton onHide={onHide} />}
-          </div>
-        )}
+        {/* Outside a lesson the tree starts at the column's top: the editor
+          head over it names the column with its Files toggle (DES-205) */}
         <div
           ref={bodyRef}
           // File names are never shortened, so a name wider than the panel

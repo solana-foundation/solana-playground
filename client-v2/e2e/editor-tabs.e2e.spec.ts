@@ -173,8 +173,11 @@ test("a tab opened past the row's edge scrolls into view, and the wheel scrolls 
   seededPage: page,
 }) => {
   await page.setViewportSize({ width: 834, height: 900 });
-  const names = ["f1.rs", "f2.rs", "f3.rs", "f4.rs", "f5.rs", "f6.rs"];
+  // The row spans the editor head, over the files column and the stage, so
+  // it takes a dozen tabs to overflow it at this width
+  const names = Array.from({ length: 12 }, (_, i) => `f${i + 1}.rs`);
   for (const name of names) await newFile(page, name);
+  const lastName = names[names.length - 1];
   const list = page.locator('#tabs [role="tablist"]');
   const overflow = () => list.evaluate((el) => el.scrollWidth - el.clientWidth);
   await expect.poll(overflow).toBeGreaterThan(0);
@@ -192,12 +195,12 @@ test("a tab opened past the row's edge scrolls into view, and the wheel scrolls 
   });
   await page
     .locator("#root-dir")
-    .getByText("f6.rs", { exact: true })
+    .getByText(lastName, { exact: true })
     .first()
     .click();
-  await expect.poll(() => currentName(page)).toBe("f6.rs");
+  await expect.poll(() => currentName(page)).toBe(lastName);
 
-  const last = page.locator(`${TAB}[id$="/f6.rs"]`);
+  const last = page.locator(`${TAB}[id$="/${lastName}"]`);
   const inView = async () => {
     const row = requireFor("the bounding box of list")(
       await list.boundingBox()

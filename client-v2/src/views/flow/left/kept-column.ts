@@ -4,7 +4,7 @@ export type Tab = "steps" | "files";
 /**
  * What the files column held when it last unmounted, in which project
  * (`PgExplorer.currentWorkspaceId`, which a rename keeps).
- * Hidden by ⌘E or the stage bar, the column leaves the layout and unmounts
+ * Hidden by ⌘E or the editor head's Files, the column leaves the layout and unmounts
  * (design.md, "Frame chrome (5.25)"), so its scroll and its lesson tab are
  * put back from here when it comes back; the tree keeps its folders on its
  * own (`kept-tree.ts`).

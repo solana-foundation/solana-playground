@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, runInTerminal, test } from "./fixtures";
+import { consoleTrigger, expect, runInTerminal, test } from "./fixtures";
 
 /**
  * The scenarios of `client-v2-terminal` for an unknown command (Spec 13,
@@ -11,7 +11,7 @@ import { expect, runInTerminal, test } from "./fixtures";
 const terminalText = (page: Page) => page.locator(".xterm-rows").first();
 
 const openConsole = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  const drawer = consoleTrigger(page);
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }

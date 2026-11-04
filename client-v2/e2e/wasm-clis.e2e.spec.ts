@@ -1,7 +1,7 @@
 import { type Page } from "@playwright/test";
 
 import { WASM_STUB_MARKER } from "../scripts/wasm-stubs.mjs";
-import { expect, LONG, test } from "./fixtures";
+import { consoleTrigger, expect, LONG, test } from "./fixtures";
 
 // `client-v2-with-stubs.yml` excludes this tag; `client-v2.yml` runs on the real packages and includes it.
 const REAL_WASM = { tag: "@real-wasm" };
@@ -26,7 +26,8 @@ test.describe("the wasm CLIs", REAL_WASM, () => {
     await expect(page.getByRole("menuitem", { name: /SOL/ })).toBeVisible(LONG);
     await page.keyboard.press("Escape");
 
-    const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+    // The console bar's own trigger: the editor head's Terminal shares its name
+    const drawer = consoleTrigger(page);
     if ((await drawer.getAttribute("aria-expanded")) !== "true") {
       await drawer.click();
     }

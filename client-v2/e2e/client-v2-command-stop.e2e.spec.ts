@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { expect, json, LONG, test } from "./fixtures";
+import { consoleTrigger, expect, json, LONG, test } from "./fixtures";
 
 /**
  * The scenarios of `client-v2-command-stop`: stopping a build from the
@@ -33,7 +33,7 @@ const startBuild = async (page: Page) => {
 const terminalText = (page: Page) => page.locator(".xterm-rows").first();
 
 const openConsole = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  const drawer = consoleTrigger(page);
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }

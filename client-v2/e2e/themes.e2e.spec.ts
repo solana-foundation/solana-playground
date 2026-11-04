@@ -1,6 +1,12 @@
 import { expect, type Page } from "@playwright/test";
 
-import { HELP_TAIL, home, runInTerminal, test } from "./fixtures";
+import {
+  consoleTrigger,
+  HELP_TAIL,
+  home,
+  runInTerminal,
+  test,
+} from "./fixtures";
 
 /** The computed style property of the first element matching `selector` */
 const computed = (
@@ -42,7 +48,7 @@ const pickTheme = async (page: Page, name: "Dark" | "Light") => {
  * the terminal and take the typing.
  */
 const runHelp = async (page: Page) => {
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  const drawer = consoleTrigger(page);
   if ((await drawer.getAttribute("aria-expanded")) !== "true") {
     await drawer.click();
   }

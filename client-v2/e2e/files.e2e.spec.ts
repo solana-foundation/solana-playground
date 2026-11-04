@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect } from "@playwright/test";
 
-import { LONG, projectMenu, test } from "./fixtures";
+import { filesToggle, LONG, projectMenu, test } from "./fixtures";
 
 /** Closes every editor tab by its own close button */
 const closeEveryTab = async (page: Page) => {
@@ -28,7 +28,7 @@ test("client-v2-files: Show files with the column folded", async ({
   seededPage: page,
 }) => {
   await closeEveryTab(page);
-  await page.getByRole("button", { name: "Hide files" }).click();
+  await filesToggle(page).click();
   await expect(page.locator("#root-dir")).toBeHidden();
 
   await page.getByRole("button", { name: "Show files" }).click();

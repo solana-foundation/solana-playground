@@ -181,6 +181,12 @@ export interface BaseLayoutShellProps {
    * stage; on a phone, in the bar of the preview page
    */
   stageTabs: ReactNode;
+  /**
+   * The editor head (`BaseEditorHead`), under `stageTabs` across the files
+   * column and the stage, outside their group so opening the column moves
+   * nothing in it. Not on a phone, and not under Home, where no work shows.
+   */
+  workHead?: ReactNode;
   stage: ReactNode;
   console: ReactNode;
   /** Renders the assistant, in its panel, its Sheet or the pager's page */
@@ -299,8 +305,8 @@ const NavSlot = ({ nav }: { nav: BaseLayoutShellProps["nav"] }) => {
 /**
  * The four-column frame: the navigation as the stock Sidebar, then the
  * assistant on a wide screen (a Sheet below `LAYOUT_BREAKPOINTS.compact`), then
- * the work area: the stage bar over the files column and the stage, the stage
- * over the console. Below `LAYOUT_BREAKPOINTS.phone` the frame gives way
+ * the work area: the stage bar, the stage tabs and the editor head over the
+ * files column and the stage, the stage over the console. Below `LAYOUT_BREAKPOINTS.phone` the frame gives way
  * to `BasePhonePager`; the stage and the console are outlets, so their nodes
  * move between the two without remounting. Lays out what it is given; owns
  * the outlets' nodes and, of layout state, only the assistant widened for
@@ -698,9 +704,10 @@ const BaseLayoutShell = (props: BaseLayoutShellProps) => {
                       className="flex min-w-0 flex-col"
                     >
                       {/* Over the files column and the stage both, as the prototype
-                draws them: the column bar, then the stage tabs */}
+                draws them: the column bar, the stage tabs, then the editor head */}
                       {props.stageBar}
                       {props.stageTabs}
+                      {props.workHead}
                       {/* Hidden, the group holds only the
                 stage and, like the horizontal group below `compact`, neither
                 takes nor saves its layout */}

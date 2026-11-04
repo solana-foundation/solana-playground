@@ -1,8 +1,10 @@
 import { SetStateAction, useCallback } from "react";
+import { createPortal } from "react-dom";
 
 import { useViewport } from "@/shared/lib/hooks/use-viewport";
 import { cn } from "@/shared/lib/utils";
 import { Button } from "@/shared/ui/button";
+import { useEditorHeadHost } from "@/widgets/layout-shell";
 
 import {
   useExplorer,
@@ -45,9 +47,14 @@ export const Tabs = () => {
   // the others (`BasePhonePager`'s file picker), as the prototype draws it.
   // The row's wallet toggle goes with it; the account menu opens the wallet
   const phone = useViewport() === "phone";
+  // From 768 px the row sits in the frame's editor head, over the files
+  // column and the stage; it stays mounted here, so its contexts are the
+  // stage's. With no head (a phone returns above; Home, a unit test) it
+  // draws in place.
+  const host = useEditorHeadHost();
   if (phone || !explorer.tabs.length) return null;
 
-  return (
+  const row = (
     <BaseEditorTabs
       id={PgView.ids.TABS}
       current={explorer.currentFilePath ?? undefined}
@@ -62,6 +69,7 @@ export const Tabs = () => {
       />
     </BaseEditorTabs>
   );
+  return host ? createPortal(row, host) : row;
 };
 
 const Wallet = () => {
