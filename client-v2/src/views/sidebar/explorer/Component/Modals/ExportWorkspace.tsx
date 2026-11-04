@@ -130,7 +130,12 @@ const Default: FC<React.PropsWithChildren<DefaultProps>> = ({
   };
 
   return (
-    <ModalFrame name="export-workspace" title={`Export ${label}`}>
+    <ModalFrame
+      name="export-workspace"
+      title={`Export ${label}`}
+      // No field to land on, so Radix would ring the header's Close on open
+      openFocus="dialog"
+    >
       <Content>
         {kind === "no-program" ? (
           <>

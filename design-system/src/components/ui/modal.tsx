@@ -64,7 +64,7 @@ function ModalHeader({ className, children, ...props }: React.ComponentProps<"di
       <div className="flex min-w-0 flex-1 flex-col gap-1">{children}</div>
       <DialogPrimitive.Close
         aria-label="Close"
-        className="-my-1.5 -mr-2 grid size-9 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring max-md:m-0 max-md:size-11"
+        className="-my-1 -mr-2 grid size-8 shrink-0 cursor-pointer place-items-center rounded-lg border-0 bg-transparent p-0 text-muted-foreground outline-none hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset max-md:m-0 max-md:size-11"
       >
         <XIcon className="size-4" />
       </DialogPrimitive.Close>

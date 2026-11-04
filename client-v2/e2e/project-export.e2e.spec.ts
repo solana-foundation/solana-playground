@@ -72,6 +72,9 @@ test("project-export: The dialog for a TypeScript project", async ({
   await openExport(page);
 
   const dialog = page.getByRole("dialog");
+  // No field to land on: the dialog takes focus, so Close is not ringed on open
+  await expect(dialog).toBeFocused();
+  await expect(dialog.getByRole("button", { name: "Close" })).not.toBeFocused();
   await expect(dialog.getByText("Make it a Node project?")).toBeVisible();
   await expect(dialog.getByText("Convert the project layout?")).toHaveCount(0);
   await expect(dialog.getByText("package.json")).toBeVisible();
