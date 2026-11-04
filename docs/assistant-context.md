@@ -132,6 +132,30 @@ anywhere — the raw `stderr` was printed to the terminal and discarded, leaving
 only a `lastBuildFailed` boolean. Explaining a real error needs the compiler's
 real words, so the build command now stores it.
 
+**Project code runs in a sandbox.** `run` and `test` execute scripts and tests
+in a sandboxed frame with an opaque origin, so a shared project's code cannot
+reach the page, its storage or the built-in wallet's secret key. Every signature
+comes from the page over a private message channel.
+
+- `pg.wallet.keypair` is still a `Keypair` for signing: `tx.sign(pg.wallet.keypair)`,
+  `sendAndConfirmTransaction(connection, tx, [pg.wallet.keypair])`, v0
+  transactions, and Anchor's `provider.wallet.payer` and `.signers([payer])` all
+  work.
+- Reading `pg.wallet.keypair.secretKey` throws an error that names
+  `pg.wallet.signTransaction` and `pg.wallet.signMessage`. So does anything built
+  on the bytes, such as `Keypair.fromSecretKey(pg.wallet.keypair.secretKey)` or
+  `nacl.sign.detached(message, keypair.secretKey)`. Asked about that error, rewrite
+  the code to use those two methods; a key the script generates itself keeps its
+  bytes.
+- `tx.sign(...)` returns a promise in the sandbox. Until it resolves, the
+  transaction holds a placeholder for the wallet's signature, which is replaced
+  when the transaction is sent or simulated through a `Connection`. Code that
+  reads `tx.signature`, calls `tx.verifySignatures()`, or sends the bytes by any
+  other route must `await tx.sign(...)` first.
+- Websocket subscriptions are not carried through the page, so
+  `onAccountChange` and its kin do not work on Playnet from project code;
+  `confirmTransaction` polls instead.
+
 ## Status
 
 **The assistant panel is shipped.** Hit build, get an error, the assistant
