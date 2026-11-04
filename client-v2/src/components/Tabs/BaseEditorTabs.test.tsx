@@ -10,10 +10,14 @@ import {
   vi,
 } from "vitest";
 
+import { requireFor } from "../../test-utils/require-for";
 import { BaseEditorTab } from "./BaseEditorTab";
 import { BaseEditorTabs } from "./BaseEditorTabs";
 
 const FILES = ["a.rs", "b.rs", "c.rs"];
+
+/** The tabs row's element, by the id `row` gives it */
+const tabs = () => requireFor("the tabs row")(document.getElementById("tabs"));
 
 /** Every `scrollIntoView` call: the element and its options */
 const scrolled = vi.fn();
@@ -85,8 +89,8 @@ describe("BaseEditorTabs", () => {
     ).toEqual(FILES);
     const wallet = screen.getByRole("button", { name: "Wallet" });
     expect(list.contains(wallet)).toBe(false);
-    expect(document.getElementById("tabs")!.contains(wallet)).toBe(true);
-    expect(document.getElementById("tabs")!.contains(list)).toBe(true);
+    expect(tabs().contains(wallet)).toBe(true);
+    expect(tabs().contains(list)).toBe(true);
   });
 
   it("moves focus with the arrow keys, wrapping, and opens nothing", async () => {

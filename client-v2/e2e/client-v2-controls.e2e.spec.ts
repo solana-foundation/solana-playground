@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
   FAILED_BUILD_STDERR,
@@ -82,7 +83,9 @@ test.describe("client-v2-controls", () => {
     await page.keyboard.press("ArrowRight");
 
     const after = group.getByRole("radio", { checked: true });
-    await expect(after).not.toHaveText(before!);
+    await expect(after).not.toHaveText(
+      requireFor("the checked radio's text")(before)
+    );
     await expect(after).toBeFocused();
   });
 

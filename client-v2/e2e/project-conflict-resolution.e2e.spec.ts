@@ -2,6 +2,7 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
 import { hunkLineClass } from "../src/features/persistence/ui/merge-editor/hunk-class";
+import { requireFor } from "../src/test-utils/require-for";
 import { applyWrite, json, LONG, makeLocalProject, settled } from "./fixtures";
 
 /**
@@ -48,7 +49,8 @@ const stubAccount = async (page: Page, id: string, name: string) => {
     hold: null as Promise<void> | null,
     /** The files as the account holds them */
     get files(): Files {
-      return account.row.snapshot!.files;
+      return requireFor("the account's stored project")(account.row.snapshot)
+        .files;
     },
     /** The other device saves: each path to new content, or deleted (null) */
     save(changes: Record<string, string | null>) {

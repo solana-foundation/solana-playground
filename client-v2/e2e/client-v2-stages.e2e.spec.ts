@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import {
   expect,
   FAILED_BUILD_STDERR,
@@ -215,8 +216,12 @@ test.describe("client-v2-stages on a phone", () => {
       LONG
     );
 
-    const panelBox = (await panel.boundingBox())!;
-    const actionsBox = (await actions.boundingBox())!;
+    const panelBox = requireFor("the panel's bounding box")(
+      await panel.boundingBox()
+    );
+    const actionsBox = requireFor("the actions' bounding box")(
+      await actions.boundingBox()
+    );
     const gap =
       panelBox.y + panelBox.height - (actionsBox.y + actionsBox.height);
     expect(gap).toBeGreaterThanOrEqual(0);
@@ -257,8 +262,12 @@ test.describe("client-v2-stages on a phone", () => {
       actions.getByRole("button", { name: /Redeploy to devnet/ })
     ).toBeVisible(LONG);
 
-    const panelBox = (await panel.boundingBox())!;
-    const actionsBox = (await actions.boundingBox())!;
+    const panelBox = requireFor("the panel's bounding box")(
+      await panel.boundingBox()
+    );
+    const actionsBox = requireFor("the actions' bounding box")(
+      await actions.boundingBox()
+    );
     const gap =
       panelBox.y + panelBox.height - (actionsBox.y + actionsBox.height);
     expect(gap).toBeGreaterThanOrEqual(0);
@@ -279,8 +288,12 @@ test.describe("client-v2-stages on a phone", () => {
       actions.getByRole("button", { name: "Go to Deploy" })
     ).toBeVisible(LONG);
 
-    const panelBox = (await panel.boundingBox())!;
-    const actionsBox = (await actions.boundingBox())!;
+    const panelBox = requireFor("the panel's bounding box")(
+      await panel.boundingBox()
+    );
+    const actionsBox = requireFor("the actions' bounding box")(
+      await actions.boundingBox()
+    );
     const gap =
       panelBox.y + panelBox.height - (actionsBox.y + actionsBox.height);
     expect(gap).toBeGreaterThanOrEqual(0);

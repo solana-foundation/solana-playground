@@ -21,6 +21,7 @@ import {
   resetLogger,
 } from "@/shared/lib/logger";
 import { Modal } from "@/shared/ui/modal";
+import { requireFor } from "@/test-utils/require-for";
 import { PgView as PgViewDirect } from "@/utils/view";
 import { ModalIdContext } from "@/widgets/overlays";
 import { ModalLayerContext } from "@/widgets/overlays/ui/modal-layer";
@@ -89,9 +90,17 @@ const draw = () =>
     </ThemeProvider>
   );
 
+/** The row of the "Anchor - Hello" example */
+const exampleRow = () =>
+  requireFor("the example's row")(
+    requireFor("the example's title container")(
+      screen.getByText("Anchor - Hello").closest("div")
+    ).parentElement
+  );
+
 /** The example's own Import, not the dialog's submit */
 const importExample = () => {
-  const row = screen.getByText("Anchor - Hello").closest("div")!.parentElement!;
+  const row = exampleRow();
   fireEvent.click(within(row).getByRole("button", { name: /^import$/i }));
 };
 
@@ -136,7 +145,7 @@ it("tells the user an example that failed to import", async () => {
 
 it("closes the dialog as imported when an example is opened", () => {
   draw();
-  const row = screen.getByText("Anchor - Hello").closest("div")!.parentElement!;
+  const row = exampleRow();
 
   fireEvent.click(within(row).getByRole("button", { name: /^open$/i }));
 

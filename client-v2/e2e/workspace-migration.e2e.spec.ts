@@ -67,12 +67,13 @@ const rewriteConfig = (page: Page, next: unknown) =>
         if (/"workspaces"|"allNames"/.test(text)) target = keys[i];
       });
       if (target === undefined) throw new Error(`no file matching ${marker}`);
+      const key = target;
 
       await new Promise<void>((res, rej) => {
         const tx = db.transaction(store, "readwrite");
         tx.objectStore(store).put(
           new TextEncoder().encode(JSON.stringify(nextInPage)),
-          target!
+          key
         );
         tx.oncomplete = () => res();
         tx.onerror = () => rej(tx.error);
@@ -88,12 +89,14 @@ const readConfig = (page: Page) =>
       .map((d: any) => d.name)
       .find((n: string) => n?.includes("solana"));
     const db: IDBDatabase = await new Promise((res) => {
-      const r = indexedDB.open(name!);
+      if (name === undefined) throw new Error("Expected the app's database");
+      const r = indexedDB.open(name);
       r.onsuccess = () => res(r.result);
     });
     const store = Array.from(db.objectStoreNames).find((s) =>
       s.includes("files")
-    )!;
+    );
+    if (store === undefined) throw new Error("Expected the files store");
     const values: any[] = await new Promise((res) => {
       const rq = db.transaction(store, "readonly").objectStore(store).getAll();
       rq.onsuccess = () => res(rq.result);

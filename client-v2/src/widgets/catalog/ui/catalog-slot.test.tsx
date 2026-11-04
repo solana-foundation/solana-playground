@@ -4,6 +4,8 @@ vi.mock("./TutorialsPage", () => ({ default: () => null }));
 vi.mock("./ProgramsPage", () => ({ default: () => null }));
 vi.mock("@/utils", () => ({}));
 
+import { requireFor } from "@/test-utils/require-for";
+
 import { catalogPage } from "../model/catalog-page";
 import { catalogSlot } from "./catalog-slot";
 
@@ -12,8 +14,10 @@ it("has no slot while no page shows", () => {
 });
 
 it("names the page shown and closes it", () => {
-  const slot = catalogSlot("programs")!;
+  const slot = requireFor("the programs slot")(catalogSlot("programs"));
   expect(slot.title).toBe("Programs");
   expect(slot.onClose).toBe(catalogPage.close);
-  expect(catalogSlot("tutorials")!.title).toBe("Tutorials");
+  expect(requireFor("the tutorials slot")(catalogSlot("tutorials")).title).toBe(
+    "Tutorials"
+  );
 });

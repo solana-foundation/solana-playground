@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
 
+import { requireFor } from "../src/test-utils/require-for";
 import { expect, test } from "./fixtures";
 import { currentProject, openGallery, seedWorkspace } from "./fixtures";
 
@@ -186,9 +187,14 @@ const addMessage = async (
     })
     .toContain(text);
   await expect
-    .poll(() => fileIsListed(page, encodeURIComponent(id!)), {
-      timeout: 15_000,
-    })
+    .poll(
+      () =>
+        fileIsListed(
+          page,
+          encodeURIComponent(requireFor("the open thread's id")(id))
+        ),
+      { timeout: 15_000 }
+    )
     .toBe(true);
 };
 
