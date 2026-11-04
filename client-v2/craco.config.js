@@ -39,7 +39,11 @@ class GoogleTagPlugin {
     compiler.hooks.compilation.tap("GoogleTagPlugin", (compilation) => {
       HtmlWebpackPlugin.getHooks(compilation).beforeEmit.tap(
         "GoogleTagPlugin",
-        (data) => ({ ...data, html: insertGoogleTag(data.html, this.id) })
+        // The sandbox's runtime.html runs project code, never the tag
+        (data) =>
+          data.outputName === "index.html"
+            ? { ...data, html: insertGoogleTag(data.html, this.id) }
+            : data
       );
     });
   }
@@ -93,6 +97,56 @@ class BundleModulesPlugin {
     });
   }
 }
+
+/**
+ * The sandboxed frame that `run` and `test` execute project code in
+ * (`src/utils/js-runtime/sandbox`): its own entry and page, so it shares no
+ * code or origin with the app (`sandbox="allow-scripts"` makes it opaque).
+ */
+const SANDBOX_ENTRY = "sandbox";
+const SANDBOX_PAGE = "runtime.html";
+
+/**
+ * Adds the sandbox's entry and page beside CRA's, and keeps CRA's
+ * index.html to its own entry
+ */
+const addSandboxEntry = (webpackConfig, env) => {
+  webpackConfig.entry = {
+    main: webpackConfig.entry,
+    [SANDBOX_ENTRY]: path.join(
+      __dirname,
+      "src/utils/js-runtime/sandbox/index.ts"
+    ),
+  };
+
+  // Development names CRA's one entry `bundle.js`; two entries need two names
+  const filename = webpackConfig.output.filename;
+  if (typeof filename === "string" && !filename.includes("[name]")) {
+    webpackConfig.output.filename = (pathData) =>
+      pathData.chunk.name === SANDBOX_ENTRY
+        ? `static/js/${SANDBOX_ENTRY}.bundle.js`
+        : filename;
+  }
+
+  const appPage = webpackConfig.plugins.find(
+    (plugin) => plugin instanceof HtmlWebpackPlugin
+  );
+  if (!appPage) throw new Error("craco: expected CRA's HtmlWebpackPlugin");
+  appPage.userOptions.chunks = ["main"];
+
+  webpackConfig.plugins.push(
+    new HtmlWebpackPlugin({
+      filename: SANDBOX_PAGE,
+      template: path.join(
+        __dirname,
+        "src/utils/js-runtime/sandbox/runtime.html"
+      ),
+      chunks: [SANDBOX_ENTRY],
+      inject: true,
+      minify: env === "production",
+    })
+  );
+};
 
 /** CRA's in-build type check and lint, by plugin class name */
 const BUILD_ONLY_CHECKS = [
@@ -180,6 +234,8 @@ module.exports = {
     configure: (webpackConfig, { env }) => {
       // tsconfig `paths` is the only `@/` mapping; react-scripts 5 strips it only in `init`, never in start or build
       webpackConfig.resolve.tsconfig = path.join(__dirname, "tsconfig.json");
+
+      addSandboxEntry(webpackConfig, env);
 
       // Here, not at the top: CRA's `config/env.js` has loaded `.env` by now
       warnAboutMissingObservabilityIds();
@@ -508,7 +564,7 @@ module.exports = {
   },
 
   devServer: (devServerConfig) => {
-    devServerConfig.headers = {
+    const headers = {
       ...devServerConfig.headers,
       "Cross-Origin-Embedder-Policy": "require-corp",
       "Cross-Origin-Opener-Policy": "same-origin",
@@ -517,6 +573,13 @@ module.exports = {
       // Percent-encoded: a header value must be ASCII, a path need not be.
       [DEV_SERVER_ROOT_HEADER]: encodeURIComponent(__dirname),
     };
+    // As `vercel.json`: the sandbox's opaque origin makes every script it
+    // loads cross-origin, which its COEP blocks without this header
+    devServerConfig.headers = (req) =>
+      // `originalUrl`: the middleware is mounted on "*", which strips `path`
+      req.originalUrl.startsWith("/static/")
+        ? { ...headers, "Cross-Origin-Resource-Policy": "cross-origin" }
+        : headers;
 
     // Serve `api/*.mjs` from the dev server itself, so local API work needs
     // neither `vercel dev` (which wants a login and team access) nor a second
