@@ -33,13 +33,14 @@ const bytesOf = (text) => encoder.encode(text).length;
  * the rest of the thread still syncs. A thread with nothing to send still gets
  * one empty body, which is what brings its row into being on the server.
  *
- * @param {{ maxBytes?: number, maxItems?: number }} caps the limits, each
- *   the route's own when absent
- * @returns a split of `envelope` (what every body carries besides `items`)
- *   and `items`, as `{ bodies, oversized }`
+ * @param {number} maxBytes the most bytes one body may weigh
+ * @returns a function of `maxItems`, the most items one body may hold, that
+ *   splits `envelope` (what every body carries besides `items`) and `items`,
+ *   as `{ bodies, oversized }`
  */
 export const batchPushWith =
-  ({ maxBytes = MAX_BATCH_BYTES, maxItems = MAX_BATCH_ITEMS }) =>
+  (maxBytes) =>
+  (maxItems) =>
   /**
    * @template {{ id: string }} T
    * @param {{ threadId: string, projectId: string }} envelope
@@ -85,4 +86,4 @@ export const batchPushWith =
   };
 
 /** `batchPushWith` at the route's own limits */
-export const batchPush = batchPushWith({});
+export const batchPush = batchPushWith(MAX_BATCH_BYTES)(MAX_BATCH_ITEMS);

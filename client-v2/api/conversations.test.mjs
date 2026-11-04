@@ -308,12 +308,12 @@ describe("/api/conversations", () => {
       // Room for exactly two items: the empty body, two items and one comma
       const two = weigh(bodyOf(items.slice(0, 2)));
 
-      const exact = batchPushWith({ maxBytes: two })(envelope, items).bodies;
+      const exact = batchPushWith(two)(MAX_BATCH_ITEMS)(envelope, items).bodies;
       assert.equal(exact.length, 2);
       exact.forEach((b) => assert.equal(weigh(b), two));
 
       assert.equal(
-        batchPushWith({ maxBytes: two - 1 })(envelope, items).bodies.length,
+        batchPushWith(two - 1)(MAX_BATCH_ITEMS)(envelope, items).bodies.length,
         4
       );
     });
@@ -322,12 +322,15 @@ describe("/api/conversations", () => {
       const [item] = longThread();
       const alone = weigh(bodyOf([item]));
 
-      assert.deepEqual(batchPushWith({ maxBytes: alone })(envelope, [item]), {
-        bodies: [bodyOf([item])],
-        oversized: [],
-      });
       assert.deepEqual(
-        batchPushWith({ maxBytes: alone - 1 })(envelope, [item]),
+        batchPushWith(alone)(MAX_BATCH_ITEMS)(envelope, [item]),
+        {
+          bodies: [bodyOf([item])],
+          oversized: [],
+        }
+      );
+      assert.deepEqual(
+        batchPushWith(alone - 1)(MAX_BATCH_ITEMS)(envelope, [item]),
         {
           bodies: [bodyOf([])],
           oversized: [item.id],
