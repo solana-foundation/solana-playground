@@ -609,7 +609,7 @@ Expect: the content renders; the `curl` prints `200 application/json` (the file 
 ### S-6. crate files in a Vercel build
 
 Precondition: a preview deployment of a branch with `generate-default-crates.mjs`; the Vercel CLI version pinned as
-`VERCEL_CLI` in `client-v2/Makefile.vercel`; a Protection Bypass for Automation secret from the project settings in
+`VERCEL_CLI` in `.github/workflows/preview.yml`; a Protection Bypass for Automation secret from the project settings in
 `VERCEL_BYPASS` (never in this file); the Vercel team slug in `VERCEL_SCOPE`.
 
 ```sh
@@ -753,7 +753,8 @@ Expect: `404` for `/unstable/build`; anything but `404` for `/build`, which prov
 ### R-4. the deployment carries no stub
 
 A stub in production makes the `solana`, `anchor`, `spl-token`, and `sugar` commands throw, and leaves Rust
-intellisense empty. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
+intellisense empty. The requirement is "A deployment never carries a wasm stub" in
+`openspec/specs/client-v2-build/spec.md`. The Vercel build already fails on a bundle that carries a stub or lacks the wasm-bindgen module of
 any of the six packages (`REAL_WASM_MARKERS` in `client-v2/scripts/wasm-stubs.mjs`; `node scripts/wasm-stubs.mjs check-build build` in the `buildCommand` of
 [vercel.json](../client-v2/vercel.json)), and CI runs the same check after its production build, in
 [reusable-client-v2.yml](../.github/workflows/reusable-client-v2.yml); this case checks what was deployed. For a protected preview, add
@@ -880,7 +881,8 @@ docker compose --profile v2-unstable down
 
 The production build minifies with esbuild through `terser-webpack-plugin`'s `esbuildMinify`; the Terser library does
 not run. It also leaves the type check and ESLint to CI and `yarn run check`. The requirements are the spec
-`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk its manual scenarios.
+`openspec/specs/client-v2-build/spec.md`; M-1 to M-7 walk the manual scenarios of its memory, minification, type
+check, and bundle requirements, and R-4 checks a deployment against "A deployment never carries a wasm stub".
 The bundle is about 15% larger than Terser's, accepted on purpose; shrinking it is a postponed improvement.
 
 ### M-1. the build fits Vercel's standard machine

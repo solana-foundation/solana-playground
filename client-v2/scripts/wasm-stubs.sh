@@ -1,4 +1,4 @@
-# Sourced, never run, and POSIX sh so Makefile.vercel can source it. Its Node twin is scripts/wasm-stubs.mjs.
+# Sourced, never run. Its Node twin is scripts/wasm-stubs.mjs.
 
 # all_packages in wasm/build.sh, which does not export it: the packages compiled from Rust, and so the ones a stub replaces.
 WASM_PACKAGES="anchor-cli rust-analyzer seahorse-compile solana-cli spl-token-cli sugar-cli"

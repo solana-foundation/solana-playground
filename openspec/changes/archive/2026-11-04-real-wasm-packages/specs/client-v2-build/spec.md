@@ -40,10 +40,9 @@ build cannot pass as success.
 
 ### Requirement: A deployment never carries a wasm stub
 
-A Vercel install SHALL refuse to run when `USE_WASM_STUBS=true` is set. The
-Vercel build, and the fast production deploy in `Makefile.vercel`, SHALL fail
-before deploying when the bundle or the installed packages carry a stub, or
-when the bundle lacks any of the six real packages.
+A Vercel install SHALL refuse to run when `USE_WASM_STUBS=true` is set. A Vercel
+build SHALL NOT deploy a bundle that carries a stub or lacks any of the six
+real packages; the build exits with an error instead, and nothing is deployed.
 
 #### Scenario: The variable set on a deployment (manual)
 
