@@ -557,7 +557,19 @@ const SearchBar: FC<React.PropsWithChildren<SearchBarProps>> = ({
                   <InputGroupButton
                     size="xs"
                     className="text-muted-foreground hover:text-foreground"
-                    onClick={() => pick(inlineItem)}
+                    onClick={() => {
+                      // The inline pick stands alone: a nested choice left
+                      // open (Arguments, Accounts) is dropped, not completed
+                      // by it
+                      if (itemState.isInSubSearch) {
+                        setItemState({ items, isInSubSearch: false });
+                      }
+                      setSelectedItems((prevSelected) => ({
+                        ...prevSelected,
+                        pending: [],
+                      }));
+                      pick(inlineItem);
+                    }}
                   >
                     {inline.label}
                   </InputGroupButton>

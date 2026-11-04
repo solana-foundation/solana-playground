@@ -321,6 +321,25 @@ describe("components/SearchBar", () => {
     expect(input().value).toBe("7");
   });
 
+  it("an inline pick during a nested choice selects the inline item alone", async () => {
+    const setSelectedItems = vi.fn();
+    render(
+      <Harness
+        items={[
+          { label: "Arguments", items: ["count"] },
+          { label: "Random", value: () => "7" },
+        ]}
+        inlineItem={{ label: "Random" }}
+        setSelectedItems={setSelectedItems}
+      />
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Show options" }));
+    await userEvent.click(option("Arguments"));
+    await userEvent.click(screen.getByRole("button", { name: "Random" }));
+    expect(lastLabels(setSelectedItems)).toEqual(["Random"]);
+    expect(input().value).toBe("7");
+  });
+
   it("a value field whose one pick is inline has no list", async () => {
     render(
       <Harness
