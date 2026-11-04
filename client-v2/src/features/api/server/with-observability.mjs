@@ -1,9 +1,18 @@
 // Observability for the API functions: one `http.server` span per request,
-// errors captured, flushed before the function returns. Sentry is the
-// provider, and runs only where the browser reports too (`sentryEnabled`);
-// elsewhere `@sentry/node` is never imported.
+// errors captured, flushed before the function returns, and the server
+// logger's reported entries routed to Sentry. Sentry is the provider, and
+// runs only where the browser reports too (`sentryEnabled`); elsewhere
+// `@sentry/node` is never imported.
 import { sentryEnabled } from "../../../../scripts/sentry-gate.mjs";
 import { sentryEnv } from "../../../shared/config/server-env.mjs";
+import {
+  createServerLogger,
+  initServerLogger,
+  sentryServerProvider,
+  serverConsoleProvider,
+} from "../../../shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:observability");
 
 /**
  * `SENTRY_TRACES_SAMPLE_RATE` as a rate: unset traces everything, and a value
@@ -16,8 +25,8 @@ export const tracesSampleRate = (value) => {
   if (value === undefined) return 1;
   const rate = Number(value);
   if (value.trim() !== "" && rate >= 0 && rate <= 1) return rate;
-  console.warn(
-    `api: SENTRY_TRACES_SAMPLE_RATE=${value} is not a rate from 0 to 1; using 1`
+  log.warn(
+    `SENTRY_TRACES_SAMPLE_RATE=${value} is not a rate from 0 to 1; using 1`
   );
   return 1;
 };
@@ -36,6 +45,8 @@ const loadSentry = () => {
       dsn: env.REACT_APP_SENTRY_DSN,
       environment: env.VERCEL_ENV,
       release: env.VERCEL_GIT_COMMIT_SHA,
+      // Requests carry user code and the session cookie; `/api/agent`'s upstream call carries its API key
+      dataCollection: { httpBodies: [], cookies: false, httpHeaders: false },
       // A request the browser already traces keeps the browser's decision
       tracesSampler: ({ inheritOrSampleWith }) => inheritOrSampleWith(rate),
       // `withObservability` names each request's span by route; the SDK's own
@@ -43,6 +54,9 @@ const loadSentry = () => {
       integrations: [
         Sentry.httpIntegration({ disableIncomingRequestSpans: true }),
       ],
+    });
+    initServerLogger({
+      providers: [serverConsoleProvider(), sentryServerProvider(Sentry)],
     });
     return Sentry;
   });

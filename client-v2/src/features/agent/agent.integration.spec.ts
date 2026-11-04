@@ -2,9 +2,24 @@
 import type { Mock } from "vitest";
 import { describe, it } from "vitest";
 
+import type { ServerLogEntry } from "@/shared/lib/logger/server.mjs";
+import {
+  initServerLogger,
+  resetServerLogger,
+} from "@/shared/lib/logger/server.mjs";
+
 import handler from "../../../api/agent.mjs";
 import { jsonBody, makeReq, makeRes, postJson } from "../../test/api-handler";
 import { toMicro, worstCaseCost } from "./server.mjs";
+
+/** The server logger's entries for one test, in place of the console */
+const serverLog = () => {
+  const entries: ServerLogEntry[] = [];
+  initServerLogger({ providers: [{ log: (entry) => entries.push(entry) }] });
+  return entries;
+};
+
+afterEach(resetServerLogger);
 
 /**
  * What the auth slice reports for the caller. A case runs signed in unless it
@@ -507,7 +522,7 @@ describe("POST /api/agent streaming", () => {
   ])(
     "answers 502 naming the $cause when the upstream refuses with $status",
     async ({ status, body, cause, error }) => {
-      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const logged = serverLog();
       const res = makeRes();
       await call(res, {
         ok: false,
@@ -517,16 +532,21 @@ describe("POST /api/agent streaming", () => {
 
       expect(res.statusCode).toBe(502);
       expect(jsonBody(res).error).toBe(error);
-      expect(logged).toHaveBeenCalledWith(
-        "agent: upstream refused the default backend",
-        expect.objectContaining({ status, cause })
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "error",
+          report: true,
+          error: expect.objectContaining({
+            message: "upstream refused the default backend",
+          }),
+          context: expect.objectContaining({ status, cause }),
+        })
       );
     }
   );
 
   it("logs why a 403 that is not JSON names no cause, without its body", async () => {
-    vi.spyOn(console, "error").mockImplementation(() => {});
-    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const logged = serverLog();
     const res = makeRes();
     await call(res, {
       ok: false,
@@ -534,9 +554,12 @@ describe("POST /api/agent streaming", () => {
       text: async () => "Forbidden",
     } as never);
 
-    expect(warned).toHaveBeenCalledWith(
-      "agent: upstream error body is not JSON",
-      { check: "refusal-cause", status: 403, error: "SyntaxError" }
+    expect(logged).toContainEqual(
+      expect.objectContaining({
+        level: "warn",
+        message: "upstream error body is not JSON",
+        context: { check: "refusal-cause", status: 403, error: "SyntaxError" },
+      })
     );
   });
 
@@ -1187,7 +1210,7 @@ describe("POST /api/agent spend gate", () => {
     });
 
     it("relays a 402 that is not the Gateway's budget as the upstream's", async () => {
-      const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const logged = serverLog();
       network(() => new Response("Payment required", { status: 402 }));
 
       const res = await postJson(handler, TURN);
@@ -1195,9 +1218,16 @@ describe("POST /api/agent spend gate", () => {
       expect(res.statusCode).toBe(402);
       expect(jsonBody<{ reason?: string }>(res).reason).toBeUndefined();
       // Why it was relayed, without the body
-      expect(warned).toHaveBeenCalledWith(
-        "agent: upstream error body is not JSON",
-        { check: "pool-exhausted", status: 402, error: "SyntaxError" }
+      expect(logged).toContainEqual(
+        expect.objectContaining({
+          level: "warn",
+          message: "upstream error body is not JSON",
+          context: {
+            check: "pool-exhausted",
+            status: 402,
+            error: "SyntaxError",
+          },
+        })
       );
     });
   });

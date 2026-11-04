@@ -18,6 +18,9 @@ import {
 import { isAllowedOrigin, readSession } from "../src/features/auth/server.mjs";
 import { composeSkills } from "../src/features/skills/server.mjs";
 import { sourcesEnv } from "../src/shared/config/server-env.mjs";
+import { createServerLogger } from "../src/shared/lib/logger/server.mjs";
+
+const log = createServerLogger("api:skills");
 
 /**
  * @param {import("node:http").ServerResponse} res
@@ -70,7 +73,7 @@ async function handler(req, res) {
     return sendJson(res, 200, { skills: await offered(req) });
   } catch (e) {
     // A broken catalogue fails every request, with the entry at fault named, rather than serving part of it
-    console.error("skills: the sources catalogue is invalid", e);
+    log.error(e, { report: true });
     return sendJson(res, 500, { error: /** @type {Error} */ (e).message });
   }
 }
