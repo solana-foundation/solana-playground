@@ -55,15 +55,21 @@ const PREFERRED_CLIENTS = [
 ];
 
 /**
- * Whether a script declares `name` itself, which an added import would clash
- * with: a declaration, or one import statement naming it (the clause cannot
- * cross a quote, so it stays inside that statement)
+ * Whether a script binds `name` at its top level, which an added import would
+ * clash with: a declaration that starts a line (an inner scope's does not
+ * serve the outer code), a destructuring that binds it (`{ sleep }`,
+ * `{ a: sleep }`, not the key of `{ sleep: pause }`), or one import statement
+ * naming it (the clause cannot cross a quote, so it stays inside that
+ * statement)
  */
-const hasDeclarationOf = (name: string) => (content: string) =>
-  new RegExp(`\\b(const|let|var|function|class)\\s+${name}\\b`).test(content) ||
-  // A destructuring binding: `const { sleep } = helpers`, `let [web3] = x`
+const hasDeclarationFor = (name: string) => (content: string) =>
   new RegExp(
-    `\\b(const|let|var)\\s*[{[][^}\\]=]*?\\b${name}\\b[^}\\]=]*[}\\]]\\s*=`
+    `^(export\\s+)?(const|let|var|function|class)\\s+${name}\\b`,
+    "m"
+  ).test(content) ||
+  new RegExp(
+    `^(export\\s+)?(const|let|var)\\s*[{[](?:[^}\\]=]*?[,:])?\\s*${name}\\b(?!\\s*:)[^}\\]=]*[}\\]]\\s*=`,
+    "m"
   ).test(content) ||
   new RegExp(
     `^\\s*import\\s+[^;'"]*?\\b${name}\\b[^;'"]*?\\s+from\\s+["']`,
@@ -74,7 +80,7 @@ const hasDeclarationOf = (name: string) => (content: string) =>
  * Whether a script uses the Playground global `name`: the bare name, not a
  * property (`a.pg`) or part of a longer one (`mypg`)
  */
-const isGlobalUsedIn = (name: string) => (content: string) =>
+const isGlobalUsedFor = (name: string) => (content: string) =>
   new RegExp(`(^|[^\\w$.])${name}\\b`, "m").test(content);
 
 /**
@@ -87,9 +93,9 @@ const isGlobalUsedIn = (name: string) => (content: string) =>
  */
 const shimImport = (path: string, content: string) => {
   const names = [
-    isGlobalUsedIn("pg")(content) && !hasDeclarationOf("pg")(content) && "pg",
-    isGlobalUsedIn("sleep")(content) &&
-      !hasDeclarationOf("sleep")(content) &&
+    isGlobalUsedFor("pg")(content) && !hasDeclarationFor("pg")(content) && "pg",
+    isGlobalUsedFor("sleep")(content) &&
+      !hasDeclarationFor("sleep")(content) &&
       "sleep",
   ].filter((name): name is string => !!name);
   if (!names.length) return "";
@@ -117,7 +123,7 @@ const withoutImportsOfBound = (converted: string) => {
   return lines
     .filter((line, i) => {
       const name = importedNameOf(line);
-      return !name || !hasDeclarationOf(name)(lines.slice(i + 1).join("\n"));
+      return !name || !hasDeclarationFor(name)(lines.slice(i + 1).join("\n"));
     })
     .join("\n");
 };
@@ -144,12 +150,15 @@ const clientEntry = (paths: string[]) => {
   return topLevel ?? clients[0];
 };
 
+/** A path every shell reads as one word and leaves as it is, quoted or not */
+const isShellSafe = (path: string) => /^[\w./ +,=@-]+$/.test(path);
+
 /**
- * A path as one shell word: as it is when it is plain, double-quoted
- * otherwise, which both npm's `sh` and Windows `cmd` read as one word
+ * Runs the client named in `package.json`'s `config.client` with no shell
+ * between: npm hands it over as `npm_package_config_client`, so a `$`, a quote
+ * or a `%` in the path reaches Node as it is on sh and Windows cmd alike
  */
-const shellQuote = (path: string) =>
-  /^[\w./-]+$/.test(path) ? path : `"${path.replace(/["\\$`]/g, "\\$&")}"`;
+const CLIENT_FROM_CONFIG = `node --import tsx -e "import(require('node:url').pathToFileURL(require('node:path').resolve(process.env.npm_package_config_client)).href)"`;
 
 /** An npm package name from a project name */
 const toPackageName = (name: string) =>
@@ -358,7 +367,12 @@ export const toNodeProjectWith =
     for (const used of Object.keys(dependencies)) delete devDependencies[used];
 
     const scripts: Record<string, string> = {};
-    if (client) scripts.client = `tsx ${shellQuote(client)}`;
+    const isClientShellSafe = client === undefined || isShellSafe(client);
+    if (client) {
+      scripts.client = isClientShellSafe
+        ? `tsx ${client.includes(" ") ? `"${client}"` : client}`
+        : CLIENT_FROM_CONFIG;
+    }
     if (hasTests) {
       scripts.test =
         'mocha --node-option import=tsx --timeout 1000000 "tests/**/*.{ts,js,tsx,jsx}"';
@@ -369,6 +383,7 @@ export const toNodeProjectWith =
       private: true,
       type: "module",
       engines: { node: ">=20.6" },
+      ...(isClientShellSafe ? {} : { config: { client } }),
       scripts,
       dependencies: sorted(dependencies),
       devDependencies: sorted(devDependencies),
@@ -551,6 +566,34 @@ console.log(await pg.connection.getSlot());
     it("quotes a client path with a space in the client script", async () => {
       const pkg = packageOf(await exportOf([["client/my client.ts", CLIENT]]));
       expect(pkg.scripts.client).toBe('tsx "client/my client.ts"');
+    });
+
+    it("keeps the import a global needs when only an inner scope binds its name", async () => {
+      const files = await exportOf([
+        [
+          "client/inner.ts",
+          "assert.equal(1, 1);\nfunction check() { const assert = {}; }",
+        ],
+      ]);
+      expect(fileOf(files, "client/inner.ts")).toContain(
+        'import assert from "assert";'
+      );
+    });
+
+    it("imports sleep when a destructuring only renames a sleep key", async () => {
+      const files = await exportOf([
+        [
+          "client/renamed.ts",
+          "const { sleep: pause } = helpers;\nawait sleep(1);",
+        ],
+      ]);
+      expect(fileOf(files, "client/renamed.ts")).toContain("sleep } from");
+    });
+
+    it("runs a client whose path a shell would change through Node, not the shell", async () => {
+      const pkg = packageOf(await exportOf([["client/my$file.ts", CLIENT]]));
+      expect(pkg.config).toEqual({ client: "client/my$file.ts" });
+      expect(pkg.scripts.client).not.toContain("my$file");
     });
 
     it("leaves files outside client and tests as they are", async () => {
