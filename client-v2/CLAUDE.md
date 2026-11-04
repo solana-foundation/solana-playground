@@ -472,8 +472,8 @@ reason.
   (`yarn test-build`, every `scripts/*.build-test.mjs`) read the build's
   output. Among them, `scripts/in-source-tests.build-test.mjs` fails when a
   chunk holds an in-source test title, `scripts/bundle-modules.build-test.mjs`
-  when the bundle holds a module under `src/test-utils/` or from `vitest` or
-  `@vitest/*`, and `scripts/bundle-info.build-test.mjs` when
+  when the bundle holds a module under `src/test-utils/` or from `vitest`,
+  `@vitest/*` or `fake-indexeddb`, and `scripts/bundle-info.build-test.mjs` when
   `bench/BUNDLE.md` no longer matches the build. A test that runs the real
   build tool, with the production options, on representative input and
   asserts on its output is allowed: `scripts/esbuild-minify.test.mjs` (run by

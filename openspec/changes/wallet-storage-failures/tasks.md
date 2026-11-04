@@ -2,7 +2,7 @@
 
 ## 1. Keystore tests
 
-- [ ] 1.1 Add `fake-indexeddb` as a devDependency and an in-source block in `keystore.ts` covering open, read, write, the open timeout and the lock; verify `yarn test-unit src/utils/wallet/keystore.ts` passes and `yarn test-build` finds no test module in the bundle
+- [x] 1.1 Add `fake-indexeddb` as a devDependency and an in-source block in `keystore.ts` covering open, read, write, the open timeout and the lock; verify `yarn test-unit src/utils/wallet/keystore.ts` passes and `yarn test-build` finds no test module in the bundle
 
 ## 2. Storage results
 
