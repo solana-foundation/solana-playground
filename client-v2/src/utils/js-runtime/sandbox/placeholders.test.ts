@@ -146,10 +146,99 @@ describe("sandbox web3.js patch", () => {
     expect(tx.signatures).toHaveLength(2);
   });
 
-  it("partialSign with the wallet after a real signer keeps both", async () => {
-    const tx = legacyTx();
-    await (tx.partialSign(sandboxKeypair()) as unknown as Promise<void>);
-    expect(tx.verifySignatures()).toBe(true);
+  describe("signers mixed in one transaction", () => {
+    const second = web3.Keypair.generate();
+    /** The page: holds both `wallet` and `second` */
+    const pageOfTwo: SignThroughPage = (publicKey) => () => async (bytes) => {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const held = [wallet, second].find((keypair) =>
+        keypair.publicKey.equals(publicKey)
+      );
+      if (!held) throw new Error(`No key for account ${publicKey.toBase58()}`);
+      return ed25519.sign(bytes, held.secretKey.slice(0, 32));
+    };
+    const sandboxed = (keypair: web3.Keypair) =>
+      sandboxKeypairWith(pageOfTwo)(keypair.publicKey);
+
+    /** Pays from `wallet` and makes `account` sign too: a fresh message */
+    const instructionsWith = (account: web3.PublicKey) => [
+      transferFrom(wallet.publicKey),
+      web3.SystemProgram.transfer({
+        fromPubkey: account,
+        toPubkey: other.publicKey,
+        lamports: 1,
+      }),
+    ];
+    const legacyWith = (account: web3.PublicKey) =>
+      new web3.Transaction({
+        feePayer: wallet.publicKey,
+        recentBlockhash: web3.Keypair.generate().publicKey.toBase58(),
+      }).add(...instructionsWith(account));
+    const v0With = (account: web3.PublicKey) =>
+      new web3.VersionedTransaction(
+        new web3.TransactionMessage({
+          payerKey: wallet.publicKey,
+          recentBlockhash: web3.Keypair.generate().publicKey.toBase58(),
+          instructions: instructionsWith(account),
+        }).compileToV0Message()
+      );
+
+    it("legacy: a real signer, then the sandbox keypair, keeps both", async () => {
+      const real = web3.Keypair.generate();
+      const tx = legacyWith(real.publicKey);
+      void tx.partialSign(real);
+      await (tx.partialSign(sandboxed(wallet)) as unknown as Promise<void>);
+      expect(tx.signatures.every((pair) => pair.signature)).toBe(true);
+      expect(tx.verifySignatures()).toBe(true);
+    });
+
+    it("legacy: the sandbox keypair, then a real signer, keeps both", async () => {
+      const real = web3.Keypair.generate();
+      const tx = legacyWith(real.publicKey);
+      const signed = tx.partialSign(
+        sandboxed(wallet)
+      ) as unknown as Promise<void>;
+      void tx.partialSign(real);
+      await signed;
+      expect(tx.verifySignatures()).toBe(true);
+    });
+
+    it("legacy: two sandbox keypairs in one sign", async () => {
+      const tx = legacyWith(second.publicKey);
+      await (tx.sign(
+        sandboxed(second),
+        sandboxed(wallet)
+      ) as unknown as Promise<void>);
+      expect(tx.signatures).toHaveLength(2);
+      expect(tx.verifySignatures()).toBe(true);
+    });
+
+    it("v0: a real signer and the sandbox keypair, in either order", async () => {
+      for (const order of ["real first", "sandbox first"]) {
+        const real = web3.Keypair.generate();
+        const tx = v0With(real.publicKey);
+        const signers =
+          order === "real first"
+            ? [real, sandboxed(wallet)]
+            : [sandboxed(wallet), real];
+        await (tx.sign(signers) as unknown as Promise<void>);
+        expect(await isWireSigned(tx.serialize())).toBe(true);
+      }
+    });
+
+    it("v0: two sandbox keypairs, spliced before they land and signed after", async () => {
+      const tx = v0With(second.publicKey);
+      const signed = tx.sign([
+        sandboxed(wallet),
+        sandboxed(second),
+      ]) as unknown as Promise<void>;
+
+      const wire = tx.serialize();
+      expect(await isWireSigned(await spliceSignatures(wire))).toBe(true);
+
+      await signed;
+      expect(await isWireSigned(tx.serialize())).toBe(true);
+    });
   });
 
   it("VersionedTransaction.sign signs a v0 transaction with the wallet", async () => {
