@@ -33,8 +33,8 @@ code and makes it the default.
   so the opaque-origin sandbox can load them under the app's
   cross-origin isolation (COEP `require-corp`). User-visible effect: none,
   beyond `run` and `test` working.
-- The in-page runtime stays in the code as the fallback, reached only by a
-  developer override. It is not a setting.
+- The in-page runtime is removed; there is no path that runs project code
+  in the page.
 - Telemetry: no product events are added, renamed or removed. Sandbox
   failures (load timeout, a refused sign request) are logged through
   `shared/lib/logger`.
