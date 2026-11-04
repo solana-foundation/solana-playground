@@ -36,7 +36,7 @@ type BuildSkipped =
  * build runs yet (the stage's Build may have been pressed). Gives
  * up after `MOUNT_WAIT_MS`, leaving the Build stage's own Build button.
  */
-const buildWhenMounted = async (): Promise<BuildSkipped | null> => {
+const buildWhenMounted = async (): Promise<BuildSkipped | undefined> => {
   const until = Date.now() + MOUNT_WAIT_MS;
   for (;;) {
     if (PgExplorer.currentWorkspaceName !== EXAMPLE_NAME) return "left-example";
@@ -44,7 +44,7 @@ const buildWhenMounted = async (): Promise<BuildSkipped | null> => {
     if (PgGlobal.buildLoading) return "already-building";
     try {
       await PgCommand.build.execute();
-      return null;
+      return undefined;
     } catch (e) {
       if (!isTerminalUnmounted(e)) throw e;
       if (Date.now() >= until) return "terminal-never-mounted";

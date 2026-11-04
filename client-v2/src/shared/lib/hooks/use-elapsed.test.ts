@@ -6,8 +6,8 @@ import { useElapsed } from "./use-elapsed";
 
 const START = 1_000_000;
 
-/** When a run started, or `null` while none runs */
-const flow = (running: boolean) => (running ? START : null);
+/** When a run started, or `undefined` while none runs */
+const flow = (running: boolean) => (running ? START : undefined);
 
 describe("shared/lib/hooks/use-elapsed", () => {
   beforeEach(() => {
@@ -23,15 +23,15 @@ describe("shared/lib/hooks/use-elapsed", () => {
     expect(result.current).toBe(12_000);
   });
 
-  it("is null and keeps no timer while nothing runs", () => {
+  it("is undefined and keeps no timer while nothing runs", () => {
     const { result } = renderHook(() => useElapsed(flow(false)));
-    expect(result.current).toBeNull();
+    expect(result.current).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it("counts a new run from its own start", () => {
     const { result, rerender } = renderHook(({ at }) => useElapsed(at), {
-      initialProps: { at: START as number | null },
+      initialProps: { at: START as number | undefined },
     });
     act(() => vi.advanceTimersByTime(30_000));
     rerender({ at: START + 30_000 });
@@ -46,7 +46,7 @@ describe("shared/lib/hooks/use-elapsed", () => {
     );
     act(() => vi.advanceTimersByTime(3_000));
     rerender({ running: false });
-    expect(result.current).toBeNull();
+    expect(result.current).toBeUndefined();
     expect(vi.getTimerCount()).toBe(0);
   });
 });

@@ -45,10 +45,10 @@ export const useStatus = (): StatusIndicator[] => {
   useRenderOnChange(PgSession.onDidChange);
   const analyzer = useAnalyzer();
   const online = useOnline();
-  const since = analyzer.kind === "starting" ? analyzer.since : null;
+  const since = analyzer.kind === "starting" ? analyzer.since : undefined;
   // Ticks only while the analyzer starts; the model reads the seconds from it
   const elapsed = useElapsed(since);
-  const now = since === null ? Date.now() : since + (elapsed ?? 0);
+  const now = since === undefined ? Date.now() : since + (elapsed ?? 0);
 
   return [
     networkIndicator(network, online),

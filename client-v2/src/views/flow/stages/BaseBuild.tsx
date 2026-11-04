@@ -66,7 +66,7 @@ export interface BaseBuildProps {
   /** The last build's duration, `null` while unknown */
   ms: number | null;
   /** How long the running build has run, `null` while none runs */
-  elapsedMs: number | null;
+  elapsedMs: number | undefined;
   /** The browser has no network: Build waits, and the notice over the stage
    * says why (Spec 08 NET-01) */
   offline: boolean;
@@ -205,7 +205,7 @@ const Empty = (p: BaseBuildProps) => (
   <Surface
     title={p.building ? "Building…" : "Nothing built yet"}
     meta={
-      p.building && p.elapsedMs !== null
+      p.building && p.elapsedMs !== undefined
         ? `${Math.floor(p.elapsedMs / 1000)} s`
         : null
     }

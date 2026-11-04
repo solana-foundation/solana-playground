@@ -54,7 +54,9 @@ const Build = () => {
 
   const building = flow.build === "running";
   const slow = useSlowBuild(building, flow.buildStartedAt);
-  const elapsedMs = useElapsed(building ? flow.buildStartedAt : null);
+  const elapsedMs = useElapsed(
+    building ? flow.buildStartedAt ?? undefined : undefined
+  );
   const online = useOnline();
   const own = ownOutput(out, PgExplorer.currentWorkspaceName ?? null);
   const surface = buildSurface({ flow, own });
