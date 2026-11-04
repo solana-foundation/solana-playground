@@ -8,7 +8,7 @@
 
 ## 2. The message protocol
 
-- [ ] 2.1 Define the typed protocol module (`run`, `output`, `result`, `end`, `sign`, `rpc`, `ready`) imported by both halves, and verify with a unit test that no message type has a field that can hold key bytes beyond a signature
+- [x] 2.1 Define the typed protocol module (`run`, `output`, `result`, `end`, `sign`, `rpc`, `ready`) imported by both halves, and verify with a unit test that no message type has a field that can hold key bytes beyond a signature
 
 ## 3. Running code in the sandbox
 
