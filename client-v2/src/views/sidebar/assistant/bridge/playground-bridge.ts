@@ -3,6 +3,7 @@ import {
   normalizeProjectPath,
   PgAssistantContext,
 } from "@/entities/assistant-context";
+import { merge3 } from "@/features/persistence/model/merge";
 
 import {
   PgBlockExplorer,
@@ -116,6 +117,25 @@ const summarizeIdl = (): IdlSummary | null => {
 };
 
 /** The real playground. */
+/**
+ * The text for a buffer the user typed into while a patch was being written:
+ * the patch with the typing folded in, or the typing alone when the two
+ * overlap, since autosave then writes it and a card can say the file moved on,
+ * while lost typing cannot be told at all
+ */
+const foldTyping = ({
+  base,
+  typed,
+  content,
+}: {
+  base: string;
+  typed: string;
+  content: string;
+}) => {
+  const merged = merge3(base, content, typed);
+  return merged.kind === "clean" ? merged.text : typed;
+};
+
 export const realBridge: PlaygroundBridge = {
   getProjectContext() {
     const currentFullPath = PgExplorer.currentFilePath;
@@ -177,13 +197,18 @@ export const realBridge: PlaygroundBridge = {
   },
 
   readFile(path) {
-    return (
-      PgExplorer.getFileContent(PgExplorer.convertToFullPath(path)) ?? null
-    );
+    const fullPath = PgExplorer.convertToFullPath(path);
+    const saved = PgExplorer.getFileContent(fullPath);
+    // eslint-disable-next-line unicorn/no-null -- `PlaygroundBridge.readFile` types an absent file as null
+    if (saved === undefined) return null;
+    // Autosave lags typing by about 500 ms, so the explorer can be behind what
+    // the user sees: Undo would pass its check and overwrite the new typing
+    return PgExplorer.editorBuffers?.read(fullPath) ?? saved;
   },
 
   async applyPatch({ path, content }) {
     const fullPath = PgExplorer.convertToFullPath(path);
+    const buffered = PgExplorer.editorBuffers?.read(fullPath);
 
     // Write without touching tabs; the editor is synced separately below
     await PgExplorer.createItem(fullPath, content, {
@@ -206,7 +231,13 @@ export const realBridge: PlaygroundBridge = {
     const model = monaco.editor
       .getModels()
       .find((m) => m.uri.path === fullPath);
-    if (model && model.getValue() !== content) model.setValue(content);
+    if (!model) return;
+    const live = model.getValue();
+    const text =
+      buffered === undefined || live === buffered
+        ? content
+        : foldTyping({ base: buffered, typed: live, content });
+    if (live !== text) model.setValue(text);
   },
 
   async deleteFile(path) {
