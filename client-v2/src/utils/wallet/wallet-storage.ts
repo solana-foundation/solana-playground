@@ -2,7 +2,11 @@ import { createLogger, toError } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import { isIndexedDbMissing, type WalletStore } from "./keystore";
 import { publicKeyOf } from "./signer-provider";
-import type { SerializedWalletState, WalletAccount } from "./types";
+import type {
+  SavedWalletState,
+  SerializedWalletState,
+  WalletAccount,
+} from "./types";
 
 const log = createLogger("wallet:storage");
 
@@ -93,15 +97,31 @@ const isAccount = (value: unknown): value is WalletAccount => {
   );
 };
 
+/**
+ * Every state a stored wallet may have, as a record so that a state added to
+ * `SavedWalletState` must be listed here
+ */
+const SAVED_STATES: Record<SavedWalletState, true> = {
+  setup: true,
+  disconnected: true,
+  pg: true,
+  sol: true,
+};
+
+/** Whether `value` is a state a stored wallet may have */
+const isSavedState = (value: unknown): value is SavedWalletState =>
+  typeof value === "string" && Object.hasOwn(SAVED_STATES, value);
+
 /** A stored wallet whose accounts may include damaged ones */
 type StoredWallet = Omit<SerializedWalletState, "accounts"> & {
   accounts: unknown[];
 };
 
 /**
- * Whether `value` has the shape of a stored wallet. Some accounts may be
- * damaged, but not all of them: a wallet with accounts and no valid one is
- * unreadable as a whole.
+ * Whether `value` has the shape of a stored wallet, with a state a saved
+ * wallet can have (never `unavailable`). Some accounts may be damaged, but
+ * not all of them: a wallet with accounts and no valid one is unreadable as a
+ * whole.
  */
 const isStoredWallet = (value: unknown): value is StoredWallet => {
   if (typeof value !== "object" || value === null) return false;
@@ -112,7 +132,7 @@ const isStoredWallet = (value: unknown): value is StoredWallet => {
     Array.isArray(accounts) &&
     (accounts.length === 0 || accounts.some(isAccount)) &&
     typeof currentIndex === "number" &&
-    typeof state === "string"
+    isSavedState(state)
   );
 };
 
@@ -998,6 +1018,26 @@ if (import.meta.vitest) {
       expect(store.heldAside()).toEqual([record]);
       expect(store.held()).toEqual(wallet);
       expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+    });
+
+    it("does not load a stored state that is not a saved wallet's", async () => {
+      for (const state of ["unavailable", "junk"]) {
+        const store = memoryStore(undefined);
+        const record = {
+          state,
+          accounts: [account(1, "Wallet 1")],
+          currentIndex: 0,
+          standardName: NO_STANDARD,
+        };
+        store.read.mockResolvedValue(record as never);
+
+        const read = await walletStorageWith(store)(
+          memoryLocal(undefined)
+        ).read();
+
+        expect(read).toEqual({ kind: "none", setAside: 1 });
+        expect(store.heldAside()).toEqual([record]);
+      }
     });
 
     it("reads unavailable when a stored record of the wrong shape cannot be set aside", async () => {
