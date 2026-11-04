@@ -2,8 +2,11 @@ import type { PgWeb3 } from "../web3";
 
 /** Wallet state */
 export interface WalletState {
-  /** Wallet connection state */
-  state: "setup" | "disconnected" | "pg" | "sol";
+  /**
+   * Wallet connection state. `unavailable`: a wallet may be stored but could
+   * not be read; it is never saved, so the stored wallet stays as it was.
+   */
+  state: "setup" | "disconnected" | "pg" | "sol" | "unavailable";
   /** All accounts */
   accounts: WalletAccount[];
   /** Current wallet index */

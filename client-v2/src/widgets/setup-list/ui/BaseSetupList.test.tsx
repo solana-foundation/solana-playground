@@ -118,3 +118,16 @@ it("warns on a network that does not answer, with no tick and no button", () => 
     "Get set up· 2 of 4"
   );
 });
+
+it("shows a wallet that could not be read as a warning", () => {
+  renderList([
+    todo("assistant"),
+    done("network", "devnet"),
+    done("github", "octocat"),
+    { step: "wallet", done: false, problem: "unavailable" },
+  ]);
+  const wallet = screen.getAllByRole("listitem")[3];
+  expect(wallet.getAttribute("data-status")).toBe("warn");
+  expect(wallet.textContent).toContain("Wallet unavailable");
+  expect(screen.queryByRole("button", { name: "Connect a wallet" })).toBeNull();
+});

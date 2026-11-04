@@ -6,7 +6,7 @@
 
 ## 2. Storage results
 
-- [ ] 2.1 Make `read` return `wallet | none | unavailable` and map `unavailable` to the unpersisted `"unavailable"` wallet state; verify with unit tests in `wallet-storage.ts` and the scenario "The store fails and nothing is in localStorage" as a Playwright test
+- [x] 2.1 Make `read` return `wallet | none | unavailable` and map `unavailable` to the unpersisted `"unavailable"` wallet state; verify with unit tests in `wallet-storage.ts` and the scenario "The store fails and nothing is in localStorage" as a Playwright test
 - [ ] 2.2 Make writes report `store | local | lost` and show the save-failure notice once per page load; verify with unit tests and "Neither store saves the wallet" as a Playwright test
 - [ ] 2.3 Filter damaged accounts, remap the current one and set the damaged ones aside in the database; verify with unit tests and "One of three accounts is damaged" and "The current account is the damaged one" as Playwright tests
 - [ ] 2.4 Request persistent storage after the first store write; verify "Persistence is requested once" as a Playwright test

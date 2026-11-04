@@ -54,6 +54,14 @@ const BaseSetupList = ({
     </SetupListHeader>
     <SetupListContent>
       {steps.map((view) => {
+        if ("problem" in view) {
+          return (
+            <SetupListItem key={view.step} status="warn">
+              <SetupListIndicator />
+              <SetupListLabel>Wallet unavailable</SetupListLabel>
+            </SetupListItem>
+          );
+        }
         if ("warn" in view) {
           // Not a step to do: the network is chosen, it does not answer. The
           // reason is in the title and read after the label

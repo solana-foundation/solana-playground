@@ -6,7 +6,7 @@ import { isSignInFailure, PgSession } from "@/features/auth";
 import { useRenderOnChange, useWallet } from "@/hooks";
 import { createLogger } from "@/shared/lib/logger";
 import { shortAddress } from "@/shared/lib/short-address";
-import { PgCommand, PgConnection, PgView } from "@/utils";
+import { PgCommand, PgConnection, PgView, PgWallet } from "@/utils";
 import { PgAssistant } from "@/views/sidebar/assistant/store";
 
 import type { StepView, TodoStep } from "../model/steps";
@@ -57,6 +57,8 @@ const SetupList = ({
   useRenderOnChange(PgSession.onDidChange);
   useRenderOnChange(PgAssistant.onDidChange);
   const wallet = useWallet();
+  useRenderOnChange(PgWallet.onDidChangeState);
+  const isWalletUnavailable = PgWallet.state === "unavailable";
   const user = PgSession.get();
 
   // Keyed by step, so a new step without a state does not compile
@@ -83,6 +85,9 @@ const SetupList = ({
         };
       }
       return { step, done: true, value };
+    }
+    if (step === "wallet" && isWalletUnavailable) {
+      return { step, done: false, problem: "unavailable" };
     }
     const { done, value } = states[step];
     return done ? { step, done, value } : { step, done };

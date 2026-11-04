@@ -92,13 +92,22 @@ const localStorageOrRefusal = (): Pick<
 const storage = {
   /** Read from storage and deserialize the data. */
   async read(): Promise<WalletState> {
-    const serializedState = await walletStorage().read();
-    if (!serializedState) return defaultState;
-    return { ...defaultState, ...serializedState };
+    const read = await walletStorage().read();
+    switch (read.kind) {
+      case "wallet":
+        return { ...defaultState, ...read.wallet };
+      case "none":
+        return defaultState;
+      case "unavailable":
+        return { ...defaultState, state: "unavailable" };
+    }
   },
 
   /** Serialize the data and write to storage. */
   write(wallet: WalletState) {
+    // Saving it would replace the stored wallet that could not be read
+    if (wallet.state === "unavailable") return;
+
     // Don't use spread operator(...) because of the extra state
     const serializedState: SerializedWalletState = {
       accounts: wallet.accounts,
@@ -148,6 +157,7 @@ const derive = () => ({
 
         case "disconnected":
         case "setup":
+        case "unavailable":
           return null;
       }
     },
