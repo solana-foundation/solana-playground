@@ -64,9 +64,9 @@ field is empty.
 Once the selected cluster is known, the Deploy stage SHALL show it over its
 title, capitalised ("Devnet"), with a status dot, before and after the first
 deploy; until then no cluster line is drawn. Until a build has succeeded, its
-description SHALL read "Build the program first. Deploy opens once the build
-passes." A failed deploy SHALL show an error callout (`role="alert"`) reading
-"Deploy failed. The terminal has the details." Upload IDL SHALL be a link, not
+description SHALL read "Build the program first." A failed deploy SHALL show
+an error callout (`role="alert"`) reading "Could not deploy. The full log has
+the details." Upload IDL SHALL be a link, not
 a button: on a desk under the Deploy pill before the first deploy and beside it
 after one; on a phone above the pill. The stage keeps
 `flow-stage-panel-deploy`.
@@ -75,11 +75,11 @@ after one; on a phone above the pill. The stage keeps
 
 - **WHEN** a project that has never been built opens the Deploy stage on devnet
 - **THEN** the stage shows "Devnet" over "Nothing deployed yet"
-- **AND** reads "Build the program first. Deploy opens once the build passes."
+- **AND** reads "Build the program first."
 - **AND** Deploy is disabled and Upload IDL is a link under it
 
 #### Scenario: A failed deploy
 
 - **WHEN** a deploy fails
-- **THEN** the stage shows "Deploy failed. The terminal has the details." in
-  an alert
+- **THEN** the stage shows "Could not deploy. The full log has the details."
+  in an alert
