@@ -7,7 +7,8 @@
  * tracks, layout sizes, elevation and motion.
  *
  * The values come from the product's former Solana theme and the deck's
- * tokens. Colours are hex on purpose: Studio's Design tab offers a
+ * tokens; the dark ramp, its text and status colours from the tutorial's
+ * cool palette (DES-160, 3 Nov 2026). Colours are hex on purpose: Studio's Design tab offers a
  * colour picker for a hex token and a text field for anything else.
  *
  * :root is paper: the product's Light theme, the landing and the deck's
@@ -24,6 +25,8 @@
   --popover-foreground: #151515;
   --primary: #8a3ff5;
   --primary-foreground: #ffffff;
+  /* never drawn in light: both buttons apply the edge under dark: only */
+  --primary-edge: #8a3ff5;
   --secondary: #f2f2f3;
   --secondary-foreground: #151515;
   --muted: #f2f2f3;
@@ -83,23 +86,28 @@
 .dark {
   /* ── shadcn semantic tokens, the product ────────────────────────────── */
   --background: #101011;
-  --foreground: #f2f2f3;
-  --card: #161617;
-  --card-foreground: #f2f2f3;
-  --popover: #161617;
-  --popover-foreground: #f2f2f3;
+  --foreground: #e4e4e7;
+  --card: #1d1d21;
+  --card-foreground: #e4e4e7;
+  --popover: #1d1d21;
+  --popover-foreground: #e4e4e7;
   --primary: #8a3ff5;
   --primary-foreground: #ffffff;
-  --secondary: #242426;
-  --secondary-foreground: #f2f2f3;
-  --muted: #242426;
-  --muted-foreground: #a0a0a6;
-  --accent: #2a2a2c;
-  --accent-foreground: #f2f2f3;
-  --destructive: #ef4444;
-  --border: #26262a;
-  --input: #33333a;
-  --ring: #9945ff;
+  /* a lighter purple hairline round the filled button. The fill is under
+     3:1 on raised and hover (2.9, 2.7), and a fill light enough for 3:1
+     would drop the white label under 4.5:1 (white on #b08cff is 2.61), so
+     the edge carries the 3:1 and the fill keeps the label */
+  --primary-edge: #b08cff;
+  --secondary: #27272b;
+  --secondary-foreground: #e4e4e7;
+  --muted: #27272b;
+  --muted-foreground: #a1a1aa;
+  --accent: #2c2c31;
+  --accent-foreground: #e4e4e7;
+  --destructive: #f87171;
+  --border: #2e2e33;
+  --input: #3a3a40;
+  --ring: #b08cff;
 
   --chart-1: #9945ff;
   --chart-2: #14f195;
@@ -108,41 +116,44 @@
   --chart-5: #9496f9;
 
   --sidebar: #101011;
-  --sidebar-foreground: #f2f2f3;
+  --sidebar-foreground: #e4e4e7;
   --sidebar-primary: #9945ff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #242426;
-  --sidebar-accent-foreground: #f2f2f3;
-  --sidebar-border: #26262a;
-  --sidebar-ring: #9945ff;
+  --sidebar-accent: #27272b;
+  --sidebar-accent-foreground: #e4e4e7;
+  --sidebar-border: #2e2e33;
+  --sidebar-ring: #b08cff;
 
-  /* ── Playground surfaces and text: an equal-channel grey ramp ──────── */
+  /* ── Playground surfaces and text: a cool grey ramp ─────────────────── */
+  /* the tutorial's palette (DES-160, 3 Nov 2026): every text tier reaches 4.5:1 on every
+     surface up to hover, tertiary included (#93939c, 4.56:1 on hover) */
   /* base is the ground (bg1). panel is bg2: cards, menus, dialogs, the
      composer, the stepper's track. well is the terminal's, one step below */
   --surface-base: #101011;
-  --surface-panel: #161617;
-  --surface: #1c1c1e;
-  --surface-raised: #242426;
-  --surface-hover: #2a2a2c;
+  --surface-panel: #1d1d21;
+  --surface: #212125;
+  --surface-raised: #27272b;
+  --surface-hover: #2c2c31;
   --surface-well: #0b0b0c;
   /* the bars that float over the stage: the stepper rail, the console
      strip, the objective band. Used with backdrop blur, see .frosted */
   --frosted: rgb(16 16 17 / 0.82);
-  --text-primary: #f2f2f3;
-  --text-secondary: #a0a0a6;
-  --text-tertiary: #6b6b72;
-  --border-strong: #33333a;
+  --text-primary: #e4e4e7;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #93939c;
+  --border-strong: #3a3a40;
 
   /* ── status: Solana's green for success, and nothing else uses them ── */
   --success: #14f195;
   --success-foreground: #08080a;
-  --warning: #f59e0b;
+  --warning: #facc15;
   --warning-foreground: #08080a;
-  --warning-ink: #f2c36b;
+  /* the warning's own yellow for its text too, as the tutorial draws it */
+  --warning-ink: #facc15;
   --info: #38bdf8;
   --info-foreground: #08080a;
-  --error: #ef4444;
-  --error-foreground: #ffffff;
+  --error: #f87171;
+  --error-foreground: #08080a;
 
   --track-brand: #14f195;
   --track-product: #ae7bff;
@@ -182,13 +193,14 @@
   --trail-4: #5a3fd9;
 
   /* ── syntax: VS Code's six roles, pulled into the product's palette ── */
+  /* plain and comment follow the dark ramp's primary and tertiary text */
   --syntax-keyword: #ec4899;
   --syntax-type: #38bdf8;
   --syntax-function: #14f195;
   --syntax-string: #f59e0b;
   --syntax-number: #8b5cf6;
-  --syntax-comment: #6b6b72;
-  --syntax-plain: #f2f2f3;
+  --syntax-comment: #93939c;
+  --syntax-plain: #e4e4e7;
 
   /* ── type ───────────────────────────────────────────────────────────── */
   --font-headline: "Stack Sans Headline", "Manrope", -apple-system,
