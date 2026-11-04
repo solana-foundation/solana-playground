@@ -214,13 +214,15 @@ when its condition ends.
 ### Requirement: The setup list warns on a network that does not answer
 
 While the chosen cluster does not answer or its slot does not move, the
-"Choose a network" row of "Get set up" SHALL lose its tick and show its warn
-state, with the cluster's name as its value and "<cluster> is not responding"
-as its title and as the words read after its label; it SHALL NOT count as
-done. It SHALL tick again when the cluster answers.
+"Choose a network" row of "Get set up" SHALL show its warn state in place of
+its tick, with the cluster's name as its value and "<cluster> is not
+responding" as its title and as the words read after its label. It SHALL
+still count as done: the network stays the one chosen, so an outage takes no
+step back (DES-194 design review, Almaz, 3 Nov). It SHALL tick again when the
+cluster answers.
 
 #### Scenario: The setup row warns while the cluster does not answer
 
 - **WHEN** the cluster stops answering
 - **THEN** the "Choose a network" row shows its warn state, titled "devnet
-  is not responding", and the list counts one step fewer as done
+  is not responding", and the list's count of done steps does not change
