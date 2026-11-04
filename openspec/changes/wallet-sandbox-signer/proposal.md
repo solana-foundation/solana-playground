@@ -26,6 +26,11 @@ code and makes it the default.
   (`pg.wallet.keypair.secretKey`, `Keypair.fromSecretKey(...)` over them,
   `nacl.sign.detached(msg, kp.secretKey)`): it gets an error that names
   `pg.wallet.signMessage` and `pg.wallet.signTransaction` instead.
+- **BREAKING** for project code that uses more of a standard wallet than it
+  signs with: under `pg.wallets`, and as `pg.wallet` when it is current, a
+  standard wallet exposes its name, public key, `signTransaction`,
+  `signAllTransactions` and `signMessage` only, not the rest of the wallet
+  object the in-page runtime handed over.
 - The packages project code can import (web3.js, anchor, mocha and the rest
   of `supported-packages.json`) load inside the sandbox from a second build
   entry. RPC calls go through the page, so Playnet keeps working.
@@ -64,8 +69,7 @@ code and makes it the default.
 - Tests: unit tests for the provider, the placeholder splice and the message
   bridge. An e2e that a sandboxed script cannot read the key. The existing
   signing, deploy and hello-solana e2e keep passing.
-- Docs: an upstream divergence row. `docs/assistant-context.md` explains
-  the `secretKey` error.
+- Docs: `docs/assistant-context.md` explains the `secretKey` error.
 - Out of scope: approval prompts for sign requests (project code still signs
   without asking, as today). Moving the key out of the page itself
   (HOO-2426 does this for the model key). Stopping a running script by
