@@ -1,5 +1,6 @@
 # Dependencies
 */node_modules
+.github/vercel-cli/node_modules
 **/target
 
 # Generated package imports

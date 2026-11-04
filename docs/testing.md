@@ -608,12 +608,12 @@ Expect: the content renders; the `curl` prints `200 application/json` (the file 
 
 ### S-6. crate files in a Vercel build
 
-Precondition: a preview deployment of a branch with `generate-default-crates.mjs`; the Vercel CLI version pinned as
-`VERCEL_CLI` in `.github/workflows/preview.yml`; a Protection Bypass for Automation secret from the project settings in
-`VERCEL_BYPASS` (never in this file); the Vercel team slug in `VERCEL_SCOPE`.
+Precondition: a preview deployment of a branch with `generate-default-crates.mjs`; the Vercel CLI installed with
+`npm ci --ignore-scripts --prefix .github/vercel-cli`; a Protection Bypass for Automation secret from the project
+settings in `VERCEL_BYPASS` (never in this file); the Vercel team slug in `VERCEL_SCOPE`.
 
 ```sh
-npx vercel@<version> inspect <deployment URL> --logs --scope "$VERCEL_SCOPE" \
+.github/vercel-cli/node_modules/.bin/vercel inspect <deployment URL> --logs --scope "$VERCEL_SCOPE" \
   | grep -E 'default crates:|Default crates are current|Crates are current|generate-crates|not found'
 curl -s -H "x-vercel-protection-bypass: $VERCEL_BYPASS" <deployment URL>/crates/std.rs | head -c 200
 curl -s -H "x-vercel-protection-bypass: $VERCEL_BYPASS" <deployment URL>/crates/anchor_lang.toml | head -c 200

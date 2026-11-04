@@ -91,21 +91,25 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       PR: ${{ github.event.pull_request.number }}
       SHA: ${{ github.event.pull_request.head.sha }}
-      # The Build and deploy step was verified against this CLI version; bump only after re-running it.
-      VERCEL_CLI: vercel@62.7.0
+      VERCEL: ${{ github.workspace }}/.github/vercel-cli/node_modules/.bin/vercel
     steps:
       # The head commit, not the merge commit `pull_request` checks out by
       # default: the preview shows the branch as pushed. Submodule with full
       # history, as in client-v2.yml: update-static dates tutorials from it.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           submodules: true
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version-file: client-v2/.nvmrc
+
+      # Every package checked against package-lock.json's hashes, and no install
+      # script runs. Bump `vercel` there only after re-running Build and deploy.
+      - name: Install the Vercel CLI
+        run: npm ci --ignore-scripts --prefix .github/vercel-cli
 
       - name: Check configuration
         run: |
@@ -142,7 +146,7 @@ jobs:
           DATABASE_URL="$url" dbmate --wait --wait-timeout 60s --no-dump-schema up
 
       # Pull, pin the Root Directory, build here, deploy the prebuilt output,
-      # with the CLI at VERCEL_CLI. The Git integration deploys an integration
+      # with the CLI from .github/vercel-cli. The Git integration deploys an integration
       # branch's push on its own and skips a ticket branch's
       # (client-v2/scripts/vercel-ignore-build.mjs); this deployment differs in
       # its DATABASE_URL, the PR's Neon branch, and is a ticket branch's only
@@ -156,21 +160,21 @@ jobs:
           echo "::add-mask::$db"
           # Nothing below needs it, and `vercel build` runs the PR's code.
           unset NEON_API_KEY
-          npx --yes "$VERCEL_CLI" pull --yes --environment=preview --token="$VERCEL_TOKEN"
+          "$VERCEL" pull --yes --environment=preview --token="$VERCEL_TOKEN"
           jq '.settings.rootDirectory = "client-v2"' .vercel/project.json > .vercel/project.json.next
           mv .vercel/project.json.next .vercel/project.json
           # Separate lines: `-e` does not stop on a failure inside an && list.
           set -a
           . ./.vercel/.env.preview.local
           set +a
-          npx --yes "$VERCEL_CLI" build --token="$VERCEL_TOKEN"
+          "$VERCEL" build --token="$VERCEL_TOKEN"
           # Every file under api/ becomes a public function unless
           # client-v2/.vercelignore drops it, and a test there writes to the
           # database it is given (HOO-2175).
           tests=$(find .vercel/output/functions -name '*.test.func')
           [ -z "$tests" ] || { echo "::error::test files deployed as functions: $tests"; exit 1; }
           # --archive=tgz: the prebuilt output is over the upload API's 15000-file cap.
-          url=$(npx --yes "$VERCEL_CLI" deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" \
+          url=$("$VERCEL" deploy --prebuilt --archive=tgz --token="$VERCEL_TOKEN" \
             -e DATABASE_URL="$db" --meta githubPrId="$PR" --meta githubCommitSha="$SHA")
           [ -n "$url" ] || { echo "::error::vercel deploy printed no URL"; exit 1; }
           echo "url=$url" >> "$GITHUB_OUTPUT"
@@ -221,7 +225,7 @@ jobs:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
     steps:
       # Sparse: only the scripts, not the submodule.
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           sparse-checkout: .github/scripts
 

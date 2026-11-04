@@ -188,8 +188,9 @@ The version comes from the lockfile, the file wasm-pack reads, after `cargo meta
 ## Tokens
 
 Without `--token`, the CLI uses the session from `vercel login`, so the commands
-in [Migrate production](#migrate-production) need no token. `npx vercel@<version> whoami`
-names the account the CLI acts as; it must be a member of the linked team.
+in [Migrate production](#migrate-production) need no token. `"$vercel" whoami`, with
+`$vercel` as that section sets it, names the account the CLI acts as; it must be a
+member of the linked team.
 
 **A project-scoped token cannot drive the CLI.** Choosing a single project in
 Account Settings → Tokens creates one, and it denies every user-level request.
@@ -530,12 +531,16 @@ database that cannot be reached, not one whose schema is merely out of date.
 The database behind the Production environment's `DATABASE_URL` needs its own
 schema. Run from the repository root, with `jq`, `dbmate`, a linked checkout
 ([One-time setup](#one-time-setup)), and a `vercel login` session in the linked
-team. The CLI version is the one `VERCEL_CLI` pins in `preview.yml`:
+team. The CLI is the one `preview.yml` runs, installed from
+[`.github/vercel-cli/package-lock.json`](../../.github/vercel-cli/package-lock.json),
+so every package is checked against its hash:
 
 ```sh
+npm ci --ignore-scripts --prefix .github/vercel-cli
+vercel="$PWD/.github/vercel-cli/node_modules/.bin/vercel"
 export VERCEL_ORG_ID=$(jq -r .orgId .vercel/project.json)
 export VERCEL_PROJECT_ID=$(jq -r .projectId .vercel/project.json)
-npx vercel@62.7.0 env pull .vercel/.env.production.local --environment=production --yes
+"$vercel" env pull .vercel/.env.production.local --environment=production --yes
 url=$(grep -m1 '^DATABASE_URL_UNPOOLED=' .vercel/.env.production.local | cut -d= -f2- | tr -d '"')
 printf '%s\n' "$url" | sed -E 's#^[^@]*@([^/?]*).*#production database: \1#'
 cd client-v2
