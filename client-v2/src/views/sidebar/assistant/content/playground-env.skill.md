@@ -72,8 +72,9 @@ keeping accurate.
 - Deploy goes to the cluster set in Settings → Connection: devnet by default,
   and the project snapshot names the current one. It costs SOL and needs a
   wallet funded on that cluster.
-- The default wallet is an in-browser keypair in local storage. Clearing
-  browser data destroys it along with the projects.
+- The default wallet is an in-browser keypair kept in the wallet's own
+  IndexedDB database, not in `localStorage`. Clearing site data destroys it
+  along with the projects.
 
 ## Environment limits worth naming out loud
 
