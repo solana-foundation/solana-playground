@@ -3,7 +3,8 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { ESLint } from "eslint";
+
+import { untypedEslintAt } from "./lib/untyped-eslint.mjs";
 
 const cwd = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -36,7 +37,7 @@ const LAYER_RULES = new Set([
  * here as violations that pass.
  */
 const layerMessages = async (file, code) => {
-  const eslint = new ESLint({ cwd });
+  const eslint = untypedEslintAt(cwd);
   const [result] = await eslint.lintText(code, { filePath: file });
   return result.messages.filter((m) => LAYER_RULES.has(m.ruleId));
 };
@@ -220,7 +221,7 @@ describe("eslint-layers.js run from the repository root", () => {
     const before = process.cwd();
     process.chdir(root);
     try {
-      const eslint = new ESLint({ cwd: root });
+      const eslint = untypedEslintAt(root);
       const [result] = await eslint.lintText(
         'import { ModalHost } from "../../overlays";\nModalHost;\n',
         { filePath: "client-v2/src/widgets/assistant/ui/Probe.tsx" }
@@ -259,7 +260,7 @@ describe("the recorded exception", () => {
     const files = layersConfig.overrides.find(
       (o) => "layers/recorded-exception" in o.rules
     ).files;
-    const results = await new ESLint({ cwd }).lintFiles(files);
+    const results = await untypedEslintAt(cwd).lintFiles(files);
     const found = results.flatMap((result) =>
       result.messages
         .filter((m) => LAYER_RULES.has(m.ruleId))

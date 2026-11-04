@@ -3,7 +3,9 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
-import { ESLint, Linter, RuleTester } from "eslint";
+import { Linter, RuleTester } from "eslint";
+
+import { untypedEslintAt } from "./lib/untyped-eslint.mjs";
 
 const require = createRequire(import.meta.url);
 const { rules } = require("eslint-plugin-layers");
@@ -13,7 +15,7 @@ const src = path.join(cwd, "src");
 
 describe("eslint-plugin-layers", () => {
   it("fails a relative import that leaves its slice", async () => {
-    const eslint = new ESLint({ cwd });
+    const eslint = untypedEslintAt(cwd);
     const [result] = await eslint.lintText(
       'import { uuid } from "../../../shared/lib/ids";\nuuid;\n',
       { filePath: "src/widgets/home/model/probe.ts" }
