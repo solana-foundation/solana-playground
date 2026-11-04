@@ -85,6 +85,92 @@ if (import.meta.vitest) {
       bytes: new Uint8Array([1, 2, 3]),
     };
 
+    const keypair = PgWeb3.Keypair.generate();
+    const other = PgWeb3.Keypair.generate();
+    const blockhash = PgWeb3.Keypair.generate().publicKey.toBase58();
+
+    /** A v0 transfer of `lamports` paid by `payer`, as its message bytes */
+    const transferMessageWith = (lamports: number) => (payer: PgWeb3.Keypair) =>
+      new PgWeb3.TransactionMessage({
+        payerKey: payer.publicKey,
+        recentBlockhash: blockhash,
+        instructions: [
+          PgWeb3.SystemProgram.transfer({
+            fromPubkey: payer.publicKey,
+            toPubkey: other.publicKey,
+            lamports,
+          }),
+        ],
+      }).compileToV0Message();
+
+    /** A wallet as `keypair` whose `signTransaction` the test supplies */
+    const walletWith = (
+      signTransaction: (
+        tx: PgWeb3.VersionedTransaction
+      ) => Promise<PgWeb3.VersionedTransaction>
+    ) =>
+      ({
+        isPg: true,
+        name: "Wallet 1",
+        publicKey: keypair.publicKey,
+        signTransaction,
+      } as unknown as Wallet);
+
+    const transactionRequest = (bytes: Uint8Array) => ({
+      publicKey: keypair.publicKey.toBase58(),
+      kind: "transaction" as const,
+      bytes,
+    });
+
+    it("refuses a signature for a transaction the wallet changed", async () => {
+      const asked = transferMessageWith(1)(keypair).serialize();
+      // The wallet signs a transfer of more than it was asked to
+      const wallet = walletWith(async () => {
+        const changed = new PgWeb3.VersionedTransaction(
+          transferMessageWith(1_000_000)(keypair)
+        );
+        changed.sign([keypair]);
+        return changed;
+      });
+
+      const reply = await signRequestWith(() => [wallet])(
+        transactionRequest(asked)
+      );
+
+      expect(reply).toEqual({
+        error: expect.stringContaining(
+          "does not match the transaction it was asked to sign"
+        ),
+      });
+    });
+
+    it("refuses to sign a transaction the account is not a signer of", async () => {
+      const asked = transferMessageWith(1)(other).serialize();
+      const wallet = walletWith(async (tx) => tx);
+
+      const reply = await signRequestWith(() => [wallet])(
+        transactionRequest(asked)
+      );
+
+      expect(reply).toEqual({
+        error: `Account ${keypair.publicKey.toBase58()} is not a signer of the transaction`,
+      });
+    });
+
+    it("hands back the signature of a transaction signed as asked", async () => {
+      const asked = transferMessageWith(1)(keypair).serialize();
+      const wallet = walletWith(async (tx) => {
+        tx.sign([keypair]);
+        return tx;
+      });
+
+      const reply = await signRequestWith(() => [wallet])(
+        transactionRequest(asked)
+      );
+
+      expect("signature" in reply && reply.signature).toHaveLength(64);
+    });
+
     it("answers with the reason when the page's wallets cannot be listed", async () => {
       const reply = await signRequestWith(() => {
         throw new Error("Wallet not connected");
