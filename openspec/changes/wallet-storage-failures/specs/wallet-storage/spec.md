@@ -41,6 +41,8 @@ Changes are kept until you reload; export your keypair to keep it."
   to `localStorage` fails too
 - **THEN** the notice "Your wallet could not be saved." is shown once
 - **AND** a second failed save in the same page load shows no second notice
+- **AND** while the wallet has no account, a failed save shows no notice,
+  since nothing can be lost
 
 ## ADDED Requirements
 

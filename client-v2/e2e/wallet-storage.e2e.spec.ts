@@ -478,6 +478,10 @@ test("wallet-storage: Neither store saves the wallet", async ({ page }) => {
   await failLocalWalletWrites(page);
   await seedWorkspace(page);
 
+  // Nothing to lose yet: the notice would cover the step that makes a wallet
+  await page.waitForTimeout(TOAST_RENDER_MS);
+  await expect(saveFailedNotices(page)).toHaveCount(0);
+
   await createWallet(page);
 
   await expect(saveFailedNotices(page)).toHaveCount(1, LONG);

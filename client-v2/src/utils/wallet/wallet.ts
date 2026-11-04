@@ -187,7 +187,8 @@ const storage = {
     };
 
     const outcome = await walletStorage().write(serializedState);
-    if (outcome === "lost") tell("save-failed");
+    // Before there is an account, a lost save costs nothing to be told about
+    if (outcome === "lost" && wallet.accounts.length) tell("save-failed");
     if (outcome === "store") await requestPersistence();
   },
 };
