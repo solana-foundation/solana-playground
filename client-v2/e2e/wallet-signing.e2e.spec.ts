@@ -40,7 +40,7 @@ test("wallet-signing: Project code signs with pg.wallet.keypair", async ({
   const keypair = Keypair.generate();
   const address = keypair.publicKey.toBase58();
 
-  await seedLocalWallet(page, {
+  await seedLocalWallet(page)({
     state: "pg",
     accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
     currentIndex: 0,
