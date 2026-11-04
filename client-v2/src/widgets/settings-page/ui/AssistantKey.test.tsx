@@ -7,6 +7,7 @@ import {
   memoryProvider as memoryTelemetry,
   resetTelemetry,
 } from "@/shared/lib/telemetry";
+
 import { storedValues } from "../../../test-utils/stored-values";
 import {
   KEY_NOT_FORGOTTEN,

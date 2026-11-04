@@ -1,5 +1,6 @@
-import type { KeyHold } from "../../../views/sidebar/assistant/model/types";
 import { Button } from "@/shared/ui/button";
+
+import type { KeyHold } from "../../../views/sidebar/assistant/model/types";
 import BaseSettingRow from "./BaseSettingRow";
 
 /** The user's own key, as the row reads it (`KeyHold`) */
