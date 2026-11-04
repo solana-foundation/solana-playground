@@ -21,11 +21,6 @@ export const POOL_LIMITS = {
 
 /**
  * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
- */
-export const isConfigured = (env) => !!env.DATABASE_URL;
-
-/**
- * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
  * @returns {Promise<import("pg").Pool>}
  */
 export const createPool = async (env) =>

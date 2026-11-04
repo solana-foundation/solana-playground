@@ -16,11 +16,7 @@ import { oAuthProxy } from "better-auth/plugins";
 import { authEnv } from "../../../shared/config/server-env.mjs";
 import { createServerLogger } from "../../../shared/lib/logger/server.mjs";
 // TODO(ui-migration 1.4): a feature importing a feature; the auth database adapter needs persistence's pool
-import {
-  getPool,
-  isConfigured,
-  missingDatabaseEnv,
-} from "../../persistence/server.mjs";
+import { getPool, missingDatabaseEnv } from "../../persistence/server.mjs";
 import { SIGN_IN_ENV } from "../config.mjs";
 
 const log = createServerLogger("auth:session");
@@ -202,12 +198,10 @@ export const isAllowedOrigin = (req) => {
 export const missingConfig = () => {
   const env = authEnv();
   // The database's variables depend on `DB_PROVIDER` and belong to the
-  // persistence slice. A provider `isConfigured` accepts reports none: an
-  // unknown `DB_PROVIDER` counts as configured there, so the pool can refuse
-  // it by name rather than sign-in calling it absent.
-  const database = isConfigured()
-    ? []
-    : missingDatabaseEnv((name) => !!process.env[name]);
+  // persistence slice. An unknown `DB_PROVIDER` is reported as `DB_PROVIDER`:
+  // the pool still refuses it by name for sync, but sign-in answers 503
+  // naming the setting rather than failing on the pool
+  const database = missingDatabaseEnv((name) => !!process.env[name]);
   const present = {
     GITHUB_CLIENT_ID: !!env.GITHUB_CLIENT_ID,
     GITHUB_CLIENT_SECRET: !!env.GITHUB_CLIENT_SECRET,

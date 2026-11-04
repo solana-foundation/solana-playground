@@ -13,17 +13,80 @@
  */
 import pg from "pg";
 
-import { DATABASE_ENV } from "../../config.mjs";
+// The preview databases' prefixes, from the module that names every preview
+// database, so the gate and the workflows cannot disagree on them
+import {
+  BRANCH_PREFIX,
+  PR_PREFIX,
+} from "../../../../../scripts/db/preview-name.mjs";
 import { POOL_LIMITS } from "./url.mjs";
 
-/** The production database. Only the Production environment may open it. */
+/** The production instance and database. Only Production may open either. */
+const PRODUCTION_INSTANCE = "solpg";
 const PRODUCTION_DATABASE = "solpg";
 
+/** The database the previews without one of their own share */
+const SHARED_PREVIEW_DATABASE = "solpg_preview";
+
 /**
- * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
+ * The instance's own name, the last segment of `CLOUD_SQL_INSTANCE`, or
+ * `undefined` when the value is not `<project>:<region>:<instance>`.
+ *
+ * @param {string} connectionName
  */
-export const isConfigured = (env) =>
-  DATABASE_ENV["cloud-sql"].every((name) => !!env[name]);
+const instanceOf = (connectionName) => {
+  const segments = connectionName.split(":");
+  return segments.length === 3 && segments.every(Boolean)
+    ? segments[2]
+    : undefined;
+};
+
+/**
+ * Whether `name` is a preview database: the shared one, or one that
+ * `scripts/db/preview-name.mjs` names for a PR or a branch.
+ *
+ * @param {string} name
+ */
+const isPreviewDatabase = (name) =>
+  name === SHARED_PREVIEW_DATABASE ||
+  [PR_PREFIX, BRANCH_PREFIX].some(
+    (prefix) => name.startsWith(prefix) && name.length > prefix.length
+  );
+
+/**
+ * Why this deployment may not open the instance and database it names, or
+ * `undefined` when it may. Decided on both together: Production opens the
+ * production instance's production database and nothing else, and every
+ * other environment (a preview, a laptop, CI) stays off the production
+ * instance and opens only a preview database.
+ *
+ * @param {ReturnType<typeof import("../../../../shared/config/server-env.mjs").databaseEnv>} env
+ * @returns {string | undefined}
+ */
+const refusalOf = (env) => {
+  const instance = instanceOf(env.CLOUD_SQL_INSTANCE ?? "");
+  const database = env.CLOUD_SQL_DATABASE ?? "";
+  const where = `(VERCEL_ENV is ${env.VERCEL_ENV ?? "unset"})`;
+  if (!instance) {
+    return `refusing instance "${env.CLOUD_SQL_INSTANCE}": not <project>:<region>:<instance> ${where}`;
+  }
+  if (env.VERCEL_ENV === "production") {
+    if (instance !== PRODUCTION_INSTANCE) {
+      return `refusing instance "${instance}" in production ${where}`;
+    }
+    if (database !== PRODUCTION_DATABASE) {
+      return `refusing database "${database}" in production ${where}`;
+    }
+    return undefined;
+  }
+  if (instance === PRODUCTION_INSTANCE) {
+    return `refusing instance "${instance}" outside production ${where}`;
+  }
+  if (!isPreviewDatabase(database)) {
+    return `refusing database "${database}" outside production: not a preview database ${where}`;
+  }
+  return undefined;
+};
 
 /**
  * The connector's options for `pg`: a `stream` factory over the connector's
@@ -73,9 +136,9 @@ export const connector = {
 /**
  * Build the pool, unless this deployment may not open the database it names.
  *
- * The refusal runs before anything reaches Google, so a preview pointed at
- * the production database spends nothing and leaves no trace on the
- * instance. It is one of four gates; the federation bindings, the grants on
+ * The refusal (`refusalOf`) runs before anything reaches Google, so a
+ * preview pointed at the production instance spends nothing and leaves no
+ * trace on it. It is one of four gates; the federation bindings, the grants on
  * `solpg`, and the preview workflows' naming are the others (see
  * `docs/cloud-sql.md`).
  *
@@ -83,15 +146,11 @@ export const connector = {
  * @returns {Promise<import("pg").Pool>}
  */
 export const createPool = async (env) => {
-  if (
-    env.VERCEL_ENV !== "production" &&
-    env.CLOUD_SQL_DATABASE === PRODUCTION_DATABASE
-  ) {
-    const message =
-      `refusing database "${PRODUCTION_DATABASE}" outside production ` +
-      `(VERCEL_ENV is ${env.VERCEL_ENV ?? "unset"})`;
-    console.error(`db: ${message}`);
-    throw new Error(message);
+  const refusal = refusalOf(env);
+  if (refusal) {
+    // eslint-disable-next-line no-console -- server-side: Vercel's function log is where this goes
+    console.error(`db: ${refusal}`);
+    throw new Error(refusal);
   }
 
   const options = await connector.options(env);

@@ -3,40 +3,52 @@
  *
  * Plain `pg`, whichever provider builds the pool: every statement is
  * Postgres, so nothing here or above may depend on a vendor driver.
- * `DB_PROVIDER` names the provider (`providers/<name>.mjs`); each exports
- * `isConfigured(env)` and `createPool(env)`, and nothing outside this file
- * knows which one is behind the pool.
+ * `DB_PROVIDER` names the provider (`providers/<name>.mjs`), `DATABASE_ENV`
+ * lists the variables each needs, and each module exports `createPool(env)`;
+ * nothing outside this file knows which one is behind the pool.
  */
 import { databaseEnv } from "../../../shared/config/server-env.mjs";
+import {
+  DATABASE_ENV,
+  isDatabaseProvider,
+  missingDatabaseEnv,
+} from "../config.mjs";
 import * as cloudSql from "./providers/cloud-sql.mjs";
 import * as url from "./providers/url.mjs";
 
+/** Each provider's module, under the name `DATABASE_ENV` gives it */
 const PROVIDERS = { url, "cloud-sql": cloudSql };
 
-/** @type {Promise<import("pg").Pool> | null} */
-let pool = null;
+// The names are `DATABASE_ENV`'s keys and nowhere else: a provider in one table
+// only would pass the build check while every request rejects, or the other
+// way round. Checked on load, so every test that loads this file catches it.
+const unmatched = Object.keys(DATABASE_ENV)
+  .filter((name) => !Object.hasOwn(PROVIDERS, name))
+  .concat(Object.keys(PROVIDERS).filter((name) => !isDatabaseProvider(name)));
+if (unmatched.length) {
+  throw new Error(
+    `db: providers without both a DATABASE_ENV entry and a module: ${unmatched.join(
+      ", "
+    )}`
+  );
+}
+
+/** @type {Promise<import("pg").Pool> | undefined} */
+let pool;
 
 /**
- * The provider `DB_PROVIDER` names, or `undefined` for a value that names
- * none. `Object.hasOwn` so `constructor` and the like are not providers.
- */
-const provider = () => {
-  const name = databaseEnv().DB_PROVIDER;
-  return Object.hasOwn(PROVIDERS, name) ? PROVIDERS[name] : undefined;
-};
-
-/**
- * Whether a database is configured at all.
+ * Whether a database is configured at all: the chosen provider has every
+ * variable `DATABASE_ENV` lists for it, counting `""` as unset, as
+ * `databaseEnv()` does.
  *
  * An unknown `DB_PROVIDER` counts as configured: somebody chose a provider,
  * and the deployment must report that choice as broken (`getPool` rejects
  * naming it) rather than as absent, which would read as "sync was never set
  * up here".
  */
-export const isConfigured = () => {
-  const chosen = provider();
-  return chosen ? chosen.isConfigured(databaseEnv()) : true;
-};
+export const isConfigured = () =>
+  !isDatabaseProvider(databaseEnv().DB_PROVIDER) ||
+  missingDatabaseEnv((name) => !!process.env[name]).length === 0;
 
 /** Whether sync should serve traffic. The kill switch is opt-in. */
 export const isEnabled = () => isConfigured() && databaseEnv().SYNC_ENABLED;
@@ -48,17 +60,25 @@ export const isEnabled = () => isConfigured() && databaseEnv().SYNC_ENABLED;
  */
 const open = async () => {
   const env = databaseEnv();
-  const chosen = provider();
-  if (!chosen) {
+  if (!isDatabaseProvider(env.DB_PROVIDER)) {
     throw new Error(
       `DB_PROVIDER "${env.DB_PROVIDER}" names no database provider; ` +
-        `expected one of: ${Object.keys(PROVIDERS).join(", ")}`
+        `expected one of: ${Object.keys(DATABASE_ENV).join(", ")}`
     );
   }
-  const created = await chosen.createPool(env);
+  const created = await PROVIDERS[env.DB_PROVIDER].createPool(env);
   // Without a listener, an error on an idle client is an unhandled 'error'
-  // event, which takes the whole function down rather than the one query
-  created.on("error", () => {});
+  // event, which takes the whole function down rather than the one query.
+  // `pg` drops the client either way; logged, because an idle client dies on
+  // instance maintenance, a failover or a dropped connector stream, and the
+  // query failures that follow would otherwise have no visible cause
+  created.on("error", (error) => {
+    // eslint-disable-next-line no-console -- server-side: Vercel's function log is where this goes
+    console.error("db: an idle client failed", {
+      message: error.message,
+      code: /** @type {{ code?: unknown }} */ (error).code,
+    });
+  });
   return created;
 };
 
@@ -77,7 +97,7 @@ const open = async () => {
 export const getPool = async () => {
   if (!isConfigured()) return null;
   pool ??= open().catch((e) => {
-    pool = null;
+    pool = undefined;
     throw e;
   });
   return pool;

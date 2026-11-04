@@ -6,6 +6,7 @@ import {
   getAuth,
   isAllowedOrigin,
   mapGithubProfile,
+  missingConfig,
   readSession,
 } from "./auth.mjs";
 
@@ -150,5 +151,53 @@ describe("GitHub profile fields", () => {
       })
     );
     assert.equal(res.status, 404);
+  });
+});
+
+describe("missingConfig", () => {
+  /** Sign-in's own variables, with the database left to each case */
+  const GITHUB = {
+    GITHUB_CLIENT_ID: "id",
+    GITHUB_CLIENT_SECRET: "secret",
+    AUTH_SECRET: "a-test-secret-of-at-least-32-bytes!",
+  };
+
+  /** A complete `cloud-sql` production, without DATABASE_URL */
+  const CLOUD_SQL = {
+    DB_PROVIDER: "cloud-sql",
+    DATABASE_URL: undefined,
+    CLOUD_SQL_INSTANCE: "project:region:solpg",
+    CLOUD_SQL_DATABASE: "solpg",
+    CLOUD_SQL_USER: "vercel-production@project.iam",
+    GCP_PROJECT_NUMBER: "123",
+    GCP_WORKLOAD_IDENTITY_POOL_ID: "vercel",
+    GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: "vercel",
+    GCP_SERVICE_ACCOUNT_EMAIL:
+      "vercel-production@project.iam.gserviceaccount.com",
+  };
+
+  const restores = [];
+  /** Applies `vars` for the current case, undone after it */
+  const set = (vars) => restores.push(withEnv(vars));
+  beforeEach(() => set(GITHUB));
+  afterEach(() => {
+    while (restores.length) restores.pop()();
+  });
+
+  test("names a missing Cloud SQL variable, and not DATABASE_URL", () => {
+    set(CLOUD_SQL);
+    set({ CLOUD_SQL_USER: undefined });
+    assert.deepEqual(missingConfig(), ["CLOUD_SQL_USER"]);
+  });
+
+  test("names no database variable for a complete Cloud SQL deployment", () => {
+    set(CLOUD_SQL);
+    assert.deepEqual(missingConfig(), []);
+  });
+
+  test("names DB_PROVIDER when it names no provider", () => {
+    // A stray DATABASE_URL beside it must not make sign-in look configured
+    set({ DB_PROVIDER: "cloudsql", DATABASE_URL: "postgres://x/y" });
+    assert.deepEqual(missingConfig(), ["DB_PROVIDER"]);
   });
 });

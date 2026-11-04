@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { beforeEach, describe, it } from "node:test";
+import { afterEach, beforeEach, describe, it, mock } from "node:test";
 
 const load = async () => {
   const url = new URL("./auth.mjs", import.meta.url);
@@ -19,15 +19,44 @@ const makeRes = () => ({
   },
 });
 
+/**
+ * A preview on Cloud SQL pointed at the production instance, which the pool
+ * refuses before reaching Google
+ */
+const CLOUD_SQL = {
+  DB_PROVIDER: "cloud-sql",
+  CLOUD_SQL_INSTANCE: "project:region:solpg",
+  CLOUD_SQL_DATABASE: "solpg",
+  CLOUD_SQL_USER: "vercel-preview@project.iam",
+  GCP_PROJECT_NUMBER: "123",
+  GCP_WORKLOAD_IDENTITY_POOL_ID: "vercel",
+  GCP_WORKLOAD_IDENTITY_POOL_PROVIDER_ID: "vercel",
+  GCP_SERVICE_ACCOUNT_EMAIL: "vercel-preview@project.iam.gserviceaccount.com",
+  VERCEL_ENV: "preview",
+};
+
+/** Sign-in's own variables */
+const setGithub = () => {
+  process.env.GITHUB_CLIENT_ID = "id";
+  process.env.GITHUB_CLIENT_SECRET = "secret";
+  process.env.AUTH_SECRET = "a-test-secret-of-at-least-32-bytes!";
+};
+
 describe("/api/auth", () => {
   // Cleared before each case, not after: `yarn test-api` loads `.env`, so the
   // credentials these cases assert are missing would otherwise be present.
   beforeEach(() => {
-    delete process.env.DATABASE_URL;
-    delete process.env.GITHUB_CLIENT_ID;
-    delete process.env.GITHUB_CLIENT_SECRET;
-    delete process.env.AUTH_SECRET;
+    const names = [
+      "DATABASE_URL",
+      "GITHUB_CLIENT_ID",
+      "GITHUB_CLIENT_SECRET",
+      "AUTH_SECRET",
+    ].concat(Object.keys(CLOUD_SQL));
+    for (const name of names) {
+      delete process.env[name];
+    }
   });
+  afterEach(() => mock.restoreAll());
 
   it("503s when the database is not configured, instead of crashing on import", async () => {
     const mod = await load();
@@ -80,6 +109,44 @@ describe("/api/auth", () => {
     );
     // It signs the session cookie, so it is as required as the rest
     assert.deepEqual(JSON.parse(res.body).missing, ["AUTH_SECRET"]);
+  });
+
+  // A pool that cannot be built is a 503 with a body, not a bare 500
+  it("503s without detail when the pool cannot be built", async () => {
+    Object.assign(process.env, CLOUD_SQL);
+    setGithub();
+    const logged = mock.method(console, "error", () => {});
+    const mod = await load();
+    const res = makeRes();
+    await mod.default(
+      { method: "GET", url: "/auth/session", headers: {} },
+      res
+    );
+    assert.equal(res.statusCode, 503);
+    assert.deepEqual(JSON.parse(res.body), {
+      error: "Authentication is temporarily unavailable",
+    });
+    assert.doesNotMatch(res.body, /solpg/);
+    // The cause goes to the function log
+    assert.ok(
+      logged.mock.calls.some((call) =>
+        String(call.arguments[1]?.message).includes("refusing instance")
+      )
+    );
+  });
+
+  it("names DB_PROVIDER when it names no provider", async () => {
+    process.env.DB_PROVIDER = "cloudsql";
+    process.env.DATABASE_URL = "postgres://x/y";
+    setGithub();
+    const mod = await load();
+    const res = makeRes();
+    await mod.default(
+      { method: "GET", url: "/auth/session", headers: {} },
+      res
+    );
+    assert.equal(res.statusCode, 503);
+    assert.deepEqual(JSON.parse(res.body).missing, ["DB_PROVIDER"]);
   });
 
   // Names, never values -- the body is public and the secret is a secret

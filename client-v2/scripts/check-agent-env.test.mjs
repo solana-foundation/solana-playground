@@ -124,6 +124,20 @@ for (const [label, env, expected] of [
     }),
     0,
   ],
+  // Only the database is absent, so nothing else can be why it fails
+  [
+    "fails a production key on the default url provider without DATABASE_URL",
+    {
+      CI: "1",
+      VERCEL_ENV: "production",
+      AGENT_API_KEY: "k",
+      GITHUB_CLIENT_ID: "s",
+      GITHUB_CLIENT_SECRET: "s",
+      AUTH_SECRET: "s",
+      AUTH_BASE_URL: ORIGIN,
+    },
+    1,
+  ],
   // Production on Cloud SQL carries no DATABASE_URL, and must still build
   [
     "passes a production key on Cloud SQL without DATABASE_URL",

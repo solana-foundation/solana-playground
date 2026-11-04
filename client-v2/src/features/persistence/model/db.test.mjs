@@ -121,6 +121,99 @@ describe("db", () => {
     }
   });
 
+  /**
+   * Asserts the gate refuses the deployment `overrides` describe, naming
+   * `reason`, before anything reaches Google
+   */
+  const assertRefused = async (overrides, reason) => {
+    asCloudSql(overrides);
+    const options = stubConnector();
+    mock.method(console, "error", () => {});
+    const db = await load();
+    assert.equal(db.isConfigured(), true);
+    await assert.rejects(() => db.getPool(), reason);
+    assert.equal(options.mock.callCount(), 0);
+    mock.restoreAll();
+  };
+
+  it("refuses the production instance outside production", async () => {
+    // Any database on it: only IAM would stand between a preview and production
+    for (const CLOUD_SQL_DATABASE of ["solpg_preview_pr_42", "postgres"]) {
+      await assertRefused(
+        { CLOUD_SQL_INSTANCE: "project:region:solpg", CLOUD_SQL_DATABASE },
+        /refusing instance "solpg" outside production/
+      );
+    }
+  });
+
+  it("refuses a database outside the preview allowlist outside production", async () => {
+    for (const CLOUD_SQL_DATABASE of [
+      "postgres",
+      "solpg_preview_pr_",
+      "solpg_previews",
+    ]) {
+      await assertRefused(
+        { CLOUD_SQL_DATABASE },
+        /refusing database ".*" outside production: not a preview database/
+      );
+    }
+  });
+
+  it("refuses the preview instance in production", async () => {
+    // Production traffic must never land in a preview database unnoticed
+    await assertRefused(
+      { VERCEL_ENV: "production", CLOUD_SQL_DATABASE: "solpg" },
+      /refusing instance "solpg-preview" in production/
+    );
+  });
+
+  it("refuses a preview database on the production instance in production", async () => {
+    for (const CLOUD_SQL_DATABASE of ["solpg_preview", "solpg_preview_pr_42"]) {
+      await assertRefused(
+        {
+          VERCEL_ENV: "production",
+          CLOUD_SQL_INSTANCE: "project:region:solpg",
+          CLOUD_SQL_DATABASE,
+        },
+        /refusing database "solpg_preview.*" in production/
+      );
+    }
+  });
+
+  it("refuses an instance that is not project:region:instance", async () => {
+    for (const CLOUD_SQL_INSTANCE of ["solpg-preview", "p:r:solpg:x", "p::x"]) {
+      await assertRefused({ CLOUD_SQL_INSTANCE }, /refusing instance/);
+    }
+  });
+
+  it("opens the production database on the production instance in production", async () => {
+    asCloudSql({
+      VERCEL_ENV: "production",
+      CLOUD_SQL_INSTANCE: "project:region:solpg",
+      CLOUD_SQL_DATABASE: "solpg",
+      CLOUD_SQL_USER: "vercel-production@project.iam",
+    });
+    const options = stubConnector();
+    const db = await load();
+    const pool = await db.getPool();
+    assert.equal(options.mock.callCount(), 1);
+    assert.equal(pool.options.database, "solpg");
+    assert.equal(pool.options.user, "vercel-production@project.iam");
+  });
+
+  it("allows the shared and branch preview databases outside production", async () => {
+    for (const CLOUD_SQL_DATABASE of [
+      "solpg_preview",
+      "solpg_preview_br_fix_a_b_0123abcd",
+    ]) {
+      asCloudSql({ CLOUD_SQL_DATABASE });
+      stubConnector();
+      const db = await load();
+      assert.equal((await db.getPool()).options.database, CLOUD_SQL_DATABASE);
+      mock.restoreAll();
+    }
+  });
+
   it("allows a preview database outside production", async () => {
     asCloudSql();
     const options = stubConnector();
