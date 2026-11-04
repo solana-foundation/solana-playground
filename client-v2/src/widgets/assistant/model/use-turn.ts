@@ -142,28 +142,32 @@ const isDroppedConnection = (error: unknown) =>
   isNetworkFailure(error) || turnErrorOf(error)?.kind === "network";
 
 /**
- * Sends the outcome of a turn that ended on `error`: capped for the cost
- * gate's refusal, otherwise failed with the `TurnFailure`'s reason and status.
- * A dropped connection is the backend not answering (`provider`); anything
- * else raised on this side is `other`. Never the error's text, which can
- * quote the prompt. `runTurn` calls it for every failure but a busy model's,
- * which `waitOnBusyWith` reports once it gives up.
+ * Report a turn that ended without an answer: capped for the cost gate's
+ * refusal, failed otherwise, with the `TurnFailure`'s reason and status. A
+ * dropped connection is the backend not answering (`provider`); anything else
+ * raised on this side is `other`. Never the error's text, which can quote the
+ * prompt. `runTurn` calls it for every failure but a busy model's, which
+ * `waitOnBusyWith` reports once it gives up.
  */
-const trackTurnFailure = (provider: ModelProvider, error: unknown) => {
+const trackTurnFailureFor = (backend: ModelProvider) => (error: unknown) => {
   if (!(error instanceof TurnFailure)) {
-    const reason = isDroppedConnection(error) ? "provider" : "other";
-    assistantTelemetry.track("assistant_turn_failed", { provider, reason });
+    assistantTelemetry.track("assistant_turn_failed", {
+      provider: backend,
+      reason: isDroppedConnection(error) ? "provider" : "other",
+    });
     return;
   }
-  const { reason, status } = error;
-  if (reason === "capped") {
-    assistantTelemetry.track("assistant_turn_capped", { provider });
+  if (error.reason === "capped") {
+    assistantTelemetry.track("assistant_turn_capped", { provider: backend });
     return;
   }
-  assistantTelemetry.track(
-    "assistant_turn_failed",
-    status === undefined ? { provider, reason } : { provider, reason, status }
-  );
+  const params: AssistantEvents["assistant_turn_failed"] = {
+    provider: backend,
+    reason: error.reason,
+  };
+  // Omitted, not `undefined`, so the event carries no `status` key at all
+  if (error.status !== undefined) params.status = error.status;
+  assistantTelemetry.track("assistant_turn_failed", params);
 };
 
 /** Where Connect a model was opened from */
@@ -576,20 +580,22 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    */
   const runTurn = async (outgoing: Outgoing) => {
     const { text, attempt } = outgoing;
-    if (!provider.current) throw new Error("a turn ran with no provider");
+    if (!provider.current) {
+      throw new Error("runTurn has no provider: start builds one first");
+    }
     const { instance, connection: current } = provider.current;
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
-    // Once per message: a busy model's resend is the same turn
+    // A busy message sent again is the same turn, so only the first attempt reports a send
     if (attempt === 0) {
       assistantTelemetry.track("assistant_turn_sent", { provider: current.id });
     }
 
     try {
       await instance.send(text, { signal: controller.signal });
-      // A provider can still resolve after an abort; the turn's outcome is then the stop's, or none for a cut-off
+      // A provider may resolve after Stop, which has already ended the turn
       if (!controller.signal.aborted) {
         assistantTelemetry.track("assistant_turn_answered", {
           provider: current.id,
@@ -601,7 +607,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         : undefined;
       // A stopped turn's outcome is `stop`'s; a busy one waits for its resend
       if (!controller.signal.aborted && !(e instanceof ModelBusyError)) {
-        trackTurnFailure(current.id, e);
+        trackTurnFailureFor(current.id)(e);
       }
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
         waitOnBusyWith(current.id)(outgoing, e);
@@ -643,7 +649,6 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
         });
       } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
-        trackTurnFailureFor(backend)(e);
       } else if (isAbort(e)) {
         // Aborted by `stop`, which has already written its notice, or by the
         // store cutting the turn off, when there is nothing to tell the user
@@ -687,7 +692,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
       if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
         PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
-        trackTurnFailure(backend, busyError);
+        trackTurnFailureFor(backend)(busyError);
         return;
       }
       const at = Date.now();
@@ -790,6 +795,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       // The message stays in the thread; nothing more is sent for it
       setWaiting(null);
       PgAssistant.addNotice("Stopped.");
+      // The waiting message's turn reported its send and ends here
       assistantTelemetry.track("assistant_turn_stopped", {});
       return;
     }

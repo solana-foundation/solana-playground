@@ -1908,11 +1908,6 @@ describe("useTurn when the thread closes mid-turn", () => {
 describe("useTurn's turn events", () => {
   const PROMPT = "please refactor my secret-sauce program";
   const BUSY = "The model is busy.";
-  /** The `assistant_turn_*` events, in order, with their parameters */
-  const turnEvents = () =>
-    events.events
-      .filter((e) => e.name.startsWith("assistant_turn_"))
-      .map((e) => [e.name, e.params]);
   const sent = ["assistant_turn_sent", { provider: "default" }];
   const failed = (reason: string) => [
     "assistant_turn_failed",
@@ -1979,7 +1974,10 @@ describe("useTurn's turn events", () => {
     act(() => result.current.stop());
     await waitFor(() => expect(result.current.busy).toBe(false));
 
-    expect(turnEvents()).toStrictEqual([sent, ["assistant_turn_stopped", {}]]);
+    expect(turnEvents()).toStrictEqual([
+      sent,
+      ["assistant_turn_stopped", {}],
+    ]);
   });
 
   it.each([
@@ -2102,7 +2100,10 @@ describe("useTurn's turn events", () => {
     await act(async () => finish());
     await waitFor(() => expect(result.current.busy).toBe(false));
 
-    expect(turnEvents()).toStrictEqual([sent, ["assistant_turn_stopped", {}]]);
+    expect(turnEvents()).toStrictEqual([
+      sent,
+      ["assistant_turn_stopped", {}],
+    ]);
   });
 
   it("reports nothing more for a turn a backend change cuts off", async () => {
@@ -2194,7 +2195,10 @@ describe("useTurn's turn events", () => {
       await waitFor(() => expect(provider.send).toHaveBeenCalledTimes(4));
       await waitFor(() => expect(result.current.busy).toBe(false));
 
-      expect(turnEvents()).toStrictEqual([sent, failedWith(429)("provider")]);
+      expect(turnEvents()).toStrictEqual([
+        sent,
+        failedWith(429)("provider"),
+      ]);
     });
 
     it("reports a Stop during the countdown as stopped", async () => {
@@ -2251,7 +2255,10 @@ describe("useTurn's turn events", () => {
       await waitFor(() => expect(provider.send).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(result.current.busy).toBe(false));
 
-      expect(turnEvents()).toStrictEqual([sent, failedWith(500)("provider")]);
+      expect(turnEvents()).toStrictEqual([
+        sent,
+        failedWith(500)("provider"),
+      ]);
     });
 
     it("reports a wait longer than it counts down as failed at once", async () => {
@@ -2262,7 +2269,10 @@ describe("useTurn's turn events", () => {
 
       await act(() => result.current.send(PROMPT));
 
-      expect(turnEvents()).toStrictEqual([sent, failedWith(429)("provider")]);
+      expect(turnEvents()).toStrictEqual([
+        sent,
+        failedWith(429)("provider"),
+      ]);
     });
   });
 });
