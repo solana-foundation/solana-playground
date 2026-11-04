@@ -45,6 +45,7 @@ const storedRecordFor =
 const storedWallet = storedRecordFor<{
   accounts: Array<{ kp: number[]; name: string }>;
   currentIndex: number;
+  state: string;
 }>("wallet");
 
 /** The accounts set aside as damaged, in the same database */
@@ -462,6 +463,15 @@ test("wallet-storage: The tab closes before a save lands", async ({
   );
 });
 
+/** Opens the console drawer and runs `connect`, which saves the wallet */
+const toggleConnection = async (page: Page) => {
+  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
+  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
+    await drawer.click();
+  }
+  await runInTerminal(page, "connect");
+};
+
 test("wallet-storage: Neither store saves the wallet", async ({ page }) => {
   await failWalletWrites(page);
   await failLocalWalletWrites(page);
@@ -475,11 +485,7 @@ test("wallet-storage: Neither store saves the wallet", async ({ page }) => {
   );
 
   // A second save, disconnecting, fails the same way and tells no one again
-  const drawer = page.getByRole("button", { name: "Terminal", exact: true });
-  if ((await drawer.getAttribute("aria-expanded")) !== "true") {
-    await drawer.click();
-  }
-  await runInTerminal(page, "connect");
+  await toggleConnection(page);
   await expect(page.locator(".xterm-rows").first()).toContainText(
     "Disconnected."
   );
@@ -544,4 +550,35 @@ test("wallet-storage: The current account is the damaged one", async ({
   await expect
     .poll(async () => (await storedWallet(page))?.currentIndex, LONG)
     .toBe(0);
+});
+
+test("wallet-storage: Persistence is requested once", async ({ page }) => {
+  await page.addInitScript(() => {
+    const calls = { count: 0 };
+    Object.assign(window, { e2ePersistCalls: calls });
+    navigator.storage.persist = async () => {
+      calls.count++;
+      return false;
+    };
+  });
+  const persistCalls = () =>
+    page.evaluate(
+      () =>
+        (window as unknown as { e2ePersistCalls: { count: number } })
+          .e2ePersistCalls.count
+    );
+  await seedWorkspace(page);
+  await createWallet(page);
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+
+  // A second save to IndexedDB: disconnecting
+  await toggleConnection(page);
+  await expect(page.locator(".xterm-rows").first()).toContainText(
+    "Disconnected."
+  );
+  await expect
+    .poll(async () => (await storedWallet(page))?.state, LONG)
+    .toBe("disconnected");
+
+  expect(await persistCalls()).toBe(1);
 });

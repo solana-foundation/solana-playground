@@ -130,6 +130,34 @@ const tell = (notice: WalletNoticeKind) => {
   else showOrLog(notice);
 };
 
+const persistenceLog = createLogger("wallet:persistence");
+
+/** Whether this page load has asked the browser to keep storage persistent */
+let hasRequestedPersistence = false;
+
+/**
+ * Ask the browser, once a page load, not to evict the origin's storage, the
+ * wallet's database with it. Asked after a save landed in the store, so it
+ * is asked only where the store works. The answer is the browser's to give
+ * (Chrome grants by engagement, Firefox may prompt), so it is logged, not
+ * reported.
+ */
+const requestPersistence = async () => {
+  if (hasRequestedPersistence) return;
+  hasRequestedPersistence = true;
+  if (typeof navigator === "undefined" || !navigator.storage?.persist) return;
+  try {
+    const isPersisted = await navigator.storage.persist();
+    persistenceLog.info("storage persistence requested", {
+      context: { isPersisted },
+    });
+  } catch (error) {
+    persistenceLog.info("storage persistence request failed", {
+      context: { error: String(error) },
+    });
+  }
+};
+
 const storage = {
   /** Read from storage and deserialize the data. */
   async read(): Promise<WalletState> {
@@ -160,6 +188,7 @@ const storage = {
 
     const outcome = await walletStorage().write(serializedState);
     if (outcome === "lost") tell("save-failed");
+    if (outcome === "store") await requestPersistence();
   },
 };
 
