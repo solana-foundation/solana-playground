@@ -20,8 +20,9 @@ unreadable. Slava put these follow-ups into the same PR as the move
   shown as unavailable, with a way to try again, instead of the Setup flow
   that would make a new wallet.
 - A stored wallet with some damaged accounts loads its valid accounts. The
-  damaged ones are kept aside in the wallet's own IndexedDB database, never
-  in `localStorage`, and the user is told once.
+  damaged ones are kept aside in the wallet's own IndexedDB database, in
+  `localStorage` only when the database refuses them, and the user is told
+  once.
 - After the first successful save to IndexedDB, the app asks the browser to
   keep the wallet's storage persistent.
 - The keystore gets unit tests against an in-memory IndexedDB

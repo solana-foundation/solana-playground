@@ -172,7 +172,7 @@ const partitionWallet = (stored: StoredWallet): PartitionedWallet => {
  */
 type StoreRead =
   | { kind: "none" }
-  | { kind: "wallet"; partitioned: PartitionedWallet }
+  | { kind: "wallet"; partitioned: PartitionedWallet; record: unknown }
   | { kind: "misshapen"; record: unknown };
 
 /** Whether `value` is the pre-accounts format, a single `sk` keypair */
@@ -253,8 +253,9 @@ const mergeWallets = (
  * the store's set-aside record before any copy is rewritten without them. A
  * store record of the wrong shape (no valid account among them) goes there
  * whole, and the store reads as holding no wallet.
- * They never go to `localStorage`; where the store cannot take them, nothing
- * is moved or rewritten that read.
+ * Where the store cannot take them, nothing is moved or rewritten that read,
+ * and the text that held them is kept aside in `localStorage` instead, like
+ * an unreadable copy: the first one kept, never replaced.
  *
  * `write` calls run one after another, in call order: `updatable` does not
  * await them, and two quick changes must not land out of order.
@@ -329,6 +330,30 @@ export const walletStorageWith =
       }
     };
 
+    /**
+     * The store refused the set-aside record: keep the text that held the
+     * damaged accounts in `localStorage` instead, the `localStorage` copy
+     * first, since a save while falling back rewrites it without them
+     */
+    const keepAsideLocally = (
+      fromLocal: { damaged: unknown[]; text: string } | undefined,
+      fromStore: StoreRead
+    ) => {
+      if (fromLocal && fromLocal.damaged.length > 0) {
+        keepUnreadable(fromLocal.text);
+        return;
+      }
+      if (fromStore.kind === "none") return;
+      let text: string;
+      try {
+        text = JSON.stringify(fromStore.record);
+      } catch (error) {
+        reportFailure("Unreadable wallet not kept aside", error);
+        return;
+      }
+      keepUnreadable(text);
+    };
+
     /** Whether `localStorage` took the wallet */
     const writeLocal = (state: StoredWallet) => {
       try {
@@ -348,7 +373,11 @@ export const walletStorageWith =
       const value: unknown = await store.read();
       if (value === undefined) return { kind: "none" };
       if (isStoredWallet(value)) {
-        return { kind: "wallet", partitioned: partitionWallet(value) };
+        return {
+          kind: "wallet",
+          partitioned: partitionWallet(value),
+          record: value,
+        };
       }
       return { kind: "misshapen", record: value };
     };
@@ -400,8 +429,8 @@ export const walletStorageWith =
         fromLocal && stored
           ? mergeWallets(fromLocal.wallet, stored.wallet)
           : (fromLocal ?? stored)?.wallet;
-      // Before anything is rewritten without them: never in `localStorage`,
-      // since a damaged account may still hold key bytes
+      // Before anything is rewritten without them, into the store's
+      // set-aside record: a damaged account may still hold key bytes
       const damaged = (fromLocal?.damaged ?? [])
         .concat(stored?.damaged ?? [])
         .concat(misshapen);
@@ -411,6 +440,7 @@ export const walletStorageWith =
           await store.setAside(damaged);
         } catch (error) {
           reportDamaged("Damaged wallet accounts not set aside", error);
+          keepAsideLocally(fromLocal, fromStore);
           // A store record that could not be set aside, and no copy to fall
           // back to: not degraded, so Try again asks the store again
           if (!fromLocal && misshapen.length > 0) return UNAVAILABLE;
@@ -1284,6 +1314,67 @@ if (import.meta.vitest) {
       expect(read).toEqual(found(walletOf([account(1, "A")])));
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
       expect(store.write).not.toHaveBeenCalled();
+    });
+
+    it("keeps the localStorage text aside when its damaged accounts cannot be set aside", async () => {
+      const store = memoryStore(undefined);
+      store.setAside.mockRejectedValueOnce(new Error("quota"));
+      const text = JSON.stringify({
+        state: "pg",
+        accounts: [account(1, "A"), damaged("B")],
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      });
+      const local = memoryLocal(text);
+      const storage = walletStorageWith(store)(local);
+
+      await storage.read();
+      // A save while falling back rewrites the wallet without them
+      await storage.write(walletOf([account(1, "A")]));
+
+      expect(local.items.get("wallet.unreadable")).toBe(text);
+    });
+
+    it("keeps the store's record aside in localStorage when its damaged accounts cannot be set aside", async () => {
+      const store = memoryStore(undefined);
+      const record = {
+        state: "pg",
+        accounts: [account(1, "A"), damaged("B")],
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      };
+      store.read.mockResolvedValueOnce(record as never);
+      store.setAside.mockRejectedValueOnce(new Error("quota"));
+      const local = memoryLocal(undefined);
+
+      const read = await walletStorageWith(store)(local).read();
+
+      expect(read).toEqual(found(walletOf([account(1, "A")])));
+      expect(local.items.get("wallet.unreadable")).toBe(JSON.stringify(record));
+    });
+
+    it("keeps a stored record of the wrong shape aside in localStorage when the store refuses it", async () => {
+      const store = memoryStore(undefined);
+      const record = { accounts: "corrupt" };
+      store.read.mockResolvedValue(record as never);
+      store.setAside.mockRejectedValue(new Error("quota"));
+      const local = memoryLocal(undefined);
+      const storage = walletStorageWith(store)(local);
+
+      expect(await storage.read()).toEqual(UNAVAILABLE);
+      expect(local.items.get("wallet.unreadable")).toBe(JSON.stringify(record));
+    });
+
+    it("keeps the first copy aside when the store refuses a damaged record later", async () => {
+      const store = memoryStore(undefined);
+      store.read.mockResolvedValue({ accounts: "corrupt" } as never);
+      store.setAside.mockRejectedValue(new Error("quota"));
+      const local = memoryLocal(undefined);
+      local.items.set("wallet.unreadable", "{first");
+
+      await walletStorageWith(store)(local).read();
+
+      expect(local.items.get("wallet.unreadable")).toBe("{first");
     });
 
     it("reads an empty wallet, with no account, as a wallet", async () => {

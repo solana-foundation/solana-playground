@@ -84,13 +84,18 @@ read) or `unavailable` (it still could not be).
 A stored wallet, in IndexedDB or in `localStorage`, in which some accounts
 are damaged (not a name and a 64-byte keypair) SHALL load with its valid
 accounts. The damaged accounts SHALL be kept aside in the wallet's IndexedDB
-database, never in `localStorage`, and no later write SHALL remove them. The
+database, and no later write SHALL remove them. The
 user SHALL be told once per page load with the notice "Some wallet accounts
 could not be read and were set aside." A record in IndexedDB that is not a
 wallet's shape, a wallet with no valid account among them, SHALL be set aside
-whole in the same set-aside record, never in `localStorage`, and read as no
+whole in the same set-aside record and read as no
 wallet, with the same notice. A `localStorage` copy of the wrong shape is
 kept aside in `localStorage`, as before.
+
+They SHALL go to `localStorage` only when the store refuses the set-aside
+write: then the original text that held them (the `localStorage` copy, or else
+the IndexedDB record) SHALL be kept in `localStorage['wallet.unreadable']`,
+where the first copy kept is never replaced, rather than lost.
 
 #### Scenario: One of three accounts is damaged
 
@@ -113,6 +118,13 @@ kept aside in `localStorage`, as before.
   record
 - **AND** the wallet reads as no wallet, so the Setup flow is offered
 - **AND** the notice is shown once
+
+#### Scenario: The store refuses the set-aside write
+
+- **WHEN** a stored wallet has a damaged account, or the IndexedDB record is
+  not a wallet's shape, and writing the set-aside record fails
+- **THEN** the text that held them is in `localStorage['wallet.unreadable']`
+- **AND** a copy already kept there is not replaced
 
 #### Scenario: The stored record is not a wallet, and localStorage holds one
 
