@@ -27,7 +27,19 @@ const frameFailures: unknown[] = [];
  * the footer's one action, which starts a sign-in without waiting on it
  */
 const Dialog = (options: ShareGistOptions) => {
-  const { body, run } = useShareGist(options);
+  const { body, run } = useShareGist(
+    {
+      signIn: options.signIn,
+      cancelSignIn: options.cancelSignIn,
+      origin: options.origin,
+    },
+    {
+      name: options.name,
+      readFiles: options.readFiles,
+      source: options.source,
+      signedIn: options.signedIn,
+    }
+  );
   const action = shareAction(body);
   const press = () => {
     switch (action.run) {

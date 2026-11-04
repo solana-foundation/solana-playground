@@ -378,10 +378,10 @@ const BaseShareGist = ({
   }
 
   // The permission is one more step, so it reads as a step, not a paragraph
-  const granting =
+  const isGranting =
     (state.step === "grant" && !state.ended) ||
     (state.step === "waiting" && state.for === "grant");
-  if (granting) {
+  if (isGranting) {
     return (
       <div className="flex gap-3" data-testid="share-gist">
         {/* 18, a step under the 20 outline icons: a filled mark reads
@@ -414,7 +414,7 @@ const BaseShareGist = ({
     else if (state.ended) problem = { text: state.ended.message, warn: false };
   }
   // A session that ended is the user's to mend, not a fault: a warning
-  const signInStep = state.step === "sign-in";
+  const isSignInStep = state.step === "sign-in";
 
   return (
     <div className="flex flex-col gap-4" data-testid="share-gist">
@@ -430,8 +430,8 @@ const BaseShareGist = ({
         </p>
       )}
       {problem && (
-        <Callout variant={problem.warn || signInStep ? "warning" : "error"}>
-          {signInStep ? <InfoIcon /> : <TriangleAlert />}
+        <Callout variant={problem.warn || isSignInStep ? "warning" : "error"}>
+          {isSignInStep ? <InfoIcon /> : <TriangleAlert />}
           <CalloutDescription>
             {problem.text}
             {state.step === "failed" && state.reason === "request-failed" && (

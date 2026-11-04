@@ -208,7 +208,7 @@ const ShareFrame = ({ body, run }: ShareGistControl) => {
   };
   // Without a submit of its own, the frame's button closes the dialog
   // (Close), and that is no call to action: outlined, not the brand one
-  const closes = action.run === "close";
+  const shouldClose = action.run === "close";
   const onSubmit = action.run === "close" ? undefined : submits[action.run];
 
   let icon;
@@ -227,13 +227,13 @@ const ShareFrame = ({ body, run }: ShareGistControl) => {
         text: action.run === "copy" && copied ? "Copied" : action.label,
         icon,
         onSubmit,
-        noCloseOnSubmit: !closes,
+        noCloseOnSubmit: !shouldClose,
         // The gist exists by then: Cancel would read as undoing the share.
         // While GitHub's popup waits, Cancel beside Cancel sign-in reads as
         // two of the same; the head's Close is the way out then
         noCancel: action.run === "copy" || action.run === "cancel-sign-in",
         disabled: action.busy,
-        variant: closes ? "outline" : "brand",
+        variant: shouldClose ? "outline" : "brand",
       }}
     >
       <BaseShareGist {...body} githubMark={<GithubMark />} />
@@ -248,21 +248,21 @@ const ConnectedShare = ({
   source,
   signedIn,
 }: ShareGistDialogProps & { signedIn: boolean }) => {
-  const control = useShareGist({
-    name,
-    readFiles,
-    source,
-    signedIn,
-    signIn: (options) =>
-      PgSession.signInWith({ scopes: options?.scopes }).then(
-        () => "signed-in" as const,
-        (error: unknown) => {
-          if (isCancel(error)) return "cancelled" as const;
-          throw error;
-        }
-      ),
-    cancelSignIn: () => PgSession.cancelSignIn(),
-  });
+  const control = useShareGist(
+    {
+      signIn: (options) =>
+        PgSession.signInWith({ scopes: options?.scopes }).then(
+          () => "signed-in" as const,
+          (error: unknown) => {
+            if (isCancel(error)) return "cancelled" as const;
+            throw error;
+          }
+        ),
+      cancelSignIn: () => PgSession.cancelSignIn(),
+      origin: window.location.origin,
+    },
+    { name, readFiles, source, signedIn }
+  );
   return <ShareFrame {...control} />;
 };
 

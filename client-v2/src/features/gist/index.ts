@@ -26,7 +26,12 @@ export type {
 export { exportProjectWith } from "./model/export";
 export type { ExportFailure, ExportResult } from "./model/export";
 export { signInFailureMessage, useShareGist } from "./ui/ShareGist";
-export type { ShareGistControl, ShareGistOptions } from "./ui/ShareGist";
+export type {
+  ShareGistControl,
+  ShareGistDeps,
+  ShareGistOptions,
+  ShareGistProject,
+} from "./ui/ShareGist";
 export {
   default as BaseShareGist,
   shareAction,

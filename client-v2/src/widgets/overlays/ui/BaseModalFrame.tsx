@@ -107,11 +107,11 @@ const OWNS_ENTER =
 const FOOTER_BUTTON =
   "h-10 rounded-full px-4 font-heading text-[0.9375rem] font-normal";
 
-/** The brand submit's size: a phone's full width foot, or a desk's pill */
-const submitPadding = (phone: boolean, icon: boolean) => {
-  if (phone) return "h-12 rounded-xl text-control";
-  return icon ? "pr-5 pl-4" : "px-5";
-};
+/** The foot's submit on a phone: full width, whichever button it is */
+const PHONE_SUBMIT = "h-12 rounded-xl text-control";
+/** The brand submit's pill on a desk; less before a leading icon */
+const DESK_BRAND_SUBMIT = "px-5";
+const DESK_BRAND_SUBMIT_WITH_ICON = "pr-5 pl-4";
 
 /**
  * A dialog's content: its heading, the last error, the body and the buttons.
@@ -134,6 +134,9 @@ export const BaseModalFrame = ({
   const formRef = useRef<HTMLFormElement>(null);
   const submitRef = useRef<HTMLButtonElement>(null);
   const canSubmit = submit?.status === "ready";
+  let brandSubmitClass = DESK_BRAND_SUBMIT;
+  if (submit?.icon) brandSubmitClass = DESK_BRAND_SUBMIT_WITH_ICON;
+  if (phone) brandSubmitClass = PHONE_SUBMIT;
   /** What either kind of submit button shows */
   const submitLabel = submit && (
     <>
@@ -247,7 +250,7 @@ export const BaseModalFrame = ({
                 // The brand size leaves room for a trailing arrow (Build's);
                 // a dialog's submit has none, so its padding is even, a step
                 // less before a leading icon, which reads heavier than text
-                className={submitPadding(phone, !!submit.icon)}
+                className={brandSubmitClass}
                 disabled={!canSubmit}
               >
                 {submitLabel}
@@ -258,7 +261,7 @@ export const BaseModalFrame = ({
                 type="submit"
                 variant={submit.variant}
                 // The foot's height on a phone as on a desk, whatever the face
-                className={phone ? submitPadding(true, false) : FOOTER_BUTTON}
+                className={phone ? PHONE_SUBMIT : FOOTER_BUTTON}
                 disabled={!canSubmit}
               >
                 {submitLabel}

@@ -49,8 +49,23 @@ export interface ShareGistOptions {
    */
   cancelSignIn: () => void;
   /** The page's origin, which the Playground link opens under */
-  origin?: string;
+  origin: string;
 }
+
+/**
+ * What stays fixed for the dialog. A hook cannot be curried (the rules of
+ * hooks refuse one inside a returned function), so this is its first argument.
+ */
+export type ShareGistDeps = Pick<
+  ShareGistOptions,
+  "signIn" | "cancelSignIn" | "origin"
+>;
+
+/** What changes with the project the dialog shares */
+export type ShareGistProject = Pick<
+  ShareGistOptions,
+  "name" | "readFiles" | "source" | "signedIn"
+>;
 
 /** What the dialog's frame needs: the body's props and the actions' runs */
 export interface ShareGistControl {
@@ -86,15 +101,10 @@ const LinkCopied = () => <span>Link copied</span>;
  * share ends. The frame draws `shareAction` of the body's state in its
  * footer and calls `run` with it.
  */
-export const useShareGist = ({
-  name,
-  readFiles,
-  source,
-  signedIn,
-  signIn,
-  cancelSignIn,
-  origin = window.location.origin,
-}: ShareGistOptions): ShareGistControl => {
+export const useShareGist = (
+  { signIn, cancelSignIn, origin }: ShareGistDeps,
+  { name, readFiles, source, signedIn }: ShareGistProject
+): ShareGistControl => {
   const [state, setState] = useState<ShareStep>({ step: "ready" });
   // Secret on every open (Spec 05); a retry after a sign-in or a grant reads
   // the choice from here, so it keeps what the user picked
