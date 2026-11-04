@@ -4,10 +4,9 @@
  *
  * The page opens the conversation: the sandbox posts `ready` on `window`, the
  * page answers with a `MessagePort`, and from then on both sides talk only on
- * that port (`sandbox-frame.ts`). Every message the page sends is listed in
- * `TO_SANDBOX_FIELDS` with what each field holds, so a test can prove that no
- * message to the sandbox can carry key bytes: the only bytes the page ever
- * sends are a 64-byte signature.
+ * that port (`sandbox-frame.ts`). A type-level test (`HasBytes`) proves
+ * that no message to the sandbox has a field that can carry key bytes: the
+ * only bytes the page ever sends are a 64-byte signature.
  */
 
 /** An account the sandbox may sign as, without its key */
@@ -97,43 +96,32 @@ export const isHandshake = (data: unknown): boolean =>
   data !== null &&
   (data as { type?: unknown }).type === HANDSHAKE.type;
 
-/** What a field of a message to the sandbox can hold */
-type FieldKind =
-  | "text"
-  | "flag"
-  | "count"
-  | "address"
-  | "idl"
-  | "names"
-  | "accounts"
-  | "signature-or-error"
-  | "response-or-error";
-
 /**
- * Every field of every message to the sandbox and what it holds. The mapped
- * type makes a field missing here a type error, so a new field is classified
- * before it can ship.
+ * Whether a type can carry bytes anywhere in it: a typed array, a buffer, or
+ * an array of numbers, at any depth. Distributes over unions, so a union with
+ * one such member reads `boolean`.
  */
-export const TO_SANDBOX_FIELDS: {
-  [T in ToSandbox["type"]]: Record<
-    Exclude<keyof Extract<ToSandbox, { type: T }>, "type">,
-    FieldKind
-  >;
-} = {
-  run: {
-    code: "text",
-    isTest: "flag",
-    idl: "idl",
-    workspaceNames: "names",
-    programId: "address",
-    endpoint: "text",
-    commitment: "text",
-    wallets: "accounts",
-    current: "count",
-  },
-  sign: { id: "count", reply: "signature-or-error" },
-  rpc: { id: "count", reply: "response-or-error" },
-};
+type CarriesBytes<T> = T extends ArrayBuffer | ArrayBufferView
+  ? true
+  : T extends readonly (infer E)[]
+  ? number extends E
+    ? true
+    : CarriesBytes<E>
+  : T extends object
+  ? { [K in keyof T]-?: CarriesBytes<T[K]> }[keyof T]
+  : false;
+
+/** Whether any part of a type, any union member, can carry bytes */
+type HasBytes<T> = true extends CarriesBytes<T> ? true : false;
+
+/** Every message to the sandbox, a sign reply's signature left out */
+type ToSandboxBeyondSignature =
+  | Exclude<ToSandbox, { type: "sign" }>
+  | {
+      type: "sign";
+      id: number;
+      reply: Exclude<SignReply, { signature: Uint8Array }>;
+    };
 
 /** Length of an ed25519 signature, the only bytes the page sends */
 export const SIGNATURE_LENGTH = 64;
@@ -199,27 +187,19 @@ export const isFromSandbox = (data: unknown): data is FromSandbox => {
 };
 
 if (import.meta.vitest) {
-  const { describe, it, expect } = import.meta.vitest;
+  const { describe, it, expect, expectTypeOf } = import.meta.vitest;
 
   describe("utils/js-runtime/protocol", () => {
-    it("no message to the sandbox has a field that can hold key bytes beyond a signature", () => {
-      const byteKinds = Object.values(TO_SANDBOX_FIELDS).flatMap((fields) =>
-        Object.values<string>(fields).filter(
-          (kind) => kind !== "text" && kind !== "flag" && kind !== "count"
-        )
-      );
-      // Addresses, names, the IDL and the accounts list are public data; the
-      // only binary field is the signature of a sign reply
-      expect(new Set(byteKinds)).toEqual(
-        new Set([
-          "idl",
-          "names",
-          "address",
-          "accounts",
-          "signature-or-error",
-          "response-or-error",
-        ])
-      );
+    it("no message to the sandbox has a field that can hold bytes beyond a sign reply's signature", () => {
+      // Checked by the type checker (`yarn test-types`): a field that can
+      // hold a typed array, a buffer or a number[] makes this a type error
+      expectTypeOf<HasBytes<ToSandboxBeyondSignature>>().toEqualTypeOf<false>();
+      // The check sees bytes where they are, nested and optional too
+      expectTypeOf<HasBytes<ToSandbox>>().toEqualTypeOf<true>();
+      expectTypeOf<HasBytes<{ kp: number[] }>>().toEqualTypeOf<true>();
+      expectTypeOf<
+        HasBytes<{ wallets: Array<{ kp?: Uint8Array }> }>
+      >().toEqualTypeOf<true>();
     });
 
     it("refuses a sign reply whose bytes are not a 64-byte signature", () => {
