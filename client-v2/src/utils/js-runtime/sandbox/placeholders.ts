@@ -12,8 +12,9 @@
  * resolves once every real signature is in: `await tx.sign(...)` gives a
  * fully signed transaction.
  *
- * Imports no web3.js: `fetch-bridge.ts` imports this module before web3.js is
- * evaluated, and `patchWeb3` is handed the module.
+ * Imports web3.js only through `sandbox-signer-provider.ts`, and only after
+ * the sandbox's entry has put its `fetch` stand-in in place
+ * (`global-fetch.ts`); `patchWeb3` is handed the module it patches.
  */
 import { Buffer } from "buffer";
 

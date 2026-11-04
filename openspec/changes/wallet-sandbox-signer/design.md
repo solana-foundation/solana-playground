@@ -46,7 +46,12 @@ storage, no `parent` access, no same-origin DOM. `runtime.html` is a second
 webpack entry (`HtmlWebpackPlugin` with its own chunk) that bundles the
 packages project code may import, mocha and the sandbox half of the runtime.
 The frame is created once and kept, as today, and reset between runs by
-reloading it.
+reloading it. The attribute alone binds only our own frame, so `runtime.html`
+is also served with `Content-Security-Policy: sandbox allow-scripts;
+frame-ancestors 'self'` (vercel.json, the dev server, serve-build), and its
+entry stops before announcing itself unless `window.origin` is `"null"`.
+A `load` of the frame after the one a run started with means the run's
+sandbox is gone, and ends the run.
 
 Alternatives: `srcdoc` or a `blob:` URL would inherit the page's origin under
 some browsers and its COEP, and cannot load the bundle without inlining it; a
@@ -54,11 +59,14 @@ separate domain needs infrastructure we do not have before 11 Nov.
 
 ### 2. One MessageChannel, opened by the page
 
-An opaque origin can only be posted to with target `"*"`, so the page sends one
-`MessageChannel` port in its first message after the frame's `load`, and both
-sides talk only on that port afterwards. The page ignores `window` messages
+An opaque origin can only be posted to with target `"*"`, so the sandbox's
+bundle announces itself with `ready` on `window` once it has loaded, the page
+answers that message with one `MessageChannel` port, and both sides talk only
+on that port afterwards. The page ignores `window` messages
 after the handshake and checks `event.source === frame.contentWindow` for the
-handshake itself. Messages are a small typed protocol (`run`, `output`,
+handshake itself. Every sign or RPC request with an id gets an answer,
+an error when it is malformed or its handler fails, so the sandbox never
+waits on a reply that will not come. Messages are a small typed protocol (`run`, `output`,
 `result`, `end`, `sign`, `rpc`, `ready`), defined in one module both entries
 import, so the two halves cannot drift.
 
