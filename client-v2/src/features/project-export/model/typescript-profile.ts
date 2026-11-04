@@ -1,8 +1,42 @@
 import { Endpoint } from "@/constants";
 import type { TupleFiles } from "@/utils";
 
-/** The module that gives `pg` and `sleep` their local meaning */
-const SHIM_PATH = "playground.ts";
+/**
+ * The names the module that gives `pg` and `sleep` their local meaning takes
+ * at the root, in order: `playground`, then `playground-shim`,
+ * `playground-shim-2` and on, when the project holds that name already
+ */
+const shimStemAt = (n: number) => {
+  if (n === 0) return "playground";
+  return n === 1 ? "playground-shim" : `playground-shim-${n}`;
+};
+
+/** The extensions an extensionless import can resolve to */
+const RESOLVED_EXTENSION_REGEX = /^\.(?:(?:d\.)?[cm]?[jt]sx?|json)$/;
+
+/**
+ * The root name the shim takes: the first one no file or folder of the project
+ * holds, so `import ... from "../<name>"` reaches the shim and nothing else
+ *
+ * @param paths the project's paths
+ * @returns the name, without `.ts`
+ */
+const shimStemFor = (paths: string[]) => {
+  // Lowercase: a zip unpacked on macOS or Windows puts `Playground.ts` and
+  // `playground.ts` in one file
+  const lowerPaths = paths.map((path) => path.toLowerCase());
+  const isTaken = (stem: string) =>
+    lowerPaths.some(
+      (path) =>
+        path === stem ||
+        path.startsWith(`${stem}/`) ||
+        (path.startsWith(`${stem}.`) &&
+          RESOLVED_EXTENSION_REGEX.test(path.slice(stem.length)))
+    );
+  let n = 0;
+  while (isTaken(shimStemAt(n))) n++;
+  return shimStemAt(n);
+};
 
 /** The variable that names the cluster `pg.connection` connects to */
 export const RPC_URL_VARIABLE = "SOLANA_RPC_URL";
@@ -84,14 +118,15 @@ const isGlobalUsedFor = (name: string) => (content: string) =>
   new RegExp(`(^|[^\\w$.])${name}\\b`, "m").test(content);
 
 /**
- * The import of `pg` and `sleep` a script needs, from `playground.ts` at the
- * project root
+ * The import of `pg` and `sleep` a script needs, from the shim at the project
+ * root
  *
+ * @param shimStem the shim's name at the root, without `.ts`
  * @param path the script's path, from the project root
  * @param content the script
  * @returns the import line, or empty when the script uses neither
  */
-const shimImport = (path: string, content: string) => {
+const shimImport = (shimStem: string) => (path: string, content: string) => {
   const names = [
     isGlobalUsedFor("pg")(content) && !hasDeclarationFor("pg")(content) && "pg",
     isGlobalUsedFor("sleep")(content) &&
@@ -101,7 +136,7 @@ const shimImport = (path: string, content: string) => {
   if (!names.length) return "";
 
   const depth = path.split("/").length - 1;
-  const from = "../".repeat(depth) + SHIM_PATH.replace(/\.ts$/, "");
+  const from = "../".repeat(depth) + shimStem;
   return `import { ${names.join(", ")} } from "${from}";\n`;
 };
 
@@ -134,9 +169,10 @@ const withoutImportsOfBound = (converted: string) => {
  */
 const convertScriptWith =
   (importGlobals: (content: string) => string) =>
+  (shimStem: string) =>
   (path: string, content: string) => {
     const converted = withoutImportsOfBound(importGlobals(content));
-    return shimImport(path, converted) + converted;
+    return shimImport(shimStem)(path, converted) + converted;
   };
 
 /** The client file `npm run client` runs, or `undefined` with no client */
@@ -275,11 +311,21 @@ const readme = (opts: {
   endpoint: string;
   client: string | undefined;
   hasTests: boolean;
+  shimPath: string;
+  ownScripts: string[];
+  isPackageKept: boolean;
 }) => {
+  const isOwn = (script: string) => opts.ownScripts.includes(script);
   const run = [
     opts.client &&
-      `- \`npm run client\` runs \`${opts.client}\`. Run another client file with \`npx tsx client/<file>\`.`,
-    opts.hasTests && "- `npm test` runs every test under `tests/` with mocha.",
+      (isOwn("client")
+        ? "- `npm run client` runs the `client` script in `package.json`."
+        : `- \`npm run client\` runs \`${opts.client}\`.`) +
+        " Run another client file with `npx tsx client/<file>`.",
+    opts.hasTests &&
+      (isOwn("test")
+        ? "- `npm test` runs the `test` script in `package.json`."
+        : "- `npm test` runs every test under `tests/` with mocha."),
   ].filter(Boolean);
 
   return `# ${opts.name}
@@ -294,11 +340,19 @@ ${[opts.client && "npm run client", opts.hasTests && "npm test"]
 \`\`\`
 
 ${run.join("\n")}
-
+${
+  opts.isPackageKept
+    ? `
+\`package.json\` is the project's own, kept as it is because it is not a JSON
+object the export can complete. Add \`tsx\`, \`@solana/web3.js\` and the
+scripts above to it before running them.
+`
+    : ""
+}
 ## Cluster and wallet
 
 In Playground, \`pg.connection\` and \`pg.wallet\` came from the browser. Here
-\`${SHIM_PATH}\` provides them:
+\`${opts.shimPath}\` provides them:
 
 - \`pg.connection\` connects to \`${RPC_URL_VARIABLE}\`, or to \`${
     opts.endpoint
@@ -318,12 +372,113 @@ exist only in Playground.
 `;
 };
 
+/** The fields of `package.json` that declare a package */
+const DEPENDENCY_FIELDS = [
+  "dependencies",
+  "devDependencies",
+  "peerDependencies",
+  "optionalDependencies",
+];
+
+/** The fields of `package.json` the profile fills in, each an object */
+const OBJECT_FIELDS = ["engines", "scripts", "config", ...DEPENDENCY_FIELDS];
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && !!value && !Array.isArray(value);
+
+/** `own` with the entries of `add` it does not have, after its own */
+const withMissing = (
+  own: Record<string, unknown>,
+  add: Record<string, unknown>
+) =>
+  Object.assign(
+    {},
+    own,
+    Object.fromEntries(
+      Object.entries(add).filter(([key]) => !Object.hasOwn(own, key))
+    )
+  );
+
+/**
+ * A project's own `package.json`, completed with what the profile's would
+ * hold: every field, script, config entry (but `config.client`, below) and
+ * package it already has is
+ * kept as it is, and only the missing ones are added, so `npm install` and
+ * `npm run client` work with the converted code. `type` is set only when
+ * absent: the project chose its module system. `config.client` comes only
+ * with the `client` script it serves, and replaces the project's own then,
+ * since that script reads it.
+ *
+ * @param ours the one the profile would write
+ * @param own the project's `package.json`
+ * @returns the file to write, the scripts it held already, and whether it was
+ * kept as it is: when it is not JSON, not an object, or holds a field the
+ * profile fills in (`OBJECT_FIELDS`) that is not an object
+ */
+const completePackageJsonWith =
+  (ours: Record<string, unknown>) => (own: string) => {
+    const kept = { text: own, ownScripts: [], isKept: true };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(own);
+    } catch {
+      // Not JSON: the project's file is never destroyed, and the README
+      // says it was kept (`isPackageKept`)
+      return kept;
+    }
+    if (!isRecord(parsed)) return kept;
+    const pkg = parsed;
+    const field = (name: string) => {
+      const value = pkg[name];
+      return isRecord(value) ? value : {};
+    };
+    if (
+      OBJECT_FIELDS.some(
+        (name) => Object.hasOwn(pkg, name) && !isRecord(pkg[name])
+      )
+    ) {
+      return kept;
+    }
+
+    const oursField = (name: string) => {
+      const value = ours[name];
+      return isRecord(value) ? value : {};
+    };
+    const declared = new Set(
+      DEPENDENCY_FIELDS.flatMap((name) => Object.keys(field(name)))
+    );
+    const ownScripts = Object.keys(field("scripts"));
+    const merged: Record<string, unknown> = { ...pkg };
+    if (!Object.hasOwn(pkg, "type")) merged.type = ours.type;
+    for (const name of ["engines", "scripts"]) {
+      merged[name] = withMissing(field(name), oursField(name));
+    }
+    if (Object.hasOwn(ours, "config") && !ownScripts.includes("client")) {
+      merged.config = Object.assign({}, field("config"), oursField("config"));
+    }
+    for (const name of ["dependencies", "devDependencies"]) {
+      const missing = Object.fromEntries(
+        Object.entries(oursField(name)).filter(([dep]) => !declared.has(dep))
+      );
+      if (Object.hasOwn(pkg, name) || Object.keys(missing).length) {
+        merged[name] = withMissing(field(name), missing);
+      }
+    }
+    return {
+      text: JSON.stringify(merged, undefined, 2) + "\n",
+      ownScripts,
+      isKept: false,
+    };
+  };
+
 /**
  * Turn a project with no program into a Node project: every file kept at its
  * path, the scripts importing what Playground provided as globals, and
- * `package.json`, `tsconfig.json`, `README.md`, `.gitignore` and
- * `playground.ts` added at the root, unless the project holds one there
- * already.
+ * `package.json`, `tsconfig.json`, `README.md`, `.gitignore` and the shim,
+ * `playground.ts`, added at the root. A file the project holds there already
+ * is kept, except `package.json`, which is completed
+ * (`completePackageJsonWith`); a project that holds `playground` gets the shim
+ * under the next free name (`shimStemFor`).
  *
  * @param fetchDependencies the packages the given files use, with versions
  * (`fetchJSDependencyMap`)
@@ -343,20 +498,22 @@ export const toNodeProjectWith =
   (endpoint: string) =>
   (name: string) =>
   async (files: TupleFiles): Promise<{ files: TupleFiles; readme: string }> => {
-    const convertScript = convertScriptWith(importGlobals);
+    const paths = files.map(([path]) => path);
+    const shimStem = shimStemFor(paths);
+    const shimPath = `${shimStem}.ts`;
+    const convertScript = convertScriptWith(importGlobals)(shimStem);
     const converted: TupleFiles = files.map(([path, content]) =>
       SCRIPT_FOLDER_REGEX.test(path) && SCRIPT_REGEX.test(path)
         ? [path, convertScript(path, content)]
         : [path, content]
     );
 
-    const paths = files.map(([path]) => path);
     const client = clientEntry(paths);
     const hasTests = paths.some(
       (path) => path.startsWith("tests/") && SCRIPT_REGEX.test(path)
     );
 
-    const shimFile: [string, string] = [SHIM_PATH, shim(endpoint)];
+    const shimFile: [string, string] = [shimPath, shim(endpoint)];
     const dependencies = await fetchDependencies([...converted, shimFile]);
     for (const builtin of NODE_BUILTINS) delete dependencies[builtin];
     const devDependencies: Record<string, string> = {
@@ -402,15 +559,44 @@ export const toNodeProjectWith =
       },
     };
 
+    const ownPackage = files.find(([path]) => path === "package.json")?.[1];
+    const {
+      text: packageText,
+      ownScripts,
+      isKept: isPackageKept,
+    } = ownPackage === undefined
+      ? {
+          text: JSON.stringify(packageJson, undefined, 2) + "\n",
+          ownScripts: [],
+          isKept: false,
+        }
+      : completePackageJsonWith(packageJson)(ownPackage);
+
     const added: TupleFiles = [
-      ["package.json", JSON.stringify(packageJson, undefined, 2) + "\n"],
+      ["package.json", packageText],
       ["tsconfig.json", JSON.stringify(tsconfig, undefined, 2) + "\n"],
-      ["README.md", readme({ name, endpoint, client, hasTests })],
+      [
+        "README.md",
+        readme({
+          name,
+          endpoint,
+          client,
+          hasTests,
+          shimPath,
+          ownScripts,
+          isPackageKept,
+        }),
+      ],
       [".gitignore", "node_modules\n"],
       shimFile,
     ];
     const taken = new Set(paths);
-    const all = [...converted, ...added.filter(([path]) => !taken.has(path))];
+    const all: TupleFiles = [
+      ...converted.map(([path, content]): [string, string] =>
+        path === "package.json" ? [path, packageText] : [path, content]
+      ),
+      ...added.filter(([path]) => !taken.has(path)),
+    ];
     return {
       files: all,
       readme: all.find(([path]) => path === "README.md")?.[1] ?? "",
@@ -659,7 +845,7 @@ console.log(await pg.connection.getSlot());
     it("falls back to the exported cluster and the CLI keypair", async () => {
       const shimText = fileOf(
         await exportOf([["client/a.ts", CLIENT]]),
-        SHIM_PATH
+        "playground.ts"
       );
       expect(shimText).toContain(`process.env.SOLANA_RPC_URL || "${DEVNET}"`);
       expect(shimText).toContain(
@@ -691,7 +877,7 @@ console.log(await pg.connection.getSlot());
             'https://rpc.example/?k="1"'
           )("x")([["client/a.ts", CLIENT]])
         ).files,
-        SHIM_PATH
+        "playground.ts"
       );
       expect(shimText).toContain('"https://rpc.example/?k=\\"1\\""');
     });
@@ -733,7 +919,7 @@ console.log(await pg.connection.getSlot());
     it("writes a shim TypeScript parses", async () => {
       const shimText = fileOf(
         await exportOf([["client/a.ts", CLIENT]]),
-        SHIM_PATH
+        "playground.ts"
       );
       const { diagnostics } = ts.transpileModule(shimText, {
         reportDiagnostics: true,
@@ -798,6 +984,209 @@ console.log(await pg.connection.getSlot());
         expect(toPublicEndpoint(cluster, endpoint)).toBe(expected);
       }
     );
+
+    describe("a project with its own root files", () => {
+      const OWN_PACKAGE = JSON.stringify({
+        name: "mine",
+        version: "2.0.0",
+        scripts: { start: "node index.js" },
+        dependencies: { "@solana/web3.js": "^1.90.0", lodash: "^4.0.0" },
+      });
+
+      it("keeps its package.json and adds what the client and tests need", async () => {
+        const files = await exportOf([
+          ["client/client.ts", CLIENT],
+          ["tests/basic.test.ts", TEST],
+          ["package.json", OWN_PACKAGE],
+        ]);
+        expect(files.filter(([path]) => path === "package.json")).toHaveLength(
+          1
+        );
+        const pkg = packageOf(files);
+        expect(pkg.name).toBe("mine");
+        expect(pkg.version).toBe("2.0.0");
+        expect(pkg.type).toBe("module");
+        expect(pkg.scripts).toEqual({
+          start: "node index.js",
+          client: "tsx client/client.ts",
+          test: 'mocha --node-option import=tsx --timeout 1000000 "tests/**/*.{ts,js,tsx,jsx}"',
+        });
+        // Its own versions win; what it lacks is added
+        expect(pkg.dependencies).toEqual({
+          "@solana/web3.js": "^1.90.0",
+          lodash: "^4.0.0",
+        });
+        expect(Object.keys(pkg.devDependencies)).toEqual([
+          "@types/mocha",
+          "@types/node",
+          "mocha",
+          "tsx",
+          "typescript",
+        ]);
+      });
+
+      it("keeps its own scripts, module type and dev dependencies", async () => {
+        const own = JSON.stringify({
+          type: "commonjs",
+          scripts: { client: "ts-node client/main.ts" },
+          devDependencies: { tsx: "^3.0.0", "@solana/web3.js": "^1.0.0" },
+        });
+        const pkg = packageOf(
+          await exportOf([
+            ["client/client.ts", CLIENT],
+            ["package.json", own],
+          ])
+        );
+        expect(pkg.type).toBe("commonjs");
+        expect(pkg.scripts.client).toBe("ts-node client/main.ts");
+        expect(pkg.devDependencies.tsx).toBe("^3.0.0");
+        // Already a dev dependency: not added again as a dependency
+        expect(pkg.dependencies ?? {}).not.toHaveProperty("@solana/web3.js");
+      });
+
+      it("names the client it runs through config when the path needs it", async () => {
+        const pkg = packageOf(
+          await exportOf([
+            ["client/my$file.ts", CLIENT],
+            ["package.json", JSON.stringify({ config: { port: 1 } })],
+          ])
+        );
+        expect(pkg.config).toEqual({ port: 1, client: "client/my$file.ts" });
+      });
+
+      it.each(["{ not json", "[]", "null", '{ "scripts": "x" }'])(
+        "keeps the package.json %s as it is, and says so in the README",
+        async (own) => {
+          const files = await exportOf([
+            ["client/client.ts", CLIENT],
+            ["package.json", own],
+          ]);
+          expect(fileOf(files, "package.json")).toBe(own);
+          const text = fileOf(files, "README.md");
+          expect(text).toContain("kept as it is");
+          expect(text).toContain("runs `client/client.ts`");
+        }
+      );
+
+      it("names its own test script in the README", async () => {
+        const files = await exportOf([
+          ["tests/a.test.ts", TEST],
+          ["package.json", JSON.stringify({ scripts: { test: "vitest" } })],
+        ]);
+        expect(packageOf(files).scripts.test).toBe("vitest");
+        expect(fileOf(files, "README.md")).toContain(
+          "`test` script in `package.json`"
+        );
+      });
+
+      it("counts a peer dependency as declared", async () => {
+        const pkg = packageOf(
+          await exportOf([
+            ["client/client.ts", CLIENT],
+            [
+              "package.json",
+              JSON.stringify({ peerDependencies: { "@solana/web3.js": "*" } }),
+            ],
+          ])
+        );
+        expect(pkg.dependencies).toBeUndefined();
+      });
+
+      it("writes its client path over its own config.client", async () => {
+        const pkg = packageOf(
+          await exportOf([
+            ["client/my$file.ts", CLIENT],
+            ["package.json", JSON.stringify({ config: { client: "old.ts" } })],
+          ])
+        );
+        expect(pkg.config.client).toBe("client/my$file.ts");
+      });
+
+      it("keeps its playground.ts and imports pg from a shim beside it", async () => {
+        const own = "export const greeting = 'hi';\n";
+        const files = await exportOf([
+          ["client/client.ts", CLIENT],
+          ["playground.ts", own],
+        ]);
+        expect(fileOf(files, "playground.ts")).toBe(own);
+        expect(fileOf(files, "playground-shim.ts")).toContain(
+          "export const pg"
+        );
+        expect(fileOf(files, "client/client.ts")).toMatch(
+          /^import \{ pg \} from "\.\.\/playground-shim";\n/
+        );
+        expect(fileOf(files, "README.md")).toContain("`playground-shim.ts`");
+        expect(fileOf(files, "README.md")).not.toContain("`playground.ts`");
+      });
+
+      it.each([
+        ["playground/index.ts"],
+        ["playground.d.ts"],
+        ["Playground.ts"],
+        ["playground.json"],
+      ])("takes playground-shim when %s holds the name", async (taken) => {
+        const files = await exportOf([
+          ["client/client.ts", CLIENT],
+          [taken, ""],
+        ]);
+        expect(fileOf(files, "client/client.ts")).toContain(
+          'from "../playground-shim"'
+        );
+      });
+
+      it.each([
+        ["playground.config.ts"],
+        ["playground.txt"],
+        ["client/playground.ts"],
+      ])("keeps the shim at playground.ts beside %s", async (other) => {
+        const files = await exportOf([
+          ["client/client.ts", CLIENT],
+          [other, ""],
+        ]);
+        expect(fileOf(files, "playground.ts")).toContain("export const pg");
+      });
+
+      it("takes the next free shim name, whatever extension holds a name", async () => {
+        const files = await exportOf([
+          ["client/client.ts", CLIENT],
+          ["playground.js", ""],
+          ["playground-shim/index.ts", ""],
+        ]);
+        expect(fileOf(files, "client/client.ts")).toContain(
+          'from "../playground-shim-2"'
+        );
+        expect(fileOf(files, "playground-shim-2.ts")).toContain(
+          "export const pg"
+        );
+      });
+
+      it("handles both, and the shim's web3 is a dependency", async () => {
+        const files = await exportOf([
+          ["client/client.ts", "console.log(pg.connection);"],
+          ["playground.ts", "export {};\n"],
+          ["package.json", JSON.stringify({ name: "both" })],
+        ]);
+        const pkg = packageOf(files);
+        expect(pkg.scripts.client).toBe("tsx client/client.ts");
+        expect(pkg.dependencies).toEqual({ "@solana/web3.js": "1.0.0" });
+        expect(fileOf(files, "client/client.ts")).toContain(
+          'from "../playground-shim"'
+        );
+      });
+
+      it("says in the README when the client script is the project's own", async () => {
+        const files = await exportOf([
+          ["client/client.ts", CLIENT],
+          [
+            "package.json",
+            JSON.stringify({ scripts: { client: "node dist/main.js" } }),
+          ],
+        ]);
+        const text = fileOf(files, "README.md");
+        expect(text).not.toContain("runs `client/client.ts`");
+        expect(text).toContain("`client` script in `package.json`");
+      });
+    });
 
     it("gives an unusable name a package name", async () => {
       expect(packageOf(await exportAs("***")([["client/a.ts", ""]])).name).toBe(
