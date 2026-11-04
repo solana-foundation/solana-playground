@@ -189,3 +189,206 @@ test("wallet-storage: A legacy single-key wallet moves to IndexedDB", async ({
   ]);
   await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
 });
+
+/** Puts raw `text` in `localStorage['wallet']`, as a damaged copy would be */
+const putLocalText = (page: Page) => (text: string) =>
+  page.evaluate((value) => localStorage.setItem("wallet", value), text);
+
+/** The console lines the wallet's storage logs, collected from now on */
+const walletLogsOf = (page: Page) => {
+  const lines: string[] = [];
+  page.on("console", (message) => {
+    if (message.text().includes("wallet:storage")) lines.push(message.text());
+  });
+  return lines;
+};
+
+/** A keypair's first bytes as they would appear in a logged array */
+const bytesOf = (kp: number[]) => kp.slice(0, 8).join(",");
+
+/** A connected wallet on one fresh account, as `localStorage` holds it */
+const walletWithNewAccount = () => {
+  const keypair = Keypair.generate();
+  return {
+    address: keypair.publicKey.toBase58(),
+    kp: Array.from(keypair.secretKey),
+    wallet: {
+      state: "pg",
+      accounts: [{ kp: Array.from(keypair.secretKey), name: "Wallet 1" }],
+      currentIndex: 0,
+    },
+  };
+};
+
+const storedCount = async (page: Page) =>
+  (await storedWallet(page))?.accounts.length;
+
+const localCount = async (page: Page) =>
+  JSON.parse((await localWallet(page)) ?? "{}").accounts?.length;
+
+test("wallet-storage: Two tabs load at once", async ({ context, page }) => {
+  await seedWorkspace(page);
+  const { address, kp, wallet } = walletWithNewAccount();
+  await putLocalText(page)(JSON.stringify(wallet));
+  const other = await context.newPage();
+
+  await Promise.all([page.reload(), other.goto("/")]);
+
+  await expect.poll(() => localWallet(page), LONG).toBeNull();
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  expect((await storedWallet(page))?.accounts[0].kp).toEqual(kp);
+  await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
+});
+
+test("wallet-storage: A localStorage wallet cannot be read", async ({
+  page,
+}) => {
+  await seedWorkspace(page);
+  const shown = await createWallet(page);
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  await putLocalText(page)("{not json");
+
+  await page.reload();
+
+  await expect(walletStep(page)).toHaveText(shown, LONG);
+  expect(await localWallet(page)).toBe("{not json");
+  expect(
+    await page.evaluate(() => localStorage.getItem("wallet.unreadable"))
+  ).toBe("{not json");
+});
+
+test("wallet-storage: Both stores hold a wallet", async ({ page }) => {
+  await seedWorkspace(page);
+  await createWallet(page);
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  const before = await storedWallet(page);
+  const { address, kp, wallet } = walletWithNewAccount();
+  await putLocalText(page)(JSON.stringify(wallet));
+
+  await page.reload();
+
+  await expect.poll(() => localWallet(page), LONG).toBeNull();
+  const after = await storedWallet(page);
+  expect(after?.accounts.map((account) => account.kp)).toEqual([
+    kp,
+    before?.accounts[0].kp,
+  ]);
+  expect(after?.accounts[1].name).not.toBe("Wallet 1");
+  await expect(walletStep(page)).toContainText(address.slice(0, 4), LONG);
+});
+
+test("wallet-storage: localStorage refuses to be read", async ({ page }) => {
+  await seedWorkspace(page);
+  const shown = await createWallet(page);
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  await page.addInitScript(() => {
+    const getItem = Storage.prototype.getItem;
+    Storage.prototype.getItem = function (key) {
+      if (key === "wallet") {
+        throw new DOMException("e2e: storage refused", "SecurityError");
+      }
+      return getItem.call(this, key);
+    };
+  });
+  const logs = walletLogsOf(page);
+
+  await page.reload();
+
+  await expect(walletStep(page)).toHaveText(shown, LONG);
+  await expect.poll(() => logs.length, LONG).toBe(1);
+});
+
+test("wallet-storage: The cross-tab lock cannot be taken", async ({ page }) => {
+  await page.addInitScript(() => {
+    const locks = navigator.locks;
+    const request = locks.request.bind(locks);
+    const refusing = (name: string, ...rest: unknown[]) =>
+      name === "pg-wallet:state"
+        ? Promise.reject(new DOMException("e2e: lock refused", "SecurityError"))
+        : (request as (...args: unknown[]) => Promise<unknown>)(name, ...rest);
+    locks.request = refusing as LockManager["request"];
+  });
+  const logs = walletLogsOf(page);
+  await seedWorkspace(page);
+
+  await createWallet(page);
+
+  await expect.poll(() => storedCount(page), LONG).toBe(1);
+  expect(await localWallet(page)).toBeNull();
+  expect(logs).toHaveLength(1);
+});
+
+test("wallet-storage: A save to IndexedDB fails", async ({ context, page }) => {
+  await failWalletWrites(page);
+  await seedWorkspace(page);
+  await createWallet(page);
+  await expect.poll(() => localCount(page), LONG).toBe(1);
+  await page.close();
+
+  // The next load, without the fault, moves it back
+  const next = await context.newPage();
+  await next.goto("/");
+
+  await expect.poll(() => storedCount(next), LONG).toBe(1);
+  await expect.poll(() => localWallet(next), LONG).toBeNull();
+});
+
+test("wallet-storage: A failing migration is logged", async ({ page }) => {
+  const { kp, wallet } = walletWithNewAccount();
+  await failWalletWrites(page);
+  await seedLocalWallet(page)(wallet);
+  const logs = walletLogsOf(page);
+
+  await seedWorkspace(page);
+
+  await expect.poll(() => logs.length, LONG).toBeGreaterThan(0);
+  expect(logs.join("\n")).not.toContain(bytesOf(kp));
+});
+
+test("wallet-storage: A truncated localStorage wallet is logged", async ({
+  page,
+}) => {
+  const { kp, wallet } = walletWithNewAccount();
+  await page.addInitScript((text) => {
+    if (sessionStorage.getItem("e2e-wallet-seeded")) return;
+    sessionStorage.setItem("e2e-wallet-seeded", "1");
+    localStorage.setItem("wallet", text);
+  }, JSON.stringify(wallet).slice(0, -40));
+  const logs = walletLogsOf(page);
+
+  await seedWorkspace(page);
+
+  await expect.poll(() => logs.length, LONG).toBeGreaterThan(0);
+  expect(logs.join("\n")).not.toContain(bytesOf(kp));
+});
+
+test("wallet-storage: The tab closes before a save lands", async ({
+  context,
+  page,
+}) => {
+  await seedWorkspace(page);
+
+  // Another tab takes the wallet's lock and keeps it
+  const holder = await context.newPage();
+  await holder.goto("/");
+  await holder.evaluate(() => {
+    void navigator.locks.request(
+      "pg-wallet:state",
+      () => new Promise<void>(() => {})
+    );
+  });
+
+  await createWallet(page);
+  await page.close({ runBeforeUnload: true });
+
+  const kept = JSON.parse((await localWallet(holder)) ?? "{}");
+  expect(kept.accounts).toHaveLength(1);
+
+  // The holder's reload frees the lock, and the load moves the kept save in
+  await holder.reload();
+  await expect.poll(() => storedCount(holder), LONG).toBe(1);
+  await expect.poll(() => localWallet(holder), LONG).toBeNull();
+  expect((await storedWallet(holder))?.accounts[0].kp).toEqual(
+    kept.accounts[0].kp
+  );
+});
