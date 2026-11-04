@@ -96,10 +96,11 @@ synchronous, and hello-solana does `tx.sign(pg.wallet.keypair)` then
   and code that does not await is unaffected;
 - `serialize` skips signature verification only while a slot holds a known
   placeholder;
-- `sendRawTransaction`, `sendEncodedTransaction` and `simulateTransaction`
-  find known placeholders in the wire bytes, wait for their real signatures,
-  splice them in and then send; a resolved signature is also written back
-  into the transaction object.
+- the sandbox's JSON-RPC transport finds known placeholders in the wire bytes
+  of `sendTransaction` and `simulateTransaction` requests, waits for their real
+  signatures, splices them in and then sends, which covers every `Connection`
+  and every send method without patching each one; a resolved signature is also
+  written back into the transaction object.
 
 So `sendAndConfirmTransaction(conn, tx, [pg.wallet.keypair])`, anchor's
 `provider.wallet.payer`, `.signers([payer])` and the spl-token helpers keep
@@ -115,12 +116,16 @@ shared projects, which Sergey's call ruled out.
 
 ### 6. RPC through the page
 
-The sandbox's `Connection` is built with a custom `fetch` that posts an `rpc`
-request; the page runs it through its own `window.fetch`, so Playnet's
-override answers it exactly as today and the sandbox's `null` origin never
-meets CORS. Websocket subscriptions are not bridged: `confirmTransaction`
-already polls when no websocket is given, and the sandbox `Connection` is
-built that way.
+Before web3 loads, the sandbox sets `globalThis.fetch` to a stand-in that
+posts JSON-RPC bodies as `rpc` requests; the page runs them through its own
+`window.fetch`, so Playnet's override answers them exactly as today and the
+sandbox's `null` origin never meets CORS. The page refuses a request to its own
+origin and sends no credentials. Every other fetch, and any websocket, leaves
+from the sandbox's opaque origin, so project code can still reach the network.
+
+Websocket subscriptions are not bridged. `confirmTransaction` waits on a
+subscription, so the sandbox patches it to poll; a subscription against Playnet
+from project code fails, and `docs/assistant-context.md` says so.
 
 ### 7. Headers
 
@@ -151,14 +156,24 @@ posts `end`.
   lockfile; unit tests cover each patched method, so an upgrade that moves
   them fails CI.
 - [A placeholder leaks into a transaction that is never sent through the
-  patched methods (e.g. serialized and posted by hand)] → `serialize` with a
-  pending placeholder warns in the terminal; `await tx.sign(...)` is
-  documented as the safe form.
+  transport (e.g. serialized and posted by hand)] → a signature that was never
+  sent is warned about in the terminal when the run ends, since a warning in
+  `serialize` would fire on every hello-solana run; `await tx.sign(...)` is the
+  documented safe form.
 - [The sandbox bundle duplicates web3, anchor and mocha] → it is a lazily
   loaded entry, fetched on the first `run`; the bundle row is explained in the
   PR.
 - [COEP blocks a sandbox asset in some browser] → the 15-second load timeout
   reports it in the terminal instead of hanging.
+
+- [A standard wallet changes the transaction it signs] → the page verifies each
+  signature it returns and refuses one that does not match the request.
+- [Browsers other than Chromium are untested for COEP plus an opaque origin] →
+  the e2e suite runs Chromium only; the 15-second timeout reports a failure, and
+  a manual check in Firefox and Safari goes in the PR.
+- [Metaplex `keypairIdentity(pg.wallet.keypair)` in the spl-token-vault tutorial
+  fails if it signs messages with `secretKey`] → transaction signing is expected
+  to work; a manual run of that tutorial goes in the PR.
 
 ## Migration Plan
 
