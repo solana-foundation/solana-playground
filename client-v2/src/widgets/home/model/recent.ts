@@ -15,20 +15,18 @@ const RECENT_SHOWN = 3;
  * browser's list, latest first. The explorer keeps no times; it appends a
  * project it makes or sync imports, and a rename keeps its place.
  */
-export const recentProjects = (
-  names: readonly string[],
-  current: string | undefined,
-  isLesson: (name: string) => boolean
-): RecentEntry[] => {
-  const rest = names.filter((name) => name !== current).reverse();
-  const ordered =
-    current && names.includes(current) ? [current, ...rest] : rest;
-  return ordered.slice(0, RECENT_SHOWN).map((name) => ({
-    name,
-    kind: isLesson(name) ? "tutorial" : "project",
-    current: name === current,
-  }));
-};
+export const recentProjectsWith =
+  (isLesson: (name: string) => boolean) =>
+  (names: readonly string[], current: string | undefined): RecentEntry[] => {
+    const rest = names.filter((name) => name !== current).reverse();
+    const ordered =
+      current && names.includes(current) ? [current, ...rest] : rest;
+    return ordered.slice(0, RECENT_SHOWN).map((name) => ({
+      name,
+      kind: isLesson(name) ? "tutorial" : "project",
+      current: name === current,
+    }));
+  };
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
@@ -38,10 +36,9 @@ if (import.meta.vitest) {
 
     describe("recentProjects", () => {
       it("puts the open project first, then the newest, three in all", () => {
-        const recent = recentProjects(
+        const recent = recentProjectsWith(noLessons)(
           ["a", "b", "c", "d", "e"],
-          "b",
-          noLessons
+          "b"
         );
         expect(recent.map((r) => [r.name, r.current])).toEqual([
           ["b", true],
@@ -51,19 +48,17 @@ if (import.meta.vitest) {
       });
 
       it("lists the newest first when none is open", () => {
-        const recent = recentProjects(
+        const recent = recentProjectsWith(noLessons)(
           ["a", "b", "c", "d"],
-          undefined,
-          noLessons
+          undefined
         );
         expect(recent.map((r) => r.name)).toEqual(["d", "c", "b"]);
       });
 
       it("marks a started tutorial", () => {
-        const recent = recentProjects(
+        const recent = recentProjectsWith((name) => name === "Hello Anchor")(
           ["a", "Hello Anchor"],
-          undefined,
-          (name) => name === "Hello Anchor"
+          undefined
         );
         expect(recent.map((r) => [r.name, r.kind])).toEqual([
           ["Hello Anchor", "tutorial"],
@@ -72,7 +67,7 @@ if (import.meta.vitest) {
       });
 
       it("lists nothing for a browser with no project", () => {
-        expect(recentProjects([], undefined, noLessons)).toEqual([]);
+        expect(recentProjectsWith(noLessons)([], undefined)).toEqual([]);
       });
     });
   });

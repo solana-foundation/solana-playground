@@ -8,7 +8,7 @@ import { PgExplorer, PgTutorial } from "@/utils";
 import { errorMessage } from "../lib/error-message";
 import { runExample } from "../model/example";
 import type { RecentEntry } from "../model/recent";
-import { recentProjects } from "../model/recent";
+import { recentProjectsWith } from "../model/recent";
 import { useSessionRetry } from "../model/session-retry";
 import type { PageTile } from "../model/telemetry";
 import { homeTelemetry } from "../model/telemetry";
@@ -33,21 +33,22 @@ const log = createLogger("home:actions");
  * to it, never re-reading it under a live editor; a started tutorial opens
  * through `PgTutorial.open`, which restores its route and page.
  */
-const openRecent = async (entry: RecentEntry, onContinue: () => void) => {
-  const names = PgExplorer.allWorkspaceNames;
-  if (!names) throw new Error("The project list has not loaded yet.");
-  if (!names.includes(entry.name)) {
-    throw new Error(`${entry.name} no longer exists.`);
-  }
-  // Read now, not when Home drew: another tab or sync may have opened another
-  if (entry.name === PgExplorer.currentWorkspaceName) {
-    onContinue();
-    return "current" as const;
-  }
-  if (entry.kind === "tutorial") await PgTutorial.open(entry.name);
-  else await PgExplorer.switchWorkspace(entry.name);
-  return entry.kind;
-};
+const openRecentWith =
+  (onContinue: () => void) => async (entry: RecentEntry) => {
+    const names = PgExplorer.allWorkspaceNames;
+    if (!names) throw new Error("The project list has not loaded yet.");
+    if (!names.includes(entry.name)) {
+      throw new Error(`${entry.name} no longer exists.`);
+    }
+    // Read now, not when Home drew: another tab or sync may have opened another
+    if (entry.name === PgExplorer.currentWorkspaceName) {
+      onContinue();
+      return "current" as const;
+    }
+    if (entry.kind === "tutorial") await PgTutorial.open(entry.name);
+    else await PgExplorer.switchWorkspace(entry.name);
+    return entry.kind;
+  };
 
 /**
  * What leads Home, by `useVisit`: the example on a first visit, recent work
@@ -83,11 +84,12 @@ const useStart = (onContinue: () => void): HomeStart | null => {
   }
   return {
     kind: "recent",
-    entries: recentProjects(names, PgExplorer.currentWorkspaceName, (name) =>
-      PgTutorial.isWorkspaceTutorial(name)
+    entries: recentProjectsWith((name) => PgTutorial.isWorkspaceTutorial(name))(
+      names,
+      PgExplorer.currentWorkspaceName
     ),
     onOpen: async (entry) => {
-      const kind = await openRecent(entry, onContinue);
+      const kind = await openRecentWith(onContinue)(entry);
       homeTelemetry.track("home_recent_opened", { kind });
     },
   };
