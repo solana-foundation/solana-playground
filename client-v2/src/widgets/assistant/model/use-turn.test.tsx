@@ -22,6 +22,7 @@ import { createProvider } from "../../../views/sidebar/assistant/model";
 import { ModelBusyError } from "../../../views/sidebar/assistant/model/model-busy";
 import { rememberBackend } from "../../../views/sidebar/assistant/model/remembered-backend";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
+import { TurnFailure } from "../../../views/sidebar/assistant/model/types";
 import type { Connection } from "../../../views/sidebar/assistant/store";
 import { PgAssistant } from "../../../views/sidebar/assistant/store";
 import { resetDefaultBackendProbe } from "./default-backend";
@@ -94,6 +95,12 @@ afterEach(() => {
 });
 
 const eventNames = () => events.events.map((e) => [e.name, e.params]);
+/** The turn's own events, in the order sent, without the rest of the panel's */
+const turnEvents = () =>
+  events.events
+    .filter((e) => e.name.startsWith("assistant_turn_"))
+    .map((e) => [e.name, e.params]);
+const SENT_ON_DEFAULT = ["assistant_turn_sent", { provider: "default" }];
 
 describe("useTurn", () => {
   it("connects the default and sends when nothing is connected", async () => {
@@ -128,6 +135,7 @@ describe("useTurn", () => {
     expect(result.current.input).toBe("hello");
     expect(result.current.busy).toBe(false);
     expect(provider.send).not.toHaveBeenCalled();
+    expect(turnEvents()).toEqual([]);
   });
 
   it("opens Connect and keeps the text when there is no default", async () => {
@@ -143,6 +151,7 @@ describe("useTurn", () => {
     expect(PgAssistant.items.length).toBe(0);
     expect(open).toHaveBeenCalledTimes(1);
     expect(open).toHaveBeenCalledWith("send", undefined);
+    expect(turnEvents()).toEqual([]);
   });
 
   it("starts one turn for two sends in the same tick", async () => {
@@ -159,6 +168,33 @@ describe("useTurn", () => {
     expect(provider.send.mock.calls[0][0]).toBe("first");
     act(() => result.current.stop());
     await waitFor(() => expect(result.current.busy).toBe(false));
+    // The refused second send reported nothing
+    expect(turnEvents()).toEqual([
+      SENT_ON_DEFAULT,
+      ["assistant_turn_stopped", {}],
+    ]);
+  });
+
+  it("reports a stopped turn only as stopped when its provider resolves after Stop", async () => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockImplementation(
+      (_: string, signal?: AbortSignal) =>
+        new Promise<void>((resolve) => {
+          signal?.addEventListener("abort", () => resolve());
+        })
+    );
+    const { result } = renderHook(() => useTestTurn());
+    act(() => {
+      void result.current.send("hi");
+    });
+
+    act(() => result.current.stop());
+    await waitFor(() => expect(result.current.busy).toBe(false));
+
+    expect(turnEvents()).toEqual([
+      SENT_ON_DEFAULT,
+      ["assistant_turn_stopped", {}],
+    ]);
   });
 
   it("says Stopped once for two Stops before the turn unwinds", async () => {
@@ -315,8 +351,11 @@ describe("useTurn", () => {
         (item) => item.kind === "notice" && item.text === "Stopped."
       )
     ).toBe(true);
-    expect(eventNames()).toContainEqual(["assistant_turn_stopped", {}]);
     await waitFor(() => expect(result.current.busy).toBe(false));
+    expect(turnEvents()).toEqual([
+      SENT_ON_DEFAULT,
+      ["assistant_turn_stopped", {}],
+    ]);
   });
 
   it("reports a failed turn as an error item", async () => {
@@ -332,6 +371,83 @@ describe("useTurn", () => {
       )
     ).toBe(true);
     expect(result.current.busy).toBe(false);
+  });
+
+  it("reports a turn as sent, then answered, on the connection's backend", async () => {
+    PgAssistant.connect({ id: "openai", apiKey: "sk-test" });
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(turnEvents()).toEqual([
+      ["assistant_turn_sent", { provider: "openai" }],
+      ["assistant_turn_answered", { provider: "openai" }],
+    ]);
+  });
+
+  it.each([
+    {
+      ends: "with the backend's error status",
+      error: new TurnFailure("down", { reason: "provider", status: 500 }),
+      outcome: [
+        "assistant_turn_failed",
+        { provider: "default", reason: "provider", status: 500 },
+      ],
+    },
+    {
+      ends: "with the model's refusal",
+      error: new TurnFailure("no", { reason: "refusal" }),
+      outcome: [
+        "assistant_turn_failed",
+        { provider: "default", reason: "refusal" },
+      ],
+    },
+    {
+      ends: "on this side",
+      error: new Error("still calling tools"),
+      outcome: [
+        "assistant_turn_failed",
+        { provider: "default", reason: "other" },
+      ],
+    },
+    {
+      ends: "under the cost gate",
+      error: new TurnFailure("capped", { reason: "capped", status: 429 }),
+      outcome: ["assistant_turn_capped", { provider: "default" }],
+    },
+    {
+      ends: "with an upstream rate limit",
+      error: new TurnFailure("busy", { reason: "provider", status: 429 }),
+      outcome: [
+        "assistant_turn_failed",
+        { provider: "default", reason: "provider", status: 429 },
+      ],
+    },
+  ])("reports a turn that ends $ends", async ({ error, outcome }) => {
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockRejectedValue(error);
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send("hi"));
+
+    expect(turnEvents()).toStrictEqual([SENT_ON_DEFAULT, outcome]);
+  });
+
+  it("keeps the prompt out of every event, even when the failure quotes it", async () => {
+    const prompt = "Explain the lib.rs build error";
+    PgAssistant.connect({ id: "default", apiKey: "" });
+    provider.send.mockRejectedValue(
+      new TurnFailure(`Could not answer "${prompt}"`, {
+        reason: "provider",
+        status: 500,
+      })
+    );
+    const { result } = renderHook(() => useTestTurn());
+
+    await act(() => result.current.send(prompt));
+
+    expect(turnEvents().length).toBe(2);
+    expect(JSON.stringify(events.events)).not.toContain(prompt);
   });
 
   describe("a busy model (Spec 08 AI-03)", () => {
@@ -372,6 +488,11 @@ describe("useTurn", () => {
       await waitFor(() => expect(result.current.retry).toBeNull());
       expect(userMessages()).toBe(1);
       expect(errors()).toEqual([]);
+      // One turn: sent once, and the busy answer it was sent again for is no outcome
+      expect(turnEvents()).toEqual([
+        SENT_ON_DEFAULT,
+        ["assistant_turn_answered", { provider: "default" }],
+      ]);
     });
 
     it("waits as long as the server says, with Try now off", async () => {
@@ -413,6 +534,30 @@ describe("useTurn", () => {
       expect(userMessages()).toBe(1);
       expect(result.current.input).toBe("");
       expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(turnEvents()).toEqual([
+        SENT_ON_DEFAULT,
+        ["assistant_turn_stopped", {}],
+      ]);
+    });
+
+    it("ends the wait as stopped when the panel closes, sending nothing", async () => {
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result, unmount } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      unmount();
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(
+        PgAssistant.items.filter(
+          (item) => item.kind === "notice" && item.text === "Stopped."
+        )
+      ).toHaveLength(1);
+      expect(turnEvents()).toEqual([
+        SENT_ON_DEFAULT,
+        ["assistant_turn_stopped", {}],
+      ]);
     });
 
     it("starts no other turn while a message waits", async () => {
@@ -447,6 +592,10 @@ describe("useTurn", () => {
       expect(
         errors().map((item) => item.kind === "error" && item.text)
       ).toEqual([LATER]);
+      expect(turnEvents()).toStrictEqual([
+        SENT_ON_DEFAULT,
+        ["assistant_turn_failed", { provider: "default", reason: "provider" }],
+      ]);
     });
 
     it("drops the wait when the conversation changes, sending nothing", async () => {
@@ -459,10 +608,40 @@ describe("useTurn", () => {
 
       expect(result.current.retry).toBeNull();
       expect(provider.send).toHaveBeenCalledTimes(1);
+      // The conversation left the turn, as the store's cut-off does: no outcome
+      expect(turnEvents()).toEqual([SENT_ON_DEFAULT]);
+    });
+
+    it("reports a waiting message not sent again for a changed model as failed", async () => {
+      PgAssistant.connect({
+        id: "anthropic",
+        apiKey: "k",
+        settings: { model: "claude-sonnet-5-5", effort: "high" },
+      });
+      provider.send.mockRejectedValueOnce(new ModelBusyError(undefined, BUSY));
+      const { result } = renderHook(() => useTestTurn());
+      await act(() => result.current.send("hi"));
+
+      act(() =>
+        PgAssistant.tune({
+          id: "anthropic",
+          apiKey: "k",
+          settings: { model: "claude-sonnet-5-5", effort: "low" },
+        })
+      );
+      await act(() => vi.advanceTimersByTimeAsync(15_000));
+
+      expect(provider.send).toHaveBeenCalledTimes(1);
+      expect(turnEvents()).toStrictEqual([
+        ["assistant_turn_sent", { provider: "anthropic" }],
+        ["assistant_turn_failed", { provider: "anthropic", reason: "other" }],
+      ]);
     });
 
     it("gives up with one line after three busy answers in a row", async () => {
-      provider.send.mockRejectedValue(new ModelBusyError(1, BUSY));
+      provider.send.mockRejectedValue(
+        new ModelBusyError(1, BUSY, { status: 429 })
+      );
       const { result } = renderHook(() => useTestTurn());
 
       await act(() => result.current.send("hi"));
@@ -475,6 +654,14 @@ describe("useTurn", () => {
       expect(
         errors().map((item) => item.kind === "error" && item.text)
       ).toEqual([LATER]);
+      // The last busy answer ends the turn; the three sent again did not
+      expect(turnEvents()).toStrictEqual([
+        SENT_ON_DEFAULT,
+        [
+          "assistant_turn_failed",
+          { provider: "default", reason: "provider", status: 429 },
+        ],
+      ]);
     });
   });
 

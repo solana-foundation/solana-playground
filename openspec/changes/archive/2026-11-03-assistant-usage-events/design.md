@@ -89,6 +89,14 @@ store cuts off without a Stop (its thread closed, the backend changed) is
 aborted the same way and ends with no outcome event; it is rare and not the
 user's action, so it is accepted rather than given a fifth event.
 
+A busy answer (`ModelBusyError`, a `TurnFailure` with reason `provider`)
+that `waitOnBusy` will send again ends nothing: `assistant_turn_sent` goes
+out once per user send, on the first attempt, and the retries are the same
+turn. The busy answer `waitOnBusy` gives up on, at `BUSY_RETRIES` or past
+`BUSY_WAIT_MAX_SECONDS`, ends the turn as `assistant_turn_failed` with reason
+`provider` and the status the backend answered with, when it answered with
+one.
+
 ### `capped` is HOO-1751's limit refusal, both kinds
 
 The provider maps a `backendRefusal` of kind `signed-out` to the session

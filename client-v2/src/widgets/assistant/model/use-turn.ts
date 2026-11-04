@@ -2,6 +2,7 @@ import { useEffect, useReducer, useRef, useState } from "react";
 
 import { PgSession } from "@/features/auth";
 import { report, toReplayMessages } from "@/features/persistence";
+import type { ModelProvider } from "@/shared/lib/ai";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
 
@@ -16,6 +17,7 @@ import {
   rememberedConnection,
 } from "../../../views/sidebar/assistant/model/remembered-backend";
 import type { Provider } from "../../../views/sidebar/assistant/model/types";
+import { TurnFailure } from "../../../views/sidebar/assistant/model/types";
 import type {
   Connection,
   PromptRequest,
@@ -74,6 +76,32 @@ interface BusyRetry {
   /** `PgAssistant.conversation` when it waited: a sign-out drops it too */
   conversation: number;
 }
+
+/**
+ * Report a turn that ended without an answer: capped for the cost gate's
+ * refusal, failed otherwise, with the `TurnFailure`'s reason and status, or
+ * `other` for any error raised on this side.
+ */
+const trackTurnFailureFor = (backend: ModelProvider) => (error: unknown) => {
+  if (!(error instanceof TurnFailure)) {
+    assistantTelemetry.track("assistant_turn_failed", {
+      provider: backend,
+      reason: "other",
+    });
+    return;
+  }
+  if (error.reason === "capped") {
+    assistantTelemetry.track("assistant_turn_capped", { provider: backend });
+    return;
+  }
+  const params: AssistantEvents["assistant_turn_failed"] = {
+    provider: backend,
+    reason: error.reason,
+  };
+  // Omitted, not `undefined`, so the event carries no `status` key at all
+  if (error.status !== undefined) params.status = error.status;
+  assistantTelemetry.track("assistant_turn_failed", params);
+};
 
 /** Where Connect a model was opened from */
 export type ConnectVia = AssistantEvents["assistant_connect_opened"]["via"];
@@ -386,19 +414,37 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * @param attempt which retry this is, 0 for the first send
    */
   const runTurn = async (text: string, attempt: number) => {
-    const instance = provider.current!.instance;
+    if (!provider.current) {
+      throw new Error("runTurn has no provider: start builds one first");
+    }
+    const {
+      instance,
+      connection: { id: backend },
+    } = provider.current;
     const controller = new AbortController();
     turn.current = controller;
     PgAssistant.beginTurn(controller);
     PgAssistant.setStatus("running");
+    // A busy message sent again is the same turn, so only the first attempt reports a send
+    if (attempt === 0) {
+      assistantTelemetry.track("assistant_turn_sent", { provider: backend });
+    }
 
     try {
       await instance.send(text, controller.signal);
+      // A provider may resolve after Stop, which has already ended the turn
+      if (!controller.signal.aborted) {
+        assistantTelemetry.track("assistant_turn_answered", {
+          provider: backend,
+        });
+      }
     } catch (e) {
       if (!controller.signal.aborted && e instanceof ModelBusyError) {
-        waitOnBusy(text, attempt, e);
+        // A busy answer sent again ends no turn; the one the panel gives up on does
+        if (!waitOnBusy(text, attempt, e)) trackTurnFailureFor(backend)(e);
       } else if (!controller.signal.aborted) {
         PgAssistant.addError(e instanceof Error ? e.message : String(e));
+        trackTurnFailureFor(backend)(e);
       } else if (isAbort(e)) {
         // Aborted by `stop`, which has already written its notice, or by the
         // store cutting the turn off, when there is nothing to tell the user
@@ -431,16 +477,19 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
    * `BUSY_RETRIES` times, then say so in the thread. The wait is the
    * server's when it names one, and Try now is off until it ends; a wait past
    * `BUSY_WAIT_MAX_SECONDS` is not counted down at all.
+   *
+   * @returns whether the message waits to be sent again; `false` once the
+   *   thread said to come back later, which ends the turn
    */
   const waitOnBusy = (
     text: string,
     attempt: number,
     busyError: ModelBusyError
-  ) => {
+  ): boolean => {
     const seconds = Math.max(1, busyError.waitSeconds ?? BUSY_WAIT_SECONDS);
     if (attempt >= BUSY_RETRIES || seconds > BUSY_WAIT_MAX_SECONDS) {
       PgAssistant.addError(`${busyError.message} ${COME_BACK_LATER}`);
-      return;
+      return false;
     }
     const at = Date.now();
     setNow(at);
@@ -452,6 +501,7 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       threadId: PgAssistant.threadId,
       conversation: PgAssistant.conversation,
     });
+    return true;
   };
 
   // Another thread, or a sign-out, while a message waits: it belongs to the
@@ -490,6 +540,12 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     const current = usableConnection();
     if (!current || provider.current?.connection !== current) {
       PgAssistant.addError(NOT_RESENT);
+      // `provider.current` still holds the connection the turn was sent on
+      if (provider.current) {
+        trackTurnFailureFor(provider.current.connection.id)(
+          new Error(NOT_RESENT)
+        );
+      }
       return;
     }
     await runTurn(held.text, held.attempt);
@@ -536,6 +592,8 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
       // The message stays in the thread; nothing more is sent for it
       setWaiting(null);
       PgAssistant.addNotice("Stopped.");
+      // The waiting message's turn reported its send and ends here
+      assistantTelemetry.track("assistant_turn_stopped", {});
       return;
     }
     if (!turn.current || turn.current.signal.aborted) return;
@@ -544,6 +602,17 @@ export const useTurn = ({ open }: TurnOptions): Turn => {
     PgAssistant.addNotice("Stopped.");
     assistantTelemetry.track("assistant_turn_stopped", {});
   };
+
+  // Closing the panel unmounts this hook and the countdown with it, so the
+  // wait ends as a Stop; a running turn is left to finish on its own
+  useEffect(
+    () => () => {
+      if (!waiting.current) return;
+      PgAssistant.addNotice("Stopped.");
+      assistantTelemetry.track("assistant_turn_stopped", {});
+    },
+    []
+  );
 
   // A build error's Explain or Fix and similar callers outside the panel ask
   // for a prompt to be sent through `PgAssistant.requestPrompt`; this is the
