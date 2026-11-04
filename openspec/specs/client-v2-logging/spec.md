@@ -120,7 +120,7 @@ event carries a request body, a cookie, or a request header.
   provider has a static import of `@sentry/react`
 - **THEN** `yarn lint` fails
 
-#### Scenario: An error not marked for reporting (manual)
+#### Scenario: An error not marked for reporting
 
 - **WHEN** `Logger.error(error)` is called without `report: true`
 - **THEN** the Sentry provider sends no event, and keeps the entry as a
@@ -165,7 +165,7 @@ breadcrumb only (HOO-1800); an unmarked rejection is a `panic`. Only an
 object can be marked: a thrown string or other primitive stays a `panic`
 even when the terminal printed it.
 
-#### Scenario: An unhandled rejection (manual)
+#### Scenario: An unhandled rejection
 
 - **WHEN** a promise rejects, nothing handles it, and the terminal has not
   printed it
