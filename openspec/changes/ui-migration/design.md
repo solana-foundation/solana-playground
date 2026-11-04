@@ -1,5 +1,10 @@
 # Design
 
+> **Frozen.** This design takes no new sections. A ticket larger than a bug
+> fix gets a change of its own (`/opsx:propose`), and a PR in this change
+> ticks only its own task line in `tasks.md` (`client-v2/CLAUDE.md`, "Specs
+> and changes", step 4).
+
 ## Context
 
 `client-v2` is a copy of upstream's Create React App client plus the fork's
