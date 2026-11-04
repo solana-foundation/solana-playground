@@ -215,13 +215,14 @@ counts.
 4. **`/opsx:apply` implements, one task per PR.** It reads `tasks.md`,
    works a task, ticks it. Tick a task only in the PR that lands it, and
    name the task in the PR description. The ordinary PR checklist (section
-   "Before a PR") still applies to every task. A ticket larger than a bug
-   fix gets a change of its own, even when an umbrella change already names
-   its area. An umbrella is a change many tickets share, such as
-   `ui-migration`. A PR there ticks only its own task line and adds nothing
-   to `design.md` or the specs, because every ticket appending to one
-   `design.md` made each merge conflict with the rest. The PR that closes
-   the umbrella (step 5) is the exception.
+   "Before a PR") still applies to every task. An umbrella is a change many
+   tickets share, such as `ui-migration`. A new ticket larger than a bug fix
+   gets a change of its own, even when an umbrella already names its area.
+   A task already listed in an umbrella stays there: its PR ticks only its
+   own task line, keeps its design detail in the task's `plans/` file, and
+   adds nothing to `design.md` or the specs, because every ticket appending
+   to one `design.md` made each merge conflict with the rest. The PR that
+   closes the umbrella (step 5) is the exception.
 5. **A human closes the change, in the PR that finishes it.** When a PR
    ticks the change's last task, the agent asks whether to close the change
    before the PR is opened (and before the sx review, if it runs); it never
@@ -239,8 +240,8 @@ counts.
    code as it is, never a plan; nothing is back-filled for code that is not changing.
 6. **Asked to build something, look in `openspec/changes/` first**
    (`openspec list`). If a change covers it, `/opsx:apply` that change and
-   say which task; when that change is an umbrella and the work is more than
-   a bug fix, step 4 gives it a change of its own. If none does and the work is more than a bug fix, offer
+   say which task. If none does, or only an umbrella names the area without
+   a task for it (step 4), and the work is more than a bug fix, offer
    `/opsx:propose` rather than starting on the code. A bug fix in a slice
    that sends no events, or none for the path being fixed, says so and
    proposes the missing events as a follow-up ticket.
