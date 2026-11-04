@@ -8,7 +8,16 @@ import BaseHandoff from "./BaseHandoff";
 
 const LINK = "https://beta.solpg.io/tutorials/hello-solana";
 
-const SIGNED_IN: HandoffAccount = { status: "signed-in", login: "ada" };
+const SIGNED_IN: HandoffAccount = {
+  status: "signed-in",
+  login: "ada",
+  synced: true,
+};
+const SIGNED_IN_UNSYNCED: HandoffAccount = {
+  status: "signed-in",
+  login: "ada",
+  synced: false,
+};
 const SIGNED_OUT: HandoffAccount = {
   status: "signed-out",
   signingIn: false,
@@ -60,6 +69,18 @@ it("signed in, says the project is in the account and names the login", () => {
   expect(screen.getByText(/@ada/)).toBeTruthy();
   expect(
     screen.queryByRole("button", { name: "Sign in with GitHub" })
+  ).toBeNull();
+});
+
+it("signed in with work the account lacks, promises nothing it has not got", () => {
+  render(sheet({ account: SIGNED_IN_UNSYNCED }));
+  expect(
+    screen.getByText(
+      "Some of this project is not in your account yet. Once it syncs, open this link on a computer and sign in with GitHub as @ada."
+    )
+  ).toBeTruthy();
+  expect(
+    screen.queryByText(/Your files and this conversation go with you/)
   ).toBeNull();
 });
 

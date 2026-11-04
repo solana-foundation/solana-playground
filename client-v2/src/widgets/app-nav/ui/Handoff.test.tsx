@@ -41,6 +41,25 @@ vi.mock("@/features/auth", () => ({
   PgSession: session,
   isSignInFailure: known.failure,
 }));
+// The open project and its sync marker: the sheet promises the project goes
+// with them only when the account holds it (no marker)
+const sync = vi.hoisted(() => ({
+  marker: vi.fn((): Promise<string | undefined> => Promise.resolve(undefined)),
+  moved: new Set<() => void>(),
+}));
+vi.mock("@/features/persistence", () => ({
+  syncMarkerOf: sync.marker,
+  onDidChangeSyncMarkers: (cb: () => void) => {
+    sync.moved.add(cb);
+    return { dispose: () => sync.moved.delete(cb) };
+  },
+}));
+vi.mock("@/utils", () => ({
+  PgExplorer: {
+    currentWorkspaceName: "counter",
+    workspaceIdOf: (name: string) => `id-${name}`,
+  },
+}));
 // The toast needs a booted app; what matters here is that a failure reaches it
 const reported = vi.hoisted(() => ({ actions: [] as string[] }));
 vi.mock("@/shared/lib/report-button-failure", () => ({
@@ -131,6 +150,37 @@ it("counts an opening signed in", () => {
       params: { signedIn: true },
     }),
   ]);
+});
+
+it("promises the project goes with them only once the account holds it", async () => {
+  session.user = { login: "ada" };
+  sync.marker.mockResolvedValueOnce("not-synced");
+  open();
+  expect(
+    await screen.findByText(/Some of this project is not in your account yet/)
+  ).toBeTruthy();
+  expect(sync.marker).toHaveBeenCalledWith("id-counter", "counter");
+});
+
+it("changes the line while open once the sync lands", async () => {
+  session.user = { login: "ada" };
+  sync.marker.mockResolvedValueOnce("this-browser");
+  open();
+  await screen.findByText(/Some of this project is not in your account yet/);
+  await act(async () => {
+    for (const cb of sync.moved) cb();
+  });
+  expect(
+    await screen.findByText(/Your files and this conversation go with you/)
+  ).toBeTruthy();
+});
+
+it("says the project goes with them when it is in sync", async () => {
+  session.user = { login: "ada" };
+  open();
+  expect(
+    await screen.findByText(/Your files and this conversation go with you/)
+  ).toBeTruthy();
 });
 
 it("copies the link and counts it", async () => {

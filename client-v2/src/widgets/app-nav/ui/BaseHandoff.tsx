@@ -21,7 +21,15 @@ const COPIED_MS = 2000;
 
 /** Who the sheet speaks to: what moves to the computer depends on it */
 export type HandoffAccount =
-  | { status: "signed-in"; login: string }
+  | {
+      status: "signed-in";
+      login: string;
+      /**
+       * The account holds this project as it is here: false while it has
+       * work that never uploaded, or before its sync state is read
+       */
+      synced: boolean;
+    }
   | {
       status: "signed-out";
       /** A sign-in is under way: its button waits */
@@ -73,6 +81,17 @@ const Wrapped = ({ link }: { link: string }) => (
  * sheet gives the link; signed out, it says the project stays here and
  * offers only the sign-in, since the link would find nothing on a computer.
  */
+/**
+ * What the signed-in sheet promises: the project goes with them only once the
+ * account holds it, so an upload that failed or has not run yet is said
+ */
+const signedInLine = (
+  account: Extract<HandoffAccount, { status: "signed-in" }>
+) =>
+  account.synced
+    ? `Your files and this conversation go with you. Open this link on a computer and sign in with GitHub as @${account.login}: this project is in your list there.`
+    : `Some of this project is not in your account yet. Once it syncs, open this link on a computer and sign in with GitHub as @${account.login}.`;
+
 const BaseHandoff = ({
   open,
   onOpenChange,
@@ -122,7 +141,7 @@ const BaseHandoff = ({
                   class and the stock 14 px comes back */}
               <DrawerDescription className="text-body! font-read text-pretty text-muted-foreground">
                 {account.status === "signed-in"
-                  ? `Your files and this conversation go with you. Open this link on a computer and sign in with GitHub as @${account.login}: this project is in your list there.`
+                  ? signedInLine(account)
                   : "This project stays on this phone. Sign in with GitHub to take it to a computer."}
               </DrawerDescription>
               {account.status === "signed-out" ? (

@@ -1,8 +1,10 @@
-import { useState, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 
 import { isSignInFailure, PgSession } from "@/features/auth";
+import { onDidChangeSyncMarkers, syncMarkerOf } from "@/features/persistence";
 import { createLogger } from "@/shared/lib/logger";
 import { reportButtonFailure } from "@/shared/lib/report-button-failure";
+import { PgExplorer } from "@/utils";
 
 import { navTelemetry } from "../model/telemetry";
 import type { HandoffAccount } from "./BaseHandoff";
@@ -24,14 +26,51 @@ const snapshot = () => {
   return JSON.stringify([login, state.status === "pending", message]);
 };
 
+/**
+ * Whether the account holds the open project as it is here: no sync marker
+ * means in sync. Read when the sheet opens and again whenever a marker may
+ * have moved, so a sync that lands while it is open changes the line; until
+ * the first read, and when it cannot be read, the sheet promises nothing
+ */
+const useProjectSynced = (open: boolean, login: string | null) => {
+  const [synced, setSynced] = useState(false);
+  useEffect(() => {
+    if (!open || login === null) return;
+    let live = true;
+    setSynced(false);
+    const name = PgExplorer.currentWorkspaceName;
+    const id = name ? PgExplorer.workspaceIdOf(name) : undefined;
+    if (!name || !id) return;
+    const read = () =>
+      syncMarkerOf(id, name)
+        .then((marker) => {
+          if (live) setSynced(marker === undefined);
+        })
+        .catch((error: unknown) => {
+          // The sheet keeps the honest line; the marker read is reported
+          log.warn("hand-off could not read the sync marker", {
+            context: { error: String(error) },
+          });
+        });
+    void read();
+    const moved = onDidChangeSyncMarkers(() => void read());
+    return () => {
+      live = false;
+      moved.dispose();
+    };
+  }, [open, login]);
+  return synced;
+};
+
 /** Who the sheet speaks to, re-read when the session moves */
-const useAccount = (): HandoffAccount => {
+const useAccount = (open: boolean): HandoffAccount => {
   const [login, signingIn, error] = JSON.parse(
     useSyncExternalStore(subscribe, snapshot)
   ) as [string | null, boolean, string | null];
+  const synced = useProjectSynced(open, login);
   return login === null
     ? { status: "signed-out", signingIn, error }
-    : { status: "signed-in", login };
+    : { status: "signed-in", login, synced };
 };
 
 /**
@@ -52,7 +91,7 @@ const reportSignIn = reportButtonFailure("sign in with GitHub");
 /** `BaseHandoff` with the session, the clipboard and the share sheet */
 const Handoff = () => {
   const [open, setOpen] = useState(false);
-  const account = useAccount();
+  const account = useAccount(open);
   // Read on opening, not on every render: the sheet shows the page it was opened on
   const [link, setLink] = useState(linkHere);
 
