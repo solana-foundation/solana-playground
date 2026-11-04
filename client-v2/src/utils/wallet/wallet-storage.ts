@@ -82,7 +82,7 @@ const reportFailureWith =
 const reportFailure = reportFailureWith({});
 
 /** Report a failure with the count of accounts it concerns */
-const reportFailureFor = (state: SerializedWalletState) =>
+const reportFailureFor = (state: { accounts: unknown[] }) =>
   reportFailureWith({ accounts: state.accounts.length });
 
 /** Whether `value` is an account with a 64-byte keypair */
@@ -277,8 +277,13 @@ export const walletStorageWith =
     /** The text `keepUnsaved` put in `localStorage`, removed once the save lands */
     let keptText: string | undefined;
 
-    /** The `localStorage` wallet and its text, or `undefined` for none */
-    const readLocal = () => {
+    /**
+     * The `localStorage` wallet and its text, or `undefined` for none
+     *
+     * @param onLegacy what to do with the text of a pre-accounts wallet,
+     * which is read as none
+     */
+    const readLocalWith = (onLegacy: (text: string) => void) => () => {
       let text: string | null;
       try {
         text = local.getItem(WALLET_LOCAL_KEY);
@@ -299,7 +304,10 @@ export const walletStorageWith =
       }
       // The pre-accounts format: `wallet.ts`'s `migrate` upgrades it in place
       // before this runs in its own tab, so here it is another tab mid-upgrade
-      if (isLegacyWallet(value)) return undefined;
+      if (isLegacyWallet(value)) {
+        onLegacy(text);
+        return undefined;
+      }
       if (!isStoredWallet(value)) {
         keepUnreadable(text);
         reportFailure("Unreadable wallet in localStorage", new Error("shape"));
@@ -307,6 +315,8 @@ export const walletStorageWith =
       }
       return { ...partitionWallet(value), text };
     };
+
+    const readLocal = readLocalWith(() => undefined);
 
     /** Keep the first unreadable copy aside; a later one never replaces it */
     const keepUnreadable = (text: string) => {
@@ -320,7 +330,7 @@ export const walletStorageWith =
     };
 
     /** Whether `localStorage` took the wallet */
-    const writeLocal = (state: SerializedWalletState) => {
+    const writeLocal = (state: StoredWallet) => {
       try {
         local.setItem(WALLET_LOCAL_KEY, JSON.stringify(state));
         return true;
@@ -498,8 +508,23 @@ export const walletStorageWith =
        */
       keepUnsaved(): void {
         if (unsaved === undefined) return;
-        writeLocal(unsaved);
-        keptText = JSON.stringify(unsaved);
+        // The entry may hold the only copy of a key: another tab, on this
+        // version or the previous one, may have written it since this tab
+        // read it. So it is merged, the pending save first; its damaged
+        // accounts ride along for the next read to set aside, and an entry
+        // that cannot be merged is kept aside before it is overwritten.
+        const existing = readLocalWith(keepUnreadable)();
+        const kept: StoredWallet = existing
+          ? mergeWallets(unsaved, existing.wallet)
+          : unsaved;
+        const withDamaged: StoredWallet = {
+          state: kept.state,
+          accounts: kept.accounts.concat(existing?.damaged ?? []),
+          currentIndex: kept.currentIndex,
+          standardName: kept.standardName,
+        };
+        writeLocal(withDamaged);
+        keptText = JSON.stringify(withDamaged);
       },
     };
   };
@@ -926,6 +951,46 @@ if (import.meta.vitest) {
 
       expect(local.items.get(WALLET_LOCAL_KEY)).toBe(JSON.stringify(next));
       expect(store.held()).toBeUndefined();
+    });
+
+    it("keeps the accounts another tab put in localStorage when the page hides", async () => {
+      const { store } = heldLock();
+      const other = walletOf([account(2, "Wallet 2")]);
+      const local = memoryLocal(JSON.stringify(other));
+      const storage = walletStorageWith(store)(local);
+
+      const next = walletOf([account(1, "Wallet 1")]);
+      void storage.write(next);
+      storage.keepUnsaved();
+
+      const kept = JSON.parse(local.items.get(WALLET_LOCAL_KEY) ?? "{}");
+      // The pending save first: its accounts, names and current index win
+      expect(kept).toEqual(
+        walletOf([account(1, "Wallet 1"), account(2, "Wallet 2")])
+      );
+    });
+
+    it("keeps an unreadable localStorage entry aside before the page hides over it", () => {
+      const { store } = heldLock();
+      const local = memoryLocal("{not json");
+      const storage = walletStorageWith(store)(local);
+
+      void storage.write(walletOf([account(1, "Wallet 1")]));
+      storage.keepUnsaved();
+
+      expect(local.items.get("wallet.unreadable")).toBe("{not json");
+    });
+
+    it("keeps a pre-accounts localStorage wallet aside before the page hides over it", () => {
+      const { store } = heldLock();
+      const legacy = JSON.stringify({ sk: kp(3) });
+      const local = memoryLocal(legacy);
+      const storage = walletStorageWith(store)(local);
+
+      void storage.write(walletOf([account(1, "Wallet 1")]));
+      storage.keepUnsaved();
+
+      expect(local.items.get("wallet.unreadable")).toBe(legacy);
     });
 
     it("removes the kept copy once the save lands in the store", async () => {
