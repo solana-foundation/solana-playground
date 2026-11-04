@@ -3,8 +3,9 @@
  *
  * web3.js signs synchronously (`tx.sign(keypair)`), but only the page holds
  * the key and answers over a message. So signing with a sandbox keypair puts
- * a random 64-byte placeholder in the signer's slot and asks the page at
- * once. The real signature replaces the placeholder in the transaction when
+ * a 64-byte placeholder in the signer's slot and asks the page at once. The
+ * placeholder is random the first time a signer signs a message and the same
+ * every later time in the run, as the real signature is. The real signature replaces the placeholder in the transaction when
  * it arrives, and in the wire bytes when the transaction is sent or simulated
  * (`spliceRpcBody`, called by the RPC bridge), so code that signs first and
  * sends later works unchanged. `sign` and `partialSign` return a promise that
@@ -53,7 +54,18 @@ const isPlaceholder = (signature: Uint8Array | null | undefined) =>
   pending.has(hexOf(signature));
 
 /**
- * Hands out a placeholder for a signature the page is asked for at once.
+ * The placeholder already handed out for a signer and message, by
+ * `<public key>:<message hex>`: signing the same message as the same signer
+ * again gets the same placeholder, as a real signature would be the same.
+ * web3.js's `Connection.sendTransaction` relies on that to see a repeated
+ * transaction and fetch a fresh blockhash for it.
+ */
+const placeholderFor = new Map<string, Uint8Array>();
+
+/**
+ * Hands out a placeholder for a signature the page is asked for at once, or
+ * the one already handed out for the same signer and message, whose request
+ * to the page it shares.
  *
  * @param writeBack puts the real signature in the transaction, if its slot
  * still holds the placeholder
@@ -63,10 +75,22 @@ const placeholderWith =
   (writeBack: (placeholder: Uint8Array, signature: Uint8Array) => void) =>
   (signer: SandboxKeypair) =>
   (bytes: Uint8Array) => {
+    const request = `${signer.publicKey.toBase58()}:${hexOf(bytes)}`;
+    const known = placeholderFor.get(request);
+    const entry = known && pending.get(hexOf(known));
+    if (known && entry) {
+      const placeholder = Uint8Array.from(known);
+      // Observed as below; the refusal reaches the code from `entry`
+      entry.signature
+        .then((real) => writeBack(placeholder, real))
+        .catch((error: unknown) => error);
+      return placeholder;
+    }
+
     const placeholder = crypto.getRandomValues(
       new Uint8Array(SIGNATURE_LENGTH)
     );
-    const entry: Pending = {
+    const created: Pending = {
       signature: signer[SIGN_THROUGH_PAGE](bytes).then((real) => {
         writeBack(placeholder, real);
         return real;
@@ -77,8 +101,9 @@ const placeholderWith =
     // Observed here so a `tx.sign` nobody awaits is no unhandled rejection;
     // the refusal still reaches the code where the transaction is sent or
     // awaited, from the same promise
-    entry.signature.catch((error: unknown) => error);
-    pending.set(hexOf(placeholder), entry);
+    created.signature.catch((error: unknown) => error);
+    pending.set(hexOf(placeholder), created);
+    placeholderFor.set(request, Uint8Array.from(placeholder));
     return placeholder;
   };
 
