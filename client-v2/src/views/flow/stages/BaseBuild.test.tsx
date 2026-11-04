@@ -51,7 +51,7 @@ const props = (
   ms: 2900,
   onBuild: vi.fn(() => Promise.resolve()),
   onContinue: vi.fn(),
-  onExport: vi.fn(() => Promise.resolve()),
+  hasIdl: false,
   onAsk: vi.fn(),
   onOpenFile: vi.fn(),
   onShowLog: vi.fn(),
@@ -157,8 +157,53 @@ describe("BaseBuild", () => {
     expect(brandButtons(container)).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Continue to Deploy" }));
     expect(p.onContinue).toHaveBeenCalled();
-    expect(screen.getByRole("button", { name: "Export project" })).toBeTruthy();
+    // A project action, in Settings and the explorer, not a build result
+    expect(screen.queryByRole("button", { name: "Export project" })).toBeNull();
     expect(lastIsActions(container)).toBe("stage-empty-actions");
+  });
+
+  // An edit after a build needs a new build, without the assistant or a command
+  it("offers Build again as the outlined pill beside Deploy", () => {
+    const p = props({ kind: "succeeded" });
+    render(<BaseBuild {...p} />);
+
+    const again = screen.getByRole("button", { name: "Build again" });
+    expect(again.getAttribute("data-variant")).toBe("outline");
+    fireEvent.click(again);
+    expect(p.onBuild).toHaveBeenCalled();
+  });
+
+  // Nothing is below to point at, and the app cannot tell an edit
+  it.each([
+    [
+      true,
+      "The program and its IDL are ready to deploy. Edited since? Build again first.",
+    ],
+    [false, "The program is ready to deploy. Edited since? Build again first."],
+  ])(
+    "names the IDL in the success line only when there is one (%s)",
+    (hasIdl, line) => {
+      const p = props({ kind: "succeeded" });
+      p.hasIdl = hasIdl;
+      render(<BaseBuild {...p} />);
+
+      expect(screen.getByText(line)).toBeTruthy();
+    }
+  );
+
+  // Without an IDL the take-away row would be an empty gap under the pills
+  it.each([
+    [true, 1],
+    [false, 0],
+  ])("draws the IDL row only when there is an IDL (%s)", (hasIdl, rows) => {
+    const p = props({ kind: "succeeded" });
+    p.hasIdl = hasIdl;
+    p.idlActions = <a href="#idl">Download IDL</a>;
+    render(<BaseBuild {...p} />);
+
+    expect(
+      screen.queryAllByRole("link", { name: "Download IDL" })
+    ).toHaveLength(rows);
   });
 
   it("says a build that never reached the compiler did not start (BUILD-04)", async () => {

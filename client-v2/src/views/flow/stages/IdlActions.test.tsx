@@ -107,12 +107,18 @@ describe("IdlActions", () => {
     expect(mocks.warn).toHaveBeenCalled();
   });
 
-  it("holds Download IDL until a build produced one", () => {
-    render(<IdlActions mode="download" />);
+  it("offers no Download IDL until a build produced one", () => {
+    const { container } = render(<IdlActions mode="download" />);
 
-    const button = screen.getByRole("button", { name: "Download IDL" });
-    expect(button).toHaveProperty("disabled", true);
-    expect(button.getAttribute("title")).toBe("Build successfully first");
+    expect(container.textContent).toBe("");
+  });
+
+  it("draws Download IDL as a link where asked", () => {
+    mocks.idl = { name: "counter", instructions: [] };
+    render(<IdlActions mode="download" look="link" />);
+
+    const link = screen.getByRole("link", { name: "Download IDL" });
+    expect(link.getAttribute("data-variant")).toBe("link");
   });
 
   it("downloads the IDL a build produced", () => {

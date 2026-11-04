@@ -205,12 +205,14 @@ const LeftPanel: FC<React.PropsWithChildren<LeftPanelProps>> = ({
               a way out that scrolls away is not a way out. */}
         {showSteps && frontierStep && (
           // The prototype's `SkipFooter`: a full-width row under the rail,
-          // underlined from the phone width up, plain and thumb-sized below
+          // underlined from the phone width up, plain and thumb-sized below.
+          // Only its top edge is a line: Button's own border on the other
+          // three doubled the column dividers and drew one under the foot
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            className="h-7 w-full shrink-0 rounded-none border-t border-border px-3.5 text-[0.8125rem] font-normal text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:font-act max-md:no-underline"
+            className="h-7 w-full shrink-0 rounded-none border-0 border-t border-border px-3.5 text-[0.8125rem] font-normal text-muted-foreground underline max-md:h-auto max-md:min-h-[calc(3.25rem+env(safe-area-inset-bottom,0px))] max-md:px-5 max-md:pb-[env(safe-area-inset-bottom,0px)] max-md:text-control max-md:font-act max-md:no-underline"
             title={`Nothing has proved this step yet — ${frontierStep.verifiedBy}. Moving on now is recorded as a skip, and clears itself if you come back and prove it.`}
             onClick={() => PgLesson.pass()}
           >

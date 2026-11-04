@@ -160,6 +160,18 @@ describe("LeftPanel in a lesson", () => {
     fireEvent.click(requireFor("the Skip button")(skip()));
     expect(given.pass).toHaveBeenCalledTimes(1);
   });
+
+  // Its sides and foot are the column dividers' and the window's, not its own
+  it("draws Skip this step with a top line only", () => {
+    draw(false);
+    given.canPass = true;
+    act(() => given.listener?.({ path: { id: "lesson" }, record: [] }));
+    const classes = screen
+      .getByRole("button", { name: "Skip this step" })
+      .className.split(" ");
+    expect(classes).toContain("border-0");
+    expect(classes).toContain("border-t");
+  });
 });
 
 describe("isLessonTab", () => {

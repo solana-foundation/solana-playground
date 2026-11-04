@@ -72,13 +72,17 @@ export interface BaseBuildProps {
   offline: boolean;
   onBuild: () => unknown;
   onContinue: () => void;
-  onExport: () => unknown;
+  /**
+   * The app holds an IDL, the build's or an uploaded one: the success line
+   * names it and the Download IDL row is drawn
+   */
+  hasIdl: boolean;
   /** Sends a prompt to the assistant: an error card's Explain or Fix */
   onAsk: (prompt: string) => void;
   onOpenFile: (path: string) => void;
   /** Opens the console, where the terminal holds the whole output */
   onShowLog: () => void;
-  /** Download IDL, shown with a successful build */
+  /** Download IDL, a link under Build succeeded's pills, drawn only with `hasIdl` */
   idlActions: ReactNode;
 }
 
@@ -338,18 +342,24 @@ const Succeeded = (p: BaseBuildProps) => (
     icon={<CircleCheck className="text-success" />}
     title="Build succeeded"
     meta={p.ms === null ? null : `Built in ${msLabel(p.ms)}`}
-    description="The IDL below reflects this build. Deploy when ready."
+    // The app cannot tell an edit since the build, so the line asks
+    description={
+      p.hasIdl
+        ? "The program and its IDL are ready to deploy. Edited since? Build again first."
+        : "The program is ready to deploy. Edited since? Build again first."
+    }
     actions={
       <>
+        {/* What comes next: go on, or build again after an edit. Export
+            project is not here: it is a project action, in Settings and
+            the explorer, not a build result */}
         <ContinueButton p={p} />
-        {p.idlActions}
-        <AsyncButton
-          variant="outline"
-          onClick={p.onExport}
-          onError={reportButtonFailure("export the project")}
-        >
-          Export project
-        </AsyncButton>
+        <BuildButton p={p} label="Build again" variant="outline" />
+        {/* The one place to download the IDL: a link under the pills, as
+            Unreached's Show full log and Deploy's Upload IDL */}
+        {p.hasIdl && (
+          <div className="flex w-full justify-center">{p.idlActions}</div>
+        )}
       </>
     }
     progress={p}
