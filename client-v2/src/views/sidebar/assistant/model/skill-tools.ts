@@ -1,4 +1,4 @@
-import { bindTool } from "@/entities/agent-tools";
+import { bindToolFor } from "@/entities/agent-tools";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 import {
@@ -28,12 +28,12 @@ const explain = (e: unknown) => (e instanceof Error ? e.message : String(e));
  * @returns vendor-neutral tool definitions, so every provider gets them
  */
 export const createSkillTools = (): ToolDefinition[] => [
-  bindTool("list_skills", () => {
+  bindToolFor("list_skills")(() => {
     PgAssistant.addToolCall("listed the skills");
     return describeCatalog(PgAssistant.enabledSkills);
   }),
 
-  bindTool("load_skill", async (input) => {
+  bindToolFor("load_skill")(async (input) => {
     const id = str(input, "id");
     try {
       const skill = requireSkill(
@@ -48,7 +48,7 @@ export const createSkillTools = (): ToolDefinition[] => [
     }
   }),
 
-  bindTool("read_skill_reference", async (input) => {
+  bindToolFor("read_skill_reference")(async (input) => {
     const id = str(input, "id");
     const path = str(input, "path");
     try {

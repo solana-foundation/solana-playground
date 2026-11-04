@@ -4,6 +4,6 @@ export { report } from "./model/diagnostics";
 export { toReplayMessagesWith } from "./model/replay";
 export {
   isToolCallRecord,
-  toToolCallRecord,
+  toToolCallRecordWith,
   type ToolCallRecord,
 } from "./model/tool-call";

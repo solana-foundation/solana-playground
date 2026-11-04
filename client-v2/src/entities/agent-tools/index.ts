@@ -13,14 +13,11 @@ export type { ToolDeclaration } from "./model/registry.mjs";
  * differently from its declaration, which `server.mjs` exposes to server code.
  *
  * @param name a name in {@link BUILTIN_TOOLS}
- * @param run what the tool does in this tab
+ * @returns a function taking what the tool does in this tab
  * @throws when the name is not declared, so a runner cannot exist without a
  *   declaration
  */
-export const bindTool = (
-  name: string,
-  run: ToolDefinition["run"]
-): ToolDefinition => {
+export const bindToolFor = (name: string) => {
   const declared = BUILTIN_TOOLS.find((tool) => tool.name === name);
   if (!declared) {
     throw new Error(
@@ -29,7 +26,12 @@ export const bindTool = (
     );
   }
   const { description, schema } = declared;
-  return { name, description, schema, run };
+  return (run: ToolDefinition["run"]): ToolDefinition => ({
+    name,
+    description,
+    schema,
+    run,
+  });
 };
 
 if (import.meta.vitest) {
@@ -47,9 +49,9 @@ if (import.meta.vitest) {
       expect(server.BUILTIN_TOOLS).toBe(browser.BUILTIN_TOOLS);
     });
 
-    it("bindTool takes the description and schema from the registry", () => {
+    it("bindToolFor takes the description and schema from the registry", () => {
       const run = () => "ran";
-      const tool = bindTool("read_file", run);
+      const tool = bindToolFor("read_file")(run);
       const declared = BUILTIN_TOOLS.find((t) => t.name === "read_file");
       if (!declared) throw new Error("read_file is not in the registry");
 
@@ -58,8 +60,8 @@ if (import.meta.vitest) {
       expect(tool.run).toBe(run);
     });
 
-    it("bindTool refuses a name the registry does not declare", () => {
-      expect(() => bindTool("format_disk", () => "")).toThrow(
+    it("bindToolFor refuses a name the registry does not declare", () => {
+      expect(() => bindToolFor("format_disk")).toThrow(
         /"format_disk" is not declared/
       );
     });

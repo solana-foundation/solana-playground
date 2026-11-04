@@ -1,4 +1,4 @@
-import { bindTool } from "@/entities/agent-tools";
+import { bindToolFor } from "@/entities/agent-tools";
 import type { ToolDefinition, ToolInput } from "@/shared/lib/ai";
 
 import { type PlaygroundBridge, realBridge } from "../bridge/playground-bridge";
@@ -48,7 +48,7 @@ export const createTools = (
   ...createSkillTools(),
   ...createMcpTools(),
 
-  bindTool("read_file", (input) => {
+  bindToolFor("read_file")((input) => {
     const asked = str(input, "path");
     const path = bridge.toProjectPath(asked);
     // The context is the user's decision (HOO-2424): a file they did not open
@@ -62,7 +62,7 @@ export const createTools = (
     return content === null ? `There is no file at ${path}.` : content;
   }),
 
-  bindTool("get_build_error", () => {
+  bindToolFor("get_build_error")(() => {
     PgAssistant.addToolCall("read the build output");
     const { buildError } = bridge.getProjectContext();
     return (
@@ -71,7 +71,7 @@ export const createTools = (
     );
   }),
 
-  bindTool("write_file", async (input) => {
+  bindToolFor("write_file")(async (input) => {
     const asked = str(input, "path");
     const path = bridge.toProjectPath(asked);
     if (path === undefined) {
@@ -122,7 +122,7 @@ export const createTools = (
     }
   }),
 
-  bindTool("build", async () => {
+  bindToolFor("build")(async () => {
     const { id: approvalId, allowed } = await PgAssistant.requestApproval({
       type: "command",
       name: "build",
@@ -148,7 +148,7 @@ export const createTools = (
     }
   }),
 
-  bindTool("deploy", async () => {
+  bindToolFor("deploy")(async () => {
     const { cluster } = bridge.getProjectContext();
     const { id: approvalId, allowed } = await PgAssistant.requestApproval({
       type: "command",

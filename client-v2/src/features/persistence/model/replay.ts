@@ -91,7 +91,7 @@ const shownWith =
  *
  * Provider-only parts (reasoning signatures, Gemini's thought signatures)
  * were never stored, so a restored thread is honest history rather than a
- * resumed session. Results are cut when stored (`toToolCallRecord`); the live
+ * resumed session. Results are cut when stored (`toToolCallRecordWith`); the live
  * project goes with every turn anyway (`describeProject`), so a file the model
  * read is in front of it again.
  *

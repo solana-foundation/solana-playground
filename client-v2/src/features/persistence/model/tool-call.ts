@@ -8,7 +8,7 @@ import type { ChatItem } from "../../../views/sidebar/assistant/store";
 
 /**
  * One finished tool call as a later turn needs it (HOO-2425), written by
- * `toToolCallRecord`: the key redacted, every string of the input and the
+ * `toToolCallRecordWith`: the key redacted, every string of the input and the
  * result cut, an input that is not an object wrapped in one, and an input
  * still too long replaced by a note of its size. The SDK's call id is not
  * kept: a replay mints its own, since one backend's ids are not valid on
@@ -142,30 +142,38 @@ export const isToolCallRecord = (
 ): item is ChatItem & { kind: "tool"; call: ToolCallRecord } =>
   item.kind === "tool" && item.call !== undefined;
 
-/** A tool's finished call as the thread stores it */
-export const toToolCallRecord = (
-  result: Pick<ToolResultEvent, "toolName" | "input" | "output" | "failed">,
-  apiKey: string | undefined
-): ToolCallRecord => {
-  const output = cut(redactKey(result.output, apiKey), RESULT_CAP);
-  const call: ToolCallRecord = {
-    name: replayableName(result.toolName),
-    input: capInput(result.input, apiKey),
-    output: output.trim() ? output : NO_OUTPUT,
+/**
+ * A tool's finished call as the thread stores it
+ *
+ * @param apiKey the key of the connection whose turn ran the tool, redacted
+ *   from the input and the result
+ */
+export const toToolCallRecordWith =
+  (apiKey: string | undefined) =>
+  (
+    result: Pick<ToolResultEvent, "toolName" | "input" | "output" | "failed">
+  ): ToolCallRecord => {
+    const output = cut(redactKey(result.output, apiKey), RESULT_CAP);
+    const call: ToolCallRecord = {
+      name: replayableName(result.toolName),
+      input: capInput(result.input, apiKey),
+      output: output.trim() ? output : NO_OUTPUT,
+    };
+    if (result.failed) call.failed = true;
+    return call;
   };
-  if (result.failed) call.failed = true;
-  return call;
-};
 
 if (import.meta.vitest) {
   const { describe, it, expect } = import.meta.vitest;
 
   describe("features/persistence/model/tool-call", () => {
     const recordWith = (output: string) => (input: unknown) =>
-      toToolCallRecord(
-        { toolName: "probe", input, output, failed: false },
-        undefined
-      );
+      toToolCallRecordWith(undefined)({
+        toolName: "probe",
+        input,
+        output,
+        failed: false,
+      });
     const record = recordWith("ok");
 
     it("wraps an input that is not an object, so Anthropic takes the replay", () => {
@@ -222,15 +230,12 @@ if (import.meta.vitest) {
     });
 
     it("stores a made-up tool name as one a replay can send", () => {
-      const { name } = toToolCallRecord(
-        {
-          toolName: "functions.read file",
-          input: {},
-          output: "Not a tool",
-          failed: true,
-        },
-        undefined
-      );
+      const { name } = toToolCallRecordWith(undefined)({
+        toolName: "functions.read file",
+        input: {},
+        output: "Not a tool",
+        failed: true,
+      });
 
       expect(name).toBe("functions_read_file");
       expect(TOOL_NAME.test(name)).toBe(true);
@@ -238,10 +243,12 @@ if (import.meta.vitest) {
 
     it("starts a made-up name with a letter or underscore, as Gemini requires", () => {
       expect(record({}).name).toBe("probe");
-      const { name } = toToolCallRecord(
-        { toolName: "1inch-quote", input: {}, output: "x", failed: true },
-        undefined
-      );
+      const { name } = toToolCallRecordWith(undefined)({
+        toolName: "1inch-quote",
+        input: {},
+        output: "x",
+        failed: true,
+      });
 
       expect(name).toBe("_1inch-quote");
       expect(TOOL_NAME.test(name)).toBe(true);
@@ -253,25 +260,24 @@ if (import.meta.vitest) {
 
     it("redacts the key from a result", () => {
       const key = "sk-test-output-0123456789";
-      const { output } = toToolCallRecord(
-        { toolName: "probe", input: {}, output: `got ${key}`, failed: false },
-        key
-      );
+      const { output } = toToolCallRecordWith(key)({
+        toolName: "probe",
+        input: {},
+        output: `got ${key}`,
+        failed: false,
+      });
 
       expect(output).not.toContain(key);
     });
 
     it("redacts the key inside a nested input", () => {
       const key = "sk-test-nested-0123456789";
-      const { input } = toToolCallRecord(
-        {
-          toolName: "probe",
-          input: { headers: [{ auth: `Bearer ${key}` }] },
-          output: "ok",
-          failed: false,
-        },
-        key
-      );
+      const { input } = toToolCallRecordWith(key)({
+        toolName: "probe",
+        input: { headers: [{ auth: `Bearer ${key}` }] },
+        output: "ok",
+        failed: false,
+      });
 
       expect(JSON.stringify(input)).not.toContain(key);
     });

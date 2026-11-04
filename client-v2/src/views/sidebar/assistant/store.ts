@@ -17,7 +17,7 @@ import {
   isToolCallRecord,
   report,
   type ToolCallRecord,
-  toToolCallRecord,
+  toToolCallRecordWith,
 } from "../../../features/persistence";
 import {
   mergeThreads,
@@ -1109,7 +1109,7 @@ export class PgAssistant {
     if (PgAssistant._dropsCut("tool", result.toolName)) return;
     let call: ToolCallRecord;
     try {
-      call = toToolCallRecord(result, apiKey);
+      call = toToolCallRecordWith(apiKey)(result);
     } catch (error) {
       log.error(error, {
         report: true,
