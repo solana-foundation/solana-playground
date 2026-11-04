@@ -1,4 +1,5 @@
 import type { WalletNoticeKind } from "../../entities/wallet";
+import { createLogger } from "../../shared/lib/logger";
 import { PgCommon } from "../common";
 import { PgConnection } from "../connection";
 import {
@@ -91,21 +92,42 @@ const localStorageOrRefusal = (): Pick<
   }
 };
 
-/** The notices this page load has already shown, each at most once */
+const log = createLogger("wallet:notice");
+
+/** The notices this page load has already raised, each at most once */
 const toldNotices = new Set<WalletNoticeKind>();
 
 /**
- * Show a wallet storage notice until the user closes it, once a page load:
- * every failure is logged, and a toast per save would bury the page
+ * Notices raised before the toast host listens (the wallet is read before
+ * the app mounts); `PgWallet.releaseNotices` shows them and ends the hold
  */
-const tell = async (notice: WalletNoticeKind) => {
-  if (toldNotices.has(notice)) return;
-  toldNotices.add(notice);
+let heldNotices: WalletNoticeKind[] | undefined = [];
+
+/** Show a wallet storage notice until the user closes it */
+const show = async (notice: WalletNoticeKind) => {
   const { WalletNotice } = await import("../../entities/wallet");
   PgView.setToast(WalletNotice, {
     componentProps: { notice },
     options: { name: `wallet-${notice}`, duration: "persistent" },
   });
+};
+
+const showOrLog = (notice: WalletNoticeKind) => {
+  show(notice).catch((error: unknown) => {
+    // The failure it tells of is logged already; this is the notice's own
+    log.error(error, { report: true, context: { notice } });
+  });
+};
+
+/**
+ * Tell the user of a wallet storage failure, once a page load: every failure
+ * is logged, and a toast per save would bury the page
+ */
+const tell = (notice: WalletNoticeKind) => {
+  if (toldNotices.has(notice)) return;
+  toldNotices.add(notice);
+  if (heldNotices) heldNotices.push(notice);
+  else showOrLog(notice);
 };
 
 const storage = {
@@ -114,6 +136,7 @@ const storage = {
     const read = await walletStorage().read();
     switch (read.kind) {
       case "wallet":
+        if (read.setAside > 0) tell("set-aside");
         return { ...defaultState, ...read.wallet };
       case "none":
         return defaultState;
@@ -136,7 +159,7 @@ const storage = {
     };
 
     const outcome = await walletStorage().write(serializedState);
-    if (outcome === "lost") await tell("save-failed");
+    if (outcome === "lost") tell("save-failed");
   },
 };
 
@@ -512,6 +535,16 @@ class _PgWallet {
       name: account.name,
       publicKey: publicKeyOf(account.kp),
     });
+  }
+
+  /**
+   * Show the storage notices raised before the toast host listened, and show
+   * later ones at once. The `wallet-notice` effect calls it after mount.
+   */
+  static releaseNotices() {
+    const held = heldNotices ?? [];
+    heldNotices = undefined;
+    held.forEach(showOrLog);
   }
 
   /**
