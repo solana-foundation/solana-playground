@@ -19,11 +19,10 @@ const MASK = "[redacted]";
  * characters, replaced by `[redacted]`. A key shorter than that is removed
  * only whole. Matching is literal, never a pattern built from the key.
  *
- * @param {string} text
  * @param {ReadonlyArray<string | undefined | null>} secrets unset keys are skipped
- * @returns {string}
+ * @returns {(text: string) => string}
  */
-export const redactSecrets = (text, secrets) => {
+export const redactSecretsWith = (secrets) => (text) => {
   let out = text;
   for (const secret of new Set(secrets)) {
     if (!secret) continue;

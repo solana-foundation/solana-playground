@@ -348,15 +348,12 @@ describe("the assistant's provider", () => {
     });
 
     it("replays a stored call to Anthropic as tool_use and tool_result", async () => {
-      PgAssistant.addToolResult(
-        {
-          toolName: "read_file",
-          input: { path: "src/lib.rs" },
-          output: "Not found",
-          failed: true,
-        },
-        undefined
-      );
+      PgAssistant.addToolResultWith(undefined)({
+        toolName: "read_file",
+        input: { path: "src/lib.rs" },
+        output: "Not found",
+        failed: true,
+      });
       const asked: ChatItem = {
         id: "u-1",
         createdAt: "2026-01-01T00:00:00.000Z",

@@ -124,17 +124,18 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
  * arguments the model got wrong) is wrapped as `{ value }`, so the replayed
  * call stays one Anthropic accepts.
  */
-const capInput = (
-  input: unknown,
-  apiKey: string | undefined
-): Record<string, unknown> => {
-  const capped = capInputValueWith({ apiKey, seen: new WeakSet() })(input);
-  let object: Record<string, unknown> = {};
-  if (isPlainObject(capped)) object = capped;
-  else if (capped !== undefined) object = { value: capped };
-  const size = JSON.stringify(object).length;
-  return size > INPUT_CAP ? { omitted: `${size} characters of input` } : object;
-};
+const capInputWith =
+  (apiKey: string | undefined) =>
+  (input: unknown): Record<string, unknown> => {
+    const capped = capInputValueWith({ apiKey, seen: new WeakSet() })(input);
+    let object: Record<string, unknown> = {};
+    if (isPlainObject(capped)) object = capped;
+    else if (capped !== undefined) object = { value: capped };
+    const size = JSON.stringify(object).length;
+    return size > INPUT_CAP
+      ? { omitted: `${size} characters of input` }
+      : object;
+  };
 
 /** Whether an item is a stored call rather than a marker the thread draws */
 export const isToolCallRecord = (
@@ -156,7 +157,7 @@ export const toToolCallRecordWith =
     const output = cut(redactKey(result.output, apiKey), RESULT_CAP);
     const call: ToolCallRecord = {
       name: replayableName(result.toolName),
-      input: capInput(result.input, apiKey),
+      input: capInputWith(apiKey)(result.input),
       output: output.trim() ? output : NO_OUTPUT,
     };
     if (result.failed) call.failed = true;

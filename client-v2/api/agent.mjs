@@ -41,7 +41,7 @@ import {
   POOL_EXHAUSTED_REASON,
   readBoundedBody,
   recordCapped,
-  redactSecrets,
+  redactSecretsWith,
   REFUSAL_MESSAGES,
   REFUSAL_STATUS,
   reserve,
@@ -446,9 +446,8 @@ const relay = async (res, configured, body, tier, now) => {
   // of its characters, like any other. The upstream's own 200 stream is
   // forwarded as it comes, and is not this function's.
   const redact = (text) =>
-    redactSecrets(
-      text.slice(0, MAX_ERROR_TEXT),
-      Object.values(configured.keys)
+    redactSecretsWith(Object.values(configured.keys))(
+      text.slice(0, MAX_ERROR_TEXT)
     );
 
   let response;

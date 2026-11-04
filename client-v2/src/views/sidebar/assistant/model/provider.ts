@@ -115,7 +115,7 @@ export const createProvider = (
           },
           // Stored with the thread, so a provider built for it later replays the call
           onToolResult: (toolResult) =>
-            PgAssistant.addToolResult(toolResult, connection.apiKey),
+            PgAssistant.addToolResultWith(connection.apiKey)(toolResult),
         });
       } catch (e) {
         if (!(e instanceof ai.AiTurnError)) throw e;

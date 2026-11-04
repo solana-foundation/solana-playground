@@ -23,7 +23,7 @@ export {
   toMicro,
   utcDay,
 } from "./server/ledger.mjs";
-export { redactSecrets } from "./server/redact.mjs";
+export { redactSecretsWith } from "./server/redact.mjs";
 export { usageReader } from "./server/stream-usage.mjs";
 export {
   DAILY_CAP_REASON,

@@ -361,6 +361,12 @@ const holdsNewer = (
  * workspace, so a reload and a project switch both come back to the right
  * conversation. See `docs/persistent-conversations-spec.md`.
  */
+/** What `addToolResultWith` stores of a tool's return or throw */
+type ToolResultRecord = Pick<
+  ToolResultEvent,
+  "toolName" | "input" | "output" | "failed"
+>;
+
 export class PgAssistant {
   static get items(): readonly ChatItem[] {
     return PgAssistant._items;
@@ -1102,29 +1108,33 @@ export class PgAssistant {
    *
    * @param apiKey the key of the connection whose turn ran the tool, redacted
    */
-  static addToolResult(
-    result: Pick<ToolResultEvent, "toolName" | "input" | "output" | "failed">,
-    apiKey = PgAssistant._connection?.apiKey
-  ) {
-    if (PgAssistant._dropsCut("tool", result.toolName)) return;
-    let call: ToolCallRecord;
-    try {
-      call = toToolCallRecordWith(apiKey)(result);
-    } catch (error) {
-      log.error(error, {
-        report: true,
-        context: { what: "store a tool call", tool: result.toolName },
+  static addToolResultWith(apiKey: string | undefined) {
+    return (result: ToolResultRecord) => {
+      if (PgAssistant._dropsCut("tool", result.toolName)) return;
+      let call: ToolCallRecord;
+      try {
+        call = toToolCallRecordWith(apiKey)(result);
+      } catch (error) {
+        log.error(error, {
+          report: true,
+          context: { what: "store a tool call", tool: result.toolName },
+        });
+        return;
+      }
+      PgAssistant._items.push({
+        kind: "tool",
+        id: makeId(),
+        createdAt: created(),
+        label: result.toolName,
+        call,
       });
-      return;
-    }
-    PgAssistant._items.push({
-      kind: "tool",
-      id: makeId(),
-      createdAt: created(),
-      label: result.toolName,
-      call,
-    });
-    PgAssistant._emit();
+      PgAssistant._emit();
+    };
+  }
+
+  /** `addToolResultWith` the key of the connection open now */
+  static addToolResult(result: ToolResultRecord) {
+    PgAssistant.addToolResultWith(PgAssistant._connection?.apiKey)(result);
   }
 
   static addNotice(text: string) {
