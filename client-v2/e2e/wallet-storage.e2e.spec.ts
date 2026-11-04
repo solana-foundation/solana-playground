@@ -16,27 +16,39 @@ import {
  * load, and nothing is left behind in `localStorage`.
  */
 
-/** The wallet record in its IndexedDB database, read in the page */
-const storedWallet = (page: Page) =>
-  page.evaluate(
-    () =>
-      new Promise<
-        { accounts: Array<{ kp: number[]; name: string }> } | undefined
-      >((resolve, reject) => {
-        const open = indexedDB.open("pg-wallet");
-        open.onerror = () => reject(open.error);
-        open.onsuccess = () => {
-          const db = open.result;
-          if (!db.objectStoreNames.contains("state")) return resolve(undefined);
-          const get = db
-            .transaction("state", "readonly")
-            .objectStore("state")
-            .get("wallet");
-          get.onerror = () => reject(get.error);
-          get.onsuccess = () => resolve(get.result);
-        };
-      })
-  );
+/** A record in the wallet's IndexedDB database, read in the page */
+const storedRecordFor =
+  <T>(key: string) =>
+  (page: Page) =>
+    page.evaluate(
+      (record) =>
+        new Promise<T | undefined>((resolve, reject) => {
+          const open = indexedDB.open("pg-wallet");
+          open.onerror = () => reject(open.error);
+          open.onsuccess = () => {
+            const db = open.result;
+            if (!db.objectStoreNames.contains("state")) {
+              return resolve(undefined);
+            }
+            const get = db
+              .transaction("state", "readonly")
+              .objectStore("state")
+              .get(record);
+            get.onerror = () => reject(get.error);
+            get.onsuccess = () => resolve(get.result);
+          };
+        }),
+      key
+    );
+
+/** The wallet record in its IndexedDB database */
+const storedWallet = storedRecordFor<{
+  accounts: Array<{ kp: number[]; name: string }>;
+  currentIndex: number;
+}>("wallet");
+
+/** The accounts set aside as damaged, in the same database */
+const storedSetAside = storedRecordFor<unknown[]>("set-aside");
 
 const walletStep = (page: Page) =>
   page
@@ -473,4 +485,63 @@ test("wallet-storage: Neither store saves the wallet", async ({ page }) => {
   );
   await page.waitForTimeout(TOAST_RENDER_MS);
   expect(await saveFailedNotices(page).count()).toBe(1);
+});
+
+/** Three accounts, the middle one damaged: a 10-byte keypair */
+const walletWithDamagedAccount = (currentIndex: number) => {
+  const keypairs = [Keypair.generate(), Keypair.generate()];
+  const damaged = {
+    kp: Array.from(keypairs[0].secretKey.slice(0, 10)),
+    name: "Damaged",
+  };
+  const valid = keypairs.map((keypair, i) => ({
+    kp: Array.from(keypair.secretKey),
+    name: `Wallet ${i + 1}`,
+  }));
+  return {
+    addresses: keypairs.map((keypair) => keypair.publicKey.toBase58()),
+    damaged,
+    valid,
+    wallet: {
+      state: "pg",
+      accounts: [valid[0], damaged, valid[1]],
+      currentIndex,
+    },
+  };
+};
+
+/** The toasts that say accounts were set aside */
+const setAsideNotices = (page: Page) =>
+  page.locator("[data-sonner-toast]").filter({
+    hasText: "Some wallet accounts could not be read and were set aside.",
+  });
+
+test("wallet-storage: One of three accounts is damaged", async ({ page }) => {
+  const { addresses, damaged, valid, wallet } = walletWithDamagedAccount(2);
+  await seedLocalWallet(page)(wallet);
+
+  await seedWorkspace(page);
+
+  await expect(walletStep(page)).toContainText(addresses[1].slice(0, 4), LONG);
+  await expect.poll(() => localWallet(page), LONG).toBeNull();
+  expect((await storedWallet(page))?.accounts).toEqual(valid);
+  expect(await storedSetAside(page)).toEqual([damaged]);
+  await expect(setAsideNotices(page)).toHaveCount(1, LONG);
+  await page.waitForTimeout(TOAST_RENDER_MS);
+  expect(await setAsideNotices(page).count()).toBe(1);
+});
+
+test("wallet-storage: The current account is the damaged one", async ({
+  page,
+}) => {
+  const { addresses, wallet } = walletWithDamagedAccount(1);
+  await seedLocalWallet(page)(wallet);
+
+  await seedWorkspace(page);
+
+  await expect(walletStep(page)).toContainText(addresses[0].slice(0, 4), LONG);
+  await expect(walletStep(page)).toContainText(addresses[0].slice(-4));
+  await expect
+    .poll(async () => (await storedWallet(page))?.currentIndex, LONG)
+    .toBe(0);
 });

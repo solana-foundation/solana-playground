@@ -6,12 +6,19 @@ const log = createLogger("wallet:storage");
 /**
  * Where the wallet's serialized state, secret keys included, is kept.
  *
- * The wallet reads and writes its state whole, so the store holds one record.
+ * The wallet reads and writes its state whole, so the store holds one record
+ * for it, and a second one for accounts set aside as damaged.
  */
 export interface WalletStore {
   /** The stored wallet, or `undefined` when there is none */
   read(): Promise<SerializedWalletState | undefined>;
   write(state: SerializedWalletState): Promise<void>;
+  /**
+   * Add damaged accounts to the set-aside record, which no `write` touches,
+   * so a later tool can still recover them. An account already there is not
+   * added twice.
+   */
+  setAside(accounts: unknown[]): Promise<void>;
   /**
    * Run `task` while no other tab runs one on the same store, so one tab's
    * move cannot interleave with another tab's move or save. Where the lock
@@ -40,6 +47,7 @@ export const isIndexedDbMissing = (error: unknown) =>
  */
 const OPEN_TIMEOUT_MS = 5000;
 const RECORD_KEY = "wallet";
+const SET_ASIDE_KEY = "set-aside";
 
 /** Run one request in its own transaction and resolve with its result */
 const requestWith =
@@ -163,6 +171,29 @@ export const indexedDbStoreFor = (name: string): WalletStore => {
         "readwrite"
       )((store) => store.put(state, RECORD_KEY));
     },
+    async setAside(accounts) {
+      const db = await open();
+      // The read and the append in one transaction, so two tabs setting
+      // accounts aside cannot drop each other's
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(STORE_NAME, "readwrite");
+        const store = tx.objectStore(STORE_NAME);
+        const kept = store.get(SET_ASIDE_KEY);
+        kept.onsuccess = () => {
+          const before: unknown[] = Array.isArray(kept.result)
+            ? kept.result
+            : [];
+          const texts = new Set(before.map((item) => JSON.stringify(item)));
+          const added = accounts.filter(
+            (item) => !texts.has(JSON.stringify(item))
+          );
+          store.put(before.concat(added), SET_ASIDE_KEY);
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error ?? kept.error);
+        tx.onabort = () => reject(tx.error ?? new Error("Transaction aborted"));
+      });
+    },
   };
 };
 
@@ -277,6 +308,34 @@ if (import.meta.vitest) {
       await store.write(walletOf("Wallet 2"));
 
       expect((await store.read())?.accounts[0].name).toBe("Wallet 2");
+    });
+
+    it("appends set-aside accounts to its own record, not the wallet's", async () => {
+      const store = indexedDbStoreFor("pg-wallet");
+      await store.write(walletOf("Wallet 1"));
+
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+      await store.setAside([{ kp: [3], name: "B" }]);
+      // The same account twice is kept once
+      await store.setAside([{ kp: [1, 2], name: "A" }]);
+
+      expect(await store.read()).toEqual(walletOf("Wallet 1"));
+      const aside = await new Promise<unknown>((resolve, reject) => {
+        const request = indexedDB.open("pg-wallet");
+        request.onsuccess = () => {
+          const get = request.result
+            .transaction("state", "readonly")
+            .objectStore("state")
+            .get("set-aside");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+        request.onerror = () => reject(request.error);
+      });
+      expect(aside).toEqual([
+        { kp: [1, 2], name: "A" },
+        { kp: [3], name: "B" },
+      ]);
     });
 
     it("keeps databases of different names apart", async () => {

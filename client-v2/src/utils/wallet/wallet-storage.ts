@@ -18,10 +18,12 @@ const UNREADABLE_KEY = "wallet.unreadable";
 /**
  * What reading the wallet found: a wallet, none anywhere, or a store that
  * failed with nothing in `localStorage` to fall back to, which must not be
- * taken for "none" (that would offer to make a new wallet over the old one)
+ * taken for "none" (that would offer to make a new wallet over the old one).
+ * `setAside` counts the damaged accounts this read moved to the store's
+ * set-aside record.
  */
 export type WalletRead =
-  | { kind: "wallet"; wallet: SerializedWalletState }
+  | { kind: "wallet"; wallet: SerializedWalletState; setAside: number }
   | { kind: "none" }
   | { kind: "unavailable" };
 
@@ -29,8 +31,12 @@ const NONE: WalletRead = { kind: "none" };
 const UNAVAILABLE: WalletRead = { kind: "unavailable" };
 
 /** The read result for a wallet that may not be there */
-const foundOrNone = (wallet: SerializedWalletState | undefined): WalletRead =>
-  wallet ? { kind: "wallet", wallet } : NONE;
+const foundOrNoneWith =
+  (setAside: number) =>
+  (wallet: SerializedWalletState | undefined): WalletRead =>
+    wallet ? { kind: "wallet", wallet, setAside } : NONE;
+
+const foundOrNone = foundOrNoneWith(0);
 
 /** Where a write landed: the store, the `localStorage` fallback, or nowhere */
 export type WriteOutcome = "store" | "local" | "lost";
@@ -87,18 +93,57 @@ const isAccount = (value: unknown): value is WalletAccount => {
   );
 };
 
-/** Whether `value` has the shape of a stored wallet */
-const isStoredWallet = (value: unknown): value is SerializedWalletState => {
+/** A stored wallet whose accounts may include damaged ones */
+type StoredWallet = Omit<SerializedWalletState, "accounts"> & {
+  accounts: unknown[];
+};
+
+/**
+ * Whether `value` has the shape of a stored wallet. Some accounts may be
+ * damaged, but not all of them: a wallet with accounts and no valid one is
+ * unreadable as a whole.
+ */
+const isStoredWallet = (value: unknown): value is StoredWallet => {
   if (typeof value !== "object" || value === null) return false;
   const { accounts, currentIndex, state } = value as Partial<
     Record<keyof SerializedWalletState, unknown>
   >;
   return (
     Array.isArray(accounts) &&
-    accounts.every(isAccount) &&
+    (accounts.length === 0 || accounts.some(isAccount)) &&
     typeof currentIndex === "number" &&
     typeof state === "string"
   );
+};
+
+/** A stored wallet's valid accounts as the wallet, and the damaged ones */
+interface PartitionedWallet {
+  wallet: SerializedWalletState;
+  damaged: unknown[];
+}
+
+/**
+ * Split off the damaged accounts. The current account keeps its place among
+ * the valid ones; when it is the damaged one, the first valid one is current.
+ */
+const partitionWallet = (stored: StoredWallet): PartitionedWallet => {
+  const damaged = stored.accounts.filter((account) => !isAccount(account));
+  if (damaged.length === 0) {
+    return { wallet: stored as SerializedWalletState, damaged };
+  }
+  const accounts = stored.accounts.filter(isAccount);
+  const current = accounts.indexOf(
+    stored.accounts[stored.currentIndex] as WalletAccount
+  );
+  return {
+    wallet: {
+      state: stored.state,
+      accounts,
+      currentIndex: current === -1 ? 0 : current,
+      standardName: stored.standardName,
+    },
+    damaged,
+  };
 };
 
 /** Whether `value` is the pre-accounts format, a single `sk` keypair */
@@ -174,6 +219,12 @@ const mergeWallets = (
  * exception is a failed read with no `localStorage` wallet: that read is
  * `unavailable`, and the instance stays on the store so a later read retries.
  *
+ * Damaged accounts (not a name and a 64-byte keypair) in either copy are
+ * split off: the wallet loads with the valid ones, and the damaged ones go to
+ * the store's set-aside record before any copy is rewritten without them.
+ * They never go to `localStorage`; where the store cannot take them, nothing
+ * is moved or rewritten that read.
+ *
  * `write` calls run one after another, in call order: `updatable` does not
  * await them, and two quick changes must not land out of order.
  *
@@ -223,7 +274,7 @@ export const walletStorageWith =
         reportFailure("Unreadable wallet in localStorage", new Error("shape"));
         return undefined;
       }
-      return { wallet: value, text };
+      return { ...partitionWallet(value), text };
     };
 
     /** Keep the first unreadable copy aside; a later one never replaces it */
@@ -253,8 +304,9 @@ export const walletStorageWith =
 
     /** Read the store, treating a record of the wrong shape as a failure */
     const readStore = async () => {
-      const value = await store.read();
-      if (value === undefined || isStoredWallet(value)) return value;
+      const value: unknown = await store.read();
+      if (value === undefined) return undefined;
+      if (isStoredWallet(value)) return partitionWallet(value);
       throw new Error("The stored wallet has the wrong shape");
     };
 
@@ -283,7 +335,7 @@ export const walletStorageWith =
       const fromLocal = readLocal();
       if (isDegraded) return foundOrNone(fromLocal?.wallet);
 
-      let stored: SerializedWalletState | undefined;
+      let stored: PartitionedWallet | undefined;
       try {
         stored = await readStore();
       } catch (error) {
@@ -294,21 +346,55 @@ export const walletStorageWith =
         isDegraded = true;
         return foundOrNone(fromLocal?.wallet);
       }
-      if (!fromLocal) return foundOrNone(stored);
 
-      const merged = stored
-        ? mergeWallets(fromLocal.wallet, stored)
-        : fromLocal.wallet;
+      const merged =
+        fromLocal && stored
+          ? mergeWallets(fromLocal.wallet, stored.wallet)
+          : (fromLocal ?? stored)?.wallet;
+      // Before anything is rewritten without them: never in `localStorage`,
+      // since a damaged account may still hold key bytes
+      const damaged = (fromLocal?.damaged ?? []).concat(stored?.damaged ?? []);
+      if (damaged.length > 0) {
+        const reportDamaged = reportFailureWith({ accounts: damaged.length });
+        try {
+          await store.setAside(damaged);
+        } catch (error) {
+          // Nothing moves and nothing is rewritten, so the damaged accounts
+          // stay where they were
+          isDegraded = true;
+          reportDamaged("Damaged wallet accounts not set aside", error);
+          return foundOrNone(merged);
+        }
+        reportDamaged("Damaged wallet accounts set aside", new Error("shape"));
+      }
+      const found = foundOrNoneWith(damaged.length);
+
+      if (!fromLocal) {
+        if (stored && stored.damaged.length > 0) {
+          try {
+            await store.write(stored.wallet);
+          } catch (error) {
+            // The next load sets them aside again, which adds no copy
+            reportFailureFor(stored.wallet)(
+              "Wallet not rewritten without its damaged accounts",
+              error
+            );
+          }
+        }
+        return found(stored?.wallet);
+      }
+
+      const moved = merged ?? fromLocal.wallet;
       try {
-        await copyToStore(merged);
+        await copyToStore(moved);
       } catch (error) {
         isDegraded = true;
-        reportFailureFor(merged)("Wallet not moved out of localStorage", error);
-        return foundOrNone(merged);
+        reportFailureFor(moved)("Wallet not moved out of localStorage", error);
+        return found(moved);
       }
 
       removeLocal(fromLocal.text);
-      return foundOrNone(merged);
+      return found(moved);
     };
 
     return {
@@ -421,9 +507,11 @@ if (import.meta.vitest) {
     const found = (wallet: SerializedWalletState): WalletRead => ({
       kind: "wallet",
       wallet,
+      setAside: 0,
     });
     const memoryStore = (initial: SerializedWalletState | undefined) => {
       let value = initial && structuredClone(initial);
+      let setAside: unknown[] = [];
       return {
         read: vi.fn(async () => value && structuredClone(value)),
         write: vi.fn(async (state: SerializedWalletState) => {
@@ -433,7 +521,11 @@ if (import.meta.vitest) {
         exclusive: vi.fn((task: () => Promise<unknown>) =>
           task()
         ) as unknown as WalletStore["exclusive"] & ReturnType<typeof vi.fn>,
+        setAside: vi.fn(async (accounts: unknown[]) => {
+          setAside = setAside.concat(structuredClone(accounts));
+        }),
         held: () => value,
+        heldAside: () => setAside,
       };
     };
 
@@ -943,6 +1035,98 @@ if (import.meta.vitest) {
       expect(await storage.read()).toEqual(UNAVAILABLE);
 
       expect(await storage.read()).toEqual(found(stored));
+    });
+
+    /** An account whose keypair is 10 bytes: damaged */
+    const damaged = (name: string) => ({ kp: kp(9).slice(0, 10), name });
+
+    it("loads the valid accounts and sets the damaged one aside in the store", async () => {
+      const store = memoryStore(undefined);
+      const local = memoryLocal(
+        JSON.stringify({
+          state: "pg",
+          accounts: [account(1, "A"), damaged("B"), account(3, "C")],
+          currentIndex: 2,
+          standardName: NO_STANDARD,
+        })
+      );
+
+      const read = await walletStorageWith(store)(local).read();
+
+      const wallet: SerializedWalletState = {
+        state: "pg",
+        accounts: [account(1, "A"), account(3, "C")],
+        currentIndex: 1,
+        standardName: NO_STANDARD,
+      };
+      expect(read).toEqual({ kind: "wallet", wallet, setAside: 1 });
+      expect(store.held()).toEqual(wallet);
+      expect(store.heldAside()).toEqual([damaged("B")]);
+      expect(local.items.has(WALLET_LOCAL_KEY)).toBe(false);
+      expect(local.items.has("wallet.unreadable")).toBe(false);
+    });
+
+    it("makes the first valid account current when the current one is damaged", async () => {
+      const store = memoryStore(undefined);
+      const local = memoryLocal(
+        JSON.stringify({
+          state: "pg",
+          accounts: [damaged("A"), account(2, "B"), account(3, "C")],
+          currentIndex: 0,
+          standardName: NO_STANDARD,
+        })
+      );
+
+      const read = await walletStorageWith(store)(local).read();
+
+      expect(read.kind === "wallet" && read.wallet.currentIndex).toBe(0);
+      expect(read.kind === "wallet" && read.wallet.accounts[0].name).toBe("B");
+    });
+
+    it("sets damaged accounts in the store's own record aside and rewrites it", async () => {
+      const store = memoryStore(undefined);
+      store.read.mockResolvedValueOnce({
+        state: "pg",
+        accounts: [account(1, "A"), damaged("B")],
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      } as never);
+
+      const read = await walletStorageWith(store)(
+        memoryLocal(undefined)
+      ).read();
+
+      const wallet = walletOf([account(1, "A")]);
+      expect(read).toEqual({ kind: "wallet", wallet, setAside: 1 });
+      expect(store.heldAside()).toEqual([damaged("B")]);
+      expect(store.held()).toEqual(wallet);
+    });
+
+    it("keeps a localStorage wallet with damaged accounts in place when they cannot be set aside", async () => {
+      const store = memoryStore(undefined);
+      store.setAside.mockRejectedValueOnce(new Error("quota"));
+      const text = JSON.stringify({
+        state: "pg",
+        accounts: [account(1, "A"), damaged("B")],
+        currentIndex: 0,
+        standardName: NO_STANDARD,
+      });
+      const local = memoryLocal(text);
+
+      const read = await walletStorageWith(store)(local).read();
+
+      expect(read).toEqual(found(walletOf([account(1, "A")])));
+      expect(local.items.get(WALLET_LOCAL_KEY)).toBe(text);
+      expect(store.write).not.toHaveBeenCalled();
+    });
+
+    it("reads an empty wallet, with no account, as a wallet", async () => {
+      const empty = walletOf([]);
+      const read = await walletStorageWith(memoryStore(empty))(
+        memoryLocal(undefined)
+      ).read();
+
+      expect(read).toEqual(found(empty));
     });
 
     it("saves under the store's lock", async () => {
